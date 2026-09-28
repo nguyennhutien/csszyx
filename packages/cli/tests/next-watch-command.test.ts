@@ -10,10 +10,13 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { watch } from 'chokidar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { type NextWatchFactory, startNextWatch } from '../src/commands/next-watch.js';
+import {
+    type NextWatchFactory,
+    nextWatchFactoryFor,
+    startNextWatch,
+} from '../src/commands/next-watch.js';
 import { linkTailwind } from './link-tailwind.js';
 
 const tempDirs: string[] = [];
@@ -89,7 +92,9 @@ async function waitFor(assertion: () => boolean, options: WaitOptions = {}): Pro
  */
 function recordingWatch(log: string[]): NextWatchFactory {
     return (paths, options) => {
-        const watcher = watch(paths, options);
+        // The platform's own watcher, as the command picks it, so the events
+        // recorded are the ones a user's session would get.
+        const watcher = nextWatchFactoryFor()(paths, options);
         const started = Date.now();
         watcher.on('all', (event, filePath) => {
             log.push(`+${String(Date.now() - started).padStart(5)}ms ${event} ${filePath}`);

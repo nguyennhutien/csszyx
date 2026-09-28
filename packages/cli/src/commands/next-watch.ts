@@ -1,9 +1,11 @@
 /**
  * csszyx next-watch - Maintain the Next.js Turbopack Tailwind safelist.
  *
- * Startup runs the existing prebuild contract once. Chokidar then observes
- * metadata shards plus source removals; source add/change transforms remain
- * owned by the Turbopack loader so the CLI does not duplicate compiler work.
+ * Startup runs the existing prebuild contract once. A file watcher then
+ * observes metadata shards plus source removals; source add/change transforms
+ * remain owned by the Turbopack loader so the CLI does not duplicate compiler
+ * work. macOS and Windows watch through Node's recursive `fs.watch`, other
+ * platforms through chokidar; see {@link nextWatchFactoryFor}.
  */
 
 import * as fs from 'node:fs';
@@ -20,10 +22,11 @@ import {
     type NextSafelistWatchEvent,
     NextSafelistWatcher,
 } from '@csszyx/unplugin/next-watcher';
-import { type ChokidarOptions, type FSWatcher, watch } from 'chokidar';
+import { type ChokidarOptions, watch } from 'chokidar';
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
+import { type NextFileWatcher, watchRecursively } from './native-recursive-watcher.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -116,7 +119,60 @@ const WATCH_ROOT_RESOLVERS: Partial<Record<NodeJS.Platform, (root: string) => st
 export type NextWatchFactory = (
     paths: string | readonly string[],
     options: ChokidarOptions,
-) => FSWatcher;
+) => NextFileWatcher;
+
+/**
+ * Chokidar: one watch per directory and per file.
+ *
+ * @param paths - What to watch.
+ * @param options - Chokidar's options, as `next watch` sets them.
+ * @returns The watcher.
+ */
+export const chokidarNextWatchFactory: NextWatchFactory = (paths, options) =>
+    watch(typeof paths === 'string' ? paths : [...paths], options);
+
+/**
+ * Node's recursive `fs.watch`: one operating-system stream for the whole tree.
+ *
+ * Only the ignore predicate carries over; the rest of chokidar's options have
+ * no counterpart and no need of one. `awaitWriteFinish` guarded against
+ * reading a half-written file, and every shard is written to a temporary name
+ * and renamed into place.
+ *
+ * @param paths - The watch root.
+ * @param options - The options chokidar would get; only `ignored` is read.
+ * @returns The watcher.
+ */
+export const nativeNextWatchFactory: NextWatchFactory = (paths, options) =>
+    watchRecursively(String(paths), {
+        ignored: filePath => (options.ignored as (candidate: string) => boolean)(filePath),
+    });
+
+/**
+ * The platforms the native stream serves. Measured with a file written into a
+ * directory created while the watch runs, then deleted, across macOS, Windows
+ * and Linux on Node 22 and 24: under CPU load chokidar lost that file's events
+ * on macOS only, the native stream nowhere. Linux keeps chokidar because the
+ * native watch there is Node's own per-file walk, and without the `ignore`
+ * option (Node 24.14 and 25.5 onwards) it watches all of `node_modules`:
+ * 237,428 inotify watches and about 1 GB on this repository.
+ */
+const WATCH_FACTORIES: Partial<Record<NodeJS.Platform, NextWatchFactory>> = {
+    darwin: nativeNextWatchFactory,
+    win32: nativeNextWatchFactory,
+};
+
+/**
+ * The file watcher `next watch` uses on a platform.
+ *
+ * @param platform - The platform to answer for; the running one by default.
+ * @returns The watcher factory for it.
+ */
+export function nextWatchFactoryFor(
+    platform: NodeJS.Platform = process.platform,
+): NextWatchFactory {
+    return WATCH_FACTORIES[platform] ?? chokidarNextWatchFactory;
+}
 
 /** Dependencies that can be replaced by tests. */
 export interface NextWatchDependencies {
@@ -264,7 +320,7 @@ export async function startNextWatch(
         },
     });
     const isIgnored = createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore);
-    const watchFactory = dependencies.watch ?? watch;
+    const watchFactory = dependencies.watch ?? nextWatchFactoryFor();
     const fsWatcher = watchFactory(root, {
         ignoreInitial: true,
         persistent: true,
@@ -305,15 +361,12 @@ export async function startNextWatch(
                 });
             return;
         }
-        // A directory that appears after the watch is running may already hold
-        // files, and the recursive watch on it is established AFTER it exists.
-        // Anything written into that window is never reported — and never
-        // reported means the watcher does not know the file at all, so its
-        // eventual removal produces no `unlink` either and the shard it wrote
-        // outlives its source. Naming the files explicitly closes the window;
-        // a path chokidar already tracks is a no-op.
-        if (event === 'addDir') {
-            watchSourcesAlreadyInside(fsWatcher, absolutePath, isIgnored);
+        // A directory removed or moved in one step can arrive as a single
+        // event for the directory and none for the sources in it. Every cycle
+        // checks each shard's source on disk, so prompting one is enough to
+        // reap them.
+        if (event === 'unlinkDir') {
+            controller.notifySourceRemoval(absolutePath);
             return;
         }
         if (event === 'add' || event === 'change' || event === 'unlink') {
@@ -416,7 +469,7 @@ export async function nextWatch(options: NextWatchCommandOptions = {}): Promise<
  * @param watcher Chokidar watcher awaiting initial readiness.
  * @returns Promise resolved after the initial scan or rejected on startup error.
  */
-function waitForWatcherReady(watcher: FSWatcher): Promise<void> {
+function waitForWatcherReady(watcher: NextFileWatcher): Promise<void> {
     return new Promise((resolve, reject) => {
         const onReady = (): void => {
             watcher.off('error', onStartupError);
@@ -452,7 +505,7 @@ function waitForWatcherReady(watcher: FSWatcher): Promise<void> {
  * @param timeoutMs How long to wait before starting anyway.
  */
 async function waitForWatcherDelivery(
-    watcher: FSWatcher,
+    watcher: NextFileWatcher,
     probePath: string,
     timeoutMs: number,
 ): Promise<void> {
@@ -517,48 +570,6 @@ function waitForShutdown(failure: Promise<Error>): Promise<Error | undefined> {
             resolve(error);
         });
     });
-}
-
-/**
- * Explicitly watch the source files a newly-seen directory already contains.
- *
- * Only the directory's own entries, not its subtree: a nested directory
- * arrives as its own `addDir`, so recursing here would walk the same tree
- * twice and would also descend into places the ignore list prunes.
- *
- * Best effort by design. The directory can vanish between the event and the
- * read — a build tool writing a temporary tree, or a `mkdir` immediately
- * undone — and that is not a watcher failure. Reporting it would turn an
- * ordinary race into a fatal error, which is the opposite of the point.
- *
- * @param watcher Active chokidar watcher.
- * @param directory Absolute path chokidar reported as added.
- * @param isIgnored Predicate for paths the watch prunes.
- */
-function watchSourcesAlreadyInside(
-    watcher: FSWatcher,
-    directory: string,
-    isIgnored: (candidate: string, entry?: KnownEntry) => boolean,
-): void {
-    if (isIgnored(directory)) {
-        return;
-    }
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(directory, { withFileTypes: true });
-    } catch {
-        return;
-    }
-    for (const entry of entries) {
-        if (!entry.isFile() || !SOURCE_EXTENSION.test(entry.name)) {
-            continue;
-        }
-        const candidate = path.join(directory, entry.name);
-        if (isIgnored(candidate, entry)) {
-            continue;
-        }
-        watcher.add(candidate);
-    }
 }
 
 /** What chokidar knows about a path it asks about, when it knows anything. */
