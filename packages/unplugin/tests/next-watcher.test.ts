@@ -301,6 +301,33 @@ describe('Next safelist watcher controller', () => {
         expect(reasons).toEqual([['initial'], ['source:unlink', 'shard:unlink']]);
     });
 
+    it('runs a full cycle when told a change it cannot name, only while running', () => {
+        // A platform watcher can report that something changed without saying
+        // what; every cycle reconciles all shards against the disk, so one
+        // cycle covers whatever it was.
+        const timers = scheduler();
+        const reasons: readonly string[][] = [];
+        const ctx = context();
+        const watcher = new NextSafelistWatcher({
+            context: ctx,
+            runCycle: (_context, _options, cycleReasons) => {
+                (reasons as string[][]).push([...cycleReasons]);
+                return cycleResult(reasons.length);
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+        });
+
+        expect(watcher.rescan()).toBe(false);
+        watcher.start();
+        expect(watcher.rescan()).toBe(true);
+        timers.runAll();
+        watcher.close();
+        expect(watcher.rescan()).toBe(false);
+
+        expect(reasons).toEqual([['initial'], ['rescan']]);
+    });
+
     it('cannot restart after close or accept events before start', () => {
         const ctx = context();
         const watcher = new NextSafelistWatcher({

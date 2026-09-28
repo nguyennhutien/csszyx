@@ -647,9 +647,10 @@ jobs:
           pnpm --filter @csszyx/cli exec vitest run \
             tests/next-watch-branches.test.ts \
             tests/next-watch-command.test.ts \
+            tests/next-watch-backends.test.ts \
             tests/next-watch-lifecycle.test.ts \
-            tests/next-watch-new-directory.test.ts \
             tests/next-watch-readiness.test.ts \
+            tests/native-recursive-watcher.test.ts \
             tests/bin-dispatch-next-watch.test.ts
 
   # The Next Turbopack state layer relies on advisory locks, atomic rename,
