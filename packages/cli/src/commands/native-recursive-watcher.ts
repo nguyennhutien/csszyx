@@ -27,9 +27,13 @@ export interface NextFileWatcher {
     close(): Promise<void>;
 }
 
-/** What a changed path turned out to be. */
+/**
+ * What a changed path turned out to be. `rescan` names no path of its own: the
+ * platform said something under the root changed without saying what, and
+ * `path` is the root.
+ */
 export interface NativeEvent {
-    event: 'change' | 'addDir' | 'unlink' | 'unlinkDir';
+    event: 'change' | 'addDir' | 'unlink' | 'unlinkDir' | 'rescan';
     path: string;
 }
 
@@ -51,8 +55,13 @@ type Stat = (filePath: string) => Pick<fs.Stats, 'isDirectory'>;
  * reported: a spare reconciliation costs a millisecond, a dropped event can
  * leave a stale shard for the rest of the session.
  *
- * Cost: one `stat` per event, none for an ignored path. O(1) in the size of
- * the tree.
+ * An event with no name is a `rescan` of the root. Node documents the name as
+ * not always provided, and on the Windows runner writes made moments after the
+ * watch started arrived as one nameless change and nothing else, so dropping
+ * it lost them for good.
+ *
+ * Cost: one `stat` per named event, none for an ignored path or a rescan. O(1)
+ * in the size of the tree.
  *
  * @param root - The watched directory.
  * @param filename - The name the platform reported, relative to `root`.
@@ -66,7 +75,7 @@ export function classifyNativeEvent(
     isIgnored: (filePath: string) => boolean,
     stat: Stat,
 ): NativeEvent | null {
-    if (!filename) return null;
+    if (!filename) return { event: 'rescan', path: root };
     const filePath = path.join(root, filename);
     const relative = path.relative(root, filePath);
     if (relative.startsWith('..') || path.isAbsolute(relative)) return null;

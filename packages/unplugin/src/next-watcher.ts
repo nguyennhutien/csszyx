@@ -176,6 +176,26 @@ export class NextSafelistWatcher {
     }
 
     /**
+     * Queue a cycle for a change whose path is unknown.
+     *
+     * A platform watcher can report that something under the root changed
+     * without naming it: Node documents the name as not always provided, and
+     * Windows does it for writes made moments after a watch starts. Every
+     * cycle reconciles all shards against the disk, so one cycle covers
+     * whatever the change was.
+     *
+     * @returns Whether the cycle was queued.
+     */
+    rescan(): boolean {
+        if (this.closed || !this.started) {
+            return false;
+        }
+
+        this.loop.notify('rescan');
+        return true;
+    }
+
+    /**
      * Flush any pending event batch immediately.
      */
     flush(): NextWatcherCycleResult | undefined {

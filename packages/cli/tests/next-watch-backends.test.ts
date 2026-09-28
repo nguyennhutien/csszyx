@@ -25,6 +25,7 @@ import {
     nextWatchFactoryFor,
     startNextWatch,
 } from '../src/commands/next-watch.js';
+import { linkTailwind } from './link-tailwind.js';
 
 const tempDirs: string[] = [];
 
@@ -173,6 +174,83 @@ describe('a removed directory', () => {
             rmSync(join(session.root, 'app'), { recursive: true });
             emitter.emit('all', 'unlinkDir', join(session.root, 'app'));
             await waitFor(() => !existsSync(shardPath), 'the shard to be reaped');
+        } finally {
+            await session.close();
+        }
+    }, 40_000);
+});
+
+describe('a change the platform cannot name', () => {
+    /**
+     * A watcher whose events the test sends itself.
+     *
+     * @returns The emitter to send them through, and the factory that hands it out.
+     */
+    function scripted(): { emitter: EventEmitter; factory: NextWatchFactory } {
+        const emitter = new EventEmitter();
+        const factory: NextWatchFactory = () => {
+            setTimeout(() => emitter.emit('ready'), 0);
+            return Object.assign(emitter, { close: async (): Promise<void> => {} });
+        };
+        return { emitter, factory };
+    }
+
+    it('reconciles the shards, which picks up one written without an event', async () => {
+        const root = tempRoot();
+        const { emitter, factory } = scripted();
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: factory, deliveryProbeTimeoutMs: 50 },
+        );
+        try {
+            const source = join(session.root, 'app/Card.tsx');
+            const shardPath = join(session.root, '.csszyx/cache/safelist-shards/manual.json');
+            mkdirSync(join(session.root, 'app'), { recursive: true });
+            writeFileSync(source, 'export const Card=()=> <div />;');
+            writeShard(shardPath, source, 'm-2');
+            emitter.emit('all', 'rescan', session.root);
+            await waitFor(
+                () => readFileSync(session.safelistOutputPath, 'utf8').includes('m-2'),
+                'the shard to reach the safelist',
+            );
+
+            rmSync(join(session.root, 'app'), { recursive: true });
+            emitter.emit('all', 'rescan', session.root);
+            await waitFor(() => !existsSync(shardPath), 'the shard to be reaped');
+        } finally {
+            await session.close();
+        }
+    }, 40_000);
+
+    it('reads the stylesheets again, which picks up one edited without an event', async () => {
+        const root = tempRoot();
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        const { emitter, factory } = scripted();
+        const session = await startNextWatch(
+            {
+                root,
+                cwd: root,
+                parserMode: 'wasm',
+                debounceMs: 10,
+                silent: true,
+                tailwindStylesheet: ['app/globals.css'],
+            },
+            { watch: factory, deliveryProbeTimeoutMs: 50 },
+        );
+        const facts = join(session.root, '.csszyx/cache/stylesheet-facts.json');
+        try {
+            expect(readFileSync(facts, 'utf8')).toContain('"prefix": null');
+            writeFileSync(
+                join(session.root, 'app/globals.css'),
+                '@import "tailwindcss" prefix(tw);\n',
+            );
+            emitter.emit('all', 'rescan', session.root);
+            await waitFor(
+                () => readFileSync(facts, 'utf8').includes('"prefix": "tw"'),
+                'the stylesheet facts to be recorded again',
+            );
         } finally {
             await session.close();
         }

@@ -72,9 +72,23 @@ describe('classifyNativeEvent', () => {
     it.each([
         ['no filename', null],
         ['an empty filename', ''],
-        ['a name that leaves the root', join('..', 'elsewhere.tsx')],
-    ])('drops %s', (_name, filename) => {
-        expect(classifyNativeEvent(root, filename, notIgnored, statOf({}))).toBeNull();
+    ])('reports %s as a rescan of the root', (_name, filename) => {
+        // Node documents the name as not always provided. On the Windows
+        // runner, writes made moments after the watch started arrived as one
+        // nameless change and nothing else: dropping it lost them for good.
+        const stat = () => {
+            throw new Error('there is no path to stat');
+        };
+        expect(classifyNativeEvent(root, filename, notIgnored, stat)).toEqual({
+            event: 'rescan',
+            path: root,
+        });
+    });
+
+    it('drops a name that leaves the root', () => {
+        expect(
+            classifyNativeEvent(root, join('..', 'elsewhere.tsx'), notIgnored, statOf({})),
+        ).toBeNull();
     });
 
     it('drops what the ignore list prunes, before touching the disk', () => {

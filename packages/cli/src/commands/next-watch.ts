@@ -338,27 +338,38 @@ export async function startNextWatch(
     );
 
     let factsWrites: Promise<void> = Promise.resolve();
+    // A stylesheet edit can change the prefix. Rewriting the facts file re-runs
+    // the loader for every module that depends on it. An edit that leaves the
+    // stylesheets unreadable is reported, and the session goes on: the author
+    // is mid-edit.
+    const refreshStylesheetFacts = (): void => {
+        factsWrites = factsWrites
+            .then(recordStylesheetFacts)
+            .then(writeRegistration)
+            .catch((error: unknown) => {
+                // The build's note says nothing was written, which a watch
+                // that goes on is not; say what it goes on with instead.
+                const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+                printWatcherNotice(
+                    `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
+                );
+            });
+    };
     fsWatcher.on('all', (event, filePath) => {
+        // The platform saw a change and could not say where, so anything may
+        // have changed: the stylesheets are read again and every shard is
+        // reconciled against the disk.
+        if (event === 'rescan') {
+            refreshStylesheetFacts();
+            controller.rescan();
+            return;
+        }
         const absolutePath = path.resolve(filePath);
         if (absolutePath === probePath) {
             return;
         }
         if (absolutePath.endsWith('.css')) {
-            // A stylesheet edit can change the prefix. Rewriting the facts file
-            // re-runs the loader for every module that depends on it. An edit
-            // that leaves the stylesheets unreadable is reported, and the
-            // session goes on: the author is mid-edit.
-            factsWrites = factsWrites
-                .then(recordStylesheetFacts)
-                .then(writeRegistration)
-                .catch((error: unknown) => {
-                    // The build's note says nothing was written, which a watch
-                    // that goes on is not; say what it goes on with instead.
-                    const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
-                    printWatcherNotice(
-                        `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
-                    );
-                });
+            refreshStylesheetFacts();
             return;
         }
         // A directory removed or moved in one step can arrive as a single
