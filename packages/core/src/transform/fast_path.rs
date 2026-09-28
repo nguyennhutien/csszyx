@@ -275,6 +275,8 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             can_host_style: true,
             sz_attribute_indices: vec![attribute_index],
             class_attribute_index: None,
+            side_class_indices: Vec::new(),
+            rewrite_scope: super::RewriteScope::Element,
             style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,

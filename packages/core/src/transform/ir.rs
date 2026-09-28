@@ -91,6 +91,10 @@ pub struct SourceIr {
     /// Elements whose several `sz` attributes were folded into one.
     #[serde(default)]
     pub duplicate_sz_attributes: Vec<DuplicateSzAttributeIr>,
+    /// Elements whose class name and `sz` stand on either side of a spread,
+    /// so they stay two attributes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spread_split_classes: Vec<SpreadSplitClassIr>,
     /// Resolved objects omitted from emission but still requiring diagnostics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub omitted_sz_objects: Vec<StaticSzObject>,
@@ -151,6 +155,7 @@ impl SourceIr {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
         }
     }
@@ -181,6 +186,16 @@ pub struct JsxOpeningElementIr {
     pub sz_attribute_indices: Vec<usize>,
     /// Class/className attribute index in [`SourceIr::class_attributes`].
     pub class_attribute_index: Option<usize>,
+    /// The class name beside each entry of `sz_attribute_indices`, when a
+    /// spread splits the element into several: class names and `sz` merge only
+    /// on the same side of a spread. Empty when the element has one side,
+    /// which reads `class_attribute_index`. See [`JsxOpeningElementIr::sz_sides`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub side_class_indices: Vec<Option<usize>>,
+    /// [`RewriteScope::OneSide`] on the copy the rewrite makes of one side
+    /// of a split element. Never serialized.
+    #[serde(skip)]
+    pub rewrite_scope: RewriteScope,
     /// Style attribute index in [`SourceIr::style_attributes`].
     pub style_attribute_index: Option<usize>,
     /// Static `szRecover` attribute index in [`SourceIr::recovery_attributes`].
@@ -199,6 +214,51 @@ pub struct JsxOpeningElementIr {
     pub element_name: String,
     /// Dynamic CSS custom properties hoisted from descendant `sz` attributes.
     pub hoisted_dynamic_css_vars: Vec<DynamicCssVarIr>,
+}
+
+/// What one rewrite of an element covers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RewriteScope {
+    /// The whole element: its style props are written here.
+    #[default]
+    Element,
+    /// One side of an element a spread splits: the caller writes the
+    /// element's style props once, for every side.
+    OneSide,
+}
+
+impl JsxOpeningElementIr {
+    /// A copy of this element to stand for one side of it, with no `sz` yet.
+    ///
+    /// The caller gives it one side's `sz` and class name at a time. Its
+    /// per-side class list is cleared so [`Self::sz_sides`] reads the class it
+    /// was given, not the element's first side, and its scope leaves the
+    /// element's one `style` to the caller.
+    #[must_use]
+    pub fn empty_side(&self) -> Self {
+        Self {
+            sz_attribute_indices: Vec::with_capacity(1),
+            side_class_indices: Vec::new(),
+            rewrite_scope: RewriteScope::OneSide,
+            ..self.clone()
+        }
+    }
+
+    /// Each `sz` of the element with the class name it merges with: one pair
+    /// on an element no spread splits, one per side otherwise.
+    pub fn sz_sides(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
+        self.sz_attribute_indices
+            .iter()
+            .enumerate()
+            .map(|(side, index)| {
+                let class = if self.side_class_indices.is_empty() {
+                    self.class_attribute_index
+                } else {
+                    self.side_class_indices[side]
+                };
+                (*index, class)
+            })
+    }
 }
 
 /// One JSX prop spread that can absorb compiler-generated style properties.
@@ -463,6 +523,27 @@ pub struct DuplicateSzAttributeIr {
     pub span: TextSpan,
     /// How many `sz` attributes the element carried.
     pub count: usize,
+}
+
+/// An element whose class names and `sz` stand on more than one side of a
+/// spread.
+///
+/// The spread may carry a class name of its own, and in React, Preact, Solid
+/// and Qwik an attribute written after a spread replaces what the spread set,
+/// and one written before it is replaced. So each side merges on its own and
+/// keeps its place, and the engine says that the earlier sides do not apply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpreadSplitClassIr {
+    /// JSX tag name, as written.
+    pub element_name: String,
+    /// Span of the first class name or `sz` written.
+    pub span: TextSpan,
+    /// What the sides before the last one hold, as a reader names it: a class
+    /// name's value in backticks, or the classes of an `sz`.
+    pub earlier: Vec<String>,
+    /// Where to write the one `sz` array and what it holds, built from the
+    /// element: its spread, its class attribute's name, its class values.
+    pub example: String,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -743,6 +824,38 @@ mod tests {
     }
 
     #[test]
+    fn a_side_copy_pairs_its_one_sz_with_the_class_it_is_given() {
+        // The element a spread splits: two sides, one class each.
+        let element = JsxOpeningElementIr {
+            opening_span: TextSpan::new(0, 40).expect("valid span"),
+            parent_element_index: None,
+            can_host_style: true,
+            sz_attribute_indices: vec![0, 1],
+            class_attribute_index: None,
+            side_class_indices: vec![Some(2), None],
+            rewrite_scope: super::RewriteScope::Element,
+            style_attribute_index: None,
+            recovery_attribute_index: None,
+            has_recovery_token_attribute: false,
+            has_spread_attribute: true,
+            safe_style_spread: None,
+            last_attribute_end: Some(39),
+            element_name: "div".to_string(),
+            hoisted_dynamic_css_vars: Vec::new(),
+        };
+
+        let mut side = element.empty_side();
+        assert!(side.sz_attribute_indices.is_empty());
+        assert_eq!(side.rewrite_scope, super::RewriteScope::OneSide);
+
+        // Given the second side's `sz` and class, it reads as that side alone,
+        // not as the element's first side.
+        side.sz_attribute_indices.push(1);
+        side.class_attribute_index = None;
+        assert_eq!(side.sz_sides().collect::<Vec<_>>(), vec![(1, None)]);
+    }
+
+    #[test]
     fn source_ir_keeps_source_order_and_duplicate_keys() {
         let object = StaticSzObject {
             properties: vec![
@@ -811,6 +924,8 @@ mod tests {
                 can_host_style: true,
                 sz_attribute_indices: vec![0],
                 class_attribute_index: Some(0),
+                side_class_indices: Vec::new(),
+                rewrite_scope: super::RewriteScope::Element,
                 style_attribute_index: None,
                 recovery_attribute_index: None,
                 has_recovery_token_attribute: false,
@@ -824,6 +939,7 @@ mod tests {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
         };
 

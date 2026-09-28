@@ -49,6 +49,7 @@ export type SzDiagnosticKindId =
     | 'sz-recover'
     | 'class-precedence'
     | 'duplicate-sz'
+    | 'spread-split-class'
     | 'other';
 
 /**
@@ -86,6 +87,11 @@ const KINDS: ReadonlyArray<
     ['sz-recover', false, { startsWith: 'szRecover at ' }],
     ['class-precedence', true, { includes: 'takes precedence over the runtime "className"' }],
     ['duplicate-sz', true, { includes: '`sz` attributes; they were merged as sz={[' }],
+    [
+        'spread-split-class',
+        false,
+        { includes: 'on more than one side of a spread stay separate attributes, one per side' },
+    ],
 ];
 
 /** The build's note that the variable-hoist planner declined; every class is still emitted. */

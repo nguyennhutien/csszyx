@@ -62,6 +62,7 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
+export { rewriteStartTags } from './start-tags.js';
 export {
     explainStaticObjectLiteral,
     parseStaticObjectLiteral,

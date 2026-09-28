@@ -852,7 +852,41 @@ The `sz` prop and `className` prop can coexist. The compiler puts `sz` **last**:
 ```
 
 That order is the contract, and it holds whichever order you write the two
-attributes in — JSX attribute order carries no meaning here.
+attributes in — JSX attribute order carries no meaning here, as long as no
+spread stands between them.
+
+A spread between them is the exception. It may carry a class name of its own,
+and the platform already decides between attributes written on either side of
+one: in React, Preact, Solid and Qwik the later one replaces the earlier. So a
+spread is a wall. The class names and `sz` on one side of it merge as usual, and
+each side becomes one class name where its `sz` stood:
+
+```tsx
+<div className="card" {...rest} sz={{ p: 4 }} />
+// → className="card" {...rest} className="p-4"   (React renders class="p-4")
+
+<div className="card" sz={{ p: 4 }} {...rest} sz={{ m: 2 }} />
+// → className="card p-4" {...rest} className="m-2"
+```
+
+The build warns, in production too, which classes will not apply, and writes
+the fix from your element. To keep them, write everything in one `sz` array
+after the spread, in the order that should win:
+`sz={['card', rest.className, { p: 4 }]}`. In Solid the attribute is `class`,
+so the spread's is `rest.class`. Vue JSX merges every `class` instead, so there
+all of them apply.
+
+In a Svelte component two `class` attributes on one element are an error, so
+Svelte stops the build with `attribute_duplicate: Attributes need to be
+unique`, pointing at the `class` csszyx wrote where `sz` stood. The Svelte
+adapter compiles only an `sz` object, not an array, so there put the class and
+`sz` on the same side, after the spread, and read the spread's class inside
+the string:
+
+```svelte
+<div {...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}></div>
+<!-- → class="card {rest.class ?? ''} p-4" -->
+```
 
 When `className` is a dynamic expression, the merge runs at runtime and is
 last-wins per conflicting utility, so **`sz` beats `className` on the same

@@ -4322,6 +4322,7 @@ mod tests {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
         };
 

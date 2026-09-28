@@ -49,12 +49,12 @@ pub use contract::{
 pub use ir::{
     ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
     DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr, RecoveryAttributeIr,
-    RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr, SafeStyleSpreadExpressionIr,
+    RewriteScope, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr, SafeStyleSpreadExpressionIr,
     SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr,
-    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryArmIr,
-    StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzFallbackSiteIr, SzrImportRewriteIr,
-    SzsAttributeIr, SzsSlotEntryIr, SzvReplacementIr, SzvTableInsertionIr, TextSpan,
-    UnsupportedRecoveryIr,
+    SpreadSplitClassIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue,
+    StaticTernaryArmIr, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzFallbackSiteIr,
+    SzrImportRewriteIr, SzsAttributeIr, SzsSlotEntryIr, SzvReplacementIr, SzvTableInsertionIr,
+    TextSpan, UnsupportedRecoveryIr,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.
