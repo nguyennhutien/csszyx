@@ -306,6 +306,9 @@ fn numeric_opacity(value: &str) -> SzValue {
 
 /// Pick the prefix's key by the value's shape and spell the value.
 fn disambiguate(prefix: &str, value: &str, negative: bool) -> Option<ParsedClass> {
+    if class_rules::keeps_in_class_name(prefix, value) {
+        return None;
+    }
     let shape = Shape::read(value);
     let (_, rule) = class_rules::select(class_rules::rules_for(prefix), &shape)?;
     Some(ParsedClass::new(
@@ -429,5 +432,17 @@ mod tests {
             "rules no corpus class reaches: {}",
             unreached.join(", ")
         );
+    }
+
+    #[test]
+    fn ring_inset_stays_in_class_name_and_the_ring_width_still_migrates() {
+        // `ring` holds the width too, so `ring-1 ring-inset` on one element
+        // would keep only the later class.
+        assert!(parse_class("ring-inset").is_none());
+        assert!(parse_class("ring-inset!").is_none());
+        let width = parse_class("ring-2").expect("a ring width migrates");
+        assert_eq!(width.prop, "ring");
+        let colour = parse_class("ring-blue-500").expect("a ring colour migrates");
+        assert_eq!(colour.prop, "ringColor");
     }
 }

@@ -165,7 +165,9 @@ describe('class-parser', () => {
         it('keywords that belong to a style key, not the colour key of their prefix', () => {
             expect(parseClass('outline-hidden')).toEqual({ prop: 'outlineStyle', value: 'hidden' });
             expect(parseClass('outline-solid')).toEqual({ prop: 'outlineStyle', value: 'solid' });
-            expect(parseClass('ring-inset')).toEqual({ prop: 'ring', value: 'inset' });
+            // `ring` also holds the width (`ring-1`), so an element with both
+            // would keep one. No key holds the pair: the class stays as written.
+            expect(parseClass('ring-inset')).toBeNull();
             expect(parseClass('border-collapse')).toEqual({
                 prop: 'borderCollapse',
                 value: 'collapse',

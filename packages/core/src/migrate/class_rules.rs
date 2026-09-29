@@ -349,8 +349,6 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
         &[
             rule!(Integer, Key("ring"), Number),
             rule!(ArbitraryDimension, Key("ring"), Unwrapped),
-            // `ring-inset` is the `ring` key's own value, not a colour.
-            rule!(Is("inset"), Key("ring"), Verbatim),
             rule!(Always, Key("ringColor"), Unwrapped),
         ],
     ),
@@ -476,6 +474,17 @@ pub fn rules_for(prefix: &str) -> &'static [Rule] {
         .iter()
         .find(|(candidate, _)| *candidate == prefix)
         .map_or(DEFAULT_RULES, |(_, rules)| rules)
+}
+
+/// Classes no sz key can hold alongside their siblings, so migrate leaves
+/// them in `className`. `ring-inset` is a value of `ring`, the key that the
+/// ring width (`ring-1`) also writes: an element carrying both would keep only
+/// the later one. `ringColor: 'inset'` keeps both but names the wrong key.
+const KEEP_IN_CLASS_NAME: &[(&str, &str)] = &[("ring", "inset")];
+
+/// Whether migrate leaves `<prefix>-<value>` in `className`.
+pub fn keeps_in_class_name(prefix: &str, value: &str) -> bool {
+    KEEP_IN_CLASS_NAME.contains(&(prefix, value))
 }
 
 /// The first rule for the prefix whose shape the value has, with its index.

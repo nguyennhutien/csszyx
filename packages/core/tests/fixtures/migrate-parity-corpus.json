@@ -60431,16 +60431,14 @@
    "c": "focus-visible:ring-inset",
    "p": null,
    "o": {
-    "sz": {
-     "focusVisible": {
-      "ring": "inset"
-     }
-    },
-    "szText": "{\"focusVisible\":{\"ring\":\"inset\"}}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "focus-visible:ring-inset"
+    ],
     "k": [],
-    "g": "{\n  focusVisible: { ring: 'inset' },\n}",
-    "h": "focusVisible: { ring: 'inset' },"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -61837,19 +61835,16 @@
   },
   {
    "c": "ring-inset",
-   "p": {
-    "prop": "ring",
-    "value": "inset"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "ring": "inset"
-    },
-    "szText": "{\"ring\":\"inset\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "ring-inset"
+    ],
     "k": [],
-    "g": "{ ring: 'inset' }",
-    "h": "ring: 'inset'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
