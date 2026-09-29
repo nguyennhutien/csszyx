@@ -287,6 +287,20 @@ describe('csszyx check — a relative --cwd', () => {
         expect(process.exitCode).toBe(1);
     });
 
+    it('reads the project from the working directory when no --cwd is given', async () => {
+        const root = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+        });
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({});
+
+        expect(log.mock.calls.flat().join('\n')).toMatch(/pointer-none\s+src\/Bad\.tsx/);
+    });
+
     it('runs the merge audit', async () => {
         const root = projectWith({
             'src/app.css': '@import "tailwindcss";',
