@@ -268,3 +268,35 @@ describe('csszyx check — what it does with nothing to check', () => {
         expect(report).not.toMatch(/pointer-none\s+src\/B\.tsx/);
     });
 });
+
+describe('csszyx check — a relative --cwd', () => {
+    // `--cwd apps/web` is how a monorepo root runs it. Tailwind and the content
+    // scanner are resolved from that directory, and a relative path reached
+    // them as-is: the dead-class pass skipped with an info line, and the merge
+    // audit threw inside `createRequire`.
+    it('asks Tailwind about the emitted classes, as an absolute --cwd does', async () => {
+        const root = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+        });
+
+        const report = await reportFor(path.relative(process.cwd(), root));
+
+        expect(report).toMatch(/pointer-none\s+src\/Bad\.tsx/);
+        expect(report).not.toContain('Dead-class check skipped');
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('runs the merge audit', async () => {
+        const root = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Card.tsx': 'export const Card = () => <div sz={{ pb: 2, p: 4 }} />;',
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd: path.relative(process.cwd(), root), rule: ['merge-covered-key'] });
+
+        expect(log.mock.calls.flat().join('\n')).toContain('pb-2');
+    });
+});
