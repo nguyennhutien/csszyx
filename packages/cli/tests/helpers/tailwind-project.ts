@@ -20,13 +20,20 @@ const roots: string[] = [];
  * Materialise a project with Tailwind v4 installed.
  *
  * @param files - Project-relative paths mapped to their contents.
+ * @param options - Fixture switches.
+ * @param options.tailwind - False to model a project with Tailwind not installed.
  * @returns Absolute project root.
  */
-export function tailwindProject(files: Record<string, string>): string {
+export function tailwindProject(
+    files: Record<string, string>,
+    options: { tailwind?: boolean } = {},
+): string {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-project-')));
     roots.push(root);
     mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
+    if (options.tailwind !== false) {
+        symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
+    }
     writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
     for (const [relative, content] of Object.entries(files)) {
         const file = path.join(root, relative);

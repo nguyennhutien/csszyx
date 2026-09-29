@@ -15,43 +15,14 @@
  * the command resolves the project's own install, and without one every case
  * would pass as a skip.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type CheckOptions, check } from '../src/commands/check.js';
-
-const REPO = path.resolve(import.meta.dirname, '../../..');
-const TAILWIND_V4 = path.dirname(
-    createRequire(path.join(REPO, 'package.json')).resolve('tailwindcss/package.json'),
-);
-const roots: string[] = [];
-
-/**
- * Materialise a project that resolves Tailwind v4 the way a real one does.
- *
- * @param files - Project-relative paths mapped to their contents.
- * @returns Absolute project root.
- */
-function projectWith(files: Record<string, string>): string {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-check-op-')));
-    roots.push(root);
-    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
-    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    for (const [relative, content] of Object.entries(files)) {
-        const file = path.join(root, relative);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content, 'utf8');
-    }
-    return root;
-}
+import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -85,7 +56,7 @@ const ENTRY_CSS = `@import "tailwindcss";
 
 describe('csszyx check — opacity modifiers judged from the compiled rule', () => {
     it('reports a modifier whose token resolves to a bare comma triplet, and only that one', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': ENTRY_CSS,
             'src/Broken.tsx':
                 "export const B = () => <div sz={{ bg: { color: 'broken', op: 30 } }} />;",
@@ -106,7 +77,7 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
     });
 
     it('reports a token DEFINED as a bare triplet, without any var chain', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': ENTRY_CSS,
             'src/Direct.tsx':
                 "export const D = () => <div sz={{ color: { color: 'direct', op: 25 } }} />;",
@@ -123,7 +94,7 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
         // rules, and a class with no rule has nothing to read: it has to be
         // skipped rather than counted as a surviving modifier or crashed on.
         // Both findings come out of one scan, so they are asserted together.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': ENTRY_CSS,
             // Carries a modifier AND has no rule: the theme defines no such
             // token, so it reaches this pass and has nothing to read.
@@ -141,7 +112,7 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
     });
 
     it('stays silent when every modifier survives', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': ENTRY_CSS,
             'src/Fine.tsx':
                 "export const F = () => <div sz={{ bg: { color: 'fine', op: 30 } }} />;",
@@ -156,7 +127,7 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
     it('stays silent when the var chain leaves the stylesheet it can see', async () => {
         // `--elsewhere` is defined in some file this command never read — the
         // verdict cannot be proven, and an exact pass does not guess.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css':
                 '@import "tailwindcss";\n@theme { --color-mystery: var(--elsewhere); }\n',
             'src/Mystery.tsx':
@@ -176,7 +147,7 @@ describe('csszyx check — opacity findings under rule selection', () => {
     const BROKEN = "export const B = () => <div sz={{ bg: { color: 'broken', op: 30 } }} />;";
 
     it('still reports a broken modifier when the dead-class rule is ignored', async () => {
-        const cwd = projectWith({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
+        const cwd = tailwindProject({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
 
         const report = await reportFor(cwd, { ignoreRule: ['dead-class'] });
 
@@ -185,7 +156,7 @@ describe('csszyx check — opacity findings under rule selection', () => {
     });
 
     it('leaves a broken modifier out when only dead classes are selected', async () => {
-        const cwd = projectWith({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
+        const cwd = tailwindProject({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
 
         const report = await reportFor(cwd, { rule: ['dead-class'] });
 
