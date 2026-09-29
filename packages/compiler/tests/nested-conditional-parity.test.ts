@@ -14,9 +14,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+
+import { RUST_LANE } from './engine-parity-harness.js';
 
 /**
  * Strip the JSX element from a transform result for stable comparison.
@@ -167,7 +169,7 @@ describe('nested finite-conditional parity', () => {
             }
         });
 
-        it.skipIf(!isRustTransformAvailable())(
+        it.skipIf(!RUST_LANE)(
             `the native build is byte-identical to the wasm one — ${fixture.name}`,
             () => {
                 // Both engine artifacts factor the static sibling out and emit the same
@@ -251,7 +253,7 @@ function normalizeStyleBraces(code: string): string {
 // gate). Probe the actual capability instead of pinning a version — these
 // assertions self-arm once a binary with the feature ships.
 const rustHasMultiTernary = (): boolean => {
-    if (!isRustTransformAvailable()) return false;
+    if (!RUST_LANE) return false;
     try {
         const probe = transformRust(
             'const P = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',

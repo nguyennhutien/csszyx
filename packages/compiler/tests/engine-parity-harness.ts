@@ -43,31 +43,60 @@ export type ParityEngine = (
     options?: TransformSourceCodeOptions,
 ) => EngineParityResult;
 
-// In CI the native engine is built before the unit suites run; if that step
-// ever no-ops, every parity suite would silently degrade to two lanes and
-// keep passing. Failing at module load is deliberate — it cannot be skipped
-// per file, and the message names the real problem.
-if (process.env.CI && !isRustTransformAvailable()) {
-    throw new Error(
-        'engine parity harness: the rust lane is unavailable under CI — the native ' +
-            'engine build step failed or was skipped, and every parity suite ' +
-            'would silently degrade to two lanes.',
-    );
+/** Set to `1` to run the parity suites on the wasm artifact alone, outside CI. */
+export const WASM_ONLY_ENV = 'CSSZYX_TEST_WASM_ONLY';
+
+/**
+ * Decide whether the native lane runs, and refuse a silent wasm-only run.
+ *
+ * Without the binding every parity suite would pass on one artifact, so a RED
+ * run could be red on wasm alone. A machine that cannot build the addon opts
+ * out by name; CI never can, because its native build step must have run.
+ *
+ * @param available Whether the native binding loaded.
+ * @param env The environment to read the opt-out and `CI` from.
+ * @returns Whether the native lane runs.
+ */
+export function assertRustLane(available: boolean, env: NodeJS.ProcessEnv): boolean {
+    if (available) {
+        return true;
+    }
+    if (env.CI) {
+        throw new Error(
+            'engine parity harness: the rust lane is unavailable under CI — the native ' +
+                'engine build step failed or was skipped.',
+        );
+    }
+    if (env[WASM_ONLY_ENV] !== '1') {
+        throw new Error(
+            'engine parity harness: the native binding is missing, so these suites would ' +
+                'pass on the wasm artifact alone. Build it with ' +
+                '`pnpm --filter @csszyx/core native:build -- --native-engine`, or set ' +
+                `\`${WASM_ONLY_ENV}=1\` to run wasm only on purpose.`,
+        );
+    }
+    return false;
 }
 
-/** Both artifacts of the engine, native included whenever the binding is present. */
+/**
+ * Whether the native lane runs. Evaluated at module load, so a suite that
+ * imports the harness fails as a whole instead of skipping per test.
+ */
+export const RUST_LANE = assertRustLane(isRustTransformAvailable(), process.env);
+
+/** Both artifacts of the engine; wasm alone only under {@link WASM_ONLY_ENV}. */
 export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
     ['wasm', transformWasm as ParityEngine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as ParityEngine]] as const) : []),
+    ...(RUST_LANE ? ([['rust', transformRust as ParityEngine]] as const) : []),
 ];
 
 /** One module-link scanner: the same question the transform table asks, for links. */
 export type LinkScanner = (files: readonly ModuleLinksFile[]) => ModuleLinks[];
 
-/** Both artifacts' module-link scan, native included whenever the binding is present. */
+/** Both artifacts' module-link scan; wasm alone only under {@link WASM_ONLY_ENV}. */
 export const LINK_SCANNERS: ReadonlyArray<readonly [string, LinkScanner]> = [
     ['wasm', scanModuleLinksWasm],
-    ...(isRustTransformAvailable() ? ([['rust', scanModuleLinksRust]] as const) : []),
+    ...(RUST_LANE ? ([['rust', scanModuleLinksRust]] as const) : []),
 ];
 
 /**
