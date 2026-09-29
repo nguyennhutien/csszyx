@@ -13640,6 +13640,25 @@
     "oxc": "delay-75"
   },
   {
+    "sz": "{\"diagonalFractions\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "diagonalFractions",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "diagonal-fractions"
+  },
+  {
     "sz": "{\"display\":\"inline\"}",
     "ir": {
       "properties": [
@@ -15303,25 +15322,6 @@
       ]
     },
     "oxc": "not-italic"
-  },
-  {
-    "sz": "{\"fontVariant\":\"normal-nums\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontVariant",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "normal-nums"
-          }
-        }
-      ]
-    },
-    "oxc": "normal-nums"
   },
   {
     "sz": "{\"forcedColorAdjust\":\"auto\"}",
@@ -17817,6 +17817,25 @@
       ]
     },
     "oxc": "line-clamp-1"
+  },
+  {
+    "sz": "{\"liningNums\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "liningNums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "lining-nums"
   },
   {
     "sz": "{\"list\":\"--t\"}",
@@ -21185,6 +21204,25 @@
     "oxc": "object-top-right"
   },
   {
+    "sz": "{\"oldstyleNums\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "oldstyleNums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "oldstyle-nums"
+  },
+  {
     "sz": "{\"opacity\":\"--o\"}",
     "ir": {
       "properties": [
@@ -22931,6 +22969,25 @@
       ]
     },
     "oxc": "pr-4"
+  },
+  {
+    "sz": "{\"proportionalNums\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "proportionalNums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "proportional-nums"
   },
   {
     "sz": "{\"prose\":true}",
@@ -27727,6 +27784,25 @@
     "oxc": "sr-only"
   },
   {
+    "sz": "{\"stackedFractions\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "stackedFractions",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "stacked-fractions"
+  },
+  {
     "sz": "{\"start\":4}",
     "ir": {
       "properties": [
@@ -28010,6 +28086,25 @@
       ]
     },
     "oxc": "table-fixed"
+  },
+  {
+    "sz": "{\"tabularNums\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "tabularNums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "tabular-nums"
   },
   {
     "sz": "{\"text\":\"1.5rem\"}",

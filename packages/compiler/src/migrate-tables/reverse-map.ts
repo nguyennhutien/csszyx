@@ -78,14 +78,15 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Transforms — scale-3d/translate-3d carry the literal '3d' value via
     // BOOLEAN_VALUE_MAP, and transform-gpu/cpu/none → { transform: 'gpu'/'cpu'/'none' }.
 
-    // Font numeric
-    'normal-nums': 'fontVariant',
-    'lining-nums': 'fontVariant',
-    'oldstyle-nums': 'fontVariant',
-    'proportional-nums': 'fontVariant',
-    'tabular-nums': 'fontVariant',
-    'diagonal-fractions': 'fontVariant',
-    'stacked-fractions': 'fontVariant',
+    // Font numeric: additive flags, each its own typed key. `fontVariant` is
+    // not a key `SzProps` or the known-key check has, and `normal-nums` has no
+    // key at all, so it stays in `className`.
+    'lining-nums': 'liningNums',
+    'oldstyle-nums': 'oldstyleNums',
+    'proportional-nums': 'proportionalNums',
+    'tabular-nums': 'tabularNums',
+    'diagonal-fractions': 'diagonalFractions',
+    'stacked-fractions': 'stackedFractions',
 
     // Snap
     'snap-none': 'snapType',
@@ -115,8 +116,7 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
 
 // Values that mean "use the prop name as-is with value true". `cssProperty`
 // marks single-property utilities so the variant parser fails closed on a
-// scope conflict (e.g. `block flex` → two display values). Additive utilities
-// (font-variant-numeric) intentionally omit it — they combine, not conflict.
+// scope conflict (e.g. `block flex` → two display values).
 export const BOOLEAN_VALUE_MAP: Record<
     string,
     { prop: string; value: unknown; cssProperty?: string }
@@ -141,15 +141,6 @@ export const BOOLEAN_VALUE_MAP: Record<
     'divide-dotted': { prop: 'divideStyle', value: 'dotted' },
     'divide-double': { prop: 'divideStyle', value: 'double' },
     'divide-none': { prop: 'divideStyle', value: 'none' },
-
-    // Font variants
-    'normal-nums': { prop: 'fontVariant', value: 'normal-nums' },
-    'lining-nums': { prop: 'fontVariant', value: 'lining-nums' },
-    'oldstyle-nums': { prop: 'fontVariant', value: 'oldstyle-nums' },
-    'proportional-nums': { prop: 'fontVariant', value: 'proportional-nums' },
-    'tabular-nums': { prop: 'fontVariant', value: 'tabular-nums' },
-    'diagonal-fractions': { prop: 'fontVariant', value: 'diagonal-fractions' },
-    'stacked-fractions': { prop: 'fontVariant', value: 'stacked-fractions' },
 
     // Appearance
     'appearance-none': { prop: 'appearance', value: 'none' },
@@ -579,10 +570,12 @@ export const ALIGN_CONTENT_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 export const OUTLINE_STYLE_KEYWORDS: ReadonlySet<string> = new Set([
+    'solid',
     'none',
     'dashed',
     'dotted',
     'double',
+    'hidden',
 ]);
 
 export const RING_WIDTH_VALUES: ReadonlySet<string> = new Set(['0', '1', '2', '4', '8']);

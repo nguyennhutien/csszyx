@@ -141,13 +141,38 @@ describe('class-parser', () => {
         it('font variant booleans', () => {
             expect(parseClass('ordinal')).toEqual({ prop: 'ordinal', value: true });
             expect(parseClass('slashed-zero')).toEqual({ prop: 'slashedZero', value: true });
-            expect(parseClass('tabular-nums')).toEqual({
-                prop: 'fontVariant',
-                value: 'tabular-nums',
+            // The typed keys, not `fontVariant`: `check` reports that key as
+            // unknown, so migrate must not write it.
+            expect(parseClass('tabular-nums')).toEqual({ prop: 'tabularNums', value: true });
+            expect(parseClass('lining-nums')).toEqual({ prop: 'liningNums', value: true });
+            expect(parseClass('oldstyle-nums')).toEqual({ prop: 'oldstyleNums', value: true });
+            expect(parseClass('proportional-nums')).toEqual({
+                prop: 'proportionalNums',
+                value: true,
             });
-            expect(parseClass('lining-nums')).toEqual({
-                prop: 'fontVariant',
-                value: 'lining-nums',
+            expect(parseClass('diagonal-fractions')).toEqual({
+                prop: 'diagonalFractions',
+                value: true,
+            });
+            expect(parseClass('stacked-fractions')).toEqual({
+                prop: 'stackedFractions',
+                value: true,
+            });
+            // No sz key resets the numeric variants, so the class stays as written.
+            expect(parseClass('normal-nums')).toBeNull();
+        });
+
+        it('keywords that belong to a style key, not the colour key of their prefix', () => {
+            expect(parseClass('outline-hidden')).toEqual({ prop: 'outlineStyle', value: 'hidden' });
+            expect(parseClass('outline-solid')).toEqual({ prop: 'outlineStyle', value: 'solid' });
+            expect(parseClass('ring-inset')).toEqual({ prop: 'ring', value: 'inset' });
+            expect(parseClass('border-collapse')).toEqual({
+                prop: 'borderCollapse',
+                value: 'collapse',
+            });
+            expect(parseClass('border-separate')).toEqual({
+                prop: 'borderCollapse',
+                value: 'separate',
             });
         });
     });

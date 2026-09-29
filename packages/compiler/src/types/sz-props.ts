@@ -1193,7 +1193,7 @@ export interface BorderProps {
     outlineColor?: ColorPropValue;
 
     /** @see https://tailwindcss.com/docs/outline-style */
-    outlineStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'none';
+    outlineStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'none' | 'hidden';
 
     /** @see https://tailwindcss.com/docs/outline-offset */
     outlineOffset?: 0 | 1 | 2 | 4 | 8 | (string & {});

@@ -3499,11 +3499,17 @@ Controlling the font width.
 
 Controlling numeric glyphs.
 
-| Concept     | CSS Rule                                      | Tailwind v4 Class                                                                                                                                        | `sz` Prop (Object Syntax)             | Note                          |
-| :---------- | :-------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------ | :---------------------------- |
-| **Variant** | `font-variant-numeric: ordinal, slashed-zero` | `normal-nums`, `ordinal`, `slashed-zero`, `lining-nums`, `oldstyle-nums`, `proportional-nums`, `tabular-nums`, `diagonal-fractions`, `stacked-fractions` | `{ fontVariant: 'normal-nums' }` etc. |                               |
-| **Boolean** | `font-variant-numeric: slashed-zero`          | `slashed-zero`                                                                                                                                           | `{ slashedZero: true }`               | **Overwrites** `fontVariant`. |
-| **Boolean** | `font-variant-numeric: ordinal`               | `ordinal`                                                                                                                                                | `{ ordinal: true }`                   | **Overwrites** `fontVariant`. |
+| Concept     | CSS Rule                                   | Tailwind v4 Class    | `sz` Prop (Object Syntax)     | Note                                  |
+| :---------- | :----------------------------------------- | :------------------- | :---------------------------- | :------------------------------------ |
+| **Boolean** | `font-variant-numeric: ordinal`            | `ordinal`            | `{ ordinal: true }`           | Flags combine: each sets one feature. |
+| **Boolean** | `font-variant-numeric: slashed-zero`       | `slashed-zero`       | `{ slashedZero: true }`       |                                       |
+| **Boolean** | `font-variant-numeric: lining-nums`        | `lining-nums`        | `{ liningNums: true }`        |                                       |
+| **Boolean** | `font-variant-numeric: oldstyle-nums`      | `oldstyle-nums`      | `{ oldstyleNums: true }`      |                                       |
+| **Boolean** | `font-variant-numeric: proportional-nums`  | `proportional-nums`  | `{ proportionalNums: true }`  |                                       |
+| **Boolean** | `font-variant-numeric: tabular-nums`       | `tabular-nums`       | `{ tabularNums: true }`       |                                       |
+| **Boolean** | `font-variant-numeric: diagonal-fractions` | `diagonal-fractions` | `{ diagonalFractions: true }` |                                       |
+| **Boolean** | `font-variant-numeric: stacked-fractions`  | `stacked-fractions`  | `{ stackedFractions: true }`  |                                       |
+| —           | `font-variant-numeric: normal`             | `normal-nums`        | none — keep it in `className` | No sz key resets the flags.           |
 
 ## Font Features
 

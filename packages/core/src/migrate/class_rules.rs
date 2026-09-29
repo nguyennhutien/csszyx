@@ -239,6 +239,10 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
                 Verbatim,
             ),
             rule!(ArbitraryDimension, Key("border"), Unwrapped),
+            // border-collapse, not a colour: `borderColor: 'collapse'` emits
+            // the same class, and `check` reports the key as the wrong one.
+            rule!(Is("collapse"), Key("borderCollapse"), Verbatim),
+            rule!(Is("separate"), Key("borderCollapse"), Verbatim),
             rule!(Always, Key("borderColor"), Unwrapped),
         ],
     ),
@@ -345,6 +349,8 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
         &[
             rule!(Integer, Key("ring"), Number),
             rule!(ArbitraryDimension, Key("ring"), Unwrapped),
+            // `ring-inset` is the `ring` key's own value, not a colour.
+            rule!(Is("inset"), Key("ring"), Verbatim),
             rule!(Always, Key("ringColor"), Unwrapped),
         ],
     ),

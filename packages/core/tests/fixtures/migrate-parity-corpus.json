@@ -17285,35 +17285,35 @@
   {
    "c": "border-collapse",
    "p": {
-    "prop": "borderColor",
+    "prop": "borderCollapse",
     "value": "collapse"
    },
    "o": {
     "sz": {
-     "borderColor": "collapse"
+     "borderCollapse": "collapse"
     },
-    "szText": "{\"borderColor\":\"collapse\"}",
+    "szText": "{\"borderCollapse\":\"collapse\"}",
     "u": [],
     "k": [],
-    "g": "{ borderColor: 'collapse' }",
-    "h": "borderColor: 'collapse'"
+    "g": "{ borderCollapse: 'collapse' }",
+    "h": "borderCollapse: 'collapse'"
    }
   },
   {
    "c": "border-separate",
    "p": {
-    "prop": "borderColor",
+    "prop": "borderCollapse",
     "value": "separate"
    },
    "o": {
     "sz": {
-     "borderColor": "separate"
+     "borderCollapse": "separate"
     },
-    "szText": "{\"borderColor\":\"separate\"}",
+    "szText": "{\"borderCollapse\":\"separate\"}",
     "u": [],
     "k": [],
-    "g": "{ borderColor: 'separate' }",
-    "h": "borderColor: 'separate'"
+    "g": "{ borderCollapse: 'separate' }",
+    "h": "borderCollapse: 'separate'"
    }
   },
   {
@@ -22322,120 +22322,117 @@
   {
    "c": "diagonal-fractions",
    "p": {
-    "prop": "fontVariant",
-    "value": "diagonal-fractions"
+    "prop": "diagonalFractions",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "diagonal-fractions"
+     "diagonalFractions": true
     },
-    "szText": "{\"fontVariant\":\"diagonal-fractions\"}",
+    "szText": "{\"diagonalFractions\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'diagonal-fractions' }",
-    "h": "fontVariant: 'diagonal-fractions'"
+    "g": "{ diagonalFractions: true }",
+    "h": "diagonalFractions: true"
    }
   },
   {
    "c": "lining-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "lining-nums"
+    "prop": "liningNums",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "lining-nums"
+     "liningNums": true
     },
-    "szText": "{\"fontVariant\":\"lining-nums\"}",
+    "szText": "{\"liningNums\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'lining-nums' }",
-    "h": "fontVariant: 'lining-nums'"
+    "g": "{ liningNums: true }",
+    "h": "liningNums: true"
    }
   },
   {
    "c": "normal-nums",
-   "p": {
-    "prop": "fontVariant",
-    "value": "normal-nums"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "fontVariant": "normal-nums"
-    },
-    "szText": "{\"fontVariant\":\"normal-nums\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "normal-nums"
+    ],
     "k": [],
-    "g": "{ fontVariant: 'normal-nums' }",
-    "h": "fontVariant: 'normal-nums'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
    "c": "oldstyle-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "oldstyle-nums"
+    "prop": "oldstyleNums",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "oldstyle-nums"
+     "oldstyleNums": true
     },
-    "szText": "{\"fontVariant\":\"oldstyle-nums\"}",
+    "szText": "{\"oldstyleNums\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'oldstyle-nums' }",
-    "h": "fontVariant: 'oldstyle-nums'"
+    "g": "{ oldstyleNums: true }",
+    "h": "oldstyleNums: true"
    }
   },
   {
    "c": "proportional-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "proportional-nums"
+    "prop": "proportionalNums",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "proportional-nums"
+     "proportionalNums": true
     },
-    "szText": "{\"fontVariant\":\"proportional-nums\"}",
+    "szText": "{\"proportionalNums\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'proportional-nums' }",
-    "h": "fontVariant: 'proportional-nums'"
+    "g": "{ proportionalNums: true }",
+    "h": "proportionalNums: true"
    }
   },
   {
    "c": "stacked-fractions",
    "p": {
-    "prop": "fontVariant",
-    "value": "stacked-fractions"
+    "prop": "stackedFractions",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "stacked-fractions"
+     "stackedFractions": true
     },
-    "szText": "{\"fontVariant\":\"stacked-fractions\"}",
+    "szText": "{\"stackedFractions\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'stacked-fractions' }",
-    "h": "fontVariant: 'stacked-fractions'"
+    "g": "{ stackedFractions: true }",
+    "h": "stackedFractions: true"
    }
   },
   {
    "c": "tabular-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "tabular-nums"
+    "prop": "tabularNums",
+    "value": true
    },
    "o": {
     "sz": {
-     "fontVariant": "tabular-nums"
+     "tabularNums": true
     },
-    "szText": "{\"fontVariant\":\"tabular-nums\"}",
+    "szText": "{\"tabularNums\":true}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'tabular-nums' }",
-    "h": "fontVariant: 'tabular-nums'"
+    "g": "{ tabularNums: true }",
+    "h": "tabularNums: true"
    }
   },
   {
@@ -28864,35 +28861,35 @@
   {
    "c": "outline-hidden",
    "p": {
-    "prop": "outlineColor",
+    "prop": "outlineStyle",
     "value": "hidden"
    },
    "o": {
     "sz": {
-     "outlineColor": "hidden"
+     "outlineStyle": "hidden"
     },
-    "szText": "{\"outlineColor\":\"hidden\"}",
+    "szText": "{\"outlineStyle\":\"hidden\"}",
     "u": [],
     "k": [],
-    "g": "{ outlineColor: 'hidden' }",
-    "h": "outlineColor: 'hidden'"
+    "g": "{ outlineStyle: 'hidden' }",
+    "h": "outlineStyle: 'hidden'"
    }
   },
   {
    "c": "outline-solid",
    "p": {
-    "prop": "outlineColor",
+    "prop": "outlineStyle",
     "value": "solid"
    },
    "o": {
     "sz": {
-     "outlineColor": "solid"
+     "outlineStyle": "solid"
     },
-    "szText": "{\"outlineColor\":\"solid\"}",
+    "szText": "{\"outlineStyle\":\"solid\"}",
     "u": [],
     "k": [],
-    "g": "{ outlineColor: 'solid' }",
-    "h": "outlineColor: 'solid'"
+    "g": "{ outlineStyle: 'solid' }",
+    "h": "outlineStyle: 'solid'"
    }
   },
   {
@@ -55097,14 +55094,14 @@
    "o": {
     "sz": {
      "focusVisible": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"focusVisible\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"focusVisible\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  focusVisible: { outlineColor: 'hidden' },\n}",
-    "h": "focusVisible: { outlineColor: 'hidden' },"
+    "g": "{\n  focusVisible: { outlineStyle: 'hidden' },\n}",
+    "h": "focusVisible: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -60176,14 +60173,14 @@
    "o": {
     "sz": {
      "file": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"file\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"file\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  file: { outlineColor: 'hidden' },\n}",
-    "h": "file: { outlineColor: 'hidden' },"
+    "g": "{\n  file: { outlineStyle: 'hidden' },\n}",
+    "h": "file: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -60436,14 +60433,14 @@
    "o": {
     "sz": {
      "focusVisible": {
-      "ringColor": "inset"
+      "ring": "inset"
      }
     },
-    "szText": "{\"focusVisible\":{\"ringColor\":\"inset\"}}",
+    "szText": "{\"focusVisible\":{\"ring\":\"inset\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  focusVisible: { ringColor: 'inset' },\n}",
-    "h": "focusVisible: { ringColor: 'inset' },"
+    "g": "{\n  focusVisible: { ring: 'inset' },\n}",
+    "h": "focusVisible: { ring: 'inset' },"
    }
   },
   {
@@ -60516,14 +60513,14 @@
    "o": {
     "sz": {
      "focus": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"focus\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"focus\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  focus: { outlineColor: 'hidden' },\n}",
-    "h": "focus: { outlineColor: 'hidden' },"
+    "g": "{\n  focus: { outlineStyle: 'hidden' },\n}",
+    "h": "focus: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -61841,18 +61838,18 @@
   {
    "c": "ring-inset",
    "p": {
-    "prop": "ringColor",
+    "prop": "ring",
     "value": "inset"
    },
    "o": {
     "sz": {
-     "ringColor": "inset"
+     "ring": "inset"
     },
-    "szText": "{\"ringColor\":\"inset\"}",
+    "szText": "{\"ring\":\"inset\"}",
     "u": [],
     "k": [],
-    "g": "{ ringColor: 'inset' }",
-    "h": "ringColor: 'inset'"
+    "g": "{ ring: 'inset' }",
+    "h": "ring: 'inset'"
    }
   },
   {

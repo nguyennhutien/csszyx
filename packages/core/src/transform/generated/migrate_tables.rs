@@ -781,11 +781,15 @@ pub(crate) fn object_position_keywords(value: &str) -> bool {
 }
 
 /// `OUTLINE_STYLE_KEYWORDS` from reverse-map.ts, in source order.
-pub(crate) const OUTLINE_STYLE_KEYWORDS: &[&str] = &["none", "dashed", "dotted", "double"];
+pub(crate) const OUTLINE_STYLE_KEYWORDS: &[&str] =
+    &["solid", "none", "dashed", "dotted", "double", "hidden"];
 
 /// Whether `value` is in `OUTLINE_STYLE_KEYWORDS`.
 pub(crate) fn outline_style_keywords(value: &str) -> bool {
-    matches!(value, "none" | "dashed" | "dotted" | "double")
+    matches!(
+        value,
+        "solid" | "none" | "dashed" | "dotted" | "double" | "hidden"
+    )
 }
 
 /// `RING_WIDTH_VALUES` from reverse-map.ts, in source order.
@@ -1177,13 +1181,12 @@ pub(crate) const REVERSE_BOOLEAN_MAP: &[(&str, &str)] = &[
     ("inset-ring", "insetRing"),
     ("outline", "outline"),
     ("rounded", "rounded"),
-    ("normal-nums", "fontVariant"),
-    ("lining-nums", "fontVariant"),
-    ("oldstyle-nums", "fontVariant"),
-    ("proportional-nums", "fontVariant"),
-    ("tabular-nums", "fontVariant"),
-    ("diagonal-fractions", "fontVariant"),
-    ("stacked-fractions", "fontVariant"),
+    ("lining-nums", "liningNums"),
+    ("oldstyle-nums", "oldstyleNums"),
+    ("proportional-nums", "proportionalNums"),
+    ("tabular-nums", "tabularNums"),
+    ("diagonal-fractions", "diagonalFractions"),
+    ("stacked-fractions", "stackedFractions"),
     ("snap-none", "snapType"),
     ("snap-x", "snapType"),
     ("snap-y", "snapType"),
@@ -1239,13 +1242,12 @@ pub(crate) fn reverse_boolean(key: &str) -> Option<&'static str> {
         "inset-ring" => Some("insetRing"),
         "outline" => Some("outline"),
         "rounded" => Some("rounded"),
-        "normal-nums" => Some("fontVariant"),
-        "lining-nums" => Some("fontVariant"),
-        "oldstyle-nums" => Some("fontVariant"),
-        "proportional-nums" => Some("fontVariant"),
-        "tabular-nums" => Some("fontVariant"),
-        "diagonal-fractions" => Some("fontVariant"),
-        "stacked-fractions" => Some("fontVariant"),
+        "lining-nums" => Some("liningNums"),
+        "oldstyle-nums" => Some("oldstyleNums"),
+        "proportional-nums" => Some("proportionalNums"),
+        "tabular-nums" => Some("tabularNums"),
+        "diagonal-fractions" => Some("diagonalFractions"),
+        "stacked-fractions" => Some("stackedFractions"),
         "snap-none" => Some("snapType"),
         "snap-x" => Some("snapType"),
         "snap-y" => Some("snapType"),
@@ -1461,62 +1463,6 @@ pub(crate) const BOOLEAN_VALUE_MAP: &[(&str, BooleanValue)] = &[
         BooleanValue {
             prop: "divideStyle",
             value: "none",
-            css_property: None,
-        },
-    ),
-    (
-        "normal-nums",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "normal-nums",
-            css_property: None,
-        },
-    ),
-    (
-        "lining-nums",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "lining-nums",
-            css_property: None,
-        },
-    ),
-    (
-        "oldstyle-nums",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "oldstyle-nums",
-            css_property: None,
-        },
-    ),
-    (
-        "proportional-nums",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "proportional-nums",
-            css_property: None,
-        },
-    ),
-    (
-        "tabular-nums",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "tabular-nums",
-            css_property: None,
-        },
-    ),
-    (
-        "diagonal-fractions",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "diagonal-fractions",
-            css_property: None,
-        },
-    ),
-    (
-        "stacked-fractions",
-        BooleanValue {
-            prop: "fontVariant",
-            value: "stacked-fractions",
             css_property: None,
         },
     ),
@@ -2040,41 +1986,6 @@ pub(crate) fn boolean_value(class: &str) -> Option<BooleanValue> {
         "divide-none" => Some(BooleanValue {
             prop: "divideStyle",
             value: "none",
-            css_property: None,
-        }),
-        "normal-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "normal-nums",
-            css_property: None,
-        }),
-        "lining-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "lining-nums",
-            css_property: None,
-        }),
-        "oldstyle-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "oldstyle-nums",
-            css_property: None,
-        }),
-        "proportional-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "proportional-nums",
-            css_property: None,
-        }),
-        "tabular-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "tabular-nums",
-            css_property: None,
-        }),
-        "diagonal-fractions" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "diagonal-fractions",
-            css_property: None,
-        }),
-        "stacked-fractions" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "stacked-fractions",
             css_property: None,
         }),
         "appearance-none" => Some(BooleanValue {
