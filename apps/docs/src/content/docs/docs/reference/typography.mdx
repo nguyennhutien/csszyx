@@ -148,6 +148,29 @@ for the full contrast. You write no brackets or parens either way.
   { sz: "{ fontSmoothing: 'subpixel' }", tw: "subpixel-antialiased" },
 ]} />
 
+## Numeric Glyphs (font-variant-numeric)
+
+CSS takes one keyword per group and combines the groups, so each group is one
+key: a second value in the same group replaces the first, and different groups
+combine. `nums: 'normal'` resets them all, so write it alone or under a variant.
+
+<PropTable rows={[
+  { sz: "{ numSpacing: 'tabular' }", tw: "tabular-nums" },
+  { sz: "{ numSpacing: 'proportional' }", tw: "proportional-nums" },
+  { sz: "{ numFigure: 'lining' }", tw: "lining-nums" },
+  { sz: "{ numFigure: 'oldstyle' }", tw: "oldstyle-nums" },
+  { sz: "{ numFraction: 'diagonal' }", tw: "diagonal-fractions" },
+  { sz: "{ numFraction: 'stacked' }", tw: "stacked-fractions" },
+  { sz: "{ numOrdinal: true }", tw: "ordinal" },
+  { sz: "{ numSlashedZero: true }", tw: "slashed-zero" },
+  { sz: "{ nums: 'normal' }", tw: "normal-nums" },
+  { sz: "{ numSpacing: 'tabular', numSlashedZero: true }", tw: "tabular-nums slashed-zero" },
+]} />
+
+Tailwind keeps each group in a variable that a child does not inherit: a child
+that sets one group of its own shows only that group. Put every group an element
+needs on that element.
+
 ## Font Features (v4.2)
 
 :::tip[New in v4.2]

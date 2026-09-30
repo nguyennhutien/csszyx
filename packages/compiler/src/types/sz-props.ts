@@ -933,15 +933,22 @@ export interface TypographyProps {
         | 'ultra-expanded'
         | (string & {});
 
-    /** @see https://tailwindcss.com/docs/font-variant-numeric */
-    ordinal?: boolean;
-    slashedZero?: boolean;
-    liningNums?: boolean;
-    oldstyleNums?: boolean;
-    proportionalNums?: boolean;
-    tabularNums?: boolean;
-    diagonalFractions?: boolean;
-    stackedFractions?: boolean;
+    /**
+     * `font-variant-numeric: normal` — `normal-nums`. Resets the whole
+     * property, so it belongs alone or under a variant (`md: { nums: 'normal' }`).
+     * @see https://tailwindcss.com/docs/font-variant-numeric
+     */
+    nums?: 'normal';
+    /** Figure style: `lining-nums` | `oldstyle-nums`. One per element; combines with the other `num*` keys. */
+    numFigure?: 'lining' | 'oldstyle';
+    /** Figure width: `proportional-nums` | `tabular-nums` (aligned columns). One per element; combines with the other `num*` keys. */
+    numSpacing?: 'proportional' | 'tabular';
+    /** Fraction style: `diagonal-fractions` | `stacked-fractions`. One per element; combines with the other `num*` keys. */
+    numFraction?: 'diagonal' | 'stacked';
+    /** `ordinal` — ordinal markers (1st, 2nd). Combines with the other `num*` keys. */
+    numOrdinal?: boolean;
+    /** `slashed-zero` — a zero with a slash. Combines with the other `num*` keys. */
+    numSlashedZero?: boolean;
 
     /** @see https://tailwindcss.com/docs/letter-spacing */
     tracking?: 'tighter' | 'tight' | 'normal' | 'wide' | 'wider' | 'widest' | (string & {});

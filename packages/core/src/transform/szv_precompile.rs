@@ -1220,7 +1220,7 @@ mod tests {
         // Same for a flag whose class name differs from its key.
         assert_eq!(
             overlap_disqualify_path(&base_config(vec![entry(
-                "tabularNums",
+                "numSlashedZero",
                 StaticSzValue::Boolean(true)
             )])),
             None

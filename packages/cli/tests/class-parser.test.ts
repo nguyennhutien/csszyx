@@ -138,28 +138,35 @@ describe('class-parser', () => {
             expect(parseClass('divide-dashed')).toEqual({ prop: 'divideStyle', value: 'dashed' });
         });
 
-        it('font variant booleans', () => {
-            expect(parseClass('ordinal')).toEqual({ prop: 'ordinal', value: true });
-            expect(parseClass('slashed-zero')).toEqual({ prop: 'slashedZero', value: true });
-            // The typed keys, not `fontVariant`: `check` reports that key as
-            // unknown, so migrate must not write it.
-            expect(parseClass('tabular-nums')).toEqual({ prop: 'tabularNums', value: true });
-            expect(parseClass('lining-nums')).toEqual({ prop: 'liningNums', value: true });
-            expect(parseClass('oldstyle-nums')).toEqual({ prop: 'oldstyleNums', value: true });
-            expect(parseClass('proportional-nums')).toEqual({
-                prop: 'proportionalNums',
-                value: true,
+        it('font variant numeric: one key per group', () => {
+            expect(parseClass('ordinal')).toEqual({ prop: 'numOrdinal', value: true });
+            expect(parseClass('slashed-zero')).toEqual({ prop: 'numSlashedZero', value: true });
+            const group = (prop: string, value: string, cssProperty: string) => ({
+                prop,
+                value,
+                cssProperty,
             });
-            expect(parseClass('diagonal-fractions')).toEqual({
-                prop: 'diagonalFractions',
-                value: true,
-            });
-            expect(parseClass('stacked-fractions')).toEqual({
-                prop: 'stackedFractions',
-                value: true,
-            });
-            // No sz key resets the numeric variants, so the class stays as written.
-            expect(parseClass('normal-nums')).toBeNull();
+            expect(parseClass('normal-nums')).toEqual(
+                group('nums', 'normal', 'font-variant-numeric'),
+            );
+            expect(parseClass('lining-nums')).toEqual(
+                group('numFigure', 'lining', '--tw-numeric-figure'),
+            );
+            expect(parseClass('oldstyle-nums')).toEqual(
+                group('numFigure', 'oldstyle', '--tw-numeric-figure'),
+            );
+            expect(parseClass('proportional-nums')).toEqual(
+                group('numSpacing', 'proportional', '--tw-numeric-spacing'),
+            );
+            expect(parseClass('tabular-nums')).toEqual(
+                group('numSpacing', 'tabular', '--tw-numeric-spacing'),
+            );
+            expect(parseClass('diagonal-fractions')).toEqual(
+                group('numFraction', 'diagonal', '--tw-numeric-fraction'),
+            );
+            expect(parseClass('stacked-fractions')).toEqual(
+                group('numFraction', 'stacked', '--tw-numeric-fraction'),
+            );
         });
 
         it('keywords that belong to a style key, not the colour key of their prefix', () => {

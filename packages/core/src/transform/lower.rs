@@ -532,15 +532,15 @@ pub(crate) fn collect_owned_key_variant_objects(
 
 /// The class a closed-enum key emits for a value outside its table.
 ///
-/// On these keys the value IS the class, so it goes out verbatim — except
-/// `isolation`, whose utilities are prefixed. Mirrors `bareClosedEnumClass` in
-/// the TypeScript core, so the diagnostic names the class both engines emit.
+/// The value keeps its key's fixed part (`isolation-`, `-nums`, …) from the
+/// generated `closed_enum_affix`, or goes out verbatim on the keys whose value
+/// IS the class. Mirrors `bareClosedEnumClass` in the TypeScript core, so the
+/// diagnostic names the class both engines emit.
 pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
-    if key == "isolation" {
-        format!("isolation-{value}")
-    } else {
-        value.to_string()
-    }
+    super::generated::tables::closed_enum_affix(key).map_or_else(
+        || value.to_string(),
+        |(prefix, suffix)| format!("{prefix}{value}{suffix}"),
+    )
 }
 
 /// Collect closed-enum keys whose value is not in their set, for the diagnostic.
@@ -1548,23 +1548,6 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     "space" | "round" => format!("{prefix}mask-repeat-{value}"),
                     _ => format!("{prefix}mask-{value}"),
                 });
-            }
-            // font-variant-numeric values are emitted bare (normal-nums, tabular-nums).
-            if key == "fontVariant"
-                && matches!(
-                    value.as_str(),
-                    "normal-nums"
-                        | "ordinal"
-                        | "slashed-zero"
-                        | "lining-nums"
-                        | "oldstyle-nums"
-                        | "proportional-nums"
-                        | "tabular-nums"
-                        | "diagonal-fractions"
-                        | "stacked-fractions"
-                )
-            {
-                return Some(format!("{prefix}{value}"));
             }
             // scroll-snap direct maps: the sub-axis is dropped (snap-mandatory,
             // snap-center), except snap-align-none which keeps the axis.
@@ -3540,14 +3523,8 @@ mod tests {
                 property("snapStrictness", StaticSzValue::String("invalid".into())),
                 property("snapStop", StaticSzValue::String("invalid".into())),
                 property("snapType", StaticSzValue::String("invalid".into())),
-                property(
-                    "fontVariant",
-                    StaticSzValue::String("diagonal-fractions".into()),
-                ),
-                property(
-                    "fontVariant",
-                    StaticSzValue::String("stacked-fractions".into()),
-                ),
+                property("numFraction", StaticSzValue::String("diagonal".into())),
+                property("numFraction", StaticSzValue::String("stacked".into())),
                 property(
                     "bg",
                     object(vec![

@@ -61,6 +61,7 @@ function readTables() {
             suggestionMap: core.stringObject('SUGGESTION_MAP'),
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
+            closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
         };
@@ -84,6 +85,7 @@ function renderRust({
     suggestionMap,
     migrationNotes,
     closedEnumClasses,
+    closedEnumAffixes,
     varHostileWrongProperty,
     varHostileNoVarForm,
 }) {
@@ -227,6 +229,15 @@ ${renderMatchPatterns(closedEnumClasses.map(([key]) => key))}
     )
 }
 
+/// The fixed part a closed-enum key wraps around a value outside its set, as
+/// \`(prefix, suffix)\`. Keys absent here emit such a value verbatim.
+pub(crate) fn closed_enum_affix(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+${renderAffixArms(closedEnumAffixes)}
+        _ => None,
+    }
+}
+
 /// The legal values of a closed-enum key, in table order, for the diagnostic.
 pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
     match key {
@@ -280,6 +291,15 @@ function renderClosedEnumLists(entries) {
 function renderMatchArms(entries) {
     return entries
         .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
+}
+
+function renderAffixArms(entries) {
+    return entries
+        .map(([key, fields]) => {
+            const shape = Object.fromEntries(fields);
+            return `        ${rustString(key)} => Some((${rustString(shape.prefix)}, ${rustString(shape.suffix)})),`;
+        })
         .join('\n');
 }
 

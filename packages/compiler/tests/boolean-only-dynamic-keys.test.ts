@@ -36,6 +36,8 @@ const MEMBER_BARE_CLASS: Record<string, string> = {
     outline: 'outline',
     truncate: 'truncate',
     shadow: 'shadow',
+    numOrdinal: 'ordinal',
+    numSlashedZero: 'slashed-zero',
 };
 
 describe('BOOLEAN_ONLY_DYNAMIC_KEYS membership gate', () => {

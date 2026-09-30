@@ -84,8 +84,8 @@ The dev warning is precise:
 :::note[Genuinely on/off utilities stay boolean]
 Only **value-aliases** of a single property were removed. Utilities that are
 truly on/off — not one value among several — keep accepting `true`: composite
-helpers (`truncate`, `srOnly`), stackable font-variant-numeric flags (`ordinal`,
-`tabularNums`, `liningNums`, …), default-or-value toggles (`grow`, `shrink`,
+helpers (`truncate`, `srOnly`), single-keyword font-variant-numeric groups
+(`numOrdinal`, `numSlashedZero`), default-or-value toggles (`grow`, `shrink`,
 `ring`, `outline`, `blur`, `border`, `shadow`, `transition`, `divideX`), and
 plugin components (`container`, `prose`). `{ truncate: true }`, `{ grow: true }`,
 and `{ container: true }` are all still correct.

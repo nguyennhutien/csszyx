@@ -13640,25 +13640,6 @@
     "oxc": "delay-75"
   },
   {
-    "sz": "{\"diagonalFractions\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "diagonalFractions",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "diagonal-fractions"
-  },
-  {
     "sz": "{\"display\":\"inline\"}",
     "ir": {
       "properties": [
@@ -17819,25 +17800,6 @@
     "oxc": "line-clamp-1"
   },
   {
-    "sz": "{\"liningNums\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "liningNums",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "lining-nums"
-  },
-  {
     "sz": "{\"list\":\"--t\"}",
     "ir": {
       "properties": [
@@ -20900,6 +20862,177 @@
     "oxc": "not-sr-only"
   },
   {
+    "sz": "{\"numFigure\":\"lining\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFigure",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "lining"
+          }
+        }
+      ]
+    },
+    "oxc": "lining-nums"
+  },
+  {
+    "sz": "{\"numFigure\":\"oldstyle\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFigure",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "oldstyle"
+          }
+        }
+      ]
+    },
+    "oxc": "oldstyle-nums"
+  },
+  {
+    "sz": "{\"numFraction\":\"diagonal\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFraction",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "diagonal"
+          }
+        }
+      ]
+    },
+    "oxc": "diagonal-fractions"
+  },
+  {
+    "sz": "{\"numFraction\":\"stacked\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFraction",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "stacked"
+          }
+        }
+      ]
+    },
+    "oxc": "stacked-fractions"
+  },
+  {
+    "sz": "{\"numOrdinal\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numOrdinal",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "ordinal"
+  },
+  {
+    "sz": "{\"numSlashedZero\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSlashedZero",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "slashed-zero"
+  },
+  {
+    "sz": "{\"numSpacing\":\"proportional\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSpacing",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "proportional"
+          }
+        }
+      ]
+    },
+    "oxc": "proportional-nums"
+  },
+  {
+    "sz": "{\"numSpacing\":\"tabular\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSpacing",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "tabular"
+          }
+        }
+      ]
+    },
+    "oxc": "tabular-nums"
+  },
+  {
+    "sz": "{\"nums\":\"normal\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "nums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "normal"
+          }
+        }
+      ]
+    },
+    "oxc": "normal-nums"
+  },
+  {
     "sz": "{\"objectFit\":\"contain\"}",
     "ir": {
       "properties": [
@@ -21204,25 +21337,6 @@
     "oxc": "object-top-right"
   },
   {
-    "sz": "{\"oldstyleNums\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "oldstyleNums",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "oldstyle-nums"
-  },
-  {
     "sz": "{\"opacity\":\"--o\"}",
     "ir": {
       "properties": [
@@ -21392,25 +21506,6 @@
       ]
     },
     "oxc": "order-none"
-  },
-  {
-    "sz": "{\"ordinal\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "ordinal",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "ordinal"
   },
   {
     "sz": "{\"origin\":\"--o\"}",
@@ -22969,25 +23064,6 @@
       ]
     },
     "oxc": "pr-4"
-  },
-  {
-    "sz": "{\"proportionalNums\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "proportionalNums",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "proportional-nums"
   },
   {
     "sz": "{\"prose\":true}",
@@ -27366,25 +27442,6 @@
     "oxc": "skew-y-6"
   },
   {
-    "sz": "{\"slashedZero\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "slashedZero",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "slashed-zero"
-  },
-  {
     "sz": "{\"snapAlign\":\"none\"}",
     "ir": {
       "properties": [
@@ -27784,25 +27841,6 @@
     "oxc": "sr-only"
   },
   {
-    "sz": "{\"stackedFractions\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "stackedFractions",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "stacked-fractions"
-  },
-  {
     "sz": "{\"start\":4}",
     "ir": {
       "properties": [
@@ -28086,25 +28124,6 @@
       ]
     },
     "oxc": "table-fixed"
-  },
-  {
-    "sz": "{\"tabularNums\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "tabularNums",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "tabular-nums"
   },
   {
     "sz": "{\"text\":\"1.5rem\"}",

@@ -57,19 +57,22 @@ Controlling the font width.
 
 ## Font Variant Numeric
 
-Controlling numeric glyphs.
+Controlling numeric glyphs. CSS allows one keyword per group — figure, spacing,
+fraction, ordinal, slashed zero — and combines the groups, so each group is one
+key: a second value for the same group replaces the first, different groups
+combine. `normal` resets them all.
 
-| Concept     | CSS Rule                                   | Tailwind v4 Class    | `sz` Prop (Object Syntax)     | Note                                  |
-| :---------- | :----------------------------------------- | :------------------- | :---------------------------- | :------------------------------------ |
-| **Boolean** | `font-variant-numeric: ordinal`            | `ordinal`            | `{ ordinal: true }`           | Flags combine: each sets one feature. |
-| **Boolean** | `font-variant-numeric: slashed-zero`       | `slashed-zero`       | `{ slashedZero: true }`       |                                       |
-| **Boolean** | `font-variant-numeric: lining-nums`        | `lining-nums`        | `{ liningNums: true }`        |                                       |
-| **Boolean** | `font-variant-numeric: oldstyle-nums`      | `oldstyle-nums`      | `{ oldstyleNums: true }`      |                                       |
-| **Boolean** | `font-variant-numeric: proportional-nums`  | `proportional-nums`  | `{ proportionalNums: true }`  |                                       |
-| **Boolean** | `font-variant-numeric: tabular-nums`       | `tabular-nums`       | `{ tabularNums: true }`       |                                       |
-| **Boolean** | `font-variant-numeric: diagonal-fractions` | `diagonal-fractions` | `{ diagonalFractions: true }` |                                       |
-| **Boolean** | `font-variant-numeric: stacked-fractions`  | `stacked-fractions`  | `{ stackedFractions: true }`  |                                       |
-| —           | `font-variant-numeric: normal`             | `normal-nums`        | none — keep it in `className` | No sz key resets the flags.           |
+| Concept          | CSS Rule                                   | Tailwind v4 Class    | `sz` Prop (Object Syntax)        | Note                                           |
+| :--------------- | :----------------------------------------- | :------------------- | :------------------------------- | :--------------------------------------------- |
+| **Reset**        | `font-variant-numeric: normal`             | `normal-nums`        | `{ nums: 'normal' }`             | Resets every group. Alone, or under a variant. |
+| **Figure**       | `font-variant-numeric: lining-nums`        | `lining-nums`        | `{ numFigure: 'lining' }`        | One per element.                               |
+| **Figure**       | `font-variant-numeric: oldstyle-nums`      | `oldstyle-nums`      | `{ numFigure: 'oldstyle' }`      |                                                |
+| **Spacing**      | `font-variant-numeric: proportional-nums`  | `proportional-nums`  | `{ numSpacing: 'proportional' }` | One per element.                               |
+| **Spacing**      | `font-variant-numeric: tabular-nums`       | `tabular-nums`       | `{ numSpacing: 'tabular' }`      | Aligned number columns.                        |
+| **Fraction**     | `font-variant-numeric: diagonal-fractions` | `diagonal-fractions` | `{ numFraction: 'diagonal' }`    | One per element.                               |
+| **Fraction**     | `font-variant-numeric: stacked-fractions`  | `stacked-fractions`  | `{ numFraction: 'stacked' }`     |                                                |
+| **Ordinal**      | `font-variant-numeric: ordinal`            | `ordinal`            | `{ numOrdinal: true }`           |                                                |
+| **Slashed zero** | `font-variant-numeric: slashed-zero`       | `slashed-zero`       | `{ numSlashedZero: true }`       |                                                |
 
 ## Font Features
 

@@ -544,9 +544,15 @@ export const MIGRATION_NOTES: Record<string, string> = {
     maskVia:
         'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
     maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
+    // One key could hold one keyword, while CSS combines one per group.
+    fontVariant:
+        'font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal"',
 };
 
 export const SUGGESTION_MAP: Record<string, string> = {
+    // font-variant-numeric single-keyword groups joined the `num*` family (0.18.0)
+    ordinal: 'numOrdinal',
+    slashedZero: 'numSlashedZero',
     // Background
     backgroundColor: 'bg',
     backgroundImage: 'bgImg',
@@ -910,12 +916,17 @@ export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
     'maskMode',
     'maskType',
     'snapStrictness',
+    // font-variant-numeric, one key per group of its grammar (CLOSED_ENUM_CLASSES)
+    'nums',
+    'numFigure',
+    'numSpacing',
+    'numFraction',
 ]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
-// (truncate, srOnly), additive/stackable flags (font-variant-numeric, which
-// combine), default-or-value toggles (grow/ring/blur — true means the default,
+// (truncate, srOnly), single-keyword groups of an additive property
+// (numOrdinal, numSlashedZero), default-or-value toggles (grow/ring/blur — true means the default,
 // a value means a specific one), plugin components (container/prose), and
 // directional reverse flags. Value-alias sugar for display/position/visibility/
 // isolation/text-transform/font-style/text-decoration-line/font-smoothing was
@@ -944,15 +955,11 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     'proseInvert',
     'srOnly',
     'notSrOnly',
-    'ordinal',
-    'slashedZero',
-    // Font variant numeric (additive — these combine, so they stay boolean flags)
-    'liningNums',
-    'oldstyleNums',
-    'proportionalNums',
-    'tabularNums',
-    'diagonalFractions',
-    'stackedFractions',
+    // font-variant-numeric groups with a single keyword; the two-keyword groups
+    // are closed enums (numFigure/numSpacing/numFraction) so one object cannot
+    // set both keywords of a group.
+    'numOrdinal',
+    'numSlashedZero',
     // Divide/Space reverse
     'divideXReverse',
     'divideYReverse',
@@ -1002,6 +1009,8 @@ const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
     outline: true,
     truncate: true,
     shadow: true,
+    numOrdinal: true,
+    numSlashedZero: true,
 } as const satisfies SzProps;
 
 // Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
@@ -1059,6 +1068,13 @@ export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string 
     // font-smoothing
     antialiased: { key: 'fontSmoothing', value: 'grayscale' },
     subpixelAntialiased: { key: 'fontSmoothing', value: 'subpixel' },
+    // font-variant-numeric: each two-keyword group became one key (0.18.0)
+    liningNums: { key: 'numFigure', value: 'lining' },
+    oldstyleNums: { key: 'numFigure', value: 'oldstyle' },
+    proportionalNums: { key: 'numSpacing', value: 'proportional' },
+    tabularNums: { key: 'numSpacing', value: 'tabular' },
+    diagonalFractions: { key: 'numFraction', value: 'diagonal' },
+    stackedFractions: { key: 'numFraction', value: 'stacked' },
 };
 
 // Alignment sz-keys take csszyx's short value form (start/end/between/around/
@@ -1137,12 +1153,8 @@ export const BOOLEAN_TO_CLASS: Record<string, string> = {
     spaceXReverse: 'space-x-reverse',
     spaceYReverse: 'space-y-reverse',
     // Font variant numeric
-    liningNums: 'lining-nums',
-    oldstyleNums: 'oldstyle-nums',
-    proportionalNums: 'proportional-nums',
-    tabularNums: 'tabular-nums',
-    diagonalFractions: 'diagonal-fractions',
-    stackedFractions: 'stacked-fractions',
+    numOrdinal: 'ordinal',
+    numSlashedZero: 'slashed-zero',
     // Transforms
     transformGpu: 'transform-gpu',
     transformCpu: 'transform-cpu',
@@ -2729,7 +2741,6 @@ const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']
 /** Collects special properties that emit one direct utility. */
 function collectBasicSpecialProperty(
     rawKey: string,
-    key: string,
     value: SzValue,
     prefix: string,
     classes: string[],
@@ -2738,7 +2749,7 @@ function collectBasicSpecialProperty(
         classes.push(`${prefix}${formatWillChange(value)}`);
         return true;
     }
-    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(key) : undefined;
+    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(rawKey) : undefined;
     if (legal !== undefined && typeof value === 'string') {
         // The important modifier is a class suffix, never part of the value:
         // `flex!` is a legal display value that a raw lookup would refuse.
@@ -2749,8 +2760,8 @@ function collectBasicSpecialProperty(
             classes.push(`${prefix}${utility}${bang}`);
             return true;
         }
-        const bare = bareClosedEnumClass(key, base);
-        warnClosedEnumValue(key, base, bare, legal);
+        const bare = bareClosedEnumClass(rawKey, base);
+        warnClosedEnumValue(rawKey, base, bare, legal);
         classes.push(`${prefix}${bare}${bang}`);
         return true;
     }
@@ -2825,6 +2836,31 @@ const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
         isolate: 'isolate',
         auto: 'isolation-auto',
     },
+    // font-variant-numeric, one key per group of `normal | [ <figure> ||
+    // <spacing> || <fraction> || ordinal || slashed-zero ]`. Each group is one
+    // Tailwind variable, so two keywords of a group override and different
+    // groups combine. Source of truth: `docs/specs/snippets/typography.md`.
+    nums: { normal: 'normal-nums' },
+    numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
+    numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
+    numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
+};
+
+/**
+ * What a closed-enum key wraps around a value outside its table.
+ *
+ * `display`/`position`/`visibility` spell their value as the bare utility, so
+ * a typo goes out verbatim. The other keys' utilities carry a fixed part, and
+ * keeping it on a typo keeps the class clear of a project's own CSS names:
+ * `numSpacing: 'tabulr'` ships `tabulr-nums`, not `tabulr`. The engine reads a
+ * generated copy, so both artifacts emit the same class.
+ */
+const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> = {
+    isolation: { prefix: 'isolation-', suffix: '' },
+    nums: { prefix: '', suffix: '-nums' },
+    numFigure: { prefix: '', suffix: '-nums' },
+    numSpacing: { prefix: '', suffix: '-nums' },
+    numFraction: { prefix: '', suffix: '-fractions' },
 };
 
 /**
@@ -2847,16 +2883,17 @@ const _warnedClosedEnumValues = new Set<string>();
 /**
  * The class a closed-enum key emits for a value outside its table.
  *
- * On these keys the value IS the class, so it goes out verbatim — except
- * `isolation`, whose utilities are prefixed. This is the pre-diagnostic
- * behaviour, kept on purpose: the class is what makes the typo findable in
- * the DOM when no diagnostic reaches it.
+ * The value keeps its key's fixed part (`CLOSED_ENUM_AFFIXES`), or goes out
+ * verbatim on the keys whose value IS the class. The class is emitted on
+ * purpose: it is what makes the typo findable in the DOM when no diagnostic
+ * reaches it.
  * @param key - The closed-enum key.
  * @param value - The value outside its set, without the important modifier.
  * @returns The bare utility, before any variant prefix.
  */
 function bareClosedEnumClass(key: string, value: string): string {
-    return key === 'isolation' ? `isolation-${value}` : value;
+    const affix = CLOSED_ENUM_AFFIXES[key];
+    return affix ? `${affix.prefix}${value}${affix.suffix}` : value;
 }
 
 /**
@@ -2941,17 +2978,6 @@ const DECORATION_CLASSES = new Set([
     'none',
 ]);
 const TEXT_TRANSFORM_CLASSES = new Set(['uppercase', 'lowercase', 'capitalize']);
-const FONT_VARIANT_CLASSES = new Set([
-    'normal-nums',
-    'ordinal',
-    'slashed-zero',
-    'lining-nums',
-    'oldstyle-nums',
-    'proportional-nums',
-    'tabular-nums',
-    'diagonal-fractions',
-    'stacked-fractions',
-]);
 
 /** Collects direct text decoration, transform, wrapping, and numeral modes. */
 function collectTextKeywordProperty(
@@ -2970,10 +2996,6 @@ function collectTextKeywordProperty(
     }
     if (key === 'textTransform' && (value === 'normal-case' || value === 'none')) {
         classes.push(`${prefix}normal-case`);
-        return true;
-    }
-    if (key === 'fontVariant' && FONT_VARIANT_CLASSES.has(value)) {
-        classes.push(`${prefix}${value}`);
         return true;
     }
     if (key === 'textWrap') {
@@ -4200,7 +4222,7 @@ function collectTransformProperty(
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 
     const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
-    if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) return;
+    if (collectBasicSpecialProperty(rawKey, value, prefix, classes)) return;
     if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
     collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
 }

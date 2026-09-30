@@ -22322,117 +22322,127 @@
   {
    "c": "diagonal-fractions",
    "p": {
-    "prop": "diagonalFractions",
-    "value": true
+    "cssProperty": "--tw-numeric-fraction",
+    "prop": "numFraction",
+    "value": "diagonal"
    },
    "o": {
     "sz": {
-     "diagonalFractions": true
+     "numFraction": "diagonal"
     },
-    "szText": "{\"diagonalFractions\":true}",
+    "szText": "{\"numFraction\":\"diagonal\"}",
     "u": [],
     "k": [],
-    "g": "{ diagonalFractions: true }",
-    "h": "diagonalFractions: true"
+    "g": "{ numFraction: 'diagonal' }",
+    "h": "numFraction: 'diagonal'"
    }
   },
   {
    "c": "lining-nums",
    "p": {
-    "prop": "liningNums",
-    "value": true
+    "cssProperty": "--tw-numeric-figure",
+    "prop": "numFigure",
+    "value": "lining"
    },
    "o": {
     "sz": {
-     "liningNums": true
+     "numFigure": "lining"
     },
-    "szText": "{\"liningNums\":true}",
+    "szText": "{\"numFigure\":\"lining\"}",
     "u": [],
     "k": [],
-    "g": "{ liningNums: true }",
-    "h": "liningNums: true"
+    "g": "{ numFigure: 'lining' }",
+    "h": "numFigure: 'lining'"
    }
   },
   {
    "c": "normal-nums",
-   "p": null,
+   "p": {
+    "cssProperty": "font-variant-numeric",
+    "prop": "nums",
+    "value": "normal"
+   },
    "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "normal-nums"
-    ],
+    "sz": {
+     "nums": "normal"
+    },
+    "szText": "{\"nums\":\"normal\"}",
+    "u": [],
     "k": [],
-    "g": "{}",
-    "h": ""
+    "g": "{ nums: 'normal' }",
+    "h": "nums: 'normal'"
    }
   },
   {
    "c": "oldstyle-nums",
    "p": {
-    "prop": "oldstyleNums",
-    "value": true
+    "cssProperty": "--tw-numeric-figure",
+    "prop": "numFigure",
+    "value": "oldstyle"
    },
    "o": {
     "sz": {
-     "oldstyleNums": true
+     "numFigure": "oldstyle"
     },
-    "szText": "{\"oldstyleNums\":true}",
+    "szText": "{\"numFigure\":\"oldstyle\"}",
     "u": [],
     "k": [],
-    "g": "{ oldstyleNums: true }",
-    "h": "oldstyleNums: true"
+    "g": "{ numFigure: 'oldstyle' }",
+    "h": "numFigure: 'oldstyle'"
    }
   },
   {
    "c": "proportional-nums",
    "p": {
-    "prop": "proportionalNums",
-    "value": true
+    "cssProperty": "--tw-numeric-spacing",
+    "prop": "numSpacing",
+    "value": "proportional"
    },
    "o": {
     "sz": {
-     "proportionalNums": true
+     "numSpacing": "proportional"
     },
-    "szText": "{\"proportionalNums\":true}",
+    "szText": "{\"numSpacing\":\"proportional\"}",
     "u": [],
     "k": [],
-    "g": "{ proportionalNums: true }",
-    "h": "proportionalNums: true"
+    "g": "{ numSpacing: 'proportional' }",
+    "h": "numSpacing: 'proportional'"
    }
   },
   {
    "c": "stacked-fractions",
    "p": {
-    "prop": "stackedFractions",
-    "value": true
+    "cssProperty": "--tw-numeric-fraction",
+    "prop": "numFraction",
+    "value": "stacked"
    },
    "o": {
     "sz": {
-     "stackedFractions": true
+     "numFraction": "stacked"
     },
-    "szText": "{\"stackedFractions\":true}",
+    "szText": "{\"numFraction\":\"stacked\"}",
     "u": [],
     "k": [],
-    "g": "{ stackedFractions: true }",
-    "h": "stackedFractions: true"
+    "g": "{ numFraction: 'stacked' }",
+    "h": "numFraction: 'stacked'"
    }
   },
   {
    "c": "tabular-nums",
    "p": {
-    "prop": "tabularNums",
-    "value": true
+    "cssProperty": "--tw-numeric-spacing",
+    "prop": "numSpacing",
+    "value": "tabular"
    },
    "o": {
     "sz": {
-     "tabularNums": true
+     "numSpacing": "tabular"
     },
-    "szText": "{\"tabularNums\":true}",
+    "szText": "{\"numSpacing\":\"tabular\"}",
     "u": [],
     "k": [],
-    "g": "{ tabularNums: true }",
-    "h": "tabularNums: true"
+    "g": "{ numSpacing: 'tabular' }",
+    "h": "numSpacing: 'tabular'"
    }
   },
   {
@@ -28368,18 +28378,18 @@
   {
    "c": "ordinal",
    "p": {
-    "prop": "ordinal",
+    "prop": "numOrdinal",
     "value": true
    },
    "o": {
     "sz": {
-     "ordinal": true
+     "numOrdinal": true
     },
-    "szText": "{\"ordinal\":true}",
+    "szText": "{\"numOrdinal\":true}",
     "u": [],
     "k": [],
-    "g": "{ ordinal: true }",
-    "h": "ordinal: true"
+    "g": "{ numOrdinal: true }",
+    "h": "numOrdinal: true"
    }
   },
   {
@@ -34465,18 +34475,18 @@
   {
    "c": "slashed-zero",
    "p": {
-    "prop": "slashedZero",
+    "prop": "numSlashedZero",
     "value": true
    },
    "o": {
     "sz": {
-     "slashedZero": true
+     "numSlashedZero": true
     },
-    "szText": "{\"slashedZero\":true}",
+    "szText": "{\"numSlashedZero\":true}",
     "u": [],
     "k": [],
-    "g": "{ slashedZero: true }",
-    "h": "slashedZero: true"
+    "g": "{ numSlashedZero: true }",
+    "h": "numSlashedZero: true"
    }
   },
   {

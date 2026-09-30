@@ -55,8 +55,8 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'sr-only': 'srOnly',
     'not-sr-only': 'notSrOnly',
     isolate: 'isolate',
-    ordinal: 'ordinal',
-    'slashed-zero': 'slashedZero',
+    ordinal: 'numOrdinal',
+    'slashed-zero': 'numSlashedZero',
     // Bare `transition` (common transition property) and the `group`/`peer`
     // marker classes round-trip through the compiler as boolean sugar.
     transition: 'transition',
@@ -78,15 +78,15 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Transforms — scale-3d/translate-3d carry the literal '3d' value via
     // BOOLEAN_VALUE_MAP, and transform-gpu/cpu/none → { transform: 'gpu'/'cpu'/'none' }.
 
-    // Font numeric: additive flags, each its own typed key. `fontVariant` is
-    // not a key `SzProps` or the known-key check has, and `normal-nums` has no
-    // key at all, so it stays in `className`.
-    'lining-nums': 'liningNums',
-    'oldstyle-nums': 'oldstyleNums',
-    'proportional-nums': 'proportionalNums',
-    'tabular-nums': 'tabularNums',
-    'diagonal-fractions': 'diagonalFractions',
-    'stacked-fractions': 'stackedFractions',
+    // Font numeric: the two-keyword groups and the reset carry a value, so they
+    // live in BOOLEAN_VALUE_MAP below.
+    'normal-nums': 'nums',
+    'lining-nums': 'numFigure',
+    'oldstyle-nums': 'numFigure',
+    'proportional-nums': 'numSpacing',
+    'tabular-nums': 'numSpacing',
+    'diagonal-fractions': 'numFraction',
+    'stacked-fractions': 'numFraction',
 
     // Snap
     'snap-none': 'snapType',
@@ -141,6 +141,29 @@ export const BOOLEAN_VALUE_MAP: Record<
     'divide-dotted': { prop: 'divideStyle', value: 'dotted' },
     'divide-double': { prop: 'divideStyle', value: 'double' },
     'divide-none': { prop: 'divideStyle', value: 'none' },
+
+    // Font numeric: one key per group. The group's Tailwind variable is its
+    // `cssProperty`, so two keywords of one group fail closed while different
+    // groups — which all set `font-variant-numeric` — still combine.
+    'normal-nums': { prop: 'nums', value: 'normal', cssProperty: 'font-variant-numeric' },
+    'lining-nums': { prop: 'numFigure', value: 'lining', cssProperty: '--tw-numeric-figure' },
+    'oldstyle-nums': { prop: 'numFigure', value: 'oldstyle', cssProperty: '--tw-numeric-figure' },
+    'proportional-nums': {
+        prop: 'numSpacing',
+        value: 'proportional',
+        cssProperty: '--tw-numeric-spacing',
+    },
+    'tabular-nums': { prop: 'numSpacing', value: 'tabular', cssProperty: '--tw-numeric-spacing' },
+    'diagonal-fractions': {
+        prop: 'numFraction',
+        value: 'diagonal',
+        cssProperty: '--tw-numeric-fraction',
+    },
+    'stacked-fractions': {
+        prop: 'numFraction',
+        value: 'stacked',
+        cssProperty: '--tw-numeric-fraction',
+    },
 
     // Appearance
     'appearance-none': { prop: 'appearance', value: 'none' },

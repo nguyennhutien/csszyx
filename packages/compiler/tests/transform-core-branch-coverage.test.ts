@@ -376,7 +376,7 @@ describe('string property handler chain', () => {
         expect(cls({ willChange: '--w' })).toBe('will-change-(--w)');
         expect(cls({ willChange: 'left top' })).toBe('will-change-[left_top]');
     });
-    it('decoration / textTransform / fontStyle / fontSmoothing / fontVariant', () => {
+    it('decoration / textTransform / fontStyle / fontSmoothing', () => {
         expect(cls({ decoration: 'underline' })).toBe('underline');
         expect(cls({ decoration: 'none' })).toBe('no-underline');
         expect(cls({ textTransform: 'uppercase' })).toBe('uppercase');
@@ -388,7 +388,6 @@ describe('string property handler chain', () => {
         expect(cls({ fontSmoothing: 'grayscale' })).toBe('antialiased');
         expect(cls({ fontSmoothing: 'subpixel' })).toBe('subpixel-antialiased');
         expect(cls({ fontSmoothing: 'bad' })).toBe('');
-        expect(cls({ fontVariant: 'ordinal' })).toBe('ordinal');
     });
     it('textWrap / break / wrap / textOverflow', () => {
         expect(cls({ textWrap: 'balance' })).toBe('text-balance');

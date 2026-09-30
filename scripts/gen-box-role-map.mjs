@@ -454,14 +454,8 @@ const BOOLEAN_ROLE = {
     proseInvert: { role: 'inner', category: 'text' },
     srOnly: { role: 'outer', category: 'visibility' },
     notSrOnly: { role: 'outer', category: 'visibility' },
-    ordinal: { role: 'inner', category: 'text' },
-    slashedZero: { role: 'inner', category: 'text' },
-    liningNums: { role: 'inner', category: 'text' },
-    oldstyleNums: { role: 'inner', category: 'text' },
-    proportionalNums: { role: 'inner', category: 'text' },
-    tabularNums: { role: 'inner', category: 'text' },
-    diagonalFractions: { role: 'inner', category: 'text' },
-    stackedFractions: { role: 'inner', category: 'text' },
+    numOrdinal: { role: 'inner', category: 'text' },
+    numSlashedZero: { role: 'inner', category: 'text' },
     divideXReverse: { role: 'inner', category: 'divide' },
     divideYReverse: { role: 'inner', category: 'divide' },
     spaceXReverse: { role: 'inner', category: 'space' },
@@ -478,6 +472,10 @@ const VALUE_KEYED_ROLE = {
     fontStyle: { role: 'inner', category: 'text' },
     decoration: { role: 'inner', category: 'text' },
     fontSmoothing: { role: 'inner', category: 'text' },
+    nums: { role: 'inner', category: 'text' },
+    numFigure: { role: 'inner', category: 'text' },
+    numSpacing: { role: 'inner', category: 'text' },
+    numFraction: { role: 'inner', category: 'text' },
 };
 
 function buildPropertyKeyRoles() {

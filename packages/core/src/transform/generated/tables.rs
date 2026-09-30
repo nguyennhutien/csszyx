@@ -364,6 +364,8 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
 /// Canonical-key suggestion for a removed/aliased sz key.
 pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
     match key {
+        "ordinal" => Some("numOrdinal"),
+        "slashedZero" => Some("numSlashedZero"),
         "backgroundColor" => Some("bg"),
         "backgroundImage" => Some("bgImg"),
         "backgroundSize" => Some("bgSize"),
@@ -471,6 +473,7 @@ pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
         "maskTo" => Some("the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
         "maskVia" => Some("masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
         "maskShape" => Some("the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
+        "fontVariant" => Some("font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
         _ => None,
     }
 }
@@ -490,12 +493,8 @@ pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
         "divideYReverse" => Some("divide-y-reverse"),
         "spaceXReverse" => Some("space-x-reverse"),
         "spaceYReverse" => Some("space-y-reverse"),
-        "liningNums" => Some("lining-nums"),
-        "oldstyleNums" => Some("oldstyle-nums"),
-        "proportionalNums" => Some("proportional-nums"),
-        "tabularNums" => Some("tabular-nums"),
-        "diagonalFractions" => Some("diagonal-fractions"),
-        "stackedFractions" => Some("stacked-fractions"),
+        "numOrdinal" => Some("ordinal"),
+        "numSlashedZero" => Some("slashed-zero"),
         "transformGpu" => Some("transform-gpu"),
         "transformCpu" => Some("transform-cpu"),
         "proseInvert" => Some("prose-invert"),
@@ -525,14 +524,8 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "proseInvert"
             | "srOnly"
             | "notSrOnly"
-            | "ordinal"
-            | "slashedZero"
-            | "liningNums"
-            | "oldstyleNums"
-            | "proportionalNums"
-            | "tabularNums"
-            | "diagonalFractions"
-            | "stackedFractions"
+            | "numOrdinal"
+            | "numSlashedZero"
             | "divideXReverse"
             | "divideYReverse"
             | "spaceXReverse"
@@ -564,6 +557,8 @@ pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
             | "outline"
             | "truncate"
             | "shadow"
+            | "numOrdinal"
+            | "numSlashedZero"
     )
 }
 
@@ -583,6 +578,10 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
             | "maskMode"
             | "maskType"
             | "snapStrictness"
+            | "nums"
+            | "numFigure"
+            | "numSpacing"
+            | "numFraction"
     )
 }
 
@@ -627,6 +626,12 @@ pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
             | "noUnderline"
             | "antialiased"
             | "subpixelAntialiased"
+            | "liningNums"
+            | "oldstyleNums"
+            | "proportionalNums"
+            | "tabularNums"
+            | "diagonalFractions"
+            | "stackedFractions"
     )
 }
 
@@ -672,6 +677,12 @@ pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static s
         "noUnderline" => Some(("decoration", "none")),
         "antialiased" => Some(("fontSmoothing", "grayscale")),
         "subpixelAntialiased" => Some(("fontSmoothing", "subpixel")),
+        "liningNums" => Some(("numFigure", "lining")),
+        "oldstyleNums" => Some(("numFigure", "oldstyle")),
+        "proportionalNums" => Some(("numSpacing", "proportional")),
+        "tabularNums" => Some(("numSpacing", "tabular")),
+        "diagonalFractions" => Some(("numFraction", "diagonal")),
+        "stackedFractions" => Some(("numFraction", "stacked")),
         _ => None,
     }
 }
@@ -857,13 +868,43 @@ pub(crate) fn closed_enum_class(key: &str, value: &str) -> Option<&'static str> 
         ("visibility", "collapse") => Some("collapse"),
         ("isolation", "isolate") => Some("isolate"),
         ("isolation", "auto") => Some("isolation-auto"),
+        ("nums", "normal") => Some("normal-nums"),
+        ("numFigure", "lining") => Some("lining-nums"),
+        ("numFigure", "oldstyle") => Some("oldstyle-nums"),
+        ("numSpacing", "proportional") => Some("proportional-nums"),
+        ("numSpacing", "tabular") => Some("tabular-nums"),
+        ("numFraction", "diagonal") => Some("diagonal-fractions"),
+        ("numFraction", "stacked") => Some("stacked-fractions"),
         _ => None,
     }
 }
 
 /// Whether a key's value set is closed. Mirrors `CLOSED_ENUM_CLASSES`'s keys.
 pub(crate) fn is_closed_enum_key(key: &str) -> bool {
-    matches!(key, "display" | "position" | "visibility" | "isolation")
+    matches!(
+        key,
+        "display"
+            | "position"
+            | "visibility"
+            | "isolation"
+            | "nums"
+            | "numFigure"
+            | "numSpacing"
+            | "numFraction"
+    )
+}
+
+/// The fixed part a closed-enum key wraps around a value outside its set, as
+/// `(prefix, suffix)`. Keys absent here emit such a value verbatim.
+pub(crate) fn closed_enum_affix(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+        "isolation" => Some(("isolation-", "")),
+        "nums" => Some(("", "-nums")),
+        "numFigure" => Some(("", "-nums")),
+        "numSpacing" => Some(("", "-nums")),
+        "numFraction" => Some(("", "-fractions")),
+        _ => None,
+    }
 }
 
 /// The legal values of a closed-enum key, in table order, for the diagnostic.
@@ -873,6 +914,10 @@ pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
         "position" => Some("static, fixed, absolute, relative, sticky"),
         "visibility" => Some("visible, hidden, collapse"),
         "isolation" => Some("isolate, auto"),
+        "nums" => Some("normal"),
+        "numFigure" => Some("lining, oldstyle"),
+        "numSpacing" => Some("proportional, tabular"),
+        "numFraction" => Some("diagonal, stacked"),
         _ => None,
     }
 }
@@ -925,7 +970,6 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "caption"
             | "clear"
             | "container"
-            | "diagonalFractions"
             | "display"
             | "fieldSizing"
             | "float"
@@ -938,7 +982,6 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "justify"
             | "justifyItems"
             | "justifySelf"
-            | "liningNums"
             | "maskClip"
             | "maskComposite"
             | "maskConic"
@@ -949,8 +992,10 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "maskType"
             | "mixBlend"
             | "notSrOnly"
-            | "oldstyleNums"
-            | "ordinal"
+            | "numFigure"
+            | "numFraction"
+            | "nums"
+            | "numSpacing"
             | "overflow"
             | "overflowX"
             | "overflowY"
@@ -962,7 +1007,6 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "placeSelf"
             | "pointerEvents"
             | "position"
-            | "proportionalNums"
             | "resize"
             | "scheme"
             | "scroll"
@@ -970,14 +1014,11 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "scrollbarGutter"
             | "select"
             | "self"
-            | "slashedZero"
             | "snapAlign"
             | "snapStop"
             | "snapType"
             | "srOnly"
-            | "stackedFractions"
             | "tableLayout"
-            | "tabularNums"
             | "textClip"
             | "textEllipsis"
             | "touch"
