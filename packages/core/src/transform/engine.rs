@@ -886,6 +886,7 @@ struct KeyValueFindings {
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
     mask_members: Vec<(String, String, String, u32)>,
+    numeric_resets: Vec<(&'static str, u32)>,
 }
 
 impl KeyValueFindings {
@@ -900,6 +901,7 @@ impl KeyValueFindings {
         self.unknown_variants.clear();
         self.dead_enums.clear();
         self.mask_members.clear();
+        self.numeric_resets.clear();
     }
 }
 
@@ -938,6 +940,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_property_object_values(object, &mut found.property_objects);
         super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
+        super::lower::collect_numeric_resets(object, &mut found.numeric_resets);
         super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
     }
     if !repeat_free {
@@ -951,6 +954,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.unknown_variants, 6, seen, |(_, at)| *at);
         retain_first_occurrence(&mut found.dead_enums, 7, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.mask_members, 8, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.numeric_resets, 9, seen, |(_, at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -982,6 +986,26 @@ fn push_group_key_value_diagnostics<'a>(
     push_owned_key_variant_diagnostics(file, &found.unknown_variants, location, lines, out);
     push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
     push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
+    push_numeric_reset_diagnostics(file, &found.numeric_resets, location, lines, out);
+}
+
+/// `nums: 'normal'` beside a numeric group in one object. Mirrors
+/// `numericResetMessage` in the TypeScript core byte for byte.
+fn push_numeric_reset_diagnostics(
+    file: &TransformFile,
+    found: &[(&'static str, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (other, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"nums: normal\" at {location}:{line} resets every numeric group, so \"{other}\" in the same object is kept or dropped depending on whether the build merges classes. Keep one, or put the reset under a variant: {{ md: {{ nums: 'normal' }} }}."
+        ));
+    }
 }
 
 fn unknown_property_diagnostics(
@@ -1899,6 +1923,30 @@ mod tests {
             diagnostic.contains("object literal contains a runtime value")
                 && diagnostic.contains("deferred to _szPart")
         }));
+    }
+
+    #[test]
+    fn a_numeric_reset_beside_a_group_is_reported_once_per_object() {
+        let report = |sz: &str| {
+            let file = TransformFile {
+                filename: "/repo/src/Nums.tsx".to_string(),
+                source: format!("export const A = () => <p sz={{{{ {sz} }}}} />;"),
+            };
+            transform_static_classes(&file, 0, std::time::Instant::now()).diagnostics
+        };
+
+        let both = report("nums: 'normal', numSpacing: 'tabular', numFigure: 'lining'");
+        assert_eq!(both.len(), 1, "{both:?}");
+        // Named in the table's order on both engines, not the object's.
+        assert!(both[0].contains("\"numFigure\""), "{}", both[0]);
+        let nested = report("numOrdinal: true, md: { numSlashedZero: true, nums: 'normal' }");
+        assert_eq!(nested.len(), 1, "{nested:?}");
+        assert!(nested[0].contains("\"numSlashedZero\""), "{}", nested[0]);
+        // A reset alone, a group switched off, and a parameter namespace are
+        // not the pair.
+        assert!(report("nums: 'normal', md: { numSpacing: 'tabular' }").is_empty());
+        assert!(report("nums: 'normal', numOrdinal: false").is_empty());
+        assert!(report("data: { open: { nums: 'normal', numOrdinal: true } }").is_empty());
     }
 
     #[test]

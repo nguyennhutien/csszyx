@@ -530,6 +530,51 @@ pub(crate) fn collect_owned_key_variant_objects(
     }
 }
 
+/// The `num*` keys that set one group of `font-variant-numeric`.
+#[cfg(feature = "native-engine")]
+const NUMERIC_GROUP_KEYS: [&str; 5] = [
+    "numFigure",
+    "numSpacing",
+    "numFraction",
+    "numOrdinal",
+    "numSlashedZero",
+];
+
+/// Collect objects where `nums: 'normal'` shares a level with a numeric group,
+/// as the first group key and the reset's offset.
+///
+/// `normal` stands alone in the CSS grammar. Beside a group, which class wins
+/// depends on whether the build merges classes, so the pair is reported
+/// rather than resolved. Descends like `collect_dead_enum_values`.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_numeric_resets(object: &StaticSzObject, out: &mut Vec<(&'static str, u32)>) {
+    let reset = object.properties.iter().find(|property| {
+        property.key == "nums"
+            && matches!(&property.value, StaticSzValue::String(value) if value == "normal")
+    });
+    if let Some(reset) = reset {
+        let other = NUMERIC_GROUP_KEYS.into_iter().find(|key| {
+            object.properties.iter().any(|property| {
+                property.key == *key && !matches!(property.value, StaticSzValue::Boolean(false))
+            })
+        });
+        if let Some(other) = other {
+            out.push((other, reset.span.start));
+        }
+    }
+    for property in &object.properties {
+        if let StaticSzValue::Object(nested) = &property.value {
+            if matches!(
+                property.key.as_str(),
+                "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+            ) {
+                continue;
+            }
+            collect_numeric_resets(nested, out);
+        }
+    }
+}
+
 /// The class a closed-enum key emits for a value outside its table.
 ///
 /// The value keeps its key's fixed part (`isolation-`, `-nums`, …) from the

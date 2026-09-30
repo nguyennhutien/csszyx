@@ -112,4 +112,29 @@ describe('font-variant-numeric keys', () => {
         expect(warnings).toContain('canonical key "numSlashedZero"');
         expect(warnings).toContain('"fontVariant" was removed');
     });
+
+    // `normal` stands alone in the CSS grammar. Beside a group, which class
+    // wins depends on whether the build merges classes (a later key does) or
+    // leaves both to Tailwind (`normal-nums` sorts last and always does).
+    it.each(ENGINES)('%s reports the reset sharing an object with a group', (_name, engine) => {
+        const run = captureWarnings(
+            engine,
+            "export const A = () => <p sz={{ nums: 'normal', numSpacing: 'tabular', md: { numOrdinal: true, nums: 'normal' } }} />;",
+        );
+        const warnings = run.warnings.join('\n');
+
+        expect(warnings).toContain('"nums: normal"');
+        expect(warnings).toContain('"numSpacing"');
+        expect(warnings).toContain('"numOrdinal"');
+    });
+
+    it('runtime reports the reset sharing an object with a group, once', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        transform({ numFraction: 'stacked', nums: 'normal' });
+        transform({ numFraction: 'stacked', nums: 'normal' });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('"numFraction"');
+    });
 });

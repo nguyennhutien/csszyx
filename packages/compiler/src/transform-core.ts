@@ -2899,9 +2899,10 @@ function bareClosedEnumClass(key: string, value: string): string {
 /**
  * Warns when a closed-enum key carries a value CSS does not define for it.
  *
- * On these four keys the value IS the class, so the typo ships as a bare
- * unprefixed class name — the shape a project's own component CSS is made of,
- * which makes it a possible collision rather than a plain dead class. The
+ * On `display`/`position`/`visibility` the value IS the class, so the typo
+ * ships as a bare unprefixed class name — the shape a project's own component
+ * CSS is made of, which makes it a possible collision rather than a plain dead
+ * class; the other keys keep their fixed part (`CLOSED_ENUM_AFFIXES`). The
  * class is still emitted: the lowering cannot see whether a diagnostic will
  * reach this site, and a drop where none does is a silent loss. Naming the
  * emitted class is what makes it findable either way.
@@ -2925,6 +2926,50 @@ function warnClosedEnumValue(
             'still emitted and styles nothing, unless a rule of your own happens to match ' +
             `it. ${key} takes one of: ${[...legal.keys()].join(', ')}.`,
     );
+}
+
+/** The `num*` keys that set one group of `font-variant-numeric`. */
+const NUMERIC_GROUP_KEYS = [
+    'numFigure',
+    'numSpacing',
+    'numFraction',
+    'numOrdinal',
+    'numSlashedZero',
+] as const;
+
+/** Reset/group pairs already warned about, so a re-render cannot spam. */
+const _warnedNumericResets = new Set<string>();
+
+/**
+ * The message for `nums: 'normal'` beside a numeric group in one object.
+ *
+ * `normal` stands alone in the CSS grammar. Beside a group, which class wins
+ * depends on the build: a merge table keeps the later key, while without one
+ * both classes reach Tailwind and `normal-nums` sorts last and wins.
+ * @param other - The group key sharing the object.
+ * @param at - The ` at file:line` suffix, or empty.
+ * @returns The diagnostic.
+ */
+function numericResetMessage(other: string, at: string): string {
+    return (
+        `[csszyx] "nums: normal"${at} resets every numeric group, so "${other}" in the same ` +
+        'object is kept or dropped depending on whether the build merges classes. Keep ' +
+        "one, or put the reset under a variant: { md: { nums: 'normal' } }."
+    );
+}
+
+/**
+ * Warns when `nums: 'normal'` shares an object with a numeric group.
+ * @param szProp - One object level of an sz value.
+ */
+function warnNumericReset(szProp: SzObject): void {
+    if (szProp.nums !== 'normal' || !szDevWarningsEnabled()) return;
+    const other = NUMERIC_GROUP_KEYS.find(
+        key => szProp[key] !== undefined && szProp[key] !== null && szProp[key] !== false,
+    );
+    if (other === undefined || _warnedNumericResets.has(other)) return;
+    _warnedNumericResets.add(other);
+    console.warn(numericResetMessage(other, szWarnLocation ? ` at ${szWarnLocation}` : ''));
 }
 
 /** Returns whether a key controls a gradient stop position. */
@@ -4267,6 +4312,7 @@ function transformImpl(
 ): TransformResult {
     const classes: string[] = [];
 
+    warnNumericReset(szProp);
     for (const [rawKey, value] of Object.entries(szProp)) {
         collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
