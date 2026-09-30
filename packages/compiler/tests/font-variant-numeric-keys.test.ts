@@ -10,7 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { transform } from '../src/transform-core.js';
+import { setSzWarnLocation, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -136,5 +136,17 @@ describe('font-variant-numeric keys', () => {
 
         expect(warn).toHaveBeenCalledTimes(1);
         expect(String(warn.mock.calls[0]?.[0])).toContain('"numFraction"');
+    });
+
+    it('runtime names the location when the build set one', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('src/Table.tsx:7');
+        try {
+            transform({ nums: 'normal', numFigure: 'lining' });
+        } finally {
+            setSzWarnLocation(undefined);
+        }
+
+        expect(String(warn.mock.calls[0]?.[0])).toContain('"nums: normal" at src/Table.tsx:7');
     });
 });
