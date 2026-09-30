@@ -97,6 +97,9 @@ mod diagnostic_table_tests {
 
     /// The CSS property names the table translates, alias to canonical key.
     const CANONICAL_KEY_SUGGESTIONS: &[(&str, &str)] = &[
+        // font-variant-numeric single-keyword groups joined the `num*` family.
+        ("ordinal", "numOrdinal"),
+        ("slashedZero", "numSlashedZero"),
         ("backgroundColor", "bg"),
         ("backgroundImage", "bgImg"),
         ("backgroundSize", "bgSize"),
@@ -240,6 +243,7 @@ mod diagnostic_table_tests {
             ("maskTo", "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
             ("maskVia", "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
             ("maskShape", "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
+            ("fontVariant", "font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
         ] {
             assert_eq!(key_migration_note(key), Some(note), "note for {key}");
         }

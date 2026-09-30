@@ -1926,6 +1926,27 @@ mod tests {
     }
 
     #[test]
+    fn a_numeric_group_typo_names_the_class_and_the_legal_values() {
+        let file = TransformFile {
+            filename: "/repo/src/Nums.tsx".to_string(),
+            source: "export const A = () => <p sz={{ nums: 'reset', numFigure: 'old', numSpacing: 'tab', numFraction: 'slash' }} />;".to_string(),
+        };
+        let diagnostics = transform_static_classes(&file, 0, std::time::Instant::now()).diagnostics;
+
+        for expected in [
+            "The class \"reset-nums\" is still emitted and styles nothing, unless a rule of your own happens to match it. nums takes one of: normal.",
+            "numFigure takes one of: lining, oldstyle.",
+            "numSpacing takes one of: proportional, tabular.",
+            "The class \"slash-fractions\" is still emitted and styles nothing, unless a rule of your own happens to match it. numFraction takes one of: diagonal, stacked.",
+        ] {
+            assert!(
+                diagnostics.iter().any(|line| line.contains(expected)),
+                "{expected} in {diagnostics:?}"
+            );
+        }
+    }
+
+    #[test]
     fn a_numeric_reset_beside_a_group_is_reported_once_per_object() {
         let report = |sz: &str| {
             let file = TransformFile {

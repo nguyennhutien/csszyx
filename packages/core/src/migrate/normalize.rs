@@ -180,9 +180,6 @@ fn literal_branch_edits(
             literal_branch_edits(&conditional.consequent, value, out)
                 && literal_branch_edits(&conditional.alternate, value, out)
         }
-        Expression::ParenthesizedExpression(inner) => {
-            literal_branch_edits(&inner.expression, value, out)
-        }
         Expression::BooleanLiteral(literal) => {
             out.push(Replacement {
                 start: literal.span.start as usize,
@@ -375,6 +372,10 @@ mod tests {
             "{ tabularNums: false }"
         );
         assert_eq!(keys_only("{ tabularNums: v }"), "{ tabularNums: v }");
+        assert_eq!(
+            keys_only("{ tabularNums: c ? true : 1 }"),
+            "{ tabularNums: c ? true : 1 }"
+        );
     }
 
     #[test]
@@ -394,6 +395,11 @@ mod tests {
             "{ fontVariant: 'bogus value' }"
         );
         assert_eq!(keys_only("{ fontVariant: v }"), "{ fontVariant: v }");
+        // A class the parser reads as a number is no numeric-glyph key.
+        assert_eq!(
+            keys_only("{ fontVariant: 'p-4' }"),
+            "{ fontVariant: 'p-4' }"
+        );
     }
 
     #[test]

@@ -3610,6 +3610,24 @@ mod tests {
     }
 
     #[test]
+    fn a_closed_enum_typo_keeps_its_key_fixed_part() {
+        for (key, expected) in [
+            ("display", "bogus"),
+            ("isolation", "isolation-bogus"),
+            ("nums", "bogus-nums"),
+            ("numFigure", "bogus-nums"),
+            ("numSpacing", "bogus-nums"),
+            ("numFraction", "bogus-fractions"),
+        ] {
+            assert_eq!(
+                super::bare_closed_enum_class(key, "bogus"),
+                expected,
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
     fn special_lowering_helpers_fail_closed_on_invalid_shapes() {
         let object = StaticSzObject {
             properties: vec![
