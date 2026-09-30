@@ -317,6 +317,9 @@ export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'row-start',
     'row-end',
     'rotate',
+    'rotate-x',
+    'rotate-y',
+    'rotate-z',
     'skew-x',
     'skew-y',
     'translate-x',
@@ -334,9 +337,6 @@ export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'scroll-ml',
     'hue-rotate',
     'backdrop-hue-rotate',
-    // mask gradient direction carries a leading `-` as part of the value
-    // (e.g. -mask-linear-45 → { mask: '-linear-45' }), not a numeric negation.
-    'mask',
 ]);
 
 // ============================================================================

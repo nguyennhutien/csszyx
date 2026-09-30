@@ -665,6 +665,9 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "row-start",
     "row-end",
     "rotate",
+    "rotate-x",
+    "rotate-y",
+    "rotate-z",
     "skew-x",
     "skew-y",
     "translate-x",
@@ -682,7 +685,6 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "scroll-ml",
     "hue-rotate",
     "backdrop-hue-rotate",
-    "mask",
 ];
 
 /// Whether `value` is in `NEGATIVE_ALLOWED`.
@@ -722,6 +724,9 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "row-start"
             | "row-end"
             | "rotate"
+            | "rotate-x"
+            | "rotate-y"
+            | "rotate-z"
             | "skew-x"
             | "skew-y"
             | "translate-x"
@@ -739,7 +744,6 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "scroll-ml"
             | "hue-rotate"
             | "backdrop-hue-rotate"
-            | "mask"
     )
 }
 

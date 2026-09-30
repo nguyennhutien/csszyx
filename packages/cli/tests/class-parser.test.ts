@@ -169,6 +169,12 @@ describe('class-parser', () => {
             );
         });
 
+        it('a negative rotation on one axis keeps its axis key', () => {
+            expect(parseClass('-rotate-x-45')).toEqual({ prop: 'rotateX', value: -45 });
+            expect(parseClass('-rotate-y-12')).toEqual({ prop: 'rotateY', value: -12 });
+            expect(parseClass('-rotate-z-6')).toEqual({ prop: 'rotateZ', value: -6 });
+        });
+
         it('keywords that belong to a style key, not the colour key of their prefix', () => {
             expect(parseClass('outline-hidden')).toEqual({ prop: 'outlineStyle', value: 'hidden' });
             expect(parseClass('outline-solid')).toEqual({ prop: 'outlineStyle', value: 'solid' });
@@ -1347,8 +1353,11 @@ describe('class-parser', () => {
             });
         });
 
-        it('mask gradient keeps a leading - as part of the value', () => {
-            expect(parseClass('-mask-linear-45')).toEqual({ prop: 'mask', value: '-linear-45' });
+        it('a negative mask angle is a negative angle on its layer (ADR 0013)', () => {
+            expect(parseClass('-mask-linear-45')).toEqual({
+                prop: 'maskLinear',
+                value: { angle: -45 },
+            });
         });
     });
 });

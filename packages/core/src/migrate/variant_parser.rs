@@ -420,7 +420,34 @@ fn set_nested(object: &mut SzObject, key_path: &[String], prop: &str, value: SzV
         let SzValue::Object(next) = slot else { return };
         current = next;
     }
-    current.insert(prop.to_string(), value);
+    match (current.get_mut(prop), value) {
+        (Some(SzValue::Object(existing)), SzValue::Object(incoming))
+            if MASK_SLOTS.contains(&prop) =>
+        {
+            merge_objects(existing, incoming);
+        }
+        (_, value) => {
+            current.insert(prop.to_string(), value);
+        }
+    }
+}
+
+/// The mask layers, whose utilities each set one member: `mask-b-from-20%`
+/// and `mask-b-to-80%` are one `maskLinear: { b: { from, to } }`, not a
+/// later object replacing an earlier one.
+const MASK_SLOTS: [&str; 3] = ["maskLinear", "maskRadial", "maskConic"];
+
+/// Merge `incoming` into `existing`, member by member; a member both hold as
+/// an object merges too, anything else is replaced by the later value.
+fn merge_objects(existing: &mut SzObject, incoming: SzObject) {
+    for (key, value) in incoming.0 {
+        match (existing.get_mut(&key), value) {
+            (Some(SzValue::Object(inner)), SzValue::Object(next)) => merge_objects(inner, next),
+            (_, value) => {
+                existing.insert(key, value);
+            }
+        }
+    }
 }
 
 /// Remove `prop` under the variant path, then every object the removal
@@ -661,5 +688,28 @@ mod tests {
         ] {
             assert_eq!(mapped(variant), keys, "{variant}");
         }
+    }
+
+    #[test]
+    fn the_utilities_of_one_mask_layer_merge_and_other_objects_are_replaced() {
+        let object = |classes: &str| {
+            let converted = super::class_name_to_sz_object(classes, None);
+            serde_json::to_string(&super::SzValue::Object(converted.sz_object))
+                .expect("an sz object serialises")
+        };
+        assert_eq!(
+            object("mask-b-from-20% mask-b-to-80% mask-linear-45 mask-b-from-30%"),
+            r#"{"maskLinear":{"b":{"from":"30%","to":"80%"},"angle":45}}"#
+        );
+        // A member one class sets as a value and another as an object is the later.
+        assert_eq!(
+            object("mask-x-from-(--p) mask-x-from-20%"),
+            r#"{"maskLinear":{"x":{"from":"20%"}}}"#
+        );
+        // Outside the mask layers the later object replaces the earlier.
+        assert_eq!(
+            object("bg-linear-45 bg-radial"),
+            r#"{"bgImg":{"gradient":"radial"}}"#
+        );
     }
 }
