@@ -230,10 +230,17 @@ Utilities for controlling the strictness of snap points.
 ## Touch Action
 
 Utilities for controlling how an element can be panned and zoomed by a user on a touchscreen.
+CSS takes one keyword per group — horizontal pan, vertical pan, pinch zoom — and combines the
+groups, so each group is one key. `touch` holds the keywords that stand alone. In one object
+the later key wins: `touch` after the group keys replaces them, group keys after `touch`
+replace it and combine.
 
-| Concept      | CSS Rule              | Tailwind v4 Class                              | `sz` Prop (Object Syntax) | Note |
-| :----------- | :-------------------- | :--------------------------------------------- | :------------------------ | :--- |
-| **Keywords** | `touch-action: (etc)` | `touch-auto`, `touch-none`, `touch-pan-x`(etc) | `{ touch: 'auto' }`       |      |
+| Concept         | CSS Rule                   | Tailwind v4 Class  | `sz` Prop (Object Syntax)  | Note                         |
+| :-------------- | :------------------------- | :----------------- | :------------------------- | :--------------------------- |
+| **Stand-alone** | `touch-action: auto`       | `touch-auto`       | `{ touch: 'auto' }`        | Also `none`, `manipulation`. |
+| **Pan X**       | `touch-action: pan-x`      | `touch-pan-x`      | `{ touchPanX: 'x' }`       | Also `left`, `right`.        |
+| **Pan Y**       | `touch-action: pan-y`      | `touch-pan-y`      | `{ touchPanY: 'y' }`       | Also `up`, `down`.           |
+| **Pinch zoom**  | `touch-action: pinch-zoom` | `touch-pinch-zoom` | `{ touchPinchZoom: true }` |                              |
 
 ## User Select
 

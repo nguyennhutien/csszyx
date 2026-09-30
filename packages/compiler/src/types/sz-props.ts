@@ -934,8 +934,8 @@ export interface TypographyProps {
         | (string & {});
 
     /**
-     * `font-variant-numeric: normal` — `normal-nums`. Resets the whole
-     * property, so it belongs alone or under a variant (`md: { nums: 'normal' }`).
+     * `font-variant-numeric: normal` — `normal-nums`. Resets the groups
+     * written before it in one object; groups written after it replace it.
      * @see https://tailwindcss.com/docs/font-variant-numeric
      */
     nums?: 'normal';
@@ -1637,18 +1637,35 @@ export interface InteractivityProps {
     /** @see https://tailwindcss.com/docs/scroll-snap-type */
     snapType?: 'none' | 'x' | 'y' | 'both' | 'mandatory' | 'proximity';
 
-    /** @see https://tailwindcss.com/docs/touch-action */
-    touch?:
-        | 'auto'
-        | 'none'
-        | 'pan-x'
-        | 'pan-left'
-        | 'pan-right'
-        | 'pan-y'
-        | 'pan-up'
-        | 'pan-down'
-        | 'pinch-zoom'
-        | 'manipulation';
+    /**
+     * `touch-auto` | `touch-none` | `touch-manipulation` — the touch-action
+     * keywords that stand alone. Written after `touchPan*` / `touchPinchZoom`
+     * in one object it replaces them; written before, they replace it.
+     * @see https://tailwindcss.com/docs/touch-action
+     */
+    touch?: 'auto' | 'none' | 'manipulation';
+    /** Horizontal pan: `touch-pan-x` | `touch-pan-left` | `touch-pan-right`. Combines with the other `touch*` groups. */
+    touchPanX?: 'x' | 'left' | 'right';
+    /** Vertical pan: `touch-pan-y` | `touch-pan-up` | `touch-pan-down`. Combines with the other `touch*` groups. */
+    touchPanY?: 'y' | 'up' | 'down';
+    /** `touch-pinch-zoom`. Combines with the other `touch*` groups. */
+    touchPinchZoom?: boolean;
+
+    /**
+     * `contain-none` | `contain-strict` | `contain-content` — the containment
+     * keywords that stand alone. Written after the `contain*` groups in one
+     * object it replaces them; written before, they replace it.
+     * @see https://developer.mozilla.org/docs/Web/CSS/contain
+     */
+    contain?: 'none' | 'strict' | 'content';
+    /** Size containment: `contain-size` | `contain-inline-size`. Combines with the other `contain*` groups. */
+    containSize?: 'size' | 'inline-size';
+    /** `contain-layout`. Combines with the other `contain*` groups. */
+    containLayout?: boolean;
+    /** `contain-paint`. Combines with the other `contain*` groups. */
+    containPaint?: boolean;
+    /** `contain-style`. Combines with the other `contain*` groups. */
+    containStyle?: boolean;
 
     /** @see https://tailwindcss.com/docs/user-select */
     select?: 'none' | 'text' | 'all' | 'auto';

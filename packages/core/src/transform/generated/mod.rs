@@ -255,6 +255,61 @@ mod diagnostic_table_tests {
 }
 
 #[cfg(test)]
+mod grouped_key_tables_tests {
+    use super::tables::{
+        closed_enum_affix, closed_enum_value_move, closed_enum_values, global_keyword_for_group,
+        global_keyword_groups,
+    };
+
+    /// Every group key finds its stand-alone key, and every stand-alone key
+    /// lists exactly those groups.
+    #[test]
+    fn every_group_key_belongs_to_its_standalone_key() {
+        for global in ["nums", "touch", "contain"] {
+            let groups = global_keyword_groups(global).expect("a stand-alone key");
+            for group in groups.split(' ') {
+                assert_eq!(global_keyword_for_group(group), Some(global), "{group}");
+            }
+        }
+        assert_eq!(global_keyword_groups("p"), None);
+        assert_eq!(global_keyword_for_group("p"), None);
+    }
+
+    #[test]
+    fn every_moved_touch_value_names_its_group_key() {
+        for (value, key, replacement) in [
+            ("pan-x", "touchPanX", "x"),
+            ("pan-left", "touchPanX", "left"),
+            ("pan-right", "touchPanX", "right"),
+            ("pan-y", "touchPanY", "y"),
+            ("pan-up", "touchPanY", "up"),
+            ("pan-down", "touchPanY", "down"),
+            ("pinch-zoom", "touchPinchZoom", "true"),
+        ] {
+            assert_eq!(
+                closed_enum_value_move("touch", value),
+                Some((key, replacement))
+            );
+        }
+        assert_eq!(closed_enum_value_move("touch", "none"), None);
+    }
+
+    #[test]
+    fn the_grouped_closed_keys_name_their_values_and_fixed_part() {
+        for (key, values, affix) in [
+            ("touch", "auto, none, manipulation", ("touch-", "")),
+            ("touchPanX", "x, left, right", ("touch-pan-", "")),
+            ("touchPanY", "y, up, down", ("touch-pan-", "")),
+            ("contain", "none, strict, content", ("contain-", "")),
+            ("containSize", "size, inline-size", ("contain-", "")),
+        ] {
+            assert_eq!(closed_enum_values(key), Some(values), "{key}");
+            assert_eq!(closed_enum_affix(key), Some(affix), "{key}");
+        }
+    }
+}
+
+#[cfg(test)]
 mod reverse_tables_tests {
     use super::reverse_tables::{
         reverse_property_key, EXTRA_REVERSE_PREFIXES, REVERSE_PROPERTY_MAP,

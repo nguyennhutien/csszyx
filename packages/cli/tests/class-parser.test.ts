@@ -169,6 +169,31 @@ describe('class-parser', () => {
             );
         });
 
+        it('touch-action and contain: one key per group', () => {
+            expect(parseClass('touch-none')).toMatchObject({ prop: 'touch', value: 'none' });
+            expect(parseClass('touch-pan-left')).toEqual({
+                prop: 'touchPanX',
+                value: 'left',
+                cssProperty: '--tw-pan-x',
+            });
+            expect(parseClass('touch-pan-down')).toEqual({
+                prop: 'touchPanY',
+                value: 'down',
+                cssProperty: '--tw-pan-y',
+            });
+            expect(parseClass('touch-pinch-zoom')).toEqual({ prop: 'touchPinchZoom', value: true });
+            expect(parseClass('contain-strict')).toMatchObject({
+                prop: 'contain',
+                value: 'strict',
+            });
+            expect(parseClass('contain-inline-size')).toEqual({
+                prop: 'containSize',
+                value: 'inline-size',
+                cssProperty: '--tw-contain-size',
+            });
+            expect(parseClass('contain-paint')).toEqual({ prop: 'containPaint', value: true });
+        });
+
         it('a negative rotation on one axis keeps its axis key', () => {
             expect(parseClass('-rotate-x-45')).toEqual({ prop: 'rotateX', value: -45 });
             expect(parseClass('-rotate-y-12')).toEqual({ prop: 'rotateY', value: -12 });

@@ -56,6 +56,8 @@ export const KEYS_WITHOUT_A_RUNTIME_FORM = {
         'snapStop',
         'snapType',
         'touch',
+        'touchPanX',
+        'touchPanY',
     ],
     layout: [
         'box',
@@ -64,6 +66,7 @@ export const KEYS_WITHOUT_A_RUNTIME_FORM = {
         'breakBefore',
         'breakInside',
         'clear',
+        'containSize',
         'display',
         'float',
         'isolation',

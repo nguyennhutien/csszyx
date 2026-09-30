@@ -921,6 +921,12 @@ export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
     'numFigure',
     'numSpacing',
     'numFraction',
+    // touch-action and contain, one key per group (CLOSED_ENUM_CLASSES); `touch`
+    // itself is a PROPERTY_MAP key
+    'touchPanX',
+    'touchPanY',
+    'contain',
+    'containSize',
 ]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
@@ -960,6 +966,11 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // set both keywords of a group.
     'numOrdinal',
     'numSlashedZero',
+    // the single-keyword groups of touch-action and contain
+    'touchPinchZoom',
+    'containLayout',
+    'containPaint',
+    'containStyle',
     // Divide/Space reverse
     'divideXReverse',
     'divideYReverse',
@@ -1011,6 +1022,10 @@ const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
     shadow: true,
     numOrdinal: true,
     numSlashedZero: true,
+    touchPinchZoom: true,
+    containLayout: true,
+    containPaint: true,
+    containStyle: true,
 } as const satisfies SzProps;
 
 // Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
@@ -1173,6 +1188,10 @@ export const BOOLEAN_TO_CLASS: Record<string, string> = {
     // Font variant numeric
     numOrdinal: 'ordinal',
     numSlashedZero: 'slashed-zero',
+    touchPinchZoom: 'touch-pinch-zoom',
+    containLayout: 'contain-layout',
+    containPaint: 'contain-paint',
+    containStyle: 'contain-style',
     // Transforms
     transformGpu: 'transform-gpu',
     transformCpu: 'transform-cpu',
@@ -2778,6 +2797,11 @@ function collectBasicSpecialProperty(
             classes.push(`${prefix}${utility}${bang}`);
             return true;
         }
+        const moved = CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`];
+        if (moved !== undefined) {
+            warnMovedValue(rawKey, base, moved);
+            return true;
+        }
         const bare = bareClosedEnumClass(rawKey, base);
         warnClosedEnumValue(rawKey, base, bare, legal);
         classes.push(`${prefix}${bare}${bang}`);
@@ -2862,6 +2886,16 @@ const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
     numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
     numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
     numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
+    // touch-action: `auto | none | [ pan-x… || pan-y… || pinch-zoom ] |
+    // manipulation`. `touch` holds the keywords that stand alone. Source of
+    // truth: `docs/specs/snippets/interactivity.md`.
+    touch: { auto: 'touch-auto', none: 'touch-none', manipulation: 'touch-manipulation' },
+    touchPanX: { x: 'touch-pan-x', left: 'touch-pan-left', right: 'touch-pan-right' },
+    touchPanY: { y: 'touch-pan-y', up: 'touch-pan-up', down: 'touch-pan-down' },
+    // contain: `none | strict | content | [ size|inline-size || layout || style
+    // || paint ]`. Source of truth: `docs/specs/snippets/layout.md`.
+    contain: { none: 'contain-none', strict: 'contain-strict', content: 'contain-content' },
+    containSize: { size: 'contain-size', 'inline-size': 'contain-inline-size' },
 };
 
 /**
@@ -2879,6 +2913,50 @@ const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> =
     numFigure: { prefix: '', suffix: '-nums' },
     numSpacing: { prefix: '', suffix: '-nums' },
     numFraction: { prefix: '', suffix: '-fractions' },
+    touch: { prefix: 'touch-', suffix: '' },
+    touchPanX: { prefix: 'touch-pan-', suffix: '' },
+    touchPanY: { prefix: 'touch-pan-', suffix: '' },
+    contain: { prefix: 'contain-', suffix: '' },
+    containSize: { prefix: 'contain-', suffix: '' },
+};
+
+/**
+ * Values a closed key took until a group got its own key, keyed
+ * `<key>:<value>`, with the key and value that replaced them.
+ *
+ * A moved value emits no class and names its replacement, as a removed key
+ * does. A replacement value of `'true'` is the boolean flag. The engine reads
+ * a generated copy (`closed_enum_value_move`), and `csszyx migrate` rewrites
+ * with it.
+ */
+export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', string>> = {
+    'touch:pan-x': { key: 'touchPanX', value: 'x' },
+    'touch:pan-left': { key: 'touchPanX', value: 'left' },
+    'touch:pan-right': { key: 'touchPanX', value: 'right' },
+    'touch:pan-y': { key: 'touchPanY', value: 'y' },
+    'touch:pan-up': { key: 'touchPanY', value: 'up' },
+    'touch:pan-down': { key: 'touchPanY', value: 'down' },
+    'touch:pinch-zoom': { key: 'touchPinchZoom', value: 'true' },
+};
+
+/**
+ * The key that holds a property's stand-alone keywords, with the property and
+ * its group keys (space-separated, for the generated Rust copy).
+ *
+ * The CSS grammar lets a global keyword stand only alone, so the lowering
+ * resolves a global beside its groups by the object's order
+ * (`keysShadowedByGlobalKeywords`). The engine reads a generated copy.
+ */
+const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups', string>> = {
+    nums: {
+        property: 'font-variant-numeric',
+        groups: 'numFigure numSpacing numFraction numOrdinal numSlashedZero',
+    },
+    touch: { property: 'touch-action', groups: 'touchPanX touchPanY touchPinchZoom' },
+    contain: {
+        property: 'contain',
+        groups: 'containSize containLayout containPaint containStyle',
+    },
 };
 
 /**
@@ -2946,48 +3024,96 @@ function warnClosedEnumValue(
     );
 }
 
-/** The `num*` keys that set one group of `font-variant-numeric`. */
-const NUMERIC_GROUP_KEYS = [
-    'numFigure',
-    'numSpacing',
-    'numFraction',
-    'numOrdinal',
-    'numSlashedZero',
-] as const;
-
-/** Reset/group pairs already warned about, so a re-render cannot spam. */
-const _warnedNumericResets = new Set<string>();
+/** Moved values already warned about, so a re-render cannot spam. */
+const _warnedMovedValues = new Set<string>();
 
 /**
- * The message for `nums: 'normal'` beside a numeric group in one object.
- *
- * `normal` stands alone in the CSS grammar. Beside a group, which class wins
- * depends on the build: a merge table keeps the later key, while without one
- * both classes reach Tailwind and `normal-nums` sorts last and wins.
- * @param other - The group key sharing the object.
+ * The message for a value that moved onto its group's own key.
+ * @param key - The key the value was written on.
+ * @param value - The value.
+ * @param moved - The key and value that replaced it; `'true'` is a flag.
  * @param at - The ` at file:line` suffix, or empty.
  * @returns The diagnostic.
  */
-function numericResetMessage(other: string, at: string): string {
+function movedValueMessage(
+    key: string,
+    value: string,
+    moved: Record<'key' | 'value', string>,
+    at: string,
+): string {
+    const replacement = moved.value === 'true' ? 'true' : `'${moved.value}'`;
     return (
-        `[csszyx] "nums: normal"${at} resets every numeric group, so "${other}" in the same ` +
-        'object is kept or dropped depending on whether the build merges classes. Keep ' +
-        "one, or put the reset under a variant: { md: { nums: 'normal' } }."
+        `[csszyx] "${key}: ${value}" moved to { ${moved.key}: ${replacement} }${at}. ` +
+        'Run `csszyx migrate` to rewrite it.'
     );
 }
 
 /**
- * Warns when `nums: 'normal'` shares an object with a numeric group.
- * @param szProp - One object level of an sz value.
+ * Warns that a value moved onto its group's own key. Fires in browser dev
+ * too, as removed boolean sugar does: the class is gone either way.
+ * @param key - The key the value was written on.
+ * @param value - The value.
+ * @param moved - The key and value that replaced it.
  */
-function warnNumericReset(szProp: SzObject): void {
-    if (szProp.nums !== 'normal' || !szDevWarningsEnabled()) return;
-    const other = NUMERIC_GROUP_KEYS.find(
-        key => szProp[key] !== undefined && szProp[key] !== null && szProp[key] !== false,
+function warnMovedValue(key: string, value: string, moved: Record<'key' | 'value', string>): void {
+    if (process.env.NODE_ENV === 'production' || _warnedMovedValues.has(`${key}:${value}`)) return;
+    _warnedMovedValues.add(`${key}:${value}`);
+    console.warn(
+        movedValueMessage(key, value, moved, szWarnLocation ? ` at ${szWarnLocation}` : ''),
     );
-    if (other === undefined || _warnedNumericResets.has(other)) return;
-    _warnedNumericResets.add(other);
-    console.warn(numericResetMessage(other, szWarnLocation ? ` at ${szWarnLocation}` : ''));
+}
+
+/** The answer for an object with no stand-alone keyword key. */
+const NOTHING_SHADOWED: ReadonlySet<string> = new Set();
+
+/** `GLOBAL_KEYWORD_GROUPS` as entries, built once. */
+const GLOBAL_KEYWORD_ENTRIES = Object.entries(GLOBAL_KEYWORD_GROUPS);
+
+/**
+ * Whether an object level holds any stand-alone keyword key.
+ * @param szProp - One object level of an sz value.
+ * @returns True when a key of `GLOBAL_KEYWORD_GROUPS` is present.
+ */
+function holdsGlobalKeyword(szProp: SzObject): boolean {
+    for (const [global] of GLOBAL_KEYWORD_ENTRIES) {
+        if (global in szProp) return true;
+    }
+    return false;
+}
+
+/**
+ * The keys of one object level that a stand-alone keyword overrides, or that
+ * override it.
+ *
+ * The object's own order decides, as it does for every other key: a global
+ * keyword resets each group written before it, and the groups written after
+ * it combine and replace it. So `{ contain: 'strict', containPaint: true }` is
+ * `contain-paint`, and `{ containPaint: true, contain: 'strict' }` is
+ * `contain-strict`. The global class and a group class are never both
+ * emitted, so the result does not depend on which one Tailwind sorts later —
+ * it sorts `normal-nums` last but `touch-none` and `contain-strict` first.
+ * @param szProp - One object level of an sz value.
+ * @returns The keys to leave out of the lowering; empty when nothing is shadowed.
+ */
+function keysShadowedByGlobalKeywords(szProp: SzObject): ReadonlySet<string> {
+    // Runs on every object level of every `_sz` call; almost none holds a
+    // stand-alone keyword, so answer those without allocating.
+    if (!holdsGlobalKeyword(szProp)) return NOTHING_SHADOWED;
+    const shadowed = new Set<string>();
+    const keys = Object.keys(szProp);
+    const active = (key: string): boolean =>
+        szProp[key] !== undefined && szProp[key] !== null && szProp[key] !== false;
+    for (const [global, { groups }] of GLOBAL_KEYWORD_ENTRIES) {
+        const at = keys.indexOf(global);
+        if (at === -1 || !active(global)) continue;
+        const members = new Set(groups.split(' '));
+        const later = keys.slice(at + 1).some(key => members.has(key) && active(key));
+        if (later) shadowed.add(global);
+        for (const key of later ? keys.slice(0, at) : keys) {
+            if (members.has(key)) shadowed.add(key);
+        }
+    }
+    return shadowed;
 }
 
 /** Returns whether a key controls a gradient stop position. */
@@ -4331,8 +4457,9 @@ function transformImpl(
 ): TransformResult {
     const classes: string[] = [];
 
-    warnNumericReset(szProp);
+    const shadowed = keysShadowedByGlobalKeywords(szProp);
     for (const [rawKey, value] of Object.entries(szProp)) {
+        if (shadowed.has(rawKey)) continue;
         collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 

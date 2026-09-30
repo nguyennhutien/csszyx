@@ -73,6 +73,7 @@ export const VAR_HOSTILE_NO_VAR_FORM: ReadonlySet<string> = new Set([
     'caption',
     'clear',
     'container',
+    'containSize',
     'display',
     'fieldSizing',
     'float',
@@ -125,6 +126,8 @@ export const VAR_HOSTILE_NO_VAR_FORM: ReadonlySet<string> = new Set([
     'textClip',
     'textEllipsis',
     'touch',
+    'touchPanX',
+    'touchPanY',
     'visibility',
     'whitespace',
 ]);

@@ -11,7 +11,9 @@ use super::class_rules::{self, Shape};
 use super::source::Replacement;
 use super::sz_codegen::quoted;
 use super::value::{js_number_to_string, SzValue};
-use crate::transform::generated::tables::{key_suggestion, removed_boolean_sugar_replacement};
+use crate::transform::generated::tables::{
+    closed_enum_value_move, key_suggestion, removed_boolean_sugar_replacement,
+};
 
 /// Rewrite every legacy key in the object, recursing into nested variant
 /// objects, and return how many keys were rewritten.
@@ -85,6 +87,7 @@ fn plan_property<'a>(property: &'a ObjectPropertyKind<'a>) -> Option<Plan<'a>> {
     let mut edits = Vec::new();
     let renamed = normalize_removed_boolean_sugar(property, key_name, &mut edits)
         .or_else(|| normalize_font_variant(property, key_name, &mut edits))
+        .or_else(|| normalize_moved_value(property, key_name, &mut edits))
         .or_else(|| normalize_ambiguous_font(property, key_name, key, &mut edits))
         .or_else(|| normalize_canonical_key(key_name, key, &mut edits));
     // Only a plain key rename can carry an object: every other rewrite
@@ -196,6 +199,31 @@ fn literal_branch_edits(
         Expression::Identifier(identifier) => identifier.name == "undefined",
         _ => false,
     }
+}
+
+/// `touch: 'pan-x'` moved onto its group's own key, `touchPanX: 'x'`; the
+/// compiler's table says where each value went. A replacement of `true` is
+/// the boolean flag.
+fn normalize_moved_value(
+    property: &oxc_ast::ast::ObjectProperty<'_>,
+    key_name: &str,
+    edits: &mut Vec<Replacement>,
+) -> Option<String> {
+    let Expression::StringLiteral(literal) = &property.value else {
+        return None;
+    };
+    let (key, value) = closed_enum_value_move(key_name, &literal.value)?;
+    let value = if value == "true" {
+        value.to_string()
+    } else {
+        quoted(value)
+    };
+    edits.push(Replacement {
+        start: property.span.start as usize,
+        end: property.span.end as usize,
+        text: format!("{key}: {value}"),
+    });
+    Some(key.to_string())
 }
 
 /// `fontVariant: 'tabular-nums'` named a class, so the class says which key
@@ -395,6 +423,14 @@ mod tests {
             "{ fontVariant: 'bogus value' }"
         );
         assert_eq!(keys_only("{ fontVariant: v }"), "{ fontVariant: v }");
+        // A touch value that moved takes its group key; a flag is a boolean.
+        assert_eq!(keys_only("{ touch: 'pan-up' }"), "{ touchPanY: 'up' }");
+        assert_eq!(
+            keys_only("{ touch: 'pinch-zoom' }"),
+            "{ touchPinchZoom: true }"
+        );
+        assert_eq!(keys_only("{ touch: 'none' }"), "{ touch: 'none' }");
+        assert_eq!(keys_only("{ touch: v }"), "{ touch: v }");
         // A class the parser reads as a number is no numeric-glyph key.
         assert_eq!(
             keys_only("{ fontVariant: 'p-4' }"),

@@ -63,6 +63,8 @@ function readTables() {
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
             closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
+            closedEnumValueMoves: core.objectOfStringObjects('CLOSED_ENUM_VALUE_MOVES'),
+            globalKeywordGroups: core.objectOfStringObjects('GLOBAL_KEYWORD_GROUPS'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
         };
@@ -88,6 +90,8 @@ function renderRust({
     migrationNotes,
     closedEnumClasses,
     closedEnumAffixes,
+    closedEnumValueMoves,
+    globalKeywordGroups,
     varHostileWrongProperty,
     varHostileNoVarForm,
 }) {
@@ -249,6 +253,38 @@ ${renderAffixArms(closedEnumAffixes)}
     }
 }
 
+/// The key and value that replaced a value a closed key used to take, keyed by
+/// the key and the old value. A value of \`true\` is the boolean flag.
+pub(crate) fn closed_enum_value_move(key: &str, value: &str) -> Option<(&'static str, &'static str)> {
+    match (key, value) {
+${renderValueMoveArms(closedEnumValueMoves)}
+        _ => None,
+    }
+}
+
+/// The group keys a stand-alone keyword key resets, space-separated, when the
+/// key holds one.
+pub(crate) fn global_keyword_groups(key: &str) -> Option<&'static str> {
+    match key {
+${globalKeywordGroups.map(([key, fields]) => `        ${rustString(key)} => Some(${rustString(Object.fromEntries(fields).groups)}),`).join('\n')}
+        _ => None,
+    }
+}
+
+/// The stand-alone keyword key a group key belongs to.
+pub(crate) fn global_keyword_for_group(key: &str) -> Option<&'static str> {
+    match key {
+${globalKeywordGroups
+    .flatMap(([global, fields]) =>
+        Object.fromEntries(fields)
+            .groups.split(' ')
+            .map(group => `        ${rustString(group)} => Some(${rustString(global)}),`),
+    )
+    .join('\n')}
+        _ => None,
+    }
+}
+
 /// The legal values of a closed-enum key, in table order, for the diagnostic.
 pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
     match key {
@@ -302,6 +338,16 @@ function renderClosedEnumLists(entries) {
 function renderMatchArms(entries) {
     return entries
         .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
+}
+
+function renderValueMoveArms(entries) {
+    return entries
+        .map(([moved, fields]) => {
+            const shape = Object.fromEntries(fields);
+            const colon = moved.indexOf(':');
+            return `        (${rustString(moved.slice(0, colon))}, ${rustString(moved.slice(colon + 1))}) => Some((${rustString(shape.key)}, ${rustString(shape.value)})),`;
+        })
         .join('\n');
 }
 

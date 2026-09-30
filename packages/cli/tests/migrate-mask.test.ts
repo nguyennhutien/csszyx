@@ -7,8 +7,9 @@
  * class to `mask`, which the engine refuses for a layer and lowers to nothing
  * — 2,125 of Tailwind's mask utilities migrated to no class at all.
  *
- * The last case asks Tailwind itself for every mask utility it serves, so a
- * spelling nobody wrote down here is covered too.
+ * The last cases ask Tailwind itself for every mask, touch-action and
+ * contain utility it serves, so a spelling nobody wrote down here is covered
+ * too.
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -106,5 +107,48 @@ describe('migrate — mask utilities', () => {
             expect(classes.length).toBeGreaterThan(6000);
             expect(wrong.slice(0, 10)).toEqual([]);
         });
+    });
+});
+
+describe('migrate — every touch-action and contain utility Tailwind serves', () => {
+    let classes: string[] = [];
+    beforeAll(async () => {
+        const require = createRequire(path.join(REPO, 'package.json'));
+        const tailwind = require('tailwindcss');
+        const design = await tailwind.__unstable__loadDesignSystem(
+            readFileSync(require.resolve('tailwindcss/index.css'), 'utf8'),
+            { base: REPO },
+        );
+        classes = design
+            .getClassList()
+            .map(([name]: [string]) => name)
+            .filter((name: string) => /^(touch|contain)-/.test(name));
+    });
+
+    it('migrates to a group key or the stand-alone key, and back to the same class', () => {
+        const owners = new Set([
+            'touch',
+            'touchPanX',
+            'touchPanY',
+            'touchPinchZoom',
+            'contain',
+            'containSize',
+            'containLayout',
+            'containPaint',
+            'containStyle',
+        ]);
+        const wrong: string[] = [];
+        for (const className of classes) {
+            const parsed = parseClass(className);
+            const lowered = parsed
+                ? transform({ [parsed.prop]: parsed.value } as SzObject).className
+                : '(unparsed)';
+            if (lowered !== className || !owners.has(parsed?.prop ?? '')) {
+                wrong.push(`${className} → ${JSON.stringify(parsed)} → ${lowered}`);
+            }
+        }
+
+        expect(classes).toHaveLength(18);
+        expect(wrong).toEqual([]);
     });
 });

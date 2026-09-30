@@ -14,6 +14,7 @@ use super::class_parser::{find_top_level_slash, parse_class};
 use super::class_rules::wrapped;
 use super::value::{is_js_whitespace, SzObject, SzValue};
 use crate::transform::generated::migrate_tables::reverse_variant;
+use crate::transform::generated::tables::{global_keyword_for_group, global_keyword_groups};
 
 /// What a `className` converts to.
 ///
@@ -239,6 +240,19 @@ struct State {
     seen: HashMap<String, HashMap<String, String>>,
     /// Per variant scope, the CSS properties two tokens fought over.
     conflicted: HashMap<String, HashSet<String>>,
+    /// Tokens that set a stand-alone keyword key or one of its groups, with
+    /// the scope, the family (the stand-alone key) and where they were placed.
+    grouped: Vec<Grouped>,
+}
+
+/// A token placed on a stand-alone keyword key or one of its group keys.
+struct Grouped {
+    scope: String,
+    family: String,
+    standalone: bool,
+    key_path: Vec<String>,
+    prop: String,
+    token: String,
 }
 
 /// Convert a whole `className` into one merged sz object, with the tokens
@@ -252,7 +266,38 @@ pub fn class_name_to_sz_object(class_name: &str, custom_map: Option<&SzObject>) 
         }
         apply_parsed_token(token, &mut state);
     }
+    keep_standalone_conflicts_as_written(&mut state);
     state.conversion
+}
+
+/// Move a stand-alone keyword and its groups back to `className` when one
+/// scope has both.
+///
+/// Which class wins between them depends on the property, not the order
+/// written — Tailwind sorts `normal-nums` last but `touch-none` and
+/// `contain-strict` first — while an sz object settles them by its order. No
+/// object renders the same as the classes in every case, so both stay as
+/// written, as two classes fighting over one property do.
+fn keep_standalone_conflicts_as_written(state: &mut State) {
+    let clashes = |entry: &Grouped| {
+        state.grouped.iter().any(|other| {
+            other.scope == entry.scope
+                && other.family == entry.family
+                && other.standalone != entry.standalone
+        })
+    };
+    let moved: Vec<usize> = (0..state.grouped.len())
+        .filter(|index| clashes(&state.grouped[*index]))
+        .collect();
+    for index in moved {
+        let entry = &state.grouped[index];
+        remove_nested(
+            &mut state.conversion.sz_object,
+            &entry.key_path,
+            &entry.prop,
+        );
+        state.conversion.unrecognized.push(entry.token.clone());
+    }
 }
 
 /// What a resolution-map entry asks for a token.
@@ -381,11 +426,26 @@ fn apply_parsed_token(token: &str, state: &mut State) {
         }
         state
             .seen
-            .entry(scope)
+            .entry(scope.clone())
             .or_default()
             .insert(css_property.clone(), token.to_string());
     }
 
+    let family = if global_keyword_groups(&parsed.prop).is_some() {
+        Some((parsed.prop.clone(), true))
+    } else {
+        global_keyword_for_group(&parsed.prop).map(|global| (global.to_string(), false))
+    };
+    if let Some((family, standalone)) = family {
+        state.grouped.push(Grouped {
+            scope,
+            family,
+            standalone,
+            key_path: parsed.key_path.clone(),
+            prop: parsed.prop.clone(),
+            token: token.to_string(),
+        });
+    }
     set_nested(
         &mut state.conversion.sz_object,
         &parsed.key_path,
@@ -711,5 +771,27 @@ mod tests {
             object("bg-linear-45 bg-radial"),
             r#"{"bgImg":{"gradient":"radial"}}"#
         );
+    }
+
+    #[test]
+    fn a_standalone_keyword_beside_its_group_stays_in_class_name() {
+        let converted = super::class_name_to_sz_object(
+            "touch-pan-x p-4 touch-none md:contain-paint contain-strict md:contain-none",
+            None,
+        );
+        assert_eq!(
+            converted.unrecognized,
+            [
+                "touch-pan-x",
+                "touch-none",
+                "md:contain-paint",
+                "md:contain-none"
+            ]
+        );
+        // A different scope is a different object: `contain-strict` alone at
+        // the base scope converts.
+        let object = serde_json::to_string(&super::SzValue::Object(converted.sz_object))
+            .expect("an sz object serialises");
+        assert_eq!(object, r#"{"p":4,"contain":"strict"}"#);
     }
 }

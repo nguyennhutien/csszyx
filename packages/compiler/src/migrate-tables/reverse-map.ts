@@ -88,6 +88,24 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'diagonal-fractions': 'numFraction',
     'stacked-fractions': 'numFraction',
 
+    // touch-action and contain: the single-keyword groups are flags; the
+    // two-and-three-keyword groups carry a value in BOOLEAN_VALUE_MAP below.
+    'touch-pinch-zoom': 'touchPinchZoom',
+    'touch-pan-x': 'touchPanX',
+    'touch-pan-left': 'touchPanX',
+    'touch-pan-right': 'touchPanX',
+    'touch-pan-y': 'touchPanY',
+    'touch-pan-up': 'touchPanY',
+    'touch-pan-down': 'touchPanY',
+    'contain-none': 'contain',
+    'contain-strict': 'contain',
+    'contain-content': 'contain',
+    'contain-size': 'containSize',
+    'contain-inline-size': 'containSize',
+    'contain-layout': 'containLayout',
+    'contain-paint': 'containPaint',
+    'contain-style': 'containStyle',
+
     // Snap
     'snap-none': 'snapType',
     'snap-x': 'snapType',
@@ -163,6 +181,24 @@ export const BOOLEAN_VALUE_MAP: Record<
         prop: 'numFraction',
         value: 'stacked',
         cssProperty: '--tw-numeric-fraction',
+    },
+
+    // touch-action and contain: one key per group, the group's variable as its
+    // `cssProperty`. The stand-alone keywords set the property itself.
+    'touch-pan-x': { prop: 'touchPanX', value: 'x', cssProperty: '--tw-pan-x' },
+    'touch-pan-left': { prop: 'touchPanX', value: 'left', cssProperty: '--tw-pan-x' },
+    'touch-pan-right': { prop: 'touchPanX', value: 'right', cssProperty: '--tw-pan-x' },
+    'touch-pan-y': { prop: 'touchPanY', value: 'y', cssProperty: '--tw-pan-y' },
+    'touch-pan-up': { prop: 'touchPanY', value: 'up', cssProperty: '--tw-pan-y' },
+    'touch-pan-down': { prop: 'touchPanY', value: 'down', cssProperty: '--tw-pan-y' },
+    'contain-none': { prop: 'contain', value: 'none', cssProperty: 'contain' },
+    'contain-strict': { prop: 'contain', value: 'strict', cssProperty: 'contain' },
+    'contain-content': { prop: 'contain', value: 'content', cssProperty: 'contain' },
+    'contain-size': { prop: 'containSize', value: 'size', cssProperty: '--tw-contain-size' },
+    'contain-inline-size': {
+        prop: 'containSize',
+        value: 'inline-size',
+        cssProperty: '--tw-contain-size',
     },
 
     // Appearance

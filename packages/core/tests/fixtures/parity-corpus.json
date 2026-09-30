@@ -13241,6 +13241,101 @@
     "oxc": "columns-xs"
   },
   {
+    "sz": "{\"contain\":\"strict\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "contain",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "strict"
+          }
+        }
+      ]
+    },
+    "oxc": "contain-strict"
+  },
+  {
+    "sz": "{\"containLayout\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containLayout",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-layout"
+  },
+  {
+    "sz": "{\"containPaint\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containPaint",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-paint"
+  },
+  {
+    "sz": "{\"containSize\":\"size\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "size"
+          }
+        }
+      ]
+    },
+    "oxc": "contain-size"
+  },
+  {
+    "sz": "{\"containStyle\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containStyle",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-style"
+  },
+  {
     "sz": "{\"container\":true}",
     "ir": {
       "properties": [
@@ -28485,6 +28580,63 @@
       ]
     },
     "oxc": "touch-auto"
+  },
+  {
+    "sz": "{\"touchPanX\":\"x\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPanX",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "x"
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pan-x"
+  },
+  {
+    "sz": "{\"touchPanY\":\"y\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPanY",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "y"
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pan-y"
+  },
+  {
+    "sz": "{\"touchPinchZoom\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPinchZoom",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pinch-zoom"
   },
   {
     "sz": "{\"tracking\":\"--t\"}",

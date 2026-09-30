@@ -316,6 +316,9 @@ export const BOOLEAN_SHORTHANDS = [
     "backdropInvert",
     "backdropSepia",
     "blur",
+    "containLayout",
+    "containPaint",
+    "containStyle",
     "container",
     "divideXReverse",
     "divideYReverse",
@@ -336,11 +339,14 @@ export const BOOLEAN_SHORTHANDS = [
     "srOnly",
     "textClip",
     "textEllipsis",
+    "touchPinchZoom",
     "truncate"
 ] as const;
 /** Canonical properties lowered by dedicated compiler branches. */
 export const KNOWN_SPECIAL_PROPERTIES = [
     "alignContent",
+    "contain",
+    "containSize",
     "css",
     "fromPos",
     "maskComposite",
@@ -355,6 +361,8 @@ export const KNOWN_SPECIAL_PROPERTIES = [
     "nums",
     "snapStrictness",
     "toPos",
+    "touchPanX",
+    "touchPanY",
     "viaPos"
 ] as const;
 export const KNOWN_VARIANTS = [

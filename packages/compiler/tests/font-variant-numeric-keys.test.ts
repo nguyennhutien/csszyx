@@ -10,7 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { setSzWarnLocation, transform } from '../src/transform-core.js';
+import { transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -116,41 +116,24 @@ describe('font-variant-numeric keys', () => {
         expect(warnings).toContain('"fontVariant" was removed');
     });
 
-    // `normal` stands alone in the CSS grammar. Beside a group, which class
-    // wins depends on whether the build merges classes (a later key does) or
-    // leaves both to Tailwind (`normal-nums` sorts last and always does).
-    it.each(ENGINES)('%s reports the reset sharing an object with a group', (_name, engine) => {
+    // `normal` stands alone in the CSS grammar, so the object's order settles
+    // it: the reset replaces the groups written before it, the groups written
+    // after it replace the reset.
+    it.each(ENGINES)('%s settles the reset and its groups by the object order', (_name, engine) => {
         const run = captureWarnings(
             engine,
-            "export const A = () => <p sz={{ nums: 'normal', numSpacing: 'tabular', md: { numOrdinal: true, nums: 'normal' } }} />;",
+            "export const A = () => <p sz={{ numSpacing: 'tabular', nums: 'normal', md: { nums: 'normal', numOrdinal: true } }} />;",
         );
-        const warnings = run.warnings.join('\n');
 
-        expect(warnings).toContain('"nums: normal"');
-        expect(warnings).toContain('"numSpacing"');
-        expect(warnings).toContain('"numOrdinal"');
+        expect(run.className).toBe('normal-nums md:ordinal');
+        expect(run.warnings).toEqual([]);
     });
 
-    it('runtime reports the reset sharing an object with a group, once', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-        transform({ numFraction: 'stacked', nums: 'normal' });
-        transform({ numFraction: 'stacked', nums: 'normal' });
-
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]?.[0])).toContain('"numFraction"');
-    });
-
-    it('runtime names the location when the build set one', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        setSzWarnLocation('src/Table.tsx:7');
-        try {
-            transform({ nums: 'normal', numFigure: 'lining' });
-        } finally {
-            setSzWarnLocation(undefined);
-        }
-
-        expect(String(warn.mock.calls[0]?.[0])).toContain('"nums: normal" at src/Table.tsx:7');
+    it('runtime settles the reset and its groups by the object order', () => {
+        expect(transform({ nums: 'normal', numFraction: 'stacked' }).className).toBe(
+            'stacked-fractions',
+        );
+        expect(transform({ numFraction: 'stacked', nums: 'normal' }).className).toBe('normal-nums');
     });
 
     it('runtime says a replaced flag was replaced, not that sugar was removed', () => {

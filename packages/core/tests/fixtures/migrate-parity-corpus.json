@@ -35943,18 +35943,19 @@
   {
    "c": "touch-pan-x",
    "p": {
-    "prop": "touch",
-    "value": "pan-x"
+    "cssProperty": "--tw-pan-x",
+    "prop": "touchPanX",
+    "value": "x"
    },
    "o": {
     "sz": {
-     "touch": "pan-x"
+     "touchPanX": "x"
     },
-    "szText": "{\"touch\":\"pan-x\"}",
+    "szText": "{\"touchPanX\":\"x\"}",
     "u": [],
     "k": [],
-    "g": "{ touch: 'pan-x' }",
-    "h": "touch: 'pan-x'"
+    "g": "{ touchPanX: 'x' }",
+    "h": "touchPanX: 'x'"
    }
   },
   {

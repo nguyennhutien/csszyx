@@ -183,6 +183,32 @@ The old keys emit nothing, and the build names the replacement:
 and two flags of one group in one object, which become one key holding the
 later value.
 
+### 6. `touch-action` takes one key per group, `contain` gains keys (0.18.0)
+
+`touch-action` has the same shape as `font-variant-numeric`: groups that combine
+— horizontal pan, vertical pan, pinch zoom — and keywords that stand alone. The
+groups moved to their own keys, and `touch` keeps the stand-alone keywords.
+`contain` had no key; it now follows the same shape.
+
+| Before | After |
+|---|---|
+| `{ touch: 'pan-x' }` / `'pan-left'` / `'pan-right'` | `{ touchPanX: 'x' }` / `'left'` / `'right'` |
+| `{ touch: 'pan-y' }` / `'pan-up'` / `'pan-down'` | `{ touchPanY: 'y' }` / `'up'` / `'down'` |
+| `{ touch: 'pinch-zoom' }` | `{ touchPinchZoom: true }` |
+| `{ touch: 'auto' }` / `'none'` / `'manipulation'` | unchanged |
+| — | `{ contain: 'none' \| 'strict' \| 'content' }`, `{ containSize: 'size' \| 'inline-size' }`, `containLayout` / `containPaint` / `containStyle: true` |
+
+A moved value emits nothing, and the build names the replacement:
+
+```text
+[csszyx] "touch: pan-x" moved to { touchPanX: 'x' } at src/Map.tsx:3. Run `csszyx migrate` to rewrite it.
+```
+
+`csszyx migrate --keys-only` rewrites it. In one object the later key wins for
+all three properties (`nums`, `touch`, `contain` against their groups): the
+stand-alone keyword replaces the groups written before it, and groups written
+after it replace it.
+
 ## Understanding the Migration Report
 
 After each run, migrate prints a summary (also written to `.csszyx/logs/`)

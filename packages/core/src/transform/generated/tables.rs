@@ -495,6 +495,10 @@ pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
         "spaceYReverse" => Some("space-y-reverse"),
         "numOrdinal" => Some("ordinal"),
         "numSlashedZero" => Some("slashed-zero"),
+        "touchPinchZoom" => Some("touch-pinch-zoom"),
+        "containLayout" => Some("contain-layout"),
+        "containPaint" => Some("contain-paint"),
+        "containStyle" => Some("contain-style"),
         "transformGpu" => Some("transform-gpu"),
         "transformCpu" => Some("transform-cpu"),
         "proseInvert" => Some("prose-invert"),
@@ -526,6 +530,10 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "notSrOnly"
             | "numOrdinal"
             | "numSlashedZero"
+            | "touchPinchZoom"
+            | "containLayout"
+            | "containPaint"
+            | "containStyle"
             | "divideXReverse"
             | "divideYReverse"
             | "spaceXReverse"
@@ -559,6 +567,10 @@ pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
             | "shadow"
             | "numOrdinal"
             | "numSlashedZero"
+            | "touchPinchZoom"
+            | "containLayout"
+            | "containPaint"
+            | "containStyle"
     )
 }
 
@@ -582,6 +594,10 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
             | "numFigure"
             | "numSpacing"
             | "numFraction"
+            | "touchPanX"
+            | "touchPanY"
+            | "contain"
+            | "containSize"
     )
 }
 
@@ -891,6 +907,20 @@ pub(crate) fn closed_enum_class(key: &str, value: &str) -> Option<&'static str> 
         ("numSpacing", "tabular") => Some("tabular-nums"),
         ("numFraction", "diagonal") => Some("diagonal-fractions"),
         ("numFraction", "stacked") => Some("stacked-fractions"),
+        ("touch", "auto") => Some("touch-auto"),
+        ("touch", "none") => Some("touch-none"),
+        ("touch", "manipulation") => Some("touch-manipulation"),
+        ("touchPanX", "x") => Some("touch-pan-x"),
+        ("touchPanX", "left") => Some("touch-pan-left"),
+        ("touchPanX", "right") => Some("touch-pan-right"),
+        ("touchPanY", "y") => Some("touch-pan-y"),
+        ("touchPanY", "up") => Some("touch-pan-up"),
+        ("touchPanY", "down") => Some("touch-pan-down"),
+        ("contain", "none") => Some("contain-none"),
+        ("contain", "strict") => Some("contain-strict"),
+        ("contain", "content") => Some("contain-content"),
+        ("containSize", "size") => Some("contain-size"),
+        ("containSize", "inline-size") => Some("contain-inline-size"),
         _ => None,
     }
 }
@@ -907,6 +937,11 @@ pub(crate) fn is_closed_enum_key(key: &str) -> bool {
             | "numFigure"
             | "numSpacing"
             | "numFraction"
+            | "touch"
+            | "touchPanX"
+            | "touchPanY"
+            | "contain"
+            | "containSize"
     )
 }
 
@@ -919,6 +954,59 @@ pub(crate) fn closed_enum_affix(key: &str) -> Option<(&'static str, &'static str
         "numFigure" => Some(("", "-nums")),
         "numSpacing" => Some(("", "-nums")),
         "numFraction" => Some(("", "-fractions")),
+        "touch" => Some(("touch-", "")),
+        "touchPanX" => Some(("touch-pan-", "")),
+        "touchPanY" => Some(("touch-pan-", "")),
+        "contain" => Some(("contain-", "")),
+        "containSize" => Some(("contain-", "")),
+        _ => None,
+    }
+}
+
+/// The key and value that replaced a value a closed key used to take, keyed by
+/// the key and the old value. A value of `true` is the boolean flag.
+pub(crate) fn closed_enum_value_move(
+    key: &str,
+    value: &str,
+) -> Option<(&'static str, &'static str)> {
+    match (key, value) {
+        ("touch", "pan-x") => Some(("touchPanX", "x")),
+        ("touch", "pan-left") => Some(("touchPanX", "left")),
+        ("touch", "pan-right") => Some(("touchPanX", "right")),
+        ("touch", "pan-y") => Some(("touchPanY", "y")),
+        ("touch", "pan-up") => Some(("touchPanY", "up")),
+        ("touch", "pan-down") => Some(("touchPanY", "down")),
+        ("touch", "pinch-zoom") => Some(("touchPinchZoom", "true")),
+        _ => None,
+    }
+}
+
+/// The group keys a stand-alone keyword key resets, space-separated, when the
+/// key holds one.
+pub(crate) fn global_keyword_groups(key: &str) -> Option<&'static str> {
+    match key {
+        "nums" => Some("numFigure numSpacing numFraction numOrdinal numSlashedZero"),
+        "touch" => Some("touchPanX touchPanY touchPinchZoom"),
+        "contain" => Some("containSize containLayout containPaint containStyle"),
+        _ => None,
+    }
+}
+
+/// The stand-alone keyword key a group key belongs to.
+pub(crate) fn global_keyword_for_group(key: &str) -> Option<&'static str> {
+    match key {
+        "numFigure" => Some("nums"),
+        "numSpacing" => Some("nums"),
+        "numFraction" => Some("nums"),
+        "numOrdinal" => Some("nums"),
+        "numSlashedZero" => Some("nums"),
+        "touchPanX" => Some("touch"),
+        "touchPanY" => Some("touch"),
+        "touchPinchZoom" => Some("touch"),
+        "containSize" => Some("contain"),
+        "containLayout" => Some("contain"),
+        "containPaint" => Some("contain"),
+        "containStyle" => Some("contain"),
         _ => None,
     }
 }
@@ -934,6 +1022,11 @@ pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
         "numFigure" => Some("lining, oldstyle"),
         "numSpacing" => Some("proportional, tabular"),
         "numFraction" => Some("diagonal, stacked"),
+        "touch" => Some("auto, none, manipulation"),
+        "touchPanX" => Some("x, left, right"),
+        "touchPanY" => Some("y, up, down"),
+        "contain" => Some("none, strict, content"),
+        "containSize" => Some("size, inline-size"),
         _ => None,
     }
 }
@@ -986,6 +1079,7 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "caption"
             | "clear"
             | "container"
+            | "containSize"
             | "display"
             | "fieldSizing"
             | "float"
@@ -1038,6 +1132,8 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "textClip"
             | "textEllipsis"
             | "touch"
+            | "touchPanX"
+            | "touchPanY"
             | "visibility"
             | "whitespace"
     )

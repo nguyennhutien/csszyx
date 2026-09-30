@@ -79,4 +79,35 @@ describe('migrate --keys-only', () => {
             );
         });
     });
+
+    describe('touch values that moved to a group key (0.18.0)', () => {
+        const run = (sz: string) =>
+            transformSource(`const A = () => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true }).code;
+
+        it('moves each onto its group key', () => {
+            expect(run("{ touch: 'pan-x', md: { touch: 'pinch-zoom' } }")).toBe(
+                "const A = () => <p sz={{ touchPanX: 'x', md: { touchPinchZoom: true } }} />;",
+            );
+            expect(run("{ touch: 'none' }")).toBe("const A = () => <p sz={{ touch: 'none' }} />;");
+        });
+    });
+
+    describe('a stand-alone keyword beside its group in one className', () => {
+        // Tailwind sorts `touch-none` first and `normal-nums` last, so the class
+        // that wins depends on the property, not on the order written. Migrate
+        // cannot write an object that renders the same in every case, so it
+        // keeps both classes as written, as it does for two classes fighting
+        // over one property.
+        it.each([
+            ['touch-pan-x touch-none'],
+            ['contain-strict contain-paint'],
+            ['tabular-nums normal-nums'],
+        ])('keeps %s in className', classes => {
+            const out = transformSource(
+                `const A = () => <p className="${classes} p-4" />;`,
+                'a.tsx',
+            ).code;
+            expect(out).toBe(`const A = () => <p className="${classes}" sz={{ p: 4 }} />;`);
+        });
+    });
 });

@@ -152,7 +152,8 @@ for the full contrast. You write no brackets or parens either way.
 
 CSS takes one keyword per group and combines the groups, so each group is one
 key: a second value in the same group replaces the first, and different groups
-combine. `nums: 'normal'` resets them all, so write it alone or under a variant.
+combine. `nums: 'normal'` resets them: written after the group keys it replaces
+them, and group keys written after it replace it.
 
 <PropTable rows={[
   { sz: "{ numSpacing: 'tabular' }", tw: "tabular-nums" },

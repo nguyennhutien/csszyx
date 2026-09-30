@@ -456,6 +456,10 @@ const BOOLEAN_ROLE = {
     notSrOnly: { role: 'outer', category: 'visibility' },
     numOrdinal: { role: 'inner', category: 'text' },
     numSlashedZero: { role: 'inner', category: 'text' },
+    touchPinchZoom: { role: 'inner', category: 'touch' },
+    containLayout: { role: 'outer', category: 'containment' },
+    containPaint: { role: 'outer', category: 'containment' },
+    containStyle: { role: 'outer', category: 'containment' },
     divideXReverse: { role: 'inner', category: 'divide' },
     divideYReverse: { role: 'inner', category: 'divide' },
     spaceXReverse: { role: 'inner', category: 'space' },
@@ -476,6 +480,10 @@ const VALUE_KEYED_ROLE = {
     numFigure: { role: 'inner', category: 'text' },
     numSpacing: { role: 'inner', category: 'text' },
     numFraction: { role: 'inner', category: 'text' },
+    touchPanX: { role: 'inner', category: 'touch' },
+    touchPanY: { role: 'inner', category: 'touch' },
+    contain: { role: 'outer', category: 'containment' },
+    containSize: { role: 'outer', category: 'containment' },
 };
 
 function buildPropertyKeyRoles() {

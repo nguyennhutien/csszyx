@@ -2227,10 +2227,17 @@ Utilities for controlling the strictness of snap points.
 ## Touch Action
 
 Utilities for controlling how an element can be panned and zoomed by a user on a touchscreen.
+CSS takes one keyword per group — horizontal pan, vertical pan, pinch zoom — and combines the
+groups, so each group is one key. `touch` holds the keywords that stand alone. In one object
+the later key wins: `touch` after the group keys replaces them, group keys after `touch`
+replace it and combine.
 
-| Concept      | CSS Rule              | Tailwind v4 Class                              | `sz` Prop (Object Syntax) | Note |
-| :----------- | :-------------------- | :--------------------------------------------- | :------------------------ | :--- |
-| **Keywords** | `touch-action: (etc)` | `touch-auto`, `touch-none`, `touch-pan-x`(etc) | `{ touch: 'auto' }`       |      |
+| Concept         | CSS Rule                   | Tailwind v4 Class  | `sz` Prop (Object Syntax)  | Note                         |
+| :-------------- | :------------------------- | :----------------- | :------------------------- | :--------------------------- |
+| **Stand-alone** | `touch-action: auto`       | `touch-auto`       | `{ touch: 'auto' }`        | Also `none`, `manipulation`. |
+| **Pan X**       | `touch-action: pan-x`      | `touch-pan-x`      | `{ touchPanX: 'x' }`       | Also `left`, `right`.        |
+| **Pan Y**       | `touch-action: pan-y`      | `touch-pan-y`      | `{ touchPanY: 'y' }`       | Also `up`, `down`.           |
+| **Pinch zoom**  | `touch-action: pinch-zoom` | `touch-pinch-zoom` | `{ touchPinchZoom: true }` |                              |
 
 ## User Select
 
@@ -2458,6 +2465,22 @@ Controlling flow relative to floats.
 | **None**  | `clear: none`         | `clear-none`      | `{ clear: 'none' }`       |      |
 | **Start** | `clear: inline-start` | `clear-start`     | `{ clear: 'start' }`      |      |
 | **End**   | `clear: inline-end`   | `clear-end`       | `{ clear: 'end' }`        |      |
+
+## Contain
+
+Utilities for controlling how an element's contents are isolated from the rest of the page.
+CSS takes one keyword per group — size, layout, paint, style — and combines the groups, so each
+group is one key. `contain` holds the keywords that stand alone. In one object the later key
+wins: `contain` after the group keys replaces them, group keys after `contain` replace it and
+combine.
+
+| Concept         | CSS Rule          | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                    |
+| :-------------- | :---------------- | :---------------- | :------------------------ | :---------------------- |
+| **Stand-alone** | `contain: strict` | `contain-strict`  | `{ contain: 'strict' }`   | Also `none`, `content`. |
+| **Size**        | `contain: size`   | `contain-size`    | `{ containSize: 'size' }` | Also `inline-size`.     |
+| **Layout**      | `contain: layout` | `contain-layout`  | `{ containLayout: true }` |                         |
+| **Paint**       | `contain: paint`  | `contain-paint`   | `{ containPaint: true }`  |                         |
+| **Style**       | `contain: style`  | `contain-style`   | `{ containStyle: true }`  |                         |
 
 ## Isolation
 
@@ -3500,11 +3523,12 @@ Controlling the font width.
 Controlling numeric glyphs. CSS allows one keyword per group — figure, spacing,
 fraction, ordinal, slashed zero — and combines the groups, so each group is one
 key: a second value for the same group replaces the first, different groups
-combine. `normal` resets them all.
+combine. `normal` resets them: in one object the later key wins, so `nums` after the group keys
+replaces them and group keys after `nums` replace it.
 
 | Concept          | CSS Rule                                   | Tailwind v4 Class    | `sz` Prop (Object Syntax)        | Note                                           |
 | :--------------- | :----------------------------------------- | :------------------- | :------------------------------- | :--------------------------------------------- |
-| **Reset**        | `font-variant-numeric: normal`             | `normal-nums`        | `{ nums: 'normal' }`             | Resets every group. Alone, or under a variant. |
+| **Reset**        | `font-variant-numeric: normal`             | `normal-nums`        | `{ nums: 'normal' }`             | Later key wins over the groups.                |
 | **Figure**       | `font-variant-numeric: lining-nums`        | `lining-nums`        | `{ numFigure: 'lining' }`        | One per element.                               |
 | **Figure**       | `font-variant-numeric: oldstyle-nums`      | `oldstyle-nums`      | `{ numFigure: 'oldstyle' }`      |                                                |
 | **Spacing**      | `font-variant-numeric: proportional-nums`  | `proportional-nums`  | `{ numSpacing: 'proportional' }` | One per element.                               |

@@ -530,49 +530,48 @@ pub(crate) fn collect_owned_key_variant_objects(
     }
 }
 
-/// The `num*` keys that set one group of `font-variant-numeric`.
-#[cfg(feature = "native-engine")]
-const NUMERIC_GROUP_KEYS: [&str; 5] = [
-    "numFigure",
-    "numSpacing",
-    "numFraction",
-    "numOrdinal",
-    "numSlashedZero",
-];
-
-/// Collect objects where `nums: 'normal'` shares a level with a numeric group,
-/// as the first group key and the reset's offset.
+/// Collect closed-key values that moved onto their group's own key, as the
+/// key, the value, the key and value that replaced them, and the offset.
 ///
-/// `normal` stands alone in the CSS grammar. Beside a group, which class wins
-/// depends on whether the build merges classes, so the pair is reported
-/// rather than resolved. Descends like `collect_dead_enum_values`.
+/// `touch: 'pan-x'` is `touchPanX: 'x'` now; the lowering emits nothing for
+/// it, and this names the replacement. Descends like
+/// `collect_dead_enum_values`.
 #[cfg(feature = "native-engine")]
-pub(crate) fn collect_numeric_resets(object: &StaticSzObject, out: &mut Vec<(&'static str, u32)>) {
-    let reset = object.properties.iter().find(|property| {
-        property.key == "nums"
-            && matches!(&property.value, StaticSzValue::String(value) if value == "normal")
-    });
-    if let Some(reset) = reset {
-        let other = NUMERIC_GROUP_KEYS.into_iter().find(|key| {
-            object.properties.iter().any(|property| {
-                property.key == *key && !matches!(property.value, StaticSzValue::Boolean(false))
-            })
-        });
-        if let Some(other) = other {
-            out.push((other, reset.span.start));
-        }
-    }
+pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedValue>) {
     for property in &object.properties {
-        if let StaticSzValue::Object(nested) = &property.value {
-            if matches!(
-                property.key.as_str(),
-                "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
-            ) {
-                continue;
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if let Some((key, replacement)) =
+                    super::generated::tables::closed_enum_value_move(&property.key, value)
+                {
+                    out.push((
+                        property.key.clone(),
+                        value.clone(),
+                        key,
+                        replacement,
+                        property.span.start,
+                    ));
+                }
             }
-            collect_numeric_resets(nested, out);
+            StaticSzValue::Object(nested) if !is_parameter_namespace(&property.key) => {
+                collect_moved_values(nested, out);
+            }
+            _ => {}
         }
     }
+}
+
+/// A moved value: key, value, replacing key, replacing value, offset.
+#[cfg(feature = "native-engine")]
+pub(crate) type MovedValue = (String, String, &'static str, &'static str, u32);
+
+/// Keys whose objects hold parameters or values, not sz properties.
+#[cfg(feature = "native-engine")]
+fn is_parameter_namespace(key: &str) -> bool {
+    matches!(
+        key,
+        "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+    )
 }
 
 /// The class a closed-enum key emits for a value outside its table.
@@ -608,6 +607,8 @@ pub(crate) fn collect_dead_enum_values(
                 let base = value.strip_suffix('!').unwrap_or(value);
                 if super::generated::tables::is_closed_enum_key(&property.key)
                     && super::generated::tables::closed_enum_class(&property.key, base).is_none()
+                    && super::generated::tables::closed_enum_value_move(&property.key, base)
+                        .is_none()
                 {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
@@ -919,9 +920,49 @@ fn split_variant_prefix(class_name: &str) -> (&str, &str) {
         .map_or(("", class_name), |index| class_name.split_at(index + 1))
 }
 
+/// The keys of one object level a stand-alone keyword overrides, or that
+/// override it. Mirrors `keysShadowedByGlobalKeywords` in the TypeScript core.
+///
+/// The object's own order decides: a global keyword resets each group written
+/// before it, and the groups written after it combine and replace it. The two
+/// are never emitted together, so the result does not hang on Tailwind
+/// sorting `normal-nums` last but `touch-none` and `contain-strict` first.
+fn keys_shadowed_by_global_keywords(object: &StaticSzObject) -> Vec<&str> {
+    let mut shadowed = Vec::new();
+    let active = |value: &StaticSzValue| !matches!(value, StaticSzValue::Boolean(false));
+    for (at, global) in object.properties.iter().enumerate() {
+        let Some(groups) = super::generated::tables::global_keyword_groups(&global.key) else {
+            continue;
+        };
+        if !active(&global.value) {
+            continue;
+        }
+        let member = |key: &str| groups.split(' ').any(|group| group == key);
+        let later = object.properties[at + 1..]
+            .iter()
+            .any(|property| member(&property.key) && active(&property.value));
+        if later {
+            shadowed.push(global.key.as_str());
+        }
+        let reach = if later {
+            &object.properties[..at]
+        } else {
+            &object.properties[..]
+        };
+        shadowed.extend(
+            reach
+                .iter()
+                .filter(|property| member(&property.key))
+                .map(|property| property.key.as_str()),
+        );
+    }
+    shadowed
+}
+
 fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    let shadowed = keys_shadowed_by_global_keywords(object);
     for property in &object.properties {
-        if is_removed_sz_key(&property.key) {
+        if is_removed_sz_key(&property.key) || shadowed.contains(&property.key.as_str()) {
             continue;
         }
         // A style keyword on a per-side border key has no Tailwind utility
@@ -1482,6 +1523,11 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // where the pre-diagnostic behaviour at least left the typo in the
             // DOM to find.
             if super::generated::tables::is_closed_enum_key(key) {
+                // A value that moved onto its group's own key emits nothing;
+                // `collect_moved_values` names the replacement.
+                if super::generated::tables::closed_enum_value_move(key, value).is_some() {
+                    return None;
+                }
                 let utility = super::generated::tables::closed_enum_class(key, value)
                     .map_or_else(|| bare_closed_enum_class(key, value), str::to_string);
                 return Some(format!("{prefix}{utility}"));
