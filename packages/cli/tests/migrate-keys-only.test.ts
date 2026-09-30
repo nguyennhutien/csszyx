@@ -37,4 +37,46 @@ describe('migrate --keys-only', () => {
         expect(out.changed).toBe(false);
         expect(out.code).toBe(src);
     });
+
+    describe('font-variant-numeric keys (0.18.0)', () => {
+        const run = (sz: string) =>
+            transformSource(`const A = ({ c }) => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true })
+                .code;
+
+        it('moves each old flag onto its group key', () => {
+            expect(run('{ tabularNums: true, ordinal: true, slashedZero: true }')).toBe(
+                "const A = ({ c }) => <p sz={{ numSpacing: 'tabular', numOrdinal: true, numSlashedZero: true }} />;",
+            );
+        });
+
+        it('keeps a ternary a ternary, with each literal branch spelled for the new key', () => {
+            expect(run('{ tabularNums: c ? true : false }')).toBe(
+                "const A = ({ c }) => <p sz={{ numSpacing: c ? 'tabular' : undefined }} />;",
+            );
+            expect(run('{ flex: c ? undefined : true }')).toBe(
+                "const A = ({ c }) => <p sz={{ display: c ? undefined : 'flex' }} />;",
+            );
+        });
+
+        it('leaves a ternary with a runtime branch for the build to report', () => {
+            expect(run('{ tabularNums: c ? true : v }')).toBe(
+                'const A = ({ c }) => <p sz={{ tabularNums: c ? true : v }} />;',
+            );
+        });
+
+        it('keeps only the later of two keys that became one, as the object did', () => {
+            expect(run('{ liningNums: true, p: 2, oldstyleNums: true }')).toBe(
+                "const A = ({ c }) => <p sz={{ p: 2, numFigure: 'oldstyle' }} />;",
+            );
+            expect(run('{ block: true, flex: true }')).toBe(
+                "const A = ({ c }) => <p sz={{ display: 'flex' }} />;",
+            );
+        });
+
+        it('reads a fontVariant value as the class it named', () => {
+            expect(run("{ fontVariant: 'tabular-nums', md: { fontVariant: 'ordinal' } }")).toBe(
+                "const A = ({ c }) => <p sz={{ numSpacing: 'tabular', md: { numOrdinal: true } }} />;",
+            );
+        });
+    });
 });
