@@ -14,6 +14,7 @@ import {
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
+    REPLACED_KEYS,
     SUGGESTION_MAP,
     transform,
 } from '@csszyx/compiler';
@@ -47,7 +48,9 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
     if (suggestion) {
         return {
             key,
-            message: `Unknown prop '${key}'. This is a CSS property name, not an sz key.`,
+            message: REPLACED_KEYS.has(key)
+                ? `'${key}' was replaced by '${suggestion}' in 0.18.0.`
+                : `Unknown prop '${key}'. This is a CSS property name, not an sz key.`,
             suggestion: `Use '${suggestion}' instead. Example: { ${suggestion.split(/[\s/(]/)[0]}: ${JSON.stringify(value)} }`,
         };
     }
@@ -56,7 +59,9 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
     if (removed && value === true) {
         return {
             key,
-            message: `'${key}: true' boolean sugar was removed; it emits no class.`,
+            message: REPLACED_KEYS.has(key)
+                ? `'${key}: true' was replaced; it emits no class.`
+                : `'${key}: true' boolean sugar was removed; it emits no class.`,
             suggestion: `Use { ${removed.key}: ${JSON.stringify(removed.value)} } instead.`,
         };
     }

@@ -55,6 +55,7 @@ function readTables() {
             knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
             removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
+            replacedKeys: core.stringSet('REPLACED_KEYS'),
             knownVariants: core.stringSet('KNOWN_VARIANTS'),
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
@@ -79,6 +80,7 @@ function renderRust({
     knownSpecialProperties,
     removedBooleanSugar,
     removedBooleanSugarReplacement,
+    replacedKeys,
     knownVariants,
     ariaStates,
     specialVariants,
@@ -181,6 +183,15 @@ pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static s
 ${renderPairArms(removedBooleanSugarReplacement)}
         _ => None,
     }
+}
+
+/// Returns true when a key was canonical and got a new spelling, so its
+/// removal message says it was replaced rather than that sugar was removed.
+pub(crate) fn is_replaced_key(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(replacedKeys)}
+    )
 }
 
 /// Returns true when a key is a known csszyx variant name.

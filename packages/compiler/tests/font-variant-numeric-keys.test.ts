@@ -105,7 +105,10 @@ describe('font-variant-numeric keys', () => {
         const warnings = run.warnings.join('\n');
 
         expect(run.className ?? '').toBe('');
+        expect(warnings).toContain('"tabularNums" was replaced');
         expect(warnings).toContain("Use { numSpacing: 'tabular' }");
+        // These were canonical keys, not sugar; the sugar wording misnamed them.
+        expect(warnings).not.toContain('boolean sugar');
         expect(warnings).toContain("Use { numFigure: 'lining' }");
         expect(warnings).toContain("Use { numFraction: 'stacked' }");
         expect(warnings).toContain('canonical key "numOrdinal"');
@@ -148,5 +151,14 @@ describe('font-variant-numeric keys', () => {
         }
 
         expect(String(warn.mock.calls[0]?.[0])).toContain('"nums: normal" at src/Table.tsx:7');
+    });
+
+    it('runtime says a replaced flag was replaced, not that sugar was removed', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        expect(transform({ stackedFractions: true }).className).toBe('');
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            '[csszyx] "stackedFractions" was replaced. Use { numFraction: \'stacked\' } instead, or run `csszyx migrate`.',
+        );
     });
 });

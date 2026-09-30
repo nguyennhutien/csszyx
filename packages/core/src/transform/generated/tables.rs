@@ -687,6 +687,22 @@ pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static s
     }
 }
 
+/// Returns true when a key was canonical and got a new spelling, so its
+/// removal message says it was replaced rather than that sugar was removed.
+pub(crate) fn is_replaced_key(key: &str) -> bool {
+    matches!(
+        key,
+        "liningNums"
+            | "oldstyleNums"
+            | "proportionalNums"
+            | "tabularNums"
+            | "diagonalFractions"
+            | "stackedFractions"
+            | "ordinal"
+            | "slashedZero"
+    )
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(

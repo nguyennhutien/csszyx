@@ -154,6 +154,35 @@ _sz("base", isActive ? "active" : "inactive");
 _sz("base", { sm: "p-2", lg: "p-6" }[size]);
 ```
 
+### 5. `font-variant-numeric` takes one key per group (0.18.0)
+
+CSS allows one keyword per group of `font-variant-numeric` — figure, spacing,
+fraction, ordinal, slashed zero — and combines the groups. The eight boolean
+flags let one object hold both keywords of a group, and on the page the
+stylesheet order, not the object, then decided which one applied. Each group is
+now one key, so a later value in the same group replaces the earlier one and
+different groups combine:
+
+| Before (replaced) | After | Group |
+|---|---|---|
+| `{ liningNums: true }` / `{ oldstyleNums: true }` | `{ numFigure: 'lining' }` / `{ numFigure: 'oldstyle' }` | figure |
+| `{ proportionalNums: true }` / `{ tabularNums: true }` | `{ numSpacing: 'proportional' }` / `{ numSpacing: 'tabular' }` | spacing |
+| `{ diagonalFractions: true }` / `{ stackedFractions: true }` | `{ numFraction: 'diagonal' }` / `{ numFraction: 'stacked' }` | fraction |
+| `{ ordinal: true }` | `{ numOrdinal: true }` | ordinal |
+| `{ slashedZero: true }` | `{ numSlashedZero: true }` | slashed zero |
+| `{ fontVariant: 'normal-nums' }` | `{ nums: 'normal' }` | resets every group |
+
+The old keys emit nothing, and the build names the replacement:
+
+```text
+[csszyx] "tabularNums" was replaced at src/Table.tsx:4. Use { numSpacing: 'tabular' } instead, or run `csszyx migrate`.
+```
+
+`csszyx migrate --keys-only` rewrites them, including a ternary of literals
+(`tabularNums: c ? true : false` becomes `numSpacing: c ? 'tabular' : undefined`)
+and two flags of one group in one object, which become one key holding the
+later value.
+
 ## Understanding the Migration Report
 
 After each run, migrate prints a summary (also written to `.csszyx/logs/`)

@@ -19,6 +19,20 @@ describe('csszyx_validate', () => {
         expect(data.errors[0].suggestion).toContain("'p'");
     });
 
+    it('says a 0.18.0 numeric key was replaced, not that it is a CSS name or sugar', () => {
+        const data = JSON.parse(
+            handleValidate({ sz: { tabularNums: true, ordinal: true } }).content[0].text,
+        );
+        const byKey = Object.fromEntries(
+            data.errors.map((error: { key: string; message: string }) => [error.key, error]),
+        );
+        expect(byKey.tabularNums.message).toBe(
+            "'tabularNums: true' was replaced; it emits no class.",
+        );
+        expect(byKey.tabularNums.suggestion).toContain('numSpacing');
+        expect(byKey.ordinal.message).toBe("'ordinal' was replaced by 'numOrdinal' in 0.18.0.");
+    });
+
     it('catches unknown props', () => {
         const data = JSON.parse(handleValidate({ sz: { unknownProp: 'value' } }).content[0].text);
         expect(data.valid).toBe(false);

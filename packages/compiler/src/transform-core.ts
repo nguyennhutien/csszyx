@@ -1077,6 +1077,24 @@ export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string 
     stackedFractions: { key: 'numFraction', value: 'stacked' },
 };
 
+/**
+ * Keys that were canonical and got a new spelling (0.18.0 `num*` family).
+ *
+ * They reach the same removal paths as boolean sugar and alias names, but
+ * they were never sugar or a CSS property name, so every message says they
+ * were replaced. Generated into the engine's tables (`is_replaced_key`).
+ */
+export const REPLACED_KEYS: ReadonlySet<string> = new Set([
+    'liningNums',
+    'oldstyleNums',
+    'proportionalNums',
+    'tabularNums',
+    'diagonalFractions',
+    'stackedFractions',
+    'ordinal',
+    'slashedZero',
+]);
+
 // Alignment sz-keys take csszyx's short value form (start/end/between/around/
 // evenly), NOT the CSS-spec longhand (flex-start/space-between/...). A longhand
 // value produces a DEAD class — `justify-flex-start` / `content-space-between`
@@ -4181,8 +4199,9 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (!removed) return false;
     if (process.env.NODE_ENV !== 'production' && !warnedRemovedSugar.has(rawKey)) {
         warnedRemovedSugar.add(rawKey);
+        const what = REPLACED_KEYS.has(rawKey) ? 'was replaced' : 'boolean sugar was removed';
         console.warn(
-            `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
+            `[csszyx] "${rawKey}" ${what}. Use ` +
                 `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
         );
     }

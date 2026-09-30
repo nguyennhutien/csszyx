@@ -1175,8 +1175,13 @@ fn push_removed_sugar_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
+        let what = if super::generated::tables::is_replaced_key(key) {
+            "was replaced"
+        } else {
+            "boolean sugar was removed"
+        };
         out.push(format!(
-            "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
+            "[csszyx] \"{key}\" {what} at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
         ));
     }
 }
@@ -2004,6 +2009,14 @@ mod tests {
         // `flex` is also the flex shorthand: only a `true` branch is the sugar.
         let flex_sugar = run("flex: c ? true : undefined");
         assert!(flex_sugar.diagnostics[0].contains("\"flex\" boolean sugar was removed"));
+        // A key that was canonical until 0.18.0 is named as replaced, not sugar.
+        let replaced = run("tabularNums: true");
+        assert!(
+            replaced.diagnostics[0]
+                .contains("\"tabularNums\" was replaced at /repo/src/Sugar.tsx:1."),
+            "{:?}",
+            replaced.diagnostics
+        );
         let flex_values = run("flex: c ? 1 : 'none'");
         assert!(
             flex_values.diagnostics.is_empty(),
