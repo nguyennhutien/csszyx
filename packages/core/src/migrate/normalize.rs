@@ -412,6 +412,12 @@ mod tests {
             keys_only("{ block: true, md: { hidden: true, flex: true } }"),
             "{ display: 'block', md: { display: 'flex' } }"
         );
+        // One side renamed is enough: the author's `display` loses to the
+        // sugar that became `display` after it.
+        assert_eq!(
+            keys_only("{ display: 'block', flex: true }"),
+            "{ display: 'flex' }"
+        );
         // The same key twice with no rename is the author's own, untouched.
         assert_eq!(keys_only("{ p: 1, p: 2 }"), "{ p: 1, p: 2 }");
     }

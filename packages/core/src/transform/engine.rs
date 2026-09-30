@@ -1967,6 +1967,11 @@ mod tests {
         // not the pair.
         assert!(report("nums: 'normal', md: { numSpacing: 'tabular' }").is_empty());
         assert!(report("nums: 'normal', numOrdinal: false").is_empty());
+        // `normal` on another key, and another value on `nums`, are no reset.
+        assert!(report("tracking: 'normal', numSpacing: 'tabular'").is_empty());
+        assert!(!report("nums: 'bogus', numSpacing: 'tabular'")
+            .iter()
+            .any(|line| line.contains("resets every numeric group")));
         assert!(report("data: { open: { nums: 'normal', numOrdinal: true } }").is_empty());
     }
 
