@@ -71,9 +71,10 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
     });
 
     it('stays silent for a value that sets the key own property', async () => {
+        const svgFill = `export const A = () => <svg sz={{ fill: 'none' }} />;`;
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
-            'src/App.tsx': `export const A = () => <svg sz={{ fill: 'none' }} />;`,
+            'src/App.tsx': svgFill,
         });
 
         expect(await reportFor(cwd)).not.toContain("fill: 'none'");
