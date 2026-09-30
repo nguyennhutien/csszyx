@@ -430,6 +430,10 @@ pub enum DroppedKeyReason {
     /// The key is supported, but Tailwind has no utility that reads a CSS
     /// custom property for it, so a runtime value cannot be lowered at all.
     NoVarForm,
+    /// The key is removed boolean sugar written with a value the static
+    /// collector cannot see: a ternary with a `true` branch, or a runtime
+    /// value. Its message names the canonical `{ key: value }`.
+    RemovedSugar,
 }
 
 /// Dynamic property dropped before CSS-variable lowering, with no static value

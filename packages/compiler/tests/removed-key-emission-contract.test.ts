@@ -85,6 +85,37 @@ describe('removed sz key emission contract', () => {
         expect(run.warnings.join('\n')).not.toContain('canonical key');
     });
 
+    // Removed boolean sugar under a ternary or with a runtime value used to
+    // lose its class with no word: the literal-`true` check was the only one.
+    it.each(ENGINES)('%s reports removed sugar whatever shape its value has', (_name, engine) => {
+        const source = `
+            export const App = ({ c, v }) => (
+                <div sz={{ absolute: c ? true : false, isolate: v, md: { flex: c ? true : undefined }, p: 4 }} />
+            );
+        `;
+        const run = captureWarnings(engine, source);
+        const code = run.result.code ?? '';
+        const warnings = run.warnings.join('\n');
+
+        expect(code).not.toContain('--_sz-isolate');
+        expect(code).not.toContain('isolate-(');
+        expect(warnings).toContain('"absolute" boolean sugar was removed');
+        expect(warnings).toContain("Use { position: 'absolute' }");
+        expect(warnings).toContain('"isolate" boolean sugar was removed');
+        expect(warnings).toContain('"flex" boolean sugar was removed');
+        expect(code).toContain('p-4');
+    });
+
+    it.each(ENGINES)('%s keeps `flex` a value key and inactive sugar silent', (_name, engine) => {
+        const run = captureWarnings(
+            engine,
+            'export const App = ({ v }) => <div sz={{ flex: v, absolute: false }} />;',
+        );
+
+        expect(run.result.code ?? '').toContain('flex-(--_sz-flex)');
+        expect(run.warnings.join('\n')).not.toContain('boolean sugar was removed');
+    });
+
     it('does not mistake the canonical alignContent key for CSS content', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

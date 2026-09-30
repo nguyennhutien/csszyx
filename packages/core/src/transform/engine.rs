@@ -961,6 +961,18 @@ fn push_group_key_value_diagnostics<'a>(
             .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
             .map(|dropped| (dropped.key.clone(), dropped.span.start)),
     );
+    found.removed_sugar.extend(
+        dropped_dynamic_keys
+            .iter()
+            .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedSugar)
+            .filter_map(|dropped| {
+                super::generated::tables::removed_boolean_sugar_replacement(&dropped.key).map(
+                    |(canonical, value)| {
+                        (dropped.key.clone(), canonical, value, dropped.span.start)
+                    },
+                )
+            }),
+    );
     push_unknown_key_diagnostics(file, &found.unknown, location, lines, out);
     push_dead_spacing_step_diagnostics(file, &found.dead_steps, location, lines, out);
     push_dead_weight_diagnostics(file, &found.dead_weights, location, lines, out);
@@ -1887,6 +1899,54 @@ mod tests {
             diagnostic.contains("object literal contains a runtime value")
                 && diagnostic.contains("deferred to _szPart")
         }));
+    }
+
+    #[test]
+    fn removed_sugar_is_reported_whatever_shape_its_value_has() {
+        let run = |sz: &str| {
+            let file = TransformFile {
+                filename: "/repo/src/Sugar.tsx".to_string(),
+                source: format!("const App = ({{ c, v }}) => <div sz={{{{ {sz} }}}} />;"),
+            };
+            transform_static_classes_with_options(
+                &file,
+                0,
+                std::time::Instant::now(),
+                TransformOptions::default(),
+            )
+        };
+
+        // Every branch of the ternary lowered to nothing, with no word.
+        let nested = run("absolute: c ? (v ? true : false) : false");
+        assert_eq!(nested.diagnostics.len(), 1, "{:?}", nested.diagnostics);
+        assert!(nested.diagnostics[0].contains("\"absolute\" boolean sugar was removed"));
+        assert!(nested.diagnostics[0].contains("{ position: 'absolute' }"));
+
+        // A runtime value reached the css-var lane as a dead `isolate-(--…)`.
+        let runtime = run("isolate: v");
+        assert!(!runtime.code.contains("--_sz-isolate"), "{}", runtime.code);
+        assert!(runtime.diagnostics[0].contains("\"isolate\" boolean sugar was removed"));
+
+        // `flex` is also the flex shorthand: only a `true` branch is the sugar.
+        let flex_sugar = run("flex: c ? true : undefined");
+        assert!(flex_sugar.diagnostics[0].contains("\"flex\" boolean sugar was removed"));
+        let flex_values = run("flex: c ? 1 : 'none'");
+        assert!(
+            flex_values.diagnostics.is_empty(),
+            "{:?}",
+            flex_values.diagnostics
+        );
+        let flex_runtime = run("flex: v");
+        assert!(
+            flex_runtime.code.contains("flex-(--_sz-flex)"),
+            "{}",
+            flex_runtime.code
+        );
+        assert!(
+            flex_runtime.diagnostics.is_empty(),
+            "{:?}",
+            flex_runtime.diagnostics
+        );
     }
 
     #[test]

@@ -4220,6 +4220,39 @@ fn drop_dynamic_key(
     });
 }
 
+/// Why a key with a non-static value is dropped before lowering, if it is.
+fn removed_key_reason(key: &str, value: &Expression<'_>) -> Option<DroppedKeyReason> {
+    if is_removed_sz_key(key) {
+        return Some(DroppedKeyReason::RemovedKey);
+    }
+    drops_removed_sugar(key, value).then_some(DroppedKeyReason::RemovedSugar)
+}
+
+/// Whether a removed boolean-sugar key must be dropped and reported although
+/// its value is not the literal `true` the static collector checks.
+///
+/// Every branch of `absolute: c ? true : false` lowers to nothing, and
+/// `isolate: v` would reach the css-var lane as a dead `isolate-(--…)`: both
+/// used to ship with no word. `flex` is the exception, because it is also the
+/// flex shorthand key — `flex: v` is that value, and only a `true` branch is
+/// the removed sugar.
+fn drops_removed_sugar(key: &str, value: &Expression<'_>) -> bool {
+    super::generated::tables::is_removed_boolean_sugar(key)
+        && (super::generated::tables::property_prefix(key).is_none() || has_true_branch(value))
+}
+
+/// Whether a value is literal `true`, or a ternary with a `true` branch at
+/// any depth.
+fn has_true_branch(value: &Expression<'_>) -> bool {
+    match unwrap_expression(value) {
+        Expression::BooleanLiteral(literal) => literal.value,
+        Expression::ConditionalExpression(conditional) => {
+            has_true_branch(&conditional.consequent) || has_true_branch(&conditional.alternate)
+        }
+        _ => false,
+    }
+}
+
 fn partial_object_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -4258,11 +4291,11 @@ fn partial_object_from_object_expression(
                 }
 
                 let key = static_property_key(&property.key)?;
-                if is_removed_sz_key(&key) {
-                    // Retain only diagnostic identity: no class or CSS variable
-                    // may be emitted, while a literal false was skipped above
-                    // and remains silent like the runtime path.
-                    drop_dynamic_key(&mut partial, key, property, DroppedKeyReason::RemovedKey);
+                // Retain only diagnostic identity: no class or CSS variable may
+                // be emitted, while a literal false was skipped above and
+                // remains silent like the runtime path.
+                if let Some(reason) = removed_key_reason(&key, &property.value) {
+                    drop_dynamic_key(&mut partial, key, property, reason);
                     continue;
                 }
                 if let Expression::ObjectExpression(nested) = &property.value {
