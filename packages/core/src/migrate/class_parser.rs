@@ -743,9 +743,20 @@ mod tests {
             "mask-radial-nowhere",
             "-mask-b-from-20%",
             "-mask-add",
+            "mask-linear-",
         ] {
             assert_eq!(mask_json(class), "null", "{class}");
         }
+        // A `%` needs a number before it to be a position; anything else is
+        // read as a colour name.
+        assert_eq!(
+            mask_json("mask-linear-from-x%"),
+            r#"{"prop":"maskLinear","value":{"from":{"color":"x%"}}}"#
+        );
+        assert_eq!(
+            mask_json("mask-linear-to-%"),
+            r#"{"prop":"maskLinear","value":{"to":{"color":"%"}}}"#
+        );
         // Not a layer or keyword: left to the prefix path.
         assert_eq!(mask_json("mask-b-20"), r#"{"prop":"mask","value":"b-20"}"#);
         assert_eq!(mask_json("mask-none"), r#"{"prop":"mask","value":"none"}"#);

@@ -938,14 +938,17 @@ fn keys_shadowed_by_global_keywords(object: &StaticSzObject) -> Vec<&str> {
             continue;
         }
         let member = |key: &str| groups.split(' ').any(|group| group == key);
-        let later = object.properties[at + 1..]
+        // The global itself is no member of its groups, so the half after the
+        // split can include it.
+        let (before, after) = object.properties.split_at(at);
+        let later = after
             .iter()
             .any(|property| member(&property.key) && active(&property.value));
         if later {
             shadowed.push(global.key.as_str());
         }
         let reach = if later {
-            &object.properties[..at]
+            before
         } else {
             &object.properties[..]
         };
