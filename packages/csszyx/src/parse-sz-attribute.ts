@@ -14,6 +14,12 @@
  *
  * Auto-wraps input in `{}` if missing, so both `"p: 4"` and `"{p: 4}"` parse.
  *
+ * Every pass of the object and array loops consumes at least one character or
+ * throws, so a parse takes time linear in the input and always ends. A
+ * character the grammar does not expect (`{ w: 1/2 }`, `{ p: 4; m: 2 }`) is a
+ * `SyntaxError` naming it, which the runtime reports; without the check those
+ * passes consumed nothing and the loop never ended, freezing the page.
+ *
  * @param rawInput Raw `sz` attribute value as written in HTML.
  * @returns Parsed object representation suitable for the sz transform.
  */
@@ -21,6 +27,13 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     const trimmed = rawInput.trim();
     const input = trimmed.startsWith('{') ? trimmed : `{${trimmed}}`;
     let pos = 0;
+
+    // Only called inside a loop that runs while `pos` is in range.
+    const unexpected = (): never => {
+        throw new SyntaxError(
+            `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos} in sz attribute "${rawInput}"`,
+        );
+    };
 
     const skipWhitespace = (): void => {
         while (pos < input.length && /\s/.test(input[pos])) {
@@ -120,12 +133,16 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
         const arr: unknown[] = [];
         skipWhitespace();
         while (pos < input.length && input[pos] !== ']') {
+            const from = pos;
             arr.push(parseValue());
             skipWhitespace();
             if (input[pos] === ',') {
                 pos++;
             }
             skipWhitespace();
+            if (pos === from) {
+                unexpected();
+            }
         }
         pos++; // skip ]
         return arr;
@@ -137,6 +154,7 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
 
         skipWhitespace();
         while (pos < input.length && input[pos] !== '}') {
+            const from = pos;
             const key = parseKey();
             skipWhitespace();
             if (input[pos] === ':') {
@@ -149,6 +167,9 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
                 pos++;
             }
             skipWhitespace();
+            if (pos === from) {
+                unexpected();
+            }
         }
         pos++; // skip }
 

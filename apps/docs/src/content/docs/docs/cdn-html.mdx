@@ -104,6 +104,18 @@ Outer braces are **optional** — these are equivalent:
 The runtime auto-wraps when braces are missing, so the VS Code extension's
 implicit syntax works out of the box.
 
+Numbers, `true`, `false`, `null` and plain words (letters, digits, `.`, `-`,
+`+`) can go unquoted. Anything else is a string and needs single quotes —
+a fraction, a hex colour, a function:
+
+```html
+<div sz="{ w: '1/2', bg: '#fff', h: 'calc(100%-2rem)' }">…</div>
+```
+
+Written unquoted (`w: 1/2`), the attribute does not parse: the runtime leaves
+that element unstyled, logs `[csszyx] Parsing error` with the character and
+its position, and carries on with the rest of the page.
+
 ## Dynamically added elements
 
 The runtime installs a `MutationObserver` on `<body>`, so any element added
