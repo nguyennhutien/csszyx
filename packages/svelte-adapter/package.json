@@ -22,8 +22,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "unbuild",
-    "dev": "unbuild --stub",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
@@ -41,8 +41,8 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "svelte": "^5.57.0",
+    "tsdown": "0.23.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   },
   "keywords": [
