@@ -62,6 +62,10 @@ describe('parseSzAttribute', () => {
             { '[&>span]': { p: 1 }, flag: true, none: null },
         ],
         ['{ list: [1, 2, 3] }', { list: [1, 2, 3] }],
+        // An escaped quote stays in the string; an escape with nothing after
+        // it ends the string at the end of the input.
+        ["{ content: 'it\\'s' }", { content: "it's" }],
+        ["{ content: 'x\\", { content: 'x' }],
     ])('parses %s as before', (input, expected) => {
         expect(parseSzAttribute(input)).toEqual(expected);
     });
