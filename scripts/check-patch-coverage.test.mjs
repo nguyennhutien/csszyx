@@ -116,7 +116,8 @@ describe('patch coverage', () => {
     });
 
     it('exempts a package config, which sits beside src and is never executed', () => {
-        assert.ok(!isMeasurable('packages/compiler/build.config.ts'));
+        assert.ok(!isMeasurable('packages/compiler/tsdown.config.mjs'));
+        assert.ok(!isMeasurable('tsdown.base.mjs'));
         assert.ok(isMeasurable('packages/compiler/src/index.ts'));
     });
 
