@@ -10,7 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { transform } from '../src/transform-core.js';
+import { setSzWarnLocation, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -115,6 +115,27 @@ describe('touch-action and contain keys', () => {
         expect(String(warn.mock.calls[0]?.[0])).toContain(
             '"touch: pan-up" moved to { touchPanY: \'up\' }',
         );
+    });
+
+    it('runtime names a flag key with its location, once, and stays quiet in production', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('src/Pan.tsx:4');
+        try {
+            transform({ touch: 'pinch-zoom' });
+            transform({ touch: 'pinch-zoom' });
+        } finally {
+            setSzWarnLocation(undefined);
+        }
+        vi.stubEnv('NODE_ENV', 'production');
+        try {
+            transform({ touch: 'pan-down' });
+        } finally {
+            vi.unstubAllEnvs();
+        }
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            '[csszyx] "touch: pinch-zoom" moved to { touchPinchZoom: true } at src/Pan.tsx:4. Run `csszyx migrate` to rewrite it.',
+        ]);
     });
 
     // A global keyword stands alone in each grammar, so the object's order
