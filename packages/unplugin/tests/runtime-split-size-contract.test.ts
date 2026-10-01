@@ -26,11 +26,14 @@ import { createUnservedRuntimeModule } from '../src/virtual-modules.js';
 const require = createRequire(import.meta.url);
 
 /**
- * A string constant that exists only in the compiler's transform chunk — a
- * dev-warning message, kept verbatim by minification. Present in a bundle
- * exactly when the browser transform shipped.
+ * A string constant that exists only in the compiler's transform chunk — the
+ * error `transform` throws for options passed the old way, kept verbatim by
+ * minification. Present in a bundle exactly when the browser transform shipped.
+ *
+ * Not a warning message: those fold away in a production bundle now, so a
+ * warning marker reads "no compiler" whether or not the transform shipped.
  */
-const COMPILER_MARKER = 'received a numeric key';
+const COMPILER_MARKER = 'transform takes options';
 
 /**
  * A string only the compiler's property tables carry — a display value from its
