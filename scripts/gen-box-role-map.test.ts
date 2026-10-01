@@ -11,6 +11,30 @@ describe('box-role map generation', () => {
         assert.equal(keyRoles.get('truncate')?.category, 'text');
     });
 
+    // A closed-enum key has no PROPERTY_MAP prefix, so it reaches the key table
+    // only through its own row; without one `splitBoxSz` cannot route it while
+    // `splitBox` routes the class it compiles to.
+    it('gives every closed-enum group key the role of its family', () => {
+        const { keyRoles } = buildRoleMaps();
+        const expected = {
+            nums: 'inner/text',
+            numFigure: 'inner/text',
+            numSpacing: 'inner/text',
+            numFraction: 'inner/text',
+            touchPanX: 'inner/touch',
+            touchPanY: 'inner/touch',
+            contain: 'outer/containment',
+            containSize: 'outer/containment',
+        };
+        const actual = Object.fromEntries(
+            Object.keys(expected).map(key => {
+                const role = keyRoles.get(key);
+                return [key, role && `${role.role}/${role.category}`];
+            }),
+        );
+        assert.deepEqual(actual, expected);
+    });
+
     it('compiles exact sugar tokens and shared prefixes', () => {
         const { prefixes, tokens } = buildRoleMaps();
         assert.equal(prefixes.get('m')?.role, 'outer');

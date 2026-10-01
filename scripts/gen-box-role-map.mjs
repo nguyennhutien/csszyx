@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
     transform,
@@ -791,6 +792,18 @@ function buildCompleteKeyRoles(keyRole) {
     for (const shorthand of BOOLEAN_SHORTHANDS) {
         if (shorthand in PROPERTY_MAP) continue;
         keyRoles.set(shorthand, BOOLEAN_ROLE[shorthand]);
+    }
+    // A closed-enum group key (`numSpacing`, `touchPanX`, `containSize`) has no
+    // PROPERTY_MAP prefix, so its row here is the only way `splitBoxSz` can
+    // route it to the side its class lands on.
+    for (const [key, role] of Object.entries(VALUE_KEYED_ROLE)) {
+        if (key in PROPERTY_MAP) continue;
+        if (!KNOWN_SPECIAL_PROPERTIES.has(key)) {
+            throw new Error(
+                `[gen-box-role-map] VALUE_KEYED_ROLE has "${key}", which is neither a PROPERTY_MAP key nor a special sz key (stale)`,
+            );
+        }
+        keyRoles.set(key, role);
     }
     // An sz key whose role depends on its value carries the exceptions, so
     // `splitBoxSz` routes `{ overflow: 'hidden' }` the way `splitBox` routes the
