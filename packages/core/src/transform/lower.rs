@@ -3659,6 +3659,53 @@ mod tests {
     }
 
     #[test]
+    fn every_touch_and_contain_value_lowers_to_its_class() {
+        for (key, value, expected) in [
+            ("touch", "auto", "touch-auto"),
+            ("touch", "none", "touch-none"),
+            ("touch", "manipulation", "touch-manipulation"),
+            ("touchPanX", "x", "touch-pan-x"),
+            ("touchPanX", "left", "touch-pan-left"),
+            ("touchPanX", "right", "touch-pan-right"),
+            ("touchPanY", "y", "touch-pan-y"),
+            ("touchPanY", "up", "touch-pan-up"),
+            ("touchPanY", "down", "touch-pan-down"),
+            ("contain", "none", "contain-none"),
+            ("contain", "strict", "contain-strict"),
+            ("contain", "content", "contain-content"),
+            ("containSize", "size", "contain-size"),
+            ("containSize", "inline-size", "contain-inline-size"),
+        ] {
+            let object = StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.into()))],
+            };
+            assert_eq!(
+                lower_static_sz_object(&object),
+                [expected],
+                "{key}: {value}"
+            );
+        }
+    }
+
+    // A stand-alone key switched off shadows nothing: the groups around it
+    // still combine.
+    #[test]
+    fn a_stand_alone_key_set_false_leaves_its_groups_alone() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("containLayout", StaticSzValue::Boolean(true)),
+                property("contain", StaticSzValue::Boolean(false)),
+                property("containPaint", StaticSzValue::Boolean(true)),
+            ],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["contain-layout", "contain-paint"]
+        );
+    }
+
+    #[test]
     fn a_closed_enum_typo_keeps_its_key_fixed_part() {
         for (key, expected) in [
             ("display", "bogus"),
