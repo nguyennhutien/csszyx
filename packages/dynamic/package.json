@@ -38,8 +38,8 @@
     "node": "^22.18.0 || >=24.11.0"
   },
   "scripts": {
-    "build": "unbuild",
-    "dev": "unbuild --stub",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"
@@ -59,8 +59,8 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "@types/react": "^18.3.31",
+    "tsdown": "0.23.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   }
 }
