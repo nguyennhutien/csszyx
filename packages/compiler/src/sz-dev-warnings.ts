@@ -14,19 +14,24 @@
  */
 
 /**
- * Whether dev-mode sz diagnostics should be printed. True in development, in a
- * Node/SSR context only (never the browser client — the warnings would double a
- * server-side render), and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The
- * opt-out lets a team that prefers a quiet dev loop rely on `csszyx check`
- * instead; the default stays ON because an unknown/aliased key is a
- * dropped-class correctness signal, not a style nudge.
+ * Whether a dev-mode sz diagnostic may print here: in a Node/SSR context only
+ * (never the browser client — the warnings would double a server-side render),
+ * and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The opt-out lets a team
+ * that prefers a quiet dev loop rely on `csszyx check` instead; the default
+ * stays ON because an unknown/aliased key is a dropped-class correctness
+ * signal, not a style nudge.
  *
- * @returns Whether a dev-mode sz warning should be printed.
+ * It does NOT read `NODE_ENV`. Every caller writes
+ * `process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()` (or the
+ * `!==` / `&&` form) itself, because only that spelling at the call site is
+ * folded by an app's bundler, which then drops the warning and its message
+ * from a production bundle; behind a call it ships to every user. Reading it
+ * here as well would make each development check touch `process.env` twice,
+ * and on Node that read is a call into the host. `dev-warning-guard.test.ts`
+ * fails a call site without the check.
+ *
+ * @returns Whether a dev-mode sz warning should be printed, given development.
  */
-export function szDevWarningsEnabled(): boolean {
-    return (
-        process.env.NODE_ENV !== 'production' &&
-        typeof window === 'undefined' &&
-        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
-    );
+export function szNodeWarningsUnmuted(): boolean {
+    return typeof window === 'undefined' && process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1';
 }

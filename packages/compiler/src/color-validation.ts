@@ -7,7 +7,7 @@
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { szDevWarningsEnabled } from './sz-dev-warnings.js';
+import { szNodeWarningsUnmuted } from './sz-dev-warnings.js';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
@@ -147,7 +147,7 @@ function sanitizeColorEntry(
  * @param color - Rejected color value.
  */
 export function warnUnrecognizedColor(key: string, color: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     console.warn(
         `[csszyx] "${key}: '${color}'" is not a recognized color value and will be ignored. ` +
             'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
@@ -162,7 +162,7 @@ export function warnUnrecognizedColor(key: string, color: string): void {
  * @param color - Rejected color value, including the slash.
  */
 export function warnStringColorOpacity(key: string, color: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     const slash = color.indexOf('/');
     console.warn(
         `[csszyx] "${key}: '${color}'" — string slash opacity is not supported. ` +

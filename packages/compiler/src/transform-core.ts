@@ -14,7 +14,7 @@ import {
 } from './color-validation.js';
 import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { szDevWarningsEnabled } from './sz-dev-warnings.js';
+import { szNodeWarningsUnmuted } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
 
@@ -1344,7 +1344,8 @@ const _warnedSpacingSteps = new Set<string>();
  */
 function warnDeadSpacingStep(key: string, value: number): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.SPACING ||
         (value * 4) % 1 === 0
     ) {
@@ -1417,7 +1418,7 @@ function isBorderSideStyleValue(key: string, value: string): boolean {
  * @param value - The style keyword that was dropped.
  */
 function warnBorderSideStyle(key: string, value: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     const token = `${key}:${value}`;
     if (_warnedBorderSideStyles.has(token)) return;
     _warnedBorderSideStyles.add(token);
@@ -1448,7 +1449,12 @@ const _warnedWeightValues = new Set<string>();
  * @param value - The string value about to be emitted bare.
  */
 function warnDeadWeightValue(rawKey: string, value: string): void {
-    if (rawKey !== 'weight' || !szDevWarningsEnabled() || !/^\d+(?:\.\d+)?$/.test(value)) {
+    if (
+        rawKey !== 'weight' ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        !/^\d+(?:\.\d+)?$/.test(value)
+    ) {
         return;
     }
     if (_warnedWeightValues.has(value)) return;
@@ -2634,7 +2640,8 @@ function resolvedThemeTokenValue(token: string): string | null {
  */
 function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         color.startsWith('--') ||
         needsArbitraryBrackets(color) ||
         /-\d{2,3}$/.test(color) ||
@@ -3014,7 +3021,12 @@ function warnClosedEnumValue(
     legal: ReadonlyMap<string, string>,
 ): void {
     const token = `${key}:${value}`;
-    if (!szDevWarningsEnabled() || _warnedClosedEnumValues.has(token)) return;
+    if (
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        _warnedClosedEnumValues.has(token)
+    )
+        return;
     _warnedClosedEnumValues.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
@@ -3141,7 +3153,7 @@ function collectFontModeProperty(
     if (value === 'grayscale') className = 'antialiased';
     else if (value === 'subpixel') className = 'subpixel-antialiased';
     if (className) classes.push(`${prefix}${className}`);
-    else if (szDevWarningsEnabled()) {
+    else if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
         console.warn(
             `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
                 `'grayscale' or 'subpixel'.`,
@@ -3152,7 +3164,7 @@ function collectFontModeProperty(
 
 /** Warns when fontStyle cannot map to a Tailwind class. */
 function warnUnsupportedFontStyle(value: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     console.warn(
         `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
             `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
@@ -3702,7 +3714,7 @@ const warnedMaskLayerValues = new Set<string>();
 
 /**
  * Warn that a `mask` layer value moved, naming the key that replaced it.
- * Fires in browser dev as well (unlike szDevWarningsEnabled warnings): the
+ * Fires in browser dev as well (unlike szNodeWarningsUnmuted warnings): the
  * consequence is a silently dropped mask, which is exactly the migration
  * mistake a first-time user makes inside a runtime-resolved sz object.
  *
@@ -3839,7 +3851,12 @@ function formatPerspectiveOrigin(value: string): string {
 
 /** Warns when a fallback key cannot produce a supported sz utility. */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
-    if (!szDevWarningsEnabled() || isKnownSzPropertyKey(key)) return;
+    if (
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        isKnownSzPropertyKey(key)
+    )
+        return;
     let message = unknownSzPropertyMessage(key);
     if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
     console.warn(message);
@@ -4180,9 +4197,14 @@ const _warnedOwnedKeyVariants = new Set<string>();
  */
 function warnOwnedKeyVariantObject(key: string): void {
     // The key test first: every nested variant reaches this line, and the
-    // environment read behind `szDevWarningsEnabled` is the expensive half
+    // environment reads in the production check are the expensive half
     // (+13% on a six-variant object when it ran first).
-    if (!isOwnedNonVariantKey(key) || !szDevWarningsEnabled() || _warnedOwnedKeyVariants.has(key)) {
+    if (
+        !isOwnedNonVariantKey(key) ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        _warnedOwnedKeyVariants.has(key)
+    ) {
         return;
     }
     _warnedOwnedKeyVariants.add(key);
@@ -4241,7 +4263,8 @@ export function __resetSzWarnDedupForTests(): void {
  */
 function warnPropertyObjectValue(key: string, value: Record<string, unknown>): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         !(key in PROPERTY_MAP) ||
         KNOWN_VARIANTS.has(key) ||
         SPECIAL_VARIANTS.has(key) ||
