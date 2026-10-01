@@ -389,6 +389,23 @@ describe('string property handler chain', () => {
         expect(cls({ fontSmoothing: 'subpixel' })).toBe('subpixel-antialiased');
         expect(cls({ fontSmoothing: 'bad' })).toBe('');
     });
+    it('an unsupported fontSmoothing warns in development only, and not when muted', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            cls({ fontSmoothing: 'blurry' });
+            vi.stubEnv('NODE_ENV', 'production');
+            cls({ fontSmoothing: 'blurry' });
+            vi.stubEnv('NODE_ENV', 'development');
+            vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+            cls({ fontSmoothing: 'blurry' });
+        } finally {
+            vi.unstubAllEnvs();
+        }
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            "[csszyx] fontSmoothing: 'blurry' is not supported — use 'grayscale' or 'subpixel'.",
+        ]);
+        warn.mockRestore();
+    });
     it('textWrap / break / wrap / textOverflow', () => {
         expect(cls({ textWrap: 'balance' })).toBe('text-balance');
         expect(cls({ break: 'all' })).toBe('break-all');
