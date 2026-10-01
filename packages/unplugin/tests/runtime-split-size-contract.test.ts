@@ -121,21 +121,20 @@ const LIGHT_RUNTIME_PROBES = [
 
 describe('runtime split size contract', () => {
     it('the marker string still identifies the compiler chunk', () => {
-        // If a compiler refactor ever renames this warning, every assertion
+        // If a compiler refactor ever renames this error, every assertion
         // below would silently test nothing — pin the marker itself first.
-        // The entry re-exports from a shared chunk (ESM `from './shared/…'`,
-        // CJS `require('./shared/…')`), so scan the entry plus every sibling
-        // chunk rather than parsing either syntax.
+        // The entry re-exports from a shared chunk whose name and folder are
+        // the bundler's layout, so scan every JS file in the entry's `dist`
+        // rather than parsing either import syntax.
         const fs = require('node:fs');
         const path = require('node:path');
         const browserEntry = require.resolve('@csszyx/compiler/browser');
-        const sharedDir = path.join(path.dirname(browserEntry), 'shared');
-        const candidates = [browserEntry];
-        if (fs.existsSync(sharedDir)) {
-            for (const name of fs.readdirSync(sharedDir)) {
-                candidates.push(path.join(sharedDir, name));
-            }
-        }
+        const distDir = path.dirname(browserEntry);
+        const candidates = fs
+            .readdirSync(distDir, { recursive: true })
+            .map(String)
+            .filter(name => /\.[cm]?js$/.test(name))
+            .map(name => path.join(distDir, name));
         const found = candidates.some(file =>
             String(fs.readFileSync(file)).includes(COMPILER_MARKER),
         );
