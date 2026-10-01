@@ -273,11 +273,12 @@ pub fn class_name_to_sz_object(class_name: &str, custom_map: Option<&SzObject>) 
 /// Move a stand-alone keyword and its groups back to `className` when one
 /// scope has both.
 ///
-/// Which class wins between them depends on the property, not the order
-/// written — Tailwind sorts `normal-nums` last but `touch-none` and
-/// `contain-strict` first — while an sz object settles them by its order. No
-/// object renders the same as the classes in every case, so both stay as
-/// written, as two classes fighting over one property do.
+/// Between the classes, Tailwind's sort decides, not the order written: it puts
+/// the stand-alone class after its groups, so `touch-pan-x touch-none` and
+/// `touch-none touch-pan-x` both render `none`. An sz object decides by the
+/// order written instead. Both stay as written, as two classes fighting over
+/// one property do, so the page keeps rendering exactly as it did without
+/// the migration depending on how Tailwind sorts its utilities.
 fn keep_standalone_conflicts_as_written(state: &mut State) {
     let clashes = |entry: &Grouped| {
         state.grouped.iter().any(|other| {

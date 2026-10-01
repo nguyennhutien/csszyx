@@ -8,9 +8,10 @@
  * and nothing else; every ordering of every subset of up to four keys of each
  * family is lowered on both engine artifacts and the runtime and compared.
  *
- * The invariant that makes the result independent of Tailwind's own sort —
- * `normal-nums` last, `touch-none` and `contain-strict` first — is checked
- * too: the stand-alone class and a group class are never emitted together.
+ * The invariant that keeps the result off Tailwind's own sort — which puts
+ * the stand-alone class after its groups, so a bare pair always renders the
+ * stand-alone keyword — is checked too: the stand-alone class and a group
+ * class are never emitted together.
  */
 import { describe, expect, it, vi } from 'vitest';
 

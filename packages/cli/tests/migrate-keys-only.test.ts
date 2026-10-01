@@ -93,11 +93,11 @@ describe('migrate --keys-only', () => {
     });
 
     describe('a stand-alone keyword beside its group in one className', () => {
-        // Tailwind sorts `touch-none` first and `normal-nums` last, so the class
-        // that wins depends on the property, not on the order written. Migrate
-        // cannot write an object that renders the same in every case, so it
-        // keeps both classes as written, as it does for two classes fighting
-        // over one property.
+        // Tailwind's sort decides between the classes (the stand-alone one
+        // comes after its groups, so it renders), while an sz object decides by
+        // the order written. Migrate keeps both classes as written, as it does
+        // for two classes fighting over one property, so the page renders as
+        // before without depending on how Tailwind sorts.
         it.each([
             ['touch-pan-x touch-none'],
             ['contain-strict contain-paint'],

@@ -120,8 +120,8 @@ describe('touch-action and contain keys', () => {
     // A global keyword stands alone in each grammar, so the object's order
     // settles it: the global resets the groups written before it, the groups
     // written after it replace it. The two are never emitted together, so the
-    // result does not hang on Tailwind sorting `touch-none` and
-    // `contain-strict` FIRST but `normal-nums` LAST.
+    // result does not hang on Tailwind's sort, which puts the stand-alone
+    // class after its groups whatever order they were written in.
     const ORDERED: ReadonlyArray<readonly [Record<string, unknown>, string]> = [
         [{ contain: 'strict', containPaint: true }, 'contain-paint'],
         [{ containPaint: true, contain: 'strict' }, 'contain-strict'],

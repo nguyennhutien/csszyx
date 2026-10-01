@@ -925,8 +925,8 @@ fn split_variant_prefix(class_name: &str) -> (&str, &str) {
 ///
 /// The object's own order decides: a global keyword resets each group written
 /// before it, and the groups written after it combine and replace it. The two
-/// are never emitted together, so the result does not hang on Tailwind
-/// sorting `normal-nums` last but `touch-none` and `contain-strict` first.
+/// are never emitted together, so the result does not hang on Tailwind's sort,
+/// which puts the stand-alone class after its groups whatever the order written.
 fn keys_shadowed_by_global_keywords(object: &StaticSzObject) -> Vec<&str> {
     let mut shadowed = Vec::new();
     let active = |value: &StaticSzValue| !matches!(value, StaticSzValue::Boolean(false));

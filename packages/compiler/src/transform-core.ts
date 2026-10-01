@@ -3090,8 +3090,8 @@ function holdsGlobalKeyword(szProp: SzObject): boolean {
  * it combine and replace it. So `{ contain: 'strict', containPaint: true }` is
  * `contain-paint`, and `{ containPaint: true, contain: 'strict' }` is
  * `contain-strict`. The global class and a group class are never both
- * emitted, so the result does not depend on which one Tailwind sorts later —
- * it sorts `normal-nums` last but `touch-none` and `contain-strict` first.
+ * emitted, so the result does not depend on Tailwind's sort, which puts the
+ * stand-alone class after its groups whatever order they were written in.
  * @param szProp - One object level of an sz value.
  * @returns The keys to leave out of the lowering; empty when nothing is shadowed.
  */
