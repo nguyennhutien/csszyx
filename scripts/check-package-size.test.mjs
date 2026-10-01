@@ -169,6 +169,68 @@ test('app bundles leave the other csszyx packages to their own budgets', () => {
     }
 });
 
+test('app bundles leave peer dependencies to the app that already has them', () => {
+    const root = makeFixture({
+        ...appPackage('thing', false),
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            peerDependencies: { 'peer-lib': '>=1' },
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs': "export { peer } from 'peer-lib';\n",
+    });
+    try {
+        // `peer-lib` is not installed; bundling it in would fail the build.
+        assert.deepEqual(checkBudgets(appBudget('thing'), root).failures, []);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** A package whose production bundle prints one integrity error and one
+ * usage nudge that forgot to fold.
+ * @returns {Record<string, string>} fixture file map
+ */
+function messagesPackage() {
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs':
+            "export function check(ok, m) { if (!ok) console.error('[thing] checksum mismatch'); " +
+            "if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return; " +
+            'console.warn(`[thing] prefer ${m}`); }\n',
+    };
+}
+
+test('a production bundle may print only the messages its budget lists', () => {
+    const root = makeFixture(messagesPackage());
+    try {
+        const listed = ['error: [thing] checksum mismatch', 'warn: [thing] prefer '];
+        assert.deepEqual(
+            checkBudgets(appBudget('thing', { productionMessages: listed }), root).failures,
+            [],
+        );
+
+        const unlisted = checkBudgets(
+            appBudget('thing', { productionMessages: ['error: [thing] checksum mismatch'] }),
+            root,
+        ).failures;
+        assert.equal(unlisted.length, 1);
+        assert.match(unlisted[0], /prints "warn: \[thing\] prefer "/);
+
+        const stale = checkBudgets(
+            appBudget('thing', { productionMessages: [...listed, 'warn: [thing] gone'] }),
+            root,
+        ).failures;
+        assert.equal(stale.length, 1);
+        assert.match(stale[0], /no longer prints "warn: \[thing\] gone"/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('a subpath list measures only those entries', () => {
     const root = makeFixture(appPackage('thing', false));
     try {

@@ -45,21 +45,48 @@ import { buildSync } from 'esbuild';
  * published `dist` text to the production app bundle. Their history before
  * that — every raise and the reason for it — is in git, against a number that
  * also counted comments and development-only warning text: 28,300 / 15,360 /
- * 24,576 then, against 15,447 / 13,902 / 14,376 measured the new way the same
+ * 24,576 then, against 15,447 / 10,626 / 14,376 measured the new way the same
  * day, after the compiler's warnings moved behind a `NODE_ENV` check a bundler
- * folds. */
+ * folds and with peer dependencies left to the app. */
 export const SIZE_BUDGETS = [
     {
         name: '@csszyx/runtime app bundle',
         kind: 'app-bundle',
         target: 'packages/runtime',
         maxGzipBytes: 15_750,
+        // Each one reports csszyx's own output as wrong, an integrity check
+        // failing, or prints only because the app turned `debug` on (ADR
+        // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
+        productionMessages: [
+            // The mangle map and recovery manifest are integrity inputs.
+            'error: Failed to parse mangle map:',
+            'error: Failed to parse recovery manifest:',
+            'error: [csszyx] Failed to verify mangle map:',
+            'error: [csszyx] Mangle map failed schema validation (not a plai',
+            'error: [csszyx] Mangle map failed schema validation; treating i',
+            'warn: [csszyx] No checksum found in HTML',
+            // "Web Crypto is unavailable", built before the call.
+            'warn: <expr>',
+            // Hydration that aborted or fell back renders other than the
+            // server did; `dev-only` recovery says it is off in production.
+            'error: [csszyx] Hydration aborted at ',
+            'warn: [csszyx] CSR recovery requires explicit szRecover direct',
+            'warn: [csszyx] Hydration mismatch recovered via CSR. Fix root ',
+            'warn: [csszyx] szRecover=',
+            // A merge table from another csszyx version merges wrongly.
+            'warn: [csszyx] the merge table was written in format ',
+            // Only with `initRuntime({ debug: true })`.
+            'log: [csszyx] Runtime initialized',
+            'warn: [csszyx] Runtime already initialized',
+        ],
     },
     {
         name: '@csszyx/dynamic app bundle',
         kind: 'app-bundle',
         target: 'packages/dynamic',
-        maxGzipBytes: 14_200,
+        // 13,902 measured with React bundled in; React is a peer dependency the
+        // app already ships, and the unsafe-value warning now folds away.
+        maxGzipBytes: 10_950,
     },
     {
         name: '@csszyx/compiler browser app bundle',
@@ -160,7 +187,9 @@ export function listExportEntries(packageDir, subpaths) {
  * every entry imported as a namespace (so nothing a consumer could reach is
  * shaken out), tree-shaken, minified, `process.env.NODE_ENV` defined as
  * production, browser platform. Other `@csszyx/*` packages stay external so
- * each budget counts its own code once. A build error throws — an import that
+ * each budget counts its own code once, and so do the package's peer
+ * dependencies, which the app has whether or not it uses this package (React
+ * for `@csszyx/dynamic`). A build error throws — an import that
  * resolves to nothing must fail the gate, never shrink the number.
  *
  * @param {string[]} entryPaths absolute entry files
@@ -168,6 +197,7 @@ export function listExportEntries(packageDir, subpaths) {
  * @returns {string} the minified production bundle
  */
 export function appBundle(entryPaths, packageDir) {
+    const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     const contents = entryPaths
         .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
         .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
@@ -180,11 +210,51 @@ export function appBundle(entryPaths, packageDir) {
         platform: 'browser',
         minify: true,
         treeShaking: true,
-        external: ['@csszyx/*'],
+        external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
         define: { 'process.env.NODE_ENV': '"production"' },
         logLevel: 'silent',
     });
     return result.outputFiles[0].text;
+}
+
+/** Console calls whose first argument opens with a string literal: the
+ * method, then the text up to the first interpolation or quote. Ordered
+ * alternation and a negated class keep the scan linear on minified input. */
+const CONSOLE_CALL_PATTERN =
+    /console\.(warn|error|log|info|debug)\(\s*([`"'])?((?:(?!\$\{)[^`"'\\])*)/g;
+
+/** The messages a bundle can print, one entry per console call: `method: head`,
+ * where head is the literal's opening text (at most 56 characters) or
+ * `<expr>` when the first argument is not a string literal.
+ *
+ * @param {string} code a bundle
+ * @returns {string[]} message heads, sorted
+ */
+export function consoleMessages(code) {
+    return [...code.matchAll(CONSOLE_CALL_PATTERN)]
+        .map(([, method, quote, text]) => `${method}: ${quote ? text.slice(0, 56) : '<expr>'}`)
+        .sort();
+}
+
+/** Compare a bundle's console messages with the ones its budget allows, as
+ * multisets, both ways: a message nobody listed is a development warning that
+ * failed to fold (or a new production message that needs a decision, ADR
+ * 0011), and a listed message the bundle no longer prints is a stale list.
+ *
+ * @param {string[]} printed heads from {@link consoleMessages}
+ * @param {string[]} allowed heads the budget lists
+ * @returns {string[]} one problem per mismatch
+ */
+export function messageProblems(printed, allowed) {
+    const left = [...allowed];
+    const problems = [];
+    for (const head of printed) {
+        const at = left.indexOf(head);
+        if (at === -1) problems.push(`prints "${head}", which its budget does not list`);
+        else left.splice(at, 1);
+    }
+    for (const head of left) problems.push(`no longer prints "${head}"`);
+    return problems;
 }
 
 /** Sum the gzip size of each file, compressed independently at a fixed level
@@ -230,7 +300,19 @@ export function checkBudgets(budgets, rootDir) {
                 if (files.length === 0) {
                     throw new Error(`no runtime export entries in ${budget.target}/package.json`);
                 }
-                gzipBytes = gzipSync(appBundle(files, target), { level: 9 }).length;
+                const bundle = appBundle(files, target);
+                gzipBytes = gzipSync(bundle, { level: 9 }).length;
+                for (const problem of messageProblems(
+                    consoleMessages(bundle),
+                    budget.productionMessages ?? [],
+                )) {
+                    failures.push(
+                        `${budget.name}: the production bundle ${problem}. Only a message that ` +
+                            "reports csszyx's own output as wrong or missing, a security or a crash " +
+                            'stays in production (ADR 0011); anything else checks ' +
+                            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
+                    );
+                }
             }
         } catch (error) {
             failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
