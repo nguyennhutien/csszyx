@@ -111,8 +111,12 @@ describe('font-variant-numeric keys', () => {
         expect(warnings).not.toContain('boolean sugar');
         expect(warnings).toContain("Use { numFigure: 'lining' }");
         expect(warnings).toContain("Use { numFraction: 'stacked' }");
-        expect(warnings).toContain('canonical key "numOrdinal"');
-        expect(warnings).toContain('canonical key "numSlashedZero"');
+        expect(warnings).toContain(
+            '"ordinal" was replaced at /p/t.tsx:2. Use { numOrdinal: true }',
+        );
+        expect(warnings).toContain(
+            '"slashedZero" was replaced at /p/t.tsx:2. Use { numSlashedZero: true }',
+        );
         expect(warnings).toContain('"fontVariant" was removed');
     });
 
@@ -126,7 +130,11 @@ describe('font-variant-numeric keys', () => {
         );
 
         expect(run.className).toBe('normal-nums md:ordinal');
-        expect(run.warnings).toEqual([]);
+        // `nums` before a group of its family is dead code, and the shape a
+        // spread override leaves; it is named.
+        expect(run.warnings).toEqual([
+            '[csszyx] "nums: normal" at /p/t.tsx:1 comes before "numOrdinal" in one sz object, so numOrdinal replaces it and the nums value styles nothing. A spread override ({ ...base, nums: \'normal\' }) leaves this order; to override, layer it: sz={[base, { nums: \'normal\' }]}.',
+        ]);
     });
 
     it('runtime settles the reset and its groups by the object order', () => {

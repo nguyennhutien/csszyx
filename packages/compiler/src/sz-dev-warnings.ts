@@ -35,3 +35,21 @@
 export function szNodeWarningsUnmuted(): boolean {
     return typeof window === 'undefined' && process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1';
 }
+
+/**
+ * Whether `CSSZYX_QUIET_SZ_WARNINGS=1` mutes the sz warnings that print in
+ * every mode — a replaced or removed key, a moved value, a stand-alone key a
+ * later group replaces. Those report a class csszyx did not emit, so they reach
+ * production and the browser console (ADR 0011) instead of folding away with
+ * `NODE_ENV`; the switch still mutes them, as it mutes every sz key and value
+ * warning. Safe where `process` does not exist, as in a browser bundle that
+ * defines only `process.env.NODE_ENV`.
+ *
+ * @returns Whether the switch is set.
+ */
+export function szWarningsQuiet(): boolean {
+    // `process.env.X` written plainly, not `process.env?.X`, so a bundler's
+    // `define` can fold it: the CDN bundle defines it away and keeps no
+    // `process.env` at all. The `typeof` guard covers a bundle that does not.
+    return typeof process !== 'undefined' && process.env.CSSZYX_QUIET_SZ_WARNINGS === '1';
+}

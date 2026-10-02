@@ -43,6 +43,9 @@ export default {
                     // to run the project scanner, which a script-tag page has
                     // no project for — so the honest substitution is "silenced".
                     'process.env.CSSZYX_NO_PROJECT_SCAN_HINT': '"1"',
+                    // A script-tag page cannot set an environment variable,
+                    // so the switch that mutes sz warnings is never on here.
+                    'process.env.CSSZYX_QUIET_SZ_WARNINGS': 'undefined',
                 },
             });
 

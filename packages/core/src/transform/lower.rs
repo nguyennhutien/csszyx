@@ -11,7 +11,7 @@ use super::{
         boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar,
         is_special_variant, key_migration_note, key_suggestion, property_prefix, variant_prefix,
     },
-    SourceIr, StaticSzObject, StaticSzValue,
+    SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
 };
 
 /// Class data lowered from parser-neutral source IR.
@@ -292,7 +292,14 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             continue;
         }
         if is_removed_sz_key(&property.key) {
-            out.push((property.key.clone(), property.span.start));
+            // An alias holding a value that moved is named by the moved-value
+            // report, which says where the value went; the alias's canonical
+            // key no longer takes it.
+            let moved = matches!(&property.value, StaticSzValue::String(value)
+                if moved_value(&property.key, value).is_some());
+            if !moved {
+                out.push((property.key.clone(), property.span.start));
+            }
             continue;
         }
         if !is_known_sz_key(&property.key) {
@@ -534,16 +541,17 @@ pub(crate) fn collect_owned_key_variant_objects(
 /// key, the value, the key and value that replaced them, and the offset.
 ///
 /// `touch: 'pan-x'` is `touchPanX: 'x'` now; the lowering emits nothing for
-/// it, and this names the replacement. Descends like
-/// `collect_dead_enum_values`.
+/// it, and this names the replacement. Descends wherever the lowering does,
+/// parametric variants (`group`, `data`, …) included, so a moved value is
+/// named in every place it can be written; a value a later key of its object
+/// replaced is left out, as the runtime leaves it out.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedValue>) {
-    for property in &object.properties {
+    let settled = settle_global_keywords(object).skipped;
+    for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
-            StaticSzValue::String(value) => {
-                if let Some((key, replacement)) =
-                    super::generated::tables::closed_enum_value_move(&property.key, value)
-                {
+            StaticSzValue::String(value) if !settled.contains(&index) => {
+                if let Some((key, replacement)) = moved_value(&property.key, value) {
                     out.push((
                         property.key.clone(),
                         value.clone(),
@@ -553,10 +561,72 @@ pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedV
                     ));
                 }
             }
-            StaticSzValue::Object(nested) if !is_parameter_namespace(&property.key) => {
-                collect_moved_values(nested, out);
+            StaticSzValue::Object(nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_moved_values(object, out);
+                });
             }
             _ => {}
+        }
+    }
+}
+
+/// The key and value a closed-key value moved to, whether it was written on
+/// the key itself or on an alias of it: `touchAction: 'pan-x'` names
+/// `touchPanX: 'x'`, not the `touch` key that no longer takes the value.
+#[cfg(any(feature = "native-engine", test))]
+pub(crate) fn moved_value(key: &str, value: &str) -> Option<(&'static str, &'static str)> {
+    super::generated::tables::closed_enum_value_move(key, value)
+        .or_else(|| super::generated::tables::closed_enum_value_move(key_suggestion(key)?, value))
+}
+
+/// Collect each stand-alone key a group key written after it replaces, as the
+/// key, its value, the group and the offset of the value.
+///
+/// Written that way by hand the keyword is dead code; it is also the shape a
+/// spread override leaves, which keeps the overridden key at the place the
+/// spread gave it. Descends like [`collect_moved_values`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_globals_before_groups(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, &'static str, u32)>,
+) {
+    for (global, group) in settle_global_keywords(object).replaced {
+        if let StaticSzValue::String(value) = &global.value {
+            out.push((global.key.clone(), value.clone(), group, global.span.start));
+        }
+    }
+    for property in &object.properties {
+        if let StaticSzValue::Object(nested) = &property.value {
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_globals_before_groups(object, out);
+            });
+        }
+    }
+}
+
+/// Call `visit` with each object under `key` that holds sz keys.
+///
+/// A variant's object is one. A parametric variant (`group`, `peer`, `data`,
+/// `aria`, `has`, `not`, `supports`) holds its parameters, each naming an
+/// object of sz keys; a parameter whose value is not an object is a selector
+/// value, not an sz key. `css` and `bgImg` hold declaration values.
+#[cfg(feature = "native-engine")]
+fn for_each_sz_object_in(
+    key: &str,
+    nested: &StaticSzObject,
+    visit: &mut dyn FnMut(&StaticSzObject),
+) {
+    if matches!(key, "css" | "bgImg") {
+        return;
+    }
+    if !is_parameter_namespace(key) {
+        visit(nested);
+        return;
+    }
+    for parameter in &nested.properties {
+        if let StaticSzValue::Object(body) = &parameter.value {
+            visit(body);
         }
     }
 }
@@ -601,9 +671,12 @@ pub(crate) fn collect_dead_enum_values(
     object: &StaticSzObject,
     out: &mut Vec<(String, String, u32)>,
 ) {
-    for property in &object.properties {
+    // A value its object settles away is not lowered, so it is not named
+    // either, as the runtime does not name it.
+    let settled = settle_global_keywords(object).skipped;
+    for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
-            StaticSzValue::String(value) => {
+            StaticSzValue::String(value) if !settled.contains(&index) => {
                 let base = value.strip_suffix('!').unwrap_or(value);
                 if super::generated::tables::is_closed_enum_key(&property.key)
                     && super::generated::tables::closed_enum_class(&property.key, base).is_none()
@@ -920,52 +993,89 @@ fn split_variant_prefix(class_name: &str) -> (&str, &str) {
         .map_or(("", class_name), |index| class_name.split_at(index + 1))
 }
 
-/// The keys of one object level a stand-alone keyword overrides, or that
-/// override it. Mirrors `keysShadowedByGlobalKeywords` in the TypeScript core.
+/// What the stand-alone keywords of one object level settle. Mirrors
+/// `keysShadowedByGlobalKeywords` in the TypeScript core.
 ///
 /// The object's own order decides: a global keyword resets each group written
 /// before it, and the groups written after it combine and replace it. The two
 /// are never emitted together, so the result does not hang on Tailwind's sort,
 /// which puts the stand-alone class after its groups whatever the order written.
-fn keys_shadowed_by_global_keywords(object: &StaticSzObject) -> Vec<&str> {
-    let mut shadowed = Vec::new();
-    let active = |value: &StaticSzValue| !matches!(value, StaticSzValue::Boolean(false));
-    for (at, global) in object.properties.iter().enumerate() {
+///
+/// A `.jsx` object may repeat a key, and JavaScript keeps the FIRST place and
+/// the LAST value; the settlement reads a repeated key of a family the same way
+/// and leaves its earlier occurrences out.
+pub(crate) struct GlobalKeywordSettlement<'a> {
+    /// Indices of the properties to leave out of the lowering.
+    pub(crate) skipped: Vec<usize>,
+    /// Each stand-alone key a later group replaces — the property holding its
+    /// value — with the first such group.
+    pub(crate) replaced: Vec<(&'a StaticSzProperty, &'static str)>,
+}
+
+/// Settle the stand-alone keywords of one object level; see
+/// [`GlobalKeywordSettlement`].
+pub(crate) fn settle_global_keywords(object: &StaticSzObject) -> GlobalKeywordSettlement<'_> {
+    let mut settlement = GlobalKeywordSettlement {
+        skipped: Vec::new(),
+        replaced: Vec::new(),
+    };
+    // Runs on every object level; almost none holds a stand-alone keyword, so
+    // answer those without allocating.
+    let properties = &object.properties;
+    if !properties
+        .iter()
+        .any(|property| super::generated::tables::global_keyword_groups(&property.key).is_some())
+    {
+        return settlement;
+    }
+    // Where JavaScript places a key (its first occurrence) and the property
+    // that holds its value (its last).
+    let first = |key: &str| properties.iter().position(|property| property.key == key);
+    let last = |key: &str| properties.iter().rposition(|property| property.key == key);
+    let active = |index: usize| !matches!(properties[index].value, StaticSzValue::Boolean(false));
+    for (index, property) in properties.iter().enumerate() {
+        let family = super::generated::tables::global_keyword_groups(&property.key).is_some()
+            || super::generated::tables::global_keyword_for_group(&property.key).is_some();
+        if family && last(&property.key) != Some(index) {
+            settlement.skipped.push(index);
+        }
+    }
+    for (index, global) in properties.iter().enumerate() {
         let Some(groups) = super::generated::tables::global_keyword_groups(&global.key) else {
             continue;
         };
-        if !active(&global.value) {
+        if first(&global.key) != Some(index) {
             continue;
         }
-        let member = |key: &str| groups.split(' ').any(|group| group == key);
-        // The global itself is no member of its groups, so the half after the
-        // split can include it.
-        let (before, after) = object.properties.split_at(at);
-        let later = after
-            .iter()
-            .any(|property| member(&property.key) && active(&property.value));
-        if later {
-            shadowed.push(global.key.as_str());
+        let value_at = last(&global.key).unwrap_or(index);
+        if !active(value_at) {
+            continue;
         }
-        let reach = if later {
-            before
-        } else {
-            &object.properties[..]
-        };
-        shadowed.extend(
-            reach
-                .iter()
-                .filter(|property| member(&property.key))
-                .map(|property| property.key.as_str()),
-        );
+        let members: Vec<(&'static str, usize, usize)> = groups
+            .split(' ')
+            .filter_map(|group| Some((group, first(group)?, last(group)?)))
+            .collect();
+        let later = members
+            .iter()
+            .filter(|(_, at, value)| *at > index && active(*value))
+            .min_by_key(|(_, at, _)| *at);
+        if let Some((group, ..)) = later {
+            settlement.skipped.push(value_at);
+            settlement.replaced.push((&properties[value_at], group));
+        }
+        for (_, at, value) in &members {
+            if later.is_none() || *at < index {
+                settlement.skipped.push(*value);
+            }
+        }
     }
-    shadowed
+    settlement
 }
 
 fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
-    let shadowed = keys_shadowed_by_global_keywords(object);
-    for property in &object.properties {
-        if is_removed_sz_key(&property.key) || shadowed.contains(&property.key.as_str()) {
+    let settled = settle_global_keywords(object).skipped;
+    for (index, property) in object.properties.iter().enumerate() {
+        if is_removed_sz_key(&property.key) || settled.contains(&index) {
             continue;
         }
         // A style keyword on a per-side border key has no Tailwind utility
@@ -4460,6 +4570,7 @@ mod tests {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

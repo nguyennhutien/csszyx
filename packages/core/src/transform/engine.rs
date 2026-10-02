@@ -887,6 +887,7 @@ struct KeyValueFindings {
     dead_enums: Vec<(String, String, u32)>,
     mask_members: Vec<(String, String, String, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
+    globals_before_groups: Vec<(String, String, &'static str, u32)>,
 }
 
 impl KeyValueFindings {
@@ -902,6 +903,7 @@ impl KeyValueFindings {
         self.dead_enums.clear();
         self.mask_members.clear();
         self.moved_values.clear();
+        self.globals_before_groups.clear();
     }
 }
 
@@ -941,6 +943,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
         super::lower::collect_moved_values(object, &mut found.moved_values);
+        super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
         super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
     }
     if !repeat_free {
@@ -955,6 +958,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.dead_enums, 7, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.mask_members, 8, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.moved_values, 9, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.globals_before_groups, 10, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -987,6 +991,26 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
     push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
     push_moved_value_diagnostics(file, &found.moved_values, location, lines, out);
+    push_global_before_group_diagnostics(file, &found.globals_before_groups, location, lines, out);
+}
+
+/// A stand-alone key a group key written after it replaces. Mirrors
+/// `warnGlobalBeforeGroup` in the TypeScript core byte for byte.
+fn push_global_before_group_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, &'static str, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (global, value, group, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"{global}: {value}\" at {location}:{line} comes before \"{group}\" in one sz object, so {group} replaces it and the {global} value styles nothing. A spread override ({{ ...base, {global}: '{value}' }}) leaves this order; to override, layer it: sz={{[base, {{ {global}: '{value}' }}]}}."
+        ));
+    }
 }
 
 /// A closed-key value that moved onto its group's own key. Mirrors
@@ -1061,6 +1085,9 @@ fn unknown_property_diagnostics(
         }
         push_group_key_value_diagnostics(&mut sink, group.into_iter(), &[], false, &mut found);
     }
+    out.extend(dynamic_group_conflict_diagnostics(
+        file, ir, &location, &mut lines,
+    ));
     out.extend(class_name_precedence_advisories(
         file, ir, &location, &mut lines,
     ));
@@ -1069,6 +1096,38 @@ fn unknown_property_diagnostics(
         file, ir, &location, &mut lines,
     ));
     out
+}
+
+/// A family key with a runtime value beside the other side of its family.
+///
+/// The object's order settles a stand-alone keyword and its groups only when
+/// both values are static. A runtime value lowers to a conditional class next
+/// to the other side's class, so both can ship and Tailwind's stylesheet order
+/// decides, which puts the stand-alone class last whatever the object says.
+/// Layers in an sz array merge by their order at runtime, so that is the fix.
+fn dynamic_group_conflict_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    location: &str,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    ir.dynamic_group_conflicts
+        .iter()
+        .map(|conflict| {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, conflict.span.start);
+            let (first, second) = if conflict.key_first {
+                (&conflict.key, &conflict.other)
+            } else {
+                (&conflict.other, &conflict.key)
+            };
+            format!(
+                "[csszyx] \"{}\" takes a runtime value beside \"{}\" in one sz object at {location}:{line}, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={{[{{ {first}: … }}, {{ {second}: … }}]}}.",
+                conflict.key, conflict.other
+            )
+        })
+        .collect()
 }
 
 /// Class names and `sz` written on more than one side of a spread.
@@ -1212,6 +1271,14 @@ fn push_unknown_key_diagnostics(
             out.push(format!(
                 "[csszyx] \"{key}\" was removed at {location}:{line}: {note}."
             ));
+        } else if let Some(suggestion) = super::generated::tables::key_suggestion(key)
+            .filter(|_| super::generated::tables::is_replaced_key(key))
+        {
+            // A flag that joined a group under a new name: worded as the other
+            // replaced keys are. Mirrors the TypeScript core's replaced-key warning.
+            out.push(format!(
+                "[csszyx] \"{key}\" was replaced at {location}:{line}. Use {{ {suggestion}: true }} instead, or run `csszyx migrate`."
+            ));
         } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
             out.push(format!(
                 "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
@@ -1272,10 +1339,34 @@ fn push_dead_enum_diagnostics(
         // lookup below cannot miss.
         let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
         let bare = super::lower::bare_closed_enum_class(key, value);
+        if let Some(sibling) = sibling_group_of(key, &bare) {
+            out.push(format!(
+                "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" it emits belongs to {{ {sibling} }}: write that key, so it combines with the other groups instead of resetting them. {key} takes one of: {allowed}."
+            ));
+            continue;
+        }
         out.push(format!(
             "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {allowed}."
         ));
     }
+}
+
+/// The group key and value whose class a stand-alone key's stray value emits:
+/// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
+/// Mirrors `siblingGroupOf` in the TypeScript core.
+fn sibling_group_of(key: &str, bare: &str) -> Option<String> {
+    let groups = super::generated::tables::global_keyword_groups(key)?;
+    groups.split(' ').find_map(|group| {
+        let values = super::generated::tables::closed_enum_values(group).unwrap_or_default();
+        values
+            .split(", ")
+            .find(|value| super::generated::tables::closed_enum_class(group, value) == Some(bare))
+            .map(|value| format!("{group}: '{value}'"))
+            .or_else(|| {
+                (super::generated::tables::boolean_class(group) == Some(bare))
+                    .then(|| format!("{group}: true"))
+            })
+    })
 }
 
 /// Advisory for an element carrying both `sz` and a non-literal `className`.
@@ -1939,7 +2030,9 @@ mod tests {
     fn a_numeric_group_typo_names_the_class_and_the_legal_values() {
         let file = TransformFile {
             filename: "/repo/src/Nums.tsx".to_string(),
-            source: "export const A = () => <p sz={{ nums: 'reset', numFigure: 'old', numSpacing: 'tab', numFraction: 'slash' }} />;".to_string(),
+            // `nums` written before its groups would be replaced by them, and a
+            // value nothing lowers is not named, so it stands alone here.
+            source: "export const A = () => <><p sz={{ nums: 'reset' }} /><p sz={{ numFigure: 'old', numSpacing: 'tab', numFraction: 'slash' }} /></>;".to_string(),
         };
         let diagnostics = transform_static_classes(&file, 0, std::time::Instant::now()).diagnostics;
 
@@ -1964,8 +2057,12 @@ mod tests {
                 source: format!("export const A = () => <p sz={{{{ {sz} }}}} />;"),
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            // A stand-alone key a later group replaces is named, nothing else.
             assert!(
-                result.diagnostics.is_empty(),
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diagnostic| diagnostic.contains("in one sz object, so")),
                 "{sz}: {:?}",
                 result.diagnostics
             );
@@ -2023,8 +2120,12 @@ mod tests {
             joined.contains("\"touch: pan-down\" moved to { touchPanY: 'down' }"),
             "{joined}"
         );
-        // A parameter namespace holds values, not sz keys, so it is not read.
-        assert!(!joined.contains("pan-x"), "{joined}");
+        // A parametric variant's parameter names an object of sz keys, so a
+        // moved value there is named too.
+        assert!(
+            joined.contains("\"touch: pan-x\" moved to { touchPanX: 'x' }"),
+            "{joined}"
+        );
         // A moved value is not also reported as a misspelling.
         assert!(!joined.contains("is not a touch value"), "{joined}");
     }
@@ -4501,5 +4602,183 @@ mod tests {
         // generated from the same source, so a gap between them would be a
         // message with no replacement to offer rather than a wrong one.
         assert!(!report("p: 4").contains("boolean sugar was removed"));
+    }
+
+    /// Lower one JSX module and return its classes and diagnostics.
+    fn layers_run(sz: &str) -> (String, Vec<String>) {
+        let file = TransformFile {
+            filename: "/repo/src/Layers.jsx".to_string(),
+            source: format!("export const A = ({{ c, m }}) => <p sz={{{sz}}} />;"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        (result.classes.join(" "), result.diagnostics)
+    }
+
+    #[test]
+    fn an_sz_array_layers_a_stand_alone_keyword_and_its_groups_later_wins() {
+        for (sz, expected) in [
+            (
+                "[{ contain: 'strict', containPaint: true }, { contain: 'none' }]",
+                "contain-none",
+            ),
+            (
+                "[{ touch: 'auto' }, { touchPanX: 'x' }, { touch: 'none' }]",
+                "touch-none",
+            ),
+            (
+                "[{ contain: 'strict' }, { containPaint: true }]",
+                "contain-paint",
+            ),
+            // An inactive group replaces nothing.
+            (
+                "[{ contain: 'strict' }, { containPaint: false }]",
+                "contain-strict",
+            ),
+            // A layer settles its own keyword first; its reset still applies.
+            (
+                "[{ numSpacing: 'tabular' }, { nums: 'normal', numFigure: 'oldstyle' }]",
+                "oldstyle-nums",
+            ),
+            // Other keys merge where they stand, family keys too.
+            ("[{ p: 2, m: 1 }, { p: 4 }]", "p-4 m-1"),
+            (
+                "[{ touchPanX: 'x', p: 1 }, { touchPanX: 'left' }]",
+                "touch-pan-left p-1",
+            ),
+            // A keyword its own layer settled away still drops the earlier one.
+            (
+                "[{ nums: 'normal' }, { nums: 'normal', numFigure: 'lining' }]",
+                "lining-nums",
+            ),
+        ] {
+            let (classes, diagnostics) = layers_run(sz);
+            assert_eq!(classes, expected, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
+
+    #[test]
+    fn a_stand_alone_keyword_before_its_group_is_named() {
+        let (classes, diagnostics) =
+            layers_run("{ contain: 'strict', containPaint: true, contain: 'size' }");
+        assert_eq!(classes, "contain-paint");
+        assert_eq!(
+            diagnostics,
+            ["[csszyx] \"contain: size\" at /repo/src/Layers.jsx:1 comes before \"containPaint\" in one sz object, so containPaint replaces it and the contain value styles nothing. A spread override ({ ...base, contain: 'size' }) leaves this order; to override, layer it: sz={[base, { contain: 'size' }]}."]
+        );
+        let (classes, diagnostics) =
+            layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
+        assert_eq!(classes, "contain-strict");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn a_value_of_a_sibling_group_names_the_group_key() {
+        let (classes, diagnostics) = layers_run("{ contain: 'paint', md: { nums: 'tabular' } }");
+        assert_eq!(classes, "contain-paint md:tabular-nums");
+        assert_eq!(
+            diagnostics,
+            [
+                "[csszyx] \"contain: paint\" at /repo/src/Layers.jsx:1 is not a contain value. The class \"contain-paint\" it emits belongs to { containPaint: true }: write that key, so it combines with the other groups instead of resetting them. contain takes one of: none, strict, content.",
+                "[csszyx] \"nums: tabular\" at /repo/src/Layers.jsx:1 is not a nums value. The class \"tabular-nums\" it emits belongs to { numSpacing: 'tabular' }: write that key, so it combines with the other groups instead of resetting them. nums takes one of: normal.",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_replaced_flag_and_a_moved_alias_value_name_their_replacement() {
+        let (_, diagnostics) = layers_run("{ ordinal: true, touchAction: 'pan-y' }");
+        assert_eq!(
+            diagnostics,
+            [
+                "[csszyx] \"ordinal\" was replaced at /repo/src/Layers.jsx:1. Use { numOrdinal: true } instead, or run `csszyx migrate`.",
+                "[csszyx] \"touchAction: pan-y\" moved to { touchPanY: 'y' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it.",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_moved_value_in_a_conditional_is_named() {
+        let (_, diagnostics) = layers_run(
+            "{ touch: m ? 'pan-x' : 'auto', md: { touch: m ? 'pan-up' : undefined }, hover: m ? { touch: 'pinch-zoom' } : {} }",
+        );
+        let joined = diagnostics.join("\n");
+        for moved in [
+            "\"touch: pan-x\" moved to { touchPanX: 'x' }",
+            "\"touch: pan-up\" moved to { touchPanY: 'up' }",
+            "\"touch: pinch-zoom\" moved to { touchPinchZoom: true }",
+        ] {
+            assert!(joined.contains(moved), "{moved} in {joined}");
+        }
+        // A finding about the key alone would read the same from both branches.
+        let (_, diagnostics) =
+            layers_run("{ bgg: m ? 'red' : 'blue', p: m ? { x: 1 } : { y: 2 } }");
+        assert!(
+            diagnostics
+                .iter()
+                .all(|line| !line.contains("bgg") && !line.contains("\"p\"")),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn a_runtime_value_beside_the_other_side_of_its_family_is_named() {
+        let layered = |key: &str, other: &str, first: &str, second: &str| {
+            format!("[csszyx] \"{key}\" takes a runtime value beside \"{other}\" in one sz object at /repo/src/Layers.jsx:1, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={{[{{ {first}: … }}, {{ {second}: … }}]}}.")
+        };
+        for (sz, expected) in [
+            (
+                "{ touch: 'none', touchPanX: c ? 'x' : undefined }",
+                vec![layered("touchPanX", "touch", "touch", "touchPanX")],
+            ),
+            (
+                "{ md: { contain: 'strict', containPaint: c } }",
+                vec![layered(
+                    "containPaint",
+                    "contain",
+                    "contain",
+                    "containPaint",
+                )],
+            ),
+            (
+                "{ contain: c ? 'strict' : 'none', containPaint: true }",
+                vec![layered(
+                    "contain",
+                    "containPaint",
+                    "contain",
+                    "containPaint",
+                )],
+            ),
+            (
+                "{ numSpacing: m ? 'tabular' : 'proportional', nums: c ? 'normal' : undefined }",
+                vec![layered("numSpacing", "nums", "numSpacing", "nums")],
+            ),
+            (
+                "{ touchPanX: c ? 'x' : undefined, touchPanY: 'up' }",
+                vec![],
+            ),
+        ] {
+            assert_eq!(layers_run(sz).1, expected, "{sz}");
+        }
+    }
+
+    /// The AST-free fast path keeps a repeated key; JavaScript keeps the
+    /// first place and the last value, and so does the settlement.
+    #[test]
+    fn a_repeated_keyword_key_reads_the_first_place_and_the_last_value() {
+        let run = |sz: &str| {
+            let result = transform_file(&TransformFile {
+                filename: "/repo/src/Dup.jsx".to_string(),
+                source: format!("export const A = () => <p sz={{{{ {sz} }}}} />;"),
+            });
+            (result.classes.join(" "), result.diagnostics)
+        };
+        let (classes, diagnostics) = run("contain: 'strict', containPaint: true, contain: 'size'");
+        assert_eq!(classes, "contain-paint");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].contains("\"contain: size\" at /repo/src/Dup.jsx:1 comes before"));
+        let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
+        assert_eq!(classes, "contain-strict");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 }

@@ -12,12 +12,22 @@ import {
     warnStringColorOpacity,
     warnUnrecognizedColor,
 } from './color-validation.js';
+import {
+    GROUPS_OF_GLOBAL_KEYWORD,
+    keysDisplacedBy,
+    keysSettledAway,
+    settleGlobalKeywords,
+} from './keyword-families.js';
 import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { szNodeWarningsUnmuted } from './sz-dev-warnings.js';
+import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
 
+// Re-exported so callers of this module keep one name for the family merge
+// helpers; the runtime's `szv` merge imports them from their own light subpath,
+// `@csszyx/compiler/keyword-families`, which carries no property tables.
+export { keysDisplacedBy, keysSettledAway } from './keyword-families.js';
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
@@ -52,7 +62,10 @@ export interface SzObject {
  * @returns A new deep-merged sz object.
  */
 export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject {
-    const result: SzObject = { ...target };
+    // Each layer settles its own stand-alone keywords first, as it would lowered
+    // alone; the merge then lets the later layer's keys replace the earlier's.
+    const result = withoutShadowedKeys(target);
+    const incoming = keysSettledAway(source);
     for (const [key, value] of Object.entries(source)) {
         const existing = result[key];
         const merged =
@@ -62,8 +75,32 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
             typeof value === 'object'
                 ? deepMergeSzObjects(existing, value)
                 : value;
+        // A later stand-alone keyword or group key drops the side of its family
+        // it replaces. Its place then decides nothing: both layers are settled,
+        // so the merged level never holds the two sides of a family at once,
+        // and the key keeps its place as every other key does — merging
+        // reorders no class it does not have to.
+        if (value !== undefined && value !== null && value !== false) {
+            for (const other of keysDisplacedBy(key)) delete result[other];
+        }
+        if (incoming.has(key)) delete result[key];
+        // A key its own layer settled away still did its work above — a
+        // stand-alone keyword resets the earlier layers' groups — but is not kept.
+        if (incoming.has(key)) continue;
         result[key] = dropDisplacedSubKeys(key, merged, value);
     }
+    return result;
+}
+
+/**
+ * A copy of one object level without the keys its stand-alone keywords
+ * settle away. Reports nothing: the merge that calls it runs before lowering.
+ * @param szProp - One object level of an sz value.
+ * @returns The copy.
+ */
+function withoutShadowedKeys(szProp: SzObject): SzObject {
+    const result: SzObject = { ...szProp };
+    for (const key of keysSettledAway(szProp)) delete result[key];
     return result;
 }
 
@@ -2947,26 +2984,6 @@ export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', str
 };
 
 /**
- * The key that holds a property's stand-alone keywords, with the property and
- * its group keys (space-separated, for the generated Rust copy).
- *
- * The CSS grammar lets a global keyword stand only alone, so the lowering
- * resolves a global beside its groups by the object's order
- * (`keysShadowedByGlobalKeywords`). The engine reads a generated copy.
- */
-const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups', string>> = {
-    nums: {
-        property: 'font-variant-numeric',
-        groups: 'numFigure numSpacing numFraction numOrdinal numSlashedZero',
-    },
-    touch: { property: 'touch-action', groups: 'touchPanX touchPanY touchPinchZoom' },
-    contain: {
-        property: 'contain',
-        groups: 'containSize containLayout containPaint containStyle',
-    },
-};
-
-/**
  * The same tables as maps, for the lookup.
  *
  * A bracket read on the object literal answers for `constructor` and
@@ -3029,11 +3046,42 @@ function warnClosedEnumValue(
         return;
     _warnedClosedEnumValues.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const values = [...legal.keys()].join(', ');
+    const sibling = siblingGroupOf(key, bare);
+    if (sibling !== undefined) {
+        console.warn(
+            `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" it ` +
+                `emits belongs to { ${sibling} }: write that key, so it combines with the other ` +
+                `groups instead of resetting them. ${key} takes one of: ${values}.`,
+        );
+        return;
+    }
     console.warn(
         `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" is ` +
             'still emitted and styles nothing, unless a rule of your own happens to match ' +
-            `it. ${key} takes one of: ${[...legal.keys()].join(', ')}.`,
+            `it. ${key} takes one of: ${values}.`,
     );
+}
+
+/**
+ * The group key and value whose class a stand-alone key's stray value emits.
+ *
+ * `contain: 'paint'` emits `contain-paint`, which is the class of
+ * `{ containPaint: true }`: the value belongs to a group of the same property.
+ * As a stand-alone value it resets the groups written before it instead of
+ * combining with them, so the message names the group key to write.
+ * @param key - A closed-enum key.
+ * @param bare - The class its value emits.
+ * @returns `group: value` for the group whose class it is, or undefined.
+ */
+function siblingGroupOf(key: string, bare: string): string | undefined {
+    for (const group of GROUPS_OF_GLOBAL_KEYWORD.get(key) ?? []) {
+        for (const [value, utility] of CLOSED_ENUM_LOOKUP.get(group) ?? []) {
+            if (utility === bare) return `${group}: '${value}'`;
+        }
+        if (BOOLEAN_TO_CLASS[group] === bare) return `${group}: true`;
+    }
+    return undefined;
 }
 
 /** Moved values already warned about, so a re-render cannot spam. */
@@ -3061,71 +3109,59 @@ function movedValueMessage(
 }
 
 /**
- * Warns that a value moved onto its group's own key. Fires in browser dev
- * too, as removed boolean sugar does: the class is gone either way.
+ * Warns that a value moved onto its group's own key. The class is gone, so
+ * it prints in production and in the browser too (ADR 0011), once, as removed
+ * boolean sugar does; only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
  * @param key - The key the value was written on.
  * @param value - The value.
  * @param moved - The key and value that replaced it.
  */
 function warnMovedValue(key: string, value: string, moved: Record<'key' | 'value', string>): void {
-    if (process.env.NODE_ENV === 'production' || _warnedMovedValues.has(`${key}:${value}`)) return;
+    if (szWarningsQuiet() || _warnedMovedValues.has(`${key}:${value}`)) return;
     _warnedMovedValues.add(`${key}:${value}`);
     console.warn(
         movedValueMessage(key, value, moved, szWarnLocation ? ` at ${szWarnLocation}` : ''),
     );
 }
 
-/** The answer for an object with no stand-alone keyword key. */
-const NOTHING_SHADOWED: ReadonlySet<string> = new Set();
-
-/** `GLOBAL_KEYWORD_GROUPS` as entries, built once. */
-const GLOBAL_KEYWORD_ENTRIES = Object.entries(GLOBAL_KEYWORD_GROUPS);
+/** Stand-alone keys already reported before a group, so a re-render cannot spam. */
+const _warnedGlobalsBeforeGroups = new Set<string>();
 
 /**
- * Whether an object level holds any stand-alone keyword key.
- * @param szProp - One object level of an sz value.
- * @returns True when a key of `GLOBAL_KEYWORD_GROUPS` is present.
+ * Warns that a stand-alone keyword comes before a group key of its family in
+ * one object, so the group replaces it and its value styles nothing.
+ *
+ * Written that way by hand the keyword is dead code; it is also exactly what a
+ * spread override leaves, because the override keeps the key at the place the
+ * spread gave it: `{ ...base, contain: 'none' }` over a `base` holding
+ * `contain` and `containPaint` still reads `contain` first. The class it
+ * meant is missing, so this prints in production too (ADR 0011), once.
+ * @param global - The stand-alone key.
+ * @param value - Its value.
+ * @param group - The first group key written after it.
  */
-function holdsGlobalKeyword(szProp: SzObject): boolean {
-    for (const [global] of GLOBAL_KEYWORD_ENTRIES) {
-        if (global in szProp) return true;
-    }
-    return false;
+function warnGlobalBeforeGroup(global: string, value: unknown, group: string): void {
+    const token = `${global}:${String(value)}>${group}`;
+    if (szWarningsQuiet() || _warnedGlobalsBeforeGroups.has(token)) return;
+    _warnedGlobalsBeforeGroups.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${global}: ${String(value)}"${at} comes before "${group}" in one sz object, so ` +
+            `${group} replaces it and the ${global} value styles nothing. A spread override ` +
+            `({ ...base, ${global}: '${String(value)}' }) leaves this order; to override, layer it: ` +
+            `sz={[base, { ${global}: '${String(value)}' }]}.`,
+    );
 }
 
 /**
- * The keys of one object level that a stand-alone keyword overrides, or that
- * override it.
- *
- * The object's own order decides, as it does for every other key: a global
- * keyword resets each group written before it, and the groups written after
- * it combine and replace it. So `{ contain: 'strict', containPaint: true }` is
- * `contain-paint`, and `{ containPaint: true, contain: 'strict' }` is
- * `contain-strict`. The global class and a group class are never both
- * emitted, so the result does not depend on Tailwind's sort, which puts the
- * stand-alone class after its groups whatever order they were written in.
+ * The keys of one object level its stand-alone keywords settle away
+ * ({@link settleGlobalKeywords}), warning about each stand-alone key a later
+ * group replaces.
  * @param szProp - One object level of an sz value.
- * @returns The keys to leave out of the lowering; empty when nothing is shadowed.
+ * @returns The keys to leave out of the lowering.
  */
 function keysShadowedByGlobalKeywords(szProp: SzObject): ReadonlySet<string> {
-    // Runs on every object level of every `_sz` call; almost none holds a
-    // stand-alone keyword, so answer those without allocating.
-    if (!holdsGlobalKeyword(szProp)) return NOTHING_SHADOWED;
-    const shadowed = new Set<string>();
-    const keys = Object.keys(szProp);
-    const active = (key: string): boolean =>
-        szProp[key] !== undefined && szProp[key] !== null && szProp[key] !== false;
-    for (const [global, { groups }] of GLOBAL_KEYWORD_ENTRIES) {
-        const at = keys.indexOf(global);
-        if (at === -1 || !active(global)) continue;
-        const members = new Set(groups.split(' '));
-        const later = keys.slice(at + 1).some(key => members.has(key) && active(key));
-        if (later) shadowed.add(global);
-        for (const key of later ? keys.slice(0, at) : keys) {
-            if (members.has(key)) shadowed.add(key);
-        }
-    }
-    return shadowed;
+    return settleGlobalKeywords(szProp, warnGlobalBeforeGroup);
 }
 
 /** Returns whether a key controls a gradient stop position. */
@@ -4332,11 +4368,12 @@ function collectNestedVariant(
 /**
  * Suppresses a removed boolean shorthand and emits its migration warning.
  *
- * Gated like {@link warnAlignmentValue} — on the build mode alone. The general
- * dev gate also requires `typeof window === 'undefined'`, which silences the
- * browser console, and a removed shorthand reaching a runtime sz object is
- * exactly the case with no build log to read: the key is dropped and the
- * element renders unstyled with nothing said anywhere.
+ * Not behind the general dev gate, which requires `typeof window ===
+ * 'undefined'` and so silences the browser console: a removed shorthand
+ * reaching a runtime sz object is exactly the case with no build log to read,
+ * where the key is dropped and the element renders unstyled. The class is
+ * missing, so it prints in production too (ADR 0011), once per key; only
+ * `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
  *
  * @param rawKey - The authored sz key.
  * @param value - Its value; only `true` is the removed shorthand.
@@ -4346,15 +4383,25 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
     const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
     if (!removed) return false;
-    if (process.env.NODE_ENV !== 'production' && !warnedRemovedSugar.has(rawKey)) {
-        warnedRemovedSugar.add(rawKey);
-        const what = REPLACED_KEYS.has(rawKey) ? 'was replaced' : 'boolean sugar was removed';
-        console.warn(
-            `[csszyx] "${rawKey}" ${what}. Use ` +
-                `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
-        );
-    }
+    const what = REPLACED_KEYS.has(rawKey) ? 'was replaced' : 'boolean sugar was removed';
+    warnRemovedKeyOnce(rawKey, what, `{ ${removed.key}: '${removed.value}' }`);
     return true;
+}
+
+/**
+ * Prints the warning for a key that emits no class because it was replaced or
+ * removed, once per key, in every mode and in the browser.
+ * @param rawKey - The authored key.
+ * @param what - `was replaced` or `boolean sugar was removed`.
+ * @param replacement - The `{ key: value }` to write instead.
+ */
+function warnRemovedKeyOnce(rawKey: string, what: string, replacement: string): void {
+    if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
+    warnedRemovedSugar.add(rawKey);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${rawKey}" ${what}${at}. Use ${replacement} instead, or run \`csszyx migrate\`.`,
+    );
 }
 
 /** Removed shorthands already warned about, so a re-render cannot spam. */
@@ -4424,8 +4471,21 @@ function collectTransformProperty(
     classes: string[],
 ): void {
     if (value === false || value === null || value === undefined) return;
+    // A flag that joined a group under a new name emits nothing; say so in
+    // every mode, as for the other replaced keys.
+    if (REPLACED_KEYS.has(rawKey) && rawKey in SUGGESTION_MAP) {
+        warnRemovedKeyOnce(rawKey, 'was replaced', `{ ${SUGGESTION_MAP[rawKey]}: true }`);
+        return;
+    }
     if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {
-        warnUnknownSzProperty(rawKey, szProp);
+        // An alias holding a value that moved: its canonical key no longer
+        // takes the value, so name where the value went instead.
+        const moved =
+            typeof value === 'string'
+                ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
+                : undefined;
+        if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
+        else warnUnknownSzProperty(rawKey, szProp);
         return;
     }
     warnAlignmentValue(rawKey, value);

@@ -42,6 +42,9 @@ function readTables() {
         const core = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
         );
+        const families = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/keyword-families.ts'),
+        );
         const varHostile = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/var-hostile-keys.ts'),
         );
@@ -64,7 +67,7 @@ function readTables() {
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
             closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
             closedEnumValueMoves: core.objectOfStringObjects('CLOSED_ENUM_VALUE_MOVES'),
-            globalKeywordGroups: core.objectOfStringObjects('GLOBAL_KEYWORD_GROUPS'),
+            globalKeywordGroups: families.objectOfStringObjects('GLOBAL_KEYWORD_GROUPS'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
         };

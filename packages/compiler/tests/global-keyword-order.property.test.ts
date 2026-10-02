@@ -15,7 +15,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { transform } from '../src/transform-core.js';
+import { deepMergeSzObjects, type SzObject, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 interface Family {
@@ -93,6 +93,18 @@ function expected(family: Family, keys: readonly string[]): string[] {
     return global ? [family.global[2]] : [...set].sort();
 }
 
+/**
+ * Whether the model lets a group written after the stand-alone key replace
+ * it — the shape a spread override leaves, which the lowering reports.
+ * @param family - The property's stand-alone key and groups.
+ * @param keys - The keys, in the order the object holds them.
+ * @returns True when a group follows the stand-alone key.
+ */
+function replacesGlobal(family: Family, keys: readonly string[]): boolean {
+    const at = keys.indexOf(family.global[0]);
+    return at !== -1 && keys.slice(at + 1).length > 0;
+}
+
 const CASES = Object.entries(FAMILIES).flatMap(([name, family]) => {
     const all = [family.global[0], ...family.groups.map(([key]) => key)];
     const values = new Map<string, unknown>([
@@ -104,7 +116,32 @@ const CASES = Object.entries(FAMILIES).flatMap(([name, family]) => {
         family,
         sz: Object.fromEntries(keys.map(key => [key, values.get(key)])),
         want: expected(family, keys),
+        warns: replacesGlobal(family, keys),
     }));
+});
+
+/**
+ * Two layers of an sz array, each an ordering of up to two keys of a family.
+ * The layers apply in order, later wins, so the model reads them as one
+ * sequence.
+ */
+const LAYERS = Object.entries(FAMILIES).flatMap(([name, family]) => {
+    const all = [family.global[0], ...family.groups.map(([key]) => key)];
+    const values = new Map<string, unknown>([
+        [family.global[0], family.global[1]],
+        ...family.groups.map(([key, value]) => [key, value] as const),
+    ]);
+    const layer = (keys: readonly string[]) =>
+        Object.fromEntries(keys.map(key => [key, values.get(key)]));
+    const short = orderings(all, 2);
+    return short.flatMap(first =>
+        short.map(second => ({
+            name,
+            family,
+            layers: [layer(first), layer(second)],
+            want: expected(family, [...first, ...second]),
+        })),
+    );
 });
 
 describe('a stand-alone keyword and its groups, every order', () => {
@@ -126,7 +163,7 @@ describe('a stand-alone keyword and its groups, every order', () => {
 
     it.each(ENGINES)('%s follows the model and never emits both', (_name, engine) => {
         const wrong: string[] = [];
-        for (const { family, sz, want } of CASES) {
+        for (const { family, sz, want, warns } of CASES) {
             const run = captureWarnings(
                 engine,
                 `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
@@ -135,11 +172,58 @@ describe('a stand-alone keyword and its groups, every order', () => {
             const both =
                 classes.includes(family.global[2]) &&
                 family.groups.some(([, , className]) => classes.includes(className));
-            if (both || classes.join(' ') !== want.join(' ') || run.warnings.length > 0) {
+            if (
+                both ||
+                classes.join(' ') !== want.join(' ') ||
+                run.warnings.length !== (warns ? 1 : 0) ||
+                !run.warnings.every(message => message.includes('in one sz object, so'))
+            ) {
                 wrong.push(`${JSON.stringify(sz)} → ${classes.join(' ')}`);
             }
         }
 
         expect(wrong).toEqual([]);
     });
+
+    it('covers every pair of two-key layers of each family', () => {
+        expect(LAYERS).toHaveLength(25 * 25 + 16 * 16 + 25 * 25);
+    });
+
+    it('runtime merges sz array layers by the model', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const wrong = LAYERS.filter(({ layers, want }) => {
+            const merged = layers.reduce((a, b) =>
+                deepMergeSzObjects(a as SzObject, b as SzObject),
+            );
+            const classes = (transform(merged as SzObject).className || '')
+                .split(' ')
+                .filter(Boolean);
+            return classes.sort().join(' ') !== want.join(' ');
+        }).map(({ layers }) => JSON.stringify(layers));
+        vi.restoreAllMocks();
+
+        expect(wrong).toEqual([]);
+    });
+
+    it.each(ENGINES)(
+        '%s merges sz array layers by the model, without a warning',
+        (_name, engine) => {
+            const wrong: string[] = [];
+            for (const { family, layers, want } of LAYERS) {
+                const run = captureWarnings(
+                    engine,
+                    `export const A = () => <p sz={${JSON.stringify(layers)}} />;`,
+                );
+                const classes = [...(run.result.classes ?? [])].sort();
+                const both =
+                    classes.includes(family.global[2]) &&
+                    family.groups.some(([, , className]) => classes.includes(className));
+                if (both || classes.join(' ') !== want.join(' ') || run.warnings.length > 0) {
+                    wrong.push(`${JSON.stringify(layers)} → ${classes.join(' ')}`);
+                }
+            }
+
+            expect(wrong).toEqual([]);
+        },
+    );
 });

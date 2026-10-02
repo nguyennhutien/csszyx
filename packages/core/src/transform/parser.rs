@@ -23,12 +23,12 @@ use std::time::Instant;
 use super::{
     lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
     ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
-    DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode,
-    SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
-    SafeStyleSpreadValueIr, SourceIr, SpreadSplitClassIr, StaticArrayPartIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
-    SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
-    UnsupportedRecoveryIr,
+    DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr, JsxOpeningElementIr,
+    RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
+    SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, SpreadSplitClassIr,
+    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
+    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
+    TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -823,8 +823,10 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     dynamic_css_vars,
                     ternaries,
                     dropped_dynamic_keys,
+                    group_conflicts,
                 )) = partial_object_from_jsx_expression(&container.expression, ctx)
                 {
+                    self.ir.dynamic_group_conflicts.extend(group_conflicts);
                     (
                         object,
                         value_span,
@@ -4130,6 +4132,24 @@ struct PartialSzObject {
     /// appended `${cond ? "…" : "…"}` template segment.
     ternaries: Vec<StaticTernaryIr>,
     dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
+    /// Family keys with a runtime value beside the other side of their family,
+    /// at this level and every nested one.
+    group_conflicts: Vec<DynamicGroupConflictIr>,
+}
+
+impl PartialSzObject {
+    /// An empty partial object with room for `capacity` static properties.
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            object: StaticSzObject {
+                properties: Vec::with_capacity(capacity),
+            },
+            dynamic_css_vars: Vec::new(),
+            ternaries: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
+            group_conflicts: Vec::new(),
+        }
+    }
 }
 
 type PartialObjectResult = (
@@ -4138,6 +4158,7 @@ type PartialObjectResult = (
     Vec<DynamicCssVarIr>,
     Vec<StaticTernaryIr>,
     Vec<DroppedSzKeyIr>,
+    Vec<DynamicGroupConflictIr>,
 );
 
 fn partial_object_from_jsx_expression(
@@ -4153,6 +4174,7 @@ fn partial_object_from_jsx_expression(
                 partial.dynamic_css_vars,
                 partial.ternaries,
                 partial.dropped_dynamic_keys,
+                partial.group_conflicts,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -4184,6 +4206,7 @@ fn partial_object_from_expression(
                 partial.dynamic_css_vars,
                 partial.ternaries,
                 partial.dropped_dynamic_keys,
+                partial.group_conflicts,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -4262,22 +4285,14 @@ fn partial_object_from_object_expression(
     if variant_prefix.is_none() {
         if let Some(ternary) = conditional_spread_ternary_from_object_expression(object, ctx) {
             return Some(PartialSzObject {
-                object: StaticSzObject::empty(),
-                dynamic_css_vars: Vec::new(),
                 ternaries: vec![ternary],
-                dropped_dynamic_keys: Vec::new(),
+                ..PartialSzObject::with_capacity(0)
             });
         }
     }
 
-    let mut partial = PartialSzObject {
-        object: StaticSzObject {
-            properties: Vec::with_capacity(object.properties.len()),
-        },
-        dynamic_css_vars: Vec::new(),
-        ternaries: Vec::new(),
-        dropped_dynamic_keys: Vec::new(),
-    };
+    let mut partial = PartialSzObject::with_capacity(object.properties.len());
+    let mut dynamic_family_keys: Vec<(String, TextSpan)> = Vec::new();
 
     for property in &object.properties {
         match property {
@@ -4291,6 +4306,7 @@ fn partial_object_from_object_expression(
                 }
 
                 let key = static_property_key(&property.key)?;
+                note_dynamic_family_key(&mut dynamic_family_keys, &key, property);
                 // Retain only diagnostic identity: no class or CSS variable may
                 // be emitted, while a literal false was skipped above and
                 // remains silent like the runtime path.
@@ -4390,7 +4406,78 @@ fn partial_object_from_object_expression(
     // Babel build-time output emits. This mix used to be punted to the runtime
     // fallback, which never safelists the dynamic utilities: Tailwind emitted
     // no CSS for them and the styling silently never applied (field-reported).
+    record_dynamic_group_conflicts(&mut partial, &dynamic_family_keys);
     Some(partial)
+}
+
+/// Note a key of a stand-alone keyword family whose value only the runtime
+/// knows, with the span of its property.
+fn note_dynamic_family_key(
+    keys: &mut Vec<(String, TextSpan)>,
+    key: &str,
+    property: &ObjectProperty<'_>,
+) {
+    if super::generated::tables::global_keyword_groups(key).is_some()
+        || super::generated::tables::global_keyword_for_group(key).is_some()
+    {
+        keys.push((key.to_string(), text_span(property.span)));
+    }
+}
+
+/// Whether two keys stand on the two sides of one stand-alone keyword family.
+fn opposite_family_sides(key: &str, other: &str) -> bool {
+    super::generated::tables::global_keyword_for_group(key).map_or_else(
+        || {
+            super::generated::tables::global_keyword_groups(key)
+                .is_some_and(|groups| groups.split(' ').any(|group| group == other))
+        },
+        |global| other == global,
+    )
+}
+
+/// Record each family key with a runtime value beside a key of the other side
+/// of its family at the same level: a group key beside its stand-alone key, or
+/// the stand-alone key beside any of its groups. Two runtime values on the two
+/// sides are one conflict, reported at the first.
+fn record_dynamic_group_conflicts(
+    partial: &mut PartialSzObject,
+    dynamic_family_keys: &[(String, TextSpan)],
+) {
+    if dynamic_family_keys.is_empty() {
+        return;
+    }
+    let present: Vec<(&str, u32)> = partial
+        .object
+        .properties
+        .iter()
+        .map(|property| (property.key.as_str(), property.span.start))
+        .chain(
+            dynamic_family_keys
+                .iter()
+                .map(|(key, span)| (key.as_str(), span.start)),
+        )
+        .collect();
+    for (index, (key, span)) in dynamic_family_keys.iter().enumerate() {
+        let opposite = |other: &str| opposite_family_sides(key, other);
+        let reported_earlier = dynamic_family_keys[..index]
+            .iter()
+            .any(|(other, _)| opposite(other));
+        if reported_earlier {
+            continue;
+        }
+        if let Some((other, at)) = present
+            .iter()
+            .filter(|(other, _)| opposite(other))
+            .min_by_key(|(_, at)| *at)
+        {
+            partial.group_conflicts.push(DynamicGroupConflictIr {
+                key: key.clone(),
+                other: (*other).to_string(),
+                span: *span,
+                key_first: span.start < *at,
+            });
+        }
+    }
 }
 
 /// Merge one nested variant/value object into an in-progress partial object.
@@ -4430,6 +4517,7 @@ fn collect_nested_partial_property(
     partial
         .dropped_dynamic_keys
         .extend(nested.dropped_dynamic_keys);
+    partial.group_conflicts.extend(nested.group_conflicts);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -4522,14 +4610,52 @@ fn conditional_class_from_property(
 ) -> Option<StaticTernaryIr> {
     let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
     let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
+    let resolved_objects = [
+        (&conditional.consequent, &consequent),
+        (&conditional.alternate, &alternate),
+    ]
+    .into_iter()
+    .filter_map(|(branch, value)| conditional_branch_object(key, branch, value, variant_keys))
+    .collect();
     Some(StaticTernaryIr {
         test_span: text_span(conditional.test.span()),
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
         chain_arms: Vec::new(),
         bool_class_key: None,
-        resolved_objects: Vec::new(),
+        resolved_objects,
     })
+}
+
+/// One branch of a property-level conditional as the object it stands for,
+/// kept for the key and value diagnostics: `touch: m ? 'pan-x' : 'auto'` is
+/// `{ touch: 'pan-x' }` on one side. The branch's own span locates it, so a
+/// finding on one branch is not taken for one on the other.
+///
+/// Only a known key's value is checked. A finding about the key alone — an
+/// unknown key, a property key holding an object — would read the same from
+/// both branches, so two reports would say one thing twice.
+fn conditional_branch_object(
+    key: &str,
+    branch: &Expression<'_>,
+    value: &StaticSzValue,
+    variant_keys: &[String],
+) -> Option<StaticSzObject> {
+    let property_object = matches!(value, StaticSzValue::Object(_))
+        && super::generated::tables::property_prefix(key).is_some();
+    if !super::lower::is_known_sz_key(key) || property_object {
+        return None;
+    }
+    Some(wrap_in_variant_keys(
+        variant_keys,
+        StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: key.to_string(),
+                span: text_span(branch.span()),
+                value: value.clone(),
+            }],
+        },
+    ))
 }
 
 fn nullable_conditional_class_from_property(
@@ -4563,8 +4689,15 @@ fn nullable_conditional_class_from_property(
     } else {
         &conditional.consequent
     };
+    let mut resolved_objects = Vec::new();
     let (present_classes, dynamic_prop) =
         if let Some(value) = static_value_from_expression(present, ctx) {
+            resolved_objects.extend(conditional_branch_object(
+                key,
+                present,
+                &value,
+                variant_keys,
+            ));
             (conditional_property_classes(key, value, variant_keys), None)
         } else {
             if !is_runtime_expression(present) {
@@ -4597,7 +4730,7 @@ fn nullable_conditional_class_from_property(
             },
             chain_arms: Vec::new(),
             bool_class_key: None,
-            resolved_objects: Vec::new(),
+            resolved_objects,
         },
         dynamic_prop,
     ))
@@ -4963,33 +5096,96 @@ fn merge_static_property(properties: &mut Vec<StaticSzProperty>, incoming: Stati
 /// survive — the build-time mirror of `szcn`'s class-level group merge.
 /// Deliberately separate from [`merge_static_property`], which keeps JS
 /// object-spread (shallow) semantics for spreads inside ONE object literal.
+///
+/// An overridden key moves to the end, so the merged object holds the keys in
+/// the order the layers wrote them. Each layer settles its own stand-alone
+/// keywords first, as it would lowered alone; then a later keyword resets the
+/// groups merged before it and a later group replaces the keyword. Mirrors
+/// `deepMergeSzObjects` in the TypeScript core.
 fn merge_static_properties_deep(
     properties: &mut Vec<StaticSzProperty>,
     incoming: impl IntoIterator<Item = StaticSzProperty>,
 ) {
-    for property in incoming {
-        merge_static_property_deep(properties, property);
+    drop_settled_properties(properties);
+    let incoming = StaticSzObject {
+        properties: incoming.into_iter().collect(),
+    };
+    let settled = super::lower::settle_global_keywords(&incoming).skipped;
+    for (index, property) in incoming.properties.into_iter().enumerate() {
+        merge_static_property_deep(properties, property, settled.contains(&index));
     }
 }
 
-fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: StaticSzProperty) {
-    if let Some(existing) = properties
-        .iter_mut()
-        .find(|property| property.key == incoming.key)
-    {
-        let key = existing.key.clone();
-        match (&mut existing.value, incoming.value) {
-            (StaticSzValue::Object(existing_object), StaticSzValue::Object(incoming_object)) => {
-                drop_displaced_sub_keys(&key, existing_object, &incoming_object);
-                merge_static_properties_deep(
-                    &mut existing_object.properties,
-                    incoming_object.properties,
-                );
-            }
-            (existing_value, incoming_value) => *existing_value = incoming_value,
+/// Leave out the properties one object level's stand-alone keywords settle away.
+fn drop_settled_properties(properties: &mut Vec<StaticSzProperty>) {
+    let object = StaticSzObject {
+        properties: std::mem::take(properties),
+    };
+    let skipped = super::lower::settle_global_keywords(&object).skipped;
+    *properties = object
+        .properties
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !skipped.contains(index))
+        .map(|(_, property)| property)
+        .collect();
+}
+
+/// Merge one later property into the merged level, at the place the key
+/// already holds. A key of a stand-alone keyword family drops the side of its
+/// family it replaces; a key its own layer settled away still drops what it
+/// replaces but is not kept. Mirrors `deepMergeSzObjects`.
+fn merge_static_property_deep(
+    properties: &mut Vec<StaticSzProperty>,
+    incoming: StaticSzProperty,
+    settled_away: bool,
+) {
+    let global = super::generated::tables::global_keyword_for_group(&incoming.key);
+    let groups = super::generated::tables::global_keyword_groups(&incoming.key);
+    if global.is_none() && groups.is_none() {
+        match properties
+            .iter_mut()
+            .find(|property| property.key == incoming.key)
+        {
+            Some(existing) => merge_in_place(existing, incoming),
+            None => properties.push(incoming),
         }
-    } else {
-        properties.push(incoming);
+        return;
+    }
+    if incoming.value != StaticSzValue::Boolean(false) {
+        properties.retain(|property| {
+            Some(property.key.as_str()) != global
+                && !groups
+                    .is_some_and(|groups| groups.split(' ').any(|group| group == property.key))
+        });
+    }
+    let position = properties
+        .iter()
+        .position(|property| property.key == incoming.key);
+    // Both layers are settled, so the merged level never holds the two sides
+    // of a family at once and the key's place decides nothing: it keeps it.
+    match (position, settled_away) {
+        (Some(index), true) => {
+            properties.remove(index);
+        }
+        (Some(index), false) => properties[index] = incoming,
+        (None, true) => {}
+        (None, false) => properties.push(incoming),
+    }
+}
+
+/// Merge a later value into the property it overrides, at that property's place.
+fn merge_in_place(existing: &mut StaticSzProperty, incoming: StaticSzProperty) {
+    let key = existing.key.clone();
+    match (&mut existing.value, incoming.value) {
+        (StaticSzValue::Object(existing_object), StaticSzValue::Object(incoming_object)) => {
+            drop_displaced_sub_keys(&key, existing_object, &incoming_object);
+            merge_static_properties_deep(
+                &mut existing_object.properties,
+                incoming_object.properties,
+            );
+        }
+        (existing_value, incoming_value) => *existing_value = incoming_value,
     }
 }
 

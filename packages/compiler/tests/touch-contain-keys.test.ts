@@ -117,7 +117,7 @@ describe('touch-action and contain keys', () => {
         );
     });
 
-    it('runtime names a flag key with its location, once, and stays quiet in production', () => {
+    it('runtime names a flag key with its location, once, in production too', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         setSzWarnLocation('src/Pan.tsx:4');
         try {
@@ -135,6 +135,7 @@ describe('touch-action and contain keys', () => {
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
             '[csszyx] "touch: pinch-zoom" moved to { touchPinchZoom: true } at src/Pan.tsx:4. Run `csszyx migrate` to rewrite it.',
+            '[csszyx] "touch: pan-down" moved to { touchPanY: \'down\' }. Run `csszyx migrate` to rewrite it.',
         ]);
     });
 
@@ -143,27 +144,41 @@ describe('touch-action and contain keys', () => {
     // written after it replace it. The two are never emitted together, so the
     // result does not hang on Tailwind's sort, which puts the stand-alone
     // class after its groups whatever order they were written in.
-    const ORDERED: ReadonlyArray<readonly [Record<string, unknown>, string]> = [
-        [{ contain: 'strict', containPaint: true }, 'contain-paint'],
-        [{ containPaint: true, contain: 'strict' }, 'contain-strict'],
-        [{ containLayout: true, contain: 'none', containPaint: true }, 'contain-paint'],
-        [{ touchPanX: 'x', touchPinchZoom: true, touch: 'none' }, 'touch-none'],
-        [{ touch: 'none', touchPanY: 'up', touchPinchZoom: true }, 'touch-pan-up touch-pinch-zoom'],
-        [{ touch: 'auto', touchPinchZoom: false }, 'touch-auto'],
+    // The stand-alone key a later group replaces is named: by hand it is dead
+    // code, and it is the shape a spread override leaves.
+    const ORDERED: ReadonlyArray<readonly [Record<string, unknown>, string, string[]]> = [
+        [{ contain: 'strict', containPaint: true }, 'contain-paint', ['contain: strict']],
+        [{ containPaint: true, contain: 'strict' }, 'contain-strict', []],
+        [
+            { containLayout: true, contain: 'none', containPaint: true },
+            'contain-paint',
+            ['contain: none'],
+        ],
+        [{ touchPanX: 'x', touchPinchZoom: true, touch: 'none' }, 'touch-none', []],
+        [
+            { touch: 'none', touchPanY: 'up', touchPinchZoom: true },
+            'touch-pan-up touch-pinch-zoom',
+            ['touch: none'],
+        ],
+        [{ touch: 'auto', touchPinchZoom: false }, 'touch-auto', []],
         [
             { md: { touch: 'none', touchPanX: 'left' }, touch: 'auto' },
             'md:touch-pan-left touch-auto',
+            ['touch: none'],
         ],
     ];
 
     it.each(ENGINES)(
         '%s settles a global keyword and its groups by the object order',
         (_name, engine) => {
-            for (const [sz, expected] of ORDERED) {
+            for (const [sz, expected, named] of ORDERED) {
                 const source = `export const A = () => <p sz={${JSON.stringify(sz)}} />;`;
                 const run = captureWarnings(engine, source);
                 expect(run.className, source).toBe(expected);
-                expect(run.warnings, source).toEqual([]);
+                expect(
+                    run.warnings.map(message => /"([^"]+)"/.exec(message)?.[1]),
+                    source,
+                ).toEqual(named);
             }
         },
     );
@@ -173,6 +188,11 @@ describe('touch-action and contain keys', () => {
         for (const [sz, expected] of ORDERED) {
             expect(transform(sz).className, JSON.stringify(sz)).toBe(expected);
         }
-        expect(warn).not.toHaveBeenCalled();
+        expect(warn.mock.calls.map(([message]) => /"([^"]+)"/.exec(String(message))?.[1])).toEqual([
+            'contain: strict',
+            'contain: none',
+            'touch: none',
+            'touch: none',
+        ]);
     });
 });

@@ -93,7 +93,23 @@ export const SIZE_BUDGETS = [
         kind: 'app-bundle',
         target: 'packages/compiler',
         subpaths: ['./browser'],
-        maxGzipBytes: 14_700,
+        // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
+        // moved value and a later group overriding a stand-alone key now warn
+        // in production as well (ADR 0011, its `productionMessages` below), so
+        // their text ships by design, plus the settlement of family keys
+        // across sz layers. Budget set the usual ~300 above the measurement.
+        maxGzipBytes: 15_200,
+        // Each one reports a class the transform did not emit (ADR 0011), so
+        // they print in production and in the browser, once each; only
+        // `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them.
+        productionMessages: [
+            // A value that moved onto its group's own key (`touch: 'pan-x'`).
+            'warn: <expr>',
+            // A replaced or removed key (`ordinal`, `tabularNums`, `inlineFlex`).
+            'warn: [csszyx] ',
+            // A stand-alone key a later group key replaces in one object.
+            'warn: [csszyx] ',
+        ],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
@@ -121,7 +137,12 @@ export const SIZE_BUDGETS = [
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 550_000,
+        // Raised from 550,000 on 2026-10-02: settling stand-alone and group
+        // keys across sz array layers, and the diagnostics for a moved value
+        // in a ternary or parametric variant, a dynamic family conflict and a
+        // spread override, cost 7,099 gzip bytes here (547,198 before,
+        // 554,297 after, un-optimized, same build).
+        maxGzipBytes: 557_500,
     },
 ];
 

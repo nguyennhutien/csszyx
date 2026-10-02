@@ -13,6 +13,9 @@ export default {
         // The depth limit, its error and the key guard on their own, so the
         // runtime's `core` and `merge` entries do not pull the property tables.
         'sz-limits': 'src/sz-limits.ts',
+        // The stand-alone keyword families and their pure settlement, for the
+        // runtime's `szv` merge, without the transform's property tables.
+        'keyword-families': 'src/keyword-families.ts',
         'migrate-rust': 'src/migrate-rust.ts',
     },
     format: ['esm', 'cjs'],

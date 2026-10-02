@@ -55,6 +55,16 @@
         "default": "./dist/sz-limits.cjs"
       }
     },
+    "./keyword-families": {
+      "import": {
+        "types": "./dist/keyword-families.d.mts",
+        "default": "./dist/keyword-families.mjs"
+      },
+      "require": {
+        "types": "./dist/keyword-families.d.cts",
+        "default": "./dist/keyword-families.cjs"
+      }
+    },
     "./bool-class": {
       "import": {
         "types": "./dist/bool-class.d.mts",

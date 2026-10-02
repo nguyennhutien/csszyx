@@ -98,6 +98,30 @@ pub struct SourceIr {
     /// Resolved objects omitted from emission but still requiring diagnostics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub omitted_sz_objects: Vec<StaticSzObject>,
+    /// Stand-alone keywords and group keys of one family in one `sz` object
+    /// level where one side holds a runtime value, so the object's order cannot
+    /// settle them at build time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_group_conflicts: Vec<DynamicGroupConflictIr>,
+}
+
+/// A key of a stand-alone keyword family that takes a runtime value beside a
+/// key of the other side of its family, in one `sz` object level.
+///
+/// The lowering settles a stand-alone keyword and its groups by the object's
+/// order only for static values; a runtime value lowers to a conditional class
+/// beside the other side's class, and Tailwind's stylesheet order then decides
+/// which applies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamicGroupConflictIr {
+    /// The key holding the runtime value.
+    pub key: String,
+    /// The key of the other side of its family.
+    pub other: String,
+    /// Span of the property holding the runtime value.
+    pub span: TextSpan,
+    /// Whether `key` is written before `other`.
+    pub key_first: bool,
 }
 
 /// One compiled `szs` slot.
@@ -157,6 +181,7 @@ impl SourceIr {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         }
     }
 
@@ -945,6 +970,7 @@ mod tests {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         };
 
         assert!(!ir.is_noop());
