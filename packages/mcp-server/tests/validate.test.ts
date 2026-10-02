@@ -1,5 +1,5 @@
 import { KNOWN_SPECIAL_PROPERTIES } from '@csszyx/compiler';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { handleValidate } from '../src/tools/validate';
 
@@ -115,6 +115,63 @@ describe('csszyx_validate', () => {
         const data = JSON.parse(handleValidate({ sz: { display: 'flex' } }).content[0].text);
         expect(data.valid).toBe(true);
         expect(data.transformResult.className).toBe('flex');
+    });
+
+    // A moved value emits no class. The compiler's console warning is deduped
+    // per process and muted in production, so a result built from it said
+    // `valid: true, className: ""` — and said nothing at all the second time.
+    it('reports a moved value as an error, on every call', () => {
+        for (let call = 0; call < 2; call++) {
+            const data = JSON.parse(handleValidate({ sz: { touch: 'pan-x' } }).content[0].text);
+            expect(data.valid).toBe(false);
+            expect(data.errors).toHaveLength(1);
+            expect(data.errors[0].key).toBe('touch');
+            expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
+            expect(data.errors[0].message).not.toMatch(/\.tsx:\d/);
+        }
+    });
+
+    it('reports a moved value inside a variant under its path', () => {
+        for (let call = 0; call < 2; call++) {
+            const data = JSON.parse(
+                handleValidate({ sz: { p: 4, hover: { touch: 'pinch-zoom' } } }).content[0].text,
+            );
+            expect(data.valid).toBe(false);
+            expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['hover.touch']);
+            expect(data.errors[0].message).toContain('touchPinchZoom');
+        }
+    });
+
+    it('names the removal note for a removed key, on every call', () => {
+        for (let call = 0; call < 2; call++) {
+            const data = JSON.parse(
+                handleValidate({ sz: { fontVariant: 'tabular-nums' } }).content[0].text,
+            );
+            expect(data.valid).toBe(false);
+            expect(data.errors[0].key).toBe('fontVariant');
+            expect(data.errors[0].message).toContain('was removed');
+            expect(data.errors[0].message).toContain('one key per group');
+        }
+    });
+
+    it('reports a value warning on every call, without reading the console', () => {
+        const warn = vi.spyOn(console, 'warn');
+        for (let call = 0; call < 2; call++) {
+            const data = JSON.parse(handleValidate({ sz: { m: 1.3 } }).content[0].text);
+            expect(data.valid).toBe(true);
+            expect(data.warnings).toHaveLength(1);
+            expect(data.warnings[0]).toContain('spacing scale');
+        }
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
+    });
+
+    it('reports a self-referencing object as a transformError instead of looping', () => {
+        const loop: Record<string, unknown> = { p: 4 };
+        loop.hover = loop;
+        const data = JSON.parse(handleValidate({ sz: loop }).content[0].text);
+        expect(data.valid).toBe(false);
+        expect(data.transformError).toContain('maximum depth');
     });
 
     it('reports a transformError (and omits transformResult) when transform() itself throws', () => {
