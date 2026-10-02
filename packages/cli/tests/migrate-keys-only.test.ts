@@ -90,6 +90,54 @@ describe('migrate --keys-only', () => {
             );
             expect(run("{ touch: 'none' }")).toBe("const A = () => <p sz={{ touch: 'none' }} />;");
         });
+
+        it('moves a ternary of literals with its branches, in every variant and object branch', () => {
+            expect(run("{ touch: m ? 'pan-x' : 'pan-left' }")).toBe(
+                "const A = () => <p sz={{ touchPanX: m ? 'x' : 'left' }} />;",
+            );
+            expect(run("{ touch: m ? 'pan-x' : 'pan-y' }")).toBe(
+                "const A = () => <p sz={{ touchPanX: m ? 'x' : undefined, touchPanY: m ? undefined : 'y' }} />;",
+            );
+            expect(
+                run(
+                    "{ group: { hover: { touch: 'pan-x' } }, data: { open: { touch: 'pinch-zoom' } } }",
+                ),
+            ).toBe(
+                "const A = () => <p sz={{ group: { hover: { touchPanX: 'x' } }, data: { open: { touchPinchZoom: true } } }} />;",
+            );
+            expect(run("m ? { touch: 'pan-x' } : { md: { touch: m ? 'pan-up' : null } }")).toBe(
+                "const A = () => <p sz={m ? { touchPanX: 'x' } : { md: { touchPanY: m ? 'up' : null } }} />;",
+            );
+        });
+
+        it('reaches the group key from an alias in one pass', () => {
+            expect(run("{ touchAction: 'pan-x' }")).toBe(
+                "const A = () => <p sz={{ touchPanX: 'x' }} />;",
+            );
+        });
+
+        it('leaves a ternary that would split across a stand-alone keyword for the build', () => {
+            expect(run("{ touch: m ? 'pan-x' : 'auto' }")).toBe(
+                "const A = () => <p sz={{ touch: m ? 'pan-x' : 'auto' }} />;",
+            );
+        });
+    });
+
+    describe('two old keys of one family keep what 0.17 rendered', () => {
+        const run = (sz: string) =>
+            transformSource(`const A = () => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true }).code;
+
+        // Before 0.18 both classes shipped and Tailwind's stylesheet order
+        // decided; `migrate-stylesheet-order.test.ts` pins that order.
+        it.each([
+            ['{ tabularNums: true, proportionalNums: true }', "{ numSpacing: 'tabular' }"],
+            ['{ oldstyleNums: true, liningNums: true }', "{ numFigure: 'oldstyle' }"],
+            ['{ stackedFractions: true, diagonalFractions: true }', "{ numFraction: 'stacked' }"],
+            ["{ fontVariant: 'normal-nums', tabularNums: true }", "{ nums: 'normal' }"],
+            ["{ touch: 'none', touchAction: 'pan-x' }", "{ touch: 'none' }"],
+        ])('%s', (sz, expected) => {
+            expect(run(sz)).toBe(`const A = () => <p sz={${expected}} />;`);
+        });
     });
 
     describe('a stand-alone keyword beside its group in one className', () => {

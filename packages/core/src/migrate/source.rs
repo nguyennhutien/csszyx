@@ -26,7 +26,7 @@ use super::dynamic::{
     is_clsx_like_name, PatternResult,
 };
 use super::line_endings::{detect_line_ending, with_line_ending};
-use super::normalize::{normalize_sz_object, static_key};
+use super::normalize::{normalize_sz_expression, static_key};
 use super::sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
 use super::value::{is_js_whitespace, SzObject};
 use super::variant_parser::{class_name_to_sz_object, tokenize};
@@ -405,8 +405,9 @@ impl<'a> Migration<'_, '_> {
         };
         if name == "sz" {
             if let Some(JSXAttributeValue::ExpressionContainer(container)) = &attribute.value {
-                if let JSXExpression::ObjectExpression(object) = &container.expression {
-                    let count = normalize_sz_object(object, &mut self.replacements);
+                if let Some(expression) = container.expression.as_expression() {
+                    let count =
+                        normalize_sz_expression(self.source, expression, &mut self.replacements);
                     self.stats.sz_keys_normalized =
                         Some(self.stats.sz_keys_normalized.unwrap_or(0) + count);
                 }
