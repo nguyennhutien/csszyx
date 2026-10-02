@@ -98,6 +98,27 @@ describe('parseSzAttribute', () => {
         expect(() => parseSzAttribute('{ list: [1, /] }')).toThrow(/Unexpected "\/" at 12/);
     });
 
+    // The position indexes the attribute as written, so it points at the
+    // character: not shifted by the `{` added around brace-less input, nor by
+    // the leading whitespace trimmed before parsing.
+    it.each([
+        ['w: 1/2', 4],
+        ['p: 4; m: 2', 4],
+        ['bg: #fff', 4],
+        ['  w: 1/2', 6],
+        ['  { w: 1/2 }', 8],
+    ])('points the position of %s at the stray character', (input, at) => {
+        expect(strayInputsEnd).toBe(true);
+        let message = '';
+        try {
+            parseSzAttribute(input);
+        } catch (error) {
+            message = (error as Error).message;
+        }
+        expect(message).toContain(` at ${at} in `);
+        expect(input[at]).toMatch(/[/;#]/);
+    });
+
     it('ends on every input: 5,000 generated strings over the grammar characters', () => {
         const result = inChild(
             `${OUTCOME}

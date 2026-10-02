@@ -25,13 +25,18 @@
  */
 export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     const trimmed = rawInput.trim();
-    const input = trimmed.startsWith('{') ? trimmed : `{${trimmed}}`;
+    const wrapped = !trimmed.startsWith('{');
+    const input = wrapped ? `{${trimmed}}` : trimmed;
+    // Maps a position in `input` back to `rawInput`: undo the added `{` and
+    // the leading whitespace `trim` removed, so the report points at the
+    // character the author wrote.
+    const offset = rawInput.length - rawInput.trimStart().length - (wrapped ? 1 : 0);
     let pos = 0;
 
     // Only called inside a loop that runs while `pos` is in range.
     const unexpected = (): never => {
         throw new SyntaxError(
-            `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos} in sz attribute "${rawInput}"`,
+            `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos + offset} in sz attribute "${rawInput}"`,
         );
     };
 

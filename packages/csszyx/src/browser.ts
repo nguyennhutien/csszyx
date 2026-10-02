@@ -61,8 +61,13 @@ function processElement(el: Element): void {
             });
         }
     } catch (e) {
-        // Fallback: treat raw value as plain Tailwind class string when not object-shaped.
-        if (rawValue.trim() && !rawValue.includes('{')) {
+        // Fallback for a plain class list (`w-1/2 p-4`). A value with `:` is sz
+        // written brace-less (`w: 1/2`, `bg: #fff`): read as classes it would
+        // add `w:` and `1/2` and say nothing, so it is reported instead. This
+        // also reports a class list with a variant and a stray character
+        // (`hover:w-1/2`); one without (`hover:p-4`) parses as an sz object and
+        // never reached the fallback anyway.
+        if (rawValue.trim() && !/[{:]/.test(rawValue)) {
             rawValue.split(/\s+/).forEach(c => {
                 if (c) {
                     el.classList.add(c);
