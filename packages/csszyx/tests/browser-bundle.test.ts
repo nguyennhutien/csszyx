@@ -137,7 +137,9 @@ dom.window.addEventListener('load', () => {
             expect(error).toContain('[csszyx] Parsing error:');
         }
         expect(result.errors[0]).toContain('Unexpected "/" at 4');
-    });
+        // Above the child's 10 s deadline, so that deadline is what fails a
+        // hang; jsdom alone took 7.4 s to start on a loaded CI runner.
+    }, 20_000);
 
     it('leaves no global behind', () => {
         loadBundle();
