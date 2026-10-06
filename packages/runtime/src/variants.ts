@@ -67,33 +67,41 @@ function deepMerge(target: SzObject, source: SzObject, depth = 0): SzObject {
         if (isForbiddenSzKey(key)) {
             continue;
         }
-        const sv = source[key];
-        const tv = result[key];
-        if (sv !== undefined && sv !== null && sv !== false) {
-            for (const other of keysDisplacedBy(key)) {
-                delete result[other];
-            }
-        }
-        if (settled.has(key)) {
-            delete result[key];
-            continue;
-        }
-        if (
-            sv !== null &&
-            sv !== undefined &&
-            typeof sv === 'object' &&
-            !Array.isArray(sv) &&
-            tv !== null &&
-            tv !== undefined &&
-            typeof tv === 'object' &&
-            !Array.isArray(tv)
-        ) {
-            result[key] = deepMerge(tv as SzObject, sv as SzObject, depth + 1);
-        } else {
-            result[key] = sv;
-        }
+        mergeKey(result, key, source[key], settled.has(key), depth);
     }
     return result;
+}
+
+/**
+ * Merge one key of a later layer into the merged level, in place.
+ *
+ * @param result The merged level so far.
+ * @param key The later layer's key.
+ * @param sv Its value.
+ * @param settledAway Whether its own layer already settled it away.
+ * @param depth Current recursion depth.
+ */
+function mergeKey(
+    result: SzObject,
+    key: string,
+    sv: SzObject[string],
+    settledAway: boolean,
+    depth: number,
+): void {
+    if (sv !== undefined && sv !== null && sv !== false) {
+        for (const other of keysDisplacedBy(key)) {
+            delete result[other];
+        }
+    }
+    if (settledAway) {
+        delete result[key];
+        return;
+    }
+    const tv = result[key];
+    result[key] =
+        isPlainObject(sv) && isPlainObject(tv)
+            ? deepMerge(tv as SzObject, sv as SzObject, depth + 1)
+            : sv;
 }
 
 /**

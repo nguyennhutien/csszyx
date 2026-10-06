@@ -4480,6 +4480,26 @@ function collectUnresolvedDirectProperty(
     return true;
 }
 
+/**
+ * Warn about a key that emits nothing under its own name: an alias, or a
+ * removed key.
+ *
+ * @param rawKey The key as written.
+ * @param value Its value.
+ * @param szProp The object it sits in.
+ */
+function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): void {
+    // An alias holding a value that moved: its canonical key no longer
+    // takes the value, so name where the value went instead.
+    const moved =
+        typeof value === 'string'
+            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
+            : undefined;
+    if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
+    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
+    else warnUnknownSzProperty(rawKey, szProp);
+}
+
 /** Collects one property after filtering inactive values and shortcut forms. */
 function collectTransformProperty(
     rawKey: string,
@@ -4496,15 +4516,7 @@ function collectTransformProperty(
         return;
     }
     if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {
-        // An alias holding a value that moved: its canonical key no longer
-        // takes the value, so name where the value went instead.
-        const moved =
-            typeof value === 'string'
-                ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
-                : undefined;
-        if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
-        else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
-        else warnUnknownSzProperty(rawKey, szProp);
+        warnAliasOrRemovedKey(rawKey, value, szProp);
         return;
     }
     warnAlignmentValue(rawKey, value);
