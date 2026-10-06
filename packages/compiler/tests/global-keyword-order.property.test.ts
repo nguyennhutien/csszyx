@@ -14,7 +14,7 @@
  * class are never emitted together.
  */
 import { describe, expect, it, vi } from 'vitest';
-
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { deepMergeSzObjects, type SzObject, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
@@ -166,7 +166,7 @@ describe('a stand-alone keyword and its groups, every order', () => {
         for (const { family, sz, want, warns } of CASES) {
             const run = captureWarnings(
                 engine,
-                `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
+                `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
             );
             const classes = [...(run.result.classes ?? [])].sort();
             const both =
@@ -212,14 +212,16 @@ describe('a stand-alone keyword and its groups, every order', () => {
             for (const { family, layers, want } of LAYERS) {
                 const run = captureWarnings(
                     engine,
-                    `export const A = () => <p sz={${JSON.stringify(layers)}} />;`,
+                    `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(layers))}} />;`,
                 );
                 const classes = [...(run.result.classes ?? [])].sort();
                 const both =
                     classes.includes(family.global[2]) &&
                     family.groups.some(([, , className]) => classes.includes(className));
                 if (both || classes.join(' ') !== want.join(' ') || run.warnings.length > 0) {
-                    wrong.push(`${JSON.stringify(layers)} → ${classes.join(' ')}`);
+                    wrong.push(
+                        `${escapeUnsafeChars(JSON.stringify(layers))} → ${classes.join(' ')}`,
+                    );
                 }
             }
 

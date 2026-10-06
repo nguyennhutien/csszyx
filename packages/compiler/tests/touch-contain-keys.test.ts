@@ -9,7 +9,7 @@
  * second value of a group replaces the first — the rule `num*` follows.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { setSzWarnLocation, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
@@ -172,7 +172,7 @@ describe('touch-action and contain keys', () => {
         '%s settles a global keyword and its groups by the object order',
         (_name, engine) => {
             for (const [sz, expected, named] of ORDERED) {
-                const source = `export const A = () => <p sz={${JSON.stringify(sz)}} />;`;
+                const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
                 const run = captureWarnings(engine, source);
                 expect(run.className, source).toBe(expected);
                 expect(

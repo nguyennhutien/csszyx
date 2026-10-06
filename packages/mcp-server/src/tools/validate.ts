@@ -27,6 +27,8 @@ import {
 import { MAX_SZ_DEPTH } from '@csszyx/compiler/sz-limits';
 import { z } from 'zod';
 
+import { escapeUnsafeChars } from './source-literal.js';
+
 export const validateSchema = z.object({
     sz: z
         .record(z.string(), z.any())
@@ -150,7 +152,8 @@ function nest(leaf: Leaf): Record<string, unknown> {
 /**
  * The engine's diagnostics for an sz object, location removed.
  *
- * JSON is a JavaScript expression, so the object goes into the source as-is.
+ * JSON is a JavaScript expression, so the object goes into the source with
+ * only the characters a JS parser reacts to escaped.
  * An object JSON cannot write (one that references itself) reports nothing
  * here; the runtime transform reports it as `transformError`.
  *
@@ -159,7 +162,7 @@ function nest(leaf: Leaf): Record<string, unknown> {
  */
 function engineDiagnostics(sz: Record<string, unknown>): string[] {
     try {
-        const source = `export const A = () => <p sz={${JSON.stringify(sz)}} />;`;
+        const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
         return transformSource(source, PREVIEW_FILE).diagnostics.map(message =>
             String(message).replace(LOCATION, ''),
         );

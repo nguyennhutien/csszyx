@@ -1,4 +1,4 @@
-import { KNOWN_SPECIAL_PROPERTIES } from '@csszyx/compiler';
+import { KNOWN_SPECIAL_PROPERTIES, type SzObject, transform } from '@csszyx/compiler';
 import { describe, expect, it, vi } from 'vitest';
 
 import { handleValidate } from '../src/tools/validate';
@@ -152,6 +152,17 @@ describe('csszyx_validate', () => {
             expect(data.errors[0].message).toContain('was removed');
             expect(data.errors[0].message).toContain('one key per group');
         }
+    });
+
+    it('reads a value holding `<`, `>` or a line separator the way the runtime does', () => {
+        // The object is spliced into source for the engine, escaped so no
+        // character in it can end the expression; the answer must not change.
+        const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
+        const data = JSON.parse(handleValidate({ sz }).content[0].text);
+        expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
+        expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
+        expect(data.transformError).toBeUndefined();
+        expect(data.transformResult.className).toBe(transform(sz as SzObject).className);
     });
 
     it('reports a value warning on every call, without reading the console', () => {
