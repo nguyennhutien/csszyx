@@ -434,3 +434,122 @@ describe('an alias holding a value that moved', () => {
         ]);
     });
 });
+
+describe('a removed key prints everywhere, once', () => {
+    it('runtime names a removed key in a browser production build', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubGlobal('window', {});
+        try {
+            expect(transform({ fontVariant: 'tabular-nums' }).className).toBe('');
+            transform({ fontVariant: 'tabular-nums' });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            '[csszyx] "fontVariant" was removed: font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal".',
+        ]);
+    });
+
+    it('runtime stays quiet about it under CSSZYX_QUIET_SZ_WARNINGS', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+
+        expect(transform({ maskVia: 'black' }).className).toBe('');
+        expect(warn).not.toHaveBeenCalled();
+    });
+});
+
+describe('a family conflict inside an sz array element', () => {
+    const layered = (dynamic: string, other: string, first: string, second: string) =>
+        `[csszyx] "${dynamic}" takes a runtime value beside "${other}" in one sz object at ` +
+        "/p/src/Layers.jsx:1, so the build cannot settle them by the object's order: both " +
+        "classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer " +
+        `them, later wins: sz={[{ ${first}: … }, { ${second}: … }]}.`;
+
+    it.each(ENGINES)('%s names it in one element', (_name, engine) => {
+        const run = jsx(engine, "[{ p: 1 }, { touchPanX: c ? 'x' : undefined, touch: 'none' }]");
+
+        expect(run.warnings).toEqual([layered('touchPanX', 'touch', 'touchPanX', 'touch')]);
+    });
+
+    it.each(ENGINES)('%s names it under a variant of one element', (_name, engine) => {
+        const run = jsx(engine, "[{ md: { contain: 'strict', containPaint: c } }, { p: 1 }]");
+
+        expect(run.warnings).toEqual([
+            layered('containPaint', 'contain', 'contain', 'containPaint'),
+        ]);
+    });
+
+    // Layers keep their order through szcn, so this is the fix, not a conflict.
+    it.each(ENGINES)('%s says nothing across layers', (_name, engine) => {
+        const run = jsx(engine, "[{ touch: 'none' }, { touchPanX: c ? 'x' : undefined }]");
+
+        expect(run.warnings).toEqual([]);
+    });
+});
+
+describe('an alias of a stand-alone key with a runtime value', () => {
+    const at = ' at /p/src/Layers.jsx:1';
+
+    it.each(ENGINES)('%s names the moved form of a literal branch', (_name, engine) => {
+        const run = jsx(engine, "{ touchAction: m ? 'pan-x' : 'auto' }");
+
+        expect(run.warnings).toEqual([
+            `[csszyx] "touchAction: pan-x" moved to { touchPanX: 'x' }${at}. Run \`csszyx migrate\` to rewrite it.`,
+        ]);
+    });
+
+    it.each(ENGINES)(
+        '%s names the stand-alone key when every branch belongs to it',
+        (_name, engine) => {
+            const run = jsx(engine, "{ touchAction: m ? 'none' : 'auto' }");
+
+            expect(run.warnings).toEqual([
+                `[csszyx] Use the canonical key "touch" instead of "touchAction"${at}.`,
+            ]);
+        },
+    );
+
+    it.each(ENGINES)('%s names both sides for a runtime value', (_name, engine) => {
+        const run = jsx(engine, '{ touchAction: c }');
+
+        expect(run.warnings).toEqual([
+            `[csszyx] "touchAction" was removed and takes a runtime value${at}: write auto, none, manipulation on touch, and the other values on touchPanX, touchPanY, touchPinchZoom.`,
+        ]);
+    });
+});
+
+describe('a stand-alone key of any literal type before its group', () => {
+    it.each(ENGINES)('%s names a number or a boolean too', (_name, engine) => {
+        const run = jsx(
+            engine,
+            "{ contain: 1, containPaint: true, md: { touch: true, touchPanX: 'x' } }",
+        );
+
+        expect(run.warnings).toEqual([
+            spreadShape('contain', '1', 'containPaint', ' at /p/src/Layers.jsx:1'),
+            spreadShape('touch', 'true', 'touchPanX', ' at /p/src/Layers.jsx:1'),
+        ]);
+    });
+});
+
+describe('the runtime names these with their location', () => {
+    it('names a removed key at its location, and no object as a stand-alone value', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('src/Gone.tsx:2');
+        try {
+            transform({ maskTo: 'black' });
+            transform({ nums: { a: 1 } as never, numFigure: 'lining' });
+        } finally {
+            setSzWarnLocation(undefined);
+        }
+
+        const messages = warn.mock.calls.map(([message]) => String(message));
+        expect(messages[0]).toBe(
+            '[csszyx] "maskTo" was removed at src/Gone.tsx:2: the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }.',
+        );
+        expect(messages.some(message => message.includes('comes before'))).toBe(false);
+    });
+});

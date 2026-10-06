@@ -3141,15 +3141,19 @@ const _warnedGlobalsBeforeGroups = new Set<string>();
  * @param group - The first group key written after it.
  */
 function warnGlobalBeforeGroup(global: string, value: unknown, group: string): void {
-    const token = `${global}:${String(value)}>${group}`;
+    // A literal, as the engine reports it; an object there is a different
+    // mistake, which its own warning names.
+    if (typeof value === 'object') return;
+    const text = String(value as string | number | boolean);
+    const token = `${global}:${text}>${group}`;
     if (szWarningsQuiet() || _warnedGlobalsBeforeGroups.has(token)) return;
     _warnedGlobalsBeforeGroups.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
-        `[csszyx] "${global}: ${String(value)}"${at} comes before "${group}" in one sz object, so ` +
+        `[csszyx] "${global}: ${text}"${at} comes before "${group}" in one sz object, so ` +
             `${group} replaces it and the ${global} value styles nothing. A spread override ` +
-            `({ ...base, ${global}: '${String(value)}' }) leaves this order; to override, layer it: ` +
-            `sz={[base, { ${global}: '${String(value)}' }]}.`,
+            `({ ...base, ${global}: '${text}' }) leaves this order; to override, layer it: ` +
+            `sz={[base, { ${global}: '${text}' }]}.`,
     );
 }
 
@@ -4404,6 +4408,20 @@ function warnRemovedKeyOnce(rawKey: string, what: string, replacement: string): 
     );
 }
 
+/**
+ * Prints the warning for a key that was removed outright (`MIGRATION_NOTES`),
+ * once per key, in every mode and in the browser: the key emits no class, so
+ * a page with no build log to read loses it silently otherwise (ADR 0011).
+ * Only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
+ * @param rawKey - The authored key.
+ */
+function warnRemovedKey(rawKey: string): void {
+    if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
+    warnedRemovedSugar.add(rawKey);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(`[csszyx] "${rawKey}" was removed${at}: ${MIGRATION_NOTES[rawKey]}.`);
+}
+
 /** Removed shorthands already warned about, so a re-render cannot spam. */
 const warnedRemovedSugar = new Set<string>();
 
@@ -4485,6 +4503,7 @@ function collectTransformProperty(
                 ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
                 : undefined;
         if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
+        else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
         else warnUnknownSzProperty(rawKey, szProp);
         return;
     }

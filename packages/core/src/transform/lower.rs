@@ -592,9 +592,15 @@ pub(crate) fn collect_globals_before_groups(
     out: &mut Vec<(String, String, &'static str, u32)>,
 ) {
     for (global, group) in settle_global_keywords(object).replaced {
-        if let StaticSzValue::String(value) = &global.value {
-            out.push((global.key.clone(), value.clone(), group, global.span.start));
-        }
+        // Any literal, spelled as JavaScript's `String()` spells it; an object
+        // there is a different mistake, which its own report names.
+        let value = match &global.value {
+            StaticSzValue::String(value) => value.clone(),
+            StaticSzValue::Number(value) => value.to_string(),
+            StaticSzValue::Boolean(value) => value.to_string(),
+            StaticSzValue::Object(_) => continue,
+        };
+        out.push((global.key.clone(), value, group, global.span.start));
     }
     for property in &object.properties {
         if let StaticSzValue::Object(nested) = &property.value {

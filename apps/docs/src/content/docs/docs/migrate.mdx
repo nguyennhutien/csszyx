@@ -243,10 +243,9 @@ and an object chosen by a ternary or `&&`/`||`/`??`
 | The keys of a spread object (`base` in `{ ...base, p: 2 }`) | Only the object literal in the prop is read |
 
 Run `csszyx check` after migrating to list what is left in static sz props and
-`szv()` definitions. A replaced key or a moved value the build cannot see
-statically, inside an object built at runtime, is reported in the browser
-console when it renders, in production too. A removed key (`fontVariant`) is
-reported there in development only.
+`szv()` definitions. A replaced key, a moved value or a removed key
+(`fontVariant`) the build cannot see statically, inside an object built at
+runtime, is reported in the browser console when it renders, in production too.
 
 ## Understanding the Migration Report
 

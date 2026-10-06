@@ -2501,6 +2501,7 @@ fn array_parts_of_sz_attributes(
                     dynamic_provable: false,
                     candidates: Vec::new(),
                     dynamic_object_literal: false,
+                    group_conflicts: Vec::new(),
                     // The ternary carries its own resolved objects.
                     resolved_objects: Vec::new(),
                 }),
@@ -2517,6 +2518,7 @@ fn array_parts_of_sz_attributes(
                 dynamic_provable: false,
                 candidates: attribute.candidate_classes.clone(),
                 dynamic_object_literal: false,
+                group_conflicts: Vec::new(),
                 resolved_objects: Vec::new(),
             });
         } else {
@@ -2655,6 +2657,7 @@ fn static_array_part_from_expression(
         dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
+        group_conflicts: Vec::new(),
         resolved_objects: Vec::new(),
     });
     if conditional_part.is_some() {
@@ -2684,6 +2687,7 @@ fn static_array_part_from_expression(
             dynamic_provable: false,
             candidates: Vec::new(),
             dynamic_object_literal: false,
+            group_conflicts: std::mem::take(&mut partial.group_conflicts),
             resolved_objects: vec![partial.object],
         });
     }
@@ -2706,6 +2710,7 @@ const fn static_array_part(
         dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
+        group_conflicts: Vec::new(),
         resolved_objects: Vec::new(),
     }
 }
@@ -2729,6 +2734,7 @@ fn dynamic_array_part(
         dynamic_provable: is_provably_non_object_argument(expression),
         candidates: candidate_classes_from_expression(expression, ctx),
         dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
+        group_conflicts: Vec::new(),
         resolved_objects: Vec::new(),
     }
 }
@@ -4236,11 +4242,40 @@ fn drop_dynamic_key(
     property: &ObjectProperty<'_>,
     reason: DroppedKeyReason,
 ) {
+    let mut literals = Vec::new();
+    let mut opaque = false;
+    // An alias of a stand-alone keyword key (`touchAction` for `touch`): some
+    // of its values moved to group keys, so its report reads the branches.
+    if reason == DroppedKeyReason::RemovedKey
+        && super::generated::tables::key_suggestion(&key)
+            .and_then(super::generated::tables::global_keyword_groups)
+            .is_some()
+    {
+        read_string_branches(&property.value, &mut literals, &mut opaque);
+    }
     partial.dropped_dynamic_keys.push(DroppedSzKeyIr {
         key,
         span: text_span(property.span),
         reason,
+        literals,
+        opaque,
     });
+}
+
+/// The string literals a value can take, through any depth of ternary;
+/// `opaque` records a branch that is neither a literal nor absent.
+fn read_string_branches(value: &Expression<'_>, literals: &mut Vec<String>, opaque: &mut bool) {
+    match unwrap_expression(value) {
+        Expression::ConditionalExpression(conditional) => {
+            read_string_branches(&conditional.consequent, literals, opaque);
+            read_string_branches(&conditional.alternate, literals, opaque);
+        }
+        Expression::StringLiteral(literal) if !literal.value.is_empty() => {
+            literals.push(literal.value.to_string());
+        }
+        absent if is_absent_sz_expression(absent) => {}
+        _ => *opaque = true,
+    }
 }
 
 /// Why a key with a non-static value is dropped before lowering, if it is.

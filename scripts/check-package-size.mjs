@@ -109,6 +109,8 @@ export const SIZE_BUDGETS = [
             'warn: [csszyx] ',
             // A stand-alone key a later group key replaces in one object.
             'warn: [csszyx] ',
+            // A removed key (`fontVariant`, `maskFrom`), named with its note.
+            'warn: [csszyx] ',
         ],
     },
     // The wasm build of the parser is the fourth surface: not browser code,

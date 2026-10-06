@@ -254,7 +254,8 @@ of unresolved objects is not supported yet.
 | Message | Notes |
 | --- | --- |
 | `[csszyx] Unknown property "{key}" in sz prop{ at LOC}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.` | The class *is* in the DOM — grep for it. |
-| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. |
+| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. **every mode.** |
+| `[csszyx] "{key}" was removed and takes a runtime value at {LOC}: write {values} on {canonical}, and the other values on {groups}.` | Build only. An alias of a stand-alone key (`touchAction: c`) whose value the build cannot read: some values stand alone, others moved to group keys. A literal branch that moved is named as a moved value instead, and an alias whose every literal stands alone gets the canonical-key row. |
 | `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
 | `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
 | `[csszyx] "{rawKey}" boolean sugar was removed{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **every mode.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |

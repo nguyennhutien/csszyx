@@ -888,6 +888,7 @@ struct KeyValueFindings {
     mask_members: Vec<(String, String, String, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     globals_before_groups: Vec<(String, String, &'static str, u32)>,
+    runtime_aliases: Vec<(String, u32)>,
 }
 
 impl KeyValueFindings {
@@ -904,6 +905,7 @@ impl KeyValueFindings {
         self.mask_members.clear();
         self.moved_values.clear();
         self.globals_before_groups.clear();
+        self.runtime_aliases.clear();
     }
 }
 
@@ -963,12 +965,12 @@ fn push_group_key_value_diagnostics<'a>(
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
     // send the author looking for a typo.
-    found.unknown.extend(
-        dropped_dynamic_keys
-            .iter()
-            .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
-            .map(|dropped| (dropped.key.clone(), dropped.span.start)),
-    );
+    for dropped in dropped_dynamic_keys
+        .iter()
+        .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
+    {
+        push_dropped_removed_key(dropped, found);
+    }
     found.removed_sugar.extend(
         dropped_dynamic_keys
             .iter()
@@ -992,6 +994,58 @@ fn push_group_key_value_diagnostics<'a>(
     push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
     push_moved_value_diagnostics(file, &found.moved_values, location, lines, out);
     push_global_before_group_diagnostics(file, &found.globals_before_groups, location, lines, out);
+    push_runtime_alias_diagnostics(file, &found.runtime_aliases, location, lines, out);
+}
+
+/// Sort one removed key with a runtime value into the family that reports it.
+///
+/// An alias of a stand-alone keyword key (`touchAction` for `touch`) cannot be
+/// pointed at its canonical key when some of its values moved to group keys:
+/// each literal branch that moved is named as a moved value, a runtime branch
+/// gets the message that names both sides, and only an alias whose every
+/// literal stands alone keeps the canonical-key report.
+fn push_dropped_removed_key(dropped: &super::DroppedSzKeyIr, found: &mut KeyValueFindings) {
+    let offset = dropped.span.start;
+    let mut moved = false;
+    for literal in &dropped.literals {
+        if let Some((key, value)) = super::lower::moved_value(&dropped.key, literal) {
+            found
+                .moved_values
+                .push((dropped.key.clone(), literal.clone(), key, value, offset));
+            moved = true;
+        }
+    }
+    if dropped.opaque {
+        found.runtime_aliases.push((dropped.key.clone(), offset));
+    } else if !moved {
+        found.unknown.push((dropped.key.clone(), offset));
+    }
+}
+
+/// An alias of a stand-alone keyword key holding a runtime value: some of its
+/// values stand alone and some moved to group keys, so the report names both.
+fn push_runtime_alias_diagnostics(
+    file: &TransformFile,
+    found: &[(String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // The parser read the branches only for such an alias, so both
+        // lookups answer.
+        let canonical = super::generated::tables::key_suggestion(key).unwrap_or_default();
+        let values = super::generated::tables::closed_enum_values(canonical).unwrap_or_default();
+        let groups = super::generated::tables::global_keyword_groups(canonical)
+            .unwrap_or_default()
+            .replace(' ', ", ");
+        out.push(format!(
+            "[csszyx] \"{key}\" was removed and takes a runtime value at {location}:{line}: write {values} on {canonical}, and the other values on {groups}."
+        ));
+    }
 }
 
 /// A stand-alone key a group key written after it replaces. Mirrors
@@ -1111,8 +1165,16 @@ fn dynamic_group_conflict_diagnostics(
     location: &str,
     lines: &mut Option<LineIndex>,
 ) -> Vec<String> {
+    // An sz array element's object is one object; its layers are not, since
+    // szcn keeps their order.
+    let in_array_elements = ir
+        .sz_attributes
+        .iter()
+        .flat_map(|attribute| &attribute.array_parts)
+        .flat_map(|part| &part.group_conflicts);
     ir.dynamic_group_conflicts
         .iter()
+        .chain(in_array_elements)
         .map(|conflict| {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -4780,5 +4842,50 @@ mod tests {
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn an_alias_of_a_stand_alone_key_with_a_runtime_value_names_where_values_went() {
+        let (_, moved) = layers_run("{ touchAction: m ? 'pan-x' : undefined }");
+        assert_eq!(
+            moved,
+            ["[csszyx] \"touchAction: pan-x\" moved to { touchPanX: 'x' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it."]
+        );
+        let (_, standing) = layers_run("{ touchAction: m ? 'none' : 'auto' }");
+        assert_eq!(
+            standing,
+            ["[csszyx] Use the canonical key \"touch\" instead of \"touchAction\" at /repo/src/Layers.jsx:1."]
+        );
+        let (_, runtime) = layers_run("{ touchAction: m ? c : 'pan-y' }");
+        assert_eq!(
+            runtime,
+            [
+                "[csszyx] \"touchAction: pan-y\" moved to { touchPanY: 'y' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it.",
+                "[csszyx] \"touchAction\" was removed and takes a runtime value at /repo/src/Layers.jsx:1: write auto, none, manipulation on touch, and the other values on touchPanX, touchPanY, touchPinchZoom.",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_family_conflict_in_an_sz_array_element_is_named() {
+        let (_, diagnostics) =
+            layers_run("[{ p: 1 }, { touchPanX: c ? 'x' : undefined, touch: 'none' }]");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].contains("\"touchPanX\" takes a runtime value beside \"touch\""));
+        let (_, layered) = layers_run("[{ touch: 'none' }, { touchPanX: c ? 'x' : undefined }]");
+        assert!(layered.is_empty(), "{layered:?}");
+    }
+
+    #[test]
+    fn a_stand_alone_key_of_any_literal_before_its_group_is_named() {
+        let (_, diagnostics) =
+            layers_run("{ contain: 1, containPaint: true, md: { touch: true, touchPanX: 'x', nums: { a: 1 }, numFigure: 'lining' } }");
+        let named: Vec<_> = diagnostics
+            .iter()
+            .filter(|line| line.contains("comes before"))
+            .collect();
+        assert_eq!(named.len(), 2, "{diagnostics:?}");
+        assert!(named[0].contains("\"contain: 1\""));
+        assert!(named[1].contains("\"touch: true\""));
     }
 }

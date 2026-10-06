@@ -472,6 +472,14 @@ pub struct DroppedSzKeyIr {
     /// Which of the two drops this was.
     #[serde(default)]
     pub reason: DroppedKeyReason,
+    /// The string literals the value can take (ternary branches included),
+    /// read for an alias of a key whose values moved: its report names where
+    /// each one went.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literals: Vec<String>,
+    /// Whether some branch of the value is not a literal.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub opaque: bool,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -664,6 +672,10 @@ pub struct StaticArrayPartIr {
     /// legitimate forwarded slots and stay silent. Defaults false for older IR.
     #[serde(default)]
     pub dynamic_object_literal: bool,
+    /// Stand-alone keyword families in this element's object where one side
+    /// takes a runtime value beside the other side.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_conflicts: Vec<DynamicGroupConflictIr>,
 }
 
 /// Class/className attribute.
