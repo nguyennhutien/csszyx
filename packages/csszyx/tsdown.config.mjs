@@ -53,13 +53,15 @@ export default {
             // src/index.ts, so stamp it back. Both entries need it: a consumer
             // resolving under the `browser` condition gets the browser
             // declarations and would otherwise lose the `sz` prop.
-            for (const name of ['index.d.mts', 'index.browser.d.mts']) {
-                const path = resolve(outDir, name);
-                const existing = await readFile(path, 'utf-8');
-                if (!existing.startsWith(JSX_REFERENCE)) {
-                    await writeFile(path, JSX_REFERENCE + existing);
-                }
-            }
+            await Promise.all(
+                ['index.d.mts', 'index.browser.d.mts'].map(async name => {
+                    const path = resolve(outDir, name);
+                    const existing = await readFile(path, 'utf-8');
+                    if (!existing.startsWith(JSX_REFERENCE)) {
+                        await writeFile(path, JSX_REFERENCE + existing);
+                    }
+                }),
+            );
         },
     },
 };
