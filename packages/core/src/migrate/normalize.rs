@@ -72,25 +72,23 @@ pub fn normalize_sz_object(
         .map(|(index, plan)| plan.as_ref().is_some_and(|plan| loses(index, plan, &plans)))
         .collect();
     let mut count = 0;
-    let mut index = 0;
-    while index < plans.len() {
-        if deleted[index] {
-            let run_start = index;
-            while index < plans.len() && deleted[index] {
-                index += 1;
-                count += 1;
+    // Runs of deleted and kept properties, walked by a bounded iterator: a run
+    // of deletions is one edit, so a comma between two deleted properties is
+    // not left behind.
+    let mut start = 0;
+    for run in deleted.chunk_by(|left, right| left == right) {
+        let end = start + run.len();
+        if run[0] {
+            push_deletion(&object.properties, start, end, replacements);
+            count += u32::try_from(run.len()).unwrap_or(u32::MAX);
+        } else {
+            for plan in plans[start..end].iter().flatten() {
+                count += u32::from(plan.renamed);
+                replacements.extend(plan.edits.iter().cloned());
+                count += normalize_sz_expression(source, plan.value, replacements);
             }
-            push_deletion(&object.properties, run_start, index, replacements);
-            continue;
         }
-        if let Some(plan) = &plans[index] {
-            if plan.renamed {
-                count += 1;
-            }
-            replacements.extend(plan.edits.iter().cloned());
-            count += normalize_sz_expression(source, plan.value, replacements);
-        }
-        index += 1;
+        start = end;
     }
     count
 }
@@ -152,10 +150,13 @@ fn loses(index: usize, plan: &Plan<'_>, plans: &[Option<Plan<'_>>]) -> bool {
         if key != other_key {
             return false;
         }
-        match (plan.class.and_then(rank), other.class.and_then(rank)) {
-            (Some(mine), Some(theirs)) if mine != theirs => theirs > mine,
-            _ => other_index > index,
-        }
+        // The later class in the stylesheet wins; equal or unknown ranks fall
+        // to the later property, as JavaScript would keep it.
+        let by_rank = match (plan.class.and_then(rank), other.class.and_then(rank)) {
+            (Some(mine), Some(theirs)) => theirs.cmp(&mine),
+            _ => std::cmp::Ordering::Equal,
+        };
+        by_rank.then(other_index.cmp(&index)).is_gt()
     })
 }
 
@@ -221,12 +222,12 @@ fn plan_property<'a>(source: &str, property: &'a ObjectPropertyKind<'a>) -> Opti
     })
 }
 
-/// A string literal's value, or `true` for the literal `true`: the values
-/// that name one class.
+/// A string literal's value: the value whose class can rank against another
+/// value of the same key. A boolean flag has one class, so it never outranks
+/// another spelling of its own key and needs no value here.
 fn static_value(value: &Expression<'_>) -> Option<String> {
     match value {
         Expression::StringLiteral(literal) => Some(literal.value.to_string()),
-        Expression::BooleanLiteral(literal) if literal.value => Some("true".to_string()),
         _ => None,
     }
 }
@@ -813,5 +814,64 @@ mod tests {
             keys_only("{ touch: 'none', touchPanX: 'x' }"),
             "{ touch: 'none', touchPanX: 'x' }"
         );
+    }
+
+    /// The migrated sz value and how many keys the codemod counted.
+    fn keys_only_counted(sz: &str) -> (String, Option<u32>) {
+        let source = format!("const A = ({{ c, v }}) => <p sz={{{sz}}} />;");
+        let options = TransformOptions {
+            keys_only: true,
+            ..TransformOptions::default()
+        };
+        let result = transform_source(&source, "a.tsx", &options);
+        let start = result.code.find("sz={").expect("an sz attribute") + 4;
+        let end = result.code.rfind("} />").expect("the element end");
+        (
+            result.code[start..end].to_string(),
+            result.stats.sz_keys_normalized,
+        )
+    }
+
+    #[test]
+    fn every_rewritten_key_is_counted_once_in_each_branch() {
+        assert_eq!(
+            keys_only_counted("c ? { tabularNums: true } : { ordinal: true, p: 1 }"),
+            (
+                "c ? { numSpacing: 'tabular' } : { numOrdinal: true, p: 1 }".to_string(),
+                Some(2)
+            )
+        );
+        assert_eq!(
+            keys_only_counted("c && { tabularNums: true, hover: { block: true } }"),
+            (
+                "c && { numSpacing: 'tabular', hover: { display: 'block' } }".to_string(),
+                Some(2)
+            )
+        );
+        assert_eq!(
+            keys_only_counted("v ?? { flex: true }"),
+            ("v ?? { display: 'flex' }".to_string(), Some(1))
+        );
+        // A run of deleted keys is one edit and each key counts; the kept
+        // keys between runs are still rewritten.
+        assert_eq!(
+            keys_only_counted(
+                "{ liningNums: true, oldstyleNums: true, p: 1, block: true, flex: true, m: 2 }"
+            ),
+            (
+                "{ numFigure: 'oldstyle', p: 1, display: 'flex', m: 2 }".to_string(),
+                Some(4)
+            )
+        );
+    }
+
+    #[test]
+    fn a_moved_value_ranks_by_the_class_it_named() {
+        // Both orders keep the same value: 0.17 shipped both classes and the
+        // stylesheet picked one, whichever came first in the object.
+        let forward = keys_only("{ touch: 'pan-x', touchPanX: 'left' }");
+        let backward = keys_only("{ touchPanX: 'left', touch: 'pan-x' }");
+        assert_eq!(forward.replace(' ', ""), backward.replace(' ', ""));
+        assert_eq!(forward.matches("touchPanX").count(), 1, "{forward}");
     }
 }

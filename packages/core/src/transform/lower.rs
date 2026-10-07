@@ -1057,20 +1057,27 @@ pub(crate) fn settle_global_keywords(object: &StaticSzObject) -> GlobalKeywordSe
         if !active(value_at) {
             continue;
         }
-        let members: Vec<(&'static str, usize, usize)> = groups
+        // A group is written before the global when its first place lies in
+        // the properties before the global's own; a group present and not
+        // written before is written after, as the two are different keys.
+        let before = &properties[..index];
+        let members: Vec<(&'static str, usize, usize, bool)> = groups
             .split(' ')
-            .filter_map(|group| Some((group, first(group)?, last(group)?)))
+            .filter_map(|group| {
+                let earlier = before.iter().any(|property| property.key == group);
+                Some((group, first(group)?, last(group)?, earlier))
+            })
             .collect();
         let later = members
             .iter()
-            .filter(|(_, at, value)| *at > index && active(*value))
-            .min_by_key(|(_, at, _)| *at);
+            .filter(|(_, _, value, earlier)| !*earlier && active(*value))
+            .min_by_key(|(_, at, ..)| *at);
         if let Some((group, ..)) = later {
             settlement.skipped.push(value_at);
             settlement.replaced.push((&properties[value_at], group));
         }
-        for (_, at, value) in &members {
-            if later.is_none() || *at < index {
+        for (_, _, value, earlier) in &members {
+            if later.is_none() || *earlier {
                 settlement.skipped.push(*value);
             }
         }

@@ -4888,4 +4888,63 @@ mod tests {
         assert!(named[0].contains("\"contain: 1\""));
         assert!(named[1].contains("\"touch: true\""));
     }
+
+    #[test]
+    fn a_moved_value_a_later_group_replaced_is_named_by_the_order_only() {
+        let (classes, diagnostics) = layers_run("{ touch: 'pan-x', touchPanX: 'left' }");
+        assert_eq!(classes, "touch-pan-left");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(
+            diagnostics[0].contains("comes before \"touchPanX\""),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn a_parameter_value_is_selector_text_not_an_sz_key() {
+        let (_, diagnostics) =
+            layers_run("{ data: { touch: 'pan-x' }, aria: { touch: 'none', touchPanX: 'x' } }");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn a_removed_key_with_a_runtime_value_keeps_its_own_report() {
+        let (_, diagnostics) = layers_run("{ backgroundColor: c }");
+        assert_eq!(
+            diagnostics,
+            ["[csszyx] Use the canonical key \"bg\" instead of \"backgroundColor\" at /repo/src/Layers.jsx:1."]
+        );
+    }
+
+    #[test]
+    fn removed_flex_sugar_is_named_on_either_branch_of_a_ternary() {
+        let sugar = |sz: &str| {
+            layers_run(sz)
+                .1
+                .iter()
+                .any(|line| line.contains("\"flex\" boolean sugar was removed"))
+        };
+        assert!(sugar("{ flex: c ? 1 : true }"));
+        assert!(sugar("{ flex: c ? true : 1 }"));
+        assert!(sugar("{ flex: c ? 1 : m ? 2 : true }"));
+        assert!(!sugar("{ flex: c ? 1 : 2 }"));
+    }
+
+    #[test]
+    fn an_array_merge_settles_each_layer_and_keeps_other_keys() {
+        for (sz, expected) in [
+            (
+                "[{ md: { contain: 'strict', containPaint: true } }, { md: { containPaint: false } }]",
+                "",
+            ),
+            (
+                "[{ p: 1, containPaint: true }, { contain: 'none' }]",
+                "p-1 contain-none",
+            ),
+        ] {
+            let (classes, diagnostics) = layers_run(sz);
+            assert_eq!(classes, expected, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
 }

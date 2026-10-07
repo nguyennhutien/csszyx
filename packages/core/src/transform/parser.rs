@@ -4270,9 +4270,8 @@ fn read_string_branches(value: &Expression<'_>, literals: &mut Vec<String>, opaq
             read_string_branches(&conditional.consequent, literals, opaque);
             read_string_branches(&conditional.alternate, literals, opaque);
         }
-        Expression::StringLiteral(literal) if !literal.value.is_empty() => {
-            literals.push(literal.value.to_string());
-        }
+        // An empty string moved nowhere, so it is read like any literal.
+        Expression::StringLiteral(literal) => literals.push(literal.value.to_string()),
         absent if is_absent_sz_expression(absent) => {}
         _ => *opaque = true,
     }
@@ -4509,7 +4508,9 @@ fn record_dynamic_group_conflicts(
                 key: key.clone(),
                 other: (*other).to_string(),
                 span: *span,
-                key_first: span.start < *at,
+                // The two are different properties, so the earlier of the
+                // two starts is one of them.
+                key_first: span.start.min(*at) == span.start,
             });
         }
     }
