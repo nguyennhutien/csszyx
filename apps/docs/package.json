@@ -17,10 +17,10 @@
     },
     "dependencies": {
         "@astrojs/markdown-remark": "^7.3.1",
-        "@astrojs/react": "^6.0.5",
-        "@astrojs/starlight": "^0.42.1",
+        "@astrojs/react": "^6.0.6",
+        "@astrojs/starlight": "^0.42.4",
         "@tailwindcss/vite": "^4.3.3",
-        "astro": "~7.3.2",
+        "astro": "~7.3.5",
         "csszyx": "workspace:*",
         "expressive-code-twoslash": "^0.6.1",
         "react": "^19.2.4",
