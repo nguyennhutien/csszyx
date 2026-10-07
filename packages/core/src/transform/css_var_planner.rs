@@ -650,6 +650,7 @@ mod tests {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         };
 
         let planned = apply_scoped_css_variable_names(&ir);

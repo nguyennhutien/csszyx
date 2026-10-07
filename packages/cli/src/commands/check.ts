@@ -46,7 +46,7 @@ import { spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
 export interface CheckOptions {
-    /** Project root to scan. Defaults to `process.cwd()`. */
+    /** Project root to scan, absolute or relative to `process.cwd()`. Defaults to `process.cwd()`. */
     cwd?: string;
     /**
      * Directory to scan, relative to `cwd`. Narrows the glob and nothing else:
@@ -939,7 +939,9 @@ function reportSelectedIssues(
  */
 export async function check(options: CheckOptions = {}): Promise<void> {
     const out = createReporter(options.json === true);
-    const cwd = options.cwd ?? process.cwd();
+    // Resolved once here: Tailwind and the content scanner are required from
+    // this directory, and `createRequire` rejects a relative path.
+    const cwd = path.resolve(options.cwd ?? process.cwd());
     // fast-glob reads a backslash as an escape, so a Windows-shaped glob
     // matches nothing and the run passes having scanned no files at all.
     const patterns = options.pattern ? [withPosixSeparators(options.pattern)] : ['**/*.{jsx,tsx}'];

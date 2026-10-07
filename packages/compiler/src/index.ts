@@ -93,6 +93,7 @@ export {
     normalizeClassName,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
+    REPLACED_KEYS,
     type SourceTransformResult,
     SPECIAL_VARIANTS,
     SUGGESTION_MAP,

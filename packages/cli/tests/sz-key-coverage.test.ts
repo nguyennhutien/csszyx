@@ -6,7 +6,7 @@
  *
  * `exempt` is for keys with no concrete single-class snippet representation:
  * directional/logical aliases that round-trip through a sibling key (e.g.
- * borderBColor via borderB, liningNums via fontVariant) and niche keys with no
+ * borderBColor via borderB) and niche keys with no
  * standalone documented class. Regenerate with `pnpm gen:key-tests`; a newly
  * uncovered key shows up as an exempt-list diff for review.
  */

@@ -125,6 +125,7 @@
     "@typescript-eslint/parser": "^8.70.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitest/coverage-v8": "^4.1.11",
+    "esbuild": "^0.28.2",
     "eslint": "^10.7.0",
     "eslint-plugin-jsdoc": "^63.3.3",
     "eslint-plugin-redos": "4.5.0",
@@ -139,10 +140,10 @@
     "prettier": "^3.9.6",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.13",
+    "tsdown": "0.23.0",
     "turbo": "^2.10.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
-    "unbuild": "3.6.1",
     "vite": "^8.3.0"
   },
   "engines": {

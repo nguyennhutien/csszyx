@@ -25,13 +25,26 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
     transform,
 } from '../packages/compiler/src/transform-core.js';
+import { readTableSource } from './extract-ts-tables.mjs';
 
 const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');
 const outPath = join(repoRoot, 'packages/runtime/src/box-role-map.generated.ts');
+
+/**
+ * Every closed-enum key with the values it accepts, read from the compiler's
+ * `CLOSED_ENUM_CLASSES`. The table is not exported (the engine reads a
+ * generated copy), so it is read the way `gen:rust-tables` reads it.
+ */
+const CLOSED_ENUM_VALUES = readTableSource(
+    join(repoRoot, 'packages/compiler/src/transform-core.ts'),
+)
+    .objectOfStringObjects('CLOSED_ENUM_CLASSES')
+    .map(([key, rows]) => [key, rows.map(([value]) => value)]);
 
 /**
  * Source of truth for the box-model role of every sz prop. Each rule lists the
@@ -454,14 +467,12 @@ const BOOLEAN_ROLE = {
     proseInvert: { role: 'inner', category: 'text' },
     srOnly: { role: 'outer', category: 'visibility' },
     notSrOnly: { role: 'outer', category: 'visibility' },
-    ordinal: { role: 'inner', category: 'text' },
-    slashedZero: { role: 'inner', category: 'text' },
-    liningNums: { role: 'inner', category: 'text' },
-    oldstyleNums: { role: 'inner', category: 'text' },
-    proportionalNums: { role: 'inner', category: 'text' },
-    tabularNums: { role: 'inner', category: 'text' },
-    diagonalFractions: { role: 'inner', category: 'text' },
-    stackedFractions: { role: 'inner', category: 'text' },
+    numOrdinal: { role: 'inner', category: 'text' },
+    numSlashedZero: { role: 'inner', category: 'text' },
+    touchPinchZoom: { role: 'inner', category: 'touch' },
+    containLayout: { role: 'outer', category: 'containment' },
+    containPaint: { role: 'outer', category: 'containment' },
+    containStyle: { role: 'outer', category: 'containment' },
     divideXReverse: { role: 'inner', category: 'divide' },
     divideYReverse: { role: 'inner', category: 'divide' },
     spaceXReverse: { role: 'inner', category: 'space' },
@@ -478,6 +489,14 @@ const VALUE_KEYED_ROLE = {
     fontStyle: { role: 'inner', category: 'text' },
     decoration: { role: 'inner', category: 'text' },
     fontSmoothing: { role: 'inner', category: 'text' },
+    nums: { role: 'inner', category: 'text' },
+    numFigure: { role: 'inner', category: 'text' },
+    numSpacing: { role: 'inner', category: 'text' },
+    numFraction: { role: 'inner', category: 'text' },
+    touchPanX: { role: 'inner', category: 'touch' },
+    touchPanY: { role: 'inner', category: 'touch' },
+    contain: { role: 'outer', category: 'containment' },
+    containSize: { role: 'outer', category: 'containment' },
 };
 
 function buildPropertyKeyRoles() {
@@ -780,11 +799,94 @@ function buildExactTokens(keyRole) {
     return tokens;
 }
 
+/**
+ * Give every class a closed-enum key emits a row with that key's role.
+ *
+ * `splitBoxSz` routes `{ contain: 'strict' }` by its key; `splitBox` routes
+ * `contain-strict` by its class. Without a token row the class is unknown (no
+ * `contain` prefix exists) or matches an unrelated prefix (`inline-table`
+ * under `inline`), and the two forms of one style land on different nodes.
+ * A class under a prefix of its own family (`touch-auto`, `touch-pan-x` under
+ * `touch`) records that prefix and value, so an object selector
+ * (`{ touch: 'auto' }`) reads it as it read the prefix match.
+ *
+ * @param tokens Exact-token map, mutated in place.
+ * @param keyRole Property-key roles.
+ * @param prefixes Prefix map, read to find a class's own-family prefix.
+ */
+function addClosedEnumTokens(tokens, keyRole, prefixes) {
+    for (const [key, values] of CLOSED_ENUM_VALUES) {
+        const role = keyRole.get(key) ?? VALUE_KEYED_ROLE[key];
+        if (!role) {
+            throw new Error(
+                `[gen-box-role-map] closed-enum key "${key}" has no role in BOX_ROLE_RULES or VALUE_KEYED_ROLE`,
+            );
+        }
+        for (const value of values) {
+            const token = transform({ [key]: value }).className.trim();
+            if (!token || token.includes(' ')) {
+                throw new Error(
+                    `[gen-box-role-map] "${key}: '${value}'" did not emit one token (got "${token}")`,
+                );
+            }
+            const prior = tokens.get(token);
+            if (prior) {
+                // Already a row (value-keyed sugar): keep it, the role must agree.
+                addToken(tokens, token, { ...prior, role: role.role });
+                continue;
+            }
+            const prefix = familyPrefix(token, role, prefixes);
+            addToken(
+                tokens,
+                token,
+                prefix === undefined
+                    ? { role: role.role, category: role.category }
+                    : {
+                          role: role.role,
+                          category: role.category,
+                          prefix,
+                          value: token.slice(prefix.length + 1),
+                      },
+            );
+        }
+    }
+}
+
+/**
+ * The longest prefix of `token` that carries the same role and category.
+ *
+ * @param token An emitted class.
+ * @param role The role and category of the key that emitted it.
+ * @param prefixes Prefix map.
+ * @returns The prefix, or `undefined` when none of its family matches.
+ */
+function familyPrefix(token, role, prefixes) {
+    let best;
+    for (const [prefix, entry] of prefixes) {
+        if (!token.startsWith(`${prefix}-`)) continue;
+        if (entry.role !== role.role || entry.category !== role.category) continue;
+        if (best === undefined || prefix.length > best.length) best = prefix;
+    }
+    return best;
+}
+
 function buildCompleteKeyRoles(keyRole) {
     const keyRoles = new Map(keyRole);
     for (const shorthand of BOOLEAN_SHORTHANDS) {
         if (shorthand in PROPERTY_MAP) continue;
         keyRoles.set(shorthand, BOOLEAN_ROLE[shorthand]);
+    }
+    // A closed-enum group key (`numSpacing`, `touchPanX`, `containSize`) has no
+    // PROPERTY_MAP prefix, so its row here is the only way `splitBoxSz` can
+    // route it to the side its class lands on.
+    for (const [key, role] of Object.entries(VALUE_KEYED_ROLE)) {
+        if (key in PROPERTY_MAP) continue;
+        if (!KNOWN_SPECIAL_PROPERTIES.has(key)) {
+            throw new Error(
+                `[gen-box-role-map] VALUE_KEYED_ROLE has "${key}", which is neither a PROPERTY_MAP key nor a special sz key (stale)`,
+            );
+        }
+        keyRoles.set(key, role);
     }
     // An sz key whose role depends on its value carries the exceptions, so
     // `splitBoxSz` routes `{ overflow: 'hidden' }` the way `splitBox` routes the
@@ -825,6 +927,7 @@ export function buildRoleMaps() {
     assertBooleanFlagsFollowTheirProperty(keyRole);
     const prefixes = buildPrefixes(keyRole, propertyKeys);
     const tokens = buildExactTokens(keyRole);
+    addClosedEnumTokens(tokens, keyRole, prefixes);
     const keyRoles = buildCompleteKeyRoles(keyRole);
     markDeclaredOnBoth(prefixes, keyRoles);
     addTailwindOnly(prefixes, tokens);
@@ -864,7 +967,7 @@ function render({ prefixes, tokens, keyRoles }) {
         .join('\n');
     return `// GENERATED by scripts/gen-box-role-map.mjs — DO NOT EDIT.
 // Run \`pnpm gen:box-role\` to regenerate from the compiler's PROPERTY_MAP /
-// REMOVED_BOOLEAN_SUGAR / BOOLEAN_SHORTHANDS. The box-model role of each prop is
+// REMOVED_BOOLEAN_SUGAR / BOOLEAN_SHORTHANDS / CLOSED_ENUM_CLASSES. The box-model role of each prop is
 // defined in that script's BOX_ROLE_RULES.
 
 /** Which side of the CSS box-model border a property acts on. */

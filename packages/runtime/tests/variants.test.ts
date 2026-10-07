@@ -161,3 +161,49 @@ describe('szv output string-coercion guard (dev)', () => {
         expect(JSON.parse(JSON.stringify(out))).toEqual({ m: 1, p: 2 });
     });
 });
+
+// A later selection overrides a key an earlier one holds, and the merged
+// object must say so in its order: in one object the later of a stand-alone
+// keyword and its group keys wins, so an override that kept the old place
+// would lose to a group key merged in between.
+describe('szv() layers a stand-alone keyword and its groups, later wins', () => {
+    const touchSz = szv({
+        base: { touch: 'auto' },
+        variants: {
+            pan: { x: { touchPanX: 'x' } },
+            disabled: { true: { touch: 'none' } },
+        },
+    });
+
+    it('a later stand-alone keyword replaces the groups merged before it', () => {
+        expect(touchSz({ pan: 'x', disabled: true })).toEqual({ touch: 'none' });
+    });
+
+    it('a later group replaces the stand-alone keyword merged before it', () => {
+        expect(touchSz({ pan: 'x' })).toEqual({ touchPanX: 'x' });
+    });
+
+    it('an overridden key keeps its place, family keys included', () => {
+        const boxSz = szv({
+            base: { p: 2, touchPanX: 'x', m: 1, touchPanY: 'up' },
+            variants: { v: { x: { p: 4, touchPanX: 'left' } } },
+        });
+        expect(Object.keys(boxSz({ v: 'x' }))).toEqual(['p', 'touchPanX', 'm', 'touchPanY']);
+    });
+
+    it('the earlier layer is settled too, and an inactive group replaces nothing', () => {
+        const containSz = szv({
+            base: { contain: 'strict', containPaint: true },
+            variants: { off: { on: { containLayout: false } } },
+        });
+        expect(containSz({ off: 'on' })).toEqual({ containPaint: true, containLayout: false });
+    });
+
+    it('a layer settles its own keyword before it merges', () => {
+        const numsSz = szv({
+            base: { numSpacing: 'tabular' },
+            variants: { reset: { on: { nums: 'normal', numFigure: 'oldstyle' } } },
+        });
+        expect(numsSz({ reset: 'on' })).toEqual({ numFigure: 'oldstyle' });
+    });
+});

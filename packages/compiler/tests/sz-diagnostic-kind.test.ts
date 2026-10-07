@@ -69,6 +69,17 @@ describe.each(ENGINES)('diagnostic kinds — %s', (_name, transform) => {
     );
 });
 
+describe.each(ENGINES)('removed keys in either wording — %s', (_name, transform) => {
+    it.each([
+        ['sugar', 'export const A = () => <div sz={{ absolute: true }} />;'],
+        ['a replaced key', 'export const A = () => <div sz={{ tabularNums: true }} />;'],
+    ])('reads removed-key from %s', (_label, source) => {
+        const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+
+        expect(diagnostics.map(szDiagnosticKindOf)).toEqual(['removed-key']);
+    });
+});
+
 describe('advisory diagnostics', () => {
     it.each([
         '[csszyx] "sz" takes precedence over the runtime "className" on this element at src/A.tsx:1, whatever order the attributes are written.',

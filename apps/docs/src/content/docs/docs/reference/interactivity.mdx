@@ -93,11 +93,20 @@ Logical scroll padding: `{ scrollPbs: 4 }` → `scroll-pbs-4` (block-start),
 
 ## Touch Action
 
+One key per group — horizontal pan, vertical pan, pinch zoom — so the groups
+combine in one object and a second value of a group replaces the first. `touch`
+holds the keywords that stand alone: written after the group keys it replaces
+them, and group keys written after it replace it.
+
 <PropTable rows={[
   { sz: "{ touch: 'none' }", tw: "touch-none" },
-  { sz: "{ touch: 'pan-x' }", tw: "touch-pan-x" },
-  { sz: "{ touch: 'pan-y' }", tw: "touch-pan-y" },
-  { sz: "{ touch: 'auto' }", tw: "touch-auto" },
+  { sz: "{ touch: 'manipulation' }", tw: "touch-manipulation" },
+  { sz: "{ touchPanX: 'x' }", tw: "touch-pan-x" },
+  { sz: "{ touchPanX: 'left' }", tw: "touch-pan-left" },
+  { sz: "{ touchPanY: 'down' }", tw: "touch-pan-down" },
+  { sz: "{ touchPinchZoom: true }", tw: "touch-pinch-zoom" },
+  { sz: "{ touchPanX: 'x', touchPinchZoom: true }", tw: "touch-pan-x touch-pinch-zoom" },
+  { sz: "{ touch: 'none', touchPanY: 'y' }", tw: "touch-pan-y" },
 ]} />
 
 ## Appearance

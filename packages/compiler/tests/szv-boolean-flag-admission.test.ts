@@ -62,7 +62,7 @@ describe.each(ENGINES)('a canonical boolean flag inside a branch (%s)', (_name, 
         expect(
             refusals(
                 engine,
-                '{ base: { tabularNums: true }, variants: { pad: { sm: { p: 2 } } } }',
+                '{ base: { numSlashedZero: true }, variants: { pad: { sm: { p: 2 } } } }',
             ),
         ).toEqual([]);
     });

@@ -9,6 +9,7 @@
  */
 
 import type { SzObject } from '@csszyx/compiler/browser';
+import { keysDisplacedBy, keysSettledAway } from '@csszyx/compiler/keyword-families';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 import { devWarn } from './dev-warn.js';
 
@@ -40,6 +41,12 @@ interface SzvConfig<V extends VariantSchema> {
  * Nested variant objects (e.g. hover, dark, sm) are recursively merged
  * so base hover styles are not lost when a variant adds its own hover.
  *
+ * A stand-alone keyword and its group keys (`touch` and `touchPanX`) settle
+ * by the layers' order, as the compiler's sz-array merge settles them: each
+ * layer settles its own first, then a later keyword resets the groups merged
+ * before it and a later group replaces the keyword. The merged level then never
+ * holds both sides of a family, so every key keeps its place.
+ *
  * @param {SzObject} target - Base object to merge into
  * @param {SzObject} source - Object whose values take precedence
  * @param {number} depth - Current recursion depth (for depth bounding)
@@ -50,30 +57,51 @@ function deepMerge(target: SzObject, source: SzObject, depth = 0): SzObject {
         throw new SzDepthError();
     }
     const result: SzObject = { ...target };
+    for (const key of keysSettledAway(target)) {
+        delete result[key];
+    }
+    const settled = keysSettledAway(source);
     for (const key of Object.keys(source)) {
         // Skip prototype-polluting keys — source may be JSON-derived (a runtime
         // variant schema), where an own `__proto__` key would poison the prototype.
         if (isForbiddenSzKey(key)) {
             continue;
         }
-        const sv = source[key];
-        const tv = target[key];
-        if (
-            sv !== null &&
-            sv !== undefined &&
-            typeof sv === 'object' &&
-            !Array.isArray(sv) &&
-            tv !== null &&
-            tv !== undefined &&
-            typeof tv === 'object' &&
-            !Array.isArray(tv)
-        ) {
-            result[key] = deepMerge(tv as SzObject, sv as SzObject, depth + 1);
-        } else {
-            result[key] = sv;
-        }
+        mergeKey(result, key, source[key], settled.has(key), depth);
     }
     return result;
+}
+
+/**
+ * Merge one key of a later layer into the merged level, in place.
+ *
+ * @param result The merged level so far.
+ * @param key The later layer's key.
+ * @param sv Its value.
+ * @param settledAway Whether its own layer already settled it away.
+ * @param depth Current recursion depth.
+ */
+function mergeKey(
+    result: SzObject,
+    key: string,
+    sv: SzObject[string],
+    settledAway: boolean,
+    depth: number,
+): void {
+    if (sv !== undefined && sv !== null && sv !== false) {
+        for (const other of keysDisplacedBy(key)) {
+            delete result[other];
+        }
+    }
+    if (settledAway) {
+        delete result[key];
+        return;
+    }
+    const tv = result[key];
+    result[key] =
+        isPlainObject(sv) && isPlainObject(tv)
+            ? deepMerge(tv as SzObject, sv as SzObject, depth + 1)
+            : sv;
 }
 
 /**

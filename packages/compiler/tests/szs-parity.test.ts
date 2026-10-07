@@ -20,9 +20,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+
+import { RUST_LANE } from './engine-parity-harness.js';
 
 interface EngineOutput {
     code: string;
@@ -192,7 +194,7 @@ describe('szs slot-map parity', () => {
             expect(babel.diagnostics).toBe(0);
         });
 
-        it.skipIf(!isRustTransformAvailable())(`rust is byte-identical — ${fixture.name}`, () => {
+        it.skipIf(!RUST_LANE)(`rust is byte-identical — ${fixture.name}`, () => {
             const oxc = run('wasm', fixture.tsx);
             const rust = run('rust', fixture.tsx);
             expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
@@ -212,15 +214,12 @@ describe('szs slot-map parity', () => {
             expect(babel.diagnostics, 'babel records one diagnostic').toBe(1);
         });
 
-        it.skipIf(!isRustTransformAvailable())(
-            `rust also rejects it identically — ${fixture.name}`,
-            () => {
-                const rust = run('rust', fixture.tsx);
-                expect(rust.code, 'rust leaves the source unchanged').toBe(fixture.tsx);
-                expect(rust.classes).toEqual([]);
-                expect(rust.diagnostics, 'rust records one diagnostic').toBe(1);
-            },
-        );
+        it.skipIf(!RUST_LANE)(`rust also rejects it identically — ${fixture.name}`, () => {
+            const rust = run('rust', fixture.tsx);
+            expect(rust.code, 'rust leaves the source unchanged').toBe(fixture.tsx);
+            expect(rust.classes).toEqual([]);
+            expect(rust.diagnostics, 'rust records one diagnostic').toBe(1);
+        });
     }
 
     it('discovery order: sz classes first, then szs classes, across elements', () => {
@@ -229,7 +228,7 @@ describe('szs slot-map parity', () => {
         const expected = ['m-1', 'm-2', 'p-1', 'p-2'];
         expect(run('wasm', tsx).classes).toEqual(expected);
         expect(run('auto', tsx).classes).toEqual(expected);
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             expect(run('rust', tsx).classes).toEqual(expected);
         }
     });
@@ -243,7 +242,7 @@ describe('szs slot-map parity', () => {
             expect(norm(second.code), `${engine} pass-2 output stable`).toBe(norm(first.code));
             expect(second.diagnostics, `${engine} pass-2 emits no diagnostics`).toBe(0);
         }
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             const first = run('rust', tsx);
             const second = run('rust', first.code);
             expect(second.code, 'rust pass-2 output stable').toBe(first.code);
@@ -259,7 +258,7 @@ describe('szs slot-map parity', () => {
             expect(out.classes).toEqual([]);
             expect(out.diagnostics).toBe(0);
         }
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             const out = run('rust', tsx);
             expect(out.code).toContain('szsc={{}}');
             expect(out.diagnostics).toBe(0);

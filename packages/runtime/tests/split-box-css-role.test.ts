@@ -72,7 +72,8 @@ const UNMOVED: ReadonlyArray<readonly [string, string | number, string, string]>
     ['scrollP', 4, 'scroll-p-4', 'inner'],
     ['resize', 'none', 'resize-none', 'inner'],
     ['appearance', 'none', 'appearance-none', 'inner'],
-    ['touch', 'pan-x', 'touch-pan-x', 'inner'],
+    ['touch', 'none', 'touch-none', 'inner'],
+    ['touchPanX', 'x', 'touch-pan-x', 'inner'],
     ['display', 'flex', 'flex', 'inner'],
     ['spaceX', 4, 'space-x-4', 'inner'],
 ];

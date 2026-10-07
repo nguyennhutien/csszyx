@@ -10,7 +10,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { SourceTransformResult, TransformSourceCodeOptions } from '../src/transform.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
+import { RUST_LANE } from './engine-parity-harness.js';
 
 type WasmLane = {
     transformWasm(
@@ -24,7 +25,7 @@ type WasmLane = {
 const lane: WasmLane | null = await import('../src/transform-wasm.js').catch(() => null);
 
 const MISSING = 'transform-wasm lane is not implemented yet';
-const nativeReady = isRustTransformAvailable();
+const nativeReady = RUST_LANE;
 
 /**
  * Compare the fields a build consumes, as plain JSON for readable diffs.

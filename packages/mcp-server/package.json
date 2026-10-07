@@ -21,9 +21,9 @@
     "csszyx-mcp": "./dist/index.mjs"
   },
   "scripts": {
-    "build": "unbuild",
+    "build": "tsdown",
     "start": "node dist/index.mjs",
-    "dev": "unbuild --stub",
+    "dev": "tsdown --watch",
     "test": "vitest run"
   },
   "files": [
@@ -37,14 +37,14 @@
     "@csszyx/cli": "workspace:*",
     "@csszyx/compiler": "workspace:*",
     "@csszyx/unplugin": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "tsdown": "0.23.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   },
   "keywords": [

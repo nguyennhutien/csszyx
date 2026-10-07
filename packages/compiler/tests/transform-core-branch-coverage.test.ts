@@ -376,7 +376,7 @@ describe('string property handler chain', () => {
         expect(cls({ willChange: '--w' })).toBe('will-change-(--w)');
         expect(cls({ willChange: 'left top' })).toBe('will-change-[left_top]');
     });
-    it('decoration / textTransform / fontStyle / fontSmoothing / fontVariant', () => {
+    it('decoration / textTransform / fontStyle / fontSmoothing', () => {
         expect(cls({ decoration: 'underline' })).toBe('underline');
         expect(cls({ decoration: 'none' })).toBe('no-underline');
         expect(cls({ textTransform: 'uppercase' })).toBe('uppercase');
@@ -388,7 +388,23 @@ describe('string property handler chain', () => {
         expect(cls({ fontSmoothing: 'grayscale' })).toBe('antialiased');
         expect(cls({ fontSmoothing: 'subpixel' })).toBe('subpixel-antialiased');
         expect(cls({ fontSmoothing: 'bad' })).toBe('');
-        expect(cls({ fontVariant: 'ordinal' })).toBe('ordinal');
+    });
+    it('an unsupported fontSmoothing warns in development only, and not when muted', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            cls({ fontSmoothing: 'blurry' });
+            vi.stubEnv('NODE_ENV', 'production');
+            cls({ fontSmoothing: 'blurry' });
+            vi.stubEnv('NODE_ENV', 'development');
+            vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+            cls({ fontSmoothing: 'blurry' });
+        } finally {
+            vi.unstubAllEnvs();
+        }
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            "[csszyx] fontSmoothing: 'blurry' is not supported — use 'grayscale' or 'subpixel'.",
+        ]);
+        warn.mockRestore();
     });
     it('textWrap / break / wrap / textOverflow', () => {
         expect(cls({ textWrap: 'balance' })).toBe('text-balance');

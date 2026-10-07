@@ -665,6 +665,9 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "row-start",
     "row-end",
     "rotate",
+    "rotate-x",
+    "rotate-y",
+    "rotate-z",
     "skew-x",
     "skew-y",
     "translate-x",
@@ -682,7 +685,6 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "scroll-ml",
     "hue-rotate",
     "backdrop-hue-rotate",
-    "mask",
 ];
 
 /// Whether `value` is in `NEGATIVE_ALLOWED`.
@@ -722,6 +724,9 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "row-start"
             | "row-end"
             | "rotate"
+            | "rotate-x"
+            | "rotate-y"
+            | "rotate-z"
             | "skew-x"
             | "skew-y"
             | "translate-x"
@@ -739,7 +744,6 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "scroll-ml"
             | "hue-rotate"
             | "backdrop-hue-rotate"
-            | "mask"
     )
 }
 
@@ -781,11 +785,15 @@ pub(crate) fn object_position_keywords(value: &str) -> bool {
 }
 
 /// `OUTLINE_STYLE_KEYWORDS` from reverse-map.ts, in source order.
-pub(crate) const OUTLINE_STYLE_KEYWORDS: &[&str] = &["none", "dashed", "dotted", "double"];
+pub(crate) const OUTLINE_STYLE_KEYWORDS: &[&str] =
+    &["solid", "none", "dashed", "dotted", "double", "hidden"];
 
 /// Whether `value` is in `OUTLINE_STYLE_KEYWORDS`.
 pub(crate) fn outline_style_keywords(value: &str) -> bool {
-    matches!(value, "none" | "dashed" | "dotted" | "double")
+    matches!(
+        value,
+        "solid" | "none" | "dashed" | "dotted" | "double" | "hidden"
+    )
 }
 
 /// `RING_WIDTH_VALUES` from reverse-map.ts, in source order.
@@ -1164,8 +1172,8 @@ pub(crate) const REVERSE_BOOLEAN_MAP: &[(&str, &str)] = &[
     ("sr-only", "srOnly"),
     ("not-sr-only", "notSrOnly"),
     ("isolate", "isolate"),
-    ("ordinal", "ordinal"),
-    ("slashed-zero", "slashedZero"),
+    ("ordinal", "numOrdinal"),
+    ("slashed-zero", "numSlashedZero"),
     ("transition", "transition"),
     ("group", "group"),
     ("peer", "peer"),
@@ -1177,13 +1185,28 @@ pub(crate) const REVERSE_BOOLEAN_MAP: &[(&str, &str)] = &[
     ("inset-ring", "insetRing"),
     ("outline", "outline"),
     ("rounded", "rounded"),
-    ("normal-nums", "fontVariant"),
-    ("lining-nums", "fontVariant"),
-    ("oldstyle-nums", "fontVariant"),
-    ("proportional-nums", "fontVariant"),
-    ("tabular-nums", "fontVariant"),
-    ("diagonal-fractions", "fontVariant"),
-    ("stacked-fractions", "fontVariant"),
+    ("normal-nums", "nums"),
+    ("lining-nums", "numFigure"),
+    ("oldstyle-nums", "numFigure"),
+    ("proportional-nums", "numSpacing"),
+    ("tabular-nums", "numSpacing"),
+    ("diagonal-fractions", "numFraction"),
+    ("stacked-fractions", "numFraction"),
+    ("touch-pinch-zoom", "touchPinchZoom"),
+    ("touch-pan-x", "touchPanX"),
+    ("touch-pan-left", "touchPanX"),
+    ("touch-pan-right", "touchPanX"),
+    ("touch-pan-y", "touchPanY"),
+    ("touch-pan-up", "touchPanY"),
+    ("touch-pan-down", "touchPanY"),
+    ("contain-none", "contain"),
+    ("contain-strict", "contain"),
+    ("contain-content", "contain"),
+    ("contain-size", "containSize"),
+    ("contain-inline-size", "containSize"),
+    ("contain-layout", "containLayout"),
+    ("contain-paint", "containPaint"),
+    ("contain-style", "containStyle"),
     ("snap-none", "snapType"),
     ("snap-x", "snapType"),
     ("snap-y", "snapType"),
@@ -1226,8 +1249,8 @@ pub(crate) fn reverse_boolean(key: &str) -> Option<&'static str> {
         "sr-only" => Some("srOnly"),
         "not-sr-only" => Some("notSrOnly"),
         "isolate" => Some("isolate"),
-        "ordinal" => Some("ordinal"),
-        "slashed-zero" => Some("slashedZero"),
+        "ordinal" => Some("numOrdinal"),
+        "slashed-zero" => Some("numSlashedZero"),
         "transition" => Some("transition"),
         "group" => Some("group"),
         "peer" => Some("peer"),
@@ -1239,13 +1262,28 @@ pub(crate) fn reverse_boolean(key: &str) -> Option<&'static str> {
         "inset-ring" => Some("insetRing"),
         "outline" => Some("outline"),
         "rounded" => Some("rounded"),
-        "normal-nums" => Some("fontVariant"),
-        "lining-nums" => Some("fontVariant"),
-        "oldstyle-nums" => Some("fontVariant"),
-        "proportional-nums" => Some("fontVariant"),
-        "tabular-nums" => Some("fontVariant"),
-        "diagonal-fractions" => Some("fontVariant"),
-        "stacked-fractions" => Some("fontVariant"),
+        "normal-nums" => Some("nums"),
+        "lining-nums" => Some("numFigure"),
+        "oldstyle-nums" => Some("numFigure"),
+        "proportional-nums" => Some("numSpacing"),
+        "tabular-nums" => Some("numSpacing"),
+        "diagonal-fractions" => Some("numFraction"),
+        "stacked-fractions" => Some("numFraction"),
+        "touch-pinch-zoom" => Some("touchPinchZoom"),
+        "touch-pan-x" => Some("touchPanX"),
+        "touch-pan-left" => Some("touchPanX"),
+        "touch-pan-right" => Some("touchPanX"),
+        "touch-pan-y" => Some("touchPanY"),
+        "touch-pan-up" => Some("touchPanY"),
+        "touch-pan-down" => Some("touchPanY"),
+        "contain-none" => Some("contain"),
+        "contain-strict" => Some("contain"),
+        "contain-content" => Some("contain"),
+        "contain-size" => Some("containSize"),
+        "contain-inline-size" => Some("containSize"),
+        "contain-layout" => Some("containLayout"),
+        "contain-paint" => Some("containPaint"),
+        "contain-style" => Some("containStyle"),
         "snap-none" => Some("snapType"),
         "snap-x" => Some("snapType"),
         "snap-y" => Some("snapType"),
@@ -1467,57 +1505,145 @@ pub(crate) const BOOLEAN_VALUE_MAP: &[(&str, BooleanValue)] = &[
     (
         "normal-nums",
         BooleanValue {
-            prop: "fontVariant",
-            value: "normal-nums",
-            css_property: None,
+            prop: "nums",
+            value: "normal",
+            css_property: Some("font-variant-numeric"),
         },
     ),
     (
         "lining-nums",
         BooleanValue {
-            prop: "fontVariant",
-            value: "lining-nums",
-            css_property: None,
+            prop: "numFigure",
+            value: "lining",
+            css_property: Some("--tw-numeric-figure"),
         },
     ),
     (
         "oldstyle-nums",
         BooleanValue {
-            prop: "fontVariant",
-            value: "oldstyle-nums",
-            css_property: None,
+            prop: "numFigure",
+            value: "oldstyle",
+            css_property: Some("--tw-numeric-figure"),
         },
     ),
     (
         "proportional-nums",
         BooleanValue {
-            prop: "fontVariant",
-            value: "proportional-nums",
-            css_property: None,
+            prop: "numSpacing",
+            value: "proportional",
+            css_property: Some("--tw-numeric-spacing"),
         },
     ),
     (
         "tabular-nums",
         BooleanValue {
-            prop: "fontVariant",
-            value: "tabular-nums",
-            css_property: None,
+            prop: "numSpacing",
+            value: "tabular",
+            css_property: Some("--tw-numeric-spacing"),
         },
     ),
     (
         "diagonal-fractions",
         BooleanValue {
-            prop: "fontVariant",
-            value: "diagonal-fractions",
-            css_property: None,
+            prop: "numFraction",
+            value: "diagonal",
+            css_property: Some("--tw-numeric-fraction"),
         },
     ),
     (
         "stacked-fractions",
         BooleanValue {
-            prop: "fontVariant",
-            value: "stacked-fractions",
-            css_property: None,
+            prop: "numFraction",
+            value: "stacked",
+            css_property: Some("--tw-numeric-fraction"),
+        },
+    ),
+    (
+        "touch-pan-x",
+        BooleanValue {
+            prop: "touchPanX",
+            value: "x",
+            css_property: Some("--tw-pan-x"),
+        },
+    ),
+    (
+        "touch-pan-left",
+        BooleanValue {
+            prop: "touchPanX",
+            value: "left",
+            css_property: Some("--tw-pan-x"),
+        },
+    ),
+    (
+        "touch-pan-right",
+        BooleanValue {
+            prop: "touchPanX",
+            value: "right",
+            css_property: Some("--tw-pan-x"),
+        },
+    ),
+    (
+        "touch-pan-y",
+        BooleanValue {
+            prop: "touchPanY",
+            value: "y",
+            css_property: Some("--tw-pan-y"),
+        },
+    ),
+    (
+        "touch-pan-up",
+        BooleanValue {
+            prop: "touchPanY",
+            value: "up",
+            css_property: Some("--tw-pan-y"),
+        },
+    ),
+    (
+        "touch-pan-down",
+        BooleanValue {
+            prop: "touchPanY",
+            value: "down",
+            css_property: Some("--tw-pan-y"),
+        },
+    ),
+    (
+        "contain-none",
+        BooleanValue {
+            prop: "contain",
+            value: "none",
+            css_property: Some("contain"),
+        },
+    ),
+    (
+        "contain-strict",
+        BooleanValue {
+            prop: "contain",
+            value: "strict",
+            css_property: Some("contain"),
+        },
+    ),
+    (
+        "contain-content",
+        BooleanValue {
+            prop: "contain",
+            value: "content",
+            css_property: Some("contain"),
+        },
+    ),
+    (
+        "contain-size",
+        BooleanValue {
+            prop: "containSize",
+            value: "size",
+            css_property: Some("--tw-contain-size"),
+        },
+    ),
+    (
+        "contain-inline-size",
+        BooleanValue {
+            prop: "containSize",
+            value: "inline-size",
+            css_property: Some("--tw-contain-size"),
         },
     ),
     (
@@ -2043,39 +2169,94 @@ pub(crate) fn boolean_value(class: &str) -> Option<BooleanValue> {
             css_property: None,
         }),
         "normal-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "normal-nums",
-            css_property: None,
+            prop: "nums",
+            value: "normal",
+            css_property: Some("font-variant-numeric"),
         }),
         "lining-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "lining-nums",
-            css_property: None,
+            prop: "numFigure",
+            value: "lining",
+            css_property: Some("--tw-numeric-figure"),
         }),
         "oldstyle-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "oldstyle-nums",
-            css_property: None,
+            prop: "numFigure",
+            value: "oldstyle",
+            css_property: Some("--tw-numeric-figure"),
         }),
         "proportional-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "proportional-nums",
-            css_property: None,
+            prop: "numSpacing",
+            value: "proportional",
+            css_property: Some("--tw-numeric-spacing"),
         }),
         "tabular-nums" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "tabular-nums",
-            css_property: None,
+            prop: "numSpacing",
+            value: "tabular",
+            css_property: Some("--tw-numeric-spacing"),
         }),
         "diagonal-fractions" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "diagonal-fractions",
-            css_property: None,
+            prop: "numFraction",
+            value: "diagonal",
+            css_property: Some("--tw-numeric-fraction"),
         }),
         "stacked-fractions" => Some(BooleanValue {
-            prop: "fontVariant",
-            value: "stacked-fractions",
-            css_property: None,
+            prop: "numFraction",
+            value: "stacked",
+            css_property: Some("--tw-numeric-fraction"),
+        }),
+        "touch-pan-x" => Some(BooleanValue {
+            prop: "touchPanX",
+            value: "x",
+            css_property: Some("--tw-pan-x"),
+        }),
+        "touch-pan-left" => Some(BooleanValue {
+            prop: "touchPanX",
+            value: "left",
+            css_property: Some("--tw-pan-x"),
+        }),
+        "touch-pan-right" => Some(BooleanValue {
+            prop: "touchPanX",
+            value: "right",
+            css_property: Some("--tw-pan-x"),
+        }),
+        "touch-pan-y" => Some(BooleanValue {
+            prop: "touchPanY",
+            value: "y",
+            css_property: Some("--tw-pan-y"),
+        }),
+        "touch-pan-up" => Some(BooleanValue {
+            prop: "touchPanY",
+            value: "up",
+            css_property: Some("--tw-pan-y"),
+        }),
+        "touch-pan-down" => Some(BooleanValue {
+            prop: "touchPanY",
+            value: "down",
+            css_property: Some("--tw-pan-y"),
+        }),
+        "contain-none" => Some(BooleanValue {
+            prop: "contain",
+            value: "none",
+            css_property: Some("contain"),
+        }),
+        "contain-strict" => Some(BooleanValue {
+            prop: "contain",
+            value: "strict",
+            css_property: Some("contain"),
+        }),
+        "contain-content" => Some(BooleanValue {
+            prop: "contain",
+            value: "content",
+            css_property: Some("contain"),
+        }),
+        "contain-size" => Some(BooleanValue {
+            prop: "containSize",
+            value: "size",
+            css_property: Some("--tw-contain-size"),
+        }),
+        "contain-inline-size" => Some(BooleanValue {
+            prop: "containSize",
+            value: "inline-size",
+            css_property: Some("--tw-contain-size"),
         }),
         "appearance-none" => Some(BooleanValue {
             prop: "appearance",

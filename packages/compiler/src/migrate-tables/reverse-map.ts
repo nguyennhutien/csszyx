@@ -55,8 +55,8 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'sr-only': 'srOnly',
     'not-sr-only': 'notSrOnly',
     isolate: 'isolate',
-    ordinal: 'ordinal',
-    'slashed-zero': 'slashedZero',
+    ordinal: 'numOrdinal',
+    'slashed-zero': 'numSlashedZero',
     // Bare `transition` (common transition property) and the `group`/`peer`
     // marker classes round-trip through the compiler as boolean sugar.
     transition: 'transition',
@@ -78,14 +78,33 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Transforms — scale-3d/translate-3d carry the literal '3d' value via
     // BOOLEAN_VALUE_MAP, and transform-gpu/cpu/none → { transform: 'gpu'/'cpu'/'none' }.
 
-    // Font numeric
-    'normal-nums': 'fontVariant',
-    'lining-nums': 'fontVariant',
-    'oldstyle-nums': 'fontVariant',
-    'proportional-nums': 'fontVariant',
-    'tabular-nums': 'fontVariant',
-    'diagonal-fractions': 'fontVariant',
-    'stacked-fractions': 'fontVariant',
+    // Font numeric: the two-keyword groups and the reset carry a value, so they
+    // live in BOOLEAN_VALUE_MAP below.
+    'normal-nums': 'nums',
+    'lining-nums': 'numFigure',
+    'oldstyle-nums': 'numFigure',
+    'proportional-nums': 'numSpacing',
+    'tabular-nums': 'numSpacing',
+    'diagonal-fractions': 'numFraction',
+    'stacked-fractions': 'numFraction',
+
+    // touch-action and contain: the single-keyword groups are flags; the
+    // two-and-three-keyword groups carry a value in BOOLEAN_VALUE_MAP below.
+    'touch-pinch-zoom': 'touchPinchZoom',
+    'touch-pan-x': 'touchPanX',
+    'touch-pan-left': 'touchPanX',
+    'touch-pan-right': 'touchPanX',
+    'touch-pan-y': 'touchPanY',
+    'touch-pan-up': 'touchPanY',
+    'touch-pan-down': 'touchPanY',
+    'contain-none': 'contain',
+    'contain-strict': 'contain',
+    'contain-content': 'contain',
+    'contain-size': 'containSize',
+    'contain-inline-size': 'containSize',
+    'contain-layout': 'containLayout',
+    'contain-paint': 'containPaint',
+    'contain-style': 'containStyle',
 
     // Snap
     'snap-none': 'snapType',
@@ -115,8 +134,7 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
 
 // Values that mean "use the prop name as-is with value true". `cssProperty`
 // marks single-property utilities so the variant parser fails closed on a
-// scope conflict (e.g. `block flex` → two display values). Additive utilities
-// (font-variant-numeric) intentionally omit it — they combine, not conflict.
+// scope conflict (e.g. `block flex` → two display values).
 export const BOOLEAN_VALUE_MAP: Record<
     string,
     { prop: string; value: unknown; cssProperty?: string }
@@ -142,14 +160,46 @@ export const BOOLEAN_VALUE_MAP: Record<
     'divide-double': { prop: 'divideStyle', value: 'double' },
     'divide-none': { prop: 'divideStyle', value: 'none' },
 
-    // Font variants
-    'normal-nums': { prop: 'fontVariant', value: 'normal-nums' },
-    'lining-nums': { prop: 'fontVariant', value: 'lining-nums' },
-    'oldstyle-nums': { prop: 'fontVariant', value: 'oldstyle-nums' },
-    'proportional-nums': { prop: 'fontVariant', value: 'proportional-nums' },
-    'tabular-nums': { prop: 'fontVariant', value: 'tabular-nums' },
-    'diagonal-fractions': { prop: 'fontVariant', value: 'diagonal-fractions' },
-    'stacked-fractions': { prop: 'fontVariant', value: 'stacked-fractions' },
+    // Font numeric: one key per group. The group's Tailwind variable is its
+    // `cssProperty`, so two keywords of one group fail closed while different
+    // groups — which all set `font-variant-numeric` — still combine.
+    'normal-nums': { prop: 'nums', value: 'normal', cssProperty: 'font-variant-numeric' },
+    'lining-nums': { prop: 'numFigure', value: 'lining', cssProperty: '--tw-numeric-figure' },
+    'oldstyle-nums': { prop: 'numFigure', value: 'oldstyle', cssProperty: '--tw-numeric-figure' },
+    'proportional-nums': {
+        prop: 'numSpacing',
+        value: 'proportional',
+        cssProperty: '--tw-numeric-spacing',
+    },
+    'tabular-nums': { prop: 'numSpacing', value: 'tabular', cssProperty: '--tw-numeric-spacing' },
+    'diagonal-fractions': {
+        prop: 'numFraction',
+        value: 'diagonal',
+        cssProperty: '--tw-numeric-fraction',
+    },
+    'stacked-fractions': {
+        prop: 'numFraction',
+        value: 'stacked',
+        cssProperty: '--tw-numeric-fraction',
+    },
+
+    // touch-action and contain: one key per group, the group's variable as its
+    // `cssProperty`. The stand-alone keywords set the property itself.
+    'touch-pan-x': { prop: 'touchPanX', value: 'x', cssProperty: '--tw-pan-x' },
+    'touch-pan-left': { prop: 'touchPanX', value: 'left', cssProperty: '--tw-pan-x' },
+    'touch-pan-right': { prop: 'touchPanX', value: 'right', cssProperty: '--tw-pan-x' },
+    'touch-pan-y': { prop: 'touchPanY', value: 'y', cssProperty: '--tw-pan-y' },
+    'touch-pan-up': { prop: 'touchPanY', value: 'up', cssProperty: '--tw-pan-y' },
+    'touch-pan-down': { prop: 'touchPanY', value: 'down', cssProperty: '--tw-pan-y' },
+    'contain-none': { prop: 'contain', value: 'none', cssProperty: 'contain' },
+    'contain-strict': { prop: 'contain', value: 'strict', cssProperty: 'contain' },
+    'contain-content': { prop: 'contain', value: 'content', cssProperty: 'contain' },
+    'contain-size': { prop: 'containSize', value: 'size', cssProperty: '--tw-contain-size' },
+    'contain-inline-size': {
+        prop: 'containSize',
+        value: 'inline-size',
+        cssProperty: '--tw-contain-size',
+    },
 
     // Appearance
     'appearance-none': { prop: 'appearance', value: 'none' },
@@ -303,6 +353,9 @@ export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'row-start',
     'row-end',
     'rotate',
+    'rotate-x',
+    'rotate-y',
+    'rotate-z',
     'skew-x',
     'skew-y',
     'translate-x',
@@ -320,9 +373,6 @@ export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'scroll-ml',
     'hue-rotate',
     'backdrop-hue-rotate',
-    // mask gradient direction carries a leading `-` as part of the value
-    // (e.g. -mask-linear-45 → { mask: '-linear-45' }), not a numeric negation.
-    'mask',
 ]);
 
 // ============================================================================
@@ -579,10 +629,12 @@ export const ALIGN_CONTENT_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 export const OUTLINE_STYLE_KEYWORDS: ReadonlySet<string> = new Set([
+    'solid',
     'none',
     'dashed',
     'dotted',
     'double',
+    'hidden',
 ]);
 
 export const RING_WIDTH_VALUES: ReadonlySet<string> = new Set(['0', '1', '2', '4', '8']);

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+
+import { RUST_LANE } from './engine-parity-harness.js';
 
 const collisionSource =
     'const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;';
@@ -31,7 +33,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
         }
     });
 
-    it.runIf(isRustTransformAvailable())('rust is byte-identical to oxc for safe branches', () => {
+    it.runIf(RUST_LANE)('rust is byte-identical to oxc for safe branches', () => {
         const oxc = transformWasm(collisionSource, 'probe.tsx');
         const rust = transformRust(collisionSource, 'probe.tsx');
         expect(rust.code).toBe(oxc.code);
@@ -52,7 +54,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
     ])('keeps the warning for %s', (_, source) => {
         expect(babelDiagnostics(source).join('\n')).toContain(diagnosticMarker);
         expect(oxcDiagnostics(source).join('\n')).toContain(diagnosticMarker);
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             expect(transformRust(source, 'probe.tsx').diagnostics.join('\n')).toContain(
                 diagnosticMarker,
             );
@@ -82,7 +84,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
     ])('does not warn when %s', (_, source) => {
         expect(babelDiagnostics(source).join('\n')).not.toContain(diagnosticMarker);
         expect(oxcDiagnostics(source).join('\n')).not.toContain(diagnosticMarker);
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             expect(transformRust(source, 'probe.tsx').diagnostics.join('\n')).not.toContain(
                 diagnosticMarker,
             );

@@ -227,8 +227,8 @@ describe('interactivity — touch action', () => {
         expect(t({ touch: 'auto' })).toBe('touch-auto');
     });
 
-    it('{ touch: "pan-x" } → touch-pan-x', () => {
-        expect(t({ touch: 'pan-x' })).toBe('touch-pan-x');
+    it('{ touchPanX: "x" } → touch-pan-x', () => {
+        expect(t({ touchPanX: 'x' })).toBe('touch-pan-x');
     });
 });
 

@@ -20,6 +20,7 @@ mod json;
 mod line_endings;
 mod normalize;
 mod source;
+mod stylesheet_order;
 mod sz_codegen;
 mod value;
 mod variant_parser;

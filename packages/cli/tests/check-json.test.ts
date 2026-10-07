@@ -10,43 +10,14 @@
  * free to be rewritten for clarity and a consumer filtering on it would break
  * every time it was.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type CheckOptions, check } from '../src/commands/check.js';
-
-const REPO = path.resolve(import.meta.dirname, '../../..');
-const TAILWIND_V4 = path.dirname(
-    createRequire(path.join(REPO, 'scripts/')).resolve('tailwindcss/package.json'),
-);
-const roots: string[] = [];
-
-/**
- * Build a throwaway project carrying its own Tailwind.
- *
- * @param files - Project-relative files to write.
- * @returns Absolute project root.
- */
-function projectWith(files: Record<string, string>): string {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-json-')));
-    roots.push(root);
-    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
-    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    for (const [relative, content] of Object.entries(files)) {
-        const file = path.join(root, relative);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content, 'utf8');
-    }
-    return root;
-}
+import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -80,7 +51,7 @@ async function jsonFor(
 
 describe('csszyx check --json', () => {
     it('writes one parseable document and nothing else', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ p: 4 }} />;`,
         });
@@ -93,7 +64,7 @@ describe('csszyx check --json', () => {
     });
 
     it('carries the rule, file, line and message for a sibling-key value', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
         });
@@ -109,7 +80,7 @@ describe('csszyx check --json', () => {
     });
 
     it('carries a theme collision with the stylesheet line it was declared on', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': `export const A = () => <div sz={{ p: 4 }} />;`,
         });
@@ -127,7 +98,7 @@ describe('csszyx check --json', () => {
     });
 
     it('carries an sz diagnostic, which already knew its own position', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ nonsenseKey: 4 }} />;`,
         });
@@ -138,7 +109,7 @@ describe('csszyx check --json', () => {
     });
 
     it('carries a dead class, naming the file that emitted it', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             // `pointer` is not an sz key, so the kebab pass-through ships
             // `pointer-none` — a class Tailwind has never served.
@@ -153,7 +124,7 @@ describe('csszyx check --json', () => {
     });
 
     it('still exits non-zero, so the flag changes the format and not the verdict', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ nonsenseKey: 4 }} />;`,
         });
@@ -172,7 +143,7 @@ describe('csszyx check --json — a diagnostic that names no line', () => {
     it('omits the line rather than inventing one', async () => {
         // An `szs` slot map built from a variable: the engine reports the
         // attribute it left alone, but has no single position to blame.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <Card szs={slots} />;`,
         });
@@ -199,7 +170,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     ].join('\n');
 
     it('names the kind of each sz diagnostic', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': PRECEDENCE_AND_TYPO,
         });
@@ -213,7 +184,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('gives a finding from another pass its rule as its kind', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ pointer: 'none' }} />;`,
         });
@@ -225,7 +196,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('drops an ignored kind from the findings and from the exit code', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx':
                 'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
@@ -240,7 +211,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     it('leaves an ignored pass out while the passes beside it still run', async () => {
         // The dead-class pass also reports broken opacity, so ignoring one of
         // its two rules must not drop the other or print the pass as clean.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ pointer: 'none' }} />;`,
         });
@@ -251,7 +222,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('keeps only the selected kinds when --rule is given', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `${PRECEDENCE_AND_TYPO}\nexport const C = () => <div sz={{ pointer: 'none' }} />;`,
         });
@@ -263,7 +234,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('selects a whole pass by its rule id', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `${PRECEDENCE_AND_TYPO}\nexport const C = () => <div sz={{ pointer: 'none' }} />;`,
         });
@@ -274,7 +245,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('suggests the key an unknown key most likely misspells', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ workBreak: 'all' }} />;`,
         });
@@ -288,7 +259,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('prints the suggestion under the diagnostic in the prose report', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ workBreak: 'all' }} />;`,
         });
@@ -303,7 +274,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     it.each(['runtime-fallback', 'parse-error', 'mangle-vars-hoist-skip'])(
         'refuses %s, which check never reports, rather than selecting nothing',
         async id => {
-            const cwd = projectWith({
+            const cwd = tailwindProject({
                 'src/app.css': '@import "tailwindcss";',
                 'src/App.tsx': PRECEDENCE_AND_TYPO,
             });
@@ -318,7 +289,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     );
 
     it('does not call a run clean when its only issues were left out', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx':
                 'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
@@ -335,7 +306,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
     });
 
     it('counts the issues left out beside the ones it reports', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': PRECEDENCE_AND_TYPO,
         });
@@ -351,7 +322,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
     it('refuses an id no rule or kind has, rather than selecting nothing', async () => {
         // A misspelt --rule that matched nothing would pass every run.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': PRECEDENCE_AND_TYPO,
         });
@@ -375,7 +346,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     // An audit of what the build changed, not a problem to fix: selected only
     // by name, and a finding does not fail the run.
     it('lists what a build removes, file by file, and passes', async () => {
-        const report = await jsonFor(projectWith(files), {
+        const report = await jsonFor(tailwindProject(files), {
             rule: ['merge-covered-key', 'merge-covered-class'],
         });
         expect(report.findings.map(({ rule, file, message }) => ({ rule, file, message }))).toEqual(
@@ -399,7 +370,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
 
     it('lists nothing when nothing merges', async () => {
         const report = await jsonFor(
-            projectWith({
+            tailwindProject({
                 ...files,
                 'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
             }),
@@ -409,7 +380,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     });
 
     it('is skipped, and says why, when the stylesheets do not compile', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             ...files,
             // Two entries that set different prefixes give the build nothing
             // to lower with, so it stops, and the audit with it.
@@ -424,7 +395,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     });
 
     it('is not part of a run that does not name it', async () => {
-        const report = await jsonFor(projectWith(files));
+        const report = await jsonFor(tailwindProject(files));
         expect(report.findings.filter(finding => finding.rule.startsWith('merge-'))).toEqual([]);
     });
 });

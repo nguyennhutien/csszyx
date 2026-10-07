@@ -19,9 +19,11 @@
  * introduce.
  */
 import { describe, expect, it } from 'vitest';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+
+import { RUST_LANE } from './engine-parity-harness.js';
 
 /** Cross-module sz objects, keyed by specifier then export name. */
 type SzObjectRegistry = Record<string, Record<string, Record<string, unknown>>>;
@@ -35,7 +37,7 @@ type Engine = (
 const ENGINES: ReadonlyArray<readonly [string, Engine]> = [
     ['auto', transformSource as Engine],
     ['wasm', transformWasm as Engine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
+    ...(RUST_LANE ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 
 /** The registry a bundler would hand a file importing from `./styles`. */
@@ -441,7 +443,7 @@ describe('where the resolved binding is used', () => {
         expect(out.classes).toEqual([]);
     });
 
-    if (isRustTransformAvailable()) {
+    if (RUST_LANE) {
         it('rust keeps the runtime path when a local const re-wraps the import', () => {
             const out = run(
                 transformRust as Engine,

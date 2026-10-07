@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-    isRustTransformAvailable,
-    transformRust,
-    transformSource,
-    transformWasm,
-} from '../src/index.js';
+import { transformRust, transformSource, transformWasm } from '../src/index.js';
 import { setSzWarnLocation, transform } from '../src/transform-core.js';
+import { RUST_LANE } from './engine-parity-harness.js';
 
 function captureWarnings(action: () => void): string[] {
     const calls: string[] = [];
@@ -122,7 +118,7 @@ describe('unknown-property warning — source location', () => {
  * installed (the diagnostic can only be exercised through the real addon).
  */
 describe('unknown-property warning — Rust engine parity (no over-warn)', () => {
-    const rustAvailable = isRustTransformAvailable();
+    const rustAvailable = RUST_LANE;
     const runOr = rustAvailable ? it : it.skip;
 
     const wasmWarns = (key: string, value: string): boolean =>
@@ -335,7 +331,7 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
         expect(msg).not.toContain('Check for typos');
     });
 
-    it.skipIf(!isRustTransformAvailable())('the rust engine emits the same numeric message', () => {
+    it.skipIf(!RUST_LANE)('the rust engine emits the same numeric message', () => {
         const diagnostics = transformRust(
             'export const A = () => <div sz={{ 4: true }} />;',
             '/p/F.tsx',

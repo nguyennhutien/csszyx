@@ -18,12 +18,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-    isRustTransformAvailable,
-    transformRust,
-    transformSource,
-    transformWasm,
-} from '../src/index.js';
+import { transformRust, transformSource, transformWasm } from '../src/index.js';
+import { RUST_LANE } from './engine-parity-harness.js';
 
 const PRELUDE = `const BASE = { p: 2, m: 1 };
 declare const szsc: { title?: string } | undefined;
@@ -185,7 +181,7 @@ describe('sz array composition — later wins (lane parity)', () => {
             expect(babel.usesSzPart, 'babel usesSzPart').toBe(fixture.usesSzPart ?? false);
         });
 
-        it.skipIf(!isRustTransformAvailable())(`rust is byte-identical — ${fixture.name}`, () => {
+        it.skipIf(!RUST_LANE)(`rust is byte-identical — ${fixture.name}`, () => {
             const oxc = run('wasm', fixture.attr);
             const rust = run('rust', fixture.attr);
             expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
@@ -200,7 +196,7 @@ describe('sz array composition — later wins (lane parity)', () => {
             const out = run(engine, 'sz={[{ p: 4 }, big && { p: 8 }]}');
             expect(out.usesMerge, engine).toBe(false);
         }
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             expect(run('rust', 'sz={[{ p: 4 }, big && { p: 8 }]}').usesMerge).toBe(false);
         }
     });
@@ -210,7 +206,7 @@ describe('sz array composition — later wins (lane parity)', () => {
             'sz={[{ md: { hover: { bg: "red-500", p: 2 } } }, { md: { hover: { bg: "blue-500" } } }]}';
         const oxc = run('wasm', attr);
         expect(oxc.div).toBe('<div className="md:hover:bg-blue-500 md:hover:p-2" />');
-        if (isRustTransformAvailable()) {
+        if (RUST_LANE) {
             expect(run('rust', attr).code).toBe(oxc.code);
         }
     });

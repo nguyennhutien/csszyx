@@ -10,43 +10,14 @@
  * their own Tailwind: a project that declares `--color-balance` has given the
  * spelling a meaning, and the report must disappear for it.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { check } from '../src/commands/check.js';
-
-const REPO = path.resolve(import.meta.dirname, '../../..');
-const TAILWIND_V4 = path.dirname(
-    createRequire(path.join(REPO, 'scripts/')).resolve('tailwindcss/package.json'),
-);
-const roots: string[] = [];
-
-/**
- * Build a throwaway project carrying its own Tailwind.
- *
- * @param files - Project-relative files to write.
- * @returns Absolute project root.
- */
-function projectWith(files: Record<string, string>): string {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-sibling-')));
-    roots.push(root);
-    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
-    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    for (const [relative, content] of Object.entries(files)) {
-        const file = path.join(root, relative);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content, 'utf8');
-    }
-    return root;
-}
+import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -66,7 +37,7 @@ async function reportFor(cwd: string): Promise<string> {
 
 describe('csszyx check — a value that belongs to a sibling key', () => {
     it('reports the pair, the class it emits, and what that class actually sets', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
         });
@@ -88,7 +59,7 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
         // pass pointing at the sz prop: the author who wrote `color: 'balance'`
         // spelled it exactly as their own theme defines it, and the one line
         // worth changing is in the stylesheet.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
         });
@@ -100,9 +71,10 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
     });
 
     it('stays silent for a value that sets the key own property', async () => {
-        const cwd = projectWith({
+        const svgFill = `export const A = () => <svg sz={{ fill: 'none' }} />;`;
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
-            'src/App.tsx': `export const A = () => <svg sz={{ fill: 'none' }} />;`,
+            'src/App.tsx': svgFill,
         });
 
         expect(await reportFor(cwd)).not.toContain("fill: 'none'");
@@ -110,7 +82,7 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
     });
 
     it('stays silent for a project with no colliding values at all', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'red-500', p: 4 }} />;`,
         });
@@ -131,7 +103,7 @@ describe('csszyx check — a project with more than one stylesheet', () => {
         // mistake this whole rule exists for. `b.css` declares the token, so
         // somewhere in this project the spelling is deliberate — and a report
         // would send its author to a line that is correct for their page.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/a.css': '@import "tailwindcss";',
             'src/b.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,

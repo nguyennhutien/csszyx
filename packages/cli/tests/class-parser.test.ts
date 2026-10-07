@@ -138,16 +138,81 @@ describe('class-parser', () => {
             expect(parseClass('divide-dashed')).toEqual({ prop: 'divideStyle', value: 'dashed' });
         });
 
-        it('font variant booleans', () => {
-            expect(parseClass('ordinal')).toEqual({ prop: 'ordinal', value: true });
-            expect(parseClass('slashed-zero')).toEqual({ prop: 'slashedZero', value: true });
-            expect(parseClass('tabular-nums')).toEqual({
-                prop: 'fontVariant',
-                value: 'tabular-nums',
+        it('font variant numeric: one key per group', () => {
+            expect(parseClass('ordinal')).toEqual({ prop: 'numOrdinal', value: true });
+            expect(parseClass('slashed-zero')).toEqual({ prop: 'numSlashedZero', value: true });
+            const group = (prop: string, value: string, cssProperty: string) => ({
+                prop,
+                value,
+                cssProperty,
             });
-            expect(parseClass('lining-nums')).toEqual({
-                prop: 'fontVariant',
-                value: 'lining-nums',
+            expect(parseClass('normal-nums')).toEqual(
+                group('nums', 'normal', 'font-variant-numeric'),
+            );
+            expect(parseClass('lining-nums')).toEqual(
+                group('numFigure', 'lining', '--tw-numeric-figure'),
+            );
+            expect(parseClass('oldstyle-nums')).toEqual(
+                group('numFigure', 'oldstyle', '--tw-numeric-figure'),
+            );
+            expect(parseClass('proportional-nums')).toEqual(
+                group('numSpacing', 'proportional', '--tw-numeric-spacing'),
+            );
+            expect(parseClass('tabular-nums')).toEqual(
+                group('numSpacing', 'tabular', '--tw-numeric-spacing'),
+            );
+            expect(parseClass('diagonal-fractions')).toEqual(
+                group('numFraction', 'diagonal', '--tw-numeric-fraction'),
+            );
+            expect(parseClass('stacked-fractions')).toEqual(
+                group('numFraction', 'stacked', '--tw-numeric-fraction'),
+            );
+        });
+
+        it('touch-action and contain: one key per group', () => {
+            expect(parseClass('touch-none')).toMatchObject({ prop: 'touch', value: 'none' });
+            expect(parseClass('touch-pan-left')).toEqual({
+                prop: 'touchPanX',
+                value: 'left',
+                cssProperty: '--tw-pan-x',
+            });
+            expect(parseClass('touch-pan-down')).toEqual({
+                prop: 'touchPanY',
+                value: 'down',
+                cssProperty: '--tw-pan-y',
+            });
+            expect(parseClass('touch-pinch-zoom')).toEqual({ prop: 'touchPinchZoom', value: true });
+            expect(parseClass('contain-strict')).toMatchObject({
+                prop: 'contain',
+                value: 'strict',
+            });
+            expect(parseClass('contain-inline-size')).toEqual({
+                prop: 'containSize',
+                value: 'inline-size',
+                cssProperty: '--tw-contain-size',
+            });
+            expect(parseClass('contain-paint')).toEqual({ prop: 'containPaint', value: true });
+        });
+
+        it('a negative rotation on one axis keeps its axis key', () => {
+            expect(parseClass('-rotate-x-45')).toEqual({ prop: 'rotateX', value: -45 });
+            expect(parseClass('-rotate-y-12')).toEqual({ prop: 'rotateY', value: -12 });
+            expect(parseClass('-rotate-z-6')).toEqual({ prop: 'rotateZ', value: -6 });
+        });
+
+        it('keywords that belong to a style key, not the colour key of their prefix', () => {
+            expect(parseClass('outline-hidden')).toEqual({ prop: 'outlineStyle', value: 'hidden' });
+            expect(parseClass('outline-solid')).toEqual({ prop: 'outlineStyle', value: 'solid' });
+            // `ring` also holds the width (`ring-1`), so an element with both
+            // would keep one. No key holds the pair: the class stays as written.
+            expect(parseClass('ring-inset')).toBeNull();
+            expect(parseClass('border-collapse')).toEqual({
+                prop: 'borderCollapse',
+                value: 'collapse',
+            });
+            expect(parseClass('border-separate')).toEqual({
+                prop: 'borderCollapse',
+                value: 'separate',
             });
         });
     });
@@ -1313,8 +1378,11 @@ describe('class-parser', () => {
             });
         });
 
-        it('mask gradient keeps a leading - as part of the value', () => {
-            expect(parseClass('-mask-linear-45')).toEqual({ prop: 'mask', value: '-linear-45' });
+        it('a negative mask angle is a negative angle on its layer (ADR 0013)', () => {
+            expect(parseClass('-mask-linear-45')).toEqual({
+                prop: 'maskLinear',
+                value: { angle: -45 },
+            });
         });
     });
 });

@@ -3,28 +3,32 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
+import { buildSync } from 'esbuild';
+
 /**
  * Size gate for the JS that ships to end users. Bytes are the one performance
  * metric here that is fully deterministic — the same build produces the same
  * gzip total on any machine — so unlike wall-clock timing (see tdd.md TDD-6)
  * this can be a hard merge gate with zero flake risk.
  *
- * Three surfaces are guarded, each one code a user's bundler pulls into the
+ * Three JS surfaces are guarded, each one code a user's bundler pulls into the
  * browser bundle:
  * - `@csszyx/runtime` exports — the `_sz`/`szv` helper layer every app imports.
  * - `@csszyx/dynamic` exports — the runtime dynamic-styling layer.
- * - `@csszyx/compiler` browser entry closure — `@csszyx/dynamic` imports
- *   `@csszyx/compiler/browser` at runtime, so that entry plus the shared
- *   chunks it re-exports reach the browser too. Only that closure is
- *   measured; the rest of the compiler dist is build-time code that never
- *   leaves the dev machine.
+ * - `@csszyx/compiler` `./browser` entry — `@csszyx/dynamic` imports it at
+ *   runtime. The rest of the compiler is build-time code that never leaves the
+ *   dev machine.
  *
- * Measurement is the closure of each package's `exports` map under the
- * `import` condition (what modern bundlers resolve), NOT a directory walk of
- * dist: `tsc -b` has `outDir: ./dist` in these packages and emits per-module
- * `.js` files next to the bundler output whenever type-check runs, so a
- * directory total would swing by 2× depending on whether tsc ran last —
- * entry closures give the same number in CI and locally.
+ * Each is measured as an app ships it (`kind: 'app-bundle'`): the export entries
+ * bundled with esbuild, tree-shaken, minified, `process.env.NODE_ENV` defined as
+ * `"production"`, then gzipped — the method size-limit uses. The other
+ * `@csszyx/*` packages stay external so each budget counts its own code once.
+ * Until 2026-10-01 this gzipped the package's `dist` files as published, which
+ * counted comments and development-only warnings that no production app
+ * downloads; the notes on the runtime budget below kept saying "package weight
+ * only, not app weight" because the number measured the wrong thing. The
+ * install-size question that method answered is the wasm budget's job, the
+ * one artifact where package weight is what users pay.
  *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
@@ -34,115 +38,80 @@ import { gzipSync } from 'node:zlib';
  * number, tight enough that silently swallowing a 30KB dependency fails.
  */
 
-/** Gzip ceilings per user-shipped surface. Baselines measured 2026-08-07 on
- * main (dae7d88e): runtime 18,665 B · dynamic 13,259 B · compiler browser
- * closure 22,008 B. Re-measure with `pnpm check:package-size` after a build. */
+/** Gzip ceilings per user-shipped surface, set the usual ~300 bytes above a
+ * measurement. Re-measure with `pnpm check:package-size` after a build.
+ *
+ * The JS budgets were re-based 2026-10-01 when the measurement moved from the
+ * published `dist` text to the production app bundle. Their history before
+ * that — every raise and the reason for it — is in git, against a number that
+ * also counted comments and development-only warning text: 28,300 / 15,360 /
+ * 24,576 then, against 15,447 / 10,626 / 14,376 measured the new way the same
+ * day, after the compiler's warnings moved behind a `NODE_ENV` check a bundler
+ * folds and with peer dependencies left to the app. */
 export const SIZE_BUDGETS = [
     {
-        // Raised from 20,480 for the mangle registry, measured 2026-08-26 at
-        // 20,758 B. The map used to reach the runtime helpers through a debug
-        // global that an inline HTML script installed, which strict CSP
-        // refuses; registering it from inside the bundle moved that code into
-        // the shipped runtime, so the growth is the fix rather than drift.
-        //
-        // Raised again from 22,800 for routing `splitBox` by CSS role, measured
-        // 2026-09-05 at 23,266 B in three steps: 22,109 before, 22,580 with the
-        // value-routed box-role map (+471, real payload — the exact tokens now
-        // carry the prefix and value they were built from), 23,266 with the
-        // three development warnings (+686, all of it message text).
-        //
-        // That second half is package weight only, not app weight: bundled with
-        // `process.env.NODE_ENV` defined as production, the warning text is gone
-        // from the output (measured with esbuild — zero occurrences, and 794
-        // gzip bytes smaller than the same bundle built for development).
-        // Raised again from 23,552 for the class-toolkit work, measured
-        // 2026-09-06 in two steps on top of a 23,552 baseline: 24,405 with the
-        // `./split` entry (+853) and 24,783 with the unrecognised-token warning
-        // (+378).
-        //
-        // The first step is the one worth reading twice, because it is NOT the
-        // entry file — `dist/split.mjs` is 202 gzip bytes and this measurement
-        // dedupes shared chunks, so a re-export would have cost about that. It
-        // is rollup re-chunking the package once a second entry reaches the
-        // box-role tables: the barrel got smaller (6,120 to 5,482 gzip for a
-        // toolkit-only import) and the package got bigger. That is a real
-        // install-size cost paid so a `require()` consumer can drop ~6 KB from
-        // their bundle, which is the trade the entry exists to make.
-        //
-        // The second step is package weight only, not app weight, for the same
-        // reason the 2026-09-05 note above gives: bundled with
-        // `process.env.NODE_ENV` defined as production the message text is gone.
-        //
-        // Raised again from 25,088 after five principal reviews of the same
-        // work, measured 2026-09-06 from 24,783: 24,975 with the warning for a
-        // placement written as `md:hidden` (+192) and 25,183 with the cap on the
-        // development-warning cache announcing itself instead of going quiet
-        // (+208). Both are message text under the same `NODE_ENV` guard as the
-        // rest, so again package weight rather than app weight.
-        //
-        // Raised again from 25,472 for `classify` reporting a `property`,
-        // measured 2026-09-06 at 25,840 from 25,183. `split-box.ts` now reads
-        // the value classifier in `merge-groups.ts`, so its keyword tables join
-        // the closure of the `./split` entry and rollup re-chunks around the new
-        // edge: +657 on the closure, and the entry itself goes from 5,337 to
-        // 7,239 gzip bytes for a consumer that uses nothing else. An app that
-        // already uses `szcn` has those tables in its bundle and pays nothing.
-        //
-        // Raised again from 26,176 for the peer-consumer routing and its
-        // warning, measured 2026-09-06 at 26,155 — 21 bytes under. Two builds
-        // of the same source measured 40 bytes apart earlier the same day, so
-        // 21 bytes of headroom is inside the noise between a local build and
-        // CI's; the budget is set the usual ~300 above the measurement.
-        // Raised again from 26,496 for the registry that holds the class names
-        // the project's Tailwind serves nothing for, measured 2026-09-08 at
-        // 26,542 — 46 over. The build compiles the real design system and
-        // registers those names; `splitBox` then places them by the fallback
-        // instead of by a prefix rule that matched by accident. What ships is a
-        // `Set`, three functions over it and one branch in `inspectUncached`:
-        // the list itself is app data that arrives from the build, and it is
-        // small — 73 bytes for this repository's own React sources. Budget set
-        // the usual ~300 above the measurement.
-        //
-        // Raised again from 26,880 for three merge fixes, measured 2026-09-12
-        // at 27,410 from 26,542: a ring offset no longer deletes the ring's
-        // colour, the five keyword families that share a prefix (`snap`,
-        // `list`, `object`, `content`, `touch`) are classified apart, and a
-        // later `gap` or scroll offset covers the sides it writes. This is
-        // real payload, not message text — the classifier has to know the
-        // values. It was 27,595 as first written; building the box coverage
-        // on first use and writing the five classifiers as `switch` over
-        // literals brought it to 27,410. A table of pattern strings read at
-        // runtime was tried in between and measured both larger, 27,447, and
-        // 3.5× slower per classification. The generated longhand table
-        // is not imported yet and is not in this number. App weight moved far
-        // less: the `./merge` entry bundled for production is 6,690 gzip
-        // bytes against 6,686 on main, because the same work stopped it
-        // pulling the compiler's property tables in through
-        // `@csszyx/compiler/browser`. Budget set the usual ~300 above the
-        // measurement.
-        //
-        // Raised again from 27,750 for conflict-safe Tailwind prefix
-        // registration, measured 2026-09-15 at 27,984 (+574 from the prior
-        // 27,410 measurement). The runtime now records no-prefix explicitly
-        // and rejects a second build with a different prefix instead of
-        // silently emitting classes for the wrong stylesheet. Budget set the
-        // usual ~300 above the measurement.
-        name: '@csszyx/runtime export closure',
-        kind: 'package-exports',
+        name: '@csszyx/runtime app bundle',
+        kind: 'app-bundle',
         target: 'packages/runtime',
-        maxGzipBytes: 28_300,
+        maxGzipBytes: 15_750,
+        // Each one reports csszyx's own output as wrong, an integrity check
+        // failing, or prints only because the app turned `debug` on (ADR
+        // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
+        productionMessages: [
+            // The mangle map and recovery manifest are integrity inputs.
+            'error: Failed to parse mangle map:',
+            'error: Failed to parse recovery manifest:',
+            'error: [csszyx] Failed to verify mangle map:',
+            'error: [csszyx] Mangle map failed schema validation (not a plai',
+            'error: [csszyx] Mangle map failed schema validation; treating i',
+            'warn: [csszyx] No checksum found in HTML',
+            // "Web Crypto is unavailable", built before the call.
+            'warn: <expr>',
+            // Hydration that aborted or fell back renders other than the
+            // server did; `dev-only` recovery says it is off in production.
+            'error: [csszyx] Hydration aborted at ',
+            'warn: [csszyx] CSR recovery requires explicit szRecover direct',
+            'warn: [csszyx] Hydration mismatch recovered via CSR. Fix root ',
+            'warn: [csszyx] szRecover=',
+            // A merge table from another csszyx version merges wrongly.
+            'warn: [csszyx] the merge table was written in format ',
+            // Only with `initRuntime({ debug: true })`.
+            'log: [csszyx] Runtime initialized',
+            'warn: [csszyx] Runtime already initialized',
+        ],
     },
     {
-        name: '@csszyx/dynamic export closure',
-        kind: 'package-exports',
+        name: '@csszyx/dynamic app bundle',
+        kind: 'app-bundle',
         target: 'packages/dynamic',
-        maxGzipBytes: 15_360,
+        // 13,902 measured with React bundled in; React is a peer dependency the
+        // app already ships, and the unsafe-value warning now folds away.
+        maxGzipBytes: 10_950,
     },
     {
-        name: '@csszyx/compiler browser entry closure',
-        kind: 'entry-closure',
-        target: 'packages/compiler/dist/transform-core.mjs',
-        maxGzipBytes: 24_576,
+        name: '@csszyx/compiler browser app bundle',
+        kind: 'app-bundle',
+        target: 'packages/compiler',
+        subpaths: ['./browser'],
+        // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
+        // moved value and a later group overriding a stand-alone key now warn
+        // in production as well (ADR 0011, its `productionMessages` below), so
+        // their text ships by design, plus the settlement of family keys
+        // across sz layers. Budget set the usual ~300 above the measurement.
+        maxGzipBytes: 15_200,
+        // Each one reports a class the transform did not emit (ADR 0011), so
+        // they print in production and in the browser, once each; only
+        // `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them.
+        productionMessages: [
+            // A value that moved onto its group's own key (`touch: 'pan-x'`).
+            'warn: <expr>',
+            // A replaced or removed key (`ordinal`, `tabularNums`, `inlineFlex`).
+            'warn: [csszyx] ',
+            // A stand-alone key a later group key replaces in one object.
+            'warn: [csszyx] ',
+            // A removed key (`fontVariant`, `maskFrom`), named with its note.
+            'warn: [csszyx] ',
+        ],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
@@ -170,7 +139,12 @@ export const SIZE_BUDGETS = [
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 550_000,
+        // Raised from 550,000 on 2026-10-02: settling stand-alone and group
+        // keys across sz array layers, and the diagnostics for a moved value
+        // in a ternary or parametric variant, a dynamic family conflict and a
+        // spread override, cost 7,099 gzip bytes here (547,198 before,
+        // 554,297 after, un-optimized, same build).
+        maxGzipBytes: 557_500,
     },
 ];
 
@@ -209,12 +183,21 @@ function importTarget(conditionValue) {
  * `./package.json` subpath) are skipped.
  *
  * @param {string} packageDir absolute package directory
+ * @param {string[]} [subpaths] only these export subpaths; every one must exist
  * @returns {string[]} absolute entry file paths, sorted
  */
-export function listExportEntries(packageDir) {
+export function listExportEntries(packageDir, subpaths) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    const exportsMap = manifest.exports ?? {};
+    const missing = (subpaths ?? []).filter(subpath => !(subpath in exportsMap));
+    if (missing.length > 0) {
+        throw new Error(
+            `no export subpath ${missing.join(', ')} in ${manifest.name ?? packageDir}`,
+        );
+    }
     const entries = new Set();
-    for (const conditionValue of Object.values(manifest.exports ?? {})) {
+    for (const [subpath, conditionValue] of Object.entries(exportsMap)) {
+        if (subpaths && !subpaths.includes(subpath)) continue;
         const target = importTarget(conditionValue);
         if (target !== null && isRuntimeArtifact(target)) {
             entries.add(path.resolve(packageDir, target));
@@ -223,39 +206,78 @@ export function listExportEntries(packageDir) {
     return [...entries].sort();
 }
 
-/** Specifiers that pull other local chunks into the shipped graph. Package
- * imports (`@csszyx/…`, `node:…`) stay external to the bundle measurement.
- * Ordered alternation (call forms before bare `import`) keeps the scan
- * linear — no adjacent optional-whitespace groups to backtrack through. */
-const RELATIVE_IMPORT_PATTERN = /(?:from|require\s*\(|import\s*\(|import)\s*['"](\.[^'"]+)['"]/g;
-
-/** Resolve the transitive closure of entry files over their relative static
- * imports — the exact set of local files a bundler ships for those entries.
- * A broken relative import throws instead of silently shrinking the closure.
+/** Bundle a package's export entries the way a production app ships them:
+ * every entry imported as a namespace (so nothing a consumer could reach is
+ * shaken out), tree-shaken, minified, `process.env.NODE_ENV` defined as
+ * production, browser platform. Other `@csszyx/*` packages stay external so
+ * each budget counts its own code once, and so do the package's peer
+ * dependencies, which the app has whether or not it uses this package (React
+ * for `@csszyx/dynamic`). A build error throws — an import that
+ * resolves to nothing must fail the gate, never shrink the number.
  *
- * @param {string | string[]} entryPaths absolute entry file(s)
- * @returns {string[]} absolute file paths in the closure, sorted
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {string} the minified production bundle
  */
-export function resolveEntryClosure(entryPaths) {
-    const seen = new Set();
-    const queue = [entryPaths].flat().map(entry => path.resolve(entry));
-    while (queue.length > 0) {
-        const current = queue.pop();
-        if (seen.has(current)) continue;
-        seen.add(current);
-        let source;
-        try {
-            source = readFileSync(current, 'utf8');
-        } catch (error) {
-            throw new Error(
-                `Entry closure import does not exist: ${current} (${error.code ?? error.message})`,
-            );
-        }
-        for (const match of source.matchAll(RELATIVE_IMPORT_PATTERN)) {
-            queue.push(path.resolve(path.dirname(current), match[1]));
-        }
+export function appBundle(entryPaths, packageDir) {
+    const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    const contents = entryPaths
+        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
+        .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
+        .join('\n');
+    const result = buildSync({
+        stdin: { contents, resolveDir: packageDir, loader: 'js' },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        minify: true,
+        treeShaking: true,
+        external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
+        define: { 'process.env.NODE_ENV': '"production"' },
+        logLevel: 'silent',
+    });
+    return result.outputFiles[0].text;
+}
+
+/** Console calls whose first argument opens with a string literal: the
+ * method, then the text up to the first interpolation or quote. Ordered
+ * alternation and a negated class keep the scan linear on minified input. */
+const CONSOLE_CALL_PATTERN =
+    /console\.(warn|error|log|info|debug)\(\s*([`"'])?((?:(?!\$\{)[^`"'\\])*)/g;
+
+/** The messages a bundle can print, one entry per console call: `method: head`,
+ * where head is the literal's opening text (at most 56 characters) or
+ * `<expr>` when the first argument is not a string literal.
+ *
+ * @param {string} code a bundle
+ * @returns {string[]} message heads, sorted
+ */
+export function consoleMessages(code) {
+    return [...code.matchAll(CONSOLE_CALL_PATTERN)]
+        .map(([, method, quote, text]) => `${method}: ${quote ? text.slice(0, 56) : '<expr>'}`)
+        .sort();
+}
+
+/** Compare a bundle's console messages with the ones its budget allows, as
+ * multisets, both ways: a message nobody listed is a development warning that
+ * failed to fold (or a new production message that needs a decision, ADR
+ * 0011), and a listed message the bundle no longer prints is a stale list.
+ *
+ * @param {string[]} printed heads from {@link consoleMessages}
+ * @param {string[]} allowed heads the budget lists
+ * @returns {string[]} one problem per mismatch
+ */
+export function messageProblems(printed, allowed) {
+    const left = [...allowed];
+    const problems = [];
+    for (const head of printed) {
+        const at = left.indexOf(head);
+        if (at === -1) problems.push(`prints "${head}", which its budget does not list`);
+        else left.splice(at, 1);
     }
-    return [...seen].sort();
+    for (const head of left) problems.push(`no longer prints "${head}"`);
+    return problems;
 }
 
 /** Sum the gzip size of each file, compressed independently at a fixed level
@@ -288,25 +310,37 @@ export function checkBudgets(budgets, rootDir) {
     for (const budget of budgets) {
         const target = path.join(rootDir, budget.target);
         let files;
+        let gzipBytes;
         try {
             if (budget.kind === 'file') {
-                // A binary artifact is one opaque file: no import closure to
-                // walk, but its absence is still a failure, never a pass.
+                // A binary artifact is one opaque file: no import graph to
+                // bundle, but its absence is still a failure, never a pass.
                 statSync(target);
                 files = [target];
+                gzipBytes = gzipTotalBytes(files);
             } else {
-                const entries =
-                    budget.kind === 'package-exports' ? listExportEntries(target) : [target];
-                if (entries.length === 0) {
+                files = listExportEntries(target, budget.subpaths);
+                if (files.length === 0) {
                     throw new Error(`no runtime export entries in ${budget.target}/package.json`);
                 }
-                files = resolveEntryClosure(entries);
+                const bundle = appBundle(files, target);
+                gzipBytes = gzipSync(bundle, { level: 9 }).length;
+                for (const problem of messageProblems(
+                    consoleMessages(bundle),
+                    budget.productionMessages ?? [],
+                )) {
+                    failures.push(
+                        `${budget.name}: the production bundle ${problem}. Only a message that ` +
+                            "reports csszyx's own output as wrong or missing, a security or a crash " +
+                            'stays in production (ADR 0011); anything else checks ' +
+                            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
+                    );
+                }
             }
         } catch (error) {
             failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
             continue;
         }
-        const gzipBytes = gzipTotalBytes(files);
         const ok = gzipBytes <= budget.maxGzipBytes;
         results.push({
             name: budget.name,

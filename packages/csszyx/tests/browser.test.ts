@@ -116,6 +116,38 @@ describe('csszyx/browser standalone runtime', () => {
         expect(errorLog).toHaveBeenCalled();
     });
 
+    it('logs a brace-less sz value that does not parse and leaves the element unstyled', async () => {
+        // `w: 1/2` is sz written without quotes, not a class list. Read as
+        // one, it used to become the classes `w:`, `1/2`, `p:`, `4;`… with no
+        // error: the page looked half-styled and nothing said why.
+        const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+        document.body.innerHTML =
+            '<div id="frac" sz="w: 1/2"></div>' +
+            '<div id="semi" sz="p: 4; m: 2"></div>' +
+            '<div id="hex" sz="bg: #fff"></div>';
+        await loadRuntime();
+
+        for (const id of ['frac', 'semi', 'hex']) {
+            expect(document.getElementById(id)?.className).toBe('');
+        }
+        const logged = errorLog.mock.calls.map(call => call[0]);
+        expect(logged).toEqual([
+            '[csszyx] Parsing error:',
+            '[csszyx] Parsing error:',
+            '[csszyx] Parsing error:',
+        ]);
+        expect(String(errorLog.mock.calls[0]?.[2])).toContain('Unexpected "/" at 4');
+    });
+
+    it('keeps the plain class list fallback for a value with no colon', async () => {
+        const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+        document.body.innerHTML = '<div id="cls" sz="w-1/2 p-4"></div>';
+        await loadRuntime();
+
+        expect(document.getElementById('cls')?.className).toBe('w-1/2 p-4');
+        expect(errorLog).not.toHaveBeenCalled();
+    });
+
     it('defers the initial walk to DOMContentLoaded while the document is loading', async () => {
         vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
         await loadRuntime();

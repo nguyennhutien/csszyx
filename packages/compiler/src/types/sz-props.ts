@@ -933,15 +933,22 @@ export interface TypographyProps {
         | 'ultra-expanded'
         | (string & {});
 
-    /** @see https://tailwindcss.com/docs/font-variant-numeric */
-    ordinal?: boolean;
-    slashedZero?: boolean;
-    liningNums?: boolean;
-    oldstyleNums?: boolean;
-    proportionalNums?: boolean;
-    tabularNums?: boolean;
-    diagonalFractions?: boolean;
-    stackedFractions?: boolean;
+    /**
+     * `font-variant-numeric: normal` — `normal-nums`. Resets the groups
+     * written before it in one object; groups written after it replace it.
+     * @see https://tailwindcss.com/docs/font-variant-numeric
+     */
+    nums?: 'normal';
+    /** Figure style: `lining-nums` | `oldstyle-nums`. One per element; combines with the other `num*` keys. */
+    numFigure?: 'lining' | 'oldstyle';
+    /** Figure width: `proportional-nums` | `tabular-nums` (aligned columns). One per element; combines with the other `num*` keys. */
+    numSpacing?: 'proportional' | 'tabular';
+    /** Fraction style: `diagonal-fractions` | `stacked-fractions`. One per element; combines with the other `num*` keys. */
+    numFraction?: 'diagonal' | 'stacked';
+    /** `ordinal` — ordinal markers (1st, 2nd). Combines with the other `num*` keys. */
+    numOrdinal?: boolean;
+    /** `slashed-zero` — a zero with a slash. Combines with the other `num*` keys. */
+    numSlashedZero?: boolean;
 
     /** @see https://tailwindcss.com/docs/letter-spacing */
     tracking?: 'tighter' | 'tight' | 'normal' | 'wide' | 'wider' | 'widest' | (string & {});
@@ -1193,7 +1200,7 @@ export interface BorderProps {
     outlineColor?: ColorPropValue;
 
     /** @see https://tailwindcss.com/docs/outline-style */
-    outlineStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'none';
+    outlineStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'none' | 'hidden';
 
     /** @see https://tailwindcss.com/docs/outline-offset */
     outlineOffset?: 0 | 1 | 2 | 4 | 8 | (string & {});
@@ -1630,18 +1637,35 @@ export interface InteractivityProps {
     /** @see https://tailwindcss.com/docs/scroll-snap-type */
     snapType?: 'none' | 'x' | 'y' | 'both' | 'mandatory' | 'proximity';
 
-    /** @see https://tailwindcss.com/docs/touch-action */
-    touch?:
-        | 'auto'
-        | 'none'
-        | 'pan-x'
-        | 'pan-left'
-        | 'pan-right'
-        | 'pan-y'
-        | 'pan-up'
-        | 'pan-down'
-        | 'pinch-zoom'
-        | 'manipulation';
+    /**
+     * `touch-auto` | `touch-none` | `touch-manipulation` — the touch-action
+     * keywords that stand alone. Written after `touchPan*` / `touchPinchZoom`
+     * in one object it replaces them; written before, they replace it.
+     * @see https://tailwindcss.com/docs/touch-action
+     */
+    touch?: 'auto' | 'none' | 'manipulation';
+    /** Horizontal pan: `touch-pan-x` | `touch-pan-left` | `touch-pan-right`. Combines with the other `touch*` groups. */
+    touchPanX?: 'x' | 'left' | 'right';
+    /** Vertical pan: `touch-pan-y` | `touch-pan-up` | `touch-pan-down`. Combines with the other `touch*` groups. */
+    touchPanY?: 'y' | 'up' | 'down';
+    /** `touch-pinch-zoom`. Combines with the other `touch*` groups. */
+    touchPinchZoom?: boolean;
+
+    /**
+     * `contain-none` | `contain-strict` | `contain-content` — the containment
+     * keywords that stand alone. Written after the `contain*` groups in one
+     * object it replaces them; written before, they replace it.
+     * @see https://developer.mozilla.org/docs/Web/CSS/contain
+     */
+    contain?: 'none' | 'strict' | 'content';
+    /** Size containment: `contain-size` | `contain-inline-size`. Combines with the other `contain*` groups. */
+    containSize?: 'size' | 'inline-size';
+    /** `contain-layout`. Combines with the other `contain*` groups. */
+    containLayout?: boolean;
+    /** `contain-paint`. Combines with the other `contain*` groups. */
+    containPaint?: boolean;
+    /** `contain-style`. Combines with the other `contain*` groups. */
+    containStyle?: boolean;
 
     /** @see https://tailwindcss.com/docs/user-select */
     select?: 'none' | 'text' | 'all' | 'auto';

@@ -73,8 +73,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "unbuild",
-    "dev": "unbuild --stub",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "test": "vitest run"
   },
   "dependencies": {
@@ -87,8 +87,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "tsdown": "0.23.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   },
   "sideEffects": [

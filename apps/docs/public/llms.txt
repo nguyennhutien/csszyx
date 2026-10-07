@@ -75,9 +75,9 @@ Boolean aliases (`{ flex: true }`, `{ italic: true }`, `{ uppercase: true }`)
 were **removed** — they emit nothing and warn; run `csszyx migrate` to rewrite.
 Each property has exactly one key, so it can never be set twice in one object.
 
-Genuinely on/off utilities — composite (`truncate`, `srOnly`), stackable
-font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
-`ring`, `blur`), plugin (`container`, `prose`) — stay boolean.
+Genuinely on/off utilities — composite (`truncate`, `srOnly`), single-keyword
+font-variant-numeric groups (`numOrdinal`, `numSlashedZero`), default-or-value
+(`grow`, `ring`, `blur`), plugin (`container`, `prose`) — stay boolean.
 
 ### Arbitrary values
 

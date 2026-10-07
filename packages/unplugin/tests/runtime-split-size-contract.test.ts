@@ -26,11 +26,14 @@ import { createUnservedRuntimeModule } from '../src/virtual-modules.js';
 const require = createRequire(import.meta.url);
 
 /**
- * A string constant that exists only in the compiler's transform chunk — a
- * dev-warning message, kept verbatim by minification. Present in a bundle
- * exactly when the browser transform shipped.
+ * A string constant that exists only in the compiler's transform chunk — the
+ * error `transform` throws for options passed the old way, kept verbatim by
+ * minification. Present in a bundle exactly when the browser transform shipped.
+ *
+ * Not a warning message: those fold away in a production bundle now, so a
+ * warning marker reads "no compiler" whether or not the transform shipped.
  */
-const COMPILER_MARKER = 'received a numeric key';
+const COMPILER_MARKER = 'transform takes options';
 
 /**
  * A string only the compiler's property tables carry — a display value from its
@@ -118,21 +121,20 @@ const LIGHT_RUNTIME_PROBES = [
 
 describe('runtime split size contract', () => {
     it('the marker string still identifies the compiler chunk', () => {
-        // If a compiler refactor ever renames this warning, every assertion
+        // If a compiler refactor ever renames this error, every assertion
         // below would silently test nothing — pin the marker itself first.
-        // The entry re-exports from a shared chunk (ESM `from './shared/…'`,
-        // CJS `require('./shared/…')`), so scan the entry plus every sibling
-        // chunk rather than parsing either syntax.
+        // The entry re-exports from a shared chunk whose name and folder are
+        // the bundler's layout, so scan every JS file in the entry's `dist`
+        // rather than parsing either import syntax.
         const fs = require('node:fs');
         const path = require('node:path');
         const browserEntry = require.resolve('@csszyx/compiler/browser');
-        const sharedDir = path.join(path.dirname(browserEntry), 'shared');
-        const candidates = [browserEntry];
-        if (fs.existsSync(sharedDir)) {
-            for (const name of fs.readdirSync(sharedDir)) {
-                candidates.push(path.join(sharedDir, name));
-            }
-        }
+        const distDir = path.dirname(browserEntry);
+        const candidates = fs
+            .readdirSync(distDir, { recursive: true })
+            .map(String)
+            .filter(name => /\.[cm]?js$/.test(name))
+            .map(name => path.join(distDir, name));
         const found = candidates.some(file =>
             String(fs.readFileSync(file)).includes(COMPILER_MARKER),
         );

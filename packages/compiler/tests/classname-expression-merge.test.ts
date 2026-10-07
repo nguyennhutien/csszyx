@@ -16,9 +16,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+
+import { RUST_LANE } from './engine-parity-harness.js';
 
 /**
  * Extract the transformed JSX element for stable comparison.
@@ -104,15 +106,12 @@ describe('className expression + static sz merges (never overwritten)', () => {
             expect([...oxc.classes]).toEqual([...babel.classes]);
         });
 
-        it.skipIf(!isRustTransformAvailable())(
-            `rust is byte-identical to oxc — ${fixture.name}`,
-            () => {
-                const oxc = transformWasm(fixture.tsx, 'F.tsx');
-                const rust = transformRust(fixture.tsx, 'F.tsx');
-                expect(element(rust.code)).toBe(element(oxc.code));
-                expect([...rust.classes]).toEqual([...oxc.classes]);
-            },
-        );
+        it.skipIf(!RUST_LANE)(`rust is byte-identical to oxc — ${fixture.name}`, () => {
+            const oxc = transformWasm(fixture.tsx, 'F.tsx');
+            const rust = transformRust(fixture.tsx, 'F.tsx');
+            expect(element(rust.code)).toBe(element(oxc.code));
+            expect([...rust.classes]).toEqual([...oxc.classes]);
+        });
     }
 
     it('string-literal className still merges into one static string', () => {

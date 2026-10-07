@@ -98,6 +98,30 @@ pub struct SourceIr {
     /// Resolved objects omitted from emission but still requiring diagnostics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub omitted_sz_objects: Vec<StaticSzObject>,
+    /// Stand-alone keywords and group keys of one family in one `sz` object
+    /// level where one side holds a runtime value, so the object's order cannot
+    /// settle them at build time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_group_conflicts: Vec<DynamicGroupConflictIr>,
+}
+
+/// A key of a stand-alone keyword family that takes a runtime value beside a
+/// key of the other side of its family, in one `sz` object level.
+///
+/// The lowering settles a stand-alone keyword and its groups by the object's
+/// order only for static values; a runtime value lowers to a conditional class
+/// beside the other side's class, and Tailwind's stylesheet order then decides
+/// which applies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamicGroupConflictIr {
+    /// The key holding the runtime value.
+    pub key: String,
+    /// The key of the other side of its family.
+    pub other: String,
+    /// Span of the property holding the runtime value.
+    pub span: TextSpan,
+    /// Whether `key` is written before `other`.
+    pub key_first: bool,
 }
 
 /// One compiled `szs` slot.
@@ -157,6 +181,7 @@ impl SourceIr {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         }
     }
 
@@ -430,6 +455,10 @@ pub enum DroppedKeyReason {
     /// The key is supported, but Tailwind has no utility that reads a CSS
     /// custom property for it, so a runtime value cannot be lowered at all.
     NoVarForm,
+    /// The key is removed boolean sugar written with a value the static
+    /// collector cannot see: a ternary with a `true` branch, or a runtime
+    /// value. Its message names the canonical `{ key: value }`.
+    RemovedSugar,
 }
 
 /// Dynamic property dropped before CSS-variable lowering, with no static value
@@ -443,6 +472,14 @@ pub struct DroppedSzKeyIr {
     /// Which of the two drops this was.
     #[serde(default)]
     pub reason: DroppedKeyReason,
+    /// The string literals the value can take (ternary branches included),
+    /// read for an alias of a key whose values moved: its report names where
+    /// each one went.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literals: Vec<String>,
+    /// Whether some branch of the value is not a literal.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub opaque: bool,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -635,6 +672,10 @@ pub struct StaticArrayPartIr {
     /// legitimate forwarded slots and stay silent. Defaults false for older IR.
     #[serde(default)]
     pub dynamic_object_literal: bool,
+    /// Stand-alone keyword families in this element's object where one side
+    /// takes a runtime value beside the other side.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_conflicts: Vec<DynamicGroupConflictIr>,
 }
 
 /// Class/className attribute.
@@ -941,6 +982,7 @@ mod tests {
             duplicate_sz_attributes: Vec::new(),
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
+            dynamic_group_conflicts: Vec::new(),
         };
 
         assert!(!ir.is_noop());
