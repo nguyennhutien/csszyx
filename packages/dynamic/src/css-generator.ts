@@ -27,7 +27,10 @@ function warnUnsafeArbitrary(utility: string): void {
     if (warnedUnsafeArbitrary) {
         return;
     }
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+    // Written out so the app's bundler folds it. Probing `typeof process` and
+    // `process.env?.` first kept it from folding: the warning shipped in every
+    // production bundle and printed there, in a browser that has no `process`.
+    if (process.env.NODE_ENV === 'production') {
         return;
     }
     warnedUnsafeArbitrary = true;

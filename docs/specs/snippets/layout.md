@@ -154,6 +154,22 @@ Controlling flow relative to floats.
 | **Start** | `clear: inline-start` | `clear-start`     | `{ clear: 'start' }`      |      |
 | **End**   | `clear: inline-end`   | `clear-end`       | `{ clear: 'end' }`        |      |
 
+## Contain
+
+Utilities for controlling how an element's contents are isolated from the rest of the page.
+CSS takes one keyword per group — size, layout, paint, style — and combines the groups, so each
+group is one key. `contain` holds the keywords that stand alone. In one object the later key
+wins: `contain` after the group keys replaces them, group keys after `contain` replace it and
+combine.
+
+| Concept         | CSS Rule          | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                    |
+| :-------------- | :---------------- | :---------------- | :------------------------ | :---------------------- |
+| **Stand-alone** | `contain: strict` | `contain-strict`  | `{ contain: 'strict' }`   | Also `none`, `content`. |
+| **Size**        | `contain: size`   | `contain-size`    | `{ containSize: 'size' }` | Also `inline-size`.     |
+| **Layout**      | `contain: layout` | `contain-layout`  | `{ containLayout: true }` |                         |
+| **Paint**       | `contain: paint`  | `contain-paint`   | `{ containPaint: true }`  |                         |
+| **Style**       | `contain: style`  | `contain-style`   | `{ containStyle: true }`  |                         |
+
 ## Isolation
 
 Controlling stacking contexts.

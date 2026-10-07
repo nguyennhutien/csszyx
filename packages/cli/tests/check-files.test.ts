@@ -11,43 +11,15 @@
  * checked alone yields exactly what it yields in a whole-project run. That is
  * what makes a staged-files hook honest rather than approximate.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type CheckOptions, check } from '../src/commands/check.js';
-
-const REPO = path.resolve(import.meta.dirname, '../../..');
-const TAILWIND_V4 = path.dirname(
-    createRequire(path.join(REPO, 'scripts/')).resolve('tailwindcss/package.json'),
-);
-const roots: string[] = [];
-
-/**
- * Build a throwaway project carrying its own Tailwind.
- *
- * @param files - Project-relative files to write.
- * @returns Absolute project root.
- */
-function projectWith(files: Record<string, string>): string {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-files-')));
-    roots.push(root);
-    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
-    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    for (const [relative, content] of Object.entries(files)) {
-        const file = path.join(root, relative);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content, 'utf8');
-    }
-    return root;
-}
+import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -102,7 +74,7 @@ const OTHER_BAD = `export const B = () => <div sz={{ otherNonsense: 2 }} />;`;
 
 describe('csszyx check --files', () => {
     it('checks exactly the files it was given', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
             'src/Other.tsx': OTHER_BAD,
@@ -115,7 +87,7 @@ describe('csszyx check --files', () => {
     });
 
     it('leaves a file out of the run when it was not listed', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
             'src/Clean.tsx': `export const B = () => <div sz={{ p: 4 }} />;`,
@@ -128,7 +100,7 @@ describe('csszyx check --files', () => {
     });
 
     it('takes several paths, as a hook hands them over', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
             'src/AlsoBad.tsx': OTHER_BAD,
@@ -141,7 +113,7 @@ describe('csszyx check --files', () => {
     });
 
     it('accepts an absolute path, which is what a hook usually passes', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
             'src/Other.tsx': OTHER_BAD,
@@ -155,7 +127,7 @@ describe('csszyx check --files', () => {
     it('ignores a listed path that is not a source file, rather than failing', async () => {
         // A hook passes everything staged. Refusing the run because a README
         // was committed alongside would make the hook useless.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'README.md': '# hi\n',
             'src/Bad.tsx': BAD,
@@ -168,7 +140,7 @@ describe('csszyx check --files', () => {
     });
 
     it('reports nothing when the list holds no source files at all', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'README.md': '# hi\n',
             'src/Bad.tsx': BAD,
@@ -193,7 +165,7 @@ describe('csszyx check --files', () => {
  */
 describe('csszyx check --files with a path that does not resolve', () => {
     it('fails rather than reporting a file it never read as clean', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Real.tsx': BAD,
         });
@@ -206,7 +178,7 @@ describe('csszyx check --files with a path that does not resolve', () => {
     });
 
     it('names the path it could not read', async () => {
-        const cwd = projectWith({ 'src/app.css': '@import "tailwindcss";' });
+        const cwd = tailwindProject({ 'src/app.css': '@import "tailwindcss";' });
         // The reporter writes every level through console.log, warnings too.
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -218,7 +190,7 @@ describe('csszyx check --files with a path that does not resolve', () => {
 
     it('reads a windows-style path as the file it names', async () => {
         // The separator a hook passes is not a statement about the filesystem.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Real.tsx': BAD,
         });
@@ -229,7 +201,7 @@ describe('csszyx check --files with a path that does not resolve', () => {
     });
 
     it('accepts a windows-style glob for the same files as a posix one', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Real.tsx': BAD,
         });
@@ -255,7 +227,7 @@ describe('csszyx check --files with a path that does not resolve', () => {
  */
 describe('csszyx check [dir]', () => {
     it('scans only the files under the directory', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/components/Bad.tsx': BAD,
             'src/pages/Other.tsx': OTHER_BAD,
@@ -270,7 +242,7 @@ describe('csszyx check [dir]', () => {
     });
 
     it('reads --pattern relative to the directory', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/components/Bad.tsx': BAD,
             'src/components/Other.jsx': OTHER_BAD,
@@ -285,7 +257,7 @@ describe('csszyx check [dir]', () => {
     });
 
     it('reads a windows-style directory as the one it names', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/components/Bad.tsx': BAD,
             'src/pages/Other.tsx': OTHER_BAD,
@@ -300,7 +272,7 @@ describe('csszyx check [dir]', () => {
 
     it('refuses a directory together with --files, since both choose the files', async () => {
         // Either answer would silently drop what the other one asked for.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
         });
@@ -313,7 +285,7 @@ describe('csszyx check [dir]', () => {
     });
 
     it('fails on a directory that does not exist rather than passing on no files', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
         });
@@ -327,7 +299,7 @@ describe('csszyx check [dir]', () => {
     it('refuses an absolute --pattern, which would not stay inside the directory', async () => {
         // fast-glob reads an absolute pattern as absolute whatever root it is
         // given, so the run would scan outside the directory and not say so.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/components/Clean.tsx': 'export const C = () => <div sz={{ p: 4 }} />;',
             'src/pages/Bad.tsx': BAD,
@@ -345,7 +317,7 @@ describe('csszyx check [dir]', () => {
     });
 
     it('points a single file at --files', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/Bad.tsx': BAD,
         });

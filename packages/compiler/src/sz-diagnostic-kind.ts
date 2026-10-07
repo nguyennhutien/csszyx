@@ -67,7 +67,11 @@ const KINDS: ReadonlyArray<
 > = [
     ['unknown-key', false, { startsWith: 'Unknown property "' }],
     ['canonical-key', false, { startsWith: 'Use the canonical key "' }],
-    ['removed-key', false, { pattern: /^"[^"]+" (?:boolean sugar )?was removed at / }],
+    [
+        'removed-key',
+        false,
+        { pattern: /^"[^"]+" (?:(?:boolean sugar )?was removed|was replaced) at / },
+    ],
     ['numeric-key', false, { startsWith: 'sz received a numeric key "' }],
     ['closed-enum-value', false, { startsWith: '"', includes: ' value. The class "' }],
     ['off-scale-value', false, { includes: " is not on Tailwind's spacing scale" }],

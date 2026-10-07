@@ -137,6 +137,23 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
   { sz: "{ objectPos: 'top' }", tw: "object-top" },
 ]} />
 
+## Contain
+
+One key per group — size, layout, paint, style — so the groups combine in one
+object. `contain` holds the keywords that stand alone: written after the group
+keys it replaces them, and group keys written after it replace it.
+
+<PropTable rows={[
+  { sz: "{ contain: 'strict' }", tw: "contain-strict" },
+  { sz: "{ contain: 'content' }", tw: "contain-content" },
+  { sz: "{ containSize: 'inline-size' }", tw: "contain-inline-size" },
+  { sz: "{ containLayout: true }", tw: "contain-layout" },
+  { sz: "{ containPaint: true }", tw: "contain-paint" },
+  { sz: "{ containStyle: true }", tw: "contain-style" },
+  { sz: "{ containLayout: true, containPaint: true }", tw: "contain-layout contain-paint" },
+  { sz: "{ containPaint: true, contain: 'none' }", tw: "contain-none" },
+]} />
+
 ## Examples
 
 ```tsx

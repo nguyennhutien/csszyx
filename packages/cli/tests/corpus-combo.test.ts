@@ -102,6 +102,113 @@ function assertComboRoundTrip(classString: string): void {
     }
 }
 
+/**
+ * The classes one sz object lowers to.
+ *
+ * @param sz - A migrated sz object.
+ * @returns Its classes.
+ */
+function classesOf(sz: Record<string, unknown>): string[] {
+    return (transform(sz as SzObject).className ?? '').split(' ').filter(Boolean);
+}
+
+/**
+ * Whether the element's output still sets what one input class set.
+ *
+ * Migrate may fold two classes into one: `text-sm leading-7` is written
+ * `text-sm/7`, which sets both. The line-height half of such a pair is found
+ * by its value after the slash, under the same variant prefix.
+ *
+ * @param expected - One class the input class lowers to on its own.
+ * @param output - Every class the whole element lowers to, plus what stays in `className`.
+ * @returns True when the output carries it.
+ */
+function carries(expected: string, output: ReadonlySet<string>): boolean {
+    if (output.has(expected)) return true;
+    const variants = expected.slice(0, expected.lastIndexOf(':') + 1);
+    const utility = expected.slice(variants.length);
+    for (const className of output) {
+        if (className.startsWith(`${expected}/`)) return true;
+        const leading = /^leading-(.+)$/.exec(utility);
+        if (
+            leading &&
+            className.startsWith(`${variants}text-`) &&
+            className.endsWith(`/${leading[1]}`)
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Elements where two classes land on one sz key and migrate keeps the later.
+ *
+ * Each needs a decision about the key, not a table fix, so they are listed
+ * rather than skipped: the gate fails when one of them stops losing a class,
+ * and the entry has to go.
+ */
+const KNOWN_CLASS_LOSS: ReadonlyMap<string, string> = new Map([
+    [
+        'border-transparent bg-current bg-dash-icon dark:border-transparent dark:bg-current',
+        '`bg-dash-icon` is a project utility; read as a colour it overwrites `bg-current`',
+    ],
+    [
+        'flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent',
+        'bare `border-t` and `border-t-transparent` both write the side key',
+    ],
+    [
+        'text-md font-semibold text-gray-900 dark:text-gray-50',
+        '`text-md` is a project size; read as a colour it meets `text-gray-900`',
+    ],
+    [
+        'text-tremor-default text-tremor-content-strong dark:text-dark-tremor-content-strong font-medium',
+        'two project `text-*` tokens, a size and a colour, both read as a colour',
+    ],
+    [
+        'text-tremor-default text-tremor-content dark:text-dark-tremor-content',
+        'two project `text-*` tokens, a size and a colour, both read as a colour',
+    ],
+    [
+        'outline outline-offset-2 outline-0 focus-visible:outline-2',
+        'bare `outline` and `outline-0` both write `outline`',
+    ],
+]);
+
+/**
+ * Assert that migrating one corpus element loses none of its classes.
+ *
+ * The round-trip above proves nothing was invented; this is the other
+ * direction. It converts the element the way `csszyx migrate` does — the whole
+ * class string at once, so two classes that land on one key meet — and asks
+ * that every class the element had is still set by the result.
+ *
+ * @param classString Whitespace-separated element classes.
+ */
+function assertNoClassLost(classString: string): void {
+    const whole = classNameToSzObject(classString);
+    const output = new Set([
+        ...classesOf(whole.szObject),
+        ...whole.unrecognized,
+        ...whole.keepInClassName,
+    ]);
+    const lost = classString
+        .split(/\s+/)
+        .filter(Boolean)
+        .filter(className =>
+            classesOf(classNameToSzObject(className).szObject).some(
+                expected => !carries(expected, output),
+            ),
+        );
+    if (KNOWN_CLASS_LOSS.has(classString)) {
+        expect(lost, 'a known loss no longer loses a class; remove it from the list').not.toEqual(
+            [],
+        );
+        return;
+    }
+    expect(lost, `migrate dropped a class from "${classString}"`).toEqual([]);
+}
+
 const comboFiles = existsSync(COMBO_DIR)
     ? readdirSync(COMBO_DIR)
           .filter(f => f.endsWith('.txt'))
@@ -122,6 +229,7 @@ describe('corpus combo: real element className strings → one sz object', () =>
             for (const classString of classStrings) {
                 it(classString, () => {
                     assertComboRoundTrip(classString);
+                    assertNoClassLost(classString);
                 });
             }
         });

@@ -11,43 +11,14 @@
  * `--allow-token` is the deliberate way out: the exemption becomes a line in a
  * diff someone reviews rather than a check nobody runs.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { check } from '../src/commands/check.js';
-
-const REPO = path.resolve(import.meta.dirname, '../../..');
-const TAILWIND_V4 = path.dirname(
-    createRequire(path.join(REPO, 'scripts/')).resolve('tailwindcss/package.json'),
-);
-const roots: string[] = [];
-
-/**
- * Build a throwaway project carrying its own Tailwind.
- *
- * @param files - Project-relative files to write.
- * @returns Absolute project root.
- */
-function projectWith(files: Record<string, string>): string {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-theme-')));
-    roots.push(root);
-    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
-    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    for (const [relative, content] of Object.entries(files)) {
-        const file = path.join(root, relative);
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, content, 'utf8');
-    }
-    return root;
-}
+import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -70,7 +41,7 @@ const APP = `export const A = () => <div sz={{ p: 4 }} />;`;
 
 describe('csszyx check — a theme token that shadows a built-in', () => {
     it('fails, naming the file, the line and the class it changes', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': APP,
         });
@@ -85,7 +56,7 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
 
     it('finds a collision under a prefix the token is not obviously named for', async () => {
         // A colour feeds `bg-` as well, so `--color-cover` changes `bg-cover`.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-cover: #0af;\n}\n',
             'src/App.tsx': APP,
         });
@@ -95,7 +66,7 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
     });
 
     it('passes once the project accepts the name deliberately', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': APP,
         });
@@ -107,7 +78,7 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
     });
 
     it('passes for a theme whose names nothing else claims', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-brand: #0af;\n}\n',
             'src/App.tsx': APP,
         });
@@ -117,7 +88,7 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
     });
 
     it('covers a namespace other than colours', async () => {
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --text-balance: 4rem;\n}\n',
             'src/App.tsx': APP,
         });
@@ -137,7 +108,7 @@ describe('csszyx check — when the probe compile cannot be made', () => {
         // stylesheet compiles — the whole rest of the command works on it — and
         // only the probe compile fails, so a report here would fail CI over a
         // token this package injected.
-        const cwd = projectWith({
+        const cwd = tailwindProject({
             'src/once.cjs':
                 'let compiles = 0;\n' +
                 'module.exports = function onceOnlyPlugin() {\n' +

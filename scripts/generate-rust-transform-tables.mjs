@@ -42,6 +42,9 @@ function readTables() {
         const core = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
         );
+        const families = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/keyword-families.ts'),
+        );
         const varHostile = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/var-hostile-keys.ts'),
         );
@@ -55,12 +58,16 @@ function readTables() {
             knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
             removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
+            replacedKeys: core.stringSet('REPLACED_KEYS'),
             knownVariants: core.stringSet('KNOWN_VARIANTS'),
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
             suggestionMap: core.stringObject('SUGGESTION_MAP'),
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
+            closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
+            closedEnumValueMoves: core.objectOfStringObjects('CLOSED_ENUM_VALUE_MOVES'),
+            globalKeywordGroups: families.objectOfStringObjects('GLOBAL_KEYWORD_GROUPS'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
         };
@@ -78,12 +85,16 @@ function renderRust({
     knownSpecialProperties,
     removedBooleanSugar,
     removedBooleanSugarReplacement,
+    replacedKeys,
     knownVariants,
     ariaStates,
     specialVariants,
     suggestionMap,
     migrationNotes,
     closedEnumClasses,
+    closedEnumAffixes,
+    closedEnumValueMoves,
+    globalKeywordGroups,
     varHostileWrongProperty,
     varHostileNoVarForm,
 }) {
@@ -181,6 +192,15 @@ ${renderPairArms(removedBooleanSugarReplacement)}
     }
 }
 
+/// Returns true when a key was canonical and got a new spelling, so its
+/// removal message says it was replaced rather than that sugar was removed.
+pub(crate) fn is_replaced_key(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(replacedKeys)}
+    )
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
@@ -225,6 +245,47 @@ pub(crate) fn is_closed_enum_key(key: &str) -> bool {
         key,
 ${renderMatchPatterns(closedEnumClasses.map(([key]) => key))}
     )
+}
+
+/// The fixed part a closed-enum key wraps around a value outside its set, as
+/// \`(prefix, suffix)\`. Keys absent here emit such a value verbatim.
+pub(crate) fn closed_enum_affix(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+${renderAffixArms(closedEnumAffixes)}
+        _ => None,
+    }
+}
+
+/// The key and value that replaced a value a closed key used to take, keyed by
+/// the key and the old value. A value of \`true\` is the boolean flag.
+pub(crate) fn closed_enum_value_move(key: &str, value: &str) -> Option<(&'static str, &'static str)> {
+    match (key, value) {
+${renderValueMoveArms(closedEnumValueMoves)}
+        _ => None,
+    }
+}
+
+/// The group keys a stand-alone keyword key resets, space-separated, when the
+/// key holds one.
+pub(crate) fn global_keyword_groups(key: &str) -> Option<&'static str> {
+    match key {
+${globalKeywordGroups.map(([key, fields]) => `        ${rustString(key)} => Some(${rustString(Object.fromEntries(fields).groups)}),`).join('\n')}
+        _ => None,
+    }
+}
+
+/// The stand-alone keyword key a group key belongs to.
+pub(crate) fn global_keyword_for_group(key: &str) -> Option<&'static str> {
+    match key {
+${globalKeywordGroups
+    .flatMap(([global, fields]) =>
+        Object.fromEntries(fields)
+            .groups.split(' ')
+            .map(group => `        ${rustString(group)} => Some(${rustString(global)}),`),
+    )
+    .join('\n')}
+        _ => None,
+    }
 }
 
 /// The legal values of a closed-enum key, in table order, for the diagnostic.
@@ -280,6 +341,25 @@ function renderClosedEnumLists(entries) {
 function renderMatchArms(entries) {
     return entries
         .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
+}
+
+function renderValueMoveArms(entries) {
+    return entries
+        .map(([moved, fields]) => {
+            const shape = Object.fromEntries(fields);
+            const colon = moved.indexOf(':');
+            return `        (${rustString(moved.slice(0, colon))}, ${rustString(moved.slice(colon + 1))}) => Some((${rustString(shape.key)}, ${rustString(shape.value)})),`;
+        })
+        .join('\n');
+}
+
+function renderAffixArms(entries) {
+    return entries
+        .map(([key, fields]) => {
+            const shape = Object.fromEntries(fields);
+            return `        ${rustString(key)} => Some((${rustString(shape.prefix)}, ${rustString(shape.suffix)})),`;
+        })
         .join('\n');
 }
 

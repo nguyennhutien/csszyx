@@ -57,13 +57,23 @@ Controlling the font width.
 
 ## Font Variant Numeric
 
-Controlling numeric glyphs.
+Controlling numeric glyphs. CSS allows one keyword per group — figure, spacing,
+fraction, ordinal, slashed zero — and combines the groups, so each group is one
+key: a second value for the same group replaces the first, different groups
+combine. `normal` resets them: in one object the later key wins, so `nums` after the group keys
+replaces them and group keys after `nums` replace it.
 
-| Concept     | CSS Rule                                      | Tailwind v4 Class                                                                                                                                        | `sz` Prop (Object Syntax)             | Note                          |
-| :---------- | :-------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------ | :---------------------------- |
-| **Variant** | `font-variant-numeric: ordinal, slashed-zero` | `normal-nums`, `ordinal`, `slashed-zero`, `lining-nums`, `oldstyle-nums`, `proportional-nums`, `tabular-nums`, `diagonal-fractions`, `stacked-fractions` | `{ fontVariant: 'normal-nums' }` etc. |                               |
-| **Boolean** | `font-variant-numeric: slashed-zero`          | `slashed-zero`                                                                                                                                           | `{ slashedZero: true }`               | **Overwrites** `fontVariant`. |
-| **Boolean** | `font-variant-numeric: ordinal`               | `ordinal`                                                                                                                                                | `{ ordinal: true }`                   | **Overwrites** `fontVariant`. |
+| Concept          | CSS Rule                                   | Tailwind v4 Class    | `sz` Prop (Object Syntax)        | Note                            |
+| :--------------- | :----------------------------------------- | :------------------- | :------------------------------- | :------------------------------ |
+| **Reset**        | `font-variant-numeric: normal`             | `normal-nums`        | `{ nums: 'normal' }`             | Later key wins over the groups. |
+| **Figure**       | `font-variant-numeric: lining-nums`        | `lining-nums`        | `{ numFigure: 'lining' }`        | One per element.                |
+| **Figure**       | `font-variant-numeric: oldstyle-nums`      | `oldstyle-nums`      | `{ numFigure: 'oldstyle' }`      |                                 |
+| **Spacing**      | `font-variant-numeric: proportional-nums`  | `proportional-nums`  | `{ numSpacing: 'proportional' }` | One per element.                |
+| **Spacing**      | `font-variant-numeric: tabular-nums`       | `tabular-nums`       | `{ numSpacing: 'tabular' }`      | Aligned number columns.         |
+| **Fraction**     | `font-variant-numeric: diagonal-fractions` | `diagonal-fractions` | `{ numFraction: 'diagonal' }`    | One per element.                |
+| **Fraction**     | `font-variant-numeric: stacked-fractions`  | `stacked-fractions`  | `{ numFraction: 'stacked' }`     |                                 |
+| **Ordinal**      | `font-variant-numeric: ordinal`            | `ordinal`            | `{ numOrdinal: true }`           |                                 |
+| **Slashed zero** | `font-variant-numeric: slashed-zero`       | `slashed-zero`       | `{ numSlashedZero: true }`       |                                 |
 
 ## Font Features
 

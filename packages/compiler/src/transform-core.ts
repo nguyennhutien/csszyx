@@ -12,12 +12,22 @@ import {
     warnStringColorOpacity,
     warnUnrecognizedColor,
 } from './color-validation.js';
+import {
+    GROUPS_OF_GLOBAL_KEYWORD,
+    keysDisplacedBy,
+    keysSettledAway,
+    settleGlobalKeywords,
+} from './keyword-families.js';
 import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { szDevWarningsEnabled } from './sz-dev-warnings.js';
+import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
 
+// Re-exported so callers of this module keep one name for the family merge
+// helpers; the runtime's `szv` merge imports them from their own light subpath,
+// `@csszyx/compiler/keyword-families`, which carries no property tables.
+export { keysDisplacedBy, keysSettledAway } from './keyword-families.js';
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
@@ -52,7 +62,10 @@ export interface SzObject {
  * @returns A new deep-merged sz object.
  */
 export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject {
-    const result: SzObject = { ...target };
+    // Each layer settles its own stand-alone keywords first, as it would lowered
+    // alone; the merge then lets the later layer's keys replace the earlier's.
+    const result = withoutShadowedKeys(target);
+    const incoming = keysSettledAway(source);
     for (const [key, value] of Object.entries(source)) {
         const existing = result[key];
         const merged =
@@ -62,8 +75,32 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
             typeof value === 'object'
                 ? deepMergeSzObjects(existing, value)
                 : value;
+        // A later stand-alone keyword or group key drops the side of its family
+        // it replaces. Its place then decides nothing: both layers are settled,
+        // so the merged level never holds the two sides of a family at once,
+        // and the key keeps its place as every other key does — merging
+        // reorders no class it does not have to.
+        if (value !== undefined && value !== null && value !== false) {
+            for (const other of keysDisplacedBy(key)) delete result[other];
+        }
+        if (incoming.has(key)) delete result[key];
+        // A key its own layer settled away still did its work above — a
+        // stand-alone keyword resets the earlier layers' groups — but is not kept.
+        if (incoming.has(key)) continue;
         result[key] = dropDisplacedSubKeys(key, merged, value);
     }
+    return result;
+}
+
+/**
+ * A copy of one object level without the keys its stand-alone keywords
+ * settle away. Reports nothing: the merge that calls it runs before lowering.
+ * @param szProp - One object level of an sz value.
+ * @returns The copy.
+ */
+function withoutShadowedKeys(szProp: SzObject): SzObject {
+    const result: SzObject = { ...szProp };
+    for (const key of keysSettledAway(szProp)) delete result[key];
     return result;
 }
 
@@ -544,9 +581,15 @@ export const MIGRATION_NOTES: Record<string, string> = {
     maskVia:
         'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
     maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
+    // One key could hold one keyword, while CSS combines one per group.
+    fontVariant:
+        'font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal"',
 };
 
 export const SUGGESTION_MAP: Record<string, string> = {
+    // font-variant-numeric single-keyword groups joined the `num*` family (0.18.0)
+    ordinal: 'numOrdinal',
+    slashedZero: 'numSlashedZero',
     // Background
     backgroundColor: 'bg',
     backgroundImage: 'bgImg',
@@ -910,12 +953,23 @@ export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
     'maskMode',
     'maskType',
     'snapStrictness',
+    // font-variant-numeric, one key per group of its grammar (CLOSED_ENUM_CLASSES)
+    'nums',
+    'numFigure',
+    'numSpacing',
+    'numFraction',
+    // touch-action and contain, one key per group (CLOSED_ENUM_CLASSES); `touch`
+    // itself is a PROPERTY_MAP key
+    'touchPanX',
+    'touchPanY',
+    'contain',
+    'containSize',
 ]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
-// (truncate, srOnly), additive/stackable flags (font-variant-numeric, which
-// combine), default-or-value toggles (grow/ring/blur — true means the default,
+// (truncate, srOnly), single-keyword groups of an additive property
+// (numOrdinal, numSlashedZero), default-or-value toggles (grow/ring/blur — true means the default,
 // a value means a specific one), plugin components (container/prose), and
 // directional reverse flags. Value-alias sugar for display/position/visibility/
 // isolation/text-transform/font-style/text-decoration-line/font-smoothing was
@@ -944,15 +998,16 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     'proseInvert',
     'srOnly',
     'notSrOnly',
-    'ordinal',
-    'slashedZero',
-    // Font variant numeric (additive — these combine, so they stay boolean flags)
-    'liningNums',
-    'oldstyleNums',
-    'proportionalNums',
-    'tabularNums',
-    'diagonalFractions',
-    'stackedFractions',
+    // font-variant-numeric groups with a single keyword; the two-keyword groups
+    // are closed enums (numFigure/numSpacing/numFraction) so one object cannot
+    // set both keywords of a group.
+    'numOrdinal',
+    'numSlashedZero',
+    // the single-keyword groups of touch-action and contain
+    'touchPinchZoom',
+    'containLayout',
+    'containPaint',
+    'containStyle',
     // Divide/Space reverse
     'divideXReverse',
     'divideYReverse',
@@ -1002,6 +1057,12 @@ const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
     outline: true,
     truncate: true,
     shadow: true,
+    numOrdinal: true,
+    numSlashedZero: true,
+    touchPinchZoom: true,
+    containLayout: true,
+    containPaint: true,
+    containStyle: true,
 } as const satisfies SzProps;
 
 // Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
@@ -1059,7 +1120,32 @@ export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string 
     // font-smoothing
     antialiased: { key: 'fontSmoothing', value: 'grayscale' },
     subpixelAntialiased: { key: 'fontSmoothing', value: 'subpixel' },
+    // font-variant-numeric: each two-keyword group became one key (0.18.0)
+    liningNums: { key: 'numFigure', value: 'lining' },
+    oldstyleNums: { key: 'numFigure', value: 'oldstyle' },
+    proportionalNums: { key: 'numSpacing', value: 'proportional' },
+    tabularNums: { key: 'numSpacing', value: 'tabular' },
+    diagonalFractions: { key: 'numFraction', value: 'diagonal' },
+    stackedFractions: { key: 'numFraction', value: 'stacked' },
 };
+
+/**
+ * Keys that were canonical and got a new spelling (0.18.0 `num*` family).
+ *
+ * They reach the same removal paths as boolean sugar and alias names, but
+ * they were never sugar or a CSS property name, so every message says they
+ * were replaced. Generated into the engine's tables (`is_replaced_key`).
+ */
+export const REPLACED_KEYS: ReadonlySet<string> = new Set([
+    'liningNums',
+    'oldstyleNums',
+    'proportionalNums',
+    'tabularNums',
+    'diagonalFractions',
+    'stackedFractions',
+    'ordinal',
+    'slashedZero',
+]);
 
 // Alignment sz-keys take csszyx's short value form (start/end/between/around/
 // evenly), NOT the CSS-spec longhand (flex-start/space-between/...). A longhand
@@ -1137,12 +1223,12 @@ export const BOOLEAN_TO_CLASS: Record<string, string> = {
     spaceXReverse: 'space-x-reverse',
     spaceYReverse: 'space-y-reverse',
     // Font variant numeric
-    liningNums: 'lining-nums',
-    oldstyleNums: 'oldstyle-nums',
-    proportionalNums: 'proportional-nums',
-    tabularNums: 'tabular-nums',
-    diagonalFractions: 'diagonal-fractions',
-    stackedFractions: 'stacked-fractions',
+    numOrdinal: 'ordinal',
+    numSlashedZero: 'slashed-zero',
+    touchPinchZoom: 'touch-pinch-zoom',
+    containLayout: 'contain-layout',
+    containPaint: 'contain-paint',
+    containStyle: 'contain-style',
     // Transforms
     transformGpu: 'transform-gpu',
     transformCpu: 'transform-cpu',
@@ -1295,7 +1381,8 @@ const _warnedSpacingSteps = new Set<string>();
  */
 function warnDeadSpacingStep(key: string, value: number): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.SPACING ||
         (value * 4) % 1 === 0
     ) {
@@ -1368,7 +1455,7 @@ function isBorderSideStyleValue(key: string, value: string): boolean {
  * @param value - The style keyword that was dropped.
  */
 function warnBorderSideStyle(key: string, value: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     const token = `${key}:${value}`;
     if (_warnedBorderSideStyles.has(token)) return;
     _warnedBorderSideStyles.add(token);
@@ -1399,7 +1486,12 @@ const _warnedWeightValues = new Set<string>();
  * @param value - The string value about to be emitted bare.
  */
 function warnDeadWeightValue(rawKey: string, value: string): void {
-    if (rawKey !== 'weight' || !szDevWarningsEnabled() || !/^\d+(?:\.\d+)?$/.test(value)) {
+    if (
+        rawKey !== 'weight' ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        !/^\d+(?:\.\d+)?$/.test(value)
+    ) {
         return;
     }
     if (_warnedWeightValues.has(value)) return;
@@ -2585,7 +2677,8 @@ function resolvedThemeTokenValue(token: string): string | null {
  */
 function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         color.startsWith('--') ||
         needsArbitraryBrackets(color) ||
         /-\d{2,3}$/.test(color) ||
@@ -2729,7 +2822,6 @@ const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']
 /** Collects special properties that emit one direct utility. */
 function collectBasicSpecialProperty(
     rawKey: string,
-    key: string,
     value: SzValue,
     prefix: string,
     classes: string[],
@@ -2738,7 +2830,7 @@ function collectBasicSpecialProperty(
         classes.push(`${prefix}${formatWillChange(value)}`);
         return true;
     }
-    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(key) : undefined;
+    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(rawKey) : undefined;
     if (legal !== undefined && typeof value === 'string') {
         // The important modifier is a class suffix, never part of the value:
         // `flex!` is a legal display value that a raw lookup would refuse.
@@ -2749,8 +2841,13 @@ function collectBasicSpecialProperty(
             classes.push(`${prefix}${utility}${bang}`);
             return true;
         }
-        const bare = bareClosedEnumClass(key, base);
-        warnClosedEnumValue(key, base, bare, legal);
+        const moved = CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`];
+        if (moved !== undefined) {
+            warnMovedValue(rawKey, base, moved);
+            return true;
+        }
+        const bare = bareClosedEnumClass(rawKey, base);
+        warnClosedEnumValue(rawKey, base, bare, legal);
         classes.push(`${prefix}${bare}${bang}`);
         return true;
     }
@@ -2825,6 +2922,65 @@ const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
         isolate: 'isolate',
         auto: 'isolation-auto',
     },
+    // font-variant-numeric, one key per group of `normal | [ <figure> ||
+    // <spacing> || <fraction> || ordinal || slashed-zero ]`. Each group is one
+    // Tailwind variable, so two keywords of a group override and different
+    // groups combine. Source of truth: `docs/specs/snippets/typography.md`.
+    nums: { normal: 'normal-nums' },
+    numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
+    numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
+    numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
+    // touch-action: `auto | none | [ pan-x… || pan-y… || pinch-zoom ] |
+    // manipulation`. `touch` holds the keywords that stand alone. Source of
+    // truth: `docs/specs/snippets/interactivity.md`.
+    touch: { auto: 'touch-auto', none: 'touch-none', manipulation: 'touch-manipulation' },
+    touchPanX: { x: 'touch-pan-x', left: 'touch-pan-left', right: 'touch-pan-right' },
+    touchPanY: { y: 'touch-pan-y', up: 'touch-pan-up', down: 'touch-pan-down' },
+    // contain: `none | strict | content | [ size|inline-size || layout || style
+    // || paint ]`. Source of truth: `docs/specs/snippets/layout.md`.
+    contain: { none: 'contain-none', strict: 'contain-strict', content: 'contain-content' },
+    containSize: { size: 'contain-size', 'inline-size': 'contain-inline-size' },
+};
+
+/**
+ * What a closed-enum key wraps around a value outside its table.
+ *
+ * `display`/`position`/`visibility` spell their value as the bare utility, so
+ * a typo goes out verbatim. The other keys' utilities carry a fixed part, and
+ * keeping it on a typo keeps the class clear of a project's own CSS names:
+ * `numSpacing: 'tabulr'` ships `tabulr-nums`, not `tabulr`. The engine reads a
+ * generated copy, so both artifacts emit the same class.
+ */
+const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> = {
+    isolation: { prefix: 'isolation-', suffix: '' },
+    nums: { prefix: '', suffix: '-nums' },
+    numFigure: { prefix: '', suffix: '-nums' },
+    numSpacing: { prefix: '', suffix: '-nums' },
+    numFraction: { prefix: '', suffix: '-fractions' },
+    touch: { prefix: 'touch-', suffix: '' },
+    touchPanX: { prefix: 'touch-pan-', suffix: '' },
+    touchPanY: { prefix: 'touch-pan-', suffix: '' },
+    contain: { prefix: 'contain-', suffix: '' },
+    containSize: { prefix: 'contain-', suffix: '' },
+};
+
+/**
+ * Values a closed key took until a group got its own key, keyed
+ * `<key>:<value>`, with the key and value that replaced them.
+ *
+ * A moved value emits no class and names its replacement, as a removed key
+ * does. A replacement value of `'true'` is the boolean flag. The engine reads
+ * a generated copy (`closed_enum_value_move`), and `csszyx migrate` rewrites
+ * with it.
+ */
+export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', string>> = {
+    'touch:pan-x': { key: 'touchPanX', value: 'x' },
+    'touch:pan-left': { key: 'touchPanX', value: 'left' },
+    'touch:pan-right': { key: 'touchPanX', value: 'right' },
+    'touch:pan-y': { key: 'touchPanY', value: 'y' },
+    'touch:pan-up': { key: 'touchPanY', value: 'up' },
+    'touch:pan-down': { key: 'touchPanY', value: 'down' },
+    'touch:pinch-zoom': { key: 'touchPinchZoom', value: 'true' },
 };
 
 /**
@@ -2847,24 +3003,26 @@ const _warnedClosedEnumValues = new Set<string>();
 /**
  * The class a closed-enum key emits for a value outside its table.
  *
- * On these keys the value IS the class, so it goes out verbatim — except
- * `isolation`, whose utilities are prefixed. This is the pre-diagnostic
- * behaviour, kept on purpose: the class is what makes the typo findable in
- * the DOM when no diagnostic reaches it.
+ * The value keeps its key's fixed part (`CLOSED_ENUM_AFFIXES`), or goes out
+ * verbatim on the keys whose value IS the class. The class is emitted on
+ * purpose: it is what makes the typo findable in the DOM when no diagnostic
+ * reaches it.
  * @param key - The closed-enum key.
  * @param value - The value outside its set, without the important modifier.
  * @returns The bare utility, before any variant prefix.
  */
 function bareClosedEnumClass(key: string, value: string): string {
-    return key === 'isolation' ? `isolation-${value}` : value;
+    const affix = CLOSED_ENUM_AFFIXES[key];
+    return affix ? `${affix.prefix}${value}${affix.suffix}` : value;
 }
 
 /**
  * Warns when a closed-enum key carries a value CSS does not define for it.
  *
- * On these four keys the value IS the class, so the typo ships as a bare
- * unprefixed class name — the shape a project's own component CSS is made of,
- * which makes it a possible collision rather than a plain dead class. The
+ * On `display`/`position`/`visibility` the value IS the class, so the typo
+ * ships as a bare unprefixed class name — the shape a project's own component
+ * CSS is made of, which makes it a possible collision rather than a plain dead
+ * class; the other keys keep their fixed part (`CLOSED_ENUM_AFFIXES`). The
  * class is still emitted: the lowering cannot see whether a diagnostic will
  * reach this site, and a drop where none does is a silent loss. Naming the
  * emitted class is what makes it findable either way.
@@ -2880,14 +3038,134 @@ function warnClosedEnumValue(
     legal: ReadonlyMap<string, string>,
 ): void {
     const token = `${key}:${value}`;
-    if (!szDevWarningsEnabled() || _warnedClosedEnumValues.has(token)) return;
+    if (
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        _warnedClosedEnumValues.has(token)
+    )
+        return;
     _warnedClosedEnumValues.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const values = [...legal.keys()].join(', ');
+    const sibling = siblingGroupOf(key, bare);
+    if (sibling !== undefined) {
+        console.warn(
+            `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" it ` +
+                `emits belongs to { ${sibling} }: write that key, so it combines with the other ` +
+                `groups instead of resetting them. ${key} takes one of: ${values}.`,
+        );
+        return;
+    }
     console.warn(
         `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" is ` +
             'still emitted and styles nothing, unless a rule of your own happens to match ' +
-            `it. ${key} takes one of: ${[...legal.keys()].join(', ')}.`,
+            `it. ${key} takes one of: ${values}.`,
     );
+}
+
+/**
+ * The group key and value whose class a stand-alone key's stray value emits.
+ *
+ * `contain: 'paint'` emits `contain-paint`, which is the class of
+ * `{ containPaint: true }`: the value belongs to a group of the same property.
+ * As a stand-alone value it resets the groups written before it instead of
+ * combining with them, so the message names the group key to write.
+ * @param key - A closed-enum key.
+ * @param bare - The class its value emits.
+ * @returns `group: value` for the group whose class it is, or undefined.
+ */
+function siblingGroupOf(key: string, bare: string): string | undefined {
+    for (const group of GROUPS_OF_GLOBAL_KEYWORD.get(key) ?? []) {
+        for (const [value, utility] of CLOSED_ENUM_LOOKUP.get(group) ?? []) {
+            if (utility === bare) return `${group}: '${value}'`;
+        }
+        if (BOOLEAN_TO_CLASS[group] === bare) return `${group}: true`;
+    }
+    return undefined;
+}
+
+/** Moved values already warned about, so a re-render cannot spam. */
+const _warnedMovedValues = new Set<string>();
+
+/**
+ * The message for a value that moved onto its group's own key.
+ * @param key - The key the value was written on.
+ * @param value - The value.
+ * @param moved - The key and value that replaced it; `'true'` is a flag.
+ * @param at - The ` at file:line` suffix, or empty.
+ * @returns The diagnostic.
+ */
+function movedValueMessage(
+    key: string,
+    value: string,
+    moved: Record<'key' | 'value', string>,
+    at: string,
+): string {
+    const replacement = moved.value === 'true' ? 'true' : `'${moved.value}'`;
+    return (
+        `[csszyx] "${key}: ${value}" moved to { ${moved.key}: ${replacement} }${at}. ` +
+        'Run `csszyx migrate` to rewrite it.'
+    );
+}
+
+/**
+ * Warns that a value moved onto its group's own key. The class is gone, so
+ * it prints in production and in the browser too (ADR 0011), once, as removed
+ * boolean sugar does; only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
+ * @param key - The key the value was written on.
+ * @param value - The value.
+ * @param moved - The key and value that replaced it.
+ */
+function warnMovedValue(key: string, value: string, moved: Record<'key' | 'value', string>): void {
+    if (szWarningsQuiet() || _warnedMovedValues.has(`${key}:${value}`)) return;
+    _warnedMovedValues.add(`${key}:${value}`);
+    console.warn(
+        movedValueMessage(key, value, moved, szWarnLocation ? ` at ${szWarnLocation}` : ''),
+    );
+}
+
+/** Stand-alone keys already reported before a group, so a re-render cannot spam. */
+const _warnedGlobalsBeforeGroups = new Set<string>();
+
+/**
+ * Warns that a stand-alone keyword comes before a group key of its family in
+ * one object, so the group replaces it and its value styles nothing.
+ *
+ * Written that way by hand the keyword is dead code; it is also exactly what a
+ * spread override leaves, because the override keeps the key at the place the
+ * spread gave it: `{ ...base, contain: 'none' }` over a `base` holding
+ * `contain` and `containPaint` still reads `contain` first. The class it
+ * meant is missing, so this prints in production too (ADR 0011), once.
+ * @param global - The stand-alone key.
+ * @param value - Its value.
+ * @param group - The first group key written after it.
+ */
+function warnGlobalBeforeGroup(global: string, value: unknown, group: string): void {
+    // A literal, as the engine reports it; an object there is a different
+    // mistake, which its own warning names.
+    if (typeof value === 'object') return;
+    const text = String(value as string | number | boolean);
+    const token = `${global}:${text}>${group}`;
+    if (szWarningsQuiet() || _warnedGlobalsBeforeGroups.has(token)) return;
+    _warnedGlobalsBeforeGroups.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${global}: ${text}"${at} comes before "${group}" in one sz object, so ` +
+            `${group} replaces it and the ${global} value styles nothing. A spread override ` +
+            `({ ...base, ${global}: '${text}' }) leaves this order; to override, layer it: ` +
+            `sz={[base, { ${global}: '${text}' }]}.`,
+    );
+}
+
+/**
+ * The keys of one object level its stand-alone keywords settle away
+ * ({@link settleGlobalKeywords}), warning about each stand-alone key a later
+ * group replaces.
+ * @param szProp - One object level of an sz value.
+ * @returns The keys to leave out of the lowering.
+ */
+function keysShadowedByGlobalKeywords(szProp: SzObject): ReadonlySet<string> {
+    return settleGlobalKeywords(szProp, warnGlobalBeforeGroup);
 }
 
 /** Returns whether a key controls a gradient stop position. */
@@ -2915,7 +3193,7 @@ function collectFontModeProperty(
     if (value === 'grayscale') className = 'antialiased';
     else if (value === 'subpixel') className = 'subpixel-antialiased';
     if (className) classes.push(`${prefix}${className}`);
-    else if (szDevWarningsEnabled()) {
+    else if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
         console.warn(
             `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
                 `'grayscale' or 'subpixel'.`,
@@ -2926,7 +3204,7 @@ function collectFontModeProperty(
 
 /** Warns when fontStyle cannot map to a Tailwind class. */
 function warnUnsupportedFontStyle(value: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     console.warn(
         `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
             `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
@@ -2941,17 +3219,6 @@ const DECORATION_CLASSES = new Set([
     'none',
 ]);
 const TEXT_TRANSFORM_CLASSES = new Set(['uppercase', 'lowercase', 'capitalize']);
-const FONT_VARIANT_CLASSES = new Set([
-    'normal-nums',
-    'ordinal',
-    'slashed-zero',
-    'lining-nums',
-    'oldstyle-nums',
-    'proportional-nums',
-    'tabular-nums',
-    'diagonal-fractions',
-    'stacked-fractions',
-]);
 
 /** Collects direct text decoration, transform, wrapping, and numeral modes. */
 function collectTextKeywordProperty(
@@ -2970,10 +3237,6 @@ function collectTextKeywordProperty(
     }
     if (key === 'textTransform' && (value === 'normal-case' || value === 'none')) {
         classes.push(`${prefix}normal-case`);
-        return true;
-    }
-    if (key === 'fontVariant' && FONT_VARIANT_CLASSES.has(value)) {
-        classes.push(`${prefix}${value}`);
         return true;
     }
     if (key === 'textWrap') {
@@ -3491,7 +3754,7 @@ const warnedMaskLayerValues = new Set<string>();
 
 /**
  * Warn that a `mask` layer value moved, naming the key that replaced it.
- * Fires in browser dev as well (unlike szDevWarningsEnabled warnings): the
+ * Fires in browser dev as well (unlike szNodeWarningsUnmuted warnings): the
  * consequence is a silently dropped mask, which is exactly the migration
  * mistake a first-time user makes inside a runtime-resolved sz object.
  *
@@ -3628,7 +3891,12 @@ function formatPerspectiveOrigin(value: string): string {
 
 /** Warns when a fallback key cannot produce a supported sz utility. */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
-    if (!szDevWarningsEnabled() || isKnownSzPropertyKey(key)) return;
+    if (
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        isKnownSzPropertyKey(key)
+    )
+        return;
     let message = unknownSzPropertyMessage(key);
     if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
     console.warn(message);
@@ -3969,9 +4237,14 @@ const _warnedOwnedKeyVariants = new Set<string>();
  */
 function warnOwnedKeyVariantObject(key: string): void {
     // The key test first: every nested variant reaches this line, and the
-    // environment read behind `szDevWarningsEnabled` is the expensive half
+    // environment reads in the production check are the expensive half
     // (+13% on a six-variant object when it ran first).
-    if (!isOwnedNonVariantKey(key) || !szDevWarningsEnabled() || _warnedOwnedKeyVariants.has(key)) {
+    if (
+        !isOwnedNonVariantKey(key) ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
+        _warnedOwnedKeyVariants.has(key)
+    ) {
         return;
     }
     _warnedOwnedKeyVariants.add(key);
@@ -4030,7 +4303,8 @@ export function __resetSzWarnDedupForTests(): void {
  */
 function warnPropertyObjectValue(key: string, value: Record<string, unknown>): void {
     if (
-        !szDevWarningsEnabled() ||
+        process.env.NODE_ENV === 'production' ||
+        !szNodeWarningsUnmuted() ||
         !(key in PROPERTY_MAP) ||
         KNOWN_VARIANTS.has(key) ||
         SPECIAL_VARIANTS.has(key) ||
@@ -4098,11 +4372,12 @@ function collectNestedVariant(
 /**
  * Suppresses a removed boolean shorthand and emits its migration warning.
  *
- * Gated like {@link warnAlignmentValue} — on the build mode alone. The general
- * dev gate also requires `typeof window === 'undefined'`, which silences the
- * browser console, and a removed shorthand reaching a runtime sz object is
- * exactly the case with no build log to read: the key is dropped and the
- * element renders unstyled with nothing said anywhere.
+ * Not behind the general dev gate, which requires `typeof window ===
+ * 'undefined'` and so silences the browser console: a removed shorthand
+ * reaching a runtime sz object is exactly the case with no build log to read,
+ * where the key is dropped and the element renders unstyled. The class is
+ * missing, so it prints in production too (ADR 0011), once per key; only
+ * `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
  *
  * @param rawKey - The authored sz key.
  * @param value - Its value; only `true` is the removed shorthand.
@@ -4112,14 +4387,39 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
     const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
     if (!removed) return false;
-    if (process.env.NODE_ENV !== 'production' && !warnedRemovedSugar.has(rawKey)) {
-        warnedRemovedSugar.add(rawKey);
-        console.warn(
-            `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
-                `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
-        );
-    }
+    const what = REPLACED_KEYS.has(rawKey) ? 'was replaced' : 'boolean sugar was removed';
+    warnRemovedKeyOnce(rawKey, what, `{ ${removed.key}: '${removed.value}' }`);
     return true;
+}
+
+/**
+ * Prints the warning for a key that emits no class because it was replaced or
+ * removed, once per key, in every mode and in the browser.
+ * @param rawKey - The authored key.
+ * @param what - `was replaced` or `boolean sugar was removed`.
+ * @param replacement - The `{ key: value }` to write instead.
+ */
+function warnRemovedKeyOnce(rawKey: string, what: string, replacement: string): void {
+    if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
+    warnedRemovedSugar.add(rawKey);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${rawKey}" ${what}${at}. Use ${replacement} instead, or run \`csszyx migrate\`.`,
+    );
+}
+
+/**
+ * Prints the warning for a key that was removed outright (`MIGRATION_NOTES`),
+ * once per key, in every mode and in the browser: the key emits no class, so
+ * a page with no build log to read loses it silently otherwise (ADR 0011).
+ * Only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
+ * @param rawKey - The authored key.
+ */
+function warnRemovedKey(rawKey: string): void {
+    if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
+    warnedRemovedSugar.add(rawKey);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(`[csszyx] "${rawKey}" was removed${at}: ${MIGRATION_NOTES[rawKey]}.`);
 }
 
 /** Removed shorthands already warned about, so a re-render cannot spam. */
@@ -4180,6 +4480,26 @@ function collectUnresolvedDirectProperty(
     return true;
 }
 
+/**
+ * Warn about a key that emits nothing under its own name: an alias, or a
+ * removed key.
+ *
+ * @param rawKey The key as written.
+ * @param value Its value.
+ * @param szProp The object it sits in.
+ */
+function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): void {
+    // An alias holding a value that moved: its canonical key no longer
+    // takes the value, so name where the value went instead.
+    const moved =
+        typeof value === 'string'
+            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
+            : undefined;
+    if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
+    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
+    else warnUnknownSzProperty(rawKey, szProp);
+}
+
 /** Collects one property after filtering inactive values and shortcut forms. */
 function collectTransformProperty(
     rawKey: string,
@@ -4189,8 +4509,14 @@ function collectTransformProperty(
     classes: string[],
 ): void {
     if (value === false || value === null || value === undefined) return;
+    // A flag that joined a group under a new name emits nothing; say so in
+    // every mode, as for the other replaced keys.
+    if (REPLACED_KEYS.has(rawKey) && rawKey in SUGGESTION_MAP) {
+        warnRemovedKeyOnce(rawKey, 'was replaced', `{ ${SUGGESTION_MAP[rawKey]}: true }`);
+        return;
+    }
     if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {
-        warnUnknownSzProperty(rawKey, szProp);
+        warnAliasOrRemovedKey(rawKey, value, szProp);
         return;
     }
     warnAlignmentValue(rawKey, value);
@@ -4200,7 +4526,7 @@ function collectTransformProperty(
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 
     const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
-    if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) return;
+    if (collectBasicSpecialProperty(rawKey, value, prefix, classes)) return;
     if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
     collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
 }
@@ -4245,7 +4571,9 @@ function transformImpl(
 ): TransformResult {
     const classes: string[] = [];
 
+    const shadowed = keysShadowedByGlobalKeywords(szProp);
     for (const [rawKey, value] of Object.entries(szProp)) {
+        if (shadowed.has(rawKey)) continue;
         collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 

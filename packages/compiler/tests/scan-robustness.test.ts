@@ -20,9 +20,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
+import { RUST_LANE } from './engine-parity-harness.js';
 
 const ENGINES = [
     ['auto', transformSource],
@@ -51,7 +52,7 @@ describe('safelist scan robustness', () => {
                 });
             }
 
-            it.skipIf(!isRustTransformAvailable())(
+            it.skipIf(!RUST_LANE)(
                 `rust extracts classes from JSX in a .${ext} file (no silent empty scan)`,
                 () => {
                     const result = transformRust(jsxInJs, `Toolbar.${ext}`);
@@ -69,7 +70,7 @@ describe('safelist scan robustness', () => {
             }
         });
 
-        it.skipIf(!isRustTransformAvailable())(
+        it.skipIf(!RUST_LANE)(
             'rust still flags a genuinely broken file with a parse-error diagnostic',
             () => {
                 const broken = 'export const A = () => <div sz={{ p: 4 } ;';
@@ -100,7 +101,7 @@ describe('safelist scan robustness', () => {
             });
         }
 
-        it.skipIf(!isRustTransformAvailable())('rust catalogs both attribute orders', () => {
+        it.skipIf(!RUST_LANE)('rust catalogs both attribute orders', () => {
             for (const source of fixtures) {
                 expect([...transformRust(source, 'A.tsx').rawClassNames].sort()).toEqual([
                     'raw',
@@ -124,7 +125,7 @@ describe('safelist scan robustness', () => {
             });
         }
 
-        it.skipIf(!isRustTransformAvailable())('rust matches on both shapes', () => {
+        it.skipIf(!RUST_LANE)('rust matches on both shapes', () => {
             expect([...transformRust(numericSz, 'A.tsx').classes].sort()).toEqual(['p-2']);
             expect([...transformRust(numericSzvLeaf, 'A.tsx').classes].sort()).toEqual(['m-6']);
         });

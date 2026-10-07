@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "globalDependencies": ["**/.env.*local"],
+  "globalDependencies": ["**/.env.*local", "tsdown.base.mjs"],
   "envMode": "loose",
   "tasks": {
     "build": {
@@ -43,6 +43,7 @@
     // input, including README.md and tsconfig.json.
     "@csszyx/compiler#test": {
       "dependsOn": ["^build", "@csszyx/runtime#build"],
+      "env": ["CSSZYX_TEST_WASM_ONLY"],
       "outputs": ["coverage/**"],
       "inputs": [
         "src/**",

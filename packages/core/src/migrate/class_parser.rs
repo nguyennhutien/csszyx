@@ -29,6 +29,14 @@ pub fn parse_class(class: &str) -> Option<ParsedClass> {
     if let Some(container) = parse_container_marker(input) {
         return Some(container);
     }
+    if let Some(mask) = parse_mask(input) {
+        return Some(apply_important(mask, important));
+    }
+    // A layer-shaped class the layers do not read stays in `className`: on the
+    // prefix path it became `mask: 'linear-…'`, a value the engine drops.
+    if is_mask_layer_class(input) {
+        return None;
+    }
     if let Some(boolean) = try_boolean_match(input) {
         return Some(apply_important(boolean, important));
     }
@@ -40,6 +48,176 @@ pub fn parse_class(class: &str) -> Option<ParsedClass> {
     }
     parse_custom_property_declaration(input)
         .map(|declaration| apply_important(declaration, important))
+}
+
+/// A mask utility, on the key that owns its CSS variable (ADR 0013).
+///
+/// `mask` holds a direct mask-image only. The gradient layers are
+/// `maskLinear` / `maskRadial` / `maskConic`, with the angle, the sides and
+/// the stops as members, and the keyword utilities belong to `maskSize`,
+/// `maskPos`, `maskMode` and `maskComposite`. Anything this does not read —
+/// `mask-none`, an arbitrary image, `mask-clip-*` — takes the prefix path.
+fn parse_mask(input: &str) -> Option<ParsedClass> {
+    let negative = input.starts_with('-');
+    let body = input
+        .strip_prefix('-')
+        .unwrap_or(input)
+        .strip_prefix("mask-")?;
+    for (family, slot) in [
+        ("linear", "maskLinear"),
+        ("radial", "maskRadial"),
+        ("conic", "maskConic"),
+    ] {
+        let Some(rest) = body
+            .strip_prefix(family)
+            .and_then(|rest| rest.strip_prefix('-'))
+        else {
+            continue;
+        };
+        if let Some((edge, value)) = stop_parts(rest) {
+            return (!negative).then(|| ParsedClass::new(slot, member(edge, mask_stop(value))));
+        }
+        if family == "radial" {
+            return parse_radial_member(rest, negative);
+        }
+        return mask_angle(rest, negative)
+            .map(|angle| ParsedClass::new(slot, member("angle", angle)));
+    }
+    if negative {
+        return None;
+    }
+    for side in ["t", "r", "b", "l", "x", "y"] {
+        let Some(rest) = body
+            .strip_prefix(side)
+            .and_then(|rest| rest.strip_prefix('-'))
+        else {
+            continue;
+        };
+        if let Some((edge, value)) = stop_parts(rest) {
+            return Some(ParsedClass::new(
+                "maskLinear",
+                member(side, member(edge, mask_stop(value))),
+            ));
+        }
+    }
+    let (prop, value) = match body {
+        "circle" | "ellipse" => {
+            return Some(ParsedClass::new(
+                "maskRadial",
+                member("shape", SzValue::from(body)),
+            ))
+        }
+        "add" | "subtract" | "intersect" | "exclude" => ("maskComposite", body),
+        "alpha" | "luminance" => ("maskMode", body),
+        "match" => ("maskMode", "match-source"),
+        "no-clip" => ("maskClip", body),
+        "repeat" | "no-repeat" | "repeat-x" | "repeat-y" => ("maskRepeat", body),
+        "repeat-space" => ("maskRepeat", "space"),
+        "repeat-round" => ("maskRepeat", "round"),
+        "type-alpha" => ("maskType", "alpha"),
+        "type-luminance" => ("maskType", "luminance"),
+        "auto" | "cover" | "contain" => ("maskSize", body),
+        "center" | "top" | "bottom" | "left" | "right" | "top-left" | "top-right"
+        | "bottom-left" | "bottom-right" => ("maskPos", body),
+        _ => return None,
+    };
+    Some(ParsedClass::new(prop, value))
+}
+
+/// A signed mask class, or one naming a gradient layer.
+fn is_mask_layer_class(input: &str) -> bool {
+    input.starts_with("-mask-")
+        || input.strip_prefix("mask-").is_some_and(|body| {
+            ["linear-", "radial-", "conic-"]
+                .iter()
+                .any(|family| body.starts_with(family))
+        })
+}
+
+/// `from-<value>` or `to-<value>`, split into the stop and its value.
+fn stop_parts(rest: &str) -> Option<(&'static str, &str)> {
+    if let Some(value) = rest.strip_prefix("from-") {
+        return Some(("from", value));
+    }
+    rest.strip_prefix("to-").map(|value| ("to", value))
+}
+
+/// The radial layer's own members: `at-<position>` and the size keywords.
+fn parse_radial_member(rest: &str, negative: bool) -> Option<ParsedClass> {
+    if negative {
+        return None;
+    }
+    if let Some(at) = rest.strip_prefix("at-") {
+        return Some(ParsedClass::new(
+            "maskRadial",
+            member("at", SzValue::from(at)),
+        ));
+    }
+    matches!(
+        rest,
+        "closest-side" | "closest-corner" | "farthest-side" | "farthest-corner"
+    )
+    .then(|| ParsedClass::new("maskRadial", member("size", SzValue::from(rest))))
+}
+
+/// A layer angle: a number of degrees, signed by the class's own `-`, or a
+/// CSS variable.
+fn mask_angle(rest: &str, negative: bool) -> Option<SzValue> {
+    if let Some(inner) = wrapped(rest, '(', ')') {
+        return (!negative && inner.starts_with("--")).then(|| SzValue::from(inner));
+    }
+    if !rest.bytes().all(|byte| byte.is_ascii_digit()) || rest.is_empty() {
+        return None;
+    }
+    let degrees = js_number(rest)?;
+    Some(SzValue::Number(if negative { -degrees } else { degrees }))
+}
+
+/// A stop's value. Position and colour are separate variables: a number, a
+/// percentage or an arbitrary value is a position, `(--x)` is a position
+/// variable, `(color:--x)` a colour variable, and a word is a colour, with
+/// its `/opacity` as `op`.
+fn mask_stop(value: &str) -> SzValue {
+    if let Some(inner) = wrapped(value, '(', ')') {
+        return inner.strip_prefix("color:").map_or_else(
+            || member("at", SzValue::from(inner)),
+            |colour| member("color", SzValue::from(colour)),
+        );
+    }
+    if value.starts_with('[') {
+        return SzValue::from(value);
+    }
+    if let Some(number) =
+        js_number(value).filter(|_| value.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
+    {
+        return SzValue::Number(number);
+    }
+    if value.strip_suffix('%').is_some_and(|number| {
+        !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+    }) {
+        return SzValue::from(value);
+    }
+    let mut colour = SzObject::new();
+    match value.split_once('/') {
+        Some((name, opacity)) => {
+            colour.insert("color".to_string(), SzValue::from(name));
+            colour.insert(
+                "op".to_string(),
+                js_number(opacity).map_or_else(|| SzValue::from(opacity), SzValue::Number),
+            );
+        }
+        None => {
+            colour.insert("color".to_string(), SzValue::from(value));
+        }
+    }
+    SzValue::Object(colour)
+}
+
+/// `{ name: value }`.
+fn member(name: &str, value: SzValue) -> SzValue {
+    let mut object = SzObject::new();
+    object.insert(name.to_string(), value);
+    SzValue::Object(object)
 }
 
 /// `@container`, `@container/name`, `group/name`, `peer/name`: the slash
@@ -306,6 +484,9 @@ fn numeric_opacity(value: &str) -> SzValue {
 
 /// Pick the prefix's key by the value's shape and spell the value.
 fn disambiguate(prefix: &str, value: &str, negative: bool) -> Option<ParsedClass> {
+    if class_rules::keeps_in_class_name(prefix, value) {
+        return None;
+    }
     let shape = Shape::read(value);
     let (_, rule) = class_rules::select(class_rules::rules_for(prefix), &shape)?;
     Some(ParsedClass::new(
@@ -429,5 +610,155 @@ mod tests {
             "rules no corpus class reaches: {}",
             unreached.join(", ")
         );
+    }
+
+    #[test]
+    fn ring_inset_stays_in_class_name_and_the_ring_width_still_migrates() {
+        // `ring` holds the width too, so `ring-1 ring-inset` on one element
+        // would keep only the later class.
+        assert!(parse_class("ring-inset").is_none());
+        assert!(parse_class("ring-inset!").is_none());
+        let width = parse_class("ring-2").expect("a ring width migrates");
+        assert_eq!(width.prop, "ring");
+        let colour = parse_class("ring-blue-500").expect("a ring colour migrates");
+        assert_eq!(colour.prop, "ringColor");
+    }
+
+    /// One parsed mask class as JSON, for a compact expectation.
+    fn mask_json(class: &str) -> String {
+        parse_class(class).map_or_else(
+            || "null".to_string(),
+            |parsed| serde_json::to_string(&parsed).expect("a parsed class serialises"),
+        )
+    }
+
+    #[test]
+    fn mask_utilities_land_on_the_key_that_owns_their_variable() {
+        for (class, expected) in [
+            (
+                "mask-linear-45",
+                r#"{"prop":"maskLinear","value":{"angle":45}}"#,
+            ),
+            (
+                "-mask-conic-90",
+                r#"{"prop":"maskConic","value":{"angle":-90}}"#,
+            ),
+            (
+                "mask-linear-(--a)",
+                r#"{"prop":"maskLinear","value":{"angle":"--a"}}"#,
+            ),
+            (
+                "mask-linear-from-20%",
+                r#"{"prop":"maskLinear","value":{"from":"20%"}}"#,
+            ),
+            (
+                "mask-conic-to-1.5",
+                r#"{"prop":"maskConic","value":{"to":1.5}}"#,
+            ),
+            (
+                "mask-radial-from-[3rem]",
+                r#"{"prop":"maskRadial","value":{"from":"[3rem]"}}"#,
+            ),
+            (
+                "mask-b-from-(--p)",
+                r#"{"prop":"maskLinear","value":{"b":{"from":{"at":"--p"}}}}"#,
+            ),
+            (
+                "mask-t-to-(color:--c)",
+                r#"{"prop":"maskLinear","value":{"t":{"to":{"color":"--c"}}}}"#,
+            ),
+            (
+                "mask-x-from-red-500/30",
+                r#"{"prop":"maskLinear","value":{"x":{"from":{"color":"red-500","op":30}}}}"#,
+            ),
+            (
+                "mask-y-to-black/[.5]",
+                r#"{"prop":"maskLinear","value":{"y":{"to":{"color":"black","op":"[.5]"}}}}"#,
+            ),
+            (
+                "mask-l-from-white",
+                r#"{"prop":"maskLinear","value":{"l":{"from":{"color":"white"}}}}"#,
+            ),
+            (
+                "mask-radial-at-top",
+                r#"{"prop":"maskRadial","value":{"at":"top"}}"#,
+            ),
+            (
+                "mask-radial-farthest-corner",
+                r#"{"prop":"maskRadial","value":{"size":"farthest-corner"}}"#,
+            ),
+            (
+                "mask-ellipse",
+                r#"{"prop":"maskRadial","value":{"shape":"ellipse"}}"#,
+            ),
+            (
+                "mask-subtract",
+                r#"{"prop":"maskComposite","value":"subtract"}"#,
+            ),
+            (
+                "mask-luminance",
+                r#"{"prop":"maskMode","value":"luminance"}"#,
+            ),
+            (
+                "mask-match",
+                r#"{"prop":"maskMode","value":"match-source"}"#,
+            ),
+            ("mask-cover", r#"{"prop":"maskSize","value":"cover"}"#),
+            (
+                "mask-top-right",
+                r#"{"prop":"maskPos","value":"top-right"}"#,
+            ),
+            ("mask-no-clip", r#"{"prop":"maskClip","value":"no-clip"}"#),
+            (
+                "mask-repeat-space",
+                r#"{"prop":"maskRepeat","value":"space"}"#,
+            ),
+            (
+                "mask-repeat-round",
+                r#"{"prop":"maskRepeat","value":"round"}"#,
+            ),
+            (
+                "mask-no-repeat",
+                r#"{"prop":"maskRepeat","value":"no-repeat"}"#,
+            ),
+            ("mask-type-alpha", r#"{"prop":"maskType","value":"alpha"}"#),
+            (
+                "mask-type-luminance",
+                r#"{"prop":"maskType","value":"luminance"}"#,
+            ),
+        ] {
+            assert_eq!(mask_json(class), expected, "{class}");
+        }
+    }
+
+    #[test]
+    fn a_mask_shape_the_layers_do_not_have_is_not_read_as_one() {
+        // A sign only on an angle; no radial angle; no named angle; no radial
+        // member outside at/size; a side with no stop.
+        for class in [
+            "-mask-linear-from-20%",
+            "-mask-linear-(--a)",
+            "-mask-radial-at-top",
+            "mask-linear-top",
+            "mask-radial-nowhere",
+            "-mask-b-from-20%",
+            "-mask-add",
+            "mask-linear-",
+        ] {
+            assert_eq!(mask_json(class), "null", "{class}");
+        }
+        // A `%` needs a number before it to be a position; anything else is
+        // read as a colour name.
+        assert_eq!(
+            mask_json("mask-linear-from-x%"),
+            r#"{"prop":"maskLinear","value":{"from":{"color":"x%"}}}"#
+        );
+        assert_eq!(
+            mask_json("mask-linear-to-%"),
+            r#"{"prop":"maskLinear","value":{"to":{"color":"%"}}}"#
+        );
+        // Not a layer or keyword: left to the prefix path.
+        assert_eq!(mask_json("mask-b-20"), r#"{"prop":"mask","value":"b-20"}"#);
+        assert_eq!(mask_json("mask-none"), r#"{"prop":"mask","value":"none"}"#);
     }
 }

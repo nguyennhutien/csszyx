@@ -13241,6 +13241,101 @@
     "oxc": "columns-xs"
   },
   {
+    "sz": "{\"contain\":\"strict\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "contain",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "strict"
+          }
+        }
+      ]
+    },
+    "oxc": "contain-strict"
+  },
+  {
+    "sz": "{\"containLayout\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containLayout",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-layout"
+  },
+  {
+    "sz": "{\"containPaint\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containPaint",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-paint"
+  },
+  {
+    "sz": "{\"containSize\":\"size\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "size"
+          }
+        }
+      ]
+    },
+    "oxc": "contain-size"
+  },
+  {
+    "sz": "{\"containStyle\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "containStyle",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "contain-style"
+  },
+  {
     "sz": "{\"container\":true}",
     "ir": {
       "properties": [
@@ -15303,25 +15398,6 @@
       ]
     },
     "oxc": "not-italic"
-  },
-  {
-    "sz": "{\"fontVariant\":\"normal-nums\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontVariant",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "normal-nums"
-          }
-        }
-      ]
-    },
-    "oxc": "normal-nums"
   },
   {
     "sz": "{\"forcedColorAdjust\":\"auto\"}",
@@ -20881,6 +20957,177 @@
     "oxc": "not-sr-only"
   },
   {
+    "sz": "{\"numFigure\":\"lining\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFigure",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "lining"
+          }
+        }
+      ]
+    },
+    "oxc": "lining-nums"
+  },
+  {
+    "sz": "{\"numFigure\":\"oldstyle\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFigure",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "oldstyle"
+          }
+        }
+      ]
+    },
+    "oxc": "oldstyle-nums"
+  },
+  {
+    "sz": "{\"numFraction\":\"diagonal\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFraction",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "diagonal"
+          }
+        }
+      ]
+    },
+    "oxc": "diagonal-fractions"
+  },
+  {
+    "sz": "{\"numFraction\":\"stacked\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numFraction",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "stacked"
+          }
+        }
+      ]
+    },
+    "oxc": "stacked-fractions"
+  },
+  {
+    "sz": "{\"numOrdinal\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numOrdinal",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "ordinal"
+  },
+  {
+    "sz": "{\"numSlashedZero\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSlashedZero",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "slashed-zero"
+  },
+  {
+    "sz": "{\"numSpacing\":\"proportional\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSpacing",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "proportional"
+          }
+        }
+      ]
+    },
+    "oxc": "proportional-nums"
+  },
+  {
+    "sz": "{\"numSpacing\":\"tabular\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "numSpacing",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "tabular"
+          }
+        }
+      ]
+    },
+    "oxc": "tabular-nums"
+  },
+  {
+    "sz": "{\"nums\":\"normal\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "nums",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "normal"
+          }
+        }
+      ]
+    },
+    "oxc": "normal-nums"
+  },
+  {
     "sz": "{\"objectFit\":\"contain\"}",
     "ir": {
       "properties": [
@@ -21354,25 +21601,6 @@
       ]
     },
     "oxc": "order-none"
-  },
-  {
-    "sz": "{\"ordinal\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "ordinal",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "ordinal"
   },
   {
     "sz": "{\"origin\":\"--o\"}",
@@ -27309,25 +27537,6 @@
     "oxc": "skew-y-6"
   },
   {
-    "sz": "{\"slashedZero\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "slashedZero",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": "slashed-zero"
-  },
-  {
     "sz": "{\"snapAlign\":\"none\"}",
     "ir": {
       "properties": [
@@ -28371,6 +28580,63 @@
       ]
     },
     "oxc": "touch-auto"
+  },
+  {
+    "sz": "{\"touchPanX\":\"x\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPanX",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "x"
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pan-x"
+  },
+  {
+    "sz": "{\"touchPanY\":\"y\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPanY",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "y"
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pan-y"
+  },
+  {
+    "sz": "{\"touchPinchZoom\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "touchPinchZoom",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "touch-pinch-zoom"
   },
   {
     "sz": "{\"tracking\":\"--t\"}",

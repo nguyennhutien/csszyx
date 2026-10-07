@@ -113,6 +113,55 @@ describe('purifySz', () => {
         expect(() => purifySz({ bg: deep } as SzObject)).toThrow(SzDepthError);
     });
 
+    it('keeps every special key the compiler lowers outside PROPERTY_MAP', () => {
+        // The allowlist was PROPERTY_MAP ∪ BOOLEAN_SHORTHANDS, so a key the
+        // compiler lowers in a dedicated branch was dropped as unknown: the
+        // per-group keys of font-variant-numeric / touch-action / contain, and
+        // the older special keys beside them.
+        const valid = {
+            nums: 'normal',
+            numFigure: 'lining',
+            numSpacing: 'tabular',
+            numFraction: 'diagonal',
+            touch: 'none',
+            touchPanX: 'x',
+            touchPanY: 'up',
+            contain: 'strict',
+            containSize: 'inline',
+            numOrdinal: true,
+            numSlashedZero: true,
+            touchPinchZoom: true,
+            containLayout: true,
+            containPaint: true,
+            containStyle: true,
+            alignContent: 'center',
+            fromPos: '10%',
+            viaPos: '30%',
+            toPos: '90%',
+            maskLinear: { angle: 45 },
+            maskRadial: { shape: 'circle' },
+            maskConic: { angle: 90 },
+            maskComposite: 'add',
+            maskMode: 'alpha',
+            maskType: 'luminance',
+            snapStrictness: 'mandatory',
+        } as SzObject;
+        const drops: string[] = [];
+        expect(purifySz(valid, { onDrop: path => drops.push(path) })).toEqual(valid);
+        expect(drops).toEqual([]);
+    });
+
+    it('drops the css escape hatch from untrusted input', () => {
+        // `css` takes arbitrary property names. Authored code may use it; from
+        // untrusted data it is the UI-redress hole the allowlist exists to close.
+        const drops: string[] = [];
+        const out = purifySz({ css: { position: 'fixed', inset: '0' }, p: 4 } as SzObject, {
+            onDrop: path => drops.push(path),
+        });
+        expect(out).toEqual({ p: 4 });
+        expect(drops).toEqual(['css']);
+    });
+
     it('returns {} for non-object input', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         // @ts-expect-error — defensive runtime path

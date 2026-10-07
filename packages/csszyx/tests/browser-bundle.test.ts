@@ -13,6 +13,7 @@
  * So this runs the built file the way a browser does, against a document it did
  * not compile itself.
  */
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -96,6 +97,49 @@ describe('csszyx/browser CDN bundle', () => {
         // page reaching this file over a CDN.
         expect(readFileSync(bundlePath, 'utf8')).not.toContain('process.env');
     });
+
+    it('reports a brace-less value that does not parse, and never hangs on it', () => {
+        // In a child process with a deadline: the shipped parser once spun
+        // forever on a stray character, and a spin blocks this process's
+        // event loop, so only an outside clock can stop a regression.
+        const page =
+            '<div id="frac" sz="w: 1/2"></div>' +
+            '<div id="semi" sz="p: 4; m: 2"></div>' +
+            '<div id="hex" sz="bg: #fff"></div>' +
+            '<div id="ok" sz="{p:4}"></div>';
+        const script = `
+const { JSDOM, VirtualConsole } = require('jsdom');
+const errors = [];
+const virtualConsole = new VirtualConsole();
+virtualConsole.on('error', (...args) => errors.push(args.map(String).join(' ')));
+const dom = new JSDOM(${JSON.stringify(page)}, { runScripts: 'outside-only', virtualConsole });
+dom.window.eval(require('node:fs').readFileSync(${JSON.stringify(bundlePath)}, 'utf8'));
+// Loaded while the document is still parsing, as a <head> script is; report
+// once the runtime's DOMContentLoaded pass has run.
+dom.window.addEventListener('load', () => {
+    const doc = dom.window.document;
+    console.log(JSON.stringify({
+        classes: ['frac', 'semi', 'hex', 'ok'].map(id => doc.getElementById(id).className),
+        errors,
+    }));
+});`;
+        const run = spawnSync(process.execPath, ['-e', script], {
+            cwd: path.dirname(bundlePath),
+            encoding: 'utf8',
+            timeout: 10_000,
+        });
+
+        expect(run.signal, 'the bundle did not finish within the deadline').toBeNull();
+        const result = JSON.parse(run.stdout.trim()) as { classes: string[]; errors: string[] };
+        expect(result.classes).toEqual(['', '', '', 'p-4']);
+        expect(result.errors).toHaveLength(3);
+        for (const error of result.errors) {
+            expect(error).toContain('[csszyx] Parsing error:');
+        }
+        expect(result.errors[0]).toContain('Unexpected "/" at 4');
+        // Above the child's 10 s deadline, so that deadline is what fails a
+        // hang; jsdom alone took 7.4 s to start on a loaded CI runner.
+    }, 20_000);
 
     it('leaves no global behind', () => {
         loadBundle();

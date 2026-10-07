@@ -138,16 +138,18 @@ describe('typography — font stretch', () => {
 });
 
 describe('typography — font variant numeric', () => {
-    it('{ fontVariant: "slashed-zero" } → slashed-zero', () => {
-        expect(t({ fontVariant: 'slashed-zero' })).toBe('slashed-zero');
+    it('{ numSlashedZero: true } → slashed-zero', () => {
+        expect(t({ numSlashedZero: true })).toBe('slashed-zero');
     });
 
-    it('{ slashedZero: true } → slashed-zero', () => {
-        expect(t({ slashedZero: true })).toBe('slashed-zero');
+    it('{ numOrdinal: true } → ordinal', () => {
+        expect(t({ numOrdinal: true })).toBe('ordinal');
     });
 
-    it('{ ordinal: true } → ordinal', () => {
-        expect(t({ ordinal: true })).toBe('ordinal');
+    it('{ numSpacing: "tabular", numFigure: "oldstyle" } combines two groups', () => {
+        expect(t({ numSpacing: 'tabular', numFigure: 'oldstyle' })).toBe(
+            'tabular-nums oldstyle-nums',
+        );
     });
 });
 

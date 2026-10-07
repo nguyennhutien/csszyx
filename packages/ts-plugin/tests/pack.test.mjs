@@ -1,9 +1,11 @@
 import assert from 'node:assert';
 import { execFileSync, spawn } from 'node:child_process';
 import {
+    existsSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
+    realpathSync,
     renameSync,
     rmSync,
     statSync,
@@ -26,13 +28,18 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const version = JSON.parse(readFileSync(join(packageDirectory, 'package.json'), 'utf8')).version;
 const typescriptPackage = resolve(packageDirectory, 'node_modules/typescript');
 
-test('packed plugin remains self-contained and loads in tsserver', async () => {
-// tooling-metadata is the bundle INPUT (a private workspace package); build it,
-// then build the plugin so esbuild inlines its data into dist/index.js.
-execFileSync(pnpm, ['--filter', '@csszyx/tooling-metadata', 'build'], {
-    cwd: repositoryRoot,
-    stdio: 'pipe',
-});
+test('packed plugin remains self-contained and loads in tsserver', async t => {
+// The fixture holds a full TypeScript install; leaving one per run fills the disk.
+t.after(() => rmSync(fixture, { recursive: true, force: true }));
+// tooling-metadata is the bundle INPUT (a private workspace package). It is
+// read, never rebuilt here: its build starts by deleting `dist`, and under
+// `turbo test` other suites import it at the same moment (turbo's `^build`
+// has already built it).
+assert.ok(
+    existsSync(join(repositoryRoot, 'packages/tooling-metadata/dist/index.js')),
+    'build @csszyx/tooling-metadata first: pnpm --filter @csszyx/tooling-metadata build',
+);
+// Build the plugin so esbuild inlines that data into dist/index.js.
 execFileSync(pnpm, ['--filter', '@csszyx/ts-plugin', 'build'], {
     cwd: repositoryRoot,
     stdio: 'pipe',
@@ -42,6 +49,25 @@ execFileSync(pnpm, ['--filter', '@csszyx/ts-plugin', 'pack', '--pack-destination
     cwd: repositoryRoot,
     stdio: 'pipe',
 });
+// TypeScript goes in as a tarball too. Installed from its folder it becomes a
+// link, and npm 11's tree builder intermittently compares that link with a
+// null target and dies (`Cannot read properties of null (reading 'matches')`).
+const typescriptTarball = execFileSync(
+    npm,
+    [
+        'pack',
+        '--cache',
+        cache,
+        '--ignore-scripts',
+        '--pack-destination',
+        tarballs,
+        realpathSync(typescriptPackage),
+    ],
+    { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+)
+    .trim()
+    .split('\n')
+    .at(-1);
 
 const pluginTarball = join(tarballs, `csszyx-ts-plugin-${version}.tgz`);
 assert.ok(statSync(pluginTarball).size < 64 * 1024, 'the packed plugin must stay small');
@@ -54,7 +80,8 @@ execFileSync(
         '--prefix',
         install,
         '--ignore-scripts',
-        typescriptPackage,
+        '--offline',
+        join(tarballs, typescriptTarball),
         pluginTarball,
     ],
     { cwd: repositoryRoot, stdio: 'pipe' },

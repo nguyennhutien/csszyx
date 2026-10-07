@@ -20,10 +20,10 @@ import {
     szFallbackConsequenceOf,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { captureWarnings, ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -270,7 +270,7 @@ describe('engine parity for the sz consequence split', () => {
 // The Rust integration suite (sz_fallback_parity.rs) pins the same wording
 // against hand-captured Babel output; this block compares the two lanes LIVE,
 // so a wording change on either side fails without regenerating a snapshot.
-describe.skipIf(!isRustTransformAvailable())('rust lane parity for sz fallback diagnostics', () => {
+describe.skipIf(!RUST_LANE)('rust lane parity for sz fallback diagnostics', () => {
     for (const [label, source] of FALLBACK_SOURCES) {
         it(`rust and babel agree on ${label}`, () => {
             const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];

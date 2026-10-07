@@ -108,9 +108,13 @@ test('the availability helper is the only place that loads the entry', () => {
     const loaders = chunks(DIST).filter(file =>
         /['"]resolveConfig\.js['"]/.test(readFileSync(file, 'utf8')),
     );
+    // Compared by module name: where a chunk lands and the content hash the
+    // bundler appends (`tailwind-availability-CwyJ9uDe.mjs`) are layout, not
+    // the property under test.
+    const moduleName = file => path.basename(file, '.mjs').replace(/-[\w-]{8}$/, '');
     assert.deepEqual(
-        loaders.map(file => path.relative(DIST, file)),
-        ['chunks/tailwind-availability.mjs'],
+        loaders.map(moduleName),
+        ['tailwind-availability'],
         'only the availability helper may load tailwindcss/resolveConfig.js',
     );
 });

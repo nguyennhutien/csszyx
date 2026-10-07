@@ -17285,35 +17285,35 @@
   {
    "c": "border-collapse",
    "p": {
-    "prop": "borderColor",
+    "prop": "borderCollapse",
     "value": "collapse"
    },
    "o": {
     "sz": {
-     "borderColor": "collapse"
+     "borderCollapse": "collapse"
     },
-    "szText": "{\"borderColor\":\"collapse\"}",
+    "szText": "{\"borderCollapse\":\"collapse\"}",
     "u": [],
     "k": [],
-    "g": "{ borderColor: 'collapse' }",
-    "h": "borderColor: 'collapse'"
+    "g": "{ borderCollapse: 'collapse' }",
+    "h": "borderCollapse: 'collapse'"
    }
   },
   {
    "c": "border-separate",
    "p": {
-    "prop": "borderColor",
+    "prop": "borderCollapse",
     "value": "separate"
    },
    "o": {
     "sz": {
-     "borderColor": "separate"
+     "borderCollapse": "separate"
     },
-    "szText": "{\"borderColor\":\"separate\"}",
+    "szText": "{\"borderCollapse\":\"separate\"}",
     "u": [],
     "k": [],
-    "g": "{ borderColor: 'separate' }",
-    "h": "borderColor: 'separate'"
+    "g": "{ borderCollapse: 'separate' }",
+    "h": "borderCollapse: 'separate'"
    }
   },
   {
@@ -22322,120 +22322,127 @@
   {
    "c": "diagonal-fractions",
    "p": {
-    "prop": "fontVariant",
-    "value": "diagonal-fractions"
+    "cssProperty": "--tw-numeric-fraction",
+    "prop": "numFraction",
+    "value": "diagonal"
    },
    "o": {
     "sz": {
-     "fontVariant": "diagonal-fractions"
+     "numFraction": "diagonal"
     },
-    "szText": "{\"fontVariant\":\"diagonal-fractions\"}",
+    "szText": "{\"numFraction\":\"diagonal\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'diagonal-fractions' }",
-    "h": "fontVariant: 'diagonal-fractions'"
+    "g": "{ numFraction: 'diagonal' }",
+    "h": "numFraction: 'diagonal'"
    }
   },
   {
    "c": "lining-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "lining-nums"
+    "cssProperty": "--tw-numeric-figure",
+    "prop": "numFigure",
+    "value": "lining"
    },
    "o": {
     "sz": {
-     "fontVariant": "lining-nums"
+     "numFigure": "lining"
     },
-    "szText": "{\"fontVariant\":\"lining-nums\"}",
+    "szText": "{\"numFigure\":\"lining\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'lining-nums' }",
-    "h": "fontVariant: 'lining-nums'"
+    "g": "{ numFigure: 'lining' }",
+    "h": "numFigure: 'lining'"
    }
   },
   {
    "c": "normal-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "normal-nums"
+    "cssProperty": "font-variant-numeric",
+    "prop": "nums",
+    "value": "normal"
    },
    "o": {
     "sz": {
-     "fontVariant": "normal-nums"
+     "nums": "normal"
     },
-    "szText": "{\"fontVariant\":\"normal-nums\"}",
+    "szText": "{\"nums\":\"normal\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'normal-nums' }",
-    "h": "fontVariant: 'normal-nums'"
+    "g": "{ nums: 'normal' }",
+    "h": "nums: 'normal'"
    }
   },
   {
    "c": "oldstyle-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "oldstyle-nums"
+    "cssProperty": "--tw-numeric-figure",
+    "prop": "numFigure",
+    "value": "oldstyle"
    },
    "o": {
     "sz": {
-     "fontVariant": "oldstyle-nums"
+     "numFigure": "oldstyle"
     },
-    "szText": "{\"fontVariant\":\"oldstyle-nums\"}",
+    "szText": "{\"numFigure\":\"oldstyle\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'oldstyle-nums' }",
-    "h": "fontVariant: 'oldstyle-nums'"
+    "g": "{ numFigure: 'oldstyle' }",
+    "h": "numFigure: 'oldstyle'"
    }
   },
   {
    "c": "proportional-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "proportional-nums"
+    "cssProperty": "--tw-numeric-spacing",
+    "prop": "numSpacing",
+    "value": "proportional"
    },
    "o": {
     "sz": {
-     "fontVariant": "proportional-nums"
+     "numSpacing": "proportional"
     },
-    "szText": "{\"fontVariant\":\"proportional-nums\"}",
+    "szText": "{\"numSpacing\":\"proportional\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'proportional-nums' }",
-    "h": "fontVariant: 'proportional-nums'"
+    "g": "{ numSpacing: 'proportional' }",
+    "h": "numSpacing: 'proportional'"
    }
   },
   {
    "c": "stacked-fractions",
    "p": {
-    "prop": "fontVariant",
-    "value": "stacked-fractions"
+    "cssProperty": "--tw-numeric-fraction",
+    "prop": "numFraction",
+    "value": "stacked"
    },
    "o": {
     "sz": {
-     "fontVariant": "stacked-fractions"
+     "numFraction": "stacked"
     },
-    "szText": "{\"fontVariant\":\"stacked-fractions\"}",
+    "szText": "{\"numFraction\":\"stacked\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'stacked-fractions' }",
-    "h": "fontVariant: 'stacked-fractions'"
+    "g": "{ numFraction: 'stacked' }",
+    "h": "numFraction: 'stacked'"
    }
   },
   {
    "c": "tabular-nums",
    "p": {
-    "prop": "fontVariant",
-    "value": "tabular-nums"
+    "cssProperty": "--tw-numeric-spacing",
+    "prop": "numSpacing",
+    "value": "tabular"
    },
    "o": {
     "sz": {
-     "fontVariant": "tabular-nums"
+     "numSpacing": "tabular"
     },
-    "szText": "{\"fontVariant\":\"tabular-nums\"}",
+    "szText": "{\"numSpacing\":\"tabular\"}",
     "u": [],
     "k": [],
-    "g": "{ fontVariant: 'tabular-nums' }",
-    "h": "fontVariant: 'tabular-nums'"
+    "g": "{ numSpacing: 'tabular' }",
+    "h": "numSpacing: 'tabular'"
    }
   },
   {
@@ -25594,58 +25601,86 @@
   {
    "c": "mask-b-from-(--c)",
    "p": {
-    "prop": "mask",
-    "value": "b-from-(--c)"
+    "prop": "maskLinear",
+    "value": {
+     "b": {
+      "from": {
+       "at": "--c"
+      }
+     }
+    }
    },
    "o": {
     "sz": {
-     "mask": "b-from-(--c)"
+     "maskLinear": {
+      "b": {
+       "from": {
+        "at": "--c"
+       }
+      }
+     }
     },
-    "szText": "{\"mask\":\"b-from-(--c)\"}",
+    "szText": "{\"maskLinear\":{\"b\":{\"from\":{\"at\":\"--c\"}}}}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'b-from-(--c)' }",
-    "h": "mask: 'b-from-(--c)'"
+    "g": "{\n  maskLinear: {\n    b: {\n      from: { at: '--c' },\n    },\n  },\n}",
+    "h": "maskLinear: {\n    b: {\n      from: { at: '--c' },\n    },\n  },"
    }
   },
   {
    "c": "mask-b-from-20%",
    "p": {
-    "prop": "mask",
-    "value": "b-from-20%"
+    "prop": "maskLinear",
+    "value": {
+     "b": {
+      "from": "20%"
+     }
+    }
    },
    "o": {
     "sz": {
-     "mask": "b-from-20%"
+     "maskLinear": {
+      "b": {
+       "from": "20%"
+      }
+     }
     },
-    "szText": "{\"mask\":\"b-from-20%\"}",
+    "szText": "{\"maskLinear\":{\"b\":{\"from\":\"20%\"}}}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'b-from-20%' }",
-    "h": "mask: 'b-from-20%'"
+    "g": "{\n  maskLinear: {\n    b: { from: '20%' },\n  },\n}",
+    "h": "maskLinear: {\n    b: { from: '20%' },\n  },"
    }
   },
   {
    "c": "mask-b-from-red-500/30",
    "p": {
-    "prop": "mask",
+    "prop": "maskLinear",
     "value": {
-     "color": "b-from-red-500",
-     "op": 30
+     "b": {
+      "from": {
+       "color": "red-500",
+       "op": 30
+      }
+     }
     }
    },
    "o": {
     "sz": {
-     "mask": {
-      "color": "b-from-red-500",
-      "op": 30
+     "maskLinear": {
+      "b": {
+       "from": {
+        "color": "red-500",
+        "op": 30
+       }
+      }
      }
     },
-    "szText": "{\"mask\":{\"color\":\"b-from-red-500\",\"op\":30}}",
+    "szText": "{\"maskLinear\":{\"b\":{\"from\":{\"color\":\"red-500\",\"op\":30}}}}",
     "u": [],
     "k": [],
-    "g": "{ mask: { color: 'b-from-red-500', op: 30 } }",
-    "h": "mask: { color: 'b-from-red-500', op: 30 }"
+    "g": "{\n  maskLinear: {\n    b: { from: { color: 'red-500', op: 30 } },\n  },\n}",
+    "h": "maskLinear: {\n    b: { from: { color: 'red-500', op: 30 } },\n  },"
    }
   },
   {
@@ -25770,137 +25805,137 @@
   {
    "c": "mask-no-clip",
    "p": {
-    "prop": "mask",
+    "prop": "maskClip",
     "value": "no-clip"
    },
    "o": {
     "sz": {
-     "mask": "no-clip"
+     "maskClip": "no-clip"
     },
-    "szText": "{\"mask\":\"no-clip\"}",
+    "szText": "{\"maskClip\":\"no-clip\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'no-clip' }",
-    "h": "mask: 'no-clip'"
+    "g": "{ maskClip: 'no-clip' }",
+    "h": "maskClip: 'no-clip'"
    }
   },
   {
    "c": "mask-add",
    "p": {
-    "prop": "mask",
+    "prop": "maskComposite",
     "value": "add"
    },
    "o": {
     "sz": {
-     "mask": "add"
+     "maskComposite": "add"
     },
-    "szText": "{\"mask\":\"add\"}",
+    "szText": "{\"maskComposite\":\"add\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'add' }",
-    "h": "mask: 'add'"
+    "g": "{ maskComposite: 'add' }",
+    "h": "maskComposite: 'add'"
    }
   },
   {
    "c": "mask-exclude",
    "p": {
-    "prop": "mask",
+    "prop": "maskComposite",
     "value": "exclude"
    },
    "o": {
     "sz": {
-     "mask": "exclude"
+     "maskComposite": "exclude"
     },
-    "szText": "{\"mask\":\"exclude\"}",
+    "szText": "{\"maskComposite\":\"exclude\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'exclude' }",
-    "h": "mask: 'exclude'"
+    "g": "{ maskComposite: 'exclude' }",
+    "h": "maskComposite: 'exclude'"
    }
   },
   {
    "c": "mask-intersect",
    "p": {
-    "prop": "mask",
+    "prop": "maskComposite",
     "value": "intersect"
    },
    "o": {
     "sz": {
-     "mask": "intersect"
+     "maskComposite": "intersect"
     },
-    "szText": "{\"mask\":\"intersect\"}",
+    "szText": "{\"maskComposite\":\"intersect\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'intersect' }",
-    "h": "mask: 'intersect'"
+    "g": "{ maskComposite: 'intersect' }",
+    "h": "maskComposite: 'intersect'"
    }
   },
   {
    "c": "mask-subtract",
    "p": {
-    "prop": "mask",
+    "prop": "maskComposite",
     "value": "subtract"
    },
    "o": {
     "sz": {
-     "mask": "subtract"
+     "maskComposite": "subtract"
     },
-    "szText": "{\"mask\":\"subtract\"}",
+    "szText": "{\"maskComposite\":\"subtract\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'subtract' }",
-    "h": "mask: 'subtract'"
+    "g": "{ maskComposite: 'subtract' }",
+    "h": "maskComposite: 'subtract'"
    }
   },
   {
    "c": "mask-alpha",
    "p": {
-    "prop": "mask",
+    "prop": "maskMode",
     "value": "alpha"
    },
    "o": {
     "sz": {
-     "mask": "alpha"
+     "maskMode": "alpha"
     },
-    "szText": "{\"mask\":\"alpha\"}",
+    "szText": "{\"maskMode\":\"alpha\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'alpha' }",
-    "h": "mask: 'alpha'"
+    "g": "{ maskMode: 'alpha' }",
+    "h": "maskMode: 'alpha'"
    }
   },
   {
    "c": "mask-luminance",
    "p": {
-    "prop": "mask",
+    "prop": "maskMode",
     "value": "luminance"
    },
    "o": {
     "sz": {
-     "mask": "luminance"
+     "maskMode": "luminance"
     },
-    "szText": "{\"mask\":\"luminance\"}",
+    "szText": "{\"maskMode\":\"luminance\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'luminance' }",
-    "h": "mask: 'luminance'"
+    "g": "{ maskMode: 'luminance' }",
+    "h": "maskMode: 'luminance'"
    }
   },
   {
    "c": "mask-match",
    "p": {
-    "prop": "mask",
-    "value": "match"
+    "prop": "maskMode",
+    "value": "match-source"
    },
    "o": {
     "sz": {
-     "mask": "match"
+     "maskMode": "match-source"
     },
-    "szText": "{\"mask\":\"match\"}",
+    "szText": "{\"maskMode\":\"match-source\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'match' }",
-    "h": "mask: 'match'"
+    "g": "{ maskMode: 'match-source' }",
+    "h": "maskMode: 'match-source'"
    }
   },
   {
@@ -26008,86 +26043,86 @@
   {
    "c": "mask-bottom",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "bottom"
    },
    "o": {
     "sz": {
-     "mask": "bottom"
+     "maskPos": "bottom"
     },
-    "szText": "{\"mask\":\"bottom\"}",
+    "szText": "{\"maskPos\":\"bottom\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'bottom' }",
-    "h": "mask: 'bottom'"
+    "g": "{ maskPos: 'bottom' }",
+    "h": "maskPos: 'bottom'"
    }
   },
   {
    "c": "mask-bottom-left",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "bottom-left"
    },
    "o": {
     "sz": {
-     "mask": "bottom-left"
+     "maskPos": "bottom-left"
     },
-    "szText": "{\"mask\":\"bottom-left\"}",
+    "szText": "{\"maskPos\":\"bottom-left\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'bottom-left' }",
-    "h": "mask: 'bottom-left'"
+    "g": "{ maskPos: 'bottom-left' }",
+    "h": "maskPos: 'bottom-left'"
    }
   },
   {
    "c": "mask-bottom-right",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "bottom-right"
    },
    "o": {
     "sz": {
-     "mask": "bottom-right"
+     "maskPos": "bottom-right"
     },
-    "szText": "{\"mask\":\"bottom-right\"}",
+    "szText": "{\"maskPos\":\"bottom-right\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'bottom-right' }",
-    "h": "mask: 'bottom-right'"
+    "g": "{ maskPos: 'bottom-right' }",
+    "h": "maskPos: 'bottom-right'"
    }
   },
   {
    "c": "mask-center",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "center"
    },
    "o": {
     "sz": {
-     "mask": "center"
+     "maskPos": "center"
     },
-    "szText": "{\"mask\":\"center\"}",
+    "szText": "{\"maskPos\":\"center\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'center' }",
-    "h": "mask: 'center'"
+    "g": "{ maskPos: 'center' }",
+    "h": "maskPos: 'center'"
    }
   },
   {
    "c": "mask-left",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "left"
    },
    "o": {
     "sz": {
-     "mask": "left"
+     "maskPos": "left"
     },
-    "szText": "{\"mask\":\"left\"}",
+    "szText": "{\"maskPos\":\"left\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'left' }",
-    "h": "mask: 'left'"
+    "g": "{ maskPos: 'left' }",
+    "h": "maskPos: 'left'"
    }
   },
   {
@@ -26110,256 +26145,264 @@
   {
    "c": "mask-right",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "right"
    },
    "o": {
     "sz": {
-     "mask": "right"
+     "maskPos": "right"
     },
-    "szText": "{\"mask\":\"right\"}",
+    "szText": "{\"maskPos\":\"right\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'right' }",
-    "h": "mask: 'right'"
+    "g": "{ maskPos: 'right' }",
+    "h": "maskPos: 'right'"
    }
   },
   {
    "c": "mask-top",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "top"
    },
    "o": {
     "sz": {
-     "mask": "top"
+     "maskPos": "top"
     },
-    "szText": "{\"mask\":\"top\"}",
+    "szText": "{\"maskPos\":\"top\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'top' }",
-    "h": "mask: 'top'"
+    "g": "{ maskPos: 'top' }",
+    "h": "maskPos: 'top'"
    }
   },
   {
    "c": "mask-top-left",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "top-left"
    },
    "o": {
     "sz": {
-     "mask": "top-left"
+     "maskPos": "top-left"
     },
-    "szText": "{\"mask\":\"top-left\"}",
+    "szText": "{\"maskPos\":\"top-left\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'top-left' }",
-    "h": "mask: 'top-left'"
+    "g": "{ maskPos: 'top-left' }",
+    "h": "maskPos: 'top-left'"
    }
   },
   {
    "c": "mask-top-right",
    "p": {
-    "prop": "mask",
+    "prop": "maskPos",
     "value": "top-right"
    },
    "o": {
     "sz": {
-     "mask": "top-right"
+     "maskPos": "top-right"
     },
-    "szText": "{\"mask\":\"top-right\"}",
+    "szText": "{\"maskPos\":\"top-right\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'top-right' }",
-    "h": "mask: 'top-right'"
+    "g": "{ maskPos: 'top-right' }",
+    "h": "maskPos: 'top-right'"
    }
   },
   {
    "c": "mask-circle",
    "p": {
-    "prop": "mask",
-    "value": "circle"
+    "prop": "maskRadial",
+    "value": {
+     "shape": "circle"
+    }
    },
    "o": {
     "sz": {
-     "mask": "circle"
+     "maskRadial": {
+      "shape": "circle"
+     }
     },
-    "szText": "{\"mask\":\"circle\"}",
+    "szText": "{\"maskRadial\":{\"shape\":\"circle\"}}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'circle' }",
-    "h": "mask: 'circle'"
+    "g": "{\n  maskRadial: { shape: 'circle' },\n}",
+    "h": "maskRadial: { shape: 'circle' },"
    }
   },
   {
    "c": "mask-ellipse",
    "p": {
-    "prop": "mask",
-    "value": "ellipse"
+    "prop": "maskRadial",
+    "value": {
+     "shape": "ellipse"
+    }
    },
    "o": {
     "sz": {
-     "mask": "ellipse"
+     "maskRadial": {
+      "shape": "ellipse"
+     }
     },
-    "szText": "{\"mask\":\"ellipse\"}",
+    "szText": "{\"maskRadial\":{\"shape\":\"ellipse\"}}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'ellipse' }",
-    "h": "mask: 'ellipse'"
+    "g": "{\n  maskRadial: { shape: 'ellipse' },\n}",
+    "h": "maskRadial: { shape: 'ellipse' },"
    }
   },
   {
    "c": "mask-no-repeat",
    "p": {
-    "prop": "mask",
+    "prop": "maskRepeat",
     "value": "no-repeat"
    },
    "o": {
     "sz": {
-     "mask": "no-repeat"
+     "maskRepeat": "no-repeat"
     },
-    "szText": "{\"mask\":\"no-repeat\"}",
+    "szText": "{\"maskRepeat\":\"no-repeat\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'no-repeat' }",
-    "h": "mask: 'no-repeat'"
+    "g": "{ maskRepeat: 'no-repeat' }",
+    "h": "maskRepeat: 'no-repeat'"
    }
   },
   {
    "c": "mask-repeat",
    "p": {
-    "prop": "mask",
+    "prop": "maskRepeat",
     "value": "repeat"
    },
    "o": {
     "sz": {
-     "mask": "repeat"
+     "maskRepeat": "repeat"
     },
-    "szText": "{\"mask\":\"repeat\"}",
+    "szText": "{\"maskRepeat\":\"repeat\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'repeat' }",
-    "h": "mask: 'repeat'"
+    "g": "{ maskRepeat: 'repeat' }",
+    "h": "maskRepeat: 'repeat'"
    }
   },
   {
    "c": "mask-repeat-round",
    "p": {
-    "prop": "mask",
-    "value": "repeat-round"
+    "prop": "maskRepeat",
+    "value": "round"
    },
    "o": {
     "sz": {
-     "mask": "repeat-round"
+     "maskRepeat": "round"
     },
-    "szText": "{\"mask\":\"repeat-round\"}",
+    "szText": "{\"maskRepeat\":\"round\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'repeat-round' }",
-    "h": "mask: 'repeat-round'"
+    "g": "{ maskRepeat: 'round' }",
+    "h": "maskRepeat: 'round'"
    }
   },
   {
    "c": "mask-repeat-space",
    "p": {
-    "prop": "mask",
-    "value": "repeat-space"
+    "prop": "maskRepeat",
+    "value": "space"
    },
    "o": {
     "sz": {
-     "mask": "repeat-space"
+     "maskRepeat": "space"
     },
-    "szText": "{\"mask\":\"repeat-space\"}",
+    "szText": "{\"maskRepeat\":\"space\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'repeat-space' }",
-    "h": "mask: 'repeat-space'"
+    "g": "{ maskRepeat: 'space' }",
+    "h": "maskRepeat: 'space'"
    }
   },
   {
    "c": "mask-repeat-x",
    "p": {
-    "prop": "mask",
+    "prop": "maskRepeat",
     "value": "repeat-x"
    },
    "o": {
     "sz": {
-     "mask": "repeat-x"
+     "maskRepeat": "repeat-x"
     },
-    "szText": "{\"mask\":\"repeat-x\"}",
+    "szText": "{\"maskRepeat\":\"repeat-x\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'repeat-x' }",
-    "h": "mask: 'repeat-x'"
+    "g": "{ maskRepeat: 'repeat-x' }",
+    "h": "maskRepeat: 'repeat-x'"
    }
   },
   {
    "c": "mask-repeat-y",
    "p": {
-    "prop": "mask",
+    "prop": "maskRepeat",
     "value": "repeat-y"
    },
    "o": {
     "sz": {
-     "mask": "repeat-y"
+     "maskRepeat": "repeat-y"
     },
-    "szText": "{\"mask\":\"repeat-y\"}",
+    "szText": "{\"maskRepeat\":\"repeat-y\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'repeat-y' }",
-    "h": "mask: 'repeat-y'"
+    "g": "{ maskRepeat: 'repeat-y' }",
+    "h": "maskRepeat: 'repeat-y'"
    }
   },
   {
    "c": "mask-auto",
    "p": {
-    "prop": "mask",
+    "prop": "maskSize",
     "value": "auto"
    },
    "o": {
     "sz": {
-     "mask": "auto"
+     "maskSize": "auto"
     },
-    "szText": "{\"mask\":\"auto\"}",
+    "szText": "{\"maskSize\":\"auto\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'auto' }",
-    "h": "mask: 'auto'"
+    "g": "{ maskSize: 'auto' }",
+    "h": "maskSize: 'auto'"
    }
   },
   {
    "c": "mask-contain",
    "p": {
-    "prop": "mask",
+    "prop": "maskSize",
     "value": "contain"
    },
    "o": {
     "sz": {
-     "mask": "contain"
+     "maskSize": "contain"
     },
-    "szText": "{\"mask\":\"contain\"}",
+    "szText": "{\"maskSize\":\"contain\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'contain' }",
-    "h": "mask: 'contain'"
+    "g": "{ maskSize: 'contain' }",
+    "h": "maskSize: 'contain'"
    }
   },
   {
    "c": "mask-cover",
    "p": {
-    "prop": "mask",
+    "prop": "maskSize",
     "value": "cover"
    },
    "o": {
     "sz": {
-     "mask": "cover"
+     "maskSize": "cover"
     },
-    "szText": "{\"mask\":\"cover\"}",
+    "szText": "{\"maskSize\":\"cover\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'cover' }",
-    "h": "mask: 'cover'"
+    "g": "{ maskSize: 'cover' }",
+    "h": "maskSize: 'cover'"
    }
   },
   {
@@ -26399,35 +26442,35 @@
   {
    "c": "mask-type-alpha",
    "p": {
-    "prop": "mask",
-    "value": "type-alpha"
+    "prop": "maskType",
+    "value": "alpha"
    },
    "o": {
     "sz": {
-     "mask": "type-alpha"
+     "maskType": "alpha"
     },
-    "szText": "{\"mask\":\"type-alpha\"}",
+    "szText": "{\"maskType\":\"alpha\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'type-alpha' }",
-    "h": "mask: 'type-alpha'"
+    "g": "{ maskType: 'alpha' }",
+    "h": "maskType: 'alpha'"
    }
   },
   {
    "c": "mask-type-luminance",
    "p": {
-    "prop": "mask",
-    "value": "type-luminance"
+    "prop": "maskType",
+    "value": "luminance"
    },
    "o": {
     "sz": {
-     "mask": "type-luminance"
+     "maskType": "luminance"
     },
-    "szText": "{\"mask\":\"type-luminance\"}",
+    "szText": "{\"maskType\":\"luminance\"}",
     "u": [],
     "k": [],
-    "g": "{ mask: 'type-luminance' }",
-    "h": "mask: 'type-luminance'"
+    "g": "{ maskType: 'luminance' }",
+    "h": "maskType: 'luminance'"
    }
   },
   {
@@ -28371,18 +28414,18 @@
   {
    "c": "ordinal",
    "p": {
-    "prop": "ordinal",
+    "prop": "numOrdinal",
     "value": true
    },
    "o": {
     "sz": {
-     "ordinal": true
+     "numOrdinal": true
     },
-    "szText": "{\"ordinal\":true}",
+    "szText": "{\"numOrdinal\":true}",
     "u": [],
     "k": [],
-    "g": "{ ordinal: true }",
-    "h": "ordinal: true"
+    "g": "{ numOrdinal: true }",
+    "h": "numOrdinal: true"
    }
   },
   {
@@ -28864,35 +28907,35 @@
   {
    "c": "outline-hidden",
    "p": {
-    "prop": "outlineColor",
+    "prop": "outlineStyle",
     "value": "hidden"
    },
    "o": {
     "sz": {
-     "outlineColor": "hidden"
+     "outlineStyle": "hidden"
     },
-    "szText": "{\"outlineColor\":\"hidden\"}",
+    "szText": "{\"outlineStyle\":\"hidden\"}",
     "u": [],
     "k": [],
-    "g": "{ outlineColor: 'hidden' }",
-    "h": "outlineColor: 'hidden'"
+    "g": "{ outlineStyle: 'hidden' }",
+    "h": "outlineStyle: 'hidden'"
    }
   },
   {
    "c": "outline-solid",
    "p": {
-    "prop": "outlineColor",
+    "prop": "outlineStyle",
     "value": "solid"
    },
    "o": {
     "sz": {
-     "outlineColor": "solid"
+     "outlineStyle": "solid"
     },
-    "szText": "{\"outlineColor\":\"solid\"}",
+    "szText": "{\"outlineStyle\":\"solid\"}",
     "u": [],
     "k": [],
-    "g": "{ outlineColor: 'solid' }",
-    "h": "outlineColor: 'solid'"
+    "g": "{ outlineStyle: 'solid' }",
+    "h": "outlineStyle: 'solid'"
    }
   },
   {
@@ -34468,18 +34511,18 @@
   {
    "c": "slashed-zero",
    "p": {
-    "prop": "slashedZero",
+    "prop": "numSlashedZero",
     "value": true
    },
    "o": {
     "sz": {
-     "slashedZero": true
+     "numSlashedZero": true
     },
-    "szText": "{\"slashedZero\":true}",
+    "szText": "{\"numSlashedZero\":true}",
     "u": [],
     "k": [],
-    "g": "{ slashedZero: true }",
-    "h": "slashedZero: true"
+    "g": "{ numSlashedZero: true }",
+    "h": "numSlashedZero: true"
    }
   },
   {
@@ -35900,18 +35943,19 @@
   {
    "c": "touch-pan-x",
    "p": {
-    "prop": "touch",
-    "value": "pan-x"
+    "cssProperty": "--tw-pan-x",
+    "prop": "touchPanX",
+    "value": "x"
    },
    "o": {
     "sz": {
-     "touch": "pan-x"
+     "touchPanX": "x"
     },
-    "szText": "{\"touch\":\"pan-x\"}",
+    "szText": "{\"touchPanX\":\"x\"}",
     "u": [],
     "k": [],
-    "g": "{ touch: 'pan-x' }",
-    "h": "touch: 'pan-x'"
+    "g": "{ touchPanX: 'x' }",
+    "h": "touchPanX: 'x'"
    }
   },
   {
@@ -55097,14 +55141,14 @@
    "o": {
     "sz": {
      "focusVisible": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"focusVisible\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"focusVisible\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  focusVisible: { outlineColor: 'hidden' },\n}",
-    "h": "focusVisible: { outlineColor: 'hidden' },"
+    "g": "{\n  focusVisible: { outlineStyle: 'hidden' },\n}",
+    "h": "focusVisible: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -60176,14 +60220,14 @@
    "o": {
     "sz": {
      "file": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"file\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"file\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  file: { outlineColor: 'hidden' },\n}",
-    "h": "file: { outlineColor: 'hidden' },"
+    "g": "{\n  file: { outlineStyle: 'hidden' },\n}",
+    "h": "file: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -60434,16 +60478,14 @@
    "c": "focus-visible:ring-inset",
    "p": null,
    "o": {
-    "sz": {
-     "focusVisible": {
-      "ringColor": "inset"
-     }
-    },
-    "szText": "{\"focusVisible\":{\"ringColor\":\"inset\"}}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "focus-visible:ring-inset"
+    ],
     "k": [],
-    "g": "{\n  focusVisible: { ringColor: 'inset' },\n}",
-    "h": "focusVisible: { ringColor: 'inset' },"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -60516,14 +60558,14 @@
    "o": {
     "sz": {
      "focus": {
-      "outlineColor": "hidden"
+      "outlineStyle": "hidden"
      }
     },
-    "szText": "{\"focus\":{\"outlineColor\":\"hidden\"}}",
+    "szText": "{\"focus\":{\"outlineStyle\":\"hidden\"}}",
     "u": [],
     "k": [],
-    "g": "{\n  focus: { outlineColor: 'hidden' },\n}",
-    "h": "focus: { outlineColor: 'hidden' },"
+    "g": "{\n  focus: { outlineStyle: 'hidden' },\n}",
+    "h": "focus: { outlineStyle: 'hidden' },"
    }
   },
   {
@@ -61840,19 +61882,16 @@
   },
   {
    "c": "ring-inset",
-   "p": {
-    "prop": "ringColor",
-    "value": "inset"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "ringColor": "inset"
-    },
-    "szText": "{\"ringColor\":\"inset\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "ring-inset"
+    ],
     "k": [],
-    "g": "{ ringColor: 'inset' }",
-    "h": "ringColor: 'inset'"
+    "g": "{}",
+    "h": ""
    }
   },
   {

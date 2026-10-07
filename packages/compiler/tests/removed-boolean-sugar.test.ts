@@ -77,7 +77,7 @@ describe('removed boolean sugar', () => {
         expect(t({ truncate: true } as SzObject)).toBe('truncate');
         expect(t({ grow: true } as SzObject)).toBe('grow');
         expect(t({ ring: true } as SzObject)).toBe('ring');
-        expect(t({ tabularNums: true } as SzObject)).toBe('tabular-nums');
+        expect(t({ numSlashedZero: true } as SzObject)).toBe('slashed-zero');
         expect(t({ srOnly: true } as SzObject)).toBe('sr-only');
     });
 

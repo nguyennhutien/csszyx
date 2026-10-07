@@ -46,7 +46,9 @@ If your project is already written with `sz` props and you do **not** want a
 Tailwind `className` migration, run `--keys-only`. It rewrites legacy sz-prop
 keys to their canonical form (`fontWeight`→`weight`, `padding`→`p`,
 `{ flex: true }`→`{ display: 'flex' }`) and leaves every `className` 100%
-untouched:
+untouched. It does not reach every sz object; see
+[What `--keys-only` leaves for the build](#what---keys-only-leaves-for-the-build)
+for the shapes it skips:
 
 ```bash
 npx @csszyx/cli migrate --keys-only --dry-run   # preview
@@ -84,8 +86,8 @@ The dev warning is precise:
 :::note[Genuinely on/off utilities stay boolean]
 Only **value-aliases** of a single property were removed. Utilities that are
 truly on/off — not one value among several — keep accepting `true`: composite
-helpers (`truncate`, `srOnly`), stackable font-variant-numeric flags (`ordinal`,
-`tabularNums`, `liningNums`, …), default-or-value toggles (`grow`, `shrink`,
+helpers (`truncate`, `srOnly`), single-keyword font-variant-numeric groups
+(`numOrdinal`, `numSlashedZero`), default-or-value toggles (`grow`, `shrink`,
 `ring`, `outline`, `blur`, `border`, `shadow`, `transition`, `divideX`), and
 plugin components (`container`, `prose`). `{ truncate: true }`, `{ grow: true }`,
 and `{ container: true }` are all still correct.
@@ -153,6 +155,97 @@ import { _sz } from "@csszyx/runtime";
 _sz("base", isActive ? "active" : "inactive");
 _sz("base", { sm: "p-2", lg: "p-6" }[size]);
 ```
+
+### 5. `font-variant-numeric` takes one key per group (0.18.0)
+
+CSS allows one keyword per group of `font-variant-numeric` — figure, spacing,
+fraction, ordinal, slashed zero — and combines the groups. The eight boolean
+flags let one object hold both keywords of a group, and on the page the
+stylesheet order, not the object, then decided which one applied. Each group is
+now one key, so a later value in the same group replaces the earlier one and
+different groups combine:
+
+| Before (replaced) | After | Group |
+|---|---|---|
+| `{ liningNums: true }` / `{ oldstyleNums: true }` | `{ numFigure: 'lining' }` / `{ numFigure: 'oldstyle' }` | figure |
+| `{ proportionalNums: true }` / `{ tabularNums: true }` | `{ numSpacing: 'proportional' }` / `{ numSpacing: 'tabular' }` | spacing |
+| `{ diagonalFractions: true }` / `{ stackedFractions: true }` | `{ numFraction: 'diagonal' }` / `{ numFraction: 'stacked' }` | fraction |
+| `{ ordinal: true }` | `{ numOrdinal: true }` | ordinal |
+| `{ slashedZero: true }` | `{ numSlashedZero: true }` | slashed zero |
+| `{ fontVariant: 'normal-nums' }` | `{ nums: 'normal' }` | resets every group |
+
+The old keys emit nothing, and the build names the replacement:
+
+```text
+[csszyx] "tabularNums" was replaced at src/Table.tsx:4. Use { numSpacing: 'tabular' } instead, or run `csszyx migrate`.
+```
+
+`csszyx migrate --keys-only` rewrites them, including a ternary of literals
+(`tabularNums: c ? true : false` becomes `numSpacing: c ? 'tabular' : undefined`).
+Two old keys of one group in one object become one key holding the value that
+rendered before. Both classes used to ship, and Tailwind's stylesheet order
+picked one, so `{ tabularNums: true, proportionalNums: true }` becomes
+`{ numSpacing: 'tabular' }` whichever was written last. The same goes for
+`oldstyle` over `lining` and `stacked` over `diagonal`. A stand-alone
+`fontVariant: 'normal-nums'` sorted after every group and rendered, so
+migrate keeps `{ nums: 'normal' }` and drops the old group keys beside it.
+
+### 6. `touch-action` takes one key per group, `contain` gains keys (0.18.0)
+
+`touch-action` has the same shape as `font-variant-numeric`: groups that combine
+— horizontal pan, vertical pan, pinch zoom — and keywords that stand alone. The
+groups moved to their own keys, and `touch` keeps the stand-alone keywords.
+`contain` had no key; it now follows the same shape.
+
+| Before | After |
+|---|---|
+| `{ touch: 'pan-x' }` / `'pan-left'` / `'pan-right'` | `{ touchPanX: 'x' }` / `'left'` / `'right'` |
+| `{ touch: 'pan-y' }` / `'pan-up'` / `'pan-down'` | `{ touchPanY: 'y' }` / `'up'` / `'down'` |
+| `{ touch: 'pinch-zoom' }` | `{ touchPinchZoom: true }` |
+| `{ touch: 'auto' }` / `'none'` / `'manipulation'` | unchanged |
+| — | `{ contain: 'none' \| 'strict' \| 'content' }`, `{ containSize: 'size' \| 'inline-size' }`, `containLayout` / `containPaint` / `containStyle: true` |
+
+A moved value emits nothing. The build reports it with its replacement, in a
+ternary and inside any variant as well as at the top of the object:
+
+```text
+[csszyx] "touch: pan-x" moved to { touchPanX: 'x' } at src/Map.tsx:3. Run `csszyx migrate` to rewrite it.
+```
+
+`csszyx migrate --keys-only` rewrites it, also under the old alias
+(`touchAction: 'pan-x'` becomes `touchPanX: 'x'` in one run) and in a ternary of
+literals. When every branch lands on one group the ternary keeps its test
+(`touch: c ? 'pan-x' : 'pan-left'` becomes `touchPanX: c ? 'x' : 'left'`).
+Branches on two groups split into one key per group, each branch of the other
+group reading `undefined`.
+
+In one object the later key wins for all three properties (`nums`, `touch`,
+`contain` against their groups): the stand-alone keyword replaces the groups
+written before it, and groups written after it replace it. A `touch` keyword
+beside an old group key in one object (`{ touch: 'none', touchAction: 'pan-x' }`)
+rendered the keyword before, so migrate keeps `touch: 'none'` and drops the
+group key.
+
+### What `--keys-only` leaves for the build
+
+`--keys-only` rewrites the keys of an sz object written in the `sz` prop: the
+object itself, its nested variants (`md`, `hover`, `group`, `data`, `aria`, …),
+and an object chosen by a ternary or `&&`/`||`/`??`
+(`sz={c ? { touch: 'pan-x' } : { … }}`). It leaves these as they are:
+
+| Left as written | Why |
+|---|---|
+| An object inside `szv(…)`, `_sz(…)` or another call | Only the `sz` prop is read |
+| An object inside an sz array (`sz={[base, c && { … }]}`) | Later layers override earlier ones, so renaming one layer alone can change which value renders |
+| HTML files | `--keys-only` skips them; the CDN runtime reports a replaced key or a moved value in the browser console |
+| A ternary with a runtime branch (`tabularNums: c ? true : v`) | The codemod cannot spell a value it does not know |
+| A ternary that mixes a moved value with a stand-alone keyword (`touch: c ? 'pan-x' : 'auto'`) | Splitting it puts runtime values on both sides of one family, which the build reports |
+| The keys of a spread object (`base` in `{ ...base, p: 2 }`) | Only the object literal in the prop is read |
+
+Run `csszyx check` after migrating to list what is left in static sz props and
+`szv()` definitions. A replaced key, a moved value or a removed key
+(`fontVariant`) the build cannot see statically, inside an object built at
+runtime, is reported in the browser console when it renders, in production too.
 
 ## Understanding the Migration Report
 

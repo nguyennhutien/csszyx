@@ -17,8 +17,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { variantStringPrefix } from '../src/transform-core.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { ENGINES } from './engine-parity-harness.js';
+import { transformRust } from '../src/transform-rust.js';
+import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 /** [sz object source, expected className] — the Tailwind-valid output. */
 const VARIANT_STRING_CASES: ReadonlyArray<readonly [string, string]> = [
@@ -112,7 +112,7 @@ describe.each(LANES)('%s lane', (_lane, transform) => {
     });
 });
 
-describe.skipIf(!isRustTransformAvailable())('rust lane', () => {
+describe.skipIf(!RUST_LANE)('rust lane', () => {
     const all = [...VARIANT_STRING_CASES, ...NEGATIVE_CASES, ...NON_VARIANT_CASES];
     it.each(all)('matches the JS lanes: %s', (szObject, want) => {
         expect(classNameFor(transformRust, szObject)).toBe(want);

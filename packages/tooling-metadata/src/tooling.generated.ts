@@ -316,37 +316,37 @@ export const BOOLEAN_SHORTHANDS = [
     "backdropInvert",
     "backdropSepia",
     "blur",
+    "containLayout",
+    "containPaint",
+    "containStyle",
     "container",
-    "diagonalFractions",
     "divideXReverse",
     "divideYReverse",
     "grayscale",
     "grow",
     "invert",
-    "liningNums",
     "notSrOnly",
-    "oldstyleNums",
-    "ordinal",
+    "numOrdinal",
+    "numSlashedZero",
     "outline",
-    "proportionalNums",
     "prose",
     "proseInvert",
     "ring",
     "sepia",
     "shrink",
-    "slashedZero",
     "spaceXReverse",
     "spaceYReverse",
     "srOnly",
-    "stackedFractions",
-    "tabularNums",
     "textClip",
     "textEllipsis",
+    "touchPinchZoom",
     "truncate"
 ] as const;
 /** Canonical properties lowered by dedicated compiler branches. */
 export const KNOWN_SPECIAL_PROPERTIES = [
     "alignContent",
+    "contain",
+    "containSize",
     "css",
     "fromPos",
     "maskComposite",
@@ -355,8 +355,14 @@ export const KNOWN_SPECIAL_PROPERTIES = [
     "maskMode",
     "maskRadial",
     "maskType",
+    "numFigure",
+    "numFraction",
+    "numSpacing",
+    "nums",
     "snapStrictness",
     "toPos",
+    "touchPanX",
+    "touchPanY",
     "viaPos"
 ] as const;
 export const KNOWN_VARIANTS = [
@@ -481,6 +487,8 @@ export const SPECIAL_VARIANTS = [
     "supports"
 ] as const;
 export const SUGGESTION_MAP = {
+    "ordinal": "numOrdinal",
+    "slashedZero": "numSlashedZero",
     "backgroundColor": "bg",
     "backgroundImage": "bgImg",
     "backgroundSize": "bgSize",
@@ -595,7 +603,8 @@ export const MIGRATION_NOTES = {
     "maskFrom": "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }",
     "maskTo": "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }",
     "maskVia": "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic",
-    "maskShape": "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"
+    "maskShape": "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }",
+    "fontVariant": "font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""
 } as const;
 /** sz keys whose utility accepts a negative value (`{ mt: '-4' }` → `-mt-4`).
  * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind

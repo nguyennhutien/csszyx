@@ -364,6 +364,8 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
 /// Canonical-key suggestion for a removed/aliased sz key.
 pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
     match key {
+        "ordinal" => Some("numOrdinal"),
+        "slashedZero" => Some("numSlashedZero"),
         "backgroundColor" => Some("bg"),
         "backgroundImage" => Some("bgImg"),
         "backgroundSize" => Some("bgSize"),
@@ -471,6 +473,7 @@ pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
         "maskTo" => Some("the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
         "maskVia" => Some("masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
         "maskShape" => Some("the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
+        "fontVariant" => Some("font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
         _ => None,
     }
 }
@@ -490,12 +493,12 @@ pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
         "divideYReverse" => Some("divide-y-reverse"),
         "spaceXReverse" => Some("space-x-reverse"),
         "spaceYReverse" => Some("space-y-reverse"),
-        "liningNums" => Some("lining-nums"),
-        "oldstyleNums" => Some("oldstyle-nums"),
-        "proportionalNums" => Some("proportional-nums"),
-        "tabularNums" => Some("tabular-nums"),
-        "diagonalFractions" => Some("diagonal-fractions"),
-        "stackedFractions" => Some("stacked-fractions"),
+        "numOrdinal" => Some("ordinal"),
+        "numSlashedZero" => Some("slashed-zero"),
+        "touchPinchZoom" => Some("touch-pinch-zoom"),
+        "containLayout" => Some("contain-layout"),
+        "containPaint" => Some("contain-paint"),
+        "containStyle" => Some("contain-style"),
         "transformGpu" => Some("transform-gpu"),
         "transformCpu" => Some("transform-cpu"),
         "proseInvert" => Some("prose-invert"),
@@ -525,14 +528,12 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "proseInvert"
             | "srOnly"
             | "notSrOnly"
-            | "ordinal"
-            | "slashedZero"
-            | "liningNums"
-            | "oldstyleNums"
-            | "proportionalNums"
-            | "tabularNums"
-            | "diagonalFractions"
-            | "stackedFractions"
+            | "numOrdinal"
+            | "numSlashedZero"
+            | "touchPinchZoom"
+            | "containLayout"
+            | "containPaint"
+            | "containStyle"
             | "divideXReverse"
             | "divideYReverse"
             | "spaceXReverse"
@@ -564,6 +565,12 @@ pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
             | "outline"
             | "truncate"
             | "shadow"
+            | "numOrdinal"
+            | "numSlashedZero"
+            | "touchPinchZoom"
+            | "containLayout"
+            | "containPaint"
+            | "containStyle"
     )
 }
 
@@ -583,6 +590,14 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
             | "maskMode"
             | "maskType"
             | "snapStrictness"
+            | "nums"
+            | "numFigure"
+            | "numSpacing"
+            | "numFraction"
+            | "touchPanX"
+            | "touchPanY"
+            | "contain"
+            | "containSize"
     )
 }
 
@@ -627,6 +642,12 @@ pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
             | "noUnderline"
             | "antialiased"
             | "subpixelAntialiased"
+            | "liningNums"
+            | "oldstyleNums"
+            | "proportionalNums"
+            | "tabularNums"
+            | "diagonalFractions"
+            | "stackedFractions"
     )
 }
 
@@ -672,8 +693,30 @@ pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static s
         "noUnderline" => Some(("decoration", "none")),
         "antialiased" => Some(("fontSmoothing", "grayscale")),
         "subpixelAntialiased" => Some(("fontSmoothing", "subpixel")),
+        "liningNums" => Some(("numFigure", "lining")),
+        "oldstyleNums" => Some(("numFigure", "oldstyle")),
+        "proportionalNums" => Some(("numSpacing", "proportional")),
+        "tabularNums" => Some(("numSpacing", "tabular")),
+        "diagonalFractions" => Some(("numFraction", "diagonal")),
+        "stackedFractions" => Some(("numFraction", "stacked")),
         _ => None,
     }
+}
+
+/// Returns true when a key was canonical and got a new spelling, so its
+/// removal message says it was replaced rather than that sugar was removed.
+pub(crate) fn is_replaced_key(key: &str) -> bool {
+    matches!(
+        key,
+        "liningNums"
+            | "oldstyleNums"
+            | "proportionalNums"
+            | "tabularNums"
+            | "diagonalFractions"
+            | "stackedFractions"
+            | "ordinal"
+            | "slashedZero"
+    )
 }
 
 /// Returns true when a key is a known csszyx variant name.
@@ -857,13 +900,115 @@ pub(crate) fn closed_enum_class(key: &str, value: &str) -> Option<&'static str> 
         ("visibility", "collapse") => Some("collapse"),
         ("isolation", "isolate") => Some("isolate"),
         ("isolation", "auto") => Some("isolation-auto"),
+        ("nums", "normal") => Some("normal-nums"),
+        ("numFigure", "lining") => Some("lining-nums"),
+        ("numFigure", "oldstyle") => Some("oldstyle-nums"),
+        ("numSpacing", "proportional") => Some("proportional-nums"),
+        ("numSpacing", "tabular") => Some("tabular-nums"),
+        ("numFraction", "diagonal") => Some("diagonal-fractions"),
+        ("numFraction", "stacked") => Some("stacked-fractions"),
+        ("touch", "auto") => Some("touch-auto"),
+        ("touch", "none") => Some("touch-none"),
+        ("touch", "manipulation") => Some("touch-manipulation"),
+        ("touchPanX", "x") => Some("touch-pan-x"),
+        ("touchPanX", "left") => Some("touch-pan-left"),
+        ("touchPanX", "right") => Some("touch-pan-right"),
+        ("touchPanY", "y") => Some("touch-pan-y"),
+        ("touchPanY", "up") => Some("touch-pan-up"),
+        ("touchPanY", "down") => Some("touch-pan-down"),
+        ("contain", "none") => Some("contain-none"),
+        ("contain", "strict") => Some("contain-strict"),
+        ("contain", "content") => Some("contain-content"),
+        ("containSize", "size") => Some("contain-size"),
+        ("containSize", "inline-size") => Some("contain-inline-size"),
         _ => None,
     }
 }
 
 /// Whether a key's value set is closed. Mirrors `CLOSED_ENUM_CLASSES`'s keys.
 pub(crate) fn is_closed_enum_key(key: &str) -> bool {
-    matches!(key, "display" | "position" | "visibility" | "isolation")
+    matches!(
+        key,
+        "display"
+            | "position"
+            | "visibility"
+            | "isolation"
+            | "nums"
+            | "numFigure"
+            | "numSpacing"
+            | "numFraction"
+            | "touch"
+            | "touchPanX"
+            | "touchPanY"
+            | "contain"
+            | "containSize"
+    )
+}
+
+/// The fixed part a closed-enum key wraps around a value outside its set, as
+/// `(prefix, suffix)`. Keys absent here emit such a value verbatim.
+pub(crate) fn closed_enum_affix(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+        "isolation" => Some(("isolation-", "")),
+        "nums" => Some(("", "-nums")),
+        "numFigure" => Some(("", "-nums")),
+        "numSpacing" => Some(("", "-nums")),
+        "numFraction" => Some(("", "-fractions")),
+        "touch" => Some(("touch-", "")),
+        "touchPanX" => Some(("touch-pan-", "")),
+        "touchPanY" => Some(("touch-pan-", "")),
+        "contain" => Some(("contain-", "")),
+        "containSize" => Some(("contain-", "")),
+        _ => None,
+    }
+}
+
+/// The key and value that replaced a value a closed key used to take, keyed by
+/// the key and the old value. A value of `true` is the boolean flag.
+pub(crate) fn closed_enum_value_move(
+    key: &str,
+    value: &str,
+) -> Option<(&'static str, &'static str)> {
+    match (key, value) {
+        ("touch", "pan-x") => Some(("touchPanX", "x")),
+        ("touch", "pan-left") => Some(("touchPanX", "left")),
+        ("touch", "pan-right") => Some(("touchPanX", "right")),
+        ("touch", "pan-y") => Some(("touchPanY", "y")),
+        ("touch", "pan-up") => Some(("touchPanY", "up")),
+        ("touch", "pan-down") => Some(("touchPanY", "down")),
+        ("touch", "pinch-zoom") => Some(("touchPinchZoom", "true")),
+        _ => None,
+    }
+}
+
+/// The group keys a stand-alone keyword key resets, space-separated, when the
+/// key holds one.
+pub(crate) fn global_keyword_groups(key: &str) -> Option<&'static str> {
+    match key {
+        "nums" => Some("numFigure numSpacing numFraction numOrdinal numSlashedZero"),
+        "touch" => Some("touchPanX touchPanY touchPinchZoom"),
+        "contain" => Some("containSize containLayout containPaint containStyle"),
+        _ => None,
+    }
+}
+
+/// The stand-alone keyword key a group key belongs to.
+pub(crate) fn global_keyword_for_group(key: &str) -> Option<&'static str> {
+    match key {
+        "numFigure" => Some("nums"),
+        "numSpacing" => Some("nums"),
+        "numFraction" => Some("nums"),
+        "numOrdinal" => Some("nums"),
+        "numSlashedZero" => Some("nums"),
+        "touchPanX" => Some("touch"),
+        "touchPanY" => Some("touch"),
+        "touchPinchZoom" => Some("touch"),
+        "containSize" => Some("contain"),
+        "containLayout" => Some("contain"),
+        "containPaint" => Some("contain"),
+        "containStyle" => Some("contain"),
+        _ => None,
+    }
 }
 
 /// The legal values of a closed-enum key, in table order, for the diagnostic.
@@ -873,6 +1018,15 @@ pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
         "position" => Some("static, fixed, absolute, relative, sticky"),
         "visibility" => Some("visible, hidden, collapse"),
         "isolation" => Some("isolate, auto"),
+        "nums" => Some("normal"),
+        "numFigure" => Some("lining, oldstyle"),
+        "numSpacing" => Some("proportional, tabular"),
+        "numFraction" => Some("diagonal, stacked"),
+        "touch" => Some("auto, none, manipulation"),
+        "touchPanX" => Some("x, left, right"),
+        "touchPanY" => Some("y, up, down"),
+        "contain" => Some("none, strict, content"),
+        "containSize" => Some("size, inline-size"),
         _ => None,
     }
 }
@@ -925,12 +1079,12 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "caption"
             | "clear"
             | "container"
+            | "containSize"
             | "display"
             | "fieldSizing"
             | "float"
             | "fontSmoothing"
             | "fontStyle"
-            | "fontVariant"
             | "forcedColorAdjust"
             | "gridFlow"
             | "isolation"
@@ -948,7 +1102,10 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "maskType"
             | "mixBlend"
             | "notSrOnly"
-            | "ordinal"
+            | "numFigure"
+            | "numFraction"
+            | "nums"
+            | "numSpacing"
             | "overflow"
             | "overflowX"
             | "overflowY"
@@ -967,7 +1124,6 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "scrollbarGutter"
             | "select"
             | "self"
-            | "slashedZero"
             | "snapAlign"
             | "snapStop"
             | "snapType"
@@ -976,6 +1132,8 @@ pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
             | "textClip"
             | "textEllipsis"
             | "touch"
+            | "touchPanX"
+            | "touchPanY"
             | "visibility"
             | "whitespace"
     )

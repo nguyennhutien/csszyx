@@ -114,12 +114,12 @@ twice in one object.
 ### True boolean utilities
 
 Some utilities are genuinely on/off — not a value of a single property — and stay
-boolean: composite helpers (`truncate`, `srOnly`), stackable font-variant-numeric
-flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
-`blur`), and plugin components (`container`, `prose`).
+boolean: composite helpers (`truncate`, `srOnly`), single-keyword
+font-variant-numeric groups (`numOrdinal`, `numSlashedZero`), default-or-value
+toggles (`grow`, `ring`, `blur`), and plugin components (`container`, `prose`).
 
 ```tsx
-<div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
+<div sz={{ truncate: true, numSlashedZero: true, grow: true, container: true }} />
 ```
 
 ## A later key covers an earlier one
