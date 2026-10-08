@@ -264,6 +264,26 @@ describe('init tsconfig and sz-types edge paths', () => {
         expect(readFileSync(join(cwd, 'tsconfig.app.json'), 'utf8')).toContain('.csszyx');
     });
 
+    it('leaves a tsconfig without an include array alone', async () => {
+        mute();
+        const cwd = tempRoot();
+        write(
+            cwd,
+            'package.json',
+            JSON.stringify({
+                dependencies: { react: '^19', vite: '^7' },
+                devDependencies: { tailwindcss: '^4' },
+            }),
+        );
+        // The default include already covers a root `.d.ts`.
+        const tsconfig = '{\n  "compilerOptions": {}\n}\n';
+        write(cwd, 'tsconfig.json', tsconfig);
+        write(cwd, 'vite.config.ts', 'export default { plugins: [] };');
+        write(cwd, 'src/index.css', '@import "tailwindcss";\n');
+        await init({ yes: true, cwd });
+        expect(readFileSync(join(cwd, 'tsconfig.json'), 'utf8')).toBe(tsconfig);
+    });
+
     it('is a no-op on a tsconfig already referencing .csszyx and appends only the missing sz reference', async () => {
         mute();
         const cwd = tempRoot();

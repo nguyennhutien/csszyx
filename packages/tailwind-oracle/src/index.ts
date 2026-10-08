@@ -36,6 +36,7 @@ export {
 export {
     FILE_READ_CONCURRENCY,
     mapConcurrent,
+    readTextFiles,
     STYLESHEET_COMPILE_CONCURRENCY,
 } from './map-concurrent.js';
 export {

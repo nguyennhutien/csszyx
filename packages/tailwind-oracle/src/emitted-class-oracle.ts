@@ -39,7 +39,7 @@ import {
     PROBE_THEME,
 } from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
-import { FILE_READ_CONCURRENCY, mapConcurrent } from './map-concurrent.js';
+import { readTextFiles } from './map-concurrent.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import {
     appliedCandidatesIn,
@@ -580,13 +580,9 @@ export async function tailwindEntriesAmong(files: readonly string[]): Promise<st
     const byDepth = [...files];
     byDepth.sort(comparePathDepth);
     // A stylesheet that cannot be read cannot be the entry point.
-    const imports = await mapConcurrent(byDepth, FILE_READ_CONCURRENCY, file =>
-        readFile(file, 'utf8').then(
-            css => IMPORTS_TAILWIND.test(css),
-            () => false,
-        ),
-    );
-    return byDepth.filter((_, index) => imports[index]);
+    return (await readTextFiles(byDepth))
+        .filter(stylesheet => IMPORTS_TAILWIND.test(stylesheet.text))
+        .map(stylesheet => stylesheet.path);
 }
 
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */

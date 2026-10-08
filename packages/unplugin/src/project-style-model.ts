@@ -28,13 +28,13 @@ import {
     collectClassHooks,
     collectVariantHooks,
     createEmittedClassOracle,
-    FILE_READ_CONCURRENCY,
     isHook,
     loadCandidateScanner,
     mapConcurrent,
     noClassHooks,
     type OracleSkipKind,
     readStylesheetRole,
+    readTextFiles,
     type ScanSource,
     STYLESHEET_COMPILE_CONCURRENCY,
     type StylesheetAlias,
@@ -678,13 +678,9 @@ async function addHookStylesheets(
     compiled: readonly string[],
 ): Promise<void> {
     const read = new Set(compiled);
-    const unread = files.filter(file => !read.has(file));
-    const contents = await mapConcurrent(unread, FILE_READ_CONCURRENCY, file =>
-        readFile(file, 'utf8').catch(() => null),
-    );
-    for (const css of contents) {
-        // A stylesheet gone since the walk selects on nothing.
-        if (css !== null) addHooks(hooks, hooksOf(css));
+    // A stylesheet gone since the walk selects on nothing.
+    for (const stylesheet of await readTextFiles(files.filter(file => !read.has(file)))) {
+        addHooks(hooks, hooksOf(stylesheet.text));
     }
 }
 

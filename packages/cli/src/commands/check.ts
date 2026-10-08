@@ -29,6 +29,7 @@ import {
     findTailwindCssEntries,
     findThemeCollisions,
     mapConcurrent,
+    readTextFiles,
     type SiblingKeywordFinding,
     STYLESHEET_COMPILE_CONCURRENCY,
     type SzValuePair,
@@ -567,9 +568,11 @@ async function collectSzDiagnostics(
     // Read ahead, then lowered in the order given: the first file to produce a
     // class is the origin reported for it.
     const sources = await mapConcurrent(files, FILE_READ_CONCURRENCY, readSzSource);
-    for (const [index, file] of files.entries()) {
-        const source = sources[index] ?? null;
+    for (const [index, source] of sources.entries()) {
         if (source === null) continue;
+        // Lowered once; let its text go rather than hold every file's to the end.
+        sources[index] = null;
+        const file = files[index] as string;
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
@@ -717,15 +720,10 @@ async function reportThemeCollisions(
     if (opened.oracles.length === 0) return false;
 
     const declared: DeclaredToken[] = [];
-    const entries = await findTailwindCssEntries(cwd);
     // A stylesheet that cannot be read declares nothing this pass can see; the
     // dead-class pass already reports an unreadable entry.
-    const stylesheets = await mapConcurrent(entries, FILE_READ_CONCURRENCY, entry =>
-        readFile(entry, 'utf8').catch(() => null),
-    );
-    for (const [index, entry] of entries.entries()) {
-        const css = stylesheets[index] ?? null;
-        if (css !== null) declared.push(...declaredThemeTokens(css, relativePosix(cwd, entry)));
+    for (const stylesheet of await readTextFiles(await findTailwindCssEntries(cwd))) {
+        declared.push(...declaredThemeTokens(stylesheet.text, relativePosix(cwd, stylesheet.path)));
     }
     if (declared.length === 0) return false;
 
