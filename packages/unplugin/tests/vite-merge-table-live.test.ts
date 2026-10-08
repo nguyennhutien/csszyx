@@ -44,21 +44,31 @@ describe('source edits on a running Vite server', () => {
             vi.spyOn(process, 'cwd').mockReturnValue(root);
             vi.spyOn(console, 'warn').mockImplementation(() => {});
             const file = join(root, 'src/value.js');
-            let completedEdits = 0;
+            // The source each completed hot update read, so a wait ends on
+            // the edit it made and never on an earlier one reported twice.
+            const completedEdits: string[] = [];
             const server = await createServer({
                 root,
                 configFile: false,
                 logLevel: 'silent',
-                server: { port: 0, host: '127.0.0.1' },
+                server: {
+                    port: 0,
+                    host: '127.0.0.1',
+                    // chokidar drops a second `change` for a path within 50 ms
+                    // of the first, and a fast hot update brings the next
+                    // edit inside that window. Waiting for the write to
+                    // settle reports every edit, the last one included.
+                    watch: { awaitWriteFinish: { stabilityThreshold: 10, pollInterval: 5 } },
+                },
                 plugins: [
                     vitePlugin({ build: { cache: false }, production: { mangle: false } }),
                     {
                         name: 'observe-merge-update-completion',
                         hotUpdate: {
                             order: 'post',
-                            handler(ctx) {
+                            async handler(ctx) {
                                 if (this.environment.name === 'client' && ctx.file === file) {
-                                    completedEdits += 1;
+                                    completedEdits.push(await ctx.read());
                                 }
                             },
                         },
@@ -76,11 +86,9 @@ describe('source edits on a running Vite server', () => {
                 ['p-4', 'p-2'],
                 ['p-2', 'p-1'],
             ]) {
-                const previousEdits = completedEdits;
-                writeFileSync(file, source(tokens));
-                await expect
-                    .poll(() => completedEdits, { timeout: 10_000 })
-                    .toBeGreaterThan(previousEdits);
+                const edit = source(tokens);
+                writeFileSync(file, edit);
+                await expect.poll(() => completedEdits, { timeout: 10_000 }).toContain(edit);
                 expect((await server.ssrLoadModule('/src/value.js')).result).toEqual([
                     tokens[1],
                     tokens[1],
@@ -92,11 +100,9 @@ describe('source edits on a running Vite server', () => {
 
             // Changing JavaScript without adding candidates keeps the exact
             // registration module, even though the source itself re-runs.
-            const previousEdits = completedEdits;
-            writeFileSync(file, `${source(['p-2', 'p-1'])}\nexport const edited = true;`);
-            await expect
-                .poll(() => completedEdits, { timeout: 10_000 })
-                .toBeGreaterThan(previousEdits);
+            const edit = `${source(['p-2', 'p-1'])}\nexport const edited = true;`;
+            writeFileSync(file, edit);
+            await expect.poll(() => completedEdits, { timeout: 10_000 }).toContain(edit);
             expect((await server.ssrLoadModule('/src/value.js')).edited).toBe(true);
             expect(await server.ssrLoadModule('virtual:csszyx/unserved')).toBe(registration);
         },
