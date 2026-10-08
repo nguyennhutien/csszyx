@@ -146,6 +146,58 @@ describe.each(LANES)('next watch on the %s watcher', (_name, factory) => {
     }, 40_000);
 });
 
+describe('a source whose events the watcher never delivers', () => {
+    it('is reaped once it is gone from the disk', async () => {
+        // The CI trace of the case above: the watcher reported `addDir app`
+        // and then nothing for the file written into it, neither its `add`
+        // nor its `unlink`, so no cycle ever ran to reap the shard. This
+        // watcher drops every event for the source, the same shape on demand.
+        const root = tempRoot();
+        const dropped = (filePath: string): boolean => filePath.endsWith('Card.tsx');
+        const lossy: NextWatchFactory = (paths, options) => {
+            const watcher = nextWatchFactoryFor()(paths, options);
+            const emit = watcher.emit.bind(watcher);
+            watcher.emit = ((event: string, ...args: unknown[]) =>
+                (event === 'all' && dropped(String(args[1]))) ||
+                ((event === 'add' || event === 'unlink') && dropped(String(args[0])))
+                    ? true
+                    : emit(event, ...args)) as typeof watcher.emit;
+            return watcher;
+        };
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: lossy, sourceSweepMs: 50 },
+        );
+        try {
+            const source = join(session.root, 'app/Card.tsx');
+            const shardPath = join(session.root, '.csszyx/cache/safelist-shards/manual.json');
+            mkdirSync(join(session.root, 'app'), { recursive: true });
+            writeFileSync(source, 'export const Card=()=> <div />;');
+            writeShard(shardPath, source, 'm-2');
+            await waitFor(
+                () => readFileSync(session.safelistOutputPath, 'utf8').includes('m-2'),
+                'the shard to reach the safelist',
+            );
+
+            rmSync(source);
+            await waitFor(
+                () => !existsSync(shardPath),
+                'the shard of a source removed without an event',
+                5_000,
+            );
+            await waitFor(
+                () => !readFileSync(session.safelistOutputPath, 'utf8').includes('m-2'),
+                'the safelist to drop its class',
+                5_000,
+            );
+            expect(existsSync(shardPath)).toBe(false);
+            expect(readFileSync(session.safelistOutputPath, 'utf8')).not.toContain('m-2');
+        } finally {
+            await session.close();
+        }
+    }, 30_000);
+});
+
 describe('a removed directory', () => {
     it('reaps the shards of the sources it held', async () => {
         // A directory moved or deleted in one step can arrive as one event for

@@ -32,7 +32,8 @@ afterEach(() => {
  *
  * @param content - What the edited file becomes after the first build.
  * @param file - The file edited, relative to the root; the stylesheet unless given.
- * @returns The errors of every build, and everything printed to `console.warn`.
+ * @returns The errors of the first build and of the rebuild the edit caused,
+ *   and everything printed to `console.warn`.
  */
 async function watchThroughEdit(
     content: string,
@@ -66,6 +67,20 @@ async function watchThroughEdit(
         plugins: [webpackPlugin({ build: { cache: false }, production: { mangle: false } })],
     });
     const builds: string[][] = [];
+    const edited = join(root, file);
+    // Either signal is enough. watchpack can report a change through the
+    // timestamps alone, leaving it out of `modifiedFiles`, and the timestamp
+    // is what webpack itself reads to decide the file changed: the edit is
+    // the only thing that makes it newer than the hour-old one set above.
+    const knowsOfEdit = (): boolean => {
+        if (compiler.modifiedFiles?.has(edited)) return true;
+        const seen = compiler.fileTimestamps?.get(edited);
+        return (
+            typeof seen === 'object' &&
+            seen !== null &&
+            (seen.timestamp ?? 0) > settled.getTime() + 1000
+        );
+    };
     await new Promise<void>((resolve, reject) => {
         let guard: NodeJS.Timeout | undefined;
         const finish = () => {
@@ -77,14 +92,21 @@ async function watchThroughEdit(
                 reject(error);
                 return;
             }
-            builds.push((stats?.compilation.errors ?? []).map(entry => entry.message));
-            if (builds.length === 1) {
-                writeFileSync(join(root, file), content, 'utf8');
+            const errors = (stats?.compilation.errors ?? []).map(entry => entry.message);
+            if (builds.length === 0) {
+                builds.push(errors);
+                writeFileSync(edited, content, 'utf8');
                 // A stylesheet the build does not depend on never rebuilds;
                 // stop waiting rather than hang until the test times out.
                 guard = setTimeout(finish, 15_000);
                 return;
             }
+            // The watcher can start a rebuild for a path it reported first --
+            // a directory, or the `.csszyx` file the plugin wrote as the watch
+            // began -- before it reports the edit, which then lands in the
+            // rebuild after. Only a rebuild that knew of the edit answers here.
+            if (!knowsOfEdit()) return;
+            builds.push(errors);
             finish();
         });
     });
