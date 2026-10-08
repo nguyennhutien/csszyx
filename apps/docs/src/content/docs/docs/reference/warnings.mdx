@@ -284,6 +284,18 @@ emits its kebab-case class after warning. A key listed as an alias or removed
 migration is not a custom escape hatch: csszyx warns and drops it instead of
 silently preserving obsolete API spellings or leaving dead classes in the DOM.
 
+The unknown-key and canonical-key reports print once per message per process,
+so server-side rendering does not repeat them on every request. After 512
+distinct keys they stop, once, with:
+
+```text
+[csszyx] {count} distinct unknown sz keys have been reported; further ones are suppressed for this process. help: sz keys built from data are the usual cause — look above for one key repeating with different names.
+```
+
+An object whose keys come from data — one per record — would otherwise make
+every render a new report. The keys printed above the line name the object to
+look at. Production is unaffected.
+
 ### Values that generate no CSS
 
 | Message | Notes |

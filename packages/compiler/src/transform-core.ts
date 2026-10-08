@@ -3889,6 +3889,15 @@ function formatPerspectiveOrigin(value: string): string {
         : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
 }
 
+// Runtime lowering has no source location, and server-side rendering lowers
+// the same object on every request: one report per message says it all.
+// Capped like the runtime's `devWarn` cache: a key built from data would grow
+// it for as long as the server runs, so admission stops at the cap and one
+// line says so, rather than clearing and printing the flood again.
+const UNKNOWN_SZ_PROPERTY_WARNINGS_MAX = 512;
+const _warnedUnknownSzProperties = new Set<string>();
+let _announcedUnknownSzPropertyCap = false;
+
 /** Warns when a fallback key cannot produce a supported sz utility. */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
     if (
@@ -3898,6 +3907,18 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
     )
         return;
     let message = unknownSzPropertyMessage(key);
+    if (_warnedUnknownSzProperties.has(message)) return;
+    if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
+        if (!_announcedUnknownSzPropertyCap) {
+            _announcedUnknownSzPropertyCap = true;
+            console.warn(
+                `[csszyx] ${UNKNOWN_SZ_PROPERTY_WARNINGS_MAX} distinct unknown sz keys have been reported; further ones are suppressed for this process. ` +
+                    'help: sz keys built from data are the usual cause — look above for one key repeating with different names.',
+            );
+        }
+        return;
+    }
+    _warnedUnknownSzProperties.add(message);
     if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
     console.warn(message);
     hintProjectScanOnce(szWarnLocation);
@@ -4289,6 +4310,8 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedClosedEnumValues.clear();
     _warnedOwnedKeyVariants.clear();
     warnedRemovedSugar.clear();
+    _warnedUnknownSzProperties.clear();
+    _announcedUnknownSzPropertyCap = false;
 }
 
 /**
