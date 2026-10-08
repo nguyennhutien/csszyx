@@ -176,3 +176,10 @@ describe('parseSzAttribute own keys', () => {
         expect((parsed as { p?: unknown }).p).toBeUndefined();
     });
 });
+
+describe('parseSzAttribute keys without a value', () => {
+    it.each(['flex gap-2', 'flex', '{ p: 4, flex }'])('rejects %j', raw => {
+        // A key must be followed by `:`; without one the text is a class list.
+        expect(() => parseSzAttribute(raw)).toThrow(SyntaxError);
+    });
+});

@@ -148,6 +148,19 @@ describe('csszyx/browser standalone runtime', () => {
         expect(errorLog).not.toHaveBeenCalled();
     });
 
+    it('reads a class list whose names parse as sz keys as classes', async () => {
+        // `flex gap-2` reads as a key and a bare value with no colon between
+        // them, and used to become the single class `flex-gap-2`.
+        const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+        document.body.innerHTML =
+            '<div id="cls" sz="flex gap-2"></div><div id="one" sz="flex"></div>';
+        await loadRuntime();
+
+        expect(document.getElementById('cls')?.className).toBe('flex gap-2');
+        expect(document.getElementById('one')?.className).toBe('flex');
+        expect(errorLog).not.toHaveBeenCalled();
+    });
+
     it('defers the initial walk to DOMContentLoaded while the document is loading', async () => {
         vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
         await loadRuntime();
@@ -160,7 +173,7 @@ describe('csszyx/browser standalone runtime', () => {
 
 describe('parser character edges', () => {
     it('handles escaped characters inside quoted strings and quoted keys', async () => {
-        document.body.innerHTML = `<div id="esc" sz="{'bg': 'red-500', title: 'it\\\\'s'}"></div>`;
+        document.body.innerHTML = `<div id="esc" sz="{'bg': 'red-500', title: 'it\\'s'}"></div>`;
         await loadRuntime();
         const esc = document.getElementById('esc');
         expect(esc?.hasAttribute('sz')).toBe(false);
