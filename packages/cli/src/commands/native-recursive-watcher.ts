@@ -140,8 +140,9 @@ export function watchRecursively(
         setImmediate(() => emitter.emit('error', error));
     }
     return Object.assign(emitter, {
-        close: async (): Promise<void> => {
+        close: (): Promise<void> => {
             inner?.close();
+            return Promise.resolve();
         },
     });
 }

@@ -24,10 +24,13 @@ import {
     createEmittedClassOracle,
     type DeclaredToken,
     type EmittedClassOracle,
+    FILE_READ_CONCURRENCY,
     findSiblingKeywordValues,
     findTailwindCssEntries,
     findThemeCollisions,
+    mapConcurrent,
     type SiblingKeywordFinding,
+    STYLESHEET_COMPILE_CONCURRENCY,
     type SzValuePair,
     szValuePairs,
 } from '@csszyx/tailwind-oracle';
@@ -243,12 +246,17 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
     const skipped: string[] = [];
     const prefixes: OpenedOracles['prefixes'] = [];
     let stylesheetFailed = false;
-    for (const entry of entries) {
-        const oracle = await createEmittedClassOracle({
+    // Two compiles at a time, as the build's own style model does; read in
+    // entry order, so the skip reasons and prefixes keep that order.
+    const compiled = await mapConcurrent(entries, STYLESHEET_COMPILE_CONCURRENCY, async entry =>
+        createEmittedClassOracle({
             resolveFrom: cwd,
             css: await readFile(entry, 'utf8'),
             cssBase: path.dirname(entry),
-        });
+        }),
+    );
+    for (const [index, entry] of entries.entries()) {
+        const oracle = compiled[index] as EmittedClassOracle;
         if (oracle.ok) {
             oracles.push(oracle);
             prefixes.push({ entry: relativePosix(cwd, entry), prefix: oracle.facts.prefix });
@@ -318,14 +326,14 @@ function agreedPrefix(opened: OpenedOracles): {
  * @param disagreement - Why the entries give no single prefix, or null.
  * @returns Whether anything dead was found.
  */
-async function reportDeadClasses(
+function reportDeadClasses(
     out: Reporter,
     opened: OpenedOracles,
     origins: Map<string, string>,
     allow: readonly string[],
     wants: (rule: CheckRule) => boolean,
     disagreement: string | null,
-): Promise<boolean> {
+): boolean {
     if (origins.size === 0) return false;
 
     const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
@@ -556,8 +564,11 @@ async function collectSzDiagnostics(
     // there is skipped here too rather than reported by only one of them.
     const pairsByFile = new Map<string, SzValuePair[]>();
 
-    for (const file of files) {
-        const source = await readSzSource(file);
+    // Read ahead, then lowered in the order given: the first file to produce a
+    // class is the origin reported for it.
+    const sources = await mapConcurrent(files, FILE_READ_CONCURRENCY, readSzSource);
+    for (const [index, file] of files.entries()) {
+        const source = sources[index] ?? null;
         if (source === null) continue;
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
@@ -706,15 +717,15 @@ async function reportThemeCollisions(
     if (opened.oracles.length === 0) return false;
 
     const declared: DeclaredToken[] = [];
-    for (const entry of await findTailwindCssEntries(cwd)) {
-        try {
-            declared.push(
-                ...declaredThemeTokens(await readFile(entry, 'utf8'), relativePosix(cwd, entry)),
-            );
-        } catch {
-            // A stylesheet that cannot be read declares nothing this pass can
-            // see; the dead-class pass already reports an unreadable entry.
-        }
+    const entries = await findTailwindCssEntries(cwd);
+    // A stylesheet that cannot be read declares nothing this pass can see; the
+    // dead-class pass already reports an unreadable entry.
+    const stylesheets = await mapConcurrent(entries, FILE_READ_CONCURRENCY, entry =>
+        readFile(entry, 'utf8').catch(() => null),
+    );
+    for (const [index, entry] of entries.entries()) {
+        const css = stylesheets[index] ?? null;
+        if (css !== null) declared.push(...declaredThemeTokens(css, relativePosix(cwd, entry)));
     }
     if (declared.length === 0) return false;
 
@@ -996,14 +1007,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     if (
         deadClassPass &&
         !disagreementLeftOut &&
-        (await reportDeadClasses(
-            out,
-            opened,
-            classOrigins,
-            options.allow ?? [],
-            wantsRule,
-            disagreement,
-        ))
+        reportDeadClasses(out, opened, classOrigins, options.allow ?? [], wantsRule, disagreement)
     ) {
         process.exitCode = 1;
     }

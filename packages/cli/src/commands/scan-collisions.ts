@@ -15,6 +15,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { sortStrings } from '@csszyx/compiler';
+import { FILE_READ_CONCURRENCY, mapConcurrent } from '@csszyx/tailwind-oracle';
 import fg from 'fast-glob';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
@@ -161,13 +162,12 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
 
     // name → set of files it appears in.
     const risky = new Map<string, Set<string>>();
-    for (const file of files) {
-        let css: string;
-        try {
-            css = await readFile(file, 'utf8');
-        } catch {
-            continue;
-        }
+    const stylesheets = await mapConcurrent(files, FILE_READ_CONCURRENCY, file =>
+        readFile(file, 'utf8').catch(() => null),
+    );
+    for (const [index, file] of files.entries()) {
+        const css = stylesheets[index] ?? null;
+        if (css === null) continue;
         const rel = relativePosix(cwd, file);
         for (const match of stripNonSelectorText(css).matchAll(CLASS_SELECTOR_RE)) {
             const name = match[1];

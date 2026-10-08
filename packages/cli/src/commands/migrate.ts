@@ -148,7 +148,7 @@ function isGitignored(cwd: string, pattern: string): boolean {
  * @param question - The question string to display.
  * @returns Promise resolving to true if user answered 'y'.
  */
-async function askYesNo(question: string): Promise<boolean> {
+function askYesNo(question: string): Promise<boolean> {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     return new Promise(resolve => {
         rl.question(question, answer => {

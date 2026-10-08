@@ -602,7 +602,8 @@ function waitForShutdown(failure: Promise<Error>): Promise<Error | undefined> {
         };
         process.once('SIGINT', onSignal);
         process.once('SIGTERM', onSignal);
-        failure.then(error => {
+        // `failure` only ever resolves, with the error that stopped the watch.
+        void failure.then(error => {
             cleanup();
             resolve(error);
         });

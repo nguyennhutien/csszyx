@@ -114,7 +114,7 @@ describe('audit', () => {
     it('emits machine-readable stats in json mode', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();
-        await audit({ cwd, json: true });
+        audit({ cwd, json: true });
         const stats = JSON.parse(logs.join('\n'));
         expect(stats).toHaveProperty('output');
         expect(stats).not.toHaveProperty('totalClasses');
@@ -124,7 +124,7 @@ describe('audit', () => {
     it('prints the human report and says when dist holds nothing to weigh', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();
-        await audit({ cwd });
+        audit({ cwd });
         expect(logs.join('\n')).toContain('No built HTML or CSS found under dist/.');
     });
 
@@ -138,7 +138,7 @@ describe('audit', () => {
         const html = '<html><body class="a b"></body></html>';
         writeFileSync(join(cwd, 'dist/index.html'), html);
         writeFileSync(join(cwd, 'dist/app.css'), '.a{p:1}.b{m:2}');
-        await audit({ cwd });
+        audit({ cwd });
         const output = logs.join('\n');
         expect(output).toContain(`index.html           ${Buffer.byteLength(html)} B`);
         expect(output).toContain('app.css');

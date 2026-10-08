@@ -734,7 +734,8 @@ export async function prepareNextStylesheetFacts(input: {
         const content = readText(filePath);
         return content === null ? [] : [{ filePath, content }];
     });
-    return writeNextStylesheetFacts({
+    // Awaited so a failure anywhere in here rejects rather than throws.
+    return await writeNextStylesheetFacts({
         root,
         cacheDir: resolveNextAppCacheDir(root, input.cacheDir),
         tailwindStylesheet: input.tailwindStylesheet,

@@ -135,8 +135,10 @@ export function tailwindLoaderFor(projectRoot: string, alsoNextToCli = true): Ta
         return selected;
     };
     return {
-        async version() {
-            return install().version;
+        version() {
+            // Deferred so a failed lookup rejects, as the contract says,
+            // rather than throwing at the call.
+            return Promise.resolve().then(() => install().version);
         },
         async resolveConfig() {
             // Beside the manifest, so both steps answer for one package. The

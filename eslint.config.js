@@ -244,6 +244,30 @@ export default [
         },
     },
 
+    // S9383, S7503 and S9382, which SonarCloud added on 2026-09-29 and then
+    // reported on whatever file a pull request touched. The local rules print
+    // the same sentences. Production code only: Sonar reported none of them in
+    // a test, where `node:test` hands back a promise from every `describe`.
+    // Type-aware, which the parser settings above already give these files.
+    {
+        files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+        ignores: ['**/generated/**', '**/*.d.ts', '**/*.type-test.ts'],
+        plugins: { '@typescript-eslint': typescript },
+        rules: {
+            // A promise nobody awaits fails as an unhandled rejection instead
+            // of failing what started it: the esbuild adapter handed esbuild no
+            // promise for a setup that registers its hooks after an `await`.
+            // Fire-and-forget is written `void`, which says so.
+            '@typescript-eslint/no-floating-promises': 'error',
+            // An `async` function with nothing to await turns a throw into a
+            // rejection without saying so; return the promise, or await it.
+            'require-await': 'error',
+            // Files read one after another leave the disk idle between them.
+            // `mapConcurrent` in `@csszyx/tailwind-oracle` bounds the overlap.
+            'no-await-in-loop': 'error',
+        },
+    },
+
     // S7780, the other Sonar rule with no `eslint-plugin-sonarjs` rule behind
     // it. `String.raw` says a backslash is a backslash; the escaped spelling
     // has to be decoded by the reader to see the same thing.

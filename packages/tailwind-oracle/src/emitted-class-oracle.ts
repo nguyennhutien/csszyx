@@ -39,6 +39,7 @@ import {
     PROBE_THEME,
 } from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
+import { FILE_READ_CONCURRENCY, mapConcurrent } from './map-concurrent.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import {
     appliedCandidatesIn,
@@ -578,15 +579,14 @@ export async function tailwindEntriesAmong(files: readonly string[]): Promise<st
     // leave that dependency invisible at the call site.
     const byDepth = [...files];
     byDepth.sort(comparePathDepth);
-    const entries: string[] = [];
-    for (const file of byDepth) {
-        try {
-            if (IMPORTS_TAILWIND.test(await readFile(file, 'utf8'))) entries.push(file);
-        } catch {
-            // A stylesheet that cannot be read cannot be the entry point.
-        }
-    }
-    return entries;
+    // A stylesheet that cannot be read cannot be the entry point.
+    const imports = await mapConcurrent(byDepth, FILE_READ_CONCURRENCY, file =>
+        readFile(file, 'utf8').then(
+            css => IMPORTS_TAILWIND.test(css),
+            () => false,
+        ),
+    );
+    return byDepth.filter((_, index) => imports[index]);
 }
 
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */
@@ -894,13 +894,13 @@ export async function createEmittedClassOracle(
             }
             return collisions;
         },
-        async loadOriginOracle() {
+        loadOriginOracle() {
             origins ??= originOracleFrom({
                 css: options.css,
                 projectStylesheets: [...projectStylesheets.values()],
                 loadedModules,
                 cssFor: classes => design.candidatesToCss([...classes]),
-                compileStripped: async declared =>
+                compileStripped: declared =>
                     load(stripCustomUtilities(options.css), {
                         ...loadOptions,
                         loadStylesheet: async (id, base) => {
@@ -918,7 +918,7 @@ export async function createEmittedClassOracle(
                         },
                     }),
             });
-            return origins;
+            return Promise.resolve(origins);
         },
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered

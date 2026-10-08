@@ -244,7 +244,7 @@ cli.command('audit', 'Analyze mangling performance')
     .option('--json', 'Output as JSON')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
-        await (await import('./commands/audit.js')).audit({
+        (await import('./commands/audit.js')).audit({
             json: options.json,
             cwd: options.cwd,
         });

@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe('audit', () => {
     it('emits a json document carrying the build output and nothing else', async () => {
-        await expect(audit({ cwd: dir, json: true })).resolves.toBeUndefined();
+        expect(audit({ cwd: dir, json: true })).toBeUndefined();
         const printed = logSpy.mock.calls.map(c => String(c[0])).join('\n');
         const stats = JSON.parse(printed);
         // `totalClasses` and `tierDistribution` used to sit beside `output`.
@@ -37,7 +37,7 @@ describe('audit', () => {
     });
 
     it('prints the human report with no tier section to explain away', async () => {
-        await expect(audit({ cwd: dir })).resolves.toBeUndefined();
+        expect(audit({ cwd: dir })).toBeUndefined();
         const printed = logSpy.mock.calls.map(c => String(c[0])).join('\n');
         expect(printed).not.toContain('Mangle Statistics');
         expect(printed).not.toContain('Tier distribution');

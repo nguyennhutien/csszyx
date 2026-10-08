@@ -28,12 +28,15 @@ import {
     collectClassHooks,
     collectVariantHooks,
     createEmittedClassOracle,
+    FILE_READ_CONCURRENCY,
     isHook,
     loadCandidateScanner,
+    mapConcurrent,
     noClassHooks,
     type OracleSkipKind,
     readStylesheetRole,
     type ScanSource,
+    STYLESHEET_COMPILE_CONCURRENCY,
     type StylesheetAlias,
     type StylesheetFacts,
     type TailwindLoader,
@@ -532,42 +535,6 @@ interface ClassifiedStylesheets {
     hooks: StylesheetHooks;
 }
 
-/** Two Tailwind compiles overlap without multiplying their peak memory unboundedly. */
-const STYLESHEET_COMPILE_CONCURRENCY = 2;
-
-/**
- * Apply an asynchronous operation with a fixed worker count and ordered results.
- *
- * For N items and C workers this performs O(N) scheduling work, retains O(N + C)
- * state, and shortens the independent I/O/compile critical path toward O(N / C).
- * Style-model startup and watch refresh pay this cost, so C stays deliberately
- * small while Tailwind compilation owns comparatively large transient state.
- *
- * @param items - Values to process in their caller-provided order.
- * @param concurrency - Maximum operations allowed to overlap.
- * @param operation - Independent asynchronous work for one value.
- * @returns Results in the same order as `items`, regardless of completion order.
- */
-async function mapConcurrent<T, U>(
-    items: readonly T[],
-    concurrency: number,
-    operation: (item: T) => Promise<U>,
-): Promise<U[]> {
-    const results = new Array<U>(items.length);
-    let nextIndex = 0;
-    const worker = async (): Promise<void> => {
-        while (nextIndex < items.length) {
-            const index = nextIndex;
-            nextIndex += 1;
-            results[index] = await operation(items[index] as T);
-        }
-    };
-    await Promise.all(
-        Array.from({ length: Math.min(concurrency, items.length) }, async () => worker()),
-    );
-    return results;
-}
-
 /**
  * Classify every stylesheet the caller walked.
  *
@@ -586,7 +553,7 @@ async function classifyStylesheets(
         importedByRoots: new Set<string>(),
         hooks: noStylesheetHooks(),
     };
-    const stylesheets = await mapConcurrent(cssFiles, STYLESHEET_COMPILE_CONCURRENCY, async file =>
+    const stylesheets = await mapConcurrent(cssFiles, STYLESHEET_COMPILE_CONCURRENCY, file =>
         classifyStylesheet(file, context),
     );
     for (const [candidateIndex, stylesheet] of stylesheets.entries()) {
@@ -711,13 +678,13 @@ async function addHookStylesheets(
     compiled: readonly string[],
 ): Promise<void> {
     const read = new Set(compiled);
-    for (const file of files) {
-        if (read.has(file)) continue;
-        try {
-            addHooks(hooks, hooksOf(await readFile(file, 'utf8')));
-        } catch {
-            // A stylesheet gone since the walk selects on nothing.
-        }
+    const unread = files.filter(file => !read.has(file));
+    const contents = await mapConcurrent(unread, FILE_READ_CONCURRENCY, file =>
+        readFile(file, 'utf8').catch(() => null),
+    );
+    for (const css of contents) {
+        // A stylesheet gone since the walk selects on nothing.
+        if (css !== null) addHooks(hooks, hooksOf(css));
     }
 }
 
@@ -773,7 +740,7 @@ export async function openProjectStyleModel(
     const openedRoots = await mapConcurrent(
         selectedRoots,
         STYLESHEET_COMPILE_CONCURRENCY,
-        async ({ file, css }) => compileRoot(file, css, context),
+        ({ file, css }) => compileRoot(file, css, context),
     );
     const compiled: CompiledEntry[] = [];
     for (const [rootIndex, root] of openedRoots.entries()) {

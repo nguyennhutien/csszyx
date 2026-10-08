@@ -50,7 +50,7 @@ describe('audit byte formatting', () => {
         // >1KB so formatBytes takes the KB branch, not the raw-bytes branch.
         writeFileSync(join(cwd, 'dist/index.html'), `<html>${'x'.repeat(3000)}</html>`);
         writeFileSync(join(cwd, 'dist/app.css'), `.a{}${'/*pad*/'.repeat(400)}`);
-        await audit({ cwd });
+        audit({ cwd });
         const out = logs.join('\n');
         expect(out).toContain('KB');
         expect(out).toContain('index.html');
@@ -64,7 +64,7 @@ describe('audit megabyte formatting', () => {
         mkdirSync(join(cwd, 'dist'));
         // >1MB so formatBytes takes the MB branch.
         writeFileSync(join(cwd, 'dist/index.html'), 'x'.repeat(1_200_000));
-        await audit({ cwd });
+        audit({ cwd });
         expect(logs.join('\n')).toContain('MB');
     });
 });

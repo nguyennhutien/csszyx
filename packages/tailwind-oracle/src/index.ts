@@ -34,6 +34,11 @@ export {
     tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
 export {
+    FILE_READ_CONCURRENCY,
+    mapConcurrent,
+    STYLESHEET_COMPILE_CONCURRENCY,
+} from './map-concurrent.js';
+export {
     addClassHooks,
     appliedCandidatesIn,
     type ClassAttributeMatcher,
