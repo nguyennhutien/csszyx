@@ -163,3 +163,16 @@ console.log(JSON.stringify([
         expect(['SyntaxError', 'RangeError']).toContain(deep?.error);
     });
 });
+
+describe('parseSzAttribute own keys', () => {
+    it('keeps `__proto__` as a key of the parsed object, not its prototype', () => {
+        // An assignment to `__proto__` sets the prototype, so the key vanished
+        // from the object and its value became what every lookup fell back to.
+        const parsed = parseSzAttribute('{__proto__: {p: 4}, m: 2}');
+
+        expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+        expect(Object.keys(parsed)).toEqual(['__proto__', 'm']);
+        expect(Object.getOwnPropertyDescriptor(parsed, '__proto__')?.value).toEqual({ p: 4 });
+        expect((parsed as { p?: unknown }).p).toBeUndefined();
+    });
+});

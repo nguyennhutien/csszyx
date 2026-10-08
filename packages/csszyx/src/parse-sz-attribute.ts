@@ -166,7 +166,14 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
                 pos++;
             } // skip :
             const value = parseValue();
-            obj[key] = value;
+            // Defined, not assigned: assigning `__proto__` would set the
+            // object's prototype instead of giving it that key.
+            Object.defineProperty(obj, key, {
+                value,
+                enumerable: true,
+                writable: true,
+                configurable: true,
+            });
             skipWhitespace();
             if (input[pos] === ',') {
                 pos++;
