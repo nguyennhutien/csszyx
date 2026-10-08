@@ -31,7 +31,6 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import fg from 'fast-glob';
 import { type CompiledSources, type ScanSource, scanSourcesOf } from './candidate-scanner.js';
 import {
     type CollisionDesignSystem,
@@ -554,6 +553,10 @@ export function comparePathDepth(a: string, b: string): number {
  * @returns Absolute paths to the entries, nearest the root first.
  */
 export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
+    // Loaded on first use: fast-glob is CommonJS, and a bundler that inlines
+    // this package keeps a static CommonJS import alive and runs it when the
+    // bundle loads — 166 KB in `@csszyx/unplugin`, which never calls this.
+    const { default: fg } = await import('fast-glob');
     return tailwindEntriesAmong(
         await fg('**/*.css', { cwd, ignore: IGNORED_CSS_DIRS, absolute: true }),
     );
