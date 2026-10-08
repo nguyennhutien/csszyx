@@ -24,24 +24,44 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./config": {
-      "types": "./dist/config.d.mts",
-      "import": "./dist/config.mjs",
-      "require": "./dist/config.cjs"
+      "import": {
+        "types": "./dist/config.d.mts",
+        "default": "./dist/config.mjs"
+      },
+      "require": {
+        "types": "./dist/config.d.cts",
+        "default": "./dist/config.cjs"
+      }
     },
     "./runtime": {
-      "types": "./dist/runtime.d.mts",
-      "import": "./dist/runtime.mjs",
-      "require": "./dist/runtime.cjs"
+      "import": {
+        "types": "./dist/runtime.d.mts",
+        "default": "./dist/runtime.mjs"
+      },
+      "require": {
+        "types": "./dist/runtime.d.cts",
+        "default": "./dist/runtime.cjs"
+      }
     },
     "./compiler": {
-      "types": "./dist/compiler.d.mts",
-      "import": "./dist/compiler.mjs",
-      "require": "./dist/compiler.cjs"
+      "import": {
+        "types": "./dist/compiler.d.mts",
+        "default": "./dist/compiler.mjs"
+      },
+      "require": {
+        "types": "./dist/compiler.d.cts",
+        "default": "./dist/compiler.cjs"
+      }
     },
     "./jsx": {
       "types": "./dist/jsx.d.ts"
