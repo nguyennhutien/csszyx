@@ -1,11 +1,11 @@
 import { fileURLToPath } from 'node:url';
 
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
 // The package root, whichever directory tsdown is run from.
 const root = fileURLToPath(new URL('.', import.meta.url));
 
-export default {
+export default defineBuild({
     ...base,
     entry: { index: 'src/index.ts' },
     format: ['esm'],
@@ -24,4 +24,4 @@ export default {
             await fs.copyFile(src, dest);
         },
     },
-};
+});

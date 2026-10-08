@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
 const JSX_REFERENCE = '/// <reference types="@csszyx/types/jsx" />\n';
 
-export default {
+export default defineBuild({
     ...base,
     entry: {
         index: 'src/index.ts',
@@ -64,4 +64,4 @@ export default {
             );
         },
     },
-};
+});

@@ -1,6 +1,6 @@
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
-export default {
+export default defineBuild({
     ...base,
     entry: {
         index: 'src/index.ts',
@@ -20,4 +20,4 @@ export default {
     },
     format: ['esm', 'cjs'],
     platform: 'neutral',
-};
+});
