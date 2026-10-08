@@ -1183,17 +1183,18 @@ const warnedAlignmentValues = new Set<string>();
  * alignment props are most often resolved at runtime via `_sz` in a prop-API
  * component, where `window` is defined — so it must fire in browser dev too.
  *
+ * The caller checks that `rawKey` is an alignment key and `value` a string,
+ * so the common case pays no `process.env` read.
+ *
  * @param rawKey - The sz key being lowered.
  * @param value - Its value.
  */
-function warnAlignmentValue(rawKey: string, value: unknown): void {
-    if (process.env.NODE_ENV === 'production' || typeof value !== 'string') {
-        return;
-    }
+function warnAlignmentValue(rawKey: string, value: string): void {
+    if (process.env.NODE_ENV === 'production') return;
+    // Own keys only: `constructor` or `toString` would read Object members.
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
+    if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
     const hint = ALIGNMENT_CSS_VALUE_HINT[value];
-    if (!hint || !ALIGNMENT_KEYS.has(rawKey)) {
-        return;
-    }
     const sig = `${rawKey}:${value}`;
     if (warnedAlignmentValues.has(sig)) {
         return;
@@ -1372,6 +1373,18 @@ const ALPHA_SAFE_NAMED_COLORS = new Set(['white', 'black', 'transparent', 'curre
 const _warnedSpacingSteps = new Set<string>();
 
 /**
+ * Whether a numeric value on a spacing key is off the quarter-step scale.
+ * Checked at the call site, before {@link warnDeadSpacingStep}, so the
+ * on-scale case pays no `process.env` read.
+ * @param key - The sz property key.
+ * @param value - The numeric value about to be emitted bare.
+ * @returns True when the bare class would generate no CSS.
+ */
+function isDeadSpacingStep(key: string, value: number): boolean {
+    return PROPERTY_CATEGORY_MAP[key] === PropertyCategory.SPACING && (value * 4) % 1 !== 0;
+}
+
+/**
  * Warns when a numeric spacing value is not a quarter step. Tailwind's bare
  * spacing syntax only accepts multiples of 0.25 — `p-1.4` generates no CSS —
  * and a unitless bracket is no escape here (`padding: 1.4` is invalid CSS),
@@ -1380,14 +1393,7 @@ const _warnedSpacingSteps = new Set<string>();
  * @param value - The numeric value about to be emitted bare.
  */
 function warnDeadSpacingStep(key: string, value: number): void {
-    if (
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.SPACING ||
-        (value * 4) % 1 === 0
-    ) {
-        return;
-    }
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     const token = `${key}:${value}`;
     if (_warnedSpacingSteps.has(token)) return;
     _warnedSpacingSteps.add(token);
@@ -3898,14 +3904,13 @@ const UNKNOWN_SZ_PROPERTY_WARNINGS_MAX = 512;
 const _warnedUnknownSzProperties = new Set<string>();
 let _announcedUnknownSzPropertyCap = false;
 
-/** Warns when a fallback key cannot produce a supported sz utility. */
+/**
+ * Warns when a fallback key cannot produce a supported sz utility. Callers
+ * check {@link isKnownSzPropertyKey} first, so known keys pay no
+ * `process.env` read.
+ */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
-    if (
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        isKnownSzPropertyKey(key)
-    )
-        return;
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
     let message = unknownSzPropertyMessage(key);
     if (_warnedUnknownSzProperties.has(message)) return;
     if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
@@ -3925,7 +3930,7 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
 }
 
 /** Returns whether a key belongs to any supported property or variant family. */
-function isKnownSzPropertyKey(key: string): boolean {
+export function isKnownSzPropertyKey(key: string): boolean {
     return Boolean(
         PROPERTY_MAP[key] ||
             KNOWN_SPECIAL_PROPERTIES.has(key) ||
@@ -4143,7 +4148,7 @@ function collectFallbackProperty(
     szProp: SzObject,
     classes: string[],
 ): void {
-    warnUnknownSzProperty(rawKey, szProp);
+    if (!isKnownSzPropertyKey(rawKey)) warnUnknownSzProperty(rawKey, szProp);
     if (/^\d+(?:\.\d+)?$/.test(rawKey)) return;
     if (value === true) {
         const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? BOOLEAN_TO_CLASS[rawKey] || key : key;
@@ -4159,22 +4164,38 @@ function collectFallbackProperty(
         classes.push(`${prefix}leading-[${value}]`);
         return;
     }
+    if (typeof value === 'number') collectNumericProperty(rawKey, key, value, prefix, classes);
+    else if (typeof value === 'string') collectStringProperty(rawKey, key, value, prefix, classes);
+}
+
+/**
+ * The number arm of the fallback.
+ *
+ * @param rawKey - The sz key as written.
+ * @param key - The mapped Tailwind prefix.
+ * @param value - The number.
+ * @param prefix - The variant prefix in effect.
+ * @param classes - Where the class goes.
+ */
+function collectNumericProperty(
+    rawKey: string,
+    key: string,
+    value: number,
+    prefix: string,
+    classes: string[],
+): void {
     // Tailwind v4 spells font weights through the `--font-weight-*` theme
     // namespace, so the utility is always a NAME: it serves no `font-<number>`
     // at all, not even the nine standard steps. Every numeric weight used to
     // emit a bare class that styled nothing. The bracket carries the literal
     // the author wrote, which is exactly what `{ weight: N }` asks for, and
     // needs no theme declaration. Same reasoning as the leading ratio above.
-    if (rawKey === 'weight' && typeof value === 'number') {
+    if (rawKey === 'weight') {
         classes.push(`${prefix}${key}-[${value}]`);
         return;
     }
-    if (typeof value === 'number') {
-        warnDeadSpacingStep(rawKey, value);
-        classes.push(`${prefix}${formatNumericUtility(key, value)}`);
-        return;
-    }
-    if (typeof value === 'string') collectStringProperty(rawKey, key, value, prefix, classes);
+    if (isDeadSpacingStep(rawKey, value)) warnDeadSpacingStep(rawKey, value);
+    classes.push(`${prefix}${formatNumericUtility(key, value)}`);
 }
 
 /**
@@ -4197,7 +4218,10 @@ function collectStringProperty(
         warnBorderSideStyle(rawKey, value);
         return;
     }
-    if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
+    if (/^-?\d+(?:\.\d+)?$/.test(value)) {
+        const step = Number(value);
+        if (isDeadSpacingStep(rawKey, step)) warnDeadSpacingStep(rawKey, step);
+    }
     warnDeadWeightValue(rawKey, value);
     classes.push(buildGenericStringClass(rawKey, key, value, prefix));
 }
@@ -4231,7 +4255,7 @@ function collectObjectProperty(
         );
         return true;
     }
-    warnPropertyObjectValue(rawKey, value);
+    if (rawKey in PROPERTY_MAP) warnPropertyObjectValue(rawKey, value);
     warnOwnedKeyVariantObject(rawKey);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
@@ -4321,6 +4345,7 @@ export function __resetSzWarnDedupForTests(): void {
  * generate no CSS. Keys that are genuine variants (hover, sm, group…) never
  * reach here with a property meaning: PROPERTY_MAP and the variant sets are
  * disjoint (locked by test).
+ * The caller checks `key in PROPERTY_MAP` first.
  * @param key - The sz key holding the object.
  * @param value - The stray object value (used to name the nested keys).
  */
@@ -4328,7 +4353,6 @@ function warnPropertyObjectValue(key: string, value: Record<string, unknown>): v
     if (
         process.env.NODE_ENV === 'production' ||
         !szNodeWarningsUnmuted() ||
-        !(key in PROPERTY_MAP) ||
         KNOWN_VARIANTS.has(key) ||
         SPECIAL_VARIANTS.has(key) ||
         _warnedPropertyObjects.has(key)
@@ -4520,6 +4544,7 @@ function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject)
             : undefined;
     if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
     else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
+    // No alias or removed key is a known key; a test pins that.
     else warnUnknownSzProperty(rawKey, szProp);
 }
 
@@ -4542,7 +4567,7 @@ function collectTransformProperty(
         warnAliasOrRemovedKey(rawKey, value, szProp);
         return;
     }
-    warnAlignmentValue(rawKey, value);
+    if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;

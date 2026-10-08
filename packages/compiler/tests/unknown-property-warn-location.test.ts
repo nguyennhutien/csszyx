@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { transformRust, transformSource, transformWasm } from '../src/index.js';
-import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    isKnownSzPropertyKey,
+    MIGRATION_NOTES,
+    SUGGESTION_MAP,
+    setSzWarnLocation,
+    transform,
+} from '../src/transform-core.js';
 import { RUST_LANE } from './engine-parity-harness.js';
 
 // Runtime reports print once per message per process; each test asks afresh.
@@ -592,3 +599,10 @@ describe('unknown-property warning — a flood of distinct keys', () => {
     });
 });
 
+describe('alias and removed keys', () => {
+    it('are never known keys, so their report never needs the check', () => {
+        // The alias branch reports without asking `isKnownSzPropertyKey`.
+        const keys = [...Object.keys(SUGGESTION_MAP), ...Object.keys(MIGRATION_NOTES)];
+        expect(keys.filter(key => isKnownSzPropertyKey(key))).toEqual([]);
+    });
+});

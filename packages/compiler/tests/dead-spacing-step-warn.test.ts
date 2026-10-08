@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type SzObject, setSzWarnLocation, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    type SzObject,
+    setSzWarnLocation,
+    transform,
+} from '../src/transform-core.js';
 
 /**
  * Tailwind's bare spacing syntax only accepts quarter steps (multiples of
@@ -31,6 +36,17 @@ describe('dead spacing-step warning (dev)', () => {
         expect(w[0]).toContain('"p: 1.4"');
         expect(w[0]).toContain('generates no CSS');
         expect(w[0]).toContain('"1.4rem"');
+    });
+
+    it('stays quiet in production and when muted', () => {
+        // A fresh dedup, so silence comes from the guard alone.
+        __resetSzWarnDedupForTests();
+        vi.stubEnv('NODE_ENV', 'production');
+        expect(warns({ p: 1.6 } as SzObject)).toEqual([]);
+        vi.unstubAllEnvs();
+        vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+        expect(warns({ p: 1.7 } as SzObject)).toEqual([]);
+        vi.unstubAllEnvs();
     });
 
     it('warns on a numeric-string spacing value', () => {
