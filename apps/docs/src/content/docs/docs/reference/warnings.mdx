@@ -1605,6 +1605,19 @@ arbitrary child variant on the frame, `peer-hover:[&>*]:p-4`, which Tailwind
 compiles to the sibling rule followed by `> *`. `group-*`, `has-*` and `in-*`
 are not affected — their rules reach descendants, and the content node is one.
 
+### `css` went to the fallback node
+
+```text
+[csszyx] splitBoxSz: '{key}' holds raw CSS csszyx does not classify, so it went to the {node} node with everything else it could not classify. help: if its declarations belong on the other node, place it yourself with { {other}: ['{key}'] }.
+```
+
+`css` carries raw declarations, not sz keys, so `splitBoxSz` cannot tell which
+node each one belongs to. It keeps the whole object together on the fallback
+node — the frame by default, the content node with `fallback: 'inner'` — as
+`splitBox` does with the `[property:value]` classes it emits, rather than split
+it by declaration name. Naming `css` in `inner` or `outer` places it and
+silences the warning.
+
 ### A qualified selector names a property csszyx does not tell apart
 
 ```text

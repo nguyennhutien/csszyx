@@ -658,8 +658,10 @@ splitBoxSz({ hover: { p: 2, m: 4 } }, { outer: ["hover"] });
 // { outer: { hover: { p: 2, m: 4 } }, inner: {} }
 // Literal keys such as "[&:hover]" work too; inner wins if both lists name it.
 splitBoxSz({ overflow: "hidden", p: 4 }); // { outer: { overflow: 'hidden' }, inner: { p: 4 } }
+// css: {} is raw CSS — never recursed, kept whole on the fallback node (dev warning); place it with { inner: ["css"] }
 // classifySzKey(key, value?) / hasSz / pickSz / omitSz — the sz-object toolkit twins
-// (pass the value for a key whose side depends on it: classifySzKey('overflow', 'hidden') → outer)
+// (pass the value for a key whose side depends on it: classifySzKey('overflow', 'hidden') → outer;
+// classifySzKey('css') is undefined on purpose)
 
 // stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
 // whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)

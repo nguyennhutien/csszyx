@@ -69,14 +69,19 @@ export const SIZE_BUDGETS = [
         name: '@csszyx/runtime app bundle',
         kind: 'app-bundle',
         target: 'packages/runtime',
-        maxGzipBytes: 15_750,
-        // Measured 2026-10-08: 15,216 / 426 / 1,359 / 434 / 7,964 / 1,082.
+        // Raised from 15,750 on 2026-10-08, measured 15,851: `splitBox` and
+        // `splitBoxSz` gained the box roles of nine special keys, the
+        // `content-<keyword>` alignment tokens, and `css` kept whole on the
+        // fallback node. Budget set the usual ~300 above the measurement.
+        maxGzipBytes: 16_150,
+        // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
+        // 8,144 / 1,082.
         entryBudgets: {
-            '.': 15_500,
+            '.': 15_700,
             './lite': 750,
             './core': 1_650,
             './lowering': 750,
-            './split': 8_250,
+            './split': 8_450,
             './merge': 1_400,
         },
         // Each one reports csszyx's own output as wrong, an integrity check

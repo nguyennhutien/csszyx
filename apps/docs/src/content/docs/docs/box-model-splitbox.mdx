@@ -589,6 +589,21 @@ splitBoxSz({ overflow: 'hidden', p: 4, transition: 'colors' });
 //     inner: { p: 4, transition: 'colors' } }
 ```
 
+- **`css` stays whole on the fallback node.** Its object holds raw CSS
+  declarations, which can belong to both sides at once — the same reason a
+  multi-property `@utility` has no correct side. `splitBoxSz` never reads it as
+  a variant, so `{ css: { display: 'grid', opacity: '0.5' } }` is not torn
+  apart; it goes where `splitBox` puts the `[display:grid]` classes it compiles
+  to, with a development warning. Name it to choose the node yourself:
+
+```ts
+splitBoxSz({ m: 4, css: { writingMode: 'vertical-lr' } }, { inner: ['css'] });
+// → { outer: { m: 4 }, inner: { css: { writingMode: 'vertical-lr' } } }
+```
+
+  `classifySzKey('css')` returns `undefined` on purpose, and `hasSz`, `pickSz`
+  and `omitSz` match it only by its name, `'css'`.
+
 The toolkit has sz-object twins as well — `classifySzKey(key, value?)`, `hasSz`,
 `pickSz`, `omitSz` — reading the same generated truth keyed by sz prop instead of
 class token. Pass the value to `classifySzKey` for a key whose side depends on it
