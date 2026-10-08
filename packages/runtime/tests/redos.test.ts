@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { classify, has, splitBox } from '../src/split-box.js';
 
 /**
@@ -16,12 +16,21 @@ import { classify, has, splitBox } from '../src/split-box.js';
 describe('className parsing stays linear (ReDoS tripwire)', () => {
     const BUDGET_MS = 2000;
 
+    // `splitBox` names a token it cannot place, and these tokens are 100k
+    // characters long. Printed, that one stderr line cut the CI log short,
+    // and every test result after it went unread, failures included.
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('splitBox handles a 100k-char pathological token quickly', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const evil = `${'a'.repeat(50_000)}:${'['.repeat(50_000)}`;
         const start = performance.now();
         splitBox(evil);
         splitBox(`${'hover:'.repeat(10_000)}px-2`);
         expect(performance.now() - start).toBeLessThan(BUDGET_MS);
+        expect(warn).toHaveBeenCalled();
     });
 
     it('classify / has stay linear on a long token', () => {
