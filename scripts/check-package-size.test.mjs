@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 import {
     appBundle,
     checkBudgets,
+    entryBudgetProblems,
     gzipTotalBytes,
     isRuntimeArtifact,
     listExportEntries,
+    listExportSubpaths,
     SIZE_BUDGETS,
 } from './check-package-size.mjs';
 
@@ -231,14 +234,15 @@ test('a production bundle may print only the messages its budget lists', () => {
     }
 });
 
-test('a subpath list measures only those entries', () => {
+test('an excluded subpath is left out, and an exclusion naming no export fails', () => {
     const root = makeFixture(appPackage('thing', false));
     try {
         const all = checkBudgets(appBudget('thing'), root).results[0];
-        const one = checkBudgets(appBudget('thing', { subpaths: ['.'] }), root).results[0];
+        const one = checkBudgets(appBudget('thing', { excludeSubpaths: ['./heavy'] }), root)
+            .results[0];
         assert.equal(one.files.length, 1);
         assert.ok(one.gzipBytes < all.gzipBytes, `${one.gzipBytes} < ${all.gzipBytes}`);
-        const unknown = checkBudgets(appBudget('thing', { subpaths: ['./nope'] }), root);
+        const unknown = checkBudgets(appBudget('thing', { excludeSubpaths: ['./nope'] }), root);
         assert.equal(unknown.failures.length, 1);
         assert.match(unknown.failures[0], /\.\/nope/);
     } finally {
@@ -355,8 +359,168 @@ test('committed budgets cover the four user-shipped surfaces', () => {
         SIZE_BUDGETS.some(budget => budget.kind === 'file' && budget.target.includes('pkg-parser')),
         'the parser wasm artifact must stay under a byte ceiling',
     );
-    // The compiler ships to the browser only through its `./browser` entry;
-    // the rest of it is build-time code that never leaves the dev machine.
+    // The compiler leaves out only its build-time code, `.` and `./migrate`;
+    // everything else it exports ships to the browser, `./browser` first.
     const compiler = SIZE_BUDGETS.find(budget => budget.target === 'packages/compiler');
-    assert.deepEqual(compiler?.subpaths, ['./browser']);
+    assert.deepEqual(compiler?.excludeSubpaths, ['.', './migrate']);
+    assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
+    assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
+    // Every app bundle prices each entry on its own, no entry ceiling is
+    // looser than the union it is part of, and the priced entries are
+    // exactly the package's real runtime exports minus the exclusions.
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    for (const budget of SIZE_BUDGETS.filter(b => b.kind === 'app-bundle')) {
+        const ceilings = Object.values(budget.entryBudgets ?? {});
+        assert.ok(ceilings.length > 0, `${budget.name} has no entry budgets`);
+        for (const ceiling of ceilings) {
+            assert.ok(Number.isInteger(ceiling) && ceiling > 0);
+            assert.ok(ceiling <= budget.maxGzipBytes, `${budget.name}: ${ceiling}`);
+        }
+        // Read from `package.json` itself, not through the helper under test:
+        // every subpath whose import target is JS, minus the exclusions.
+        const manifest = JSON.parse(
+            readFileSync(path.join(repoRoot, budget.target, 'package.json'), 'utf8'),
+        );
+        const expected = Object.entries(manifest.exports)
+            .filter(([subpath, value]) => {
+                if ((budget.excludeSubpaths ?? []).includes(subpath)) return false;
+                let target = value;
+                while (target && typeof target === 'object') {
+                    target = target.import ?? target.default;
+                }
+                return typeof target === 'string' && /\.[cm]?js$/.test(target);
+            })
+            .map(([subpath]) => subpath)
+            .sort();
+        assert.deepEqual(Object.keys(budget.entryBudgets).sort(), expected, budget.name);
+    }
+});
+
+/** A package with a heavy main entry and a light `./lite` entry. With `leak`
+ * the light entry also imports the heavy table, as a careless re-export would.
+ * @param {boolean} leak whether `./lite` pulls in the heavy module
+ * @returns {Record<string, string>} fixture file map
+ */
+function splitPackage(leak) {
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: {
+                '.': { import: { default: './dist/index.mjs' } },
+                './lite': { import: { default: './dist/lite.mjs' } },
+            },
+        }),
+        'packages/thing/dist/heavy.mjs': `export const table = ${JSON.stringify(
+            Array.from({ length: 2000 }, (_, i) => `entry-${(i * 7919) % 10007}`),
+        )};\n`,
+        'packages/thing/dist/index.mjs':
+            "import { table } from './heavy.mjs';\nexport const pick = i => table[i];\n",
+        'packages/thing/dist/lite.mjs': leak
+            ? "import { table } from './heavy.mjs';\nexport const tiny = x => x + table.length;\n"
+            : 'export const tiny = x => x + 1;\n',
+    };
+}
+
+test('lists each runtime export subpath with its entry file', () => {
+    const root = makeFixture(splitPackage(false));
+    const dir = path.join(root, 'packages/thing');
+    try {
+        assert.deepEqual(listExportSubpaths(dir), [
+            { subpath: '.', file: path.join(dir, 'dist/index.mjs') },
+            { subpath: './lite', file: path.join(dir, 'dist/lite.mjs') },
+        ]);
+        assert.deepEqual(listExportSubpaths(dir, ['.']), [
+            { subpath: './lite', file: path.join(dir, 'dist/lite.mjs') },
+        ]);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a heavy import added to a light entry fails its entry budget, not the union', () => {
+    const cleanRoot = makeFixture(splitPackage(false));
+    const leakRoot = makeFixture(splitPackage(true));
+    try {
+        const clean = checkBudgets(appBudget('thing'), cleanRoot).results[0].gzipBytes;
+        const lite = checkBudgets(appBudget('thing', { excludeSubpaths: ['.'] }), cleanRoot)
+            .results[0].gzipBytes;
+        const main = checkBudgets(appBudget('thing', { excludeSubpaths: ['./lite'] }), cleanRoot)
+            .results[0].gzipBytes;
+        // Ceilings set the way the committed ones are: ~300 above a measurement.
+        const budget = appBudget('thing', {
+            maxGzipBytes: clean + 300,
+            entryBudgets: { '.': main + 300, './lite': lite + 300 },
+        });
+        assert.deepEqual(checkBudgets(budget, cleanRoot).failures, []);
+
+        const leaked = checkBudgets(budget, leakRoot);
+        // The union already held the table, so it barely moves and passes.
+        const union = leaked.results.find(r => r.name === 'thing app');
+        assert.equal(union.ok, true, `union ${union.gzipBytes} vs ${clean}`);
+        // The light entry measured alone is what catches it.
+        assert.equal(leaked.failures.length, 1);
+        assert.match(leaked.failures[0], /thing app `\.\/lite`: \d+ gzip bytes exceeds/);
+        const liteResult = leaked.results.find(r => r.name === 'thing app `./lite`');
+        assert.equal(liteResult.ok, false);
+        assert.ok(liteResult.gzipBytes > lite + 1000, `${liteResult.gzipBytes} vs ${lite}`);
+    } finally {
+        rmSync(cleanRoot, { recursive: true, force: true });
+        rmSync(leakRoot, { recursive: true, force: true });
+    }
+});
+
+test('an export without an entry budget, or a budget without an export, fails', () => {
+    assert.deepEqual(entryBudgetProblems(['.', './lite'], { '.': 1, './lite': 1 }), []);
+    assert.deepEqual(entryBudgetProblems(['.', './lite'], { '.': 1, './gone': 1 }), [
+        'export `./lite` has no entry budget',
+        'entry budget `./gone` names no runtime export',
+    ]);
+    const root = makeFixture(splitPackage(false));
+    try {
+        const { failures, results } = checkBudgets(
+            appBudget('thing', { entryBudgets: { '.': 100_000 } }),
+            root,
+        );
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /export `\.\/lite` has no entry budget/);
+        // The priced entry is still measured.
+        assert.ok(results.some(r => r.name === 'thing app `.`'));
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a new export that is not excluded must get an entry budget', () => {
+    // `./build` is build-time code, excluded the way the compiler excludes
+    // `.` and `./migrate`; `./fresh` is an export added later that nobody
+    // listed anywhere.
+    const files = splitPackage(false);
+    const manifest = JSON.parse(files['packages/thing/package.json']);
+    manifest.exports['./build'] = { import: { default: './dist/build.mjs' } };
+    files['packages/thing/dist/build.mjs'] = 'export const build = () => 1;\n';
+    const budget = appBudget('thing', {
+        excludeSubpaths: ['./build'],
+        entryBudgets: { '.': 100_000, './lite': 100_000 },
+    });
+    const before = makeFixture({
+        ...files,
+        'packages/thing/package.json': JSON.stringify(manifest),
+    });
+    manifest.exports['./fresh'] = { import: { default: './dist/fresh.mjs' } };
+    const after = makeFixture({
+        ...files,
+        'packages/thing/package.json': JSON.stringify(manifest),
+        'packages/thing/dist/fresh.mjs': 'export const fresh = () => 2;\n',
+    });
+    try {
+        assert.deepEqual(checkBudgets(budget, before).failures, []);
+        const { failures, results } = checkBudgets(budget, after);
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /export `\.\/fresh` has no entry budget/);
+        // The new export is in the union even before it gets a budget.
+        assert.ok(results[0].files.some(file => file.endsWith('fresh.mjs')));
+    } finally {
+        rmSync(before, { recursive: true, force: true });
+        rmSync(after, { recursive: true, force: true });
+    }
 });
