@@ -57,6 +57,12 @@ export interface NextSafelistMaterializeResult {
     sourceCount: number;
     tombstonedSourceCount: number;
     shardCount: number;
+    /**
+     * The source of every shard kept, sorted. A watcher that loses a source's
+     * deletion leaves its shard behind until something prompts a cycle; this
+     * is what `next watch` checks on the disk to notice that on its own.
+     */
+    sourcePaths: string[];
 }
 
 /** Result returned after one shard write attempt. */
@@ -235,6 +241,7 @@ export function materializeNextSafelist(
         sourceCount: sortedSources.length,
         tombstonedSourceCount,
         shardCount: recordsBySource.size,
+        sourcePaths: sortedSources.map(([sourcePath]) => sourcePath),
     };
 }
 

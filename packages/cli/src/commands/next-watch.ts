@@ -189,6 +189,12 @@ export interface NextWatchDependencies {
      * spending the real budget on it.
      */
     deliveryProbeTimeoutMs?: number;
+    /**
+     * How often the sources the safelist holds are checked on the disk.
+     * Present so tests can see a lost deletion reaped without waiting for
+     * the real interval.
+     */
+    sourceSweepMs?: number;
 }
 
 /**
@@ -201,6 +207,18 @@ const DELIVERY_PROBE_NAME = '.csszyx-watch-probe';
 
 /** How long readiness waits on the probe before giving up and starting. */
 const DELIVERY_PROBE_TIMEOUT_MS = 2000;
+
+/**
+ * How often the sources the safelist holds are checked on the disk.
+ *
+ * A watcher can lose the events of a file written into a directory it has
+ * just started watching: chokidar did on macOS under load, and on Linux CI a
+ * session saw the directory and never its file, so the file's deletion
+ * arrived nowhere and its classes stayed in the safelist for good. Only a
+ * source that has gone prompts a cycle; the check itself writes nothing, so
+ * Tailwind is not made to rebuild by it.
+ */
+const SOURCE_SWEEP_MS = 2000;
 
 /** Active Next watcher session. */
 export interface NextWatchSession {
@@ -407,6 +425,13 @@ export async function startNextWatch(
         throw error;
     }
 
+    const sweep = setInterval(() => {
+        if (!controller.pending && census.sourcePaths.some(source => !fs.existsSync(source))) {
+            controller.rescan();
+        }
+    }, dependencies.sourceSweepMs ?? SOURCE_SWEEP_MS);
+    sweep.unref();
+
     let closed = false;
     return {
         root,
@@ -419,6 +444,7 @@ export async function startNextWatch(
                 return;
             }
             closed = true;
+            clearInterval(sweep);
             await factsWrites;
             await fsWatcher.close();
             controller.close();

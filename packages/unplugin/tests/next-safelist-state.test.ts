@@ -75,6 +75,7 @@ describe('Next safelist state', () => {
             sourceCount: 1,
             tombstonedSourceCount: 0,
             shardCount: 1,
+            sourcePaths: [sourcePath],
         });
         expect(readFileSync(paths.outputPath, 'utf8')).toBe(
             `${SAFELIST_HEADER}[&_.tab-item-header]:py-0!\nbg-red-500\np-8\n`,

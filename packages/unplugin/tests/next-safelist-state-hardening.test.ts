@@ -83,6 +83,7 @@ describe('materializeNextSafelist over a polluted shards directory', () => {
             sourceCount: 0,
             tombstonedSourceCount: 0,
             shardCount: 0,
+            sourcePaths: [],
         });
     });
 });
