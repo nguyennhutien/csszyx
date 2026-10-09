@@ -65,6 +65,16 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
     }
 }
 
+/// Whether an unread `sz` value of this kind also cost its classes — the
+/// split `szFallbackConsequenceOf` draws for the `sz` site. Such a fallback
+/// reports `fallback-missing-css`; the others `fallback-nudge`.
+///
+/// # Arguments
+/// * `kind` - Classified shape of the expression.
+pub(crate) const fn sz_site_fallback_misses_css(kind: SzFallbackKind) -> bool {
+    matches!(kind, SzFallbackKind::Import)
+}
+
 /// Construct that produced a build-time-unresolvable diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SzFallbackSite {

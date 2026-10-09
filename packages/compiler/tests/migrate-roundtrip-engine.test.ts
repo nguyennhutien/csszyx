@@ -50,7 +50,29 @@ const ALIGN_CONTENT_KEYWORDS = [
     'stretch',
 ] as const;
 
+/**
+ * A negative of each utility the compiler writes one for, which migrate read
+ * from its own hand copy of the list until that copy fell behind.
+ */
+const NEGATIVE_CLASSES = [
+    '-scale-50',
+    '-scale-x-50',
+    '-scale-y-50',
+    '-scale-z-50',
+    '-translate-z-4',
+    '-outline-offset-2',
+    '-underline-offset-2',
+    '-scroll-ms-4',
+    '-scroll-me-4',
+    '-scroll-mbs-4',
+    '-scroll-mbe-4',
+] as const;
+
 describe('migrate → lower reproduces the original class', () => {
+    it.each(NEGATIVE_CLASSES)('%s', className => {
+        expectRoundTrip(className);
+    });
+
     describe.each(LOGICAL_SIZE_PREFIXES)('%s', prefix => {
         it.each(['1/2', '1/3', '2/3', '3/4', '4', 'full'])(`${prefix}-%s`, value => {
             expectRoundTrip(`${prefix}-${value}`);

@@ -20,6 +20,16 @@ export {
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
 } from './cross-module-extract.js';
+export { SZ_DIAGNOSTIC_CODES, type SzDiagnosticCode } from './diagnostic-codes.generated.js';
+export {
+    restoreEngineSpans,
+    type SourcePosition,
+    type StoredEngineSpans,
+    type SzDiagnosticIssue,
+    type SzMergeGroup,
+    type SzMergeOverride,
+    storeEngineSpans,
+} from './engine-spans.js';
 export {
     type GlobalVarUsageDiagnostic,
     type GlobalVarUsageKind,

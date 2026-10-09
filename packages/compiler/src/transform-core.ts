@@ -12,6 +12,7 @@ import {
     warnStringColorOpacity,
     warnUnrecognizedColor,
 } from './color-validation.js';
+import type { SzDiagnosticIssue, SzMergeGroup, SzMergeOverride } from './engine-spans.js';
 import {
     GROUPS_OF_GLOBAL_KEYWORD,
     keysDisplacedBy,
@@ -4989,21 +4990,30 @@ export interface SourceTransformResult {
     /** Raw className/class strings collected for Tailwind discovery only. */
     rawClassNames: Set<string>;
     /**
-     * The class list of each static object a merge would read, from a pass
-     * without a merge table. Absent from a result an older engine or cache
-     * entry produced; a reader then treats every class of the file as one list.
+     * Each static object a merge would read, from a pass without a merge
+     * table: its classes, the key behind each, and where it is written. Absent
+     * from a result an older engine or cache entry produced; a reader then
+     * treats every class of the file as one list.
+     *
+     * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
-    mergeGroups?: string[][];
+    mergeGroups?: SzMergeGroup[];
     /**
      * Each static class name and the static `sz` classes beside it, from a pass
      * without a merge table: the class name loses what the `sz` classes cover.
      * Absent from a result an older engine or cache entry produced.
      *
-     * @internal Read by the bundler plugin; not a stable shape.
+     * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
-    mergeOverrides?: Array<{ base: string[]; over: string[] }>;
+    mergeOverrides?: SzMergeOverride[];
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
+    /**
+     * The code and position of each diagnostic, index-parallel to
+     * `diagnostics`. Absent from a result a cache entry written before the
+     * engine reported codes produced.
+     */
+    issues?: SzDiagnosticIssue[];
     /** Recovery tokens emitted by szRecover attributes. */
     recoveryTokens: Map<string, TokenData>;
     /** CSS custom property original-to-mangled names emitted by mangleVars. */

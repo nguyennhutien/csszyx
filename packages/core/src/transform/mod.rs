@@ -9,6 +9,8 @@ pub(crate) mod css_var_hoist_planner;
 #[cfg(feature = "native-engine")]
 pub(crate) mod css_var_planner;
 #[cfg(feature = "native-engine")]
+pub(crate) mod diagnostics;
+#[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod engine;
 pub(crate) mod fast_path;
@@ -42,10 +44,11 @@ use fast_path::{triage_source, FastPathTriage};
 use rayon::prelude::*;
 
 pub use contract::{
-    CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, RecoveryMode, RecoveryToken,
+    CssVariableMapEntry, GlobalVarAliasEntry, Issue, ParserPath, RecoveryMode, RecoveryToken,
     TransformFile, TransformMetadata, TransformOptions, TransformProducer, TransformResult,
     TransformTimings,
 };
+pub use generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
 pub use ir::{
     ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
     DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr, IrError, JsxOpeningElementIr,
@@ -54,7 +57,8 @@ pub use ir::{
     SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, SpreadSplitClassIr, StaticArrayPartIr,
     StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryArmIr, StaticTernaryIr,
     StyleAttributeIr, SzAttributeIr, SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr,
-    SzsSlotEntryIr, SzvReplacementIr, SzvTableInsertionIr, TextSpan, UnsupportedRecoveryIr,
+    SzsDiagnosticIr, SzsSlotEntryIr, SzvReplacementIr, SzvTableInsertionIr, TextSpan,
+    UnsupportedRecoveryIr,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.

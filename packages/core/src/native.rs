@@ -193,10 +193,36 @@ pub struct NativeTransformTimings {
     pub total_ns: u32,
 }
 
+/// What one diagnostic reports, and where.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeIssue {
+    /// The kind of problem, as `csszyx check --rule` names it.
+    pub code: String,
+    /// Byte offset in the source the diagnostic points at; `0` for one about
+    /// the whole file.
+    pub start: u32,
+}
+
+/// One static object a merge would read, and where it is.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeMergeGroup {
+    /// The key each class was lowered from, index-parallel to `classes`.
+    pub keys: Vec<String>,
+    /// Byte offset in the source of the key each class was lowered from,
+    /// index-parallel to `keys`.
+    pub key_starts: Vec<u32>,
+    /// The classes, as emitted.
+    pub classes: Vec<String>,
+}
+
 /// A static class name and the `sz` classes beside it.
 #[derive(Debug)]
 #[napi(object)]
 pub struct NativeMergeOverride {
+    /// Byte offset of the class-name attribute in the source.
+    pub start: u32,
     /// The class name's classes, as written.
     pub base: Vec<String>,
     /// The `sz` classes, as emitted.
@@ -215,12 +241,15 @@ pub struct NativeTransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
-    /// The class list of each static object a merge would read.
-    pub merge_groups: Vec<Vec<String>>,
+    /// Each static object a merge would read.
+    pub merge_groups: Vec<NativeMergeGroup>,
     /// Each static class name beside a static `sz` a merge would read.
     pub merge_overrides: Vec<NativeMergeOverride>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
+    /// The code and position of each diagnostic, index-parallel to
+    /// `diagnostics`.
+    pub issues: Vec<NativeIssue>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<NativeRecoveryToken>,
     /// CSS custom property mangle metadata.
@@ -291,16 +320,33 @@ impl From<TransformResult> for NativeTransformResult {
             map: result.map.map(|map| map.to_string()),
             classes: result.classes,
             raw_class_names: result.raw_class_names,
-            merge_groups: result.merge_groups,
+            merge_groups: result
+                .merge_groups
+                .into_iter()
+                .map(|group| NativeMergeGroup {
+                    keys: group.keys,
+                    key_starts: group.key_starts,
+                    classes: group.classes,
+                })
+                .collect(),
             merge_overrides: result
                 .merge_overrides
                 .into_iter()
                 .map(|pair| NativeMergeOverride {
+                    start: pair.start,
                     base: pair.base,
                     over: pair.over,
                 })
                 .collect(),
             diagnostics: result.diagnostics,
+            issues: result
+                .issues
+                .into_iter()
+                .map(|issue| NativeIssue {
+                    code: issue.code.as_str().to_string(),
+                    start: issue.start,
+                })
+                .collect(),
             recovery_tokens: result
                 .recovery_tokens
                 .into_iter()

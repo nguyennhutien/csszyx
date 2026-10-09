@@ -1219,6 +1219,19 @@ describe('class-parser', () => {
             // In our reverse map, 'p' is NOT in NEGATIVE_ALLOWED, so -p-4 returns null
             expect(parseClass('-p-4')).toBeNull();
         });
+
+        it('a negative keyword is unrecognized, not a value', () => {
+            // Tailwind serves no negative of `scale-none` or `order-first`.
+            for (const className of [
+                '-scale-none',
+                '-scale-3d',
+                '-outline-offset-none',
+                '-order-first',
+            ]) {
+                expect(parseClass(className), className).toBeNull();
+            }
+            expect(parseClass('-scale-50')).toEqual({ prop: 'scale', value: -50 });
+        });
     });
 
     // ========================================================================

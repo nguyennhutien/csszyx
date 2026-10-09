@@ -65912,16 +65912,19 @@
   },
   {
    "c": "-scale-x-50",
-   "p": null,
+   "p": {
+    "prop": "scaleX",
+    "value": -50
+   },
    "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "-scale-x-50"
-    ],
+    "sz": {
+     "scaleX": -50
+    },
+    "szText": "{\"scaleX\":-50}",
+    "u": [],
     "k": [],
-    "g": "{}",
-    "h": ""
+    "g": "{ scaleX: -50 }",
+    "h": "scaleX: -50"
    }
   },
   {

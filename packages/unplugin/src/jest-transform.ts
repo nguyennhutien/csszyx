@@ -52,7 +52,7 @@ import {
     mergeTableFor,
     mergeTablePath,
 } from './merge-registration.js';
-import type { MergeOverride } from './merge-signature.js';
+import { type MergeOverride, mergeGroupsOf } from './merge-signature.js';
 import { injectNextRuntimeImports, type NextRuntimeImportUsage } from './next-runtime-injection.js';
 import {
     failedNextClassPrefixInputsStamp,
@@ -520,7 +520,12 @@ function mergedWithSettledTable<T>(
     compile: (mergeTable: NonNullable<ReturnType<typeof mergeTableFor>>) => T,
     root: string,
 ): T | null {
-    const groups = Array.isArray(first.mergeGroups) ? (first.mergeGroups as string[][]) : [];
+    const groups = Array.isArray(first.mergeGroups)
+        ? mergeGroupsOf({
+              mergeGroups: first.mergeGroups as Array<{ classes: string[] }>,
+              classes: new Set(),
+          })
+        : [];
     const overrides = Array.isArray(first.mergeOverrides)
         ? (first.mergeOverrides as MergeOverride[])
         : [];

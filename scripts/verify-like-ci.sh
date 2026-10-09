@@ -119,6 +119,7 @@ pnpm gen:reverse-map:check
 pnpm gen:migrate-tables:check
 pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
+pnpm gen:diagnostic-codes:check
 pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
 pnpm gen:longhand:check

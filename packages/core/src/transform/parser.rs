@@ -1,5 +1,7 @@
+use super::diagnostics::Diagnostics;
 #[cfg(target_arch = "wasm32")]
 use super::engine::Instant;
+use super::generated::diagnostic_codes::DiagnosticCode;
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
@@ -27,8 +29,8 @@ use super::{
     RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
     SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, SpreadSplitClassIr,
     StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
-    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
-    TransformTimings, UnsupportedRecoveryIr,
+    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsDiagnosticIr, SzsSlotEntryIr, TextSpan,
+    TransformFile, TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -49,7 +51,7 @@ pub struct ParsedSourceShell {
     /// Parser-neutral IR shell for the source file.
     pub ir: SourceIr,
     /// Recoverable parser diagnostics.
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Diagnostics,
     /// Whether the parser reported an unrecoverable panic.
     pub panicked: bool,
     /// Whether native AST traversal exceeded the csszyx budget.
@@ -173,28 +175,43 @@ pub fn parse_source_shell_with_registries(
 
     // oxc 0.140 folds warnings into `diagnostics`; only error-severity entries
     // are parse failures, matching the old `errors` field.
-    let mut diagnostics: Vec<String> = parsed
+    // Each error at its first label, the place oxc points at.
+    let errors: Vec<(u32, String)> = parsed
         .diagnostics
         .errors()
-        .map(std::string::ToString::to_string)
+        .map(|error| {
+            let start = error.labels.first().map_or(0, |label| {
+                // The label's own offset: one oxc already counts in bytes.
+                let offset: u32 = label.offset();
+                offset
+            });
+            (start, error.to_string())
+        })
         .collect();
-    let error_count = diagnostics.len();
-    if error_count > 0 || parsed.panicked {
+    let mut diagnostics = Diagnostics::default();
+    if !errors.is_empty() || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
         // the safelist, and unlike the JavaScript engines there is no Babel fallback on
         // the native path — so make the skip observable. The bundler plugin
         // promotes this marker to a build warning when the file yielded no
         // classes, instead of letting the classes die silently under
         // Tailwind `source(none)`.
-        diagnostics.insert(
-            0,
+        diagnostics.push_issue(
+            DiagnosticCode::ParseError,
+            errors.first().map_or(0, |(start, _)| *start),
             format!(
                 "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
                 file.filename,
-                error_count
+                errors.len()
             ),
         );
     }
+    diagnostics.extend(
+        errors
+            .into_iter()
+            .map(|(start, message)| (DiagnosticCode::ParseError, start, message))
+            .collect(),
+    );
     ParsedSourceShell {
         ir,
         diagnostics,
@@ -474,7 +491,10 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                     }
                     "szRecover" => match self.collect_recovery_attribute(attr) {
                         Ok(index) => recovery_attribute_index = Some(index),
-                        Err(reason) => self.ir.unsupported_recovery_attributes.push(reason),
+                        Err(reason) => self
+                            .ir
+                            .unsupported_recovery_attributes
+                            .push((attr.span.start, reason)),
                     },
                     "data-sz-recovery-token" => {
                         has_recovery_token_attribute = true;
@@ -670,16 +690,23 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// each object slot at parse time. Host elements and unsupported shapes
     /// leave the attribute untouched and record a diagnostic instead.
     fn collect_szs_attribute(&mut self, attr: &JSXAttribute<'_>, is_host: bool) {
+        let start = attr.span.start;
         if is_host {
             let message = format!(
                 "[csszyx] szs at {}: szs has no effect on a host element \u{2014} it maps slot names of a custom component. Attribute left unchanged.",
                 self.ir.filename
             );
-            self.ir.szs_diagnostics.push(message);
+            self.ir
+                .szs_diagnostics
+                .push(SzsDiagnosticIr { start, message });
             return;
         }
-        let unsupported_message =
-            super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(&self.ir.filename);
+        let unsupported_message = SzsDiagnosticIr {
+            start,
+            message: super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(
+                &self.ir.filename,
+            ),
+        };
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
             self.ir.szs_diagnostics.push(unsupported_message);
             return;
@@ -3542,7 +3569,7 @@ fn candidate_classes_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
     // Lowered under its variant keys rather than prefixed afterwards: the merge
     // table inside the lowering reads the names the file emits (`hover:pb-2`),
@@ -3568,7 +3595,10 @@ fn candidate_classes_from_object_expression(
                         {
                             let variant = variant_prefix_string(variant_prefix, &key);
                             let mut next_keys = variant_keys.to_vec();
-                            next_keys.push(key.clone());
+                            next_keys.push(VariantKey {
+                                name: key.clone(),
+                                span: text_span(property.span),
+                            });
                             classes.extend(candidate_classes_from_object_expression(
                                 nested,
                                 ctx,
@@ -3582,6 +3612,7 @@ fn candidate_classes_from_object_expression(
                             {
                                 classes.extend(conditional_property_classes(
                                     &key,
+                                    text_span(property.span),
                                     consequent,
                                     variant_keys,
                                 ));
@@ -3596,6 +3627,7 @@ fn candidate_classes_from_object_expression(
                             {
                                 classes.extend(conditional_property_classes(
                                     &key,
+                                    text_span(property.span),
                                     alternate,
                                     variant_keys,
                                 ));
@@ -3624,6 +3656,7 @@ fn candidate_classes_from_object_expression(
                             } else {
                                 classes.extend(candidate_classes_from_keyed_object(
                                     std::slice::from_ref(&key),
+                                    text_span(property.span),
                                     nested,
                                     ctx,
                                     variant_keys,
@@ -3678,11 +3711,17 @@ fn candidate_classes_from_object_expression(
 /// a build diagnostic.
 fn candidate_classes_from_keyed_object(
     path: &[String],
+    key_span: TextSpan,
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
-    fn leaf_classes(path: &[String], value: StaticSzValue, variant_keys: &[String]) -> Vec<String> {
+    fn leaf_classes(
+        path: &[String],
+        key_span: TextSpan,
+        value: StaticSzValue,
+        variant_keys: &[VariantKey],
+    ) -> Vec<String> {
         let mut wrapped = value;
         for key in path.iter().skip(1).rev() {
             wrapped = StaticSzValue::Object(StaticSzObject {
@@ -3693,7 +3732,7 @@ fn candidate_classes_from_keyed_object(
                 }],
             });
         }
-        conditional_property_classes(&path[0], wrapped, variant_keys)
+        conditional_property_classes(&path[0], key_span, wrapped, variant_keys)
     }
 
     let mut classes = Vec::new();
@@ -3710,6 +3749,7 @@ fn candidate_classes_from_keyed_object(
             Expression::ObjectExpression(nested) => {
                 classes.extend(candidate_classes_from_keyed_object(
                     &next_path,
+                    key_span,
                     nested,
                     ctx,
                     variant_keys,
@@ -3720,6 +3760,7 @@ fn candidate_classes_from_keyed_object(
                     if let Some(value) = static_value_from_expression(branch, ctx) {
                         classes.extend(leaf_classes(
                             &next_path[..next_path.len() - 1],
+                            key_span,
                             StaticSzValue::Object(StaticSzObject {
                                 properties: vec![StaticSzProperty {
                                     key: next_path[next_path.len() - 1].clone(),
@@ -3736,6 +3777,7 @@ fn candidate_classes_from_keyed_object(
                 if let Some(value) = static_value_from_expression(&prop.value, ctx) {
                     classes.extend(leaf_classes(
                         &next_path[..next_path.len() - 1],
+                        key_span,
                         StaticSzValue::Object(StaticSzObject {
                             properties: vec![StaticSzProperty {
                                 key: next_path[next_path.len() - 1].clone(),
@@ -3994,6 +4036,38 @@ fn imported_sz_object<'a>(
         .map(|(_, object)| object)
 }
 
+/// An object from the bundler's registry, placed where this file names it.
+///
+/// The registry carries no offsets: the keys were written in another module,
+/// so each arrives at offset 0, which a report reads as the first line and
+/// which also marks "the whole file". The reference in this file is the place
+/// a reader can act on. A key that already has a place — one written in this
+/// file, read through a local map — keeps it; no key of a parsed object can
+/// start at 0, because an object starts with its brace. A variant's nested
+/// keys came from the same registry, so the placing goes all the way down.
+fn placed_where_named(object: &StaticSzObject, span: TextSpan) -> StaticSzObject {
+    StaticSzObject {
+        properties: object
+            .properties
+            .iter()
+            .map(|property| StaticSzProperty {
+                key: property.key.clone(),
+                span: if property.span.start == 0 {
+                    span
+                } else {
+                    property.span
+                },
+                value: match &property.value {
+                    StaticSzValue::Object(nested) => {
+                        StaticSzValue::Object(placed_where_named(nested, span))
+                    }
+                    value => value.clone(),
+                },
+            })
+            .collect(),
+    }
+}
+
 fn static_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -4039,7 +4113,10 @@ fn static_object_from_jsx_expression(
                     static_object_from_expression(initializer, ctx)?;
                 return Some((object, text_span(identifier.span), rewrites_empty_class));
             }
-            let object = imported_sz_object(ctx.imported_sz_objects, &identifier.name)?.clone();
+            let object = placed_where_named(
+                imported_sz_object(ctx.imported_sz_objects, &identifier.name)?,
+                text_span(identifier.span),
+            );
             let rewrites_empty_class = object.is_empty();
             Some((object, text_span(identifier.span), rewrites_empty_class))
         }
@@ -4053,6 +4130,7 @@ fn static_object_from_jsx_expression(
             let StaticSzValue::Object(object) = static_value_from_member(member, ctx)? else {
                 return None;
             };
+            let object = placed_where_named(&object, text_span(member.span));
             let rewrites_empty_class = object.is_empty();
             Some((object, text_span(member.span), rewrites_empty_class))
         }
@@ -4314,7 +4392,7 @@ fn partial_object_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<PartialSzObject> {
     if variant_prefix.is_none() {
         if let Some(ternary) = conditional_spread_ternary_from_object_expression(object, ctx) {
@@ -4365,6 +4443,7 @@ fn partial_object_from_object_expression(
                     if let Some((conditional_ternary, dynamic_prop)) =
                         nullable_conditional_class_from_property(
                             &key,
+                            text_span(property.span),
                             conditional,
                             ctx,
                             variant_prefix,
@@ -4377,9 +4456,13 @@ fn partial_object_from_object_expression(
                         }
                         continue;
                     }
-                    if let Some(conditional_ternary) =
-                        conditional_class_from_property(&key, conditional, ctx, variant_keys)
-                    {
+                    if let Some(conditional_ternary) = conditional_class_from_property(
+                        &key,
+                        text_span(property.span),
+                        conditional,
+                        ctx,
+                        variant_keys,
+                    ) {
                         set_partial_ternary(&mut partial, conditional_ternary);
                         continue;
                     }
@@ -4524,7 +4607,7 @@ fn collect_nested_partial_property(
     nested: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<()> {
     if let Some(ternary) = color_opacity_ternary_from_object(&key, nested, ctx, variant_keys) {
         set_partial_ternary(partial, ternary);
@@ -4539,7 +4622,10 @@ fn collect_nested_partial_property(
     }
     let variant = variant_prefix_string(variant_prefix, &key);
     let mut next_keys = variant_keys.to_vec();
-    next_keys.push(key.clone());
+    next_keys.push(VariantKey {
+        name: key.clone(),
+        span: text_span(property.span),
+    });
     let nested =
         partial_object_from_object_expression(nested, ctx, Some(variant.as_str()), &next_keys)?;
     if !nested.object.is_empty() {
@@ -4640,9 +4726,10 @@ fn unwrap_expression<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
 
 fn conditional_class_from_property(
     key: &str,
+    key_span: TextSpan,
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<StaticTernaryIr> {
     let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
     let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
@@ -4655,8 +4742,8 @@ fn conditional_class_from_property(
     .collect();
     Some(StaticTernaryIr {
         test_span: text_span(conditional.test.span()),
-        consequent_classes: conditional_property_classes(key, consequent, variant_keys),
-        alternate_classes: conditional_property_classes(key, alternate, variant_keys),
+        consequent_classes: conditional_property_classes(key, key_span, consequent, variant_keys),
+        alternate_classes: conditional_property_classes(key, key_span, alternate, variant_keys),
         chain_arms: Vec::new(),
         bool_class_key: None,
         resolved_objects,
@@ -4675,7 +4762,7 @@ fn conditional_branch_object(
     key: &str,
     branch: &Expression<'_>,
     value: &StaticSzValue,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<StaticSzObject> {
     let property_object = matches!(value, StaticSzValue::Object(_))
         && super::generated::tables::property_prefix(key).is_some();
@@ -4696,10 +4783,11 @@ fn conditional_branch_object(
 
 fn nullable_conditional_class_from_property(
     key: &str,
+    key_span: TextSpan,
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<(StaticTernaryIr, Option<DynamicCssVarIr>)> {
     let consequent_absent = is_absent_sz_expression(&conditional.consequent);
     let alternate_absent = is_absent_sz_expression(&conditional.alternate);
@@ -4734,7 +4822,10 @@ fn nullable_conditional_class_from_property(
                 &value,
                 variant_keys,
             ));
-            (conditional_property_classes(key, value, variant_keys), None)
+            (
+                conditional_property_classes(key, key_span, value, variant_keys),
+                None,
+            )
         } else {
             if !is_runtime_expression(present) {
                 return None;
@@ -4782,17 +4873,29 @@ fn is_absent_sz_expression(expression: &Expression<'_>) -> bool {
     }
 }
 
+/// A variant key on the path down to a nested object, and where it is written.
+///
+/// The place travels with the name because the object under it is lowered
+/// inside a wrapper standing for the key, and a merge report reads the
+/// wrapper's place: without it every class of the wrapper sat at offset 0,
+/// the first line and the "whole file" mark at once.
+#[derive(Debug, Clone)]
+struct VariantKey {
+    name: String,
+    span: TextSpan,
+}
+
 /// Wraps a leaf object in the given variant-key chain (outer→inner) so the full
 /// nesting lowers through `lower_object_into`, which knows the parametric/attachment
 /// joins (`group-hover:`, `peer-hover:`, `has-[:checked]:`, `data-[active]:`, …) that
 /// a flat `{prefix}:{class}` prepend gets wrong (it emitted `group:hover:…`).
-fn wrap_in_variant_keys(variant_keys: &[String], leaf: StaticSzObject) -> StaticSzObject {
+fn wrap_in_variant_keys(variant_keys: &[VariantKey], leaf: StaticSzObject) -> StaticSzObject {
     let mut current = leaf;
     for key in variant_keys.iter().rev() {
         current = StaticSzObject {
             properties: vec![StaticSzProperty {
-                key: key.clone(),
-                span: TextSpan { start: 0, end: 0 },
+                key: key.name.clone(),
+                span: key.span,
                 value: StaticSzValue::Object(current),
             }],
         };
@@ -4800,15 +4903,18 @@ fn wrap_in_variant_keys(variant_keys: &[String], leaf: StaticSzObject) -> Static
     current
 }
 
+/// Lower one branch of a conditional on `key`, placed where `key` is written
+/// (`key_span`), so a merge report reads that place for the branch's classes.
 fn conditional_property_classes(
     key: &str,
+    key_span: TextSpan,
     value: StaticSzValue,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
     let leaf = StaticSzObject {
         properties: vec![StaticSzProperty {
             key: key.to_string(),
-            span: TextSpan { start: 0, end: 0 },
+            span: key_span,
             value,
         }],
     };
@@ -4824,7 +4930,7 @@ fn color_opacity_ternary_from_object(
     parent_key: &str,
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<StaticTernaryIr> {
     super::generated::tables::property_prefix(parent_key)?;
 
@@ -4940,7 +5046,7 @@ fn color_opacity_branch_classes(
     parent_key: &str,
     color: &str,
     op: Option<StaticSzValue>,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
     let mut properties = vec![StaticSzProperty {
         key: "color".to_string(),
@@ -4974,7 +5080,7 @@ fn color_opacity_branch_classes(
 fn bool_class_ternary_from_property(
     key: &str,
     expression_span: TextSpan,
-    variant_keys: &[String],
+    variant_keys: &[VariantKey],
 ) -> Option<StaticTernaryIr> {
     if !super::generated::tables::is_boolean_only_dynamic(key) {
         return None;
@@ -4983,6 +5089,7 @@ fn bool_class_ternary_from_property(
         test_span: expression_span,
         consequent_classes: conditional_property_classes(
             key,
+            expression_span,
             StaticSzValue::Boolean(true),
             variant_keys,
         ),
@@ -7610,7 +7717,10 @@ export const C = ({ styles }) => <div sz={styles} />;
         // back, the way the Babel and the JavaScript lane it replaceds do.
         assert_eq!(
             invalid.ir.unsupported_recovery_attributes,
-            vec![UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())]
+            vec![(
+                29,
+                UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())
+            )]
         );
     }
 
@@ -7629,7 +7739,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         // two must stay distinguishable this far down.
         assert_eq!(
             parsed.ir.unsupported_recovery_attributes,
-            vec![UnsupportedRecoveryIr::NonLiteral]
+            vec![(38, UnsupportedRecoveryIr::NonLiteral)]
         );
     }
 
@@ -8056,7 +8166,9 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_host.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_host.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_host.ir.szs_diagnostics[0].contains("host element"));
+        assert!(parsed_host.ir.szs_diagnostics[0]
+            .message
+            .contains("host element"));
 
         let non_static = "const X = ({ v }) => <Card szs={{ header: v }} />;";
         let parsed_dynamic = parse_source_shell(&TransformFile {
@@ -8065,7 +8177,9 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_dynamic.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_dynamic.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_dynamic.ir.szs_diagnostics[0].contains("identifier key"));
+        assert!(parsed_dynamic.ir.szs_diagnostics[0]
+            .message
+            .contains("identifier key"));
 
         // All-string map: classes collected AND the attribute still renames to
         // `szsc` — the component reads only the compiled prop.
@@ -8118,7 +8232,9 @@ export const C = ({ styles }) => <div sz={styles} />;
             assert!(parsed.ir.szs_attributes.is_empty(), "{source}");
             assert_eq!(parsed.ir.szs_diagnostics.len(), 1, "{source}");
             assert!(
-                parsed.ir.szs_diagnostics[0].contains("Attribute left unchanged"),
+                parsed.ir.szs_diagnostics[0]
+                    .message
+                    .contains("Attribute left unchanged"),
                 "{source}"
             );
         }

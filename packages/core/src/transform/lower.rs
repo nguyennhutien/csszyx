@@ -208,8 +208,16 @@ pub fn lower_static_sz_object_with_class_prefix(
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
+    if super::merge::collecting() {
+        return lower_static_sz_object_recorded(object);
+    }
     let mut classes = Vec::with_capacity(object.properties.len());
     lower_object_into(object, "", &mut classes);
+    finish_lowered_classes(classes)
+}
+
+/// Fuse, prefix and merge the classes one object lowered to.
+fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
     // Merged last: the table names classes as they are emitted, prefix
     // included, and the text-size/leading pair is one class by then.
     super::merge::apply_active(
@@ -218,6 +226,47 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
             .map(with_class_prefix)
             .collect(),
     )
+}
+
+/// [`lower_static_sz_object`] on a pass that collects what a merge would
+/// read: the object is recorded with the key behind each class and that key's
+/// offset, so a report can name the key and the line it is written on.
+///
+/// Kept apart so a pass with a table pays nothing for the keys: each top-level
+/// property marks where its classes start, and the marks are read only here.
+fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
+    let mut classes = Vec::with_capacity(object.properties.len());
+    let mut marks: Vec<(usize, usize)> = Vec::new();
+    lower_object_into_marked(object, "", &mut classes, &mut |index, len| {
+        marks.push((index, len));
+    });
+    // One class merges with nothing, so it is not recorded.
+    if classes.len() < 2 {
+        return finish_lowered_classes(classes);
+    }
+    // Each class belongs to the last property that started at or before it.
+    let mut owners = Vec::with_capacity(classes.len());
+    for (position, &(index, start)) in marks.iter().enumerate() {
+        let end = marks.get(position + 1).map_or(classes.len(), |next| next.1);
+        owners.extend((start..end).map(|_| &object.properties[index]));
+    }
+    let consumed = fuse_text_size_and_leading(&mut classes);
+    let mut keys = Vec::with_capacity(classes.len());
+    let mut key_starts = Vec::with_capacity(classes.len());
+    let mut kept = Vec::with_capacity(classes.len());
+    for ((owner, class_name), consumed) in owners.into_iter().zip(classes).zip(consumed) {
+        if !consumed {
+            keys.push(owner.key.clone());
+            key_starts.push(owner.span.start);
+            kept.push(with_class_prefix(class_name));
+        }
+    }
+    super::merge::record_group(super::merge::MergeGroup {
+        keys,
+        key_starts,
+        classes: kept.clone(),
+    });
+    super::merge::apply_active(kept)
 }
 
 /// Whether a key was removed from the authoring contract and has migration
@@ -935,6 +984,17 @@ fn is_dead_spacing_step(key: &str, value: f64) -> bool {
 }
 
 fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
+    let consumed = fuse_text_size_and_leading(&mut classes);
+    classes
+        .into_iter()
+        .zip(consumed)
+        .filter_map(|(class_name, consumed)| (!consumed).then_some(class_name))
+        .collect()
+}
+
+/// Fold each leading class into the text size of the same variant, in place,
+/// and say which leading classes were folded so the caller drops them.
+fn fuse_text_size_and_leading(classes: &mut [String]) -> Vec<bool> {
     let mut consumed = vec![false; classes.len()];
 
     for text_index in 0..classes.len() {
@@ -958,12 +1018,7 @@ fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
             break;
         }
     }
-
-    classes
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, class_name)| (!consumed[index]).then_some(class_name))
-        .collect()
+    consumed
 }
 
 fn text_size_class_parts(class_name: &str) -> Option<(&str, &str)> {
@@ -1086,11 +1141,24 @@ pub(crate) fn settle_global_keywords(object: &StaticSzObject) -> GlobalKeywordSe
 }
 
 fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    lower_object_into_marked(object, prefix, classes, &mut |_, _| {});
+}
+
+/// [`lower_object_into`], calling `mark` with each lowered property's index
+/// and the class count before it, so a caller can tell which property each
+/// class came from.
+fn lower_object_into_marked(
+    object: &StaticSzObject,
+    prefix: &str,
+    classes: &mut Vec<String>,
+    mark: &mut dyn FnMut(usize, usize),
+) {
     let settled = settle_global_keywords(object).skipped;
     for (index, property) in object.properties.iter().enumerate() {
         if is_removed_sz_key(&property.key) || settled.contains(&index) {
             continue;
         }
+        mark(index, classes.len());
         // A style keyword on a per-side border key has no Tailwind utility
         // behind it, so emitting the class would leave the element naming a
         // rule nothing generates. `collect_border_side_styles` reports it.

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { transformWasm } from '@csszyx/compiler';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     type CacheableTransformResult,
@@ -106,6 +107,68 @@ describe('transform cache', () => {
         expect(cached?.cssVariableMap.get('--_sz-p')).toEqual(['--cz', '--sz']);
     });
 
+    it('keeps the code and place of each diagnostic and merge group', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const spanned: CacheableTransformResult = {
+            ...result(),
+            diagnostics: ['[csszyx] Unknown property "xyzzy"'],
+            issues: [{ code: 'unknown-key', line: 3, column: 7 }],
+            mergeGroups: [
+                {
+                    keys: ['pb', 'p'],
+                    positions: [
+                        { line: 2, column: 5 },
+                        { line: 3, column: 5 },
+                    ],
+                    classes: ['pb-2', 'p-4'],
+                },
+            ],
+            mergeOverrides: [{ line: 4, column: 9, base: ['pb-2'], over: ['p-4'] }],
+        };
+        writeTransformCache(cacheRoot, input(), spanned);
+
+        const cached = readTransformCache(cacheRoot, input());
+
+        expect(cached?.issues).toEqual(spanned.issues);
+        expect(cached?.mergeGroups).toEqual(spanned.mergeGroups);
+        expect(cached?.mergeOverrides).toEqual(spanned.mergeOverrides);
+    });
+
+    it('stores where an engine placed each span as a byte offset, and reads it back in place', () => {
+        // A line and column per class grew an entry by ~45% and resolved every
+        // position at write time, undoing the lazy line index. The offset is
+        // what the engine reported; the source is at hand when the entry is read.
+        const source = [
+            'export const A = () => (',
+            '    <div className="pb-2" sz={{ pb: 2,',
+            "        p: 4, xyzzy: 'é' }} />);",
+        ].join('\n');
+        const engine = transformWasm(source, '/repo/src/App.tsx');
+        expect(engine.issues).toHaveLength(1);
+        expect(engine.mergeGroups).toHaveLength(1);
+        expect(engine.mergeOverrides).toHaveLength(1);
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const spannedInput = input({ source });
+        writeTransformCache(cacheRoot, spannedInput, { ...result(), ...engine });
+
+        const { key } = createTransformCacheKey(spannedInput);
+        const stored = JSON.parse(
+            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
+        ) as { result: Record<string, unknown> };
+        expect(JSON.stringify(stored.result)).not.toMatch(/"line"|"column"|"positions"/);
+        expect(stored.result.issues).toEqual([
+            { code: 'unknown-key', start: source.indexOf('xyzzy') },
+        ]);
+
+        const cached = readTransformCache(cacheRoot, spannedInput);
+        // Compared as JSON, which reads each position: `toEqual` sees only
+        // own fields, and a position's line and column are accessors.
+        expect(JSON.stringify(cached?.issues)).toBe(JSON.stringify(engine.issues));
+        expect(JSON.stringify(cached?.mergeGroups)).toBe(JSON.stringify(engine.mergeGroups));
+        expect(JSON.stringify(cached?.mergeOverrides)).toBe(JSON.stringify(engine.mergeOverrides));
+        expect(cached?.issues?.[0]?.line).toBe(3);
+    });
+
     it('misses when source, version, parser, producer, budget, mangle options, aliases, or filename changes', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input({ astBudget: 50_000 }), result());
@@ -168,7 +231,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":18');
+        expect(content).toContain('"version":19');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 

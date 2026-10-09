@@ -205,17 +205,183 @@ describe('the groups a first pass reports', () => {
      * @returns The engine name with its groups, per engine.
      */
     function groups(source: string): Array<[string, unknown]> {
-        return ENGINES.map(([name, transform]) => [name, transform(source, 'a.tsx').mergeGroups]);
+        // As plain data: a position's line and column are accessors, which
+        // `toEqual` does not read as fields; JSON is how a consumer gets them.
+        return ENGINES.map(([name, transform]) => [
+            name,
+            JSON.parse(JSON.stringify(transform(source, 'a.tsx').mergeGroups)),
+        ]);
+    }
+
+    /**
+     * The group one object reports, each class placed where the key it was
+     * lowered from is written.
+     *
+     * @param source - The module.
+     * @param keys - The key behind each class, in order.
+     * @param classes - The classes, in order.
+     * @returns The group as every engine reports it.
+     */
+    function groupAt(source: string, keys: string[], classes: string[]) {
+        let from = 0;
+        let previous: string | undefined;
+        const positions = keys.map(key => {
+            // A key that owns several classes is one place; the next key is
+            // written after it.
+            if (key !== previous) {
+                const match = new RegExp(`\\b${key}:`, 'g');
+                match.lastIndex = from;
+                from = match.exec(source)?.index ?? -1;
+                previous = key;
+            }
+            const before = source.slice(0, from).split('\n');
+            return { line: before.length, column: (before.at(-1) ?? '').length + 1 };
+        });
+        return { keys, classes, positions };
     }
 
     it.each([
-        ['one object', '<div sz={{ pb: 2, p: 4 }} />', [['pb-2', 'p-4']]],
-        ['an array of objects', '<div sz={[{ pb: 2 }, { p: 4 }]} />', [['pb-2', 'p-4']]],
+        ['one object', '<div sz={{ pb: 2, p: 4 }} />', [['pb', 'p']], [['pb-2', 'p-4']]],
+        [
+            'an array of objects',
+            '<div sz={[{ pb: 2 }, { p: 4 }]} />',
+            [['pb', 'p']],
+            [['pb-2', 'p-4']],
+        ],
         // Classes of two elements never meet, so they are no group.
-        ['two elements', '<><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>', []],
-    ])('names the classes one merge would read, for %s', (_, jsx, expected) => {
-        for (const [name, reported] of groups(`export const A = () => ${jsx};`)) {
+        ['two elements', '<><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>', [], []],
+    ])('names the classes one merge would read, for %s', (_, jsx, keys, classes) => {
+        const source = `export const A = () => ${jsx};`;
+        const expected = keys.map((groupKeys, index) =>
+            groupAt(source, groupKeys, classes[index] ?? []),
+        );
+        for (const [name, reported] of groups(source)) {
             expect(reported, name).toEqual(expected);
+        }
+    });
+
+    it('places each class on the line of the key it was lowered from', () => {
+        // A key on its own line is reported there, not on the line the object
+        // starts; a variant key owns its nested classes, so they sit on its line.
+        const source = [
+            'export const A = () => <div sz={{ m: 1,',
+            '    pb: 2,',
+            '    hover: {',
+            '        pb: 2,',
+            '        p: 4 },',
+            '    p: 4 }} />;',
+        ].join('\n');
+        for (const [name, reported] of groups(source)) {
+            const placed = (
+                reported as Array<{
+                    keys: string[];
+                    classes: string[];
+                    positions: Array<{ line: number; column: number }>;
+                }>
+            ).map(({ keys, classes, positions }) => ({
+                keys,
+                classes,
+                at: positions.map(({ line, column }) => `${line}:${column}`),
+            }));
+            expect(placed, name).toEqual([
+                {
+                    keys: ['m', 'pb', 'hover', 'hover', 'p'],
+                    classes: ['m-1', 'pb-2', 'hover:pb-2', 'hover:p-4', 'p-4'],
+                    at: ['1:35', '2:5', '3:5', '3:5', '6:5'],
+                },
+            ]);
+        }
+    });
+
+    it('names the key behind each class, at the place each key is written', () => {
+        // A variant key owns every class its object lowers to, and a text size
+        // fused with its leading is one class owned by the size.
+        const source = [
+            '// é😀 before the object, so a column counts UTF-16, not bytes',
+            "export const A = () => <div sz={{ /* é😀 */ text: 'sm', leading: 'tight',",
+            '    hover: { p: 4, m: 2 }, px: 2 }} />;',
+        ].join('\n');
+        for (const [name, reported] of groups(source)) {
+            expect(reported, name).toEqual([
+                groupAt(
+                    source,
+                    ['text', 'hover', 'hover', 'px'],
+                    ['text-sm/tight', 'hover:p-4', 'hover:m-2', 'px-2'],
+                ),
+            ]);
+        }
+    });
+
+    it('places a conditional under a variant key at that key', () => {
+        // Each branch lowers inside a wrapper standing for `hover`, so the
+        // wrapper is placed where `hover` is written, not at offset 0.
+        const source = [
+            'export const A = ({ c }) => <div sz={{ m: 1,',
+            '    hover: c ? { pb: 2, p: 4 } : { m: 2 } }} />;',
+        ].join('\n');
+        for (const [name, reported] of groups(source)) {
+            expect(reported, name).toEqual([
+                groupAt(source, ['hover', 'hover'], ['hover:pb-2', 'hover:p-4']),
+            ]);
+        }
+    });
+
+    it('places an object from another module where this module names it', () => {
+        // The registry object's key offsets belong to the module that wrote
+        // it; this module's report points at its own `sz={base}`.
+        const source = [
+            "import { base } from './base';",
+            'export const A = () => (',
+            '    <div sz={base} />);',
+        ].join('\n');
+        const crossModuleSzObjects = { './base': { base: { pb: 2, p: 4 } } };
+        for (const [name, transform] of ENGINES) {
+            const { mergeGroups } = transform(source, 'a.tsx', { crossModuleSzObjects });
+            expect(JSON.parse(JSON.stringify(mergeGroups)), name).toEqual([
+                {
+                    keys: ['pb', 'p'],
+                    classes: ['pb-2', 'p-4'],
+                    positions: [
+                        { line: 3, column: 14 },
+                        { line: 3, column: 14 },
+                    ],
+                },
+            ]);
+        }
+    });
+
+    it("places a variant's nested keys from another module where this module names it", () => {
+        // Nested keys arrive from the registry at offset 0 too: a diagnostic
+        // on one, and the place of a class lowered from one, read as line 1
+        // unless they are placed as the top-level keys are.
+        const source = [
+            "import { base } from './base';",
+            'export const A = () => (',
+            '    <div sz={base} />);',
+        ].join('\n');
+        const crossModuleSzObjects = { './base': { base: { hover: { bogus: 1, pb: 2 }, p: 4 } } };
+        const places = ENGINES.map(([name, transform]) => {
+            const { mergeGroups, issues } = transform(source, 'a.tsx', { crossModuleSzObjects });
+            const at = [
+                ...(issues ?? []).map(issue => [issue.code, issue.line, issue.column]),
+                ...(mergeGroups ?? []).flatMap(group =>
+                    group.positions.map((position, index) => [
+                        group.classes[index],
+                        position.line,
+                        position.column,
+                    ]),
+                ),
+            ];
+            return [name, at] as const;
+        });
+        for (const [name, at] of places) {
+            expect(at, name).toEqual([
+                ['unknown-key', 3, 14],
+                // An unknown key's class is still emitted, so it is merged too.
+                ['hover:bogus-1', 3, 14],
+                ['hover:pb-2', 3, 14],
+                ['p-4', 3, 14],
+            ]);
         }
     });
 

@@ -367,6 +367,12 @@ jobs:
       - name: Check sz fallback matrix is current
         run: pnpm gen:sz-fallback-matrix:check
 
+      # Every engine diagnostic carries a code. The Rust enum and the TypeScript
+      # union are generated from one list, so a code added on one side cannot
+      # reach users unnamed on the other. Fail if either copy is stale.
+      - name: Check diagnostic codes are current
+        run: pnpm gen:diagnostic-codes:check
+
       # llms.txt / llms-full.txt are GENERATED from docs/specs/llms-template.md
       # plus the snippets — a hand edit to the outputs is silently overwritten
       # by the next `pnpm build`. Fail while the drift is still visible.

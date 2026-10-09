@@ -385,12 +385,16 @@ fn rewrite_static_sz_with_existing_class(
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         // On one element `sz` wins: the class name loses what its classes cover.
-        let merged = super::merge::apply_over_active(existing_classes, classes)
-            .iter()
-            .map(String::as_str)
-            .chain(classes.iter().map(String::as_str))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let merged = super::merge::apply_over_active(
+            class_attribute.attribute_span.start,
+            existing_classes,
+            classes,
+        )
+        .iter()
+        .map(String::as_str)
+        .chain(classes.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ");
         overwrite_attribute(magic, class_attribute.attribute_span, &merged);
     }
 

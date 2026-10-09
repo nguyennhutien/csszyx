@@ -212,7 +212,22 @@ export const SIZE_BUDGETS = [
         // in a ternary or parametric variant, a dynamic family conflict and a
         // spread override, cost 7,099 gzip bytes here (547,198 before,
         // 554,297 after, un-optimized, same build).
-        maxGzipBytes: 557_500,
+        //
+        // Raised from 557,500 on 2026-10-09: the branch base already measured
+        // 558,738 (the negative-scale and fraction class fixes), and every
+        // diagnostic now carries a code and a byte offset beside its text,
+        // and each merge group the key behind each class and where it is,
+        // which costs 1,073 gzip bytes here (559,811 after, un-optimized,
+        // same build). Serializing the code as a number instead of its id
+        // saved 204 of those and was not taken: the id is what keeps an
+        // engine and a compiler from mislabelling each other's codes.
+        // Raised again the same day: each merge group places every class at
+        // the key it came from, one offset per class instead of one per
+        // object (561,094 → 561,272), and a registry object's nested keys
+        // are placed where the importing module names it, as its top-level
+        // keys are (561,293, un-optimized, same build). The budget keeps
+        // ~300 bytes of headroom, as the JS budgets do.
+        maxGzipBytes: 561_600,
     },
 ];
 

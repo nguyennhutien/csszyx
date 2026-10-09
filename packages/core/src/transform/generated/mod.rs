@@ -1,5 +1,6 @@
 //! Generated transform lookup tables.
 
+pub mod diagnostic_codes;
 pub(crate) mod migrate_tables;
 pub(crate) mod reverse_tables;
 pub(crate) mod sz_fallback_matrix;
@@ -435,14 +436,46 @@ mod migrate_tables_tests {
     }
 
     /// Every `export const NAME = new Set([...])` in the module, spreads
-    /// resolved against the sets declared before them.
+    /// resolved against the sets declared before them and the ones it imports.
     fn typescript_sets() -> BTreeMap<String, Vec<String>> {
-        parse_sets(&typescript_source())
+        parse_sets_over(&typescript_source(), &imported_sets())
+    }
+
+    /// The compiler's sets the module spreads, by the name it imports them as.
+    ///
+    /// `NEGATIVE_ALLOWED` is the compiler's list plus migrate's own extras; it
+    /// was a hand copy, and fell behind the compiler's.
+    fn imported_sets() -> BTreeMap<String, Vec<String>> {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../compiler/src/transform-core.ts"
+        );
+        let source =
+            std::fs::read_to_string(path).expect("transform-core.ts is in packages/compiler");
+        let start = source
+            .find("export const NEGATIVE_ALLOWED")
+            .expect("transform-core.ts exports NEGATIVE_ALLOWED");
+        let block = &source[start..];
+        let end = block.find("]);").expect("NEGATIVE_ALLOWED is closed") + "]);".len();
+        let mut sets = parse_sets(&block[..end]);
+        BTreeMap::from([(
+            "COMPILER_NEGATIVE_ALLOWED".to_string(),
+            sets.remove("NEGATIVE_ALLOWED")
+                .expect("NEGATIVE_ALLOWED parses"),
+        )])
     }
 
     /// The same, over source text handed in — so the parser's own failure
     /// modes can be exercised without a module that has to exhibit them.
     fn parse_sets(source: &str) -> BTreeMap<String, Vec<String>> {
+        parse_sets_over(source, &BTreeMap::new())
+    }
+
+    /// The same, with sets declared elsewhere that a spread may also read.
+    fn parse_sets_over(
+        source: &str,
+        imported: &BTreeMap<String, Vec<String>>,
+    ) -> BTreeMap<String, Vec<String>> {
         let mut sets: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut current: Option<(String, Vec<String>)> = None;
         for line in source.lines() {
@@ -463,6 +496,7 @@ mod migrate_tables_tests {
                     // the latter is what a new type annotation once caused.
                     let spread_members = sets
                         .get(spread)
+                        .or_else(|| imported.get(spread))
                         .unwrap_or_else(|| panic!("{spread} is spread before it is declared"));
                     members.extend(spread_members.iter().cloned());
                 } else {

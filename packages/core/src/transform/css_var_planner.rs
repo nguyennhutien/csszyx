@@ -14,6 +14,8 @@ use super::{
         CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistSkipReason,
         CssVariableHoistUsage,
     },
+    diagnostics::Diagnostics,
+    generated::diagnostic_codes::DiagnosticCode,
     lower::dynamic_css_var_class,
     CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
 };
@@ -74,7 +76,7 @@ pub struct CssVariableMangling {
     /// Original-to-mangled CSS custom property map.
     pub variable_map: Vec<CssVariableMapEntry>,
     /// Non-fatal diagnostics emitted while planning variable mangling.
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Diagnostics,
 }
 
 /// Plans tiered CSS custom property names without mutating source.
@@ -322,7 +324,16 @@ pub fn apply_css_variable_mangling(
         diagnostics: hoist_analysis
             .diagnostics
             .iter()
-            .map(format_hoist_skip_diagnostic)
+            .map(|diagnostic| {
+                // Placed at the runtime value of the group's first usage.
+                let (_, attr_index, prop_index) = locations[diagnostic.first_usage_id];
+                let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
+                (
+                    DiagnosticCode::MangleVarsHoistSkipped,
+                    prop.expression_span.start,
+                    format_hoist_skip_diagnostic(diagnostic),
+                )
+            })
             .collect(),
     }
 }
@@ -727,8 +738,8 @@ mod tests {
             .ir;
             let result = apply_css_variable_mangling(&ir, source, max_depth);
 
-            assert_eq!(result.diagnostics.len(), 1, "{marker}");
-            assert!(result.diagnostics[0].contains(marker), "{marker}");
+            assert_eq!(result.diagnostics.texts().len(), 1, "{marker}");
+            assert!(result.diagnostics.texts()[0].contains(marker), "{marker}");
             assert!(result
                 .ir
                 .sz_attributes

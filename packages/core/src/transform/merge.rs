@@ -35,10 +35,27 @@ pub struct MergeTable {
     coverage: Vec<Vec<u32>>,
 }
 
+/// One static object's classes, merged later over earlier, and where each
+/// came from.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct MergeGroup {
+    /// The key each class was lowered from, index-parallel to `classes`: a
+    /// variant key owns every class its object lowers to.
+    pub keys: Vec<String>,
+    /// Byte offset in the source of the key each class was lowered from,
+    /// index-parallel to `keys`, so a report places a removed class on its
+    /// own key's line rather than on the object's.
+    pub key_starts: Vec<u32>,
+    /// The classes, as emitted.
+    pub classes: Vec<String>,
+}
+
 /// A static class name and the `sz` classes beside it on one element: the
 /// class name loses what the `sz` classes cover, and nothing else.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MergeOverride {
+    /// Byte offset of the class-name attribute in the source.
+    pub start: u32,
     /// The class name's classes, as written.
     pub base: Vec<String>,
     /// The `sz` classes, as emitted.
@@ -49,7 +66,7 @@ pub struct MergeOverride {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MergeLists {
     /// Each static object's classes, merged later over earlier.
-    pub groups: Vec<Vec<String>>,
+    pub groups: Vec<MergeGroup>,
     /// Each static class name beside a static `sz`.
     pub overrides: Vec<MergeOverride>,
 }
@@ -137,15 +154,29 @@ impl MergeGroupScope {
     pub fn finish(mut self) -> MergeLists {
         self.finished = true;
         let previous = self.previous.take();
-        let mut lists = MERGE_GROUPS
+        let lists = MERGE_GROUPS
             .with(|cell| cell.replace(previous))
             .unwrap_or_default();
-        let mut seen = HashSet::new();
-        lists.groups.retain(|group| seen.insert(group.clone()));
-        let mut seen = HashSet::new();
-        lists.overrides.retain(|pair| seen.insert(pair.clone()));
-        lists
+        MergeLists {
+            groups: first_of_each(lists.groups),
+            overrides: first_of_each(lists.overrides),
+        }
     }
+}
+
+/// The first of each distinct item, in order, compared in place rather than
+/// through a copy of each: a group holds every class of its object, and the
+/// copy cost more than the lowering that produced it.
+fn first_of_each<T: Eq + std::hash::Hash>(items: Vec<T>) -> Vec<T> {
+    let first: Vec<bool> = {
+        let mut seen = HashSet::with_capacity(items.len());
+        items.iter().map(|item| seen.insert(item)).collect()
+    };
+    items
+        .into_iter()
+        .zip(first)
+        .filter_map(|(item, first)| first.then_some(item))
+        .collect()
 }
 
 impl Drop for MergeGroupScope {
@@ -234,24 +265,35 @@ fn apply_recording(
         .collect()
 }
 
-/// [`apply`] with the table of the file being transformed, if it has one;
-/// without one, the list is recorded when a pass is collecting them.
+/// [`apply`] with the table of the file being transformed, if it has one.
 pub(crate) fn apply_active(classes: Vec<String>) -> Vec<String> {
-    MERGE_TABLE.with(|cell| {
-        if let Some(table) = cell.borrow().as_deref() {
-            return MERGE_REMOVED
-                .with(|removed| apply_recording(classes, table, &mut removed.borrow_mut()));
+    MERGE_TABLE.with(|cell| match cell.borrow().as_deref() {
+        Some(table) => {
+            MERGE_REMOVED.with(|removed| apply_recording(classes, table, &mut removed.borrow_mut()))
         }
-        // One class merges with nothing.
-        if classes.len() > 1 {
-            MERGE_GROUPS.with(|lists| {
-                if let Some(lists) = lists.borrow_mut().as_mut() {
-                    lists.groups.push(classes.clone());
-                }
-            });
-        }
-        classes
+        None => classes,
     })
+}
+
+/// Whether a pass is collecting the lists a merge would read.
+///
+/// Only a pass without a table collects, so a collecting pass merges nothing:
+/// the caller records the object with [`record_group`] instead of applying.
+pub(crate) fn collecting() -> bool {
+    MERGE_GROUPS.with(|lists| lists.borrow().is_some())
+}
+
+/// Record one object's classes for the plugin to check, when a pass is
+/// collecting them. One class merges with nothing, so it is left out.
+pub(crate) fn record_group(group: MergeGroup) {
+    if group.classes.len() < 2 {
+        return;
+    }
+    MERGE_GROUPS.with(|lists| {
+        if let Some(lists) = lists.borrow_mut().as_mut() {
+            lists.groups.push(group);
+        }
+    });
 }
 
 /// Remove from a class name what the `sz` classes beside it cover.
@@ -295,7 +337,7 @@ pub fn apply_over(base: Vec<String>, over: &[String], table: &MergeTable) -> Vec
 /// A class the class name loses is not reported as removed: it was written in
 /// the source, so the safelist already holds it.
 #[cfg_attr(not(feature = "native-engine"), allow(dead_code))]
-pub(crate) fn apply_over_active(base: Vec<String>, over: &[String]) -> Vec<String> {
+pub(crate) fn apply_over_active(start: u32, base: Vec<String>, over: &[String]) -> Vec<String> {
     if base.is_empty() || over.is_empty() {
         return base;
     }
@@ -306,6 +348,7 @@ pub(crate) fn apply_over_active(base: Vec<String>, over: &[String]) -> Vec<Strin
         MERGE_GROUPS.with(|lists| {
             if let Some(lists) = lists.borrow_mut().as_mut() {
                 lists.overrides.push(MergeOverride {
+                    start,
                     base: base.clone(),
                     over: over.to_vec(),
                 });
@@ -318,9 +361,18 @@ pub(crate) fn apply_over_active(base: Vec<String>, over: &[String]) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        apply, apply_active, apply_over, apply_over_active, decode, MergeGroupScope, MergeOverride,
-        MergeTableScope,
+        apply, apply_active, apply_over, apply_over_active, collecting, decode, record_group,
+        MergeGroup, MergeGroupScope, MergeOverride, MergeTableScope,
     };
+
+    /// A group at offset 0 whose keys are its classes.
+    fn group(names: &[&str]) -> MergeGroup {
+        MergeGroup {
+            keys: classes(names),
+            key_starts: vec![0; names.len()],
+            classes: classes(names),
+        }
+    }
 
     fn table() -> std::sync::Arc<super::MergeTable> {
         decode(
@@ -386,22 +438,28 @@ mod tests {
     #[test]
     fn a_pass_without_a_table_collects_each_list_of_two_or_more_once() {
         let groups = MergeGroupScope::enter(true);
-        let _ = apply_active(classes(&["pb-2", "p-4"]));
-        let _ = apply_active(classes(&["m-2"]));
-        let _ = apply_active(classes(&["pb-2", "p-4"]));
-        assert_eq!(groups.finish().groups, [classes(&["pb-2", "p-4"])]);
+        assert!(collecting());
+        record_group(group(&["pb-2", "p-4"]));
+        record_group(group(&["m-2"]));
+        record_group(group(&["pb-2", "p-4"]));
+        assert_eq!(groups.finish().groups, [group(&["pb-2", "p-4"])]);
         // Finished: nothing collects any more.
         let after = MergeGroupScope::enter(false);
-        let _ = apply_active(classes(&["a", "b"]));
+        assert!(!collecting());
+        record_group(group(&["a", "b"]));
         assert_eq!(after.finish(), super::MergeLists::default());
     }
 
     #[test]
-    fn a_pass_with_a_table_collects_no_list() {
+    fn one_object_at_two_places_is_two_groups() {
         let groups = MergeGroupScope::enter(true);
-        let _table = MergeTableScope::enter(Some(table()));
-        let _ = apply_active(classes(&["pb-2", "p-4"]));
-        assert!(groups.finish().groups.is_empty());
+        record_group(group(&["pb-2", "p-4"]));
+        let elsewhere = MergeGroup {
+            key_starts: vec![9, 16],
+            ..group(&["pb-2", "p-4"])
+        };
+        record_group(elsewhere.clone());
+        assert_eq!(groups.finish().groups, [group(&["pb-2", "p-4"]), elsewhere]);
     }
 
     #[test]
@@ -410,15 +468,15 @@ mod tests {
             let _groups = MergeGroupScope::enter(true);
         }
         let probe = MergeGroupScope::enter(false);
-        let _ = apply_active(classes(&["a", "b"]));
+        record_group(group(&["a", "b"]));
         assert_eq!(probe.finish(), super::MergeLists::default());
         let outer = MergeGroupScope::enter(true);
         {
             let _inner = MergeGroupScope::enter(false);
-            let _ = apply_active(classes(&["c", "d"]));
+            record_group(group(&["c", "d"]));
         }
-        let _ = apply_active(classes(&["e", "f"]));
-        assert_eq!(outer.finish().groups, [classes(&["e", "f"])]);
+        record_group(group(&["e", "f"]));
+        assert_eq!(outer.finish().groups, [group(&["e", "f"])]);
     }
 
     #[test]
@@ -494,17 +552,18 @@ mod tests {
     fn a_pass_without_a_table_records_the_class_name_and_sz_lists() {
         let scope = MergeGroupScope::enter(true);
         assert_eq!(
-            apply_over_active(classes(&["pb-2"]), &classes(&["p-4"])),
+            apply_over_active(5, classes(&["pb-2"]), &classes(&["p-4"])),
             ["pb-2"]
         );
         // Nothing to compare: no record.
-        let _ = apply_over_active(Vec::new(), &classes(&["p-4"]));
-        let _ = apply_over_active(classes(&["pb-2"]), &[]);
+        let _ = apply_over_active(0, Vec::new(), &classes(&["p-4"]));
+        let _ = apply_over_active(0, classes(&["pb-2"]), &[]);
         let lists = scope.finish();
         assert!(lists.groups.is_empty());
         assert_eq!(
             lists.overrides,
             [MergeOverride {
+                start: 5,
                 base: classes(&["pb-2"]),
                 over: classes(&["p-4"]),
             }]
@@ -516,7 +575,7 @@ mod tests {
         let lists = MergeGroupScope::enter(true);
         let _table = MergeTableScope::enter(Some(table()));
         assert_eq!(
-            apply_over_active(classes(&["pb-2", "card"]), &classes(&["p-4"])),
+            apply_over_active(0, classes(&["pb-2", "card"]), &classes(&["p-4"])),
             ["card"]
         );
         assert!(lists.finish().overrides.is_empty());

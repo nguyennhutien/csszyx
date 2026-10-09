@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
     SZ_FALLBACK_KINDS,
     SZ_FALLBACK_MATRIX,
+    SZ_SITE_MISSING_CSS_KINDS,
 } from '../packages/compiler/src/sz-fallback-matrix.js';
 import {
     escapeRustFormat,
@@ -37,9 +38,11 @@ describe('sz fallback matrix generation', () => {
         const source = renderRust();
         for (const kind of SZ_FALLBACK_KINDS) {
             const variant = variantName(kind);
-            // Once in the enum, once in each of the two match statements.
+            // Once in each of the two match statements, and once more in the
+            // `sz_site_fallback_misses_css` list when the kind costs its classes.
             const occurrences = source.split(`SzFallbackKind::${variant}`).length - 1;
-            assert.equal(occurrences, 2, `${kind} should appear in both match statements`);
+            const expected = SZ_SITE_MISSING_CSS_KINDS.has(kind) ? 3 : 2;
+            assert.equal(occurrences, expected, `${kind} should appear in both match statements`);
             assert.ok(source.includes(`    ${variant},`), `${kind} should be an enum variant`);
         }
     });

@@ -13,6 +13,7 @@
  * lives in class-parser.ts.
  */
 
+import { NEGATIVE_ALLOWED as COMPILER_NEGATIVE_ALLOWED } from '../transform-core.js';
 import { REVERSE_PROPERTY_MAP } from './generated/reverse-property-map.js';
 
 export { REVERSE_PROPERTY_MAP };
@@ -318,62 +319,27 @@ export const KNOWN_BREAKPOINTS: ReadonlySet<string> = new Set(['sm', 'md', 'lg',
 // ============================================================================
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
+// The compiler's list, plus the prefixes migrate reads that the compiler never
+// writes. It was a hand copy and fell behind: the compiler learned `-scale-50`,
+// `-outline-offset-2` and the logical `-scroll-m*` sides, and migrate kept
+// calling them unrecognized.
 export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
-    'm',
-    'mt',
-    'mr',
-    'mb',
-    'ml',
-    'mx',
-    'my',
-    'ms',
-    'me',
-    'top',
-    'right',
-    'bottom',
-    'left',
-    'inset',
-    'inset-x',
-    'inset-y',
+    ...COMPILER_NEGATIVE_ALLOWED,
+    // Tailwind's old names for `inset-s` / `inset-e`, still found in markup.
     'start',
     'end',
-    'inset-s',
-    'inset-e',
-    'inset-bs',
-    'inset-be',
-    'mbs',
-    'mbe',
-    'translate',
-    'z',
-    'order',
-    'col',
-    'col-start',
-    'col-end',
-    'row',
-    'row-start',
-    'row-end',
-    'rotate',
-    'rotate-x',
-    'rotate-y',
-    'rotate-z',
-    'skew-x',
-    'skew-y',
-    'translate-x',
-    'translate-y',
-    'space-x',
-    'space-y',
-    'tracking',
-    'indent',
-    'scroll-m',
-    'scroll-mx',
-    'scroll-my',
-    'scroll-mt',
-    'scroll-mr',
-    'scroll-mb',
-    'scroll-ml',
-    'hue-rotate',
-    'backdrop-hue-rotate',
 ]);
+
+// ============================================================================
+// UNSIGNED_KEYWORDS: Values a negative sign never applies to
+// ============================================================================
+// Tailwind serves `scale-none`, `rotate-none` or `order-first` as fixed classes
+// and no negative of them, so `-scale-none` styles nothing. A prefix in
+// NEGATIVE_ALLOWED takes a sign on a number, a fraction, an arbitrary value or
+// a theme token (`-m-px`, `-tracking-tight`); on one of these keywords migrate
+// reports the class unrecognized instead of writing `scale: '-none'`. `auto`
+// and `screen` are not here: the value reading already drops their sign.
+export const UNSIGNED_KEYWORDS: ReadonlySet<string> = new Set(['none', '3d', 'first', 'last']);
 
 // ============================================================================
 // FRACTION_SUPPORTED: Props that support fractions (e.g., w-1/2)
