@@ -154,7 +154,7 @@ describe('init interactive path with mocked prompts', () => {
         // carried a switch that never moved anything.
         const config = (readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8') as string) ?? '';
         expect(config).not.toContain('injectChecksum');
-        expect(config).toContain('debug: true');
+        expect(config).toContain("import { defineConfig } from 'csszyx';");
         // gitignore was declined — .csszyx not appended.
         expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).not.toContain('.csszyx');
         vi.doUnmock('prompts');

@@ -75,7 +75,6 @@ import type { CsszyxConfig, PartialCsszyxConfig } from "@csszyx/types";
 const userConfig: PartialCsszyxConfig = {
   development: {
     debug: true,
-    strictMode: false,
   },
   production: {
     mangle: true,
@@ -217,7 +216,6 @@ import type {
 const options: CompilerOptions = {
   buildId: "v1.0.0",
   development: true,
-  strictMode: false,
   sourceRoot: "./src",
   outDir: "./dist",
 };

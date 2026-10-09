@@ -346,7 +346,7 @@ describe('init interactive prompts and default cwd', () => {
         } finally {
             process.chdir(prev);
         }
-        expect(readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8')).toContain('debug: true');
+        expect(readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8')).toContain('defineConfig({');
         vi.doUnmock('prompts');
     });
 });

@@ -14,6 +14,7 @@ import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/ne
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
+import { writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -75,6 +76,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             ignoreSetting: 'the `--ignore` flag',
         });
         if (facts.warning !== null) console.warn(facts.warning);
+        for (const warning of await writeNextDiagnosticPolicy(root)) console.warn(warning);
 
         const result = runNextPrebuild({
             files: matches,

@@ -43,7 +43,8 @@ describe('index exports', () => {
         expect(DEFAULT_COMPILER_OPTIONS).toBeDefined();
         expect(DEFAULT_COMPILER_OPTIONS.buildId).toBeDefined();
         expect(typeof DEFAULT_COMPILER_OPTIONS.development).toBe('boolean');
-        expect(typeof DEFAULT_COMPILER_OPTIONS.strictMode).toBe('boolean');
+        // `strictMode` was read by nothing, so it is gone rather than defaulted.
+        expect(DEFAULT_COMPILER_OPTIONS).not.toHaveProperty('strictMode');
     });
 });
 
@@ -52,17 +53,14 @@ describe('mergeOptions', () => {
         const options = mergeOptions();
         expect(options.buildId).toBeDefined();
         expect(typeof options.development).toBe('boolean');
-        expect(typeof options.strictMode).toBe('boolean');
     });
 
     it('should merge user options with defaults', () => {
         const options = mergeOptions({
             development: true,
-            strictMode: true,
         });
 
         expect(options.development).toBe(true);
-        expect(options.strictMode).toBe(true);
         expect(options.buildId).toBeDefined();
     });
 
@@ -71,12 +69,10 @@ describe('mergeOptions', () => {
         const options = mergeOptions({
             buildId: customBuildId,
             development: false,
-            strictMode: true,
         });
 
         expect(options.buildId).toBe(customBuildId);
         expect(options.development).toBe(false);
-        expect(options.strictMode).toBe(true);
     });
 
     it('should handle partial options', () => {
@@ -86,13 +82,11 @@ describe('mergeOptions', () => {
 
         expect(options.development).toBe(true);
         expect(options.buildId).toBeDefined();
-        expect(typeof options.strictMode).toBe('boolean');
     });
 
     it('should handle empty options object', () => {
         const options = mergeOptions({});
         expect(options.buildId).toBeDefined();
         expect(typeof options.development).toBe('boolean');
-        expect(typeof options.strictMode).toBe('boolean');
     });
 });

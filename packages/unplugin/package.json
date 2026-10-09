@@ -74,6 +74,16 @@
         "default": "./dist/next-config.cjs"
       }
     },
+    "./diagnostics": {
+      "import": {
+        "types": "./dist/diagnostics.d.mts",
+        "default": "./dist/diagnostics.mjs"
+      },
+      "require": {
+        "types": "./dist/diagnostics.d.cts",
+        "default": "./dist/diagnostics.cjs"
+      }
+    },
     "./next-turbo-loader": {
       "import": {
         "types": "./dist/next-turbo-loader.d.mts",

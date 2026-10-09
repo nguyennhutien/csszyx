@@ -190,11 +190,6 @@ export interface CompilerOptions {
      * Enable development mode features
      */
     development?: boolean;
-
-    /**
-     * Strict mode - fail build on warnings
-     */
-    strictMode?: boolean;
 }
 
 /**
@@ -203,7 +198,6 @@ export interface CompilerOptions {
 export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
     buildId: Date.now().toString(),
     development: process.env.NODE_ENV !== 'production',
-    strictMode: false,
 };
 
 /**

@@ -71,6 +71,8 @@ import {
     classAttributeSelectorKey,
     mangleCSSSync,
 } from './css-mangler.js';
+import { loadDiagnosticPolicy } from './csszyx-config-file.js';
+import { type DiagnosticPolicy, diagnosticConfigProblemsMessage } from './diagnostic-policy.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -3208,6 +3210,38 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             console.warn(message);
         }
     }
+    /** The policy of the project last loaded, by root, so every hook shares one read. */
+    let diagnosticPolicyLoad: { root: string; policy: Promise<DiagnosticPolicy> } | undefined;
+    /**
+     * Read the project's `csszyx.config` once per root, printing what is wrong
+     * with it.
+     *
+     * Called from the first hook on each lane that knows the root — Vite
+     * `configResolved`, webpack `beforeCompile`, the shared `buildStart` — so
+     * a misspelt id is reported before any build output, once. A problem is a
+     * config warning, muted by `quiet: true` like the others; the build never
+     * fails on it.
+     *
+     * @param root - The project root.
+     * @returns The policy; the defaults when the project has no config.
+     */
+    function loadProjectDiagnosticPolicy(root: string): Promise<DiagnosticPolicy> {
+        if (diagnosticPolicyLoad?.root !== root) {
+            const policy = loadDiagnosticPolicy(root).then(loaded => {
+                if (loaded.file !== null && loaded.problems.length > 0) {
+                    emitWarning(
+                        diagnosticConfigProblemsMessage(
+                            path.basename(loaded.file),
+                            loaded.problems,
+                        ),
+                    );
+                }
+                return loaded.policy;
+            });
+            diagnosticPolicyLoad = { root, policy };
+        }
+        return diagnosticPolicyLoad.policy;
+    }
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
     // optional deps omitted, or a cross-platform frozen lockfile), fall back to
@@ -5343,6 +5377,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the model lands in `styleModel`.
      */
     async function openStyleModelAtBuildStart(): Promise<void> {
+        await loadProjectDiagnosticPolicy(state.rootDir);
         if (styleModel === undefined) {
             refreshCompileSourceDirs();
             const discovered = discoverProjectTheme(state.rootDir, [...compileSourceDirs]);
@@ -7210,6 +7245,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    await loadProjectDiagnosticPolicy(root);
                     // Next.js maps `@/*` with a resolver plugin rather than an
                     // alias table, so webpack's own alias object is empty on the
                     // framework that needs this most; `collectSpecifierAliases`
@@ -7311,6 +7347,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    await loadProjectDiagnosticPolicy(root);
                     // Vite has already normalized `resolve.alias` into its array
                     // form here, which is also the form this reads — taking it
                     // from the RESOLVED config means an alias another plugin

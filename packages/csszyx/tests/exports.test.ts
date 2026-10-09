@@ -51,6 +51,12 @@ describe('csszyx umbrella exports', () => {
         }
     });
 
+    it('exposes defineConfig, which a csszyx.config file imports, on both entries', () => {
+        const config = { diagnostics: { preset: 'atomic' as const } };
+        expect(csszyx.defineConfig(config)).toBe(config);
+        expect(browserEntry.defineConfig(config)).toBe(config);
+    });
+
     it('keeps the build-time surface off the browser entry', () => {
         // Not cosmetic: naming any of these reaches `@csszyx/core/native`,
         // `oxc-parser` or `node:fs`, and a bundler fails at RESOLVE — so one

@@ -64,6 +64,20 @@ describe('doctor', () => {
         expect(output).toContain('Checksum injection working');
     });
 
+    it.each(['csszyx.config.mts', 'csszyx.config.mjs'])(
+        'finds a config written as %s, a name the loader reads',
+        async name => {
+            const { logs } = captureLogs();
+            const cwd = tempRoot();
+            writeFileSync(join(cwd, name), 'export default {};');
+            writeFileSync(join(cwd, 'package.json'), JSON.stringify({}));
+
+            await doctor({ cwd });
+
+            expect(logs.join('\n')).toContain('csszyx configuration found');
+        },
+    );
+
     it('counts the missing pieces on an empty project', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();

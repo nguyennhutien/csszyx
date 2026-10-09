@@ -683,22 +683,24 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
 /**
  * Generate csszyx.config.ts content for a new project.
  *
- * It takes no answers any more. The one key the interactive flow used to write
- * here was `production.injectChecksum`, and nothing read it — so the questions
- * it was gathered from decided nothing about the file.
+ * Every plugin, `csszyx check` and the Next commands read this file, for its
+ * `diagnostics` section. It goes through `defineConfig`, whose argument is
+ * all optional: the file used to declare `const config: CsszyxConfig`, which
+ * requires every section, so a fresh project failed `tsc --strict` (TS2741).
+ * The same text loads as `.js`: there is no type annotation in it.
  *
  * @returns The config file content as a string.
  */
-function generateConfigFile(): string {
-    return `import type { CsszyxConfig } from 'csszyx';
+export function generateConfigFile(): string {
+    return `import { defineConfig } from 'csszyx';
 
-const config: CsszyxConfig = {
-  development: {
-    debug: true,
+export default defineConfig({
+  diagnostics: {
+    // 'recommended' fails \`csszyx check\` on mistakes only; 'atomic' also
+    // reports every site where csszyx changed what was written.
+    preset: 'recommended',
   },
-};
-
-export default config;
+});
 `;
 }
 

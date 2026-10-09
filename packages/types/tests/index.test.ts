@@ -23,3 +23,11 @@ describe('VERSION', () => {
         expect(VERSION).toBe(manifest.version);
     });
 });
+
+describe('defineConfig', () => {
+    it('returns the config it was given, typed', async () => {
+        const { defineConfig } = await import('../src/index.js');
+        const config = { diagnostics: { rules: { 'dead-class': 'warn' as const } } };
+        expect(defineConfig(config)).toBe(config);
+    });
+});

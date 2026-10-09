@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 
+import { findCsszyxConfigFile } from '@csszyx/unplugin/diagnostics';
 import fs from 'fs-extra';
 
 import { getProjectInfo } from '../utils/framework-detector.js';
@@ -55,9 +56,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
  */
 function checkConfiguration(cwd: string): void {
     printSection('📋 Configuration Health');
-    const found = ['csszyx.config.ts', 'csszyx.config.js'].some(file =>
-        fs.existsSync(path.join(cwd, file)),
-    );
+    const found = findCsszyxConfigFile(cwd) !== null;
     if (found) printSuccess('csszyx configuration found');
     else printWarn('No csszyx.config found - using defaults');
 }
