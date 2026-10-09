@@ -42,6 +42,10 @@ overrides:
   "fast-uri@>=3.0.0 <3.1.7": "^3.1.7"
   "form-data@>=4.0.0 <4.0.6": "^4.0.6"
   "http-proxy-middleware@>=2.0.0 <3.0.6": "^3.0.6"
+  # Past what markdownlint asks for (^0.16, dev only): it parses math syntax
+  # and never calls katex to render it. 0.19, not the fixed 0.18 line, which
+  # katex deprecated as "accidentally published with breaking changes".
+  "katex@<0.18.2": "^0.19.0"
   "js-yaml@>=4.0.0 <4.3.2": "^4.3.2"
   "js-yaml@^5": "^5.4.1"
   "lodash@>=4.0.0 <4.18.0": "^4.18.1"
@@ -52,6 +56,11 @@ overrides:
   "http-cache-semantics@^4": "^4.3.0"
   "ip-address@^10": "^10.5.1"
   "postcss@>=8.0.0 <8.5.23": "^8.5.23"
+  # A major past what its dependents ask for: postcss-nested 6 (via
+  # expressive-code, docs only) asks for ^6, and the fix is 7.1.6 only. 7.0.0
+  # changed only insertion during iteration; postcss-nested 7 moved to it
+  # without other changes.
+  "postcss-selector-parser@<7.1.6": "^7.1.6"
   "qs@>=6.0.0 <6.16.0": "^6.16.0"
   "seroval@^1": "^1.6.3"
   "sharp@<0.35.5": "^0.35.5"
