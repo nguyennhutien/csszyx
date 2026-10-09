@@ -1826,7 +1826,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 return Some(format!("{prefix}{}", format_font_stretch(value)));
             }
             // Filter functions take a unit-bearing numeric whose string form is
-            // always arbitrary (brightness-[1.25]); scale: '3d' is the one keyword.
+            // always arbitrary (brightness-[1.25]); scale takes two keywords.
             if matches!(
                 key,
                 "brightness"
@@ -1837,8 +1837,10 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     | "backdropContrast"
                     | "backdropSaturate"
             ) {
-                if value == "3d" && key == "scale" {
-                    return Some(format!("{prefix}scale-3d"));
+                // The two keywords `scale` serves by name; any other value is
+                // a number. Mirrors `formatArbitraryEffect` in the TypeScript core.
+                if key == "scale" && matches!(value.as_str(), "3d" | "none") {
+                    return Some(format!("{prefix}scale-{value}"));
                 }
                 return Some(if value.starts_with("--") {
                     format!("{prefix}{class_key}-({value})")
@@ -1902,6 +1904,21 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 } else {
                     format!("{prefix}{class_key}-[{value}]")
                 });
+            }
+
+            // A CSS-wide keyword is valid CSS on every property, but Tailwind
+            // serves it by name on only a few prefixes (`text-inherit`). On a
+            // prefix whose arbitrary form sets the key's own property it takes
+            // the bracket (`p-[inherit]`); elsewhere the bracket would set a
+            // different property, so the class is left for the build to report.
+            // Mirrors `normalizeGenericStringValue` in the TypeScript core.
+            if super::generated::tables::is_css_wide_keyword(value)
+                && !super::generated::tables::is_css_wide_keyword_utility(&format!(
+                    "{class_key}-{value}"
+                ))
+                && super::generated::tables::is_css_wide_bracket_prefix(&class_key)
+            {
+                return Some(format!("{prefix}{class_key}-[{value}]"));
             }
 
             if has_slash_opacity(value) {
@@ -2565,6 +2582,12 @@ fn is_fraction_supported_prop(key: &str) -> bool {
             | "maxH"
             | "maxHeight"
             | "size"
+            | "blockSize"
+            | "minBlockSize"
+            | "maxBlockSize"
+            | "inlineSize"
+            | "minInlineSize"
+            | "maxInlineSize"
             | "basis"
             | "flexBasis"
             | "flex"
@@ -2579,6 +2602,10 @@ fn is_fraction_supported_prop(key: &str) -> bool {
             | "left"
             | "start"
             | "end"
+            | "insetS"
+            | "insetE"
+            | "insetBs"
+            | "insetBe"
             | "translate"
             | "translate-x"
             | "translateX"
@@ -3238,6 +3265,37 @@ mod tests {
             lower_static_sz_object(&object),
             ["p-4", "bg-red-500", "italic"]
         );
+    }
+
+    /// The bracket list is a closed set: a prefix outside it, or a keyword on
+    /// a prefix Tailwind names it for, keeps the value as written.
+    #[test]
+    fn the_keyword_bracket_list_is_closed() {
+        use super::super::generated::tables::{
+            is_css_wide_bracket_prefix, is_css_wide_keyword, is_css_wide_keyword_utility,
+        };
+        assert!(is_css_wide_bracket_prefix("p"));
+        assert!(is_css_wide_bracket_prefix("tab"));
+        assert!(!is_css_wide_bracket_prefix("bg"));
+        assert!(!is_css_wide_bracket_prefix("no-such-prefix"));
+        assert!(is_css_wide_keyword("revert-layer"));
+        assert!(!is_css_wide_keyword("auto"));
+        assert!(is_css_wide_keyword_utility("text-inherit"));
+        assert!(!is_css_wide_keyword_utility("p-inherit"));
+    }
+
+    /// A CSS-wide keyword brackets on a prefix whose arbitrary form sets the
+    /// key's own property, keeps the class Tailwind serves by name, and is
+    /// left as written elsewhere for the build to report.
+    #[test]
+    fn a_css_wide_keyword_takes_the_class_tailwind_serves_for_it() {
+        let lowered = |key: &str, value: &str| {
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.to_string()))],
+            })
+        };
+        assert_eq!(lowered("p", "inherit"), ["p-[inherit]"]);
+        assert_eq!(lowered("bg", "inherit"), ["bg-inherit"]);
     }
 
     #[test]

@@ -142,13 +142,20 @@ export const SIZE_BUDGETS = [
         // measured by no budget before), on top of `./browser` at 14,969.
         // Re-measured later the same day at 15,891, with `./browser` at
         // 15,104 after the special-key box roles.
-        maxGzipBytes: 16_050,
+        //
+        // Raised from 16,050 on 2026-10-09, measured 16,420: the CSS-wide
+        // keyword tables (the keywords, the prefixes whose bracket sets the
+        // key's own property, the utilities Tailwind names) and the added
+        // negative-capable and fraction-taking keys ship with the runtime
+        // lowering, so the browser carries them. Budget the usual ~300 above.
+        maxGzipBytes: 16_750,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
         // ~300 above the measurement.
         entryBudgets: {
-            './browser': 15_400,
+            // 15,646 after the CSS-wide keyword tables, 2026-10-09.
+            './browser': 15_950,
             './sz-limits': 650,
             './keyword-families': 1_000,
             './bool-class': 650,

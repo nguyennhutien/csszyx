@@ -56,6 +56,9 @@ function readTables() {
             booleanShorthands: core.stringSet('BOOLEAN_SHORTHANDS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
+            cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
+            cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
+            cssWideBracketPrefixes: core.stringSet('CSS_WIDE_BRACKET_PREFIXES'),
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
             removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
             replacedKeys: core.stringSet('REPLACED_KEYS'),
@@ -83,6 +86,9 @@ function renderRust({
     booleanShorthands,
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
+    cssWideKeywords,
+    cssWideKeywordUtilities,
+    cssWideBracketPrefixes,
     removedBooleanSugar,
     removedBooleanSugarReplacement,
     replacedKeys,
@@ -167,6 +173,32 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(knownSpecialProperties)}
+    )
+}
+
+/// Whether a value is a CSS-wide keyword. Mirrors \`CSS_WIDE_KEYWORDS\`.
+pub(crate) fn is_css_wide_keyword(value: &str) -> bool {
+    matches!(
+        value,
+${renderMatchPatterns(cssWideKeywords)}
+    )
+}
+
+/// Whether Tailwind serves \`<prefix>-<keyword>\` by name for a CSS-wide
+/// keyword. Mirrors \`CSS_WIDE_KEYWORD_UTILITIES\`.
+pub(crate) fn is_css_wide_keyword_utility(class: &str) -> bool {
+    matches!(
+        class,
+${renderMatchPatterns(cssWideKeywordUtilities)}
+    )
+}
+
+/// Whether a CSS-wide keyword may take the arbitrary form on this prefix.
+/// Mirrors \`CSS_WIDE_BRACKET_PREFIXES\`.
+pub(crate) fn is_css_wide_bracket_prefix(prefix: &str) -> bool {
+    matches!(
+        prefix,
+${renderMatchPatterns(cssWideBracketPrefixes)}
     )
 }
 
