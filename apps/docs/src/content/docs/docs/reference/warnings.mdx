@@ -1457,9 +1457,14 @@ csszyx check --rule merge-covered-key --rule merge-covered-class
 `numeric-font-weight`, `per-side-border-style`, `property-object`,
 `non-variant-object`, `unknown-field`, `runtime-value`, `unresolvable-spread`,
 `style-override`, `szs-slot-map`, `sz-recover`, `class-precedence`,
-`duplicate-sz`, `spread-split-class`, or `other` for a message no kind matches. Every other pass
-repeats its `rule`. Runtime fallback notes are not `check` findings, so they
-have no kind.
+`duplicate-sz`, `spread-split-class`, `moved-value`, `global-before-group`,
+`runtime-family-conflict`, `merge-classifier-unavailable`, `parse-error`,
+`nesting-depth`, `unsupported-dynamic-sz` or `ast-budget`. The engine gives
+every diagnostic its kind, so `other` never comes back for one; it is kept
+only as an id `--rule` still accepts. Every other pass repeats its `rule`.
+Runtime fallback notes (`fallback-missing-css`, `fallback-nudge`) and the
+`mangleVars` hoist note (`mangle-vars-hoist-skipped`) are not `check` findings,
+so they never appear here.
 
 An `unknown-key` finding also carries `suggestion` when one known key is a
 single edit away — two for a key of twelve letters or more — and the prose

@@ -183,6 +183,41 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         );
     });
 
+    it('names the engine code as the kind, never other', async () => {
+        // Read from the code the engine gives each diagnostic: a moved value
+        // and a stand-alone keyword before its group had no text matcher, so
+        // they used to come back as `other`.
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': [
+                "export const A = () => <div sz={{ touchAction: 'pan-y' }} />;",
+                "export const B = () => <div sz={{ contain: 'size', containPaint: true }} />;",
+            ].join('\n'),
+        });
+
+        const report = await jsonFor(cwd);
+        const kinds = report.findings
+            .filter(entry => entry.rule === 'sz-diagnostic')
+            .map(entry => entry.kind);
+
+        expect(kinds).toEqual(expect.arrayContaining(['moved-value', 'global-before-group']));
+        expect(kinds).not.toContain('other');
+    });
+
+    it('selects a kind only a code names', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': [
+                "export const A = () => <div sz={{ touchAction: 'pan-y' }} />;",
+                'export const B = () => <div sz={{ nonsenseKey: 4 }} />;',
+            ].join('\n'),
+        });
+
+        const report = await jsonFor(cwd, { rule: ['moved-value'] });
+
+        expect(report.findings.map(entry => entry.kind)).toEqual(['moved-value']);
+    });
+
     it('gives a finding from another pass its rule as its kind', async () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
@@ -271,7 +306,9 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         expect(log.mock.calls.flat().join('\n')).toContain('Did you mean "break"?');
     });
 
-    it.each(['runtime-fallback', 'parse-error', 'mangle-vars-hoist-skip'])(
+    // `parse-error` was on this list until the engine coded its diagnostics:
+    // a file the parser rejects is reported, now under that id.
+    it.each(['runtime-fallback', 'mangle-vars-hoist-skip'])(
         'refuses %s, which check never reports, rather than selecting nothing',
         async id => {
             const cwd = tailwindProject({

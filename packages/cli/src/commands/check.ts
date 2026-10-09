@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import {
     SZ_DIAGNOSTIC_KIND_IDS,
+    type SzDiagnosticCode,
     szDiagnosticKindOf,
     szKeySuggestionFor,
     transformSource,
@@ -111,7 +112,7 @@ export interface CheckOptions {
     files?: string[];
 }
 
-/** One captured sz diagnostic, with the kind the compiler reads from its wording. */
+/** One captured sz diagnostic, with the kind the compiler reads from its code. */
 interface ClassifiedIssue extends SzIssue {
     kind: string;
     /** The known key an `unknown-key` issue most likely misspells, or null. */
@@ -122,6 +123,8 @@ interface ClassifiedIssue extends SzIssue {
 interface SzIssue {
     file: string;
     message: string;
+    /** The code the engine gave it; absent only for a result with no codes. */
+    code?: SzDiagnosticCode;
 }
 
 /**
@@ -575,18 +578,21 @@ async function collectSzDiagnostics(
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
-        for (const message of recordFileClasses(
+        const { diagnostics, codes } = recordFileClasses(
             source,
             file,
             cwd,
             currentFile,
             classOrigins,
             classPrefix,
-        )) {
+        );
+        for (const [index, message] of diagnostics.entries()) {
             if (message.startsWith('[csszyx]')) {
+                const code = codes[index];
                 issues.push({
                     file: currentFile,
                     message: message.replace(/^\[csszyx\]\s*/, ''),
+                    ...(code === undefined ? {} : { code }),
                 });
             }
         }
@@ -607,7 +613,8 @@ async function collectSzDiagnostics(
  * @param relativePath - Path as reported to the user.
  * @param classOrigins - Origins map, extended in place.
  * @param classPrefix - The Tailwind prefix to lower with, or null.
- * @returns The file's compiler diagnostics (empty when unreadable).
+ * @returns The file's compiler diagnostics and the code of each, index-parallel
+ *          (both empty when unreadable).
  */
 function recordFileClasses(
     source: string,
@@ -616,16 +623,19 @@ function recordFileClasses(
     relativePath: string,
     classOrigins: Map<string, string>,
     classPrefix: string | null,
-): string[] {
+): { diagnostics: string[]; codes: Array<SzDiagnosticCode | undefined> } {
     try {
         const result = transformSource(source, file, { rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
-        return result.diagnostics;
+        return {
+            diagnostics: result.diagnostics,
+            codes: result.diagnostics.map((_, index) => result.issues?.[index]?.code),
+        };
     } catch {
         // Unreadable by the engine; see the note above.
-        return [];
+        return { diagnostics: [], codes: [] };
     }
 }
 
@@ -911,7 +921,7 @@ function reportSelectedIssues(
 ): void {
     const selected: ClassifiedIssue[] = [];
     for (const issue of issues) {
-        const kind = szDiagnosticKindOf(issue.message);
+        const kind = szDiagnosticKindOf(issue.message, issue.code);
         if (!wants('sz-diagnostic', kind)) continue;
         const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
         selected.push({ ...issue, kind, suggestion });
