@@ -41,7 +41,13 @@ export default defineBuild([
             // is the sole export, and this entry also exports the options
             // type, so `postcss.d.cts` would describe a namespace that the
             // `.cjs` is not. Give it the shape unbuild shipped.
+            //
+            // tsdown calls this once per format, and the two formats build at
+            // once: only the CommonJS build writes `postcss.d.cts`, so the ES
+            // build's call would read whatever is on disk at that moment —
+            // the file already rewritten, or a stale one from the last build.
             async 'build:done'(ctx) {
+                if (ctx.options.format !== 'cjs') return;
                 const fs = await import('node:fs/promises');
                 const path = await import('node:path');
                 const file = path.join(ctx.options.outDir, 'postcss.d.cts');
