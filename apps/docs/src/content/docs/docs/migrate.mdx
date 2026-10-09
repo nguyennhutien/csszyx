@@ -22,12 +22,18 @@ npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
 
+:::tip[Upgrading a project that already uses `sz`?]
+Every breaking change in 0.18, with the edit for each, is in
+[Upgrading to 0.18](/docs/upgrade-0-18/).
+:::
+
 ## Related: scan for sz issues
 
 The same CLI ships `csszyx check`, a static diagnostic pass that scans every
 source file for unknown or aliased `sz` keys (the build only warns about them
 lazily, as routes are opened). It prints each issue with its `file:line` and
-exits non-zero, so it works as a CI gate or pre-commit step:
+exits non-zero on an `error` finding, the level unknown and aliased keys have by
+default, so it works as a CI gate or pre-commit step:
 
 ```bash
 npx @csszyx/cli check                     # scan the whole project
@@ -156,75 +162,12 @@ _sz("base", isActive ? "active" : "inactive");
 _sz("base", { sm: "p-2", lg: "p-6" }[size]);
 ```
 
-### 5. `font-variant-numeric` takes one key per group (0.18.0)
+### 5. `font-variant-numeric`, `touch-action` and `contain` take one key per group (0.18.0)
 
-CSS allows one keyword per group of `font-variant-numeric` — figure, spacing,
-fraction, ordinal, slashed zero — and combines the groups. The eight boolean
-flags let one object hold both keywords of a group, and on the page the
-stylesheet order, not the object, then decided which one applied. Each group is
-now one key, so a later value in the same group replaces the earlier one and
-different groups combine:
-
-| Before (replaced) | After | Group |
-|---|---|---|
-| `{ liningNums: true }` / `{ oldstyleNums: true }` | `{ numFigure: 'lining' }` / `{ numFigure: 'oldstyle' }` | figure |
-| `{ proportionalNums: true }` / `{ tabularNums: true }` | `{ numSpacing: 'proportional' }` / `{ numSpacing: 'tabular' }` | spacing |
-| `{ diagonalFractions: true }` / `{ stackedFractions: true }` | `{ numFraction: 'diagonal' }` / `{ numFraction: 'stacked' }` | fraction |
-| `{ ordinal: true }` | `{ numOrdinal: true }` | ordinal |
-| `{ slashedZero: true }` | `{ numSlashedZero: true }` | slashed zero |
-| `{ fontVariant: 'normal-nums' }` | `{ nums: 'normal' }` | resets every group |
-
-The old keys emit nothing, and the build names the replacement:
-
-```text
-[csszyx] "tabularNums" was replaced at src/Table.tsx:4. Use { numSpacing: 'tabular' } instead, or run `csszyx migrate`.
-```
-
-`csszyx migrate --keys-only` rewrites them, including a ternary of literals
-(`tabularNums: c ? true : false` becomes `numSpacing: c ? 'tabular' : undefined`).
-Two old keys of one group in one object become one key holding the value that
-rendered before. Both classes used to ship, and Tailwind's stylesheet order
-picked one, so `{ tabularNums: true, proportionalNums: true }` becomes
-`{ numSpacing: 'tabular' }` whichever was written last. The same goes for
-`oldstyle` over `lining` and `stacked` over `diagonal`. A stand-alone
-`fontVariant: 'normal-nums'` sorted after every group and rendered, so
-migrate keeps `{ nums: 'normal' }` and drops the old group keys beside it.
-
-### 6. `touch-action` takes one key per group, `contain` gains keys (0.18.0)
-
-`touch-action` has the same shape as `font-variant-numeric`: groups that combine
-— horizontal pan, vertical pan, pinch zoom — and keywords that stand alone. The
-groups moved to their own keys, and `touch` keeps the stand-alone keywords.
-`contain` had no key; it now follows the same shape.
-
-| Before | After |
-|---|---|
-| `{ touch: 'pan-x' }` / `'pan-left'` / `'pan-right'` | `{ touchPanX: 'x' }` / `'left'` / `'right'` |
-| `{ touch: 'pan-y' }` / `'pan-up'` / `'pan-down'` | `{ touchPanY: 'y' }` / `'up'` / `'down'` |
-| `{ touch: 'pinch-zoom' }` | `{ touchPinchZoom: true }` |
-| `{ touch: 'auto' }` / `'none'` / `'manipulation'` | unchanged |
-| — | `{ contain: 'none' \| 'strict' \| 'content' }`, `{ containSize: 'size' \| 'inline-size' }`, `containLayout` / `containPaint` / `containStyle: true` |
-
-A moved value emits nothing. The build reports it with its replacement, in a
-ternary and inside any variant as well as at the top of the object:
-
-```text
-[csszyx] "touch: pan-x" moved to { touchPanX: 'x' } at src/Map.tsx:3. Run `csszyx migrate` to rewrite it.
-```
-
-`csszyx migrate --keys-only` rewrites it, also under the old alias
-(`touchAction: 'pan-x'` becomes `touchPanX: 'x'` in one run) and in a ternary of
-literals. When every branch lands on one group the ternary keeps its test
-(`touch: c ? 'pan-x' : 'pan-left'` becomes `touchPanX: c ? 'x' : 'left'`).
-Branches on two groups split into one key per group, each branch of the other
-group reading `undefined`.
-
-In one object the later key wins for all three properties (`nums`, `touch`,
-`contain` against their groups): the stand-alone keyword replaces the groups
-written before it, and groups written after it replace it. A `touch` keyword
-beside an old group key in one object (`{ touch: 'none', touchAction: 'pan-x' }`)
-rendered the keyword before, so migrate keeps `touch: 'none'` and drops the
-group key.
+`tabularNums: true` became `numSpacing: 'tabular'`, and `touch: 'pan-x'` became
+`touchPanX: 'x'`. `--keys-only` rewrites both. The full tables, the warnings and
+how migrate settles two old keys of one group are in
+[Upgrading to 0.18](/docs/upgrade-0-18/#font-variant-numeric-takes-one-key-per-group).
 
 ### What `--keys-only` leaves for the build
 
