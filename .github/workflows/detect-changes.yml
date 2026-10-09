@@ -41,6 +41,9 @@ on:
       cli:
         description: The CLI or a package it runs through changed, markdown and metadata excluded.
         value: ${{ jobs.classify.outputs.cli }}
+      szv_types:
+        description: Something the szv() row typing or its type-checking cost depends on changed.
+        value: ${{ jobs.classify.outputs.szv_types }}
       turbo_affected:
         description: Changes are confined to workspace packages, so turbo `--affected` is safe.
         value: ${{ jobs.classify.outputs.turbo_affected }}
@@ -72,6 +75,7 @@ jobs:
       runtime_critical: ${{ steps.refine.outputs.runtime_real }}
       next_state: ${{ steps.refine.outputs.next_real }}
       cli: ${{ steps.refine.outputs.cli_real }}
+      szv_types: ${{ steps.filter.outputs.szv_types }}
       # 'true' only for PRs whose changes are confined to workspace
       # packages — the case where turbo's `--affected` is provably safe.
       # Pushes (main) and full_surface changes always run the full set.
@@ -207,6 +211,20 @@ jobs:
               - 'packages/cli/**'
               - 'packages/compiler/**'
               - 'packages/unplugin/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/detect-changes.yml'
+            # What the szv() type-cost gate measures: the row typing, the
+            # SzProps it checks rows against (with the compiler declarations
+            # around it), the gate itself and the workflows that run it. A
+            # TypeScript upgrade moves the count too; it arrives as a lockfile
+            # change, which ci.yml adds through lock_code.
+            szv_types:
+              - 'packages/runtime/src/variants.ts'
+              - 'packages/compiler/src/types/**'
+              - 'packages/compiler/src/index.ts'
+              - 'packages/compiler/src/transform-core.ts'
+              - 'scripts/check-szv-type-cost.mjs'
+              - 'scripts/check-szv-type-cost.test.mjs'
               - '.github/workflows/ci.yml'
               - '.github/workflows/detect-changes.yml'
             pkg_json:

@@ -289,6 +289,15 @@ jobs:
       - name: Type check
         run: pnpm type-check
 
+      # Type-checking cost of the szv() row typing, as a tsc instantiation
+      # count of a fixed fixture: deterministic, so a budget rather than a
+      # timing. Needs the compiler declarations the build above wrote. Runs
+      # only when something it measures changed; a direct-dependency change
+      # counts, since a TypeScript upgrade moves the number.
+      - name: szv type-checking cost
+        if: needs.detect-changes.outputs.szv_types == 'true' || needs.detect-changes.outputs.lock_code == 'true'
+        run: pnpm check:szv-type-cost
+
   test:
     name: Test
     needs: detect-changes

@@ -201,8 +201,9 @@ pnpm check:classify-coverage
 
 # Type-checking cost of the `szv()` row typing, as an instantiation count —
 # deterministic, so a budget rather than a timing. Reads the compiler's built
-# declarations, which the build just above wrote. Not yet a CI step: wiring it
-# into ci.yml (after "Type check") is a workflow edit left for a PR of its own.
+# declarations, which the build just above wrote. CI runs it after "Type check"
+# in the Lint job, only when `detect-changes` reports `szv_types` or `lock_code`;
+# here it always runs.
 echo "[verify-like-ci] szv type-checking cost (tsc instantiations of a fixed fixture)..."
 pnpm check:szv-type-cost
 
