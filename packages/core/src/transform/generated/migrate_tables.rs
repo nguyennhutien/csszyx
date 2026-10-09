@@ -24,7 +24,17 @@ pub(crate) struct BooleanValue {
 
 /// `ALIGN_CONTENT_KEYWORDS` from reverse-map.ts, in source order.
 pub(crate) const ALIGN_CONTENT_KEYWORDS: &[&str] = &[
-    "normal", "center", "start", "end", "between", "around", "evenly", "baseline", "stretch",
+    "normal",
+    "center",
+    "center-safe",
+    "start",
+    "end",
+    "end-safe",
+    "between",
+    "around",
+    "evenly",
+    "baseline",
+    "stretch",
 ];
 
 /// Whether `value` is in `ALIGN_CONTENT_KEYWORDS`.
@@ -33,8 +43,10 @@ pub(crate) fn align_content_keywords(value: &str) -> bool {
         value,
         "normal"
             | "center"
+            | "center-safe"
             | "start"
             | "end"
+            | "end-safe"
             | "between"
             | "around"
             | "evenly"
@@ -340,6 +352,12 @@ pub(crate) const FRACTION_SUPPORTED: &[&str] = &[
     "inset-e",
     "inset-bs",
     "inset-be",
+    "block",
+    "inline",
+    "min-block",
+    "max-block",
+    "min-inline",
+    "max-inline",
     "translate-x",
     "translate-y",
     "translate",
@@ -371,6 +389,12 @@ pub(crate) fn fraction_supported(value: &str) -> bool {
             | "inset-e"
             | "inset-bs"
             | "inset-be"
+            | "block"
+            | "inline"
+            | "min-block"
+            | "max-block"
+            | "min-inline"
+            | "max-inline"
             | "translate-x"
             | "translate-y"
             | "translate"

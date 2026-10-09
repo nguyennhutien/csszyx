@@ -624,6 +624,59 @@ mod tests {
         assert_eq!(colour.prop, "ringColor");
     }
 
+    /// One parsed class as `prop=value`, for a compact expectation.
+    fn prop_value(class: &str) -> String {
+        parse_class(class).map_or_else(
+            || "null".to_string(),
+            |parsed| {
+                let value = serde_json::to_string(&parsed.value).expect("a value serialises");
+                format!("{}={value}", parsed.prop)
+            },
+        )
+    }
+
+    #[test]
+    fn a_logical_size_fraction_keeps_its_fraction() {
+        // `block-1/2` is half the containing block. Read as an opacity
+        // modifier it became `blockSize: 1`, a quarter-rem, with no warning.
+        for (class, expected) in [
+            ("block-1/2", r#"blockSize="1/2""#),
+            ("inline-1/3", r#"inlineSize="1/3""#),
+            ("min-block-1/2", r#"minBlockSize="1/2""#),
+            ("max-block-2/3", r#"maxBlockSize="2/3""#),
+            ("min-inline-1/4", r#"minInlineSize="1/4""#),
+            ("max-inline-3/4", r#"maxInlineSize="3/4""#),
+            ("block-4", "blockSize=4"),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+    }
+
+    #[test]
+    fn every_align_content_keyword_is_align_content() {
+        // `content-center-safe` is `align-content: safe center`; read as the
+        // `content` property it lowered to `content-[center-safe]`.
+        for keyword in [
+            "normal",
+            "center",
+            "center-safe",
+            "start",
+            "end",
+            "end-safe",
+            "between",
+            "around",
+            "evenly",
+            "baseline",
+            "stretch",
+        ] {
+            assert_eq!(
+                prop_value(&format!("content-{keyword}")),
+                format!(r#"alignContent="{keyword}""#),
+                "content-{keyword}"
+            );
+        }
+    }
+
     /// One parsed mask class as JSON, for a compact expectation.
     fn mask_json(class: &str) -> String {
         parse_class(class).map_or_else(
