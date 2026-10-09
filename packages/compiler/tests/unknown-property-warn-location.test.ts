@@ -1,8 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { transformRust, transformSource, transformWasm } from '../src/index.js';
-import { setSzWarnLocation, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    isKnownSzPropertyKey,
+    MIGRATION_NOTES,
+    SUGGESTION_MAP,
+    setSzWarnLocation,
+    transform,
+} from '../src/transform-core.js';
 import { RUST_LANE } from './engine-parity-harness.js';
+
+// Runtime reports print once per message per process; each test asks afresh.
+beforeEach(() => {
+    __resetSzWarnDedupForTests();
+});
 
 function captureWarnings(action: () => void): string[] {
     const calls: string[] = [];
@@ -543,5 +555,54 @@ describe('runtime warning context — defensive edges', () => {
         expect(msg).toBeTruthy();
         // JSON.stringify throws → the shape is omitted, but the warning still fires.
         expect(msg).not.toContain('sz object was ');
+    });
+});
+
+describe('unknown-property warning — repeated at runtime', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        __resetSzWarnDedupForTests();
+    });
+
+    it('prints once per key, however often the object is lowered', () => {
+        // Server-side lowering runs on every render; the report says nothing new
+        // the second time, so it would only bury the first one.
+        __resetSzWarnDedupForTests();
+        const warnings = captureWarnings(() => {
+            for (let render = 0; render < 3; render++) {
+                transform({ xyzzy: 4, plugh: 2 } as never);
+                transform({ backgroundColor: 'red-500' } as never);
+            }
+        });
+
+        const about = (start: string) => warnings.filter(w => w.startsWith(start));
+        expect(about('[csszyx] Unknown property "xyzzy"')).toHaveLength(1);
+        expect(about('[csszyx] Unknown property "plugh"')).toHaveLength(1);
+        expect(about('[csszyx] Use the canonical key "bg"')).toHaveLength(1);
+    });
+});
+
+describe('unknown-property warning — a flood of distinct keys', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('stops at 512 and says once that it stopped', () => {
+        const warnings = captureWarnings(() => {
+            for (let index = 0; index < 600; index++) {
+                transform({ [`dataKey${index}`]: 4 } as never);
+            }
+        });
+
+        expect(warnings.filter(w => w.startsWith('[csszyx] Unknown property'))).toHaveLength(512);
+        expect(warnings.filter(w => w.includes('further ones are suppressed'))).toHaveLength(1);
+    });
+});
+
+describe('alias and removed keys', () => {
+    it('are never known keys, so their report never needs the check', () => {
+        // The alias branch reports without asking `isKnownSzPropertyKey`.
+        const keys = [...Object.keys(SUGGESTION_MAP), ...Object.keys(MIGRATION_NOTES)];
+        expect(keys.filter(key => isKnownSzPropertyKey(key))).toEqual([]);
     });
 });

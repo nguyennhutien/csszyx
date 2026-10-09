@@ -56,4 +56,29 @@ describe('isInsideWorkspace', () => {
         await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'solo' }));
         expect(await isInsideWorkspace(dir)).toBe(false);
     });
+
+    it('walks past a package.json that is not JSON', async () => {
+        await writeFile(path.join(dir, 'package.json'), '{ not json');
+        const pkg = path.join(dir, 'web');
+        await mkdir(pkg);
+        expect(await isInsideWorkspace(pkg)).toBe(false);
+    });
+
+    it('answers for the nearest workspace root before a farther unreadable one', async () => {
+        // Every ancestor is asked at once; the answer is still the walk's.
+        await mkdir(path.join(dir, 'package.json'));
+        const pkg = path.join(dir, 'repo', 'web');
+        await mkdir(pkg, { recursive: true });
+        await writeFile(path.join(dir, 'repo', 'nx.json'), '{}');
+        expect(await isInsideWorkspace(pkg)).toBe(true);
+    });
+
+    it('fails on an unreadable package.json no nearer root answered for', async () => {
+        // A directory where the file should be: the read fails with EISDIR,
+        // which is not the missing file the walk steps past.
+        await mkdir(path.join(dir, 'package.json'));
+        const pkg = path.join(dir, 'web');
+        await mkdir(pkg);
+        await expect(isInsideWorkspace(pkg)).rejects.toMatchObject({ code: 'EISDIR' });
+    });
 });

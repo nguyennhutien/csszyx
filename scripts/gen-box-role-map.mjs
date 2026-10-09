@@ -13,8 +13,9 @@
  * The box-ROLE assignment itself is a new classification (the compiler's
  * `PROPERTY_CATEGORY_MAP` is value-TYPE — `p` and `m` are both SPACING but
  * padding is inner and margin is outer), so the source of truth for the role
- * lives here in `BOX_ROLE_RULES`. `--check` asserts every `PROPERTY_MAP` key is
- * classified, so a new compiler prop fails CI until it is given a role.
+ * lives here in `BOX_ROLE_RULES`. `--check` asserts every `PROPERTY_MAP` key and
+ * every `KNOWN_SPECIAL_PROPERTIES` key except `css` is classified, so a new
+ * compiler prop fails CI until it is given a role.
  *
  * Usage:
  *   node --import tsx/esm scripts/gen-box-role-map.mjs           # write
@@ -48,8 +49,9 @@ const CLOSED_ENUM_VALUES = readTableSource(
 
 /**
  * Source of truth for the box-model role of every sz prop. Each rule lists the
- * EXACT sz prop keys it owns; the generator asserts the union equals
- * `PROPERTY_MAP`'s keys (no silent gaps, no key in two rules). Contested calls
+ * EXACT sz prop keys it owns; the generator asserts the union covers
+ * `PROPERTY_MAP`'s keys and adds only special keys (no silent gaps, no key in
+ * two rules). Contested calls
  * (sizing→outer, display→inner, bg→outer, overflow→inner, visibility→outer) are
  * the deliberate defaults — every one is overridable at `splitBox` call time.
  *
@@ -200,7 +202,11 @@ const BOX_ROLE_RULES = [
             'bgBlend',
         ],
     },
-    { role: 'outer', category: 'gradient', keys: ['from', 'via', 'to'] },
+    {
+        role: 'outer',
+        category: 'gradient',
+        keys: ['from', 'via', 'to', 'fromPos', 'viaPos', 'toPos'],
+    },
     // visibility → OUTER (contested): toggles the whole element, not its content.
     { role: 'outer', category: 'visibility', keys: ['visibility'] },
     { role: 'outer', category: 'opacity', keys: ['opacity'] },
@@ -288,6 +294,9 @@ const BOX_ROLE_RULES = [
             'maskConic',
             'maskClip',
             'maskOrigin',
+            'maskComposite',
+            'maskMode',
+            'maskType',
         ],
     },
     { role: 'outer', category: 'color-scheme', keys: ['scheme', 'forcedColorAdjust'] },
@@ -368,7 +377,7 @@ const BOX_ROLE_RULES = [
     {
         role: 'inner',
         category: 'alignment',
-        keys: ['items', 'justify', 'justifyItems', 'placeContent', 'placeItems'],
+        keys: ['items', 'justify', 'justifyItems', 'alignContent', 'placeContent', 'placeItems'],
     },
     { role: 'inner', category: 'gap', keys: ['gap', 'gapX', 'gapY'] },
     {
@@ -425,8 +434,9 @@ const BOX_ROLE_RULES = [
     },
     // `snap-type` makes THIS box a snap container for its children; `snap-align`
     // and `snap-stop` say how this box snaps inside its ANCESTOR's container,
-    // the way `m-*` is measured against the parent.
-    { role: 'inner', category: 'snap', keys: ['snapType'] },
+    // the way `m-*` is measured against the parent. The strictness is the
+    // second half of `scroll-snap-type`, so it goes where the type goes.
+    { role: 'inner', category: 'snap', keys: ['snapType', 'snapStrictness'] },
     { role: 'outer', category: 'snap', keys: ['snapAlign', 'snapStop'] },
     // Scroll margin is the box's own outset in its ancestor's scrollport;
     // scroll padding insets the scrollport this box establishes.
@@ -516,11 +526,12 @@ function buildPropertyKeyRoles() {
             `[gen-box-role-map] ${missing.length} PROPERTY_MAP key(s) have no box role — add them to BOX_ROLE_RULES: ${missing.join(', ')}`,
         );
     }
-    // Keys lowered by a dedicated object branch have no PROPERTY_MAP prefix but
-    // are still valid sz keys that splitBoxSz has to route, so they are allowed
-    // here by name. Anything else not in PROPERTY_MAP is a stale rule.
-    const OBJECT_ONLY_KEYS = new Set(['maskLinear', 'maskRadial', 'maskConic']);
-    const extra = [...keyRole.keys()].filter(k => !(k in PROPERTY_MAP) && !OBJECT_ONLY_KEYS.has(k));
+    // Special keys are lowered by a dedicated branch and have no PROPERTY_MAP
+    // prefix, but they are still valid sz keys that splitBoxSz has to route.
+    // Anything else not in PROPERTY_MAP is a stale rule.
+    const extra = [...keyRole.keys()].filter(
+        k => !(k in PROPERTY_MAP) && !KNOWN_SPECIAL_PROPERTIES.has(k),
+    );
     if (extra.length > 0) {
         throw new Error(
             `[gen-box-role-map] BOX_ROLE_RULES has key(s) not in PROPERTY_MAP (stale): ${extra.join(', ')}`,
@@ -528,6 +539,69 @@ function buildPropertyKeyRoles() {
     }
     return { keyRole, propertyKeys };
 }
+
+/**
+ * Special sz keys that are deliberately left without a role.
+ *
+ * `css` takes raw CSS declarations, and those can belong to either side of the
+ * border at once, so no single role is right for the key. `splitBoxSz` keeps
+ * the whole object on the fallback node — where `splitBox` puts the
+ * `[prop:val]` classes it compiles to — and says so in development.
+ */
+const UNROUTED_SPECIAL_KEYS = new Set(['css']);
+
+/**
+ * Assert every special sz key has a row, except the ones left unrouted on
+ * purpose, and that those have none. A special key has no PROPERTY_MAP prefix,
+ * so the coverage check on PROPERTY_MAP cannot see it: without this, the next
+ * one would route by `splitBoxSz`'s fallback while `splitBox` routes its class.
+ *
+ * @param keyRoles - sz key → role, complete.
+ * @param specials - The compiler's special keys.
+ */
+export function assertSpecialKeysHaveRoles(keyRoles, specials = KNOWN_SPECIAL_PROPERTIES) {
+    const missing = [...specials].filter(k => !UNROUTED_SPECIAL_KEYS.has(k) && !keyRoles.has(k));
+    if (missing.length > 0) {
+        throw new Error(
+            `[gen-box-role-map] ${missing.length} special sz key(s) have no box role — add them to BOX_ROLE_RULES or VALUE_KEYED_ROLE: ${missing.join(', ')}`,
+        );
+    }
+    const routed = [...UNROUTED_SPECIAL_KEYS].filter(k => keyRoles.has(k));
+    if (routed.length > 0) {
+        throw new Error(
+            `[gen-box-role-map] ${routed.join(', ')} must stay without a box role (raw CSS has no single side)`,
+        );
+    }
+}
+
+/**
+ * The `content-<keyword>` classes `alignContent` emits that Tailwind serves as
+ * `align-content`, measured on `tailwindcss@4.3.3`. `content-none` is NOT one:
+ * it is the generated-content property, as is arbitrary `content-['x']`.
+ */
+export const ALIGN_CONTENT_VALUES = [
+    'normal',
+    'center',
+    'center-safe',
+    'start',
+    'end',
+    'end-safe',
+    'between',
+    'around',
+    'evenly',
+    'baseline',
+    'stretch',
+];
+
+/**
+ * Special keys whose class shares a prefix with another family, so each listed
+ * value gets an exact token on the key's own row. `content-*` is the
+ * generated-content prefix (text); without these rows `content-center` read as
+ * text while `{ alignContent: 'center' }` read as alignment.
+ */
+const SPECIAL_KEY_TOKENS = {
+    alignContent: { prefix: 'content', values: ALIGN_CONTENT_VALUES },
+};
 
 /** The five `overflow` values, spelled the same for all three axes. */
 const OVERFLOW_VALUES = ['auto', 'hidden', 'clip', 'visible', 'scroll'];
@@ -774,6 +848,18 @@ function buildExactTokens(keyRole) {
             });
         }
     }
+    for (const [key, { prefix, values }] of Object.entries(SPECIAL_KEY_TOKENS)) {
+        const base = keyRole.get(key);
+        for (const value of values) {
+            const token = transform({ [key]: value }).className.trim();
+            if (token !== `${prefix}-${value}`) {
+                throw new Error(
+                    `[gen-box-role-map] "${key}: '${value}'" emitted "${token}", not "${prefix}-${value}"`,
+                );
+            }
+            addToken(tokens, token, { role: base.role, category: base.category, prefix, value });
+        }
+    }
     for (const { key, value } of Object.values(REMOVED_BOOLEAN_SUGAR)) {
         const role = VALUE_KEYED_ROLE[key];
         if (!role) {
@@ -929,6 +1015,7 @@ export function buildRoleMaps() {
     const tokens = buildExactTokens(keyRole);
     addClosedEnumTokens(tokens, keyRole, prefixes);
     const keyRoles = buildCompleteKeyRoles(keyRole);
+    assertSpecialKeysHaveRoles(keyRoles);
     markDeclaredOnBoth(prefixes, keyRoles);
     addTailwindOnly(prefixes, tokens);
     return { prefixes, tokens, keyRoles };

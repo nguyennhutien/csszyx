@@ -4844,6 +4844,17 @@ mod tests {
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 
+    /// Every key, not only a family's: the fast path leaves the object to the
+    /// AST path, which reads it as JavaScript does.
+    #[test]
+    fn a_repeated_plain_key_reads_the_first_place_and_the_last_value() {
+        let result = transform_file(&TransformFile {
+            filename: "/repo/src/Dup.jsx".to_string(),
+            source: "export const A = () => <p sz={{ p: 2, m: 1, p: 4 }} />;".to_string(),
+        });
+        assert_eq!(result.classes.join(" "), "p-4 m-1");
+    }
+
     #[test]
     fn an_alias_of_a_stand_alone_key_with_a_runtime_value_names_where_values_went() {
         let (_, moved) = layers_run("{ touchAction: m ? 'pan-x' : undefined }");

@@ -81,8 +81,9 @@ export function dynamic(szProps: SzObject | ReadonlySzObject): string {
         return className;
     }
 
-    // Trigger manifest lazy-load (non-blocking — first render uses whatever is loaded)
-    ensureManifest();
+    // Trigger manifest lazy-load (non-blocking — first render uses whatever is
+    // loaded). It never rejects: a failed fetch settles as an empty manifest.
+    void ensureManifest();
 
     const classes = className.split(' ').filter(Boolean);
     const outputClasses: string[] = [];
@@ -115,7 +116,7 @@ export function dynamic(szProps: SzObject | ReadonlySzObject): string {
  * @example
  * await preloadManifest('/csszyx-manifest.json');
  */
-export async function preloadManifest(url?: string): Promise<void> {
+export function preloadManifest(url?: string): Promise<void> {
     return manifestPreload(url);
 }
 

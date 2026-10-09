@@ -38,10 +38,10 @@ interface AuditStats {
  *
  * @param options - Command line options
  */
-export async function audit(options: AuditOptions = {}): Promise<void> {
+export function audit(options: AuditOptions = {}): void {
     const cwd = options.cwd || process.cwd();
 
-    const stats = await collectStats(cwd);
+    const stats = collectStats(cwd);
 
     if (options.json) {
         console.log(JSON.stringify(stats, null, 2));
@@ -76,7 +76,7 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
  * @param cwd - Current working directory
  * @returns The collected audit statistics
  */
-async function collectStats(cwd: string): Promise<AuditStats> {
+function collectStats(cwd: string): AuditStats {
     // Initialize default stats
     const stats: AuditStats = {
         output: { html: null, css: null },

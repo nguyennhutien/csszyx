@@ -284,6 +284,18 @@ emits its kebab-case class after warning. A key listed as an alias or removed
 migration is not a custom escape hatch: csszyx warns and drops it instead of
 silently preserving obsolete API spellings or leaving dead classes in the DOM.
 
+The unknown-key and canonical-key reports print once per message per process,
+so server-side rendering does not repeat them on every request. After 512
+distinct keys they stop, once, with:
+
+```text
+[csszyx] {count} distinct unknown sz keys have been reported; further ones are suppressed for this process. help: sz keys built from data are the usual cause — look above for one key repeating with different names.
+```
+
+An object whose keys come from data — one per record — would otherwise make
+every render a new report. The keys printed above the line name the object to
+look at. Production is unaffected.
+
 ### Values that generate no CSS
 
 | Message | Notes |
@@ -1592,6 +1604,19 @@ The help line names the one way to get the effect onto the content: an
 arbitrary child variant on the frame, `peer-hover:[&>*]:p-4`, which Tailwind
 compiles to the sibling rule followed by `> *`. `group-*`, `has-*` and `in-*`
 are not affected — their rules reach descendants, and the content node is one.
+
+### `css` went to the fallback node
+
+```text
+[csszyx] splitBoxSz: '{key}' holds raw CSS csszyx does not classify, so it went to the {node} node with everything else it could not classify. help: if its declarations belong on the other node, place it yourself with { {other}: ['{key}'] }.
+```
+
+`css` carries raw declarations, not sz keys, so `splitBoxSz` cannot tell which
+node each one belongs to. It keeps the whole object together on the fallback
+node — the frame by default, the content node with `fallback: 'inner'` — as
+`splitBox` does with the `[property:value]` classes it emits, rather than split
+it by declaration name. Naming `css` in `inner` or `outer` places it and
+silences the warning.
 
 ### A qualified selector names a property csszyx does not tell apart
 

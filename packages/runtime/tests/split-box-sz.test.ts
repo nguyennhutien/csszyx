@@ -1,7 +1,16 @@
-import { PROPERTY_MAP, transform } from '@csszyx/compiler';
-import { describe, expect, it } from 'vitest';
+import { KNOWN_SPECIAL_PROPERTIES, PROPERTY_MAP, transform } from '@csszyx/compiler';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BOX_ROLE_BY_KEY } from '../src/box-role-map.generated.js';
-import { classify, classifySzKey, hasSz, omitSz, pickSz, splitBoxSz } from '../src/split-box.js';
+import { resetDevWarnCache } from '../src/dev-warn.js';
+import {
+    classify,
+    classifySzKey,
+    has,
+    hasSz,
+    omitSz,
+    pickSz,
+    splitBoxSz,
+} from '../src/split-box.js';
 
 describe('splitBoxSz', () => {
     it('partitions an sz object at the border line (the report case)', () => {
@@ -114,18 +123,52 @@ describe('splitBoxSz parity with splitBox(compile(x))', () => {
         ['rounded', 'lg'],
         ['text', 'sm'],
         ['bg', 'red-500'],
+        // Special keys: lowered by a dedicated branch, no PROPERTY_MAP prefix.
+        ['alignContent', 'center'],
+        ['fromPos', '10%'],
+        ['viaPos', '30%'],
+        ['toPos', '90%'],
+        ['maskComposite', 'intersect'],
+        ['maskMode', 'luminance'],
+        ['maskType', 'alpha'],
+        ['snapStrictness', 'mandatory'],
     ];
 
-    it('routes each key to the role its compiled class is classified as', () => {
-        for (const [key, value] of samples) {
-            const token = transform({ [key]: value })
-                .className.trim()
-                .split(/\s+/)[0];
-            const stringRole = classify(token)?.role;
-            const { outer } = splitBoxSz({ [key]: value });
-            const objectRole = key in outer ? 'outer' : 'inner';
-            expect(objectRole, `${key}:${value} → ${token}`).toBe(stringRole);
-        }
+    // Under `fallback: 'inner'` too: an unrouted outer key lands on the frame
+    // by the default fallback and only reads as parity by accident.
+    it.each(['outer', 'inner'] as const)(
+        'routes each key to the role its compiled class is classified as (fallback %s)',
+        fallback => {
+            for (const [key, value] of samples) {
+                const token = transform({ [key]: value })
+                    .className.trim()
+                    .split(/\s+/)[0];
+                const stringRole = classify(token)?.role;
+                const { outer } = splitBoxSz({ [key]: value }, { fallback });
+                const objectRole = key in outer ? 'outer' : 'inner';
+                expect(objectRole, `${key}:${value} → ${token}`).toBe(stringRole);
+            }
+        },
+    );
+
+    it('answers the alignment category for align-content on both sides', () => {
+        expect(classifySzKey('alignContent')).toEqual({
+            role: 'inner',
+            category: 'alignment',
+            confidence: 'exact',
+        });
+        expect(classify('content-center')).toMatchObject({
+            role: 'inner',
+            category: 'alignment',
+            confidence: 'exact',
+        });
+        expect(has('content-between', 'alignment')).toBe(true);
+        expect(
+            pickSz({ alignContent: 'center', placeContent: 'center', m: 1 }, 'alignment'),
+        ).toEqual({ alignContent: 'center', placeContent: 'center' });
+        // `content-none` and arbitrary content stay generated content.
+        expect(classify('content-none')?.category).toBe('text');
+        expect(classify("content-['x']")?.category).toBe('text');
     });
 
     it('routes every mapped sz key to its declared role, exactly once', () => {
@@ -145,9 +188,72 @@ describe('splitBoxSz parity with splitBox(compile(x))', () => {
         }
     });
 
-    it('covers every PROPERTY_MAP key', () => {
-        const missing = Object.keys(PROPERTY_MAP).filter(k => !BOX_ROLE_BY_KEY.has(k));
+    it('covers every PROPERTY_MAP key and every special key except css', () => {
+        const keys = [
+            ...Object.keys(PROPERTY_MAP),
+            ...[...KNOWN_SPECIAL_PROPERTIES].filter(k => k !== 'css'),
+        ];
+        const missing = keys.filter(k => !BOX_ROLE_BY_KEY.has(k));
         expect(missing).toEqual([]);
+        expect(BOX_ROLE_BY_KEY.has('css')).toBe(false);
+    });
+});
+
+describe('the css key is raw CSS, routed whole by the fallback', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        resetDevWarnCache();
+    });
+
+    // Its properties can belong to either side, and splitBox cannot classify
+    // the `[prop:val]` classes it compiles to, so both go to the fallback node.
+    it.each(['outer', 'inner'] as const)('keeps the whole object on the %s fallback', fallback => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // `display`/`color` are inner sz keys and `opacity` an outer one, so a
+        // recursion into `css` would tear it across both nodes.
+        const css = { display: 'grid', color: 'red', opacity: '0.5' };
+        const { outer, inner } = splitBoxSz({ css, m: 4 }, { fallback });
+        const expected = fallback === 'outer' ? { css, m: 4 } : { m: 4 };
+        expect(outer).toEqual(expected);
+        expect(inner).toEqual(fallback === 'inner' ? { css } : {});
+    });
+
+    it('matches where splitBox puts the compiled class, under a variant too', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(splitBoxSz({ hover: { css: { color: 'red' } } })).toEqual({
+            outer: { hover: { css: { color: 'red' } } },
+            inner: {},
+        });
+    });
+
+    it('can be placed by name', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(splitBoxSz({ css: { color: 'red' } }, { inner: ['css'] })).toEqual({
+            outer: {},
+            inner: { css: { color: 'red' } },
+        });
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns in development that the fallback placed it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        splitBoxSz({ css: { color: 'red' } });
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toMatch(
+            /splitBoxSz: 'css'.*frame node.*\{ inner: \['css'\] \}/,
+        );
+    });
+
+    it('is a leaf for hasSz / pickSz / omitSz', () => {
+        const sz = { css: { color: 'red', opacity: '0.5' }, m: 4 };
+        expect(hasSz(sz, 'inner')).toBe(false);
+        expect(hasSz(sz, 'text')).toBe(false);
+        expect(hasSz(sz, 'css')).toBe(true);
+        expect(pickSz(sz, 'inner')).toEqual({});
+        expect(pickSz(sz, 'outer')).toEqual({ m: 4 });
+        expect(pickSz(sz, 'css')).toEqual({ css: { color: 'red', opacity: '0.5' } });
+        expect(omitSz(sz, 'text')).toEqual(sz);
+        expect(omitSz(sz, 'css')).toEqual({ m: 4 });
     });
 });
 

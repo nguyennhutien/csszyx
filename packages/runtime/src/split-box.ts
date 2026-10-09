@@ -548,7 +548,9 @@ type SelectorFamily = 'class' | 'sz';
 function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolean {
     if (selector === 'outer' || selector === 'inner' || selector === 'content') return true;
     if (getKnownCategories().has(selector)) return true;
-    if (family === 'sz') return BOX_ROLE_BY_KEY.has(selector);
+    // `css` has no row on purpose, but it is a real sz key: `pickSz(sz, 'css')`
+    // asks for it by name, the way the fallback warning tells authors to.
+    if (family === 'sz') return selector === RAW_CSS_KEY || BOX_ROLE_BY_KEY.has(selector);
     // A whole class (`overflow-hidden`), a prefix deeper than the table's
     // (`bg-red`) and the table's own prefix (`bg`) all start with a segment the
     // tables know; a typo (`widht`) or a property name (`width`) does not.
@@ -1254,6 +1256,10 @@ export interface SplitBoxSzResult {
  * the role the emitted class would have. Without it the key's own role is
  * returned, which is what the class for any other value has.
  *
+ * `css` answers `undefined` on purpose: it holds raw CSS declarations that can
+ * belong to either side at once, so `splitBoxSz` keeps the whole object on the
+ * fallback node, where `splitBox` puts the `[prop:val]` classes it compiles to.
+ *
  * @param key - An sz prop key (e.g. `'m'`, `'px'`, `'grow'`).
  * @param value - The value the key holds, when it is known.
  * @returns The key's role and category, or `undefined` if unowned.
@@ -1281,6 +1287,47 @@ export function classifySzKey(key: string, value?: SzValue): Classification | un
 function roleForValue(entry: BoxRoleEntry, value: SzValue | undefined): BoxRole {
     if (entry.byValue === undefined || typeof value !== 'string') return entry.role;
     return entry.byValue.get(value) ?? entry.role;
+}
+
+/**
+ * The sz key whose value is raw CSS (`{ css: { display: 'grid' } }`). It has no
+ * role, and its object is declarations, not a variant: recursing into it would
+ * read CSS property names as sz keys and tear one declaration block across
+ * both nodes.
+ */
+const RAW_CSS_KEY = 'css';
+
+/**
+ * Is this entry a variant container to recurse into (`hover`, `md`, `[&_*]`),
+ * rather than routed whole — a property key, a scalar, or raw CSS?
+ *
+ * @param key - The sz key.
+ * @param entry - The key's classification, or `undefined` if unowned.
+ * @param value - The value the key holds.
+ * @returns `true` when the entry is a variant container.
+ */
+function isVariantContainer(
+    key: string,
+    entry: BoxRoleEntry | undefined,
+    value: SzValue,
+): value is SzObject {
+    return entry === undefined && key !== RAW_CSS_KEY && isPlainObject(value);
+}
+
+/**
+ * Say that the fallback placed the raw `css` object, the sz-object analog of
+ * the warning `splitBox` gives the `[prop:val]` classes it compiles to.
+ * Development only; the caller guards on `NODE_ENV`.
+ *
+ * @param fallback - The role the fallback sent it to.
+ */
+function warnUnplacedCss(fallback: BoxRole): void {
+    const node = fallback === 'outer' ? 'frame' : 'content';
+    const other = fallback === 'outer' ? 'inner' : 'outer';
+    devWarn(
+        `splitBoxSz: '${RAW_CSS_KEY}' holds raw CSS csszyx does not classify, so it went to the ${node} node with everything else it could not classify. ` +
+            `help: if its declarations belong on the other node, place it yourself with { ${other}: ['${RAW_CSS_KEY}'] }.`,
+    );
 }
 
 /**
@@ -1395,7 +1442,8 @@ function flattenSz(sz: SzInput, depth: number): SzObject {
  * routes by its box role (overrides win, `inner` checked first); an unowned key
  * with a nested object is a variant container (`hover`, `md`, `[&_*]`, …) and is
  * recursed, so it lands by the role of the property inside it and splits across
- * buckets when its inner properties disagree.
+ * buckets when its inner properties disagree. `css` is the exception: its object
+ * is raw CSS, kept whole on the fallback node.
  *
  * @param obj - The sz object to partition.
  * @param options - The partition overrides and fallback.
@@ -1470,7 +1518,10 @@ function partitionSzEntry(key: string, value: SzValue, context: SzPartitionConte
         (roleForValue(entry, value) === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
-    if (!isPlainObject(value)) {
+    if (!isVariantContainer(key, entry, value)) {
+        if (key === RAW_CSS_KEY && process.env.NODE_ENV !== 'production') {
+            warnUnplacedCss(context.fallback);
+        }
         (context.fallback === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
@@ -1519,7 +1570,7 @@ function filterSz(obj: SzObject, selector: BoxSelector, keep: boolean, depth: nu
         if (isForbiddenSzKey(key)) continue;
         const value = obj[key];
         const entry = BOX_ROLE_BY_KEY.get(key);
-        if (entry || !isPlainObject(value)) {
+        if (!isVariantContainer(key, entry, value)) {
             if (matchesKey(key, entry, selector) === keep) result[key] = value;
         } else {
             const sub = filterSz(value, selector, keep, depth + 1);
@@ -1546,7 +1597,7 @@ export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
             const value = obj[key];
             const entry = BOX_ROLE_BY_KEY.get(key);
             if (matchesKey(key, entry, selector)) return true;
-            if (!entry && isPlainObject(value) && scan(value, depth + 1)) return true;
+            if (isVariantContainer(key, entry, value) && scan(value, depth + 1)) return true;
         }
         return false;
     };

@@ -103,7 +103,7 @@ export function ensureManifest(): Promise<void> {
  * @param url - optional manifest URL override (default: '/csszyx-manifest.json')
  * @returns promise that resolves when the manifest has been fetched and cached
  */
-export async function preloadManifest(url?: string): Promise<void> {
+export function preloadManifest(url?: string): Promise<void> {
     if (url) {
         setManifestUrl(url);
     }

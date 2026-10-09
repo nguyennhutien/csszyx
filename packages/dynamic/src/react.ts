@@ -144,8 +144,8 @@ export function useSz(): UseSzReturn {
         _mountedConsumers++;
         // Cancel any pending cleanup from a previous unmount (handles StrictMode remount).
         cancelPendingCleanup();
-        // Pre-fetch manifest (non-blocking)
-        preloadManifest(manifestUrl);
+        // Pre-fetch manifest (non-blocking; a failed fetch settles, never rejects)
+        void preloadManifest(manifestUrl);
 
         return () => {
             _mountedConsumers--;
@@ -195,7 +195,7 @@ interface CsszyxProviderProps {
 export function CsszyxProvider({ manifest, children }: CsszyxProviderProps): ReactElement {
     useEffect(() => {
         setManifestUrl(manifest);
-        preloadManifest(manifest);
+        void preloadManifest(manifest);
     }, [manifest]);
 
     return createElement(CsszyxContext.Provider, { value: { manifestUrl: manifest } }, children);

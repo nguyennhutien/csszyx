@@ -1,4 +1,4 @@
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
 const shared = {
     ...base,
@@ -9,7 +9,7 @@ const shared = {
     deps: { neverBundle: ['esbuild', 'rollup', 'vite', 'webpack'] },
 };
 
-export default [
+export default defineBuild([
     {
         ...shared,
         entry: {
@@ -59,4 +59,4 @@ export default [
             },
         },
     },
-];
+]);

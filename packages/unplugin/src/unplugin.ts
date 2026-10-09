@@ -5439,9 +5439,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * `state.authoredClasses` is complete, and nothing has been written yet.
      * The stylesheets come from the walk the theme scan already did.
      *
-     * @returns Nothing; the result lands in `unservedClasses`.
+     * @returns Nothing once the result lands in `unservedClasses`; a promise
+     *          because every caller sequences on it, so a late hook or an
+     *          unread stylesheet rejects it rather than throwing at the call.
      */
-    async function computeUnservedClasses(): Promise<void> {
+    function computeUnservedClasses(): Promise<void> {
+        return Promise.resolve().then(settleUnservedFromScan);
+    }
+
+    /** The body of `computeUnservedClasses`, run once the call has returned. */
+    function settleUnservedFromScan(): void {
         // Tailwind's own scan, taken once here: the table needs it, and it
         // reaches files the project walk does not (an `@source`d package, a
         // Markdown page), whose hooks are read now. On a monorepo root it can
@@ -5458,7 +5465,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // `followSourceHooks`.
         const late = serving ? null : lateHookMessage();
         if (late !== null) throw new Error(late);
-        await settleUnservedClasses(scanned);
+        settleUnservedClasses(scanned);
         mergeTableSettled = true;
         // The same module the chunk embeds, as a file: jest has no bundler to
         // settle the table under and imports what the last build settled. An
@@ -5478,7 +5485,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the results land in `unservedClasses` and
      *          `mergeSignatureTable`.
      */
-    async function settleUnservedClasses(scanned: readonly string[]): Promise<void> {
+    function settleUnservedClasses(scanned: readonly string[]): void {
         // Every lane opened the model before its first transform. Without it
         // the list would come back empty, which reads as "Tailwind serves every
         // class" and places each name wrong without a word.
@@ -8215,16 +8222,19 @@ export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin 
         name: 'csszyx',
         /**
          * Registers both pre and post plugin setup hooks with the esbuild build.
+         * unplugin registers each phase's `onLoad` after an `await`, so the
+         * promise goes back to esbuild, which waits on it before building and
+         * fails the build when it rejects.
          * @param build - the esbuild plugin build context
          */
-        setup(build: PluginBuild) {
+        async setup(build: PluginBuild) {
             // `unplugin` resolves esbuild via vite's hoisted esbuild@0.21.x while our
             // local peer is esbuild@0.27.x — type-incompatible but identical at runtime.
             const b = build as unknown as Parameters<
                 ReturnType<typeof prePlugin.esbuild>['setup']
             >[0];
-            prePlugin.esbuild(safeOptions).setup(b);
-            postPlugin.esbuild(safeOptions).setup(b);
+            await prePlugin.esbuild(safeOptions).setup(b);
+            await postPlugin.esbuild(safeOptions).setup(b);
         },
     };
 };

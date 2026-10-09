@@ -30,6 +30,22 @@ import { buildSync } from 'esbuild';
  * install-size question that method answered is the wasm budget's job, the
  * one artifact where package weight is what users pay.
  *
+ * Every app-bundle budget carries two kinds of ceiling. `maxGzipBytes` caps
+ * the union of its entries — what an app that imports all of them ships, and
+ * the bundle whose console messages are checked. `entryBudgets` caps each
+ * export subpath bundled on its own, the way size-limit lists one check per
+ * entry: an app that imports only `@csszyx/runtime/lite` pays for `/lite`, and
+ * a heavy import added to a light entry hides inside the union, which the
+ * largest entry already dominates (the 13 KB browser transform landing in a
+ * 400-byte entry moves the union by little and the entry by 30x). Every
+ * runtime subpath in scope needs a budget and every budget a subpath, so a new
+ * export cannot ship unmeasured. Scope is every JS export minus the ones a
+ * budget names in `excludeSubpaths` — an exclusion list, never an inclusion
+ * one, so a subpath added to `exports` is measured until someone decides in
+ * this file that it never reaches a browser. The union stays because it is the one
+ * bundle that holds every message the package can print, and because the
+ * entries' headrooms add up: each entry can grow ~300 bytes and still pass.
+ *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
  * Crossing one is a one-line change to the number below plus a sentence in the
@@ -53,7 +69,21 @@ export const SIZE_BUDGETS = [
         name: '@csszyx/runtime app bundle',
         kind: 'app-bundle',
         target: 'packages/runtime',
-        maxGzipBytes: 15_750,
+        // Raised from 15,750 on 2026-10-08, measured 15,851: `splitBox` and
+        // `splitBoxSz` gained the box roles of nine special keys, the
+        // `content-<keyword>` alignment tokens, and `css` kept whole on the
+        // fallback node. Budget set the usual ~300 above the measurement.
+        maxGzipBytes: 16_150,
+        // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
+        // 8,144 / 1,082.
+        entryBudgets: {
+            '.': 15_700,
+            './lite': 750,
+            './core': 1_650,
+            './lowering': 750,
+            './split': 8_450,
+            './merge': 1_400,
+        },
         // Each one reports csszyx's own output as wrong, an integrity check
         // failing, or prints only because the app turned `debug` on (ADR
         // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
@@ -87,18 +117,44 @@ export const SIZE_BUDGETS = [
         // 13,902 measured with React bundled in; React is a peer dependency the
         // app already ships, and the unsafe-value warning now folds away.
         maxGzipBytes: 10_950,
+        // Measured 2026-10-08: 10,358 / 7,897.
+        entryBudgets: { '.': 10_650, './react': 8_200 },
     },
     {
         name: '@csszyx/compiler browser app bundle',
         kind: 'app-bundle',
         target: 'packages/compiler',
-        subpaths: ['./browser'],
+        // Every other export ships to the browser: `./browser` for
+        // `@csszyx/dynamic` and `@csszyx/runtime`, and the leaf modules the
+        // runtime's `/lite`, `/core` and variant helpers import by subpath.
+        // Only `.` and `./migrate` stay out: build-time code that never
+        // leaves the dev machine. A new export is measured, and needs an
+        // entry budget, unless it is added here.
+        excludeSubpaths: ['.', './migrate'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so
         // their text ships by design, plus the settlement of family keys
         // across sz layers. Budget set the usual ~300 above the measurement.
-        maxGzipBytes: 15_200,
+        //
+        // Raised from 15,200 on 2026-10-08, measured 15,752: no code grew, the
+        // union took in the five leaf subpaths the runtime ships (they were
+        // measured by no budget before), on top of `./browser` at 14,969.
+        // Re-measured later the same day at 15,891, with `./browser` at
+        // 15,104 after the special-key box roles.
+        maxGzipBytes: 16_050,
+        // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
+        // `./browser` raised from 15,250 the same day: the special-key box
+        // roles took it to 15,104, 146 under, so it went back to the usual
+        // ~300 above the measurement.
+        entryBudgets: {
+            './browser': 15_400,
+            './sz-limits': 650,
+            './keyword-families': 1_000,
+            './bool-class': 650,
+            './color-var': 550,
+            './spacing-var': 1_000,
+        },
         // Each one reports a class the transform did not emit (ADR 0011), so
         // they print in production and in the browser, once each; only
         // `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them.
@@ -111,6 +167,11 @@ export const SIZE_BUDGETS = [
             'warn: [csszyx] ',
             // A removed key (`fontVariant`, `maskFrom`), named with its note.
             'warn: [csszyx] ',
+            // A dynamic value the runtime helpers cannot lower, so the style
+            // is dropped: a non-boolean on a boolean-only key (`./bool-class`)
+            // and an unresolvable spacing value (`./spacing-var`).
+            'warn: [csszyx] dynamic value on ',
+            'warn: [csszyx] dynamic value on ',
         ],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -178,32 +239,69 @@ function importTarget(conditionValue) {
     return null;
 }
 
-/** List the runtime entry files a package's `exports` map ships under the
- * `import` condition. Non-runtime targets (type declarations, the
- * `./package.json` subpath) are skipped.
+/** List the export subpaths of a package that ship runtime JS under the
+ * `import` condition, each with its entry file. Non-runtime targets (type
+ * declarations, the `./package.json` subpath) are skipped.
  *
  * @param {string} packageDir absolute package directory
- * @param {string[]} [subpaths] only these export subpaths; every one must exist
- * @returns {string[]} absolute entry file paths, sorted
+ * @param {string[]} [excludeSubpaths] export subpaths left out of scope; every
+ *   one must exist, so a renamed export cannot leave a stale exclusion behind
+ * @returns {Array<{ subpath: string, file: string }>} subpaths in `exports` order, absolute files
  */
-export function listExportEntries(packageDir, subpaths) {
+export function listExportSubpaths(packageDir, excludeSubpaths = []) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     const exportsMap = manifest.exports ?? {};
-    const missing = (subpaths ?? []).filter(subpath => !(subpath in exportsMap));
+    const missing = excludeSubpaths.filter(subpath => !Object.hasOwn(exportsMap, subpath));
     if (missing.length > 0) {
         throw new Error(
             `no export subpath ${missing.join(', ')} in ${manifest.name ?? packageDir}`,
         );
     }
-    const entries = new Set();
+    const entries = [];
     for (const [subpath, conditionValue] of Object.entries(exportsMap)) {
-        if (subpaths && !subpaths.includes(subpath)) continue;
+        if (excludeSubpaths.includes(subpath)) continue;
         const target = importTarget(conditionValue);
         if (target !== null && isRuntimeArtifact(target)) {
-            entries.add(path.resolve(packageDir, target));
+            entries.push({ subpath, file: path.resolve(packageDir, target) });
         }
     }
-    return [...entries].sort();
+    return entries;
+}
+
+/** List the runtime entry files a package's `exports` map ships under the
+ * `import` condition, once each.
+ *
+ * @param {string} packageDir absolute package directory
+ * @param {string[]} [excludeSubpaths] export subpaths left out of scope
+ * @returns {string[]} absolute entry file paths, sorted
+ */
+export function listExportEntries(packageDir, excludeSubpaths) {
+    return [
+        ...new Set(listExportSubpaths(packageDir, excludeSubpaths).map(({ file }) => file)),
+    ].sort();
+}
+
+/** Compare the subpaths a package ships with the ones its budget prices, both
+ * ways: an export with no budget ships unmeasured, a budget with no export is
+ * stale.
+ *
+ * @param {string[]} shipped runtime subpaths in scope
+ * @param {Record<string, number>} budgeted the budget's `entryBudgets`
+ * @returns {string[]} one problem per mismatch
+ */
+export function entryBudgetProblems(shipped, budgeted) {
+    const problems = [];
+    for (const subpath of shipped) {
+        if (!Object.hasOwn(budgeted, subpath)) {
+            problems.push(`export \`${subpath}\` has no entry budget`);
+        }
+    }
+    for (const subpath of Object.keys(budgeted)) {
+        if (!shipped.includes(subpath)) {
+            problems.push(`entry budget \`${subpath}\` names no runtime export`);
+        }
+    }
+    return problems;
 }
 
 /** Bundle a package's export entries the way a production app ships them:
@@ -307,10 +405,23 @@ export function gzipTotalBytes(filePaths) {
 export function checkBudgets(budgets, rootDir) {
     const results = [];
     const failures = [];
+    /** Record one measurement against its ceiling. */
+    const record = (name, files, gzipBytes, maxGzipBytes) => {
+        const ok = gzipBytes <= maxGzipBytes;
+        results.push({ name, files, gzipBytes, maxGzipBytes, ok });
+        if (!ok) {
+            failures.push(
+                `${name}: ${gzipBytes} gzip bytes exceeds the ${maxGzipBytes}-byte budget ` +
+                    `(+${gzipBytes - maxGzipBytes}). If the growth is intentional, raise the ` +
+                    'budget in scripts/check-package-size.mjs and say why in the PR.',
+            );
+        }
+    };
     for (const budget of budgets) {
         const target = path.join(rootDir, budget.target);
         let files;
         let gzipBytes;
+        const entryMeasurements = [];
         try {
             if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
@@ -319,7 +430,7 @@ export function checkBudgets(budgets, rootDir) {
                 files = [target];
                 gzipBytes = gzipTotalBytes(files);
             } else {
-                files = listExportEntries(target, budget.subpaths);
+                files = listExportEntries(target, budget.excludeSubpaths);
                 if (files.length === 0) {
                     throw new Error(`no runtime export entries in ${budget.target}/package.json`);
                 }
@@ -336,24 +447,37 @@ export function checkBudgets(budgets, rootDir) {
                             "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
                     );
                 }
+                if (budget.entryBudgets) {
+                    const entries = listExportSubpaths(target, budget.excludeSubpaths);
+                    for (const problem of entryBudgetProblems(
+                        entries.map(({ subpath }) => subpath),
+                        budget.entryBudgets,
+                    )) {
+                        failures.push(
+                            `${budget.name}: ${problem}. Each runtime export gets its own ceiling ` +
+                                '(measured alone, ~300 bytes of headroom) in `entryBudgets`.',
+                        );
+                    }
+                    for (const { subpath, file } of entries) {
+                        if (!Object.hasOwn(budget.entryBudgets, subpath)) continue;
+                        const entryBytes = gzipSync(appBundle([file], target), {
+                            level: 9,
+                        }).length;
+                        entryMeasurements.push([subpath, file, entryBytes]);
+                    }
+                }
             }
         } catch (error) {
             failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
             continue;
         }
-        const ok = gzipBytes <= budget.maxGzipBytes;
-        results.push({
-            name: budget.name,
-            files,
-            gzipBytes,
-            maxGzipBytes: budget.maxGzipBytes,
-            ok,
-        });
-        if (!ok) {
-            failures.push(
-                `${budget.name}: ${gzipBytes} gzip bytes exceeds the ${budget.maxGzipBytes}-byte budget ` +
-                    `(+${gzipBytes - budget.maxGzipBytes}). If the growth is intentional, raise the ` +
-                    'budget in scripts/check-package-size.mjs and say why in the PR.',
+        record(budget.name, files, gzipBytes, budget.maxGzipBytes);
+        for (const [subpath, file, entryBytes] of entryMeasurements) {
+            record(
+                `${budget.name} \`${subpath}\``,
+                [file],
+                entryBytes,
+                budget.entryBudgets[subpath],
             );
         }
     }

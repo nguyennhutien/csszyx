@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type SzObject, transform } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
 
 /**
  * Alignment sz-keys take csszyx's short value form (start/end/between/around/
@@ -33,6 +33,14 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         expect(w[0]).toContain('no Tailwind utility');
     });
 
+    it('stays quiet in production', () => {
+        // A fresh dedup, so silence comes from the guard alone.
+        __resetSzWarnDedupForTests();
+        vi.stubEnv('NODE_ENV', 'production');
+        expect(warns({ justify: 'space-around' } as SzObject)).toEqual([]);
+        vi.unstubAllEnvs();
+    });
+
     it('warns on justify: flex-end', () => {
         expect(warns({ justify: 'flex-end' } as SzObject)[0]).toContain("'end'");
     });
@@ -57,6 +65,13 @@ describe('alignment CSS-longhand value warning (dev)', () => {
 
     it('does NOT warn on a non-alignment key that happens to take such a value', () => {
         expect(warns({ bg: 'space-between' } as SzObject)).toEqual([]);
+    });
+
+    it('does NOT warn on a value that only names an inherited Object member', () => {
+        // `ALIGNMENT_CSS_VALUE_HINT['constructor']` is `Object` itself, so a
+        // plain lookup read a hint the table never declared.
+        expect(warns({ justify: 'constructor' } as SzObject)).toEqual([]);
+        expect(warns({ items: 'toString' } as SzObject)).toEqual([]);
     });
 
     it('de-dups: the same key+value warns only once across renders', () => {

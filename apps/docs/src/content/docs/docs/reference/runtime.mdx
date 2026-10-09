@@ -798,12 +798,15 @@ splitBoxSz({ grow: 2, self: 'center' }, { inner: ['grow', 'self'] });
 
 Arrays are deep-merged (last-write-wins); `null` / `false` / `undefined` and
 empty objects yield `{ outer: {}, inner: {} }`. A raw className string has no
-sz-object form, so it throws in development.
+sz-object form, so it throws in development. The `css` escape hatch is never
+recursed: its raw declarations stay whole on the `fallback` node (with a
+development warning), unless a placement list names `'css'`.
 
 ### `classifySzKey` / `hasSz` / `pickSz` / `omitSz`
 
 The sz-object forms of the class toolkit — same generated truth, keyed by sz prop
-instead of class token.
+instead of class token. `classifySzKey('css')` returns `undefined` on purpose,
+and the scans match `css` only by its own name.
 
 ```ts
 function classifySzKey(key: string): { role: 'outer' | 'inner'; category: string } | undefined

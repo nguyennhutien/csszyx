@@ -1,6 +1,6 @@
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
-export default {
+export default defineBuild({
     ...base,
     entry: {
         // Main runtime; dependencies stay external (the consumer's bundler
@@ -25,4 +25,4 @@ export default {
     },
     format: ['esm', 'cjs'],
     platform: 'neutral',
-};
+});

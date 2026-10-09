@@ -54,6 +54,43 @@ async function readFileOrNull(filePath: string): Promise<string | null> {
         throw err;
     }
 }
+
+/**
+ * Ask every candidate at once and answer for the first, in the order given,
+ * that has an answer: what a loop stopping at the first hit returns, without
+ * waiting on each miss before asking the next. A probe that fails surfaces
+ * only when no earlier candidate answered, as it would in that loop.
+ *
+ * @param candidates - What to ask, in order of preference.
+ * @param probe - The answer for one candidate, or null for none.
+ * @returns The first answer in candidate order, or null when none has one.
+ */
+async function firstInOrder<T, U>(
+    candidates: readonly T[],
+    probe: (candidate: T) => Promise<U | null>,
+): Promise<U | null> {
+    const outcomes = await Promise.allSettled(candidates.map(probe));
+    for (const outcome of outcomes) {
+        if (outcome.status === 'rejected') throw outcome.reason;
+        if (outcome.value !== null) return outcome.value;
+    }
+    return null;
+}
+
+/**
+ * Read the first of several files that exists.
+ *
+ * @param filePaths - Absolute paths, in order of preference.
+ * @returns The path and contents of the first that exists, or null.
+ */
+function readFirstExisting(
+    filePaths: readonly string[],
+): Promise<{ path: string; content: string } | null> {
+    return firstInOrder(filePaths, async filePath => {
+        const content = await readFileOrNull(filePath);
+        return content === null ? null : { path: filePath, content };
+    });
+}
 const NEXTJS_FRAMEWORKS = new Set<Framework>(['nextjs-app', 'nextjs-pages']);
 
 /** The PostCSS plugin entry a Next.js project needs, as it appears in the config. */
@@ -99,10 +136,9 @@ async function hasPostcssConfig(cwd: string): Promise<boolean> {
         await fs.readFile(path.join(cwd, 'package.json'), 'utf8'),
     ) as Record<string, unknown>;
     if ('postcss' in packageJson) return true;
-    for (const name of POSTCSS_CONFIG_FILES) {
-        if ((await readFileOrNull(path.join(cwd, name))) !== null) return true;
-    }
-    return false;
+    return (
+        (await readFirstExisting(POSTCSS_CONFIG_FILES.map(name => path.join(cwd, name)))) !== null
+    );
 }
 
 /**
@@ -317,27 +353,41 @@ async function setupGitignore(cwd: string): Promise<void> {
  * @returns True when an ancestor directory is a workspace root.
  */
 export async function isInsideWorkspace(cwd: string): Promise<boolean> {
+    const ancestors: string[] = [];
     let dir = path.dirname(path.resolve(cwd));
     const { root } = path.parse(dir);
     while (dir !== root) {
-        if (
-            (await fs.pathExists(path.join(dir, 'pnpm-workspace.yaml'))) ||
-            (await fs.pathExists(path.join(dir, 'nx.json'))) ||
-            (await fs.pathExists(path.join(dir, 'lerna.json')))
-        ) {
-            return true;
-        }
-        const pkg = await readFileOrNull(path.join(dir, 'package.json'));
-        if (pkg) {
-            try {
-                if ('workspaces' in (JSON.parse(pkg) as object)) return true;
-            } catch {
-                // Malformed package.json — ignore and keep walking up.
-            }
-        }
+        ancestors.push(dir);
         dir = path.dirname(dir);
     }
-    return false;
+    const found = await firstInOrder(ancestors, async ancestor =>
+        (await isWorkspaceRoot(ancestor)) ? ancestor : null,
+    );
+    return found !== null;
+}
+
+/** Files whose presence alone marks a workspace root. */
+const WORKSPACE_MARKERS = ['pnpm-workspace.yaml', 'nx.json', 'lerna.json'];
+
+/**
+ * Whether one directory is a workspace root.
+ *
+ * @param dir - The directory.
+ * @returns True for a workspace marker file or a `workspaces` field.
+ */
+async function isWorkspaceRoot(dir: string): Promise<boolean> {
+    const markers = await Promise.all(
+        WORKSPACE_MARKERS.map(name => fs.pathExists(path.join(dir, name))),
+    );
+    if (markers.includes(true)) return true;
+    const pkg = await readFileOrNull(path.join(dir, 'package.json'));
+    if (!pkg) return false;
+    try {
+        return 'workspaces' in (JSON.parse(pkg) as object);
+    } catch {
+        // Malformed package.json — ignore and keep walking up.
+        return false;
+    }
 }
 
 /**
@@ -375,17 +425,11 @@ export function tailwindImportBlock(cssDir: string, cwd: string, monorepo: boole
  */
 async function setupTailwindCss(cwd: string): Promise<void> {
     const monorepo = await isInsideWorkspace(cwd);
-    let cssPath: string | undefined;
-    let content: string | null = null;
-    for (const candidate of CSS_ENTRY_CANDIDATES) {
-        const full = path.join(cwd, candidate);
-        const existing = await readFileOrNull(full);
-        if (existing !== null) {
-            cssPath = full;
-            content = existing;
-            break;
-        }
-    }
+    const found = await readFirstExisting(
+        CSS_ENTRY_CANDIDATES.map(candidate => path.join(cwd, candidate)),
+    );
+    let cssPath = found?.path;
+    const content = found?.content ?? null;
 
     if (!cssPath || content === null) {
         // Create src/index.css as the entry CSS file
@@ -478,16 +522,9 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
         path.join(cwd, 'vite.config.mjs'),
     ];
 
-    let configPath: string | undefined;
-    let content: string | null = null;
-    for (const c of candidates) {
-        const existing = await readFileOrNull(c);
-        if (existing !== null) {
-            configPath = c;
-            content = existing;
-            break;
-        }
-    }
+    const found = await readFirstExisting(candidates);
+    const configPath = found?.path;
+    let content = found?.content ?? null;
 
     if (!configPath || content === null) {
         return false;
@@ -547,16 +584,9 @@ export async function injectNextPlugin(cwd: string): Promise<boolean> {
         path.join(cwd, 'next.config.js'),
     ];
 
-    let configPath: string | undefined;
-    let content: string | null = null;
-    for (const c of candidates) {
-        const existing = await readFileOrNull(c);
-        if (existing !== null) {
-            configPath = c;
-            content = existing;
-            break;
-        }
-    }
+    const found = await readFirstExisting(candidates);
+    let configPath = found?.path;
+    const content = found?.content ?? null;
 
     if (!configPath) {
         // Create next.config.js
@@ -633,24 +663,20 @@ export async function setupSzTypes(cwd: string): Promise<void> {
  * @param entry - The include path to add.
  */
 async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> {
-    for (const name of ['tsconfig.json', 'tsconfig.app.json']) {
-        const tsconfigPath = path.join(cwd, name);
-        const content = await readFileOrNull(tsconfigPath);
-        if (content === null) {
-            continue;
-        }
-        if (content.includes(entry)) {
-            return;
-        }
-        const includeMatch = /"include"\s*:\s*\[/.exec(content);
-        if (includeMatch?.index !== undefined) {
-            const insertPos = includeMatch.index + includeMatch[0].length;
-            await fs.writeFile(
-                tsconfigPath,
-                `${content.slice(0, insertPos)}\n    "${entry}",${content.slice(insertPos)}`,
-            );
-        }
+    const found = await readFirstExisting(
+        ['tsconfig.json', 'tsconfig.app.json'].map(name => path.join(cwd, name)),
+    );
+    if (found === null || found.content.includes(entry)) {
         return;
+    }
+    const { path: tsconfigPath, content } = found;
+    const includeMatch = /"include"\s*:\s*\[/.exec(content);
+    if (includeMatch?.index !== undefined) {
+        const insertPos = includeMatch.index + includeMatch[0].length;
+        await fs.writeFile(
+            tsconfigPath,
+            `${content.slice(0, insertPos)}\n    "${entry}",${content.slice(insertPos)}`,
+        );
     }
 }
 

@@ -162,11 +162,22 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
             const from = pos;
             const key = parseKey();
             skipWhitespace();
-            if (input[pos] === ':') {
-                pos++;
-            } // skip :
+            // A key always takes a value. Without the colon the text is a
+            // class list (`flex gap-2`), which the caller falls back to,
+            // rather than one key with a bare value (`flex-gap-2`).
+            if (input[pos] !== ':') {
+                unexpected();
+            }
+            pos++;
             const value = parseValue();
-            obj[key] = value;
+            // Defined, not assigned: assigning `__proto__` would set the
+            // object's prototype instead of giving it that key.
+            Object.defineProperty(obj, key, {
+                value,
+                enumerable: true,
+                writable: true,
+                configurable: true,
+            });
             skipWhitespace();
             if (input[pos] === ',') {
                 pos++;

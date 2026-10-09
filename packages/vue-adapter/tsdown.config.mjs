@@ -1,6 +1,6 @@
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
-export default {
+export default defineBuild({
     ...base,
     // One module out per source module, as unbuild's mkdist builder did;
     // @csszyx/compiler stays an import, never inlined.
@@ -16,4 +16,4 @@ export default {
     // ended its CJS file with `module.exports = <default>`, which dropped every
     // named export from `require()` (unplugin's CJS lane calls `.preprocess`).
     outputOptions: { ...base.outputOptions, exports: 'named' },
-};
+});

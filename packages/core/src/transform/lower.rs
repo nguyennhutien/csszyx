@@ -2745,6 +2745,27 @@ mod tests {
         StaticSzValue::Object(StaticSzObject { properties })
     }
 
+    /// The AST path hands the settlement one property per key, and the fast
+    /// path leaves a repeated key to it, so no `.jsx` source reaches this
+    /// shape any more; a caller that does still gets JavaScript's reading.
+    #[test]
+    fn the_settlement_reads_a_repeated_family_key_as_javascript_does() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("contain", StaticSzValue::String("strict".to_string())),
+                property("containPaint", StaticSzValue::Boolean(true)),
+                property("contain", StaticSzValue::String("size".to_string())),
+            ],
+        };
+        let settlement = super::settle_global_keywords(&object);
+        // The first `contain` gives up its value to the last; the last gives
+        // up its place to the first, which `containPaint` then replaces.
+        assert!(settlement.skipped.contains(&0), "{:?}", settlement.skipped);
+        assert_eq!(settlement.replaced.len(), 1);
+        assert_eq!(settlement.replaced[0].0.key, "contain");
+        assert_eq!(settlement.replaced[0].1, "containPaint");
+    }
+
     /// The descent rule for the dead-weight warning, which no Rust test
     /// reached before: the diagnostic it feeds is asserted from the
     /// JavaScript side, and `cargo test` never runs that suite. Mutation

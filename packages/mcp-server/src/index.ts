@@ -247,11 +247,11 @@ const TOOL_HANDLERS: Record<
 
 // The low-level request handlers intentionally preserve the established wire
 // contract while the non-deprecated McpServer owns lifecycle and transport.
-server.server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.server.setRequestHandler(ListToolsRequestSchema, () => {
     return { tools: TOOLS };
 });
 
-server.server.setRequestHandler(CallToolRequestSchema, async request => {
+server.server.setRequestHandler(CallToolRequestSchema, request => {
     const { name, arguments: args } = request.params;
     const entry = TOOL_HANDLERS[name];
 
@@ -273,11 +273,11 @@ server.server.setRequestHandler(CallToolRequestSchema, async request => {
     }
 });
 
-server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+server.server.setRequestHandler(ListResourcesRequestSchema, () => {
     return { resources: listResources() };
 });
 
-server.server.setRequestHandler(ReadResourceRequestSchema, async request => {
+server.server.setRequestHandler(ReadResourceRequestSchema, request => {
     try {
         return readResource(request.params.uri);
     } catch (error: unknown) {
@@ -286,11 +286,11 @@ server.server.setRequestHandler(ReadResourceRequestSchema, async request => {
     }
 });
 
-server.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+server.server.setRequestHandler(ListPromptsRequestSchema, () => {
     return { prompts: listPrompts() };
 });
 
-server.server.setRequestHandler(GetPromptRequestSchema, async request => {
+server.server.setRequestHandler(GetPromptRequestSchema, request => {
     try {
         return getPrompt(
             request.params.name,

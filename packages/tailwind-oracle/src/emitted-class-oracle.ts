@@ -31,7 +31,6 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import fg from 'fast-glob';
 import { type CompiledSources, type ScanSource, scanSourcesOf } from './candidate-scanner.js';
 import {
     type CollisionDesignSystem,
@@ -39,6 +38,7 @@ import {
     PROBE_THEME,
 } from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
+import { readTextFiles } from './map-concurrent.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import {
     appliedCandidatesIn,
@@ -553,6 +553,10 @@ export function comparePathDepth(a: string, b: string): number {
  * @returns Absolute paths to the entries, nearest the root first.
  */
 export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
+    // Loaded on first use: fast-glob is CommonJS, and a bundler that inlines
+    // this package keeps a static CommonJS import alive and runs it when the
+    // bundle loads — 166 KB in `@csszyx/unplugin`, which never calls this.
+    const { default: fg } = await import('fast-glob');
     return tailwindEntriesAmong(
         await fg('**/*.css', { cwd, ignore: IGNORED_CSS_DIRS, absolute: true }),
     );
@@ -578,15 +582,10 @@ export async function tailwindEntriesAmong(files: readonly string[]): Promise<st
     // leave that dependency invisible at the call site.
     const byDepth = [...files];
     byDepth.sort(comparePathDepth);
-    const entries: string[] = [];
-    for (const file of byDepth) {
-        try {
-            if (IMPORTS_TAILWIND.test(await readFile(file, 'utf8'))) entries.push(file);
-        } catch {
-            // A stylesheet that cannot be read cannot be the entry point.
-        }
-    }
-    return entries;
+    // A stylesheet that cannot be read cannot be the entry point.
+    return (await readTextFiles(byDepth))
+        .filter(stylesheet => IMPORTS_TAILWIND.test(stylesheet.text))
+        .map(stylesheet => stylesheet.path);
 }
 
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */
@@ -894,13 +893,13 @@ export async function createEmittedClassOracle(
             }
             return collisions;
         },
-        async loadOriginOracle() {
+        loadOriginOracle() {
             origins ??= originOracleFrom({
                 css: options.css,
                 projectStylesheets: [...projectStylesheets.values()],
                 loadedModules,
                 cssFor: classes => design.candidatesToCss([...classes]),
-                compileStripped: async declared =>
+                compileStripped: declared =>
                     load(stripCustomUtilities(options.css), {
                         ...loadOptions,
                         loadStylesheet: async (id, base) => {
@@ -918,7 +917,7 @@ export async function createEmittedClassOracle(
                         },
                     }),
             });
-            return origins;
+            return Promise.resolve(origins);
         },
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered

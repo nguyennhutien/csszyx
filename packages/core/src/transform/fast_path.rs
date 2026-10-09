@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{
     JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
     TextSpan, TransformFile,
@@ -312,6 +314,7 @@ fn count_sz_attributes(source: &str) -> usize {
 
 fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<StaticSzObject> {
     let mut properties = Vec::new();
+    let mut keys = HashSet::new();
     for raw_part in source.split(',') {
         let part = raw_part.trim();
         if part.is_empty() {
@@ -323,6 +326,12 @@ fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<Static
         let colon = part.find(':')?;
         let key = part[..colon].trim();
         if !is_identifier_key(key) {
+            return None;
+        }
+        // A repeated key keeps its first place and its last value, as
+        // JavaScript builds the object; the AST path reads it that way, and
+        // this path would emit every occurrence.
+        if !keys.insert(key) {
             return None;
         }
         let value_source = part[colon + 1..].trim();

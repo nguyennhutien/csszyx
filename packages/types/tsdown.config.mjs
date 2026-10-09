@@ -1,6 +1,6 @@
-import { base } from '../../tsdown.base.mjs';
+import { base, defineBuild } from '../../tsdown.base.mjs';
 
-export default {
+export default defineBuild({
     ...base,
     entry: {
         index: 'src/index.ts',
@@ -19,4 +19,4 @@ export default {
     dts: { ...base.dts, generator: 'tsc' },
     // Hand-written type files, shipped as-is for the `./jsx*` subpaths.
     copy: ['src/jsx.d.ts', 'src/jsx-react.d.ts', 'src/jsx-solid.d.ts'],
-};
+});

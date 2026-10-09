@@ -69,6 +69,10 @@ describe('the webpack lane writes the theme-group registration up front', () => 
             mode: 'production',
             context: root,
             entry: {},
+            // webpack's default is `dist` under the working directory, not
+            // under `context`: the package's own `dist`, which then shipped
+            // the manifest this run emits.
+            output: { path: join(root, 'dist') },
             plugins: [webpackPlugin({ build: { cache: false }, production: { mangle: false } })],
         });
 
@@ -88,6 +92,7 @@ describe('the webpack lane writes the theme-group registration up front', () => 
             mode: 'production',
             context: root,
             entry: {},
+            output: { path: join(root, 'dist') },
             plugins: [webpackPlugin({ build: { cache: false }, production: { mangle: false } })],
         });
         await runOnce(compiler);

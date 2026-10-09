@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { describe, it } from 'node:test';
+import { pathToFileURL } from 'node:url';
 
-import { buildRoleMaps } from './gen-box-role-map.mjs';
+import { KNOWN_SPECIAL_PROPERTIES } from '../packages/compiler/src/transform-core.js';
+import {
+    ALIGN_CONTENT_VALUES,
+    assertSpecialKeysHaveRoles,
+    buildRoleMaps,
+} from './gen-box-role-map.mjs';
 
 describe('box-role map generation', () => {
     it('covers compiler keys and standalone boolean shorthands', () => {
@@ -94,6 +103,118 @@ describe('box-role map generation', () => {
         assert.equal(prefixes.get('p')?.role, 'inner');
         assert.equal(tokens.get('no-underline')?.category, 'text');
         assert.equal(tokens.get('sr-only')?.role, 'outer');
+    });
+});
+
+describe('special sz keys (lowered outside PROPERTY_MAP)', () => {
+    // Each of these is a valid sz key with no PROPERTY_MAP prefix. Without a
+    // row `splitBoxSz` sent it to the fallback node while `splitBox` routed the
+    // class it compiles to by that class's prefix.
+    it('gives every special key except css the role of its family', () => {
+        const { keyRoles } = buildRoleMaps();
+        const expected = {
+            alignContent: 'inner/alignment',
+            fromPos: 'outer/gradient',
+            viaPos: 'outer/gradient',
+            toPos: 'outer/gradient',
+            maskComposite: 'outer/mask',
+            maskMode: 'outer/mask',
+            maskType: 'outer/mask',
+            snapStrictness: 'inner/snap',
+        };
+        const actual = Object.fromEntries(
+            Object.keys(expected).map(key => {
+                const role = keyRoles.get(key);
+                return [key, role && `${role.role}/${role.category}`];
+            }),
+        );
+        assert.deepEqual(actual, expected);
+        const missing = [...KNOWN_SPECIAL_PROPERTIES].filter(
+            key => key !== 'css' && !keyRoles.has(key),
+        );
+        assert.deepEqual(missing, []);
+    });
+
+    // `css` is raw CSS: its properties can belong to either side, so no one
+    // role is right for the key. It stays unrouted on purpose.
+    it('gives css no row', () => {
+        assert.equal(buildRoleMaps().keyRoles.has('css'), false);
+    });
+
+    it('fails when a special key has no row', () => {
+        const keyRoles = new Map([['alignContent', { role: 'inner', category: 'alignment' }]]);
+        assert.throws(
+            () => assertSpecialKeysHaveRoles(keyRoles, new Set(['css', 'alignContent', 'fooPos'])),
+            /fooPos/,
+        );
+        assert.doesNotThrow(() =>
+            assertSpecialKeysHaveRoles(keyRoles, new Set(['css', 'alignContent'])),
+        );
+    });
+
+    it('fails when css is given a row', () => {
+        const keyRoles = new Map([['css', { role: 'outer', category: 'raw' }]]);
+        assert.throws(() => assertSpecialKeysHaveRoles(keyRoles, new Set(['css'])), /css/);
+    });
+
+    // `content-*` is the generated-content prefix (text). The align-content
+    // keywords share it, so each one needs an exact row to answer `alignment`.
+    it('resolves the align-content keywords to exact alignment tokens', () => {
+        const { tokens, prefixes } = buildRoleMaps();
+        for (const value of ALIGN_CONTENT_VALUES) {
+            assert.deepEqual(tokens.get(`content-${value}`), {
+                role: 'inner',
+                category: 'alignment',
+                prefix: 'content',
+                value,
+            });
+        }
+        // `content-none` is the `content` property; the prefix keeps answering
+        // for it and for arbitrary content.
+        assert.equal(tokens.has('content-none'), false);
+        assert.equal(prefixes.get('content')?.category, 'text');
+    });
+
+    // The keyword list is pinned against the Tailwind this repo installs, in
+    // both directions: every `content-*` utility its design system lists whose
+    // CSS sets `align-content` must be in the list, and nothing else may be. A
+    // keyword a Tailwind upgrade adds would otherwise fall back to the
+    // `content` prefix row (text) instead of alignment.
+    it('lists exactly the content-* keywords Tailwind serves for align-content', async () => {
+        const require = createRequire(import.meta.url);
+        const base = dirname(require.resolve('tailwindcss/package.json'));
+        const mod = await import(pathToFileURL(require.resolve('tailwindcss')).href);
+        const loadDesignSystem =
+            mod.__unstable__loadDesignSystem ?? mod.default?.__unstable__loadDesignSystem;
+        const design = await loadDesignSystem('@import "tailwindcss";', {
+            base,
+            loadStylesheet: async (id: string, from: string) => {
+                const spec = id === 'tailwindcss' ? 'tailwindcss/index.css' : id;
+                const p = require.resolve(spec, { paths: [from ?? base] });
+                return { path: p, base: dirname(p), content: readFileSync(p, 'utf8') };
+            },
+        });
+        const candidates: string[] = design
+            .getClassList()
+            .map(([name]: [string]) => name)
+            .filter((name: string) => name.startsWith('content-'));
+        const css: (string | null)[] = design.candidatesToCss(candidates);
+        const served = candidates
+            .filter((_, i) => /(?:^|[{;\s])align-content:/.test(css[i] ?? ''))
+            .map(name => name.slice('content-'.length))
+            .sort();
+        // Sanity: the enumeration reached the content-* family, and `none`
+        // (the generated-content property) is listed but not alignment.
+        assert.ok(candidates.includes('content-none'));
+        assert.equal(served.includes('none'), false);
+        const listed = [...ALIGN_CONTENT_VALUES].sort();
+        const missing = served.filter(v => !listed.includes(v));
+        const stale = listed.filter(v => !served.includes(v));
+        assert.deepEqual(
+            { missing, stale },
+            { missing: [], stale: [] },
+            `ALIGN_CONTENT_VALUES drifted from the installed Tailwind: add [${missing.join(', ')}], remove [${stale.join(', ')}]`,
+        );
     });
 });
 

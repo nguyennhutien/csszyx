@@ -64,6 +64,11 @@ const FOREIGN_RULES = new Map([
     ['S6551', '@typescript-eslint/no-base-to-string'],
     ['S3358', 'sonarjs/no-nested-conditional'],
     ['S6582', '@typescript-eslint/prefer-optional-chain'],
+    // Created by SonarSource on 2026-09-29 and reported on the next pull
+    // requests; the local rules print the same sentences.
+    ['S9383', '@typescript-eslint/no-floating-promises'],
+    ['S7503', 'require-await'],
+    ['S9382', 'no-await-in-loop'],
 ]);
 
 /**
