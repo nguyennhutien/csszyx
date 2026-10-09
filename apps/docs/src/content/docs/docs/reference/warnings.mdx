@@ -68,7 +68,7 @@ reports, and the native-binary notice. Each is marked in its table below.
 | `quiet: 'nudges'` | Usage nudges, keeps missing-output reports | Plugin option |
 | `quiet: true` | All plugin warnings (errors still throw) | Plugin option |
 | `contentScopeCheck: false` | The unscoped-monorepo warning only | Plugin option |
-| `CSSZYX_QUIET_SZ_WARNINGS=1` | The `sz` key/value warnings of the runtime, the rows marked **every mode** included (§ [sz key and value warnings](#sz--key-and-value-warnings)) | Environment |
+| `CSSZYX_QUIET_SZ_WARNINGS=1` | The `sz` key/value warnings of the runtime, the rows marked **every mode** included (§ [sz key and value warnings](#sz--key-and-value-warnings)); on the Next Turbopack loader, which takes no `quiet` option, what `quiet: true` mutes (§ [Turbopack](#the-sz-build-diagnostics-under-turbopack)) | Environment |
 | `CSSZYX_NO_PROJECT_SCAN_HINT=1` | The one-time `csszyx check` tip | Environment |
 | `csszyx.enableDiagnostics: false` | VS Code squiggles | Editor setting |
 | `NODE_ENV=production` | Every runtime dev warning (they are dead-code-eliminated), except the sz rows marked **every mode** | Environment |
@@ -1017,6 +1017,22 @@ a word. This prints once when the wait passes a second, which in practice means
 the loader was killed while holding the lock. The wait ends on its own when that
 lock goes stale. If it lasts more than a minute, the watcher stops and reports the
 lock instead.
+
+#### The `sz` build diagnostics under Turbopack
+
+The Turbopack loader prints the same `sz` build diagnostics as the Vite and
+webpack lanes, with the same gating: the [missing-output
+class](#the-two-classes-of-build-warning) and unresolvable spreads in every mode,
+advisories only under `next dev`. They arrive as Turbopack warnings on the
+module, so Next prints them under the file's path in the terminal, shows them in
+the dev overlay, and drops them once the module compiles clean. A production
+build lists none of the advisories and, unlike the other lanes, prints no count
+of them, because a loader never sees the build end; run
+[`csszyx check`](#running-it-in-ci) for the full list.
+
+The loader takes no `quiet` option. `CSSZYX_QUIET_SZ_WARNINGS=1` in the
+environment of `next dev` or `next build` mutes what `quiet: true` mutes on the
+other lanes; unresolvable spreads and budget skips still print.
 
 ### The Tailwind prefix on the Next.js lanes
 

@@ -8,13 +8,10 @@ import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
-    isAdvisorySzDiagnostic,
     isRustTransformAvailable,
     isWasmTransformAvailable,
     type SourceTransformResult,
     sortStrings,
-    szFallbackConsequenceOf,
-    szKeySuggestionFor,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -207,6 +204,12 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
+import {
+    type QuietMode,
+    resolveQuietMode,
+    routeTransformDiagnostics,
+    shouldHoldAdvisories,
+} from './transform-diagnostics.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
@@ -234,6 +237,18 @@ import {
     UNSERVED_VIRTUAL_ID,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
+
+// The diagnostic gates moved to their own module so the Next Turbopack loader
+// shares them; they stay importable from here.
+export {
+    emitKeyValueDiagnostic,
+    emitMissingCssFallback,
+    isAdvisoryDiagnostic,
+    type QuietMode,
+    resolveQuietMode,
+    shouldEmitMissingCssFallback,
+    shouldHoldAdvisories,
+} from './transform-diagnostics.js';
 
 /**
  * Plugin state for mangle map management.
@@ -1072,29 +1087,6 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
- * Whether a diagnostic is an advisory one — the class a build may hold back.
- *
- * Advisory means one thing: the styles are THERE, and the note is about how
- * they got there. An `sz`-site nudge fallback took the runtime path where a
- * compiled one was possible; the precedence advisory says which of two sources
- * won. Everything else describes output that is absent or dead, and a
- * production build has to print it.
- *
- * Asked positively on purpose. The predicate used to be "not one of three known
- * kinds", which quietly made every key and value diagnostic advisory: a
- * production build of a file with five typo'd keys printed nothing but a census
- * calling them fallbacks, while `csszyx check` on the same tree named all six.
- * The answer now comes from the compiler's diagnostic table, which also names
- * each kind for `csszyx check`, so the markers live beside the wording.
- *
- * @param message - One raw diagnostic line as an engine emitted it.
- * @returns True when the diagnostic is advisory rather than a build result.
- */
-export function isAdvisoryDiagnostic(message: string): boolean {
-    return isAdvisorySzDiagnostic(message);
-}
-
-/**
  * Build the one-line disclosure that the fallback list above is partial.
  *
  * Four of the five `sz`-site fallback kinds never print in a production build,
@@ -1129,27 +1121,6 @@ export function suppressedAdvisoryMessage(count: number): string | null {
 }
 
 /**
- * The `quiet` option, normalized.
- *
- * `'all'` is the blunt setting a plain `true` selects; `'nudges'` keeps every
- * report that the build produced less output than it was asked for.
- */
-export type QuietMode = 'off' | 'nudges' | 'all';
-
-/**
- * Normalize the authored `quiet` value. Idempotent, so a already-normalized
- * mode passes through unchanged.
- *
- * @param quiet - Authored option value, or an already-resolved mode.
- * @returns The mode the gates read.
- */
-export function resolveQuietMode(quiet: boolean | 'nudges' | QuietMode | undefined): QuietMode {
-    if (quiet === true || quiet === 'all') return 'all';
-    if (quiet === 'nudges') return 'nudges';
-    return 'off';
-}
-
-/**
  * Whether a csszyx build warning should be emitted.
  *
  * `devOnly` is already this plugin's marker for "usage nudge": it suppresses
@@ -1181,96 +1152,6 @@ export function shouldEmitWarning(
         return false;
     }
     return true;
-}
-
-/**
- * Emit one key or value diagnostic — the family that says a class is dead.
- *
- * Its own channel because the two that existed both answer a different
- * question: `emitMissingCssFallback` handles fallback sites, and the advisory
- * channel handles notes about styles that ARE present. A typo'd key matched
- * neither, so a production build dropped it on the floor while `csszyx check`
- * on the same tree exited 1 and named it. Muted only by `quiet: true`, on the
- * same reasoning as the missing-css channel: wrong output is not a usage nudge.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify and emit.
- * @param id - Bundler module identifier included in the warning.
- * @param emit - Warning output channel.
- */
-export function emitKeyValueDiagnostic(
-    quiet: QuietMode,
-    message: string,
-    id: string,
-    emit: (message: string) => void,
-): void {
-    if (
-        resolveQuietMode(quiet) === 'all' ||
-        szFallbackConsequenceOf(message) !== undefined ||
-        isAdvisoryDiagnostic(message)
-    ) {
-        return;
-    }
-    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
-    const suggestion = szKeySuggestionFor(message);
-    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
-    emit(`[csszyx] ${id}\n  ${message}${hint}`);
-}
-
-/**
- * Whether a transform diagnostic describes missing CSS and may be printed.
- *
- * Only the blunt mode hides these. A missing-CSS diagnostic says classes never
- * reached the safelist, so the styles are absent from the output — a build
- * result, not a style opinion, and `'nudges'` exists so a calmer log does not
- * have to cost it.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify.
- * @returns True when the diagnostic is an unsilenced missing-CSS failure.
- */
-export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
-    return resolveQuietMode(quiet) !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
-}
-
-/**
- * Whether this run holds the advisory fallback list back and counts it instead.
- *
- * A build prints the count once the bundle closes, so holding the list back
- * still leaves a reader a number to act on. A dev server never closes a bundle:
- * anything held back there is held back for good, which is why serving lists
- * its fallbacks whatever the environment says. `NODE_ENV` alone was the whole
- * test, and a monorepo script that exports it while running a dev server turned
- * every advisory into a number nothing would print.
- *
- * @param quiet - Resolved quiet mode.
- * @param serving - Whether this is a dev server rather than a build.
- * @param nodeEnv - `process.env.NODE_ENV` as the process sees it.
- * @returns True when the list is withheld in favour of a count.
- */
-export function shouldHoldAdvisories(
-    quiet: QuietMode,
-    serving: boolean,
-    nodeEnv: string | undefined,
-): boolean {
-    return quiet !== 'off' || (!serving && nodeEnv === 'production');
-}
-
-/**
- * Emit one missing-CSS fallback through the caller's output channel.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify and emit.
- * @param id - Bundler module identifier included in the warning.
- * @param emit - Warning output channel.
- */
-export function emitMissingCssFallback(
-    quiet: QuietMode,
-    message: string,
-    id: string,
-    emit: (message: string) => void,
-): void {
-    if (shouldEmitMissingCssFallback(quiet, message)) emit(`[csszyx] ${id}\n  ${message}`);
 }
 
 /**
@@ -6471,41 +6352,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         id: string,
         warn: (message: string) => void,
     ): void {
-        for (const message of result.diagnostics) {
-            if (message.includes('unresolvable sz spread')) {
-                state.spreadWarnings.add(`${id}\n  ${message}`);
-                continue;
-            }
-            if (message.includes('AST budget exceeded')) {
-                console.warn(`[csszyx] ${id}\n  ${message}`);
-                continue;
-            }
-            // missing-css means the classes never reached the safelist — the
-            // styles are simply absent, which is the failure class that must
-            // surface in production builds too (same tier as the spread
-            // warning above). Only `quiet: true` silences it; `'nudges'` exists
-            // precisely so a calmer log does not have to cost this report.
-            emitMissingCssFallback(quiet, message, id, console.warn);
-            // A dead key or value is the same tier and had no channel at all:
-            // it is not a fallback, so the line above skips it, and it is not
-            // advice, so the advisory list below skips it too.
-            emitKeyValueDiagnostic(quiet, message, id, console.warn);
-        }
-        const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
-        if (advisories.length === 0) return;
-        if (shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV)) {
-            // Held back, but counted. These are advisory by design — the
-            // runtime path works and the classes are collected — so a
-            // production build is right not to list them. It is not right to
-            // leave the reader believing the fallbacks it DID list are all of
-            // them, which is how a site that only ever falls back at an sz prop
-            // stays invisible to anyone reading the log.
-            state.suppressedAdvisories += advisories.length;
-            return;
-        }
-        for (const message of advisories) {
-            warn(`[csszyx] ${id}\n  ${message}`);
-        }
+        const routed = routeTransformDiagnostics(
+            result.diagnostics,
+            id,
+            quiet,
+            shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+        );
+        for (const warning of routed.spread) state.spreadWarnings.add(warning);
+        for (const line of routed.immediate) console.warn(line);
+        // Held back, but counted. These are advisory by design — the runtime
+        // path works and the classes are collected — so a production build is
+        // right not to list them. It is not right to leave the reader
+        // believing the fallbacks it DID list are all of them, which is how a
+        // site that only ever falls back at an sz prop stays invisible to
+        // anyone reading the log.
+        state.suppressedAdvisories += routed.heldAdvisories;
+        for (const line of routed.advisories) warn(line);
     }
 
     /**
