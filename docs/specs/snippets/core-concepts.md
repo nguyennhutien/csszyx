@@ -453,8 +453,8 @@ Pick is for CONCRETE tags only. On a generic component (`E extends ElementType`)
 `Pick<ComponentProps<E>, 'sz'>` distributes over union members without the
 augmentation and resolves order-dependently (sz can flip optional→required when an
 unrelated file changes). Generic wrappers declare the prop directly — `sz?: SzInput`
-(from `csszyx`) — which is stable and also accepts szv factory output
-(`sz={someSzv({ v })}`; `SzPropValue` rejects it, `SzInput` is the forwarding type).
+(from `csszyx`) — which is stable and is the forwarding type. A szv factory returns
+`SzProps`, so `sz={someSzv({ v })}` type-checks against `SzPropValue` and `SzInput` alike.
 
 The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" />`
 or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of

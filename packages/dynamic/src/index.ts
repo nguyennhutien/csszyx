@@ -22,6 +22,7 @@
 // Import only the browser-safe (pure JS, no WASM) transform sub-path.
 // The main '@csszyx/compiler' entry bundles @csszyx/core (WASM) which cannot
 // run in browsers without a dedicated WASM loader.
+import type { SzProps } from '@csszyx/compiler';
 import type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
 import { transform } from '@csszyx/compiler/browser';
 
@@ -49,14 +50,14 @@ export { type DynamicReport, dynamicReport } from './report.js';
  *
  * SSR-safe: on server, returns class names without CSSOM access.
  *
- * @param szProps - sz object (e.g. { p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } }). Accepts both mutable and `as const` objects.
+ * @param szProps - sz object (e.g. { p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } }). Accepts both mutable and `as const` objects, and the `SzProps` an `szv()` factory returns.
  * @returns space-separated class string (e.g. "p-4 bg-blue-500 hover:bg-blue-600")
  *
  * @example
  * const cls = dynamic({ p: 4, bg: 'blue-500' });
  * // → "p-4 bg-blue-500" (injects CSS for classes not in built stylesheet)
  */
-export function dynamic(szProps: SzObject | ReadonlySzObject): string {
+export function dynamic(szProps: SzObject | ReadonlySzObject | SzProps): string {
     const { className } = transform(szProps as SzObject);
     if (!className) {
         return '';

@@ -106,6 +106,10 @@ const calloutSz = szv({
 <div sz={calloutSz({ severity })} />;
 ```
 
+The factory returns `SzProps`, and every row is checked like `sz={…}`: an unknown
+key (also nested, e.g. `hover: { bgg: … }`) or a bad value is a compile error. A row
+shared between configs is declared `as const` (or typed `SzProps`).
+
 ## Runtime composition
 
 For dynamic class composition use the public helpers from

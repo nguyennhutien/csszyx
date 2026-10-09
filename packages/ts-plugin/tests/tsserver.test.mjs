@@ -11,12 +11,12 @@ const repositoryRoot = resolve(packageDirectory, '../..');
 const rootRequire = createRequire(join(repositoryRoot, 'package.json'));
 const projectRoot = join(repositoryRoot, 'playground/vite-react');
 const fileName = join(projectRoot, 'src/App.tsx');
-// A szv innermost variant object: SzObject's index signature means TypeScript
-// itself offers no key completions there, so every sz key the plugin returns is
-// unambiguously its own. (A plain `sz={{}}` prop is a weaker probe: when the
-// project's sz JSX type resolves, the base service already lists keys like `bg`
+// An szr argument: szr takes `object`, so TypeScript itself offers no key
+// completions there, and every sz key the plugin returns is unambiguously its
+// own. (A szv row was the probe until its rows became typed `SzProps`; there,
+// as in a plain `sz={{}}` prop, the base service already lists keys like `bg`
 // and the plugin correctly dedupes them, so they would not appear as owned.)
-const source = "import { szv } from 'csszyx'; const s = szv({ variants: { size: { sm: {  } } } });";
+const source = "import { szr } from 'csszyx'; const s = szr({  });";
 const completionOffset = source.indexOf('{  }') + 3;
 const servers = new Map([
     ['lowest', packageRequire.resolve('typescript/lib/tsserver.js')],

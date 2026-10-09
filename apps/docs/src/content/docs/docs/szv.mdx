@@ -30,7 +30,7 @@ const buttonSz = szv({
   defaultVariants: { variant: 'default', size: 'md' },
 });
 
-// Usage — returns an sz object, feeds directly into sz prop
+// Usage — returns `SzProps` (the type `sz=` takes), so it feeds the sz prop without a cast
 <button sz={buttonSz({ variant: 'outline', size: 'sm' })} />
 
 // defaultVariants apply when no selection given
@@ -55,6 +55,33 @@ TypeScript inference works because `szv()` is generic over the `variants` object
 Pass the config inline — do not hoist it to a separate `const` with an explicit type, as that
 would widen the literal types and lose the inference.
 :::
+
+Every row is checked like `sz={…}`: an unknown key — at the top of a row or nested under a
+variant such as `hover` — and an invalid value are compile errors.
+
+```tsx
+szv({ variants: { size: { sm: { p: 2, bgg: 'red-500' } } } })          // ❌ `bgg` is not an sz key
+szv({ variants: { size: { sm: { hover: { bgg: 'red-500' } } } } })     // ❌ nested too
+szv({ variants: { layout: { row: { display: 'flexx' } } } })           // ❌ not a display value
+```
+
+A row shared between configs is declared `as const` or typed `SzProps`, exactly as for
+`sz={row}`. Without `as const` the row's values widen to `string` and `number`, and the row
+is rejected for any key whose value type is a closed set of keywords: `{ display: 'flex' }`
+becomes `{ display: string }`, which is not a display value. A key that takes any string,
+such as `rounded` or `bg`, still compiles widened. A row typed `SzObject` is rejected, and
+a row table built at runtime as `Record<string, SzProps>` is accepted.
+
+```tsx
+const row = { display: 'flex', gap: 2 };            // widened: display is string
+szv({ variants: { layout: { row } } });              // ❌ not a display value
+
+const pill = { display: 'inline-flex', rounded: 'full', px: 3 } as const;
+const badgeSz = szv({ variants: { shape: { pill, square: { rounded: 'none' } } } });
+```
+
+A mistyped key is reported once, on that key, and the error names it:
+`Type '"red-500"' is not assignable to type '"red-500" & NotAnSzKey<"bgg">'`.
 
 ## Compose with sz array syntax
 
