@@ -8,10 +8,11 @@
  * reads the file.
  *
  * The file records the project it was written for, every stylesheet it looked
- * at, and the content hash of every stylesheet it read, so a reader can tell
- * when it describes another project, or a project that has since gained a
- * stylesheet or changed one, instead of lowering against a prefix the project
- * no longer sets.
+ * at, the content hash of every stylesheet it read, and of every `.gitignore`
+ * its walk applied, so a reader can tell when it describes another project, or
+ * a project that has since gained a stylesheet, changed one, or changed which
+ * ones git ignores, instead of lowering against a prefix the project no longer
+ * sets.
  *
  * @module
  */
@@ -58,9 +59,19 @@ export interface NextStylesheetFactsEntry {
     dependency: boolean;
 }
 
+/** One `.gitignore` the stylesheet walk applied, with the content it applied. */
+export interface NextGitignoreEntry {
+    file: string;
+    /** Hex sha256 of its content, or `missing` when it could not be read. */
+    sha256: string;
+}
+
+/** The schema this csszyx writes and reads. */
+const FACTS_SCHEMA = 4;
+
 /** What `csszyx next prebuild` and `next watch` record for the loader. */
 export interface NextStylesheetFactsRecord {
-    schema: 3;
+    schema: 4;
     /** The app root the stylesheets were read from. */
     root: string;
     /**
@@ -75,6 +86,11 @@ export interface NextStylesheetFactsRecord {
     candidates: string[];
     /** Every stylesheet read, and every one they import, so a reader can tell when one changed. */
     entries: NextStylesheetFactsEntry[];
+    /**
+     * Every `.gitignore` the stylesheet walk applied, parents first. The walk
+     * skips what they cover, so an edit to one can add or drop a candidate.
+     */
+    gitignore: NextGitignoreEntry[];
 }
 
 /** The facts file's name, under the Next app's csszyx cache directory. */
@@ -113,14 +129,21 @@ export function failedNextClassPrefixInputsStamp(input: {
     tailwindStylesheet: readonly string[];
     ignore?: readonly string[];
 }): string {
-    const candidates =
+    const walked =
         input.tailwindStylesheet.length > 0
-            ? input.tailwindStylesheet.map(file => path.resolve(input.root, file))
-            : walkedStylesheets(
+            ? {
+                  files: input.tailwindStylesheet.map(file => path.resolve(input.root, file)),
+                  gitignoreFiles: [],
+              }
+            : walkStylesheets(
                   input.root,
                   input.ignore ?? recordedIgnore(input.cacheDir, input.root),
               );
-    const files = sortStrings([resolveNextStylesheetFactsPath(input.cacheDir), ...candidates]);
+    const files = sortStrings([
+        resolveNextStylesheetFactsPath(input.cacheDir),
+        ...walked.files,
+        ...walked.gitignoreFiles,
+    ]);
     const hash = createHash('sha256');
     for (const file of files) {
         hash.update(file).update('\0');
@@ -214,7 +237,11 @@ function isFactsRecord(value: unknown): value is NextStylesheetFactsRecord {
     if (typeof value !== 'object' || value === null) return false;
     const record = value as Partial<Record<keyof NextStylesheetFactsRecord, unknown>>;
     return (
-        record.schema === 3 &&
+        record.schema === FACTS_SCHEMA &&
+        Array.isArray(record.gitignore) &&
+        record.gitignore.every(
+            entry => typeof entry?.file === 'string' && typeof entry.sha256 === 'string',
+        ) &&
         typeof record.root === 'string' &&
         Array.isArray(record.ignore) &&
         record.ignore.every(pattern => typeof pattern === 'string') &&
@@ -246,6 +273,13 @@ function readFactsRecord(
         parsed = JSON.parse(text);
     } catch {
         return { ok: false, reason: 'the stylesheet facts file is not valid JSON' };
+    }
+    const schema = (parsed as { schema?: unknown } | null)?.schema;
+    if (typeof schema === 'number' && schema < FACTS_SCHEMA) {
+        return {
+            ok: false,
+            reason: 'the stylesheet facts were written by an older csszyx, before they recorded which files `.gitignore` leaves out; run `csszyx next prebuild` again to rewrite them',
+        };
     }
     if (!isFactsRecord(parsed)) {
         return {
@@ -297,7 +331,12 @@ export async function openStylesheetModel(input: {
     ignore?: readonly string[];
     setting?: string;
     ignoreSetting?: string;
-}): Promise<{ model: ProjectStyleModel; candidates: string[]; ignore: string[] }> {
+}): Promise<{
+    model: ProjectStyleModel;
+    candidates: string[];
+    ignore: string[];
+    gitignoreFiles: string[];
+}> {
     const listed = (input.tailwindStylesheet ?? []).map(file => ({
         file,
         absolute: path.resolve(input.root, file),
@@ -316,9 +355,10 @@ export async function openStylesheetModel(input: {
     // writer would drop them and record the prefix they set as none. A
     // stylesheet this run's sources import stays even under an ignored path:
     // the import is evidence the app loads it.
+    const walk = walkStylesheets(input.root, ignore);
     const walked = [
         ...new Set([
-            ...walkedStylesheets(input.root, ignore),
+            ...walk.files,
             ...(input.extraCandidates ?? []),
             ...recordedCandidates(input.cacheDir, input.root).filter(file => !ignoresFile(file)),
         ]),
@@ -333,7 +373,7 @@ export async function openStylesheetModel(input: {
     const problem = styleModelError(model, input.root, input.setting, input.ignoreSetting);
     if (problem !== null) throw new Error(problem);
 
-    return { model, candidates, ignore };
+    return { model, candidates, ignore, gitignoreFiles: walk.gitignoreFiles };
 }
 
 /**
@@ -371,14 +411,17 @@ export async function writeNextStylesheetFacts(input: {
     warning: string | null;
     model: ProjectStyleModel;
 }> {
-    const { model, candidates, ignore } = await openStylesheetModel(input);
+    const { model, candidates, ignore, gitignoreFiles } = await openStylesheetModel(input);
     const { record, path: file } = recordStylesheetFacts(
         model,
         input.root,
         input.cacheDir,
         candidates,
-        input.writeOptions,
-        ignore,
+        {
+            writeOptions: input.writeOptions,
+            ignore,
+            gitignoreFiles,
+        },
     );
     return {
         record,
@@ -422,14 +465,61 @@ function recordedIgnore(cacheDir: string, root: string): string[] {
 }
 
 /**
- * The stylesheets a walk of the project finds outside the ignored paths.
+ * The stylesheets a walk of the project finds outside the ignored paths and
+ * what `.gitignore` covers, and the `.gitignore` files it applied.
  *
  * @param root - The Next app root.
  * @param ignore - Patterns to leave out, relative to the root.
- * @returns Absolute stylesheet paths.
+ * @returns Absolute stylesheet paths, and absolute `.gitignore` paths.
  */
-function walkedStylesheets(root: string, ignore: readonly string[]): string[] {
-    return discoverProjectTheme(root, [], ignore).scanned;
+function walkStylesheets(
+    root: string,
+    ignore: readonly string[],
+): { files: string[]; gitignoreFiles: string[] } {
+    const { scanned, gitignoreFiles } = discoverProjectTheme(root, [], ignore);
+    return { files: scanned, gitignoreFiles };
+}
+
+/**
+ * The fingerprint of the `.gitignore` files a walk applied.
+ *
+ * @param files - Their paths, in the order the walk applied them.
+ * @returns One entry per file, with its content hash.
+ */
+function gitignoreFingerprint(files: readonly string[]): NextGitignoreEntry[] {
+    return files.map(file => ({ file, sha256: currentSha256(file) ?? 'missing' }));
+}
+
+/**
+ * Whether two `.gitignore` fingerprints describe the same files and content.
+ *
+ * @param a - One fingerprint.
+ * @param b - The other.
+ * @returns True when equal, entry for entry.
+ */
+function sameGitignore(
+    a: readonly NextGitignoreEntry[],
+    b: readonly NextGitignoreEntry[],
+): boolean {
+    return (
+        a.length === b.length &&
+        a.every(
+            (entry, index) => entry.file === b[index]?.file && entry.sha256 === b[index]?.sha256,
+        )
+    );
+}
+
+/**
+ * The `.gitignore` files a record lists, hashed as they are now.
+ *
+ * @param cacheDir - The csszyx cache directory for the app.
+ * @returns Their fingerprint, or undefined when no record can be read.
+ */
+function recordedGitignoreNow(cacheDir: string): NextGitignoreEntry[] | undefined {
+    const read = readFactsRecord(cacheDir);
+    return read.ok
+        ? gitignoreFingerprint(read.record.gitignore.map(entry => entry.file))
+        : undefined;
 }
 
 /**
@@ -456,9 +546,13 @@ function recordedCandidates(cacheDir: string, root: string): string[] {
  * @param root - The project root the stylesheets were read from.
  * @param cacheDir - The csszyx cache directory for that project.
  * @param candidates - Every stylesheet the model was opened over.
- * @param writeOptions - Atomic write options.
- * @param ignore - The patterns the writer walked with; the ones already
+ * @param options - How the record is written.
+ * @param options.writeOptions - Atomic write options.
+ * @param options.ignore - The patterns the writer walked with; the ones already
  *        recorded for this project when the writer has none of its own.
+ * @param options.gitignoreFiles - The `.gitignore` files the walk behind
+ *        `candidates` applied. Every writer has walked already; a second walk
+ *        here could apply other files than the one that found the candidates.
  * @returns The record and where it lives.
  */
 export function recordStylesheetFacts(
@@ -466,9 +560,13 @@ export function recordStylesheetFacts(
     root: string,
     cacheDir: string,
     candidates: readonly string[],
-    writeOptions?: AtomicWriteOptions,
-    ignore?: readonly string[],
+    options: {
+        writeOptions?: AtomicWriteOptions;
+        ignore?: readonly string[];
+        gitignoreFiles: readonly string[];
+    },
 ): { record: NextStylesheetFactsRecord; path: string } {
+    const ignore = canonicalIgnore(options.ignore ?? recordedIgnore(cacheDir, root));
     const entries = model.entries.map(entry => {
         const text = readFileSync(entry.file, 'utf8');
         return {
@@ -487,18 +585,19 @@ export function recordStylesheetFacts(
         entries.push({ file, sha256: sha256Of(readFileSync(file, 'utf8')), dependency: true });
     }
     const record: NextStylesheetFactsRecord = {
-        schema: 3,
+        schema: FACTS_SCHEMA,
         root,
-        ignore: canonicalIgnore(ignore ?? recordedIgnore(cacheDir, root)),
+        ignore,
         facts: model.facts,
         candidates: [...candidates],
         entries,
+        gitignore: gitignoreFingerprint(options.gitignoreFiles),
     };
     const file = resolveNextStylesheetFactsPath(cacheDir);
     const content = `${JSON.stringify(record, null, 2)}\n`;
     // Rewritten only when it changed: a loader declares this file as a
     // dependency, so identical bytes written again would recompile every module.
-    if (readText(file) !== content) atomicWriteFileSync(file, content, writeOptions);
+    if (readText(file) !== content) atomicWriteFileSync(file, content, options.writeOptions);
     return { record, path: file };
 }
 
@@ -512,11 +611,19 @@ export function recordStylesheetFacts(
  * @param expected.candidates - The stylesheets the reader would read.
  * @param expected.ignore - The reader's own ignore patterns, when it was
  *        configured with them; facts written under other patterns are stale.
+ * @param expected.gitignore - The `.gitignore` files the reader's own walk
+ *        applied, when its candidates come from a walk; facts written under
+ *        other ones are stale.
  * @returns The record, or why it cannot be used.
  */
 export function readNextStylesheetFacts(
     cacheDir: string,
-    expected?: { root: string; candidates: readonly string[]; ignore?: readonly string[] },
+    expected?: {
+        root: string;
+        candidates: readonly string[];
+        ignore?: readonly string[];
+        gitignore?: readonly NextGitignoreEntry[];
+    },
 ): { ok: true; record: NextStylesheetFactsRecord } | { ok: false; reason: string } {
     const read = readFactsRecord(cacheDir);
     if (!read.ok) return read;
@@ -536,6 +643,15 @@ export function readNextStylesheetFacts(
             return {
                 ok: false,
                 reason: 'the stylesheet facts were written under other ignore patterns',
+            };
+        }
+        if (
+            expected.gitignore !== undefined &&
+            !sameGitignore(expected.gitignore, record.gitignore)
+        ) {
+            return {
+                ok: false,
+                reason: 'a .gitignore changed since the stylesheet facts were written',
             };
         }
         const recorded = new Set(record.candidates);
@@ -559,10 +675,14 @@ export function readNextStylesheetFacts(
 }
 
 /** The walk each root was last given, and the facts file it was taken against. */
-const walkedCandidates = new Map<
-    string,
-    { stamp: string | null; files: string[]; ignore: string[] }
->();
+const walkedCandidates = new Map<string, StylesheetWalk & { stamp: string | null }>();
+
+/** What one walk of a project found, and the patterns it was found under. */
+interface StylesheetWalk {
+    files: string[];
+    ignore: string[];
+    gitignore: NextGitignoreEntry[];
+}
 
 /**
  * The stylesheets a walk of the project finds, walked again only when the
@@ -593,27 +713,54 @@ export function recordedStylesheetIgnore(root: string, cacheDir: string): string
 }
 
 /**
- * The walk a root was last given, taken again only when the facts file changes.
+ * The `.gitignore` files the last walk of a project applied, with their
+ * content, walked again when the facts file or one of them changes.
+ *
+ * @param root - The Next app root.
+ * @param cacheDir - The csszyx cache directory for that app.
+ * @returns The fingerprint a reader compares with the recorded one.
+ */
+export function projectStylesheetGitignore(root: string, cacheDir: string): NextGitignoreEntry[] {
+    return projectStylesheetWalk(root, cacheDir).gitignore;
+}
+
+/**
+ * A file's identity on disk, for noticing an edit without reading it.
+ *
+ * @param file - Absolute path.
+ * @returns Inode, time and size, or null when it is not there.
+ */
+function statStamp(file: string): string | null {
+    try {
+        const stat = statSync(file);
+        return `${stat.ino}:${stat.mtimeMs}:${stat.size}`;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The walk a root was last given, taken again only when the facts file or a
+ * `.gitignore` that walk applied changes.
  *
  * @param root - The Next app root.
  * @param cacheDir - The csszyx cache directory for that app.
  * @returns The stylesheets found and the patterns they were found under.
  */
-function projectStylesheetWalk(
-    root: string,
-    cacheDir: string,
-): { files: string[]; ignore: string[] } {
-    let stamp: string | null;
-    try {
-        const stat = statSync(resolveNextStylesheetFactsPath(cacheDir));
-        stamp = `${stat.ino}:${stat.mtimeMs}:${stat.size}`;
-    } catch {
-        stamp = null;
-    }
+function projectStylesheetWalk(root: string, cacheDir: string): StylesheetWalk {
+    const factsStamp = statStamp(resolveNextStylesheetFactsPath(cacheDir));
     const walked = walkedCandidates.get(root);
-    if (walked?.stamp === stamp) return walked;
+    if (walked !== undefined) {
+        const stamp = [factsStamp, ...walked.gitignore.map(entry => statStamp(entry.file))].join(
+            '|',
+        );
+        if (walked.stamp === stamp) return walked;
+    }
     const ignore = recordedIgnore(cacheDir, root);
-    const entry = { stamp, files: walkedStylesheets(root, ignore), ignore };
+    const { files, gitignoreFiles } = walkStylesheets(root, ignore);
+    const gitignore = gitignoreFingerprint(gitignoreFiles);
+    const stamp = [factsStamp, ...gitignoreFiles.map(statStamp)].join('|');
+    const entry = { stamp, files, ignore, gitignore };
     walkedCandidates.set(root, entry);
     return entry;
 }
@@ -639,6 +786,9 @@ export type NextClassPrefix =
  *        `tailwindStylesheet` are given.
  * @param input.ignore - The caller's own ignore patterns, for a lane
  *        configured with them; the recorded ones otherwise.
+ * @param input.gitignore - The `.gitignore` files the walk behind
+ *        `candidates` applied; the recorded files, read now, when a caller
+ *        hands candidates without them.
  * @returns The prefix and its dependencies, or why it is not known yet.
  */
 export function resolveNextClassPrefix(input: {
@@ -647,21 +797,31 @@ export function resolveNextClassPrefix(input: {
     tailwindStylesheet: readonly string[];
     candidates?: readonly string[];
     ignore?: readonly string[];
+    gitignore?: readonly NextGitignoreEntry[];
 }): NextClassPrefix {
     const factsPath = resolveNextStylesheetFactsPath(input.cacheDir);
     const listed = input.tailwindStylesheet.map(file => path.resolve(input.root, file));
-    const candidates =
-        listed.length > 0
-            ? listed
-            : (input.candidates ??
-              walkedStylesheets(
-                  input.root,
-                  input.ignore ?? recordedIgnore(input.cacheDir, input.root),
-              ));
+    let candidates: readonly string[];
+    let gitignore: readonly NextGitignoreEntry[] | undefined;
+    if (listed.length > 0) {
+        // A named list is the whole answer; what git ignores does not change it.
+        candidates = listed;
+    } else if (input.candidates === undefined) {
+        const walked = walkStylesheets(
+            input.root,
+            input.ignore ?? recordedIgnore(input.cacheDir, input.root),
+        );
+        candidates = walked.files;
+        gitignore = gitignoreFingerprint(walked.gitignoreFiles);
+    } else {
+        candidates = input.candidates;
+        gitignore = input.gitignore ?? recordedGitignoreNow(input.cacheDir);
+    }
     const read = readNextStylesheetFacts(input.cacheDir, {
         root: input.root,
         candidates,
         ignore: input.ignore,
+        gitignore,
     });
     if (read.ok) {
         const decided = read.record.entries.filter(entry => entry.dependency);

@@ -3,8 +3,8 @@
  *
  * `findTailwindCssEntries` returns the shallowest first, because a stylesheet
  * nearer the project root is the one a build actually imports. Depth was
- * counted by splitting on `path.sep`, and `fast-glob` returns posix paths on
- * every platform — so on Windows the split found no separator, every path
+ * counted by splitting on `path.sep`, and the entry finder hands posix paths
+ * over on every platform — so on Windows the split found no separator, every path
  * measured depth 1, and the ordering silently fell back to alphabetical.
  *
  * These are a regression guard, NOT a red-first test, and the difference is
@@ -28,7 +28,7 @@ describe('comparePathDepth', () => {
     });
 
     it('counts depth from the posix separator, whatever the platform uses', () => {
-        // fast-glob returns `/` on Windows too, so a comparator that consults
+        // The entry finder hands `/` over on Windows too, so a comparator that consults
         // `path.sep` measures every path as depth 1 there and stops ordering.
         const sorted = ['/p/src/deep/app.css', '/p/app.css', '/p/src/app.css'].sort(
             comparePathDepth,

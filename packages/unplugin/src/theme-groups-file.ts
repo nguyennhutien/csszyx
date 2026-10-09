@@ -45,8 +45,10 @@ export interface ThemeGroupsFile {
 
 /** Cached answer plus the stylesheet state it was computed from. */
 interface CachedGroups extends ThemeGroupsFile {
-    /** Size and mtime of every watched stylesheet, in `watch` order. */
+    /** Size and mtime of every file in `signed`, in order. */
     signature: string;
+    /** The watched stylesheets, then the `.gitignore` files the walk applied. */
+    signed: string[];
     /** The ignore patterns the scan ran under; other patterns find other files. */
     ignore: string;
 }
@@ -89,7 +91,7 @@ function signatureOf(files: readonly string[]): string {
  */
 function isCacheUsable(cached: CachedGroups | undefined, ignore: string): cached is CachedGroups {
     if (cached?.ignore !== ignore) return false;
-    return signatureOf(cached.watch) === cached.signature;
+    return signatureOf(cached.signed) === cached.signature;
 }
 
 /**
@@ -118,7 +120,7 @@ export function ensureThemeGroupsFile(
         return { file: cached.file, watch: cached.watch };
     }
 
-    const { theme, scanned } = discoverProjectTheme(root, [], ignore);
+    const { theme, scanned, gitignoreFiles } = discoverProjectTheme(root, [], ignore);
     const tokens = {
         colors: theme?.colors ?? [],
         textSizes: theme?.textSizes ?? [],
@@ -142,14 +144,17 @@ export function ensureThemeGroupsFile(
         }
     }
 
-    // Signature is taken AFTER the write, from the stylesheets only — the
+    // Signature is taken AFTER the write, from the stylesheets and the
+    // `.gitignore` files that chose them only — the
     // generated module is never in the watch set. Watching a file this function
     // writes would invalidate the modules that import it on every regeneration,
     // which is the re-run cascade the loader avoids everywhere else.
+    const signed = [...scanned, ...gitignoreFiles];
     const result: CachedGroups = {
         file,
         watch: scanned,
-        signature: signatureOf(scanned),
+        signature: signatureOf(signed),
+        signed,
         ignore: ignoreKey,
     };
     cacheByRoot.set(root, result);

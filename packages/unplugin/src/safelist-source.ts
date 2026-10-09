@@ -8,6 +8,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { DEPENDENCY_OUTPUT_DIRS, stripCssBlockComments } from '@csszyx/tailwind-oracle';
+
 import { normalizePathSeparators } from './path-normalization.js';
 
 /**
@@ -142,16 +145,16 @@ export function findLegacySourceDirective(
     return null;
 }
 
-/** Directories no stylesheet of the project itself lives in. */
-const SKIPPED_DIRS = new Set([
-    'node_modules',
-    '.git',
+/**
+ * Directories no stylesheet of the project itself lives in: dependencies and
+ * framework output, plus the deploy, report and csszyx output this check has
+ * always skipped. Any `.next*` directory is skipped by name below.
+ */
+const SKIPPED_DIRS: ReadonlySet<string> = new Set([
+    ...DEPENDENCY_OUTPUT_DIRS,
     '.csszyx',
-    'dist',
-    'build',
     'out',
     'coverage',
-    '.turbo',
     '.vercel',
 ]);
 
@@ -389,39 +392,6 @@ export function appendTailwindSourceDirective(code: string, relPath: string): st
     }
     const separator = code.length === 0 || code.endsWith('\n') ? '' : '\n';
     return `${code}${separator}${directive}\n`;
-}
-
-/**
- * Strip CSS block comments in a single linear pass. The regex form
- * (`/\/\*[\s\S]*?\*\//`) is polynomial-ReDoS on adversarial input such as an
- * unterminated `/*` followed by many `a/*` repetitions (CodeQL
- * js/polynomial-redos), so scan by hand: O(n), no backtracking, copying only
- * the whole non-comment spans.
- *
- * @param code - CSS source that may contain block comments.
- * @returns the source with every block comment removed.
- */
-export function stripCssBlockComments(code: string): string {
-    const SLASH = 47;
-    const STAR = 42;
-    let out = '';
-    let last = 0;
-    let i = 0;
-    const n = code.length;
-    while (i < n) {
-        if (code.codePointAt(i) === SLASH && code.codePointAt(i + 1) === STAR) {
-            out += code.slice(last, i);
-            i += 2;
-            while (i < n && !(code.codePointAt(i) === STAR && code.codePointAt(i + 1) === SLASH)) {
-                i++;
-            }
-            i += 2; // skip past the closing */ (or past EOF if unterminated)
-            last = i;
-        } else {
-            i++;
-        }
-    }
-    return out + code.slice(last);
 }
 
 /**

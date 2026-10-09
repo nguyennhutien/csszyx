@@ -22,6 +22,7 @@ import {
 } from '@csszyx/compiler';
 import {
     createEmittedClassOracle,
+    DEPENDENCY_OUTPUT_DIRS,
     type DeclaredToken,
     type EmittedClassOracle,
     FILE_READ_CONCURRENCY,
@@ -33,6 +34,7 @@ import {
     type SiblingKeywordFinding,
     STYLESHEET_COMPILE_CONCURRENCY,
     type SzValuePair,
+    skippedDirGlobs,
     szValuePairs,
 } from '@csszyx/tailwind-oracle';
 import fg from 'fast-glob';
@@ -122,14 +124,11 @@ interface SzIssue {
     message: string;
 }
 
-const DEFAULT_IGNORE = [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/.next/**',
-    '**/.nuxt/**',
-    '**/.astro/**',
-];
+/**
+ * Dependencies and framework output only. A gitignored or report-named folder
+ * among the sources is still audited: the build safelists what it holds.
+ */
+const DEFAULT_IGNORE = skippedDirGlobs(DEPENDENCY_OUTPUT_DIRS, { anchored: false });
 
 /**
  * Read one source file, returning null when it cannot contribute diagnostics.

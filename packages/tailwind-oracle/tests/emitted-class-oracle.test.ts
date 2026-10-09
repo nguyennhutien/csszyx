@@ -632,8 +632,8 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         roots.push(root);
         return root;
     };
-    // The entry finder hands back what fast-glob found, and fast-glob spells
-    // absolute paths with forward slashes on every platform. Every consumer
+    // The entry finder spells absolute paths with forward slashes on every
+    // platform. Every consumer
     // only reads the file, so the spelling is internal — but an assertion
     // built with `path.join` would carry backslashes on Windows and disagree
     // with a correct answer.
@@ -686,6 +686,28 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         const root = tempRoot();
         write(root, { 'src/plain.css': 'body { margin: 0; }' });
         expect(await findTailwindCssEntry(root)).toBeNull();
+    });
+
+    it('ignores a stylesheet .gitignore covers, as the build walk does', async () => {
+        // A stale export under `out/` would vote on the prefix in `check` and
+        // not in the build.
+        const root = tempRoot();
+        write(root, {
+            '.gitignore': 'out/\n',
+            'out/static/app.css': '@import "tailwindcss" prefix(old);',
+            'src/app.css': '@import "tailwindcss";',
+        });
+        expect(await findTailwindCssEntries(root)).toEqual([entry(root, 'src/app.css')]);
+    });
+
+    it('keeps a gitignored stylesheet another stylesheet imports', async () => {
+        const root = tempRoot();
+        write(root, {
+            '.gitignore': 'generated/\n',
+            'src/app.css': '@import "../generated/tailwind.css";',
+            'generated/tailwind.css': '@import "tailwindcss";',
+        });
+        expect(await findTailwindCssEntries(root)).toEqual([entry(root, 'generated/tailwind.css')]);
     });
 });
 

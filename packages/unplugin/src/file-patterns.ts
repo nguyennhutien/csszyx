@@ -1,5 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { DEPENDENCY_OUTPUT_DIRS, walkProject } from '@csszyx/tailwind-oracle';
+
 import { normalizePathSeparators } from './path-normalization.js';
 import { sortStrings } from './sort.js';
 
@@ -7,7 +10,6 @@ import { sortStrings } from './sort.js';
 export type FilePattern = string | RegExp;
 
 const GLOB_MAGIC_RE = /[*?[\]{}]/;
-const DEFAULT_IGNORED_DIRS = new Set(['node_modules', '.git', '.next', '.turbo', 'dist', 'build']);
 
 /**
  * Normalizes file ids from Vite/Rollup/Webpack before matching.
@@ -145,28 +147,16 @@ export function matchesAnyPattern(
 }
 
 /**
- * Collect every non-hidden file below a directory.
+ * Collect every file below a directory outside dependency and framework
+ * output and dot-directories.
  *
  * @param dir Directory to walk.
  * @param files Destination file set.
  */
 function collectDirectoryFiles(dir: string, files: Set<string>): void {
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return;
-    }
-    for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            if (!DEFAULT_IGNORED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                collectDirectoryFiles(full, files);
-            }
-        } else {
-            files.add(path.resolve(full));
-        }
-    }
+    walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS }, file => {
+        files.add(path.resolve(file.path));
+    });
 }
 
 /**

@@ -61,6 +61,7 @@ import {
     projectResolver,
     type StylesheetAlias,
 } from './project-resolver.js';
+import { walkProjectStylesheets } from './project-walk.js';
 import type { KeywordOracle } from './sibling-keyword.js';
 import type { CollisionOracle } from './theme-collision.js';
 
@@ -483,26 +484,6 @@ function tailwindPackageStylesheet(id: string, tailwindRoot: string): string {
 }
 
 /**
- * Directories a project's own stylesheets never live in.
- *
- * The build output here carries copies of the app's stylesheets. The bundler
- * plugin's walk skips the same ones, so `csszyx check` does not stop over a
- * stale copy with an older prefix that the build never reads.
- */
-const IGNORED_CSS_DIRS = [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/.next/**',
-    '**/.nuxt/**',
-    '**/.astro/**',
-    '**/.turbo/**',
-    '**/target/**',
-    '**/coverage/**',
-    '**/storybook-static/**',
-];
-
-/**
  * Find the stylesheet that pulls Tailwind into the project.
  *
  * That file is the one worth compiling: everything the project adds — `@theme`
@@ -520,8 +501,8 @@ export async function findTailwindCssEntry(cwd: string): Promise<string | null> 
  * Order two glob results shallowest first, then by name.
  *
  * Depth is counted from `/` rather than `path.sep` because that is what the
- * input is: `fast-glob` returns posix paths on every platform, including
- * Windows. Asking the platform there found no separator at all, measured every
+ * input is: the entry finder hands posix paths over on every platform,
+ * including Windows. Asking the platform there found no separator at all, measured every
  * path as depth 1, and dropped the ordering to alphabetical without saying so.
  *
  * On posix the two spellings are the same function, so this cannot be shown
@@ -552,14 +533,14 @@ export function comparePathDepth(a: string, b: string): number {
  * @param cwd - Project root to search.
  * @returns Absolute paths to the entries, nearest the root first.
  */
-export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
-    // Loaded on first use: fast-glob is CommonJS, and a bundler that inlines
-    // this package keeps a static CommonJS import alive and runs it when the
-    // bundle loads — 166 KB in `@csszyx/unplugin`, which never calls this.
-    const { default: fg } = await import('fast-glob');
-    return tailwindEntriesAmong(
-        await fg('**/*.css', { cwd, ignore: IGNORED_CSS_DIRS, absolute: true }),
-    );
+export function findTailwindCssEntries(cwd: string): Promise<string[]> {
+    // The bundler plugin's own stylesheet walk: dependencies, build output,
+    // generated reports and what `.gitignore` covers are skipped, a gitignored
+    // stylesheet another one imports is kept. `csszyx check` then does not stop
+    // over a stale copy with an older prefix that the build never reads.
+    // Posix spelling, as the depth order reads it.
+    const { files } = walkProjectStylesheets([cwd]);
+    return tailwindEntriesAmong(files.map(file => file.split(path.sep).join('/')));
 }
 
 /**

@@ -212,6 +212,9 @@ importers:
       fs-extra:
         specifier: ^11.4.1
         version: 11.4.1
+      ignore:
+        specifier: ^7.0.6
+        version: 7.0.6
       ora:
         specifier: ^9.4.1
         version: 9.4.1
@@ -494,9 +497,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
-      fast-glob:
-        specifier: ^3.3.3
-        version: 3.3.3
+      ignore:
+        specifier: ^7.0.6
+        version: 7.0.6
 
   packages/tooling-metadata:
     devDependencies:
@@ -560,6 +563,9 @@ importers:
       '@csszyx/vue-adapter':
         specifier: workspace:*
         version: link:../vue-adapter
+      ignore:
+        specifier: ^7.0.6
+        version: 7.0.6
       minimatch:
         specifier: ^10.2.6
         version: 10.2.6

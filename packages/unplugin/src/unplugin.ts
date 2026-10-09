@@ -22,7 +22,15 @@ import {
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import { loadContentScanner } from '@csszyx/tailwind-oracle';
+import {
+    createGitignoreQuery,
+    DEPENDENCY_OUTPUT_DIRS,
+    GENERATED_REPORT_DIRS,
+    type GitignoreMode,
+    loadContentScanner,
+    stripCssBlockComments,
+    walkProject,
+} from '@csszyx/tailwind-oracle';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
@@ -143,7 +151,6 @@ import {
     legacySourceMessage,
     removeLegacySafelists,
     SAFELIST_FILE,
-    stripCssBlockComments,
 } from './safelist-source.js';
 
 export {
@@ -181,7 +188,7 @@ import {
 import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
-import { discoverProjectTheme, THEME_SCAN_IGNORE_DIRS } from './theme-discovery.js';
+import { discoverProjectTheme } from './theme-discovery.js';
 import {
     ensureThemeGroupsFile,
     THEME_GROUPS_FILE_MARKER,
@@ -3052,6 +3059,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Every stylesheet the project walk read, used to plan global-var aliases
     // before the first CSS module is transformed.
     let projectCssFiles: readonly string[] = [];
+    // The `.gitignore` files the walk that found them applied.
+    let projectGitignoreFiles: readonly string[] = [];
     /**
      * Stylesheets the prescan found imported from JavaScript, which the `.css`
      * walk cannot see when an app keeps no stylesheet of its own.
@@ -3335,7 +3344,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         '.mts',
         '.cts',
     ]);
-    const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
      * User exclude filters must run before any parser call. This is the escape
@@ -3519,6 +3527,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // planner needs to see each custom-property declaration in the project
         // before the first CSS module is rewritten.
         projectCssFiles = discovered.scanned;
+        projectGitignoreFiles = discovered.gitignoreFiles;
         // Recomputed from both sources every time rather than merged into the
         // previous value: a token deleted from a stylesheet must disappear, and
         // accumulating into `state.parsedTheme` would keep it registered.
@@ -3869,7 +3878,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function readSourceHooks(file: string, text: string): void {
         if (file.includes('?') || options.build?.mergeCoveredClasses === false) return;
-        if (inGeneratedOutput(file)) return;
         const extension = path.extname(file).slice(1);
         if (sourceHooks.readText(normalizeSourceFilename(file), text, extension)) {
             followSourceHooks();
@@ -3877,19 +3885,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Whether a file sits in a directory the stylesheet walk skips as build
+     * Whether a file the project walk found sits in a folder of generated
      * output: a coverage report, a built Storybook, a Rust `target/`. Their
      * pages are not the app, and their `<style>` blocks select on nothing it
-     * renders. Read below the root, so a project that itself lives under a
-     * directory named `build` is not skipped whole.
+     * renders. Read below the walked folder, so a project that itself lives
+     * under a folder named `target` is not skipped whole.
+     *
+     * Asked of walk-found files only: a module a bundler transforms is the
+     * app's wherever it lives.
      *
      * @param file - Its path.
-     * @returns True when a directory below the root is one of those.
+     * @param base - The folder the walk started from.
+     * @returns True when a folder below the base is one of those.
      */
-    function inGeneratedOutput(file: string): boolean {
-        const below = path.relative(state.rootDir, file).split(/[\\/]/).slice(0, -1);
-        return below.some(directory => THEME_SCAN_IGNORE_DIRS.has(directory));
+    function inGeneratedOutput(file: string, base: string): boolean {
+        const below = path.relative(base, file).split(/[\\/]/).slice(0, -1);
+        return below.some(directory => GENERATED_REPORT_DIRS.has(directory));
     }
+
+    // Whether a file a watcher reported is one the project walk would read
+    // hooks from: outside generated output and not gitignored. Rebuilt with
+    // each walk, so an edit to a `.gitignore` counts from the next prescan.
+    let walkReadsHooksFrom: (file: string) => boolean = () => true;
 
     /**
      * What a build must say when it removed a class a rule it read later
@@ -4715,25 +4732,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * the root are already covered; `shouldProcessSource` relaxes the ignore for
      * these, since they are opted in.
      *
-     * @param visit - Called with each file and its extension.
+     * Dependencies and framework output only are skipped: a folder named
+     * `target` or `coverage` among the sources is still read, and so is a
+     * gitignored one, or the sz it holds loses its CSS. Whether the file may
+     * add merge hooks is passed along: not when `.gitignore` covers it or it
+     * sits in generated output.
+     *
+     * @param gitignore - `mark` to visit every file, `skip` to visit only
+     *        those that may add hooks.
+     * @param visit - Called with each file, its extension, and whether its
+     *        hooks are read.
      */
-    function walkProjectFiles(visit: (filePath: string, extension: string) => void): void {
+    function walkProjectFiles(
+        gitignore: GitignoreMode,
+        visit: (filePath: string, extension: string, readsHooks: boolean) => void,
+    ): void {
+        const queries: Array<[string, (file: string) => boolean]> = [];
         const scanDir = (dir: string): void => {
-            let entries: fs.Dirent[];
-            try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                        scanDir(path.join(dir, entry.name));
-                    }
-                    continue;
-                }
-                visit(path.join(dir, entry.name), path.extname(entry.name));
-            }
+            walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore }, file => {
+                visit(
+                    file.path,
+                    file.extension,
+                    !file.gitignored && !inGeneratedOutput(file.path, dir),
+                );
+            });
+            queries.push([dir, createGitignoreQuery(dir)]);
         };
         scanDir(state.rootDir);
         const normRoot = normalizeForMatch(state.rootDir);
@@ -4741,6 +4764,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) continue;
             scanDir(sourceDir);
         }
+        walkReadsHooksFrom = file => {
+            const resolved = path.resolve(file);
+            const owner = queries.find(([dir]) => {
+                const relative = path.relative(dir, resolved);
+                return (
+                    relative !== '' &&
+                    !relative.startsWith(`..${path.sep}`) &&
+                    relative !== '..' &&
+                    !path.isAbsolute(relative)
+                );
+            });
+            if (owner === undefined) return true;
+            const [dir, gitignored] = owner;
+            return !inGeneratedOutput(resolved, dir) && !gitignored(resolved);
+        };
     }
 
     /**
@@ -4767,7 +4805,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function readProjectSourceHooks(): void {
         if (options.build?.mergeCoveredClasses === false) return;
-        walkProjectFiles((filePath, extension) => {
+        walkProjectFiles('skip', (filePath, extension, readsHooks) => {
+            if (!readsHooks) return;
             if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
             else if (SOURCE_EXTENSIONS.has(extension) && shouldProcessSource(filePath)) {
                 try {
@@ -4832,8 +4871,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * Read one processable source into the prescan queue.
          *
          * @param filePath Source file path.
+         * @param readsHooks Whether its merge hooks are read too.
          */
-        function collectPrescanSource(filePath: string): void {
+        function collectPrescanSource(filePath: string, readsHooks: boolean): void {
             if (!shouldProcessSource(filePath)) {
                 recordPackagesSkipIfSz(filePath);
                 return;
@@ -4845,7 +4885,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return;
             }
             if (mayImportStylesheet(content)) cssImportingSources.push({ filePath, content });
-            readSourceHooks(filePath, content);
+            if (readsHooks) readSourceHooks(filePath, content);
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
@@ -4889,9 +4929,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         const walkStarted = performance.now();
-        walkProjectFiles((filePath, extension) => {
-            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath);
-            else if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+        // Every source is read for the safelist, gitignored or not: Tailwind
+        // cannot read an sz object. Only what git keeps adds merge hooks.
+        walkProjectFiles('mark', (filePath, extension, readsHooks) => {
+            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
+            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
         });
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
@@ -5245,6 +5287,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 state.rootDir,
                 path.dirname(resolveTransformCacheDir(state.rootDir, options.build?.cacheDir)),
                 candidates,
+                { gitignoreFiles: projectGitignoreFiles },
             );
         } catch {
             // The file is for lanes with no bundler; a project where it cannot
@@ -5302,7 +5345,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     async function openStyleModelAtBuildStart(): Promise<void> {
         if (styleModel === undefined) {
             refreshCompileSourceDirs();
-            projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
+            const discovered = discoverProjectTheme(state.rootDir, [...compileSourceDirs]);
+            projectCssFiles = discovered.scanned;
+            projectGitignoreFiles = discovered.gitignoreFiles;
             readProjectSourceHooks();
             await openStyleModel();
             return;
@@ -6115,9 +6160,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): TModule[] | undefined | Promise<TModule[] | undefined> {
         const answer = handleHotFile(pass, ctx);
         if (!pass.isClientPass) return answer;
-        if (shouldProcessSource(ctx.file) || MARKUP_EXTENSIONS.has(path.extname(ctx.file))) {
+        if (
+            (shouldProcessSource(ctx.file) || MARKUP_EXTENSIONS.has(path.extname(ctx.file))) &&
+            walkReadsHooksFrom(ctx.file)
+        ) {
             // Before the module is transformed again: a hook it gained keeps a
-            // class in the modules already served.
+            // class in the modules already served. A file the walk would not
+            // read hooks from is read when the bundler transforms it.
             try {
                 readSourceHooks(ctx.file, fs.readFileSync(ctx.file, 'utf8'));
             } catch {

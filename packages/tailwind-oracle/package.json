@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "fast-glob": "^3.3.3"
+    "ignore": "^7.0.6"
   },
   "sideEffects": false,
   "license": "MIT"

@@ -19,6 +19,7 @@ export {
     type ScanSource,
     scanSourcesOf,
 } from './candidate-scanner.js';
+export { stripCssBlockComments } from './css-comments.js';
 export {
     createEmittedClassOracle,
     type EmittedClassOracle,
@@ -54,6 +55,21 @@ export {
     styleBlockHooks,
 } from './origin-oracle.js';
 export type { StylesheetAlias } from './project-resolver.js';
+export {
+    createGitignoreQuery,
+    DEPENDENCY_OUTPUT_DIRS,
+    GENERATED_REPORT_DIRS,
+    type GitignoreMode,
+    type ProjectWalkOptions,
+    type ProjectWalkResult,
+    STYLESHEET_WALK_SKIP_DIRS,
+    type StylesheetWalk,
+    type StylesheetWalkOptions,
+    skippedDirGlobs,
+    type WalkedFile,
+    walkProject,
+    walkProjectStylesheets,
+} from './project-walk.js';
 export {
     findSiblingKeywordValues,
     type KeywordOracle,

@@ -44,6 +44,7 @@ import { createNextStateContext, type NextStateContext } from './next-state-cont
 import {
     type NextClassPrefix,
     projectStylesheetCandidates,
+    projectStylesheetGitignore,
     recordedStylesheetIgnore,
     resolveNextClassPrefix,
     unreadNextPrefixMessage,
@@ -414,6 +415,10 @@ function prefixForCompilation(
                 tailwindStylesheet.length > 0
                     ? undefined
                     : projectStylesheetCandidates(context.root, context.cacheDir),
+            gitignore:
+                tailwindStylesheet.length > 0
+                    ? undefined
+                    : projectStylesheetGitignore(context.root, context.cacheDir),
         });
     if (compilation === undefined) return resolve();
 
