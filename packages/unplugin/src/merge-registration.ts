@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import path from 'node:path';
 import type { EngineMergeTable } from '@csszyx/compiler';
 import { styleBlockHooks } from '@csszyx/tailwind-oracle';
+import { type DeadClassFinding, findDeadSzClasses } from './dead-class.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     createMergeSignatureTable,
@@ -105,6 +106,12 @@ export interface MergeRegistrationInput {
     model: ProjectStyleModel | null;
     /** Classes lowering emitted across the project. */
     classes: Iterable<string>;
+    /**
+     * Each emitted class and the absolute path of the first source that emits
+     * it. Given, the emitted classes the design system serves nothing for are
+     * returned as `dead-class` findings.
+     */
+    classOrigins?: ReadonlyMap<string, string>;
     /** Class names written in `className` attributes across the project. */
     authoredClasses: Iterable<string>;
     /** String literals written inside `szcn(...)` calls across the project. */
@@ -129,9 +136,10 @@ export interface MergeRegistrationInput {
 export function writeMergeRegistration(input: MergeRegistrationInput): {
     path: string;
     changed: boolean;
+    dead: DeadClassFinding[];
 } {
-    const { unserved, table } = settle(input);
-    return writeMergeRegistrationModule(input.root, unserved, table);
+    const { unserved, table, dead } = settle(input);
+    return { ...writeMergeRegistrationModule(input.root, unserved, table), dead };
 }
 
 /**
@@ -353,12 +361,13 @@ export function mergeTableFor(
 function settle(input: MergeRegistrationInput): {
     unserved: string[];
     table: MergeSignatureTable;
+    dead: DeadClassFinding[];
 } {
     const { model } = input;
     // No design system is no answer. Registering nothing is right: every class
     // keeps the placement it has today, and every merge keeps both sides.
     const facts = model?.facts ?? null;
-    if (model === null || facts === null) return { unserved: [], table: [{}, []] };
+    if (model === null || facts === null) return { unserved: [], table: [{}, []], dead: [] };
     const authored = new Set(input.authoredClasses);
     // Tailwind's own scan as well as the shards' census, as the bundler lanes do.
     const candidates = [
@@ -383,7 +392,13 @@ function settle(input: MergeRegistrationInput): {
         authored.size === 0
             ? []
             : unservedAuthoredClasses(authored, classes => model.unserved(classes), facts.prefix);
-    return { unserved, table };
+    // The `sz`-emitted classes only, named by project-relative file; the
+    // `className` vocabulary above is the app's own and is not a finding.
+    const origins = new Map<string, string>();
+    for (const [className, file] of input.classOrigins ?? []) {
+        origins.set(className, path.relative(input.root, file).split(path.sep).join('/'));
+    }
+    return { unserved, table, dead: findDeadSzClasses(model, origins) };
 }
 
 /**

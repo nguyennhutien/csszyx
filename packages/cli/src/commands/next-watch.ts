@@ -10,7 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
+import { createDiagnosticLimiter } from '@csszyx/unplugin/diagnostics';
 import {
     createRootIgnoreMatcher,
     prepareNextStylesheetFacts,
@@ -27,7 +27,7 @@ import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { type NextFileWatcher, watchRecursively } from './native-recursive-watcher.js';
-import { writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
+import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -282,7 +282,10 @@ export async function startNextWatch(
     await recordStylesheetFacts();
     // Read once, at start: the loader reads the policy this writes. An edit to
     // the config takes effect at the next start.
-    for (const warning of await writeNextDiagnosticPolicy(root)) printWatcherNotice(warning);
+    const diagnostics = await writeNextDiagnosticPolicy(root);
+    for (const warning of diagnostics.warnings) printWatcherNotice(warning);
+    // Kept for the session: a dead class is said once, not after every cycle.
+    const deadClassLimiter = createDiagnosticLimiter();
 
     const prebuild = runNextPrebuild({
         files,
@@ -319,15 +322,24 @@ export async function startNextWatch(
     // stylesheet edit, since the design system signs the table.
     let census: NextSafelistMaterializeResult = prebuild.cycle.materialize;
     const writeRegistration = (): void => {
-        const warning = tryWriteMergeRegistration({
+        const registration = tryWriteMergeRegistration({
             root,
             model,
             classes: census.classes,
+            classOrigins: census.classOrigins,
             authoredClasses: census.authoredClasses,
             mergeLiterals: census.mergeLiterals,
             sources: files,
         });
-        if (warning !== null) printWatcherNotice(warning);
+        if (registration.warning !== null) printWatcherNotice(registration.warning);
+        for (const line of nextDeadClassLines(
+            registration.dead,
+            diagnostics.policy,
+            deadClassLimiter,
+            true,
+        )) {
+            printWatcherNotice(line);
+        }
     };
     writeRegistration();
 

@@ -188,4 +188,21 @@ describe('Next Turbopack loader diagnostics', () => {
         report('first');
         expect(warn).toHaveBeenCalledTimes(3);
     });
+
+    it('prints a console line again when an undo brings back what an edit fixed', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const report = (source: string, diagnostics: string[]): void =>
+            reportNextLoaderDiagnostics({
+                diagnostics,
+                resourcePath: '/p/Undo.tsx',
+                source,
+                mode: 'development',
+                env: {},
+            });
+        const finding = ['[csszyx] "ordinal" was replaced at /p/Undo.tsx:1.'];
+        report('broken', finding);
+        report('fixed', []);
+        report('broken', finding);
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
 });

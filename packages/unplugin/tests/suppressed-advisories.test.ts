@@ -21,8 +21,8 @@ describe('suppressedAdvisoryMessage', () => {
     });
 
     it('agrees with itself on number', () => {
-        expect(suppressedAdvisoryMessage(1)).toContain('1 advisory note not listed');
-        expect(suppressedAdvisoryMessage(3)).toContain('3 advisory notes not listed');
+        expect(suppressedAdvisoryMessage(1)).toContain('1 info note not listed');
+        expect(suppressedAdvisoryMessage(3)).toContain('3 info notes not listed');
     });
 
     // The count is every `info` finding a build holds back, and two of the
@@ -41,7 +41,14 @@ describe('suppressedAdvisoryMessage', () => {
     it('says how to see the ones it withheld', () => {
         const message = suppressedAdvisoryMessage(3);
         expect(message).toContain('development build');
-        expect(message).toContain('the styles are there');
+    });
+
+    // The count also holds findings a config lowered to `info`, such as a
+    // dead class: its styles are not there, so the line must not say they are.
+    it('counts a finding the config set to info without calling it handled', () => {
+        const message = suppressedAdvisoryMessage(3) ?? '';
+        expect(message).toContain('any finding csszyx.config sets to info');
+        expect(message).not.toContain('the styles are there');
     });
 });
 

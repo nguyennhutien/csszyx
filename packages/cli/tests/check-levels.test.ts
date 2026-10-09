@@ -365,6 +365,57 @@ describe('levels from csszyx.config', () => {
     });
 });
 
+describe('the prose of a pass whose findings are below --fail-on', () => {
+    // The sz-issue report already marked a quieter finding; every other pass
+    // printed its failure cross over a run that exited 0.
+    it.each([
+        ['dead-class', /\n! 1 emitted class\(es\) style nothing\./],
+        ['broken-opacity', /\n! 1 emitted class\(es\) carry an opacity modifier/],
+        ['sibling-keyword', /\n! 1 value\(s\) written on a key that does not own them\./],
+        ['theme-collision', /\n! 1 theme token\(s\) shadow a built-in utility\./],
+        ['prefix-disagreement', /\n! The Tailwind entries in this project set different prefixes/],
+    ])('marks a %s finding set to warn, and says why the run passes', async (id, summary) => {
+        const [, files] = PARITY.find(([name]) => name === id) as (typeof PARITY)[number];
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            ...files,
+            'csszyx.config.mjs': `export default { diagnostics: { rules: { 'sz-diagnostic': 'off', '${id}': 'warn' } } };`,
+        });
+
+        const { exitCode, printed } = await run(cwd);
+
+        expect(printed).toMatch(summary);
+        expect(printed).toContain('1 below --fail-on error, which do not fail the run.');
+        expect(printed).not.toContain('\u2716');
+        expect(exitCode).toBeUndefined();
+    });
+
+    it('tags each listed finding with a level quieter than error', async () => {
+        const [, files] = PARITY.find(([name]) => name === 'dead-class') as (typeof PARITY)[number];
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            ...files,
+            'csszyx.config.mjs':
+                "export default { diagnostics: { rules: { 'sz-diagnostic': 'off', 'dead-class': 'info' } } };",
+        });
+
+        const { printed } = await run(cwd);
+
+        expect(printed).toMatch(/\(info\) pointer-none\s+src\/A\.tsx/);
+    });
+
+    it('keeps the cross when a finding still fails the run', async () => {
+        const [, files] = PARITY.find(([name]) => name === 'dead-class') as (typeof PARITY)[number];
+        const cwd = tailwindProject({ 'src/app.css': CSS, ...files });
+
+        const { exitCode, printed } = await run(cwd, { rule: ['dead-class'] });
+
+        expect(printed).toMatch(/\n\u2716 1 emitted class\(es\) style nothing\./);
+        expect(printed).not.toContain('below --fail-on');
+        expect(exitCode).toBe(1);
+    });
+});
+
 describe('a config check cannot trust', () => {
     it('fails the run on an id it does not know, naming the one it most likely means', async () => {
         const cwd = tailwindProject({
@@ -380,6 +431,53 @@ describe('a config check cannot trust', () => {
         expect(exitCode).toBe(1);
     });
 
+    it('ends a run the config fails with a closing cross, after the clean sz summary', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            'csszyx.config.mjs':
+                "export default { diagnostics: { rules: { 'dead-clas': 'off' } } };",
+        });
+
+        const { exitCode, printed } = await run(cwd);
+
+        expect(printed).toContain('  - (error) diagnostics.rules: `dead-clas` is not a rule id');
+        const lines = printed.trimEnd().split('\n');
+        expect(lines.at(-1)).toContain(
+            '\u2716 1 config error(s) in csszyx.config.mjs, which fail the run.',
+        );
+        // One mark per line: no warning glyph in front of a cross, none alone.
+        expect(printed).not.toMatch(/\u26a0 \u2716|\u26a0 !|\u26a0 ?$/m);
+        expect(exitCode).toBe(1);
+    });
+
+    it('says nothing in the file applies when diagnostics is misspelt', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            'csszyx.config.mjs': "export default { diagnostic: { preset: 'atomic' } };",
+        });
+
+        const { exitCode, printed } = await run(cwd);
+
+        expect(printed).toContain('did you mean `diagnostics`?');
+        expect(printed).toContain('The file is not applied');
+        expect(printed).not.toContain('the rest of the file applies');
+        expect(exitCode).toBe(1);
+    });
+
+    it('closes a passing config with no cross', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            'csszyx.config.mjs': 'export default { development: { debug: true } };',
+        });
+
+        const { printed } = await run(cwd);
+
+        expect(printed).not.toContain('config error(s)');
+    });
+
     it('prints the config problems on stderr in --json, keeping stdout one document', async () => {
         const cwd = tailwindProject({
             'src/app.css': CSS,
@@ -393,7 +491,12 @@ describe('a config check cannot trust', () => {
         await check({ cwd, json: true });
 
         expect(JSON.parse(log.mock.calls.flat().join('\n')).findings).toEqual([]);
-        expect(error.mock.calls.flat().join('\n')).toContain('dead-clas');
+        const stderr = error.mock.calls.flat().join('\n');
+        expect(stderr).toContain('dead-clas');
+        // An empty findings list with exit 1: stderr says which failed the run.
+        expect(stderr.trimEnd().split('\n').at(-1)).toBe(
+            '\u2716 1 config error(s) in csszyx.config.mjs, which fail the run.',
+        );
         expect(process.exitCode).toBe(1);
     });
 
@@ -440,12 +543,39 @@ describe('a config check cannot trust', () => {
         expect(exitCode).toBeUndefined();
     });
 
-    it('refuses a --fail-on level it does not know', async () => {
+    it('refuses a --fail-on level it does not know, saying nothing was scanned', async () => {
         const cwd = tailwindProject({ 'src/app.css': CSS, 'src/A.tsx': PRECEDENCE });
 
         const { exitCode, printed } = await run(cwd, { failOn: 'fatal' as 'error' });
 
-        expect(printed).toContain('--fail-on "fatal"');
+        expect(printed).toContain(
+            '--fail-on "fatal" is not a level: use info, warn or error. Nothing was scanned.',
+        );
+        expect(exitCode).toBe(1);
+    });
+
+    it('refuses --fail-on off as a threshold', async () => {
+        const cwd = tailwindProject({ 'src/app.css': CSS, 'src/A.tsx': PRECEDENCE });
+
+        const { exitCode, printed } = await run(cwd, { failOn: 'off' });
+
+        expect(printed).toContain(
+            '--fail-on "off" cannot be a threshold: use info, warn or error. Nothing was scanned.',
+        );
+        expect(exitCode).toBe(1);
+    });
+
+    it('fails the run on a config with no default export', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': CSS,
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            'csszyx.config.mjs': "export const config = { diagnostics: { preset: 'atomic' } };\n",
+        });
+
+        const { exitCode, printed } = await run(cwd);
+
+        expect(printed).toContain('has no default export');
+        expect(printed).toContain('The file is not applied');
         expect(exitCode).toBe(1);
     });
 });

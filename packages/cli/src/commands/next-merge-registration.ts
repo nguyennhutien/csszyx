@@ -9,6 +9,7 @@
  *
  * @module
  */
+import type { DeadClassFinding } from '@csszyx/unplugin/diagnostics';
 import {
     MERGE_REGISTRATION_FILE,
     type MergeRegistrationInput,
@@ -19,20 +20,25 @@ import {
  * Write the merge table, answering with a warning instead of throwing.
  *
  * @param input - The project's census and design system.
- * @returns A warning to print, or null when the table was written.
+ * @returns A warning to print, or null when the table was written; and the
+ *          emitted classes the design system serves nothing for.
  */
-export function tryWriteMergeRegistration(input: MergeRegistrationInput): string | null {
+export function tryWriteMergeRegistration(input: MergeRegistrationInput): {
+    warning: string | null;
+    dead: DeadClassFinding[];
+} {
     try {
-        writeMergeRegistration(input);
-        return null;
+        return { warning: null, dead: writeMergeRegistration(input).dead };
     } catch (error) {
         // Node's fs throws `Error`s, and nothing else runs in between.
         const reason = (error as Error).message;
-        return (
-            `[csszyx] could not write .csszyx/${MERGE_REGISTRATION_FILE}: ${reason}\n` +
-            '  note: the safelist is written; until the file can be written, `szcn` under ' +
-            'Turbopack and jest removes only exact repeats, and a Turbopack build keeps every ' +
-            'key of an sz object rather than merging one a later key covers.'
-        );
+        return {
+            warning:
+                `[csszyx] could not write .csszyx/${MERGE_REGISTRATION_FILE}: ${reason}\n` +
+                '  note: the safelist is written; until the file can be written, `szcn` under ' +
+                'Turbopack and jest removes only exact repeats, and a Turbopack build keeps every ' +
+                'key of an sz object rather than merging one a later key covers.',
+            dead: [],
+        };
     }
 }

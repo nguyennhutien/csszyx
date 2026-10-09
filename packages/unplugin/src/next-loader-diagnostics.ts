@@ -95,8 +95,6 @@ function policyFor(root: string): DiagnosticPolicy {
  * @param input - The run's diagnostics and where to print them.
  */
 export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): void {
-    if (input.diagnostics.length === 0) return;
-    const quiet = resolveQuietMode(input.env.CSSZYX_QUIET_SZ_WARNINGS === '1');
     const root = input.root;
     const file =
         root === undefined
@@ -104,10 +102,14 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
             : path.relative(root, input.resourcePath).split(path.sep).join('/');
     const emitWarning = input.emitWarning;
     const limiter = emitWarning === undefined ? consoleLimiter : undefined;
+    // Every version, clean ones too: an undo back to a version that had
+    // findings must read as an edit, not as the version already said.
     limiter?.version(
         file ?? input.resourcePath,
         createHash('sha256').update(input.source).digest('hex'),
     );
+    if (input.diagnostics.length === 0) return;
+    const quiet = resolveQuietMode(input.env.CSSZYX_QUIET_SZ_WARNINGS === '1');
     // A dev server lists `info` findings; a build holds them. Next sets
     // NODE_ENV to its mode, so the mode answers the plugin's NODE_ENV question.
     const routed = routeTransformDiagnostics({

@@ -53,6 +53,11 @@ export interface NextSafelistMaterializeResult {
     authoredClasses: string[];
     /** Every string written inside a `szcn(...)` call across the project, sorted. */
     mergeLiterals: string[];
+    /**
+     * Each class lowering emitted and the first source, in path order, that
+     * emits it — the file a `dead-class` finding names.
+     */
+    classOrigins: Map<string, string>;
     classCount: number;
     sourceCount: number;
     tombstonedSourceCount: number;
@@ -218,6 +223,12 @@ export function materializeNextSafelist(
         .map(({ data }) => [data.sourcePath, sortStrings(new Set(data.classes))] as const)
         .sort(([left], [right]) => left.localeCompare(right));
     const classNames = sortStrings(new Set(sortedSources.flatMap(([, classSet]) => classSet)));
+    const classOrigins = new Map<string, string>();
+    for (const [sourcePath, classSet] of sortedSources) {
+        for (const className of classSet) {
+            if (!classOrigins.has(className)) classOrigins.set(className, sourcePath);
+        }
+    }
     const records = [...recordsBySource.values()].map(({ data }) => data);
     const authoredClasses = sortStrings(
         new Set(records.flatMap(data => data.authoredClasses ?? [])),
@@ -237,6 +248,7 @@ export function materializeNextSafelist(
         classes: classNames,
         authoredClasses,
         mergeLiterals,
+        classOrigins,
         classCount: classNames.length,
         sourceCount: sortedSources.length,
         tombstonedSourceCount,

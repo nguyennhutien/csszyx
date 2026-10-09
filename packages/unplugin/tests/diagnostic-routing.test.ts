@@ -10,8 +10,17 @@
  * the policy decides the channel, and that the lines a long log would repeat
  * are deduplicated and capped.
  */
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+    deadClassMessage,
+    findDeadSzClasses,
+    reportDeadSzClasses,
+    szClassSites,
+} from '../src/dead-class.js';
 import {
     capOverflowMessage,
     createCapFlush,
@@ -234,6 +243,68 @@ describe('dedupe and the cap', () => {
         expect(limiter.flush()).toEqual([capOverflowMessage('a', 1)]);
     });
 
+    it('tells two findings on one line apart by their column', () => {
+        const limiter = createDiagnosticLimiter();
+        const routed = route({
+            diagnostics: [UNKNOWN_KEY, UNKNOWN_KEY],
+            issues: [
+                { code: 'unknown-key', line: 3, column: 7 },
+                { code: 'unknown-key', line: 3, column: 30 },
+            ],
+            limiter,
+        });
+        expect(routed.immediate).toHaveLength(2);
+    });
+
+    it('counts a held finding once however often it is reported', () => {
+        // A module compiled for two layers, or a table settled twice, reports
+        // the same held finding again; the closing line counts findings.
+        const limiter = createDiagnosticLimiter(0);
+        limiter.admit({ id: 'a', file: 'f', key: '1' });
+        limiter.admit({ id: 'a', file: 'f', key: '1' });
+        limiter.admit({ id: 'a', file: 'g', key: '1' });
+        expect(limiter.flush()).toEqual([capOverflowMessage('a', 2)]);
+    });
+
+    it('forgets what the cap held for a file once the file changes', () => {
+        // Within one burst `c` is edited: its two held findings are fixed and
+        // one new one appears, so one more is held, not three.
+        const limiter = createDiagnosticLimiter(2);
+        for (const [file, line] of [
+            ['a', 1],
+            ['b', 1],
+            ['c', 1],
+            ['c', 2],
+        ] as const) {
+            limiter.version(file, 'v1');
+            limiter.admit({ id: 'x', file, line, key: 'k' });
+        }
+        limiter.version('c', 'v2');
+        expect(limiter.admit({ id: 'x', file: 'c', line: 3, key: 'k' })).toBe(false);
+        expect(limiter.flush()).toEqual([capOverflowMessage('x', 1)]);
+    });
+
+    it('has nothing pending once the only held finding is gone with its file version', () => {
+        const limiter = createDiagnosticLimiter(0);
+        limiter.version('c', 'v1');
+        limiter.admit({ id: 'x', file: 'c', line: 1, key: 'k' });
+        limiter.version('c', 'v2');
+        expect(limiter.pending).toBe(false);
+        expect(limiter.flush()).toEqual([]);
+    });
+
+    it('forgets a held dead class that is no longer reported', () => {
+        const limiter = createDiagnosticLimiter(0);
+        limiter.admit({ id: 'dead-class', file: 'f', key: 'one' });
+        limiter.admit({ id: 'dead-class', file: 'f', key: 'two' });
+        limiter.admit({ id: 'other', file: 'f', key: 'one' });
+        limiter.retain('dead-class', [{ id: 'dead-class', file: 'f', key: 'two' }]);
+        expect(limiter.flush()).toEqual([
+            capOverflowMessage('dead-class', 1),
+            capOverflowMessage('other', 1),
+        ]);
+    });
+
     it('lists a capped finding again once the cap opens, since it was never shown', () => {
         const limiter = createDiagnosticLimiter(1);
         limiter.admit({ id: 'a', file: 'f', key: '1' });
@@ -255,19 +326,95 @@ describe('when the capped counts print', () => {
         return limiter;
     }
 
-    it('prints them once a burst is over, on a timer that does not hold the process', () => {
+    it('prints them once a burst has paused, not while it goes on', () => {
         vi.useFakeTimers();
         try {
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-            const flush = createCapFlush(overflowing(), 50);
+            const limiter = createDiagnosticLimiter(0);
+            const flush = createCapFlush(limiter, 50);
+            limiter.admit({ id: 'a', file: 'f', key: '1' });
             flush.schedule();
+            vi.advanceTimersByTime(40);
+            // Still the same burst: the count waits for it to pause.
+            limiter.admit({ id: 'a', file: 'f', key: '2' });
             flush.schedule();
+            vi.advanceTimersByTime(40);
             expect(warn).not.toHaveBeenCalled();
-            vi.advanceTimersByTime(50);
-            expect(warn.mock.calls).toEqual([[capOverflowMessage('a', 1)]]);
+            vi.advanceTimersByTime(10);
+            expect(warn.mock.calls).toEqual([[capOverflowMessage('a', 2)]]);
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('opens a new cap once a dev burst is over, even when nothing was held', () => {
+        // An hour into a dev session, the eleventh new finding of an id is
+        // listed with its location, not folded into a bare count.
+        vi.useFakeTimers();
+        try {
+            const limiter = createDiagnosticLimiter(1);
+            const flush = createCapFlush(limiter, 50);
+            expect(limiter.admit({ id: 'a', file: 'f', key: '1' })).toBe(true);
+            flush.schedule();
+            vi.advanceTimersByTime(50);
+            expect(limiter.admit({ id: 'a', file: 'g', key: '1' })).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('hands every waiting flush to one exit listener, which prints and clears them', async () => {
+        vi.resetModules();
+        const fresh = await import('../src/diagnostic-limiter.js');
+        const once = vi.spyOn(process, 'once').mockImplementation(() => process);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const first = fresh.createDiagnosticLimiter(0);
+        const second = fresh.createDiagnosticLimiter(0);
+        first.admit({ id: 'a', file: 'f', key: '1' });
+        second.admit({ id: 'b', file: 'f', key: '1' });
+        const flushes = [
+            fresh.createCapFlush(first, 600_000),
+            fresh.createCapFlush(second, 600_000),
+        ];
+        for (const flush of flushes) flush.schedule();
+        expect(once.mock.calls.map(([event]) => event)).toEqual(['exit']);
+        const atExit = once.mock.calls[0]?.[1] as () => void;
+        atExit();
+        expect(warn.mock.calls).toEqual([
+            [fresh.capOverflowMessage('a', 1)],
+            [fresh.capOverflowMessage('b', 1)],
+        ]);
+        // Printed once: the timers were dropped with them.
+        atExit();
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('prints them when the process ends before the timer, which never holds it open', () => {
+        // jest workers and Next loader processes end on their own schedule; a
+        // count left on an unreferenced timer would never be printed.
+        const limiterModule = pathToFileURL(
+            fileURLToPath(new URL('../src/diagnostic-limiter.ts', import.meta.url)),
+        ).href;
+        const script = [
+            `import { createCapFlush, createDiagnosticLimiter } from ${JSON.stringify(limiterModule)};`,
+            'const limiter = createDiagnosticLimiter(0);',
+            "limiter.admit({ id: 'a', file: 'f', key: '1' });",
+            'createCapFlush(limiter, 600000).schedule();',
+        ].join('\n');
+        // Node strips types by default from 22.18; the root `engines` floor
+        // (22.13) needs the flag, which a later Node still accepts.
+        const stripTypes = process.features.typescript ? [] : ['--experimental-strip-types'];
+        const child = spawnSync(
+            process.execPath,
+            [...stripTypes, '--input-type=module', '-e', script],
+            {
+                encoding: 'utf8',
+                timeout: 30_000,
+            },
+        );
+        // A ten-minute timer that held the process would hit the timeout.
+        expect(child.status).toBe(0);
+        expect(child.stderr).toContain(capOverflowMessage('a', 1));
     });
 
     it('prints them at once at a build end, and drops the pending timer', () => {
@@ -293,5 +440,226 @@ describe('when the capped counts print', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+describe('the dead-class report', () => {
+    const findings = [{ className: 'break-bogus', file: 'src/A.tsx' }];
+
+    it('counts an info-level dead class on a production build instead of listing it', () => {
+        const report = reportDeadSzClasses(findings, {
+            policy: createDiagnosticPolicy({ rules: { 'dead-class': 'info' } }),
+            quiet: 'off',
+            holdInfo: true,
+            limiter: createDiagnosticLimiter(),
+        });
+        expect(report).toEqual({ lines: [], held: 1 });
+    });
+
+    it('lists one class once per process', () => {
+        const input = {
+            policy: createDiagnosticPolicy(),
+            quiet: 'off' as const,
+            holdInfo: true,
+            limiter: createDiagnosticLimiter(),
+        };
+        expect(reportDeadSzClasses(findings, input).lines).toHaveLength(1);
+        expect(reportDeadSzClasses(findings, input).lines).toEqual([]);
+    });
+
+    it('lists a class again once a build stopped emitting it and a later one brought it back', () => {
+        // `vite build --watch`: remove the class, then undo the edit.
+        const input = {
+            policy: createDiagnosticPolicy(),
+            quiet: 'off' as const,
+            holdInfo: true,
+            limiter: createDiagnosticLimiter(),
+        };
+        expect(reportDeadSzClasses(findings, input).lines).toHaveLength(1);
+        expect(reportDeadSzClasses([], input).lines).toEqual([]);
+        expect(reportDeadSzClasses(findings, input).lines).toHaveLength(1);
+    });
+
+    it('names the first file whose level reports the class', () => {
+        const report = reportDeadSzClasses(
+            [
+                {
+                    className: 'break-bogus',
+                    file: 'src/legacy/A.tsx',
+                    others: [{ file: 'src/B.tsx', line: 2, column: 5, key: 'break' }],
+                },
+            ],
+            {
+                policy: createDiagnosticPolicy({
+                    overrides: [{ files: ['src/legacy/**'], rules: { 'dead-class': 'off' } }],
+                }),
+                quiet: 'off',
+                holdInfo: true,
+                limiter: createDiagnosticLimiter(),
+            },
+        );
+        expect(report.lines).toEqual([
+            deadClassMessage('break-bogus', 'src/B.tsx', { line: 2, column: 5, key: 'break' }),
+        ]);
+    });
+
+    it('names a later file an override raises when the first file holds the class at info', () => {
+        // Path order put the held `info` site first; the `error` site an
+        // override set must still be listed, and the class is not also counted.
+        const report = reportDeadSzClasses(
+            [
+                {
+                    className: 'break-bogus',
+                    file: 'src/a.tsx',
+                    others: [{ file: 'src/new/b.tsx', line: 2, column: 5, key: 'break' }],
+                },
+            ],
+            {
+                policy: createDiagnosticPolicy({
+                    rules: { 'dead-class': 'info' },
+                    overrides: [{ files: ['src/new/**'], rules: { 'dead-class': 'error' } }],
+                }),
+                quiet: 'off',
+                holdInfo: true,
+                limiter: createDiagnosticLimiter(),
+            },
+        );
+        expect(report).toEqual({
+            lines: [
+                deadClassMessage('break-bogus', 'src/new/b.tsx', {
+                    line: 2,
+                    column: 5,
+                    key: 'break',
+                }),
+            ],
+            held: 0,
+        });
+    });
+
+    it('counts a class once when every file that emits it holds it at info', () => {
+        const report = reportDeadSzClasses(
+            [{ className: 'break-bogus', file: 'src/a.tsx', others: [{ file: 'src/b.tsx' }] }],
+            {
+                policy: createDiagnosticPolicy({ rules: { 'dead-class': 'info' } }),
+                quiet: 'off',
+                holdInfo: true,
+                limiter: createDiagnosticLimiter(),
+            },
+        );
+        expect(report).toEqual({ lines: [], held: 1 });
+    });
+
+    it('says nothing for a class every emitting file turns off', () => {
+        const report = reportDeadSzClasses(
+            [{ className: 'break-bogus', file: 'src/legacy/A.tsx' }],
+            {
+                policy: createDiagnosticPolicy({
+                    overrides: [{ files: ['src/legacy/**'], rules: { 'dead-class': 'off' } }],
+                }),
+                quiet: 'off',
+                holdInfo: true,
+                limiter: createDiagnosticLimiter(),
+            },
+        );
+        expect(report).toEqual({ lines: [], held: 0 });
+    });
+
+    it('names the line and the key the engine placed the class at', () => {
+        expect(
+            deadClassMessage('break-bogus', 'src/A.tsx', { line: 3, column: 9, key: 'break' }),
+        ).toBe(
+            "[csszyx] src/A.tsx:3:9: `break-bogus` (sz key `break`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n" +
+                "  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.",
+        );
+    });
+});
+
+describe('asking the design system about emitted classes', () => {
+    it('asks it about each class once per style model', () => {
+        const unserved = vi.fn((classes: readonly string[]) =>
+            classes.filter(name => name.startsWith('bogus')),
+        );
+        const model = { facts: {} as never, unserved };
+        const first = findDeadSzClasses(
+            model,
+            new Map([
+                ['p-4', 'src/A.tsx'],
+                ['bogus-1', 'src/A.tsx'],
+            ]),
+        );
+        // An HMR of one file: one new class, the rest already answered.
+        const second = findDeadSzClasses(
+            model,
+            new Map([
+                ['p-4', 'src/A.tsx'],
+                ['bogus-1', 'src/A.tsx'],
+                ['bogus-2', 'src/B.tsx'],
+            ]),
+        );
+        expect(first.map(finding => finding.className)).toEqual(['bogus-1']);
+        expect(second.map(finding => finding.className)).toEqual(['bogus-1', 'bogus-2']);
+        expect(unserved.mock.calls).toEqual([[['bogus-1', 'p-4']], [['bogus-2']]]);
+        // A new model is a new design system: every class is asked again.
+        findDeadSzClasses({ facts: {} as never, unserved }, new Map([['p-4', 'src/A.tsx']]));
+        expect(unserved.mock.calls.at(-1)).toEqual([['p-4']]);
+    });
+
+    it('carries every file that emits a class, with the site of each', () => {
+        const model = {
+            facts: {} as never,
+            unserved: (classes: readonly string[]) => [...classes],
+        };
+        expect(
+            findDeadSzClasses(
+                model,
+                new Map([
+                    [
+                        'break-bogus',
+                        [
+                            { file: 'src/A.tsx', line: 1, column: 3, key: 'break' },
+                            { file: 'src/B.tsx' },
+                        ],
+                    ],
+                ]),
+            ),
+        ).toEqual([
+            {
+                className: 'break-bogus',
+                file: 'src/A.tsx',
+                line: 1,
+                column: 3,
+                key: 'break',
+                others: [{ file: 'src/B.tsx' }],
+            },
+        ]);
+    });
+});
+
+describe('where a file emits each class', () => {
+    it('places a class at the key of the first object that emits it', () => {
+        const group = (keys: string[], classes: string[], line: number) => ({
+            keys,
+            classes,
+            positions: keys.map((_, index) => ({ line, column: index + 1 })),
+        });
+        const sites = szClassSites(
+            'src/A.tsx',
+            ['break-bogus', 'p-4', 'only-one'],
+            [
+                group(['break', 'p'], ['break-bogus', 'p-4'], 2),
+                group(['break'], ['break-bogus'], 9),
+            ],
+        );
+        expect([...sites]).toEqual([
+            ['break-bogus', { file: 'src/A.tsx', line: 2, column: 1, key: 'break' }],
+            ['p-4', { file: 'src/A.tsx', line: 2, column: 2, key: 'p' }],
+            ['only-one', { file: 'src/A.tsx' }],
+        ]);
+    });
+
+    it('names the file alone for a result an older cache entry wrote without groups', () => {
+        expect([...szClassSites('src/A.tsx', ['p-4'], undefined)]).toEqual([
+            ['p-4', { file: 'src/A.tsx' }],
+        ]);
     });
 });

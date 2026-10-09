@@ -164,11 +164,14 @@ export function mergeRemovalMessage(finding: MergeAuditFinding): string {
  *
  * @param held - How many classes each `info` id removed; at least one entry.
  * @param files - How many files they are in.
+ * @param configFile - The project's config file name, or the one it would
+ *        create (`csszyxConfigFileNameFor`).
  * @returns The warning, `[csszyx]`-prefixed.
  */
 export function mergeRemovalSummaryMessage(
     held: ReadonlyMap<MergeAuditKind, number>,
     files: number,
+    configFile: string,
 ): string {
     const ids = MERGE_AUDIT_KINDS.filter(kind => held.has(kind));
     let classes = 0;
@@ -178,6 +181,6 @@ export function mergeRemovalSummaryMessage(
     return (
         `[csszyx] ${classes} class(es) in ${files} file(s) were removed: another class on the same element sets every property they set.\n` +
         `  help: \`csszyx check ${rules}\` lists them.\n` +
-        `  note: set ${named} to \`'off'\` in \`diagnostics.rules\` of csszyx.config.ts to hide this line; \`build.mergeCoveredClasses: false\` keeps the classes.`
+        `  note: set ${named} to \`'off'\` in \`diagnostics.rules\` of \`${configFile}\` to hide this line; \`build.mergeCoveredClasses: false\` keeps the classes.`
     );
 }

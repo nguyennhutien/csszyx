@@ -19,7 +19,7 @@ import {
     type DiagnosticPolicy,
     SZ_DIAGNOSTIC_PASS_IDS,
 } from '@csszyx/unplugin/diagnostics';
-import { printHeader, printInfo, printSuccess, printWarn } from '../utils/terminal-ui.js';
+import { colors, printHeader, printInfo, printSuccess, printWarn } from '../utils/terminal-ui.js';
 
 /**
  * Every pass that produces findings, by its stable id. The list is the
@@ -87,6 +87,23 @@ export interface Reporter {
 }
 
 /**
+ * Print a warning, with one mark per line.
+ *
+ * A leading newline is a blank line of its own, not one carrying the warning
+ * glyph. A summary that starts with its own mark — `✖` when it fails the run,
+ * `!` when it does not — is printed without the glyph in front of it.
+ *
+ * @param text - The warning, possibly starting with newlines and a mark.
+ */
+function printMarked(text: string): void {
+    const body = text.replace(/^\n+/, '');
+    for (let blank = text.length - body.length; blank > 0; blank--) console.log();
+    if (body.startsWith('\u2716')) console.log(colors.error(body));
+    else if (body.startsWith('! ')) console.log(colors.warn(body));
+    else printWarn(body);
+}
+
+/**
  * Build a reporter for one run.
  *
  * @param json - True to suppress prose, so stdout holds one parseable document.
@@ -106,7 +123,7 @@ export function createReporter(
     return {
         header: say(printHeader),
         info: say(printInfo),
-        warn: say(printWarn),
+        warn: say(printMarked),
         success: say(printSuccess),
         push: finding => {
             const level = levelOf(finding);

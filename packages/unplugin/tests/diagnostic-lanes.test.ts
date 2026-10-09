@@ -31,6 +31,7 @@ afterEach(() => {
 const UNKNOWN = "export const A = () => <div sz={{ workBreak: 'all' }} />;\n";
 const PRECEDENCE =
     'export const A = ({ className }: { className?: string }) => <div className={className} sz={{ p: 4 }} />;\n';
+const CLEAN = 'export const A = () => <div sz={{ p: 4 }} />;\n';
 const OFF = 'export default { diagnostics: { rules: { "unknown-key": "off" } } };\n';
 const ATOMIC = 'export default { diagnostics: { preset: "atomic" } };\n';
 
@@ -145,7 +146,7 @@ describe('the Vite lane', () => {
         vi.stubEnv('NODE_ENV', 'production');
         const lines = await vite({ source: PRECEDENCE, config: ATOMIC });
         expect(lines.join('\n')).toContain('takes precedence over the runtime "className"');
-        expect(lines.join('\n')).not.toContain('advisory note');
+        expect(lines.join('\n')).not.toContain('not listed above');
     }, 60_000);
 
     it('counts that note instead of listing it under the recommended preset', async () => {
@@ -157,6 +158,13 @@ describe('the Vite lane', () => {
     it('lists a site once while the file is unchanged, and again once it is edited', async () => {
         const edited = `${UNKNOWN}// edited\n`;
         const lines = await vite({ source: UNKNOWN, command: 'serve', edits: [UNKNOWN, edited] });
+        expect(lines.filter(line => line.includes('Unknown property "workBreak"'))).toHaveLength(2);
+    }, 60_000);
+
+    it('lists a site again when an undo brings back what an edit fixed', async () => {
+        // The undone file is byte-identical to the first version, so only a
+        // version recorded for the clean edit in between tells them apart.
+        const lines = await vite({ source: UNKNOWN, command: 'serve', edits: [CLEAN, UNKNOWN] });
         expect(lines.filter(line => line.includes('Unknown property "workBreak"'))).toHaveLength(2);
     }, 60_000);
 });
@@ -279,6 +287,17 @@ describe('the jest transform', () => {
         expect(jest(PRECEDENCE, { preset: 'atomic' }).join('\n')).toContain(
             'takes precedence over the runtime "className"',
         );
+    });
+
+    it('prints a finding again when an undo brings back what an edit fixed', () => {
+        const { root, file } = project(UNKNOWN);
+        const lines: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            lines.push(args.map(String).join(' '));
+        });
+        const transformer = createTransformer({ root, cacheRoot: join(root, 'no-cache') });
+        for (const source of [UNKNOWN, CLEAN, UNKNOWN]) transformer.process(source, file);
+        expect(lines.filter(line => line.includes('Unknown property'))).toHaveLength(2);
     });
 
     it('drops a kind the policy sets to off', () => {

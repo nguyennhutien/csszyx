@@ -273,6 +273,11 @@ export interface DiagnosticConfigProblem {
     path: string;
     /** What is wrong, in one sentence. */
     message: string;
+    /**
+     * True when the problem stops the whole file from applying — it did not
+     * load, or exported nothing to read — rather than one entry in it.
+     */
+    fileIgnored?: boolean;
 }
 
 /** What {@link readCsszyxFileConfig} made of a file's default export. */
@@ -416,6 +421,68 @@ function readAllow(
     return allow;
 }
 
+/** A glob character: a pattern with none of these is a plain path. */
+const GLOB_MAGIC = /[*?[\]{}]/;
+
+/**
+ * Bring one `overrides[].files` glob to the form a finding's file is matched
+ * in — a forward-slash path from the project root — or null when it can never
+ * match.
+ *
+ * A backslash is a separator, as Windows writes one. A `.` segment is dropped,
+ * so `./src/**` is `src/**` and `.`, `./` or `./.` is the whole project. An
+ * absolute glob (`/src`, `C:/app`) or one with a `..` segment names no file
+ * under the root; it is checked after the `.` segments go, so `./../src` is
+ * refused too.
+ *
+ * @param glob - The glob as written.
+ * @returns The project-relative glob, or null.
+ */
+function projectGlob(glob: string): string | null {
+    const slashed = glob.replaceAll('\\', '/');
+    if (slashed.startsWith('/') || /^[a-z]:\//i.test(slashed)) return null;
+    const segments = slashed.split('/').filter(segment => segment !== '' && segment !== '.');
+    if (segments.includes('..')) return null;
+    return segments.length === 0 ? '**' : segments.join('/');
+}
+
+/**
+ * Bring each `overrides[].files` glob to the form a finding's file is matched
+ * in, recording the ones that can never match.
+ *
+ * A plain path, such as `src/legacy` or `src/Old.tsx`, matches itself and
+ * everything under it, since nothing tells a directory from a file here. A
+ * glob {@link projectGlob} cannot place under the root is dropped as an
+ * `error`, as an unknown id is, because it would set nothing without a word.
+ *
+ * @param globs - The globs as written.
+ * @param at - Their path, for the problems.
+ * @param problems - Collector.
+ * @returns The usable globs.
+ */
+function readOverrideGlobs(
+    globs: readonly string[],
+    at: string,
+    problems: DiagnosticConfigProblem[],
+): string[] {
+    const usable: string[] = [];
+    for (const glob of globs) {
+        const relative = projectGlob(glob);
+        if (relative === null) {
+            problems.push({
+                severity: 'error',
+                path: at,
+                message: `\`${glob}\` can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with \`..\`.`,
+            });
+        } else if (GLOB_MAGIC.test(relative)) {
+            usable.push(relative);
+        } else {
+            usable.push(relative, `${relative}/**`);
+        }
+    }
+    return usable;
+}
+
 /**
  * Keep the valid entries of `diagnostics.overrides`.
  *
@@ -452,9 +519,60 @@ function readOverrides(
             });
             continue;
         }
-        overrides.push({ files, rules: readRules(entry.rules, `${at}.rules`, problems) });
+        overrides.push({
+            files: readOverrideGlobs([files].flat(), `${at}.files`, problems),
+            rules: readRules(entry.rules, `${at}.rules`, problems),
+        });
     }
     return overrides;
+}
+
+/** The keys this file is read for. */
+const TOP_LEVEL_KEYS = ['diagnostics'] as const;
+
+/**
+ * The problem with a top-level key the file is not read for.
+ *
+ * A near miss of `diagnostics`, or a key of `diagnostics` written one level
+ * too high (`rules`, as an ESLint flat config has it), is an `error`: read as
+ * a plugin option it would only warn, and every level under it would fall
+ * back to the defaults with `check` still passing. Without a `diagnostics`
+ * beside it nothing in the file applies, which the problem says. Anything
+ * else is taken for a plugin option the file used to be scaffolded with, and
+ * only warned about.
+ *
+ * @param key - The key as written.
+ * @param hasDiagnostics - Whether the file has a `diagnostics` key too.
+ * @returns The problem.
+ */
+function topLevelKeyProblem(key: string, hasDiagnostics: boolean): DiagnosticConfigProblem {
+    const ignored = hasDiagnostics ? {} : { fileIgnored: true };
+    if (DIAGNOSTICS_KEYS.has(key)) {
+        return {
+            severity: 'error',
+            path: 'default export',
+            message: `\`${key}\` is not read at the top level — did you mean \`diagnostics.${key}\`?`,
+            ...ignored,
+        };
+    }
+    const near = nearestName(
+        key,
+        TOP_LEVEL_KEYS.map(known => [known, known] as const),
+        Math.max(1, Math.floor(key.length / 4)),
+    );
+    if (near !== null) {
+        return {
+            severity: 'error',
+            path: 'default export',
+            message: `\`${key}\` is not read — did you mean \`${near}\`?`,
+            ...ignored,
+        };
+    }
+    return {
+        severity: 'warning',
+        path: key,
+        message: `\`${key}\` is not read from this file; plugin options belong in the bundler config.`,
+    };
 }
 
 /**
@@ -465,6 +583,7 @@ function readOverrides(
  * default without a word. A top-level key other than `diagnostics` is a
  * `warning`: the file used to be scaffolded with plugin options that nothing
  * read, and a project still carrying them should not start failing `check`.
+ * A near miss of `diagnostics` is the exception: see {@link topLevelKeyProblem}.
  *
  * @param value - The default export.
  * @returns The usable config and every problem, in the order written.
@@ -477,21 +596,24 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
             severity: 'error',
             path: 'default export',
             message: 'must be an object; write `export default defineConfig({ … })`.',
+            fileIgnored: true,
         });
         return { config: normalize(), problems };
     }
+    const hasDiagnostics = value.diagnostics !== undefined;
     for (const key of Object.keys(value)) {
         if (key === 'diagnostics') continue;
-        problems.push({
-            severity: 'warning',
-            path: key,
-            message: `\`${key}\` is not read from this file; plugin options belong in the bundler config.`,
-        });
+        problems.push(topLevelKeyProblem(key, hasDiagnostics));
     }
     const section = (value as CsszyxFileConfig).diagnostics as unknown;
     if (section === undefined) return { config: normalize(), problems };
     if (!isRecord(section)) {
-        problems.push({ severity: 'error', path: 'diagnostics', message: 'must be an object.' });
+        problems.push({
+            severity: 'error',
+            path: 'diagnostics',
+            message: 'must be an object.',
+            fileIgnored: true,
+        });
         return { config: normalize(), problems };
     }
     for (const key of Object.keys(section)) {
@@ -531,9 +653,18 @@ export function diagnosticConfigProblemsMessage(
     file: string,
     problems: readonly DiagnosticConfigProblem[],
 ): string {
-    const lines = problems.map(problem => `  - ${problem.path}: ${problem.message}`);
+    // A problem with the file itself is already named by the header.
+    const lines = problems.map(problem =>
+        problem.path === file
+            ? `  - (${problem.severity}) ${problem.message}`
+            : `  - (${problem.severity}) ${problem.path}: ${problem.message}`,
+    );
+    const outcome = problems.some(problem => problem.fileIgnored === true)
+        ? 'The file is not applied, so every finding keeps its default level.'
+        : 'Each one is ignored; the rest of the file applies.';
     return (
-        `[csszyx] ${file} has ${problems.length} problem(s):\n${lines.join('\n')}\n` +
-        'Each one is ignored; the rest of the file applies.'
+        `[csszyx] ${file} has ${problems.length} problem(s):\n${lines.join('\n')}\n${outcome}\n` +
+        '  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; ' +
+        'a dev server or `csszyx next watch` reads the file again only when restarted.'
     );
 }

@@ -71,6 +71,36 @@ describe('the runtime registration the Next lane writes', () => {
         expect(szcn('pb-2', 'p-4')).toBe('p-4');
     }, 60_000);
 
+    it('returns the emitted classes the design system serves nothing for, with their file', async () => {
+        // The Turbopack loader cannot compile the CSS, so the Next commands
+        // that settle the table ask the dead-class question here. Only the
+        // emitted classes: the className vocabulary is the app's own.
+        const root = tailwindProject('csszyx-next-dead-', { 'app.css': '@import "tailwindcss";' });
+        const model = await openProjectStyleModel(root, [join(root, 'app.css')]);
+        const written = writeMergeRegistration({
+            root,
+            model,
+            classes: ['break-bogus', 'p-4'],
+            classOrigins: new Map([
+                ['break-bogus', join(root, 'app/page.tsx')],
+                ['p-4', join(root, 'app/page.tsx')],
+            ]),
+            authoredClasses: ['tab-items-wrapper'],
+            mergeLiterals: [],
+        });
+
+        expect(written.dead).toEqual([{ className: 'break-bogus', file: 'app/page.tsx' }]);
+        expect(
+            writeMergeRegistration({
+                root,
+                model,
+                classes: [],
+                authoredClasses: [],
+                mergeLiterals: [],
+            }).dead,
+        ).toEqual([]);
+    }, 60_000);
+
     it('writes a CommonJS twin that registers the same data, for jest', async () => {
         // jest in its default mode transforms no `.mjs` and cannot require an
         // ES module, so a suite imports this twin instead.

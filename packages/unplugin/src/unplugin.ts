@@ -71,7 +71,13 @@ import {
     classAttributeSelectorKey,
     mangleCSSSync,
 } from './css-mangler.js';
-import { loadDiagnosticPolicy } from './csszyx-config-file.js';
+import { csszyxConfigFileNameFor, loadDiagnosticPolicy } from './csszyx-config-file.js';
+import {
+    type DeadClassSite,
+    findDeadSzClasses,
+    reportDeadSzClasses,
+    szClassSites,
+} from './dead-class.js';
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import {
     createDiagnosticPolicy,
@@ -221,6 +227,7 @@ import {
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
+    scalarFieldsOf,
     type TransformCacheKey,
     type TransformCacheKeyInput,
     writeTransformCache,
@@ -231,6 +238,7 @@ import {
     resolveQuietMode,
     routeTransformDiagnostics,
     shouldHoldAdvisories,
+    suppressedAdvisoryMessage,
 } from './transform-diagnostics.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
@@ -266,6 +274,7 @@ export {
     type QuietMode,
     resolveQuietMode,
     shouldHoldAdvisories,
+    suppressedAdvisoryMessage,
 } from './transform-diagnostics.js';
 
 /**
@@ -1101,40 +1110,6 @@ export function unscopedMonorepoMessage(): string {
         'one for the classes it generates, so only your own templates need listing. ' +
         'Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
         'Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).'
-    );
-}
-
-/**
- * Build the one-line disclosure that the fallback list above is partial.
- *
- * Four of the five `sz`-site fallback kinds never print in a production build,
- * so a log can list the `szr` fallbacks it found and silently hold every
- * `sz={factory()}` beside them. A consumer counting affected sites from that
- * log counts a lower bound and has no way to know it — one reported a site
- * count that was short by half for exactly this reason, and only caught it by
- * reading sources instead.
- *
- * Suppression is the right default; implying zero is not. One line costs
- * nothing and keeps the difference visible.
- *
- * @param count - Advisory notes the build declined to list.
- * @returns The disclosure, or null when nothing was held back.
- */
-export function suppressedAdvisoryMessage(count: number): string | null {
-    if (count <= 0) return null;
-    // Count and noun interpolate together so the sentence after them is one
-    // unbroken literal: the docs-sync gate matches verbatim runs, and a
-    // placeholder in the middle splits the run it is trying to match.
-    //
-    // The noun is "note", not "sz fallback": the count is everything
-    // `isAdvisoryDiagnostic` holds back, and two of its three kinds never touch
-    // an sz prop. A build with no fallback at all was being told it had some.
-    const held = count === 1 ? '1 advisory note' : `${count} advisory notes`;
-    return (
-        `[csszyx] ${held} not listed above. An advisory reports something csszyx handled — a ` +
-        'fallback at an sz prop, a className whose precedence over sz is unstated, or a variable ' +
-        'hoist the planner declined — so the styles are there and a production build keeps the ' +
-        'list short. A development build prints each one with its file and position.'
     );
 }
 
@@ -3226,10 +3201,76 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * Each lane awaits the load in its first hook, before any transform.
      */
     let diagnosticPolicy: DiagnosticPolicy = createDiagnosticPolicy();
+    /** The config file a message tells the user to edit: theirs, or the one init would write. */
+    let diagnosticConfigName = 'csszyx.config';
     /** What this instance listed, per file version, and the cap per id. */
     const diagnosticLimiter = createDiagnosticLimiter();
     /** Prints what the cap held back: at a build's end, or after a dev server's burst. */
     const capFlush = createCapFlush(diagnosticLimiter);
+    /**
+     * The classes `sz` emitted, per project-relative file, as of each file's
+     * latest transform, each with where its key is written when the engine
+     * recorded it. A build asks the design system about them for the
+     * `dead-class` report, and names the first file that emits each one.
+     */
+    const szClassesByFile = new Map<string, ReadonlyMap<string, DeadClassSite>>();
+
+    /**
+     * Record what one transform of a file emitted, replacing its last answer.
+     *
+     * The engine places a class at its key only in a first pass, and only for
+     * an object a merge reads (two classes or more); any other class is named
+     * by its file alone.
+     *
+     * @param file - The file or bundler id.
+     * @param result - The transform, merged or not.
+     */
+    function recordSzClasses(file: string, result: SourceTransformResult): void {
+        const relative = projectRelative(file.split('?')[0] as string);
+        const first = objectRuleOutputs.get(result) ?? result;
+        szClassesByFile.set(relative, szClassSites(relative, result.classes, first.mergeGroups));
+    }
+
+    /**
+     * Each emitted class and every site, in path order, that emits it.
+     *
+     * @returns Class to sites.
+     */
+    function szClassOrigins(): Map<string, DeadClassSite[]> {
+        const origins = new Map<string, DeadClassSite[]>();
+        for (const file of sortStrings(szClassesByFile.keys())) {
+            // Every key read here was set with a map.
+            for (const [className, site] of szClassesByFile.get(file) as ReadonlyMap<
+                string,
+                DeadClassSite
+            >) {
+                const sites = origins.get(className);
+                if (sites === undefined) origins.set(className, [site]);
+                else sites.push(site);
+            }
+        }
+        return origins;
+    }
+
+    /**
+     * Print the `sz` classes the design system serves no CSS for, at the level
+     * the project's policy gives `dead-class`. Never fails the build.
+     *
+     * @param model - The opened style model.
+     */
+    function reportDeadClasses(model: ProjectStyleModel): void {
+        const findings = findDeadSzClasses(model, szClassOrigins());
+        const { lines, held } = reportDeadSzClasses(findings, {
+            policy: diagnosticPolicy,
+            quiet,
+            holdInfo: shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+            limiter: diagnosticLimiter,
+        });
+        for (const line of lines) console.warn(line);
+        state.suppressedAdvisories += held;
+        if (serving) capFlush.schedule();
+    }
+
     /**
      * Read the project's `csszyx.config` once per root, printing what is wrong
      * with it.
@@ -3255,6 +3296,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
                 }
                 diagnosticPolicy = loaded.policy;
+                diagnosticConfigName =
+                    loaded.file === null
+                        ? csszyxConfigFileNameFor(root, {
+                              typescript: fs.existsSync(path.join(root, 'tsconfig.json')),
+                          })
+                        : path.basename(loaded.file);
                 return loaded.policy;
             });
             diagnosticPolicyLoad = { root, policy };
@@ -3721,8 +3768,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         { model: ProjectStyleModel; merged: SourceTransformResult }
     >();
 
-    /** Results a second pass produced, which no path should merge again. */
-    const objectRuleOutputs = new WeakSet<SourceTransformResult>();
+    /**
+     * Results a second pass produced, which no path should merge again, and
+     * the first pass each came from: only a first pass records where each
+     * class's key is written.
+     */
+    const objectRuleOutputs = new WeakMap<SourceTransformResult, SourceTransformResult>();
 
     /**
      * Every class a first pass handed the object rule. The classes it removed
@@ -3786,7 +3837,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (serving) capFlush.schedule();
         if (held.size === 0) return;
-        console.warn(mergeRemovalSummaryMessage(held, files.size));
+        console.warn(mergeRemovalSummaryMessage(held, files.size, diagnosticConfigName));
     }
 
     /**
@@ -3877,7 +3928,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (merged === first) mergeRemovedClasses.delete(effectiveFilename);
         objectRuleMerged.set(first, { model, merged });
-        if (merged !== first) objectRuleOutputs.add(merged);
+        if (merged !== first) objectRuleOutputs.set(merged, first);
         return merged;
     }
 
@@ -4540,7 +4591,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function processPrescanTransform(
         filePath: string,
-        content: string | undefined,
+        content: string,
         result: SourceTransformResult,
         discoveredClasses: Set<string>,
         rawDiscoveredClasses: Set<string>,
@@ -4548,11 +4599,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Read by code: the engine's wording is not a contract.
         const codes = new Set(result.issues?.map(issue => issue.code));
         const budgetExceeded = codes.has('ast-budget');
-        if (cacheEnabled && !budgetExceeded && content !== undefined) {
-            prescanResultHandoff.set(normalizeSourceFilename(filePath), {
-                inputSha256: createHash('sha256').update(content).digest('hex'),
-                result,
-            });
+        const inputSha256 = createHash('sha256').update(content).digest('hex');
+        // The version the transform hook will see again, so a table settled
+        // between the prescan and that transform is not said twice.
+        diagnosticLimiter.version(projectRelative(filePath), inputSha256);
+        if (cacheEnabled && !budgetExceeded) {
+            prescanResultHandoff.set(normalizeSourceFilename(filePath), { inputSha256, result });
         }
         if (budgetExceeded) {
             warnPrescanBudgetSkip(filePath);
@@ -5036,7 +5088,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const { filePath, result } of firstPasses) {
             processPrescanTransform(
                 filePath,
-                prescanContentByPath.get(filePath),
+                // Every first pass came from one of these sources.
+                prescanContentByPath.get(filePath) as string,
                 merged.get(result) ?? result,
                 discoveredClasses,
                 rawDiscoveredClasses,
@@ -5094,6 +5147,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const cls of result.rawClassNames) {
             rawDiscoveredClasses.add(cls);
         }
+        recordSzClasses(filePath, result);
         for (const [token, data] of result.recoveryTokens) {
             state.recoveryTokens.set(token, data);
         }
@@ -5504,6 +5558,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model.facts === null) return;
+        reportDeadClasses(model);
         // Tailwind's own scan as well as what the build saw: a map of variants
         // reaches `szcn` through a variable, and a package the plugin never
         // transforms still has its classes generated.
@@ -5900,6 +5955,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // overlap, but discovering either must still grow the safelist.
         recordAuthoredClasses(fileContent);
         trackGlobalVarSourceFile(file, fileContent);
+        recordSzClasses(file, result);
         for (const cls of result.classes) {
             addSafelistClass(cls);
             state.ownedClasses.add(cls);
@@ -6477,10 +6533,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         warn: (message: string) => void,
         source: string,
     ): void {
-        if (result.diagnostics.length === 0) return;
         const [file] = id.split('?');
         const relative = projectRelative(file);
+        // Every version, clean ones too: an undo back to a version that had
+        // findings must read as an edit, not as the version already said.
         diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
+        if (result.diagnostics.length === 0) return;
         const routed = routeTransformDiagnostics({
             diagnostics: result.diagnostics,
             issues: result.issues,
@@ -6511,22 +6569,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Transform output carrying compiler helper usage and classes.
      */
     function compilerPreTransformOutput(result: SourceTransformResult): PreTransformOutput {
-        return {
-            code: result.code,
-            transformed: result.transformed,
-            usesRuntime: result.usesRuntime,
-            usesMerge: result.usesMerge,
-            usesSzcn: result.usesSzcn,
-            usesSzPart: result.usesSzPart,
-            usesSzvPick: result.usesSzvPick,
-            usesSzvPick1: result.usesSzvPick1,
-            szPartArgsProvable: result.szPartArgsProvable,
-            usesColorVar: result.usesColorVar,
-            usesSpacingVar: result.usesSpacingVar,
-            usesUnitVar: result.usesUnitVar,
-            usesBoolClass: result.usesBoolClass,
-            szClasses: result.classes,
-        };
+        return { ...scalarFieldsOf(result), szClasses: result.classes };
     }
 
     /**
@@ -6558,6 +6601,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
+        recordSzClasses(id, result);
         reportTransformDiagnostics(result, id, warn, code);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);

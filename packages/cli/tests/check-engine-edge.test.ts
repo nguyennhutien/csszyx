@@ -23,6 +23,15 @@ vi.mock('@csszyx/compiler', async importActual => {
             if (file?.includes('Explodes')) {
                 throw new Error('engine rejected this module');
             }
+            if (file?.includes('NoCodes')) {
+                // A result with no `issues`, as an engine before codes gave.
+                const { issues: _issues, ...result } = actual.transformSource(
+                    source,
+                    file,
+                    options as Parameters<typeof actual.transformSource>[2],
+                );
+                return result;
+            }
             return actual.transformSource(
                 source,
                 file,
@@ -54,6 +63,21 @@ afterEach(() => {
 });
 
 describe('csszyx check engine edges', () => {
+    it('classifies a diagnostic that came without a code by its text', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/NoCodes.tsx': 'export const N = () => <div sz={{ pading: 4 }} />;',
+        });
+
+        await check({ cwd, json: true });
+
+        const { findings } = JSON.parse(log.mock.calls.flat().join('\n'));
+        expect(findings).toEqual([
+            expect.objectContaining({ kind: 'unknown-key', file: 'src/NoCodes.tsx' }),
+        ]);
+        expect(process.exitCode).toBe(1);
+    });
+
     it('does not fail the run on a runtime-fallback diagnostic', async () => {
         vi.spyOn(console, 'log').mockImplementation(() => {});
         // An imported binding produces a fallback note ("sz fallback at ..."),

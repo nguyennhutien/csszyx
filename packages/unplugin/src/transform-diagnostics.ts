@@ -65,6 +65,41 @@ export function shouldHoldAdvisories(
     return quiet !== 'off' || (!serving && nodeEnv === 'production');
 }
 
+/**
+ * Build the one-line disclosure that the fallback list above is partial.
+ *
+ * Four of the five `sz`-site fallback kinds never print in a production build,
+ * so a log can list the `szr` fallbacks it found and silently hold every
+ * `sz={factory()}` beside them. A consumer counting affected sites from that
+ * log counts a lower bound and has no way to know it — one reported a site
+ * count that was short by half for exactly this reason, and only caught it by
+ * reading sources instead.
+ *
+ * Suppression is the right default; implying zero is not. One line costs
+ * nothing and keeps the difference visible.
+ *
+ * @param count - `info` findings the build declined to list.
+ * @returns The disclosure, or null when nothing was held back.
+ */
+export function suppressedAdvisoryMessage(count: number): string | null {
+    if (count <= 0) return null;
+    // Count and noun interpolate together so the sentence after them is one
+    // unbroken literal: the docs-sync gate matches verbatim runs, and a
+    // placeholder in the middle splits the run it is trying to match.
+    //
+    // The noun is "info note", not "sz fallback" or "advisory": the count is
+    // every finding held at `info` — the advisories csszyx handled, two of
+    // whose three kinds never touch an sz prop, and any finding the config
+    // lowered to `info`, such as a dead class, whose styles are NOT there.
+    const held = count === 1 ? '1 info note' : `${count} info notes`;
+    return (
+        `[csszyx] ${held} not listed above: the advisories csszyx handled — a fallback at an sz ` +
+        'prop, a className whose precedence over sz is unstated, or a variable hoist the planner ' +
+        'declined — and any finding csszyx.config sets to info. A production build counts them ' +
+        'instead of listing them; a development build prints each one with its file and position.'
+    );
+}
+
 /** Where one finding at a level goes. */
 export type FindingChannel = 'drop' | 'held' | 'list';
 
@@ -142,6 +177,36 @@ export interface RoutedTransformDiagnostics {
 const DEFAULT_POLICY = createDiagnosticPolicy();
 
 /**
+ * File one listed diagnostic under its channel.
+ *
+ * An unresolvable spread goes to the spread channel; any other kind is an
+ * advisory at `info` and immediate above it.
+ *
+ * @param routed - The channels being filled.
+ * @param diagnostic - The diagnostic and where it was found.
+ * @param diagnostic.kind - Its kind.
+ * @param diagnostic.level - The level the policy gives it here.
+ * @param diagnostic.where - `<id>` or `<id>:<line>:<column>`.
+ * @param diagnostic.message - The engine's message.
+ */
+function pushListedDiagnostic(
+    routed: RoutedTransformDiagnostics,
+    diagnostic: { kind: string; level: SzDiagnosticLevel; where: string; message: string },
+): void {
+    const { kind, level, where, message } = diagnostic;
+    if (kind === 'unresolvable-spread') {
+        routed.spread.push(`${where}\n  ${message}`);
+        return;
+    }
+    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
+    const suggestion = szKeySuggestionFor(message);
+    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
+    const line = `[csszyx] ${where}\n  ${message}${hint}`;
+    if (level === 'info') routed.advisories.push(line);
+    else routed.immediate.push(line);
+}
+
+/**
  * Sort one transform's diagnostics into the channels a lane prints them on.
  *
  * Each diagnostic's kind is the engine's code for it, and its level is what
@@ -175,20 +240,12 @@ export function routeTransformDiagnostics(
             routed.heldAdvisories++;
             continue;
         }
-        if (limiter?.admit({ id: kind, file, line: issue?.line, key: message }) === false) {
+        const finding = { id: kind, file, line: issue?.line, column: issue?.column, key: message };
+        if (limiter?.admit(finding) === false) {
             continue;
         }
         const where = issue === undefined ? id : `${id}:${issue.line}:${issue.column}`;
-        if (kind === 'unresolvable-spread') {
-            routed.spread.push(`${where}\n  ${message}`);
-            continue;
-        }
-        // A suggestion is a hint beside the diagnostic; nothing is rewritten.
-        const suggestion = szKeySuggestionFor(message);
-        const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
-        const line = `[csszyx] ${where}\n  ${message}${hint}`;
-        if (level === 'info') routed.advisories.push(line);
-        else routed.immediate.push(line);
+        pushListedDiagnostic(routed, { kind, level, where, message });
     }
     return routed;
 }

@@ -10,11 +10,12 @@
 
 import path from 'node:path';
 
+import { createDiagnosticLimiter } from '@csszyx/unplugin/diagnostics';
 import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
-import { writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
+import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -76,7 +77,8 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             ignoreSetting: 'the `--ignore` flag',
         });
         if (facts.warning !== null) console.warn(facts.warning);
-        for (const warning of await writeNextDiagnosticPolicy(root)) console.warn(warning);
+        const diagnostics = await writeNextDiagnosticPolicy(root);
+        for (const warning of diagnostics.warnings) console.warn(warning);
 
         const result = runNextPrebuild({
             files: matches,
@@ -98,15 +100,24 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
         // The Turbopack loader cannot compile the project's CSS, so the merge
         // table and the unserved list it registers are written here, from the
         // census the shards carry and the design system read above.
-        const registrationWarning = tryWriteMergeRegistration({
+        const registration = tryWriteMergeRegistration({
             root,
             model: facts.model,
             classes: result.cycle.materialize.classes,
+            classOrigins: result.cycle.materialize.classOrigins,
             authoredClasses: result.cycle.materialize.authoredClasses,
             mergeLiterals: result.cycle.materialize.mergeLiterals,
             sources: matches,
         });
-        if (registrationWarning !== null) console.warn(registrationWarning);
+        if (registration.warning !== null) console.warn(registration.warning);
+        for (const line of nextDeadClassLines(
+            registration.dead,
+            diagnostics.policy,
+            createDiagnosticLimiter(),
+            mode === 'development',
+        )) {
+            console.warn(line);
+        }
 
         reportPrebuildSuccess(options.json, root, mode, result);
         return 0;

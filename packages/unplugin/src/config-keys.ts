@@ -52,12 +52,13 @@ const RENAMED_KEYS: Readonly<Record<string, string>> = {
 /**
  * Options read from another file, mapped to that file.
  *
- * `diagnostics` is read from `csszyx.config.ts` so that `csszyx check` and
- * every bundler plugin see one set of levels; an inline copy would apply to
- * this bundler only and drift from the gate.
+ * `diagnostics` is read from `csszyx.config` (`.ts`, `.mts`, `.js` or
+ * `.mjs`) so that `csszyx check` and every bundler plugin see one set of
+ * levels; an inline copy would apply to this bundler only and drift from the
+ * gate.
  */
 const MOVED_KEYS: Readonly<Record<string, string>> = {
-    diagnostics: 'csszyx.config.ts',
+    diagnostics: 'csszyx.config',
 };
 
 /**

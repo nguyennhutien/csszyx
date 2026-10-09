@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "ignore": "^7.0.6"
+    "ignore": "7.0.6"
   },
   "sideEffects": false,
   "license": "MIT"

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { auditMerges, mergeFindingsOf } from '../src/merge-audit.js';
+import { auditMerges, mergeFindingsOf, mergeRemovalSummaryMessage } from '../src/merge-audit.js';
 import { openStylesheetModel } from '../src/next-stylesheet-facts.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
@@ -95,5 +95,18 @@ describe('the merge audit', () => {
 describe('the findings of one first pass', () => {
     it('reads a pass with no merge lists as nothing removed', () => {
         expect(mergeFindingsOf({}, 'src/A.tsx', () => null)).toEqual([]);
+    });
+});
+
+describe('the summary line a dev server prints', () => {
+    it('names the config file the project has, not a fixed one', () => {
+        const line = mergeRemovalSummaryMessage(
+            new Map([['merge-covered-key', 2]]),
+            1,
+            'csszyx.config.mjs',
+        );
+
+        expect(line).toContain('`diagnostics.rules` of `csszyx.config.mjs`');
+        expect(line).not.toContain('csszyx.config.ts');
     });
 });

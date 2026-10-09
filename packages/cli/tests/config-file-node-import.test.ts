@@ -67,6 +67,8 @@ function loadInNode(root: string): {
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
         encoding: 'utf8',
     });
+    // A child that crashed has no document to parse; say why instead.
+    expect(child.status, child.stderr).toBe(0);
     return { ...JSON.parse(child.stdout), stderr: child.stderr };
 }
 
@@ -102,6 +104,11 @@ describe('csszyx.config under plain Node', () => {
 
         expect(loaded.problems).toEqual([]);
         expect(loaded.level).toBe('warn');
+        // Node's advice for an ES module outside a `"type": "module"` package
+        // is to add that type, which would break a CommonJS app: it must
+        // never be printed for the config (MODULE_TYPELESS_PACKAGE_JSON with
+        // no type, "Failed to load the ES module" under commonjs).
+        expect(loaded.stderr).toBe('');
     });
 
     it.each([
@@ -109,7 +116,7 @@ describe('csszyx.config under plain Node', () => {
         ['an untyped', undefined],
         ['a CommonJS', 'commonjs'],
     ])(
-        'only warns about the TypeScript text `csszyx init` wrote into csszyx.config.js in %s package',
+        'only warns about the TypeScript text `csszyx init` 0.17 wrote into csszyx.config.js in %s package',
         (_label, type) => {
             const loaded = loadInNode(project(type, 'csszyx.config.js', INIT_TEMPLATE));
 
@@ -118,7 +125,7 @@ describe('csszyx.config under plain Node', () => {
                 severity: 'warning',
                 path: 'csszyx.config.js',
             });
-            expect(loaded.problems[0]?.message).toContain('sets no `diagnostics`');
+            expect(loaded.problems[0]?.message).toContain('`csszyx init` 0.17');
             expect(loaded.level).toBe('error');
         },
     );
@@ -134,5 +141,23 @@ describe('csszyx.config under plain Node', () => {
 
         expect(loaded.problems).toHaveLength(1);
         expect(loaded.problems[0]).toMatchObject({ severity: 'error', path: 'csszyx.config.js' });
+        // Node's SyntaxError names no file; the loader says what to do.
+        expect(loaded.problems[0]?.message).toContain(
+            '`csszyx.config.js` holds TypeScript syntax; rename it to `csszyx.config.mts`.',
+        );
+    });
+
+    it('names the line and column of a runtime error in the user file, never its copy', () => {
+        const loaded = loadInNode(
+            project(
+                'commonjs',
+                'csszyx.config.ts',
+                'const a = 1;\nconst config = defineConfig({});\nexport default config;\n',
+            ),
+        );
+
+        expect(loaded.problems[0]?.message).toBe(
+            'could not be loaded: defineConfig is not defined (at csszyx.config.ts:2:16)',
+        );
     });
 });

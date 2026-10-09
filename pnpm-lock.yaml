@@ -213,7 +213,7 @@ importers:
         specifier: ^11.4.1
         version: 11.4.1
       ignore:
-        specifier: ^7.0.6
+        specifier: 7.0.6
         version: 7.0.6
       ora:
         specifier: ^9.4.1
@@ -498,7 +498,7 @@ importers:
         specifier: workspace:*
         version: link:../compiler
       ignore:
-        specifier: ^7.0.6
+        specifier: 7.0.6
         version: 7.0.6
 
   packages/tooling-metadata:
@@ -564,7 +564,7 @@ importers:
         specifier: workspace:*
         version: link:../vue-adapter
       ignore:
-        specifier: ^7.0.6
+        specifier: 7.0.6
         version: 7.0.6
       minimatch:
         specifier: ^10.2.6

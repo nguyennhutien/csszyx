@@ -128,9 +128,9 @@ describe('the plugin reading csszyx.config', () => {
 describe('an inline diagnostics option', () => {
     it('is not read, and the warning says where it belongs', () => {
         const unknown = findUnknownConfigKeys({ diagnostics: { preset: 'atomic' } });
-        expect(unknown).toEqual([{ key: 'diagnostics', movedTo: 'csszyx.config.ts' }]);
+        expect(unknown).toEqual([{ key: 'diagnostics', movedTo: 'csszyx.config' }]);
         expect(unknownConfigKeysMessage(unknown)).toContain(
-            '`diagnostics` is read from `csszyx.config.ts`, not from the plugin options',
+            '`diagnostics` is read from `csszyx.config`, not from the plugin options',
         );
     });
 });

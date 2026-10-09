@@ -246,6 +246,48 @@ describe('readCsszyxFileConfig', () => {
         ).toEqual(['diagnostics.rules', 'diagnostics.overrides']);
     });
 
+    it('names a misspelt diagnostics key as an error, with the key it most likely means', () => {
+        // Read as a plugin option it would only warn, and every level it sets
+        // would fall back to the defaults with `check` still passing. With no
+        // `diagnostics` beside it, nothing in the file applies.
+        expect(readCsszyxFileConfig({ diagnostic: { preset: 'atomic' } }).problems).toEqual([
+            {
+                severity: 'error',
+                path: 'default export',
+                message: '`diagnostic` is not read — did you mean `diagnostics`?',
+                fileIgnored: true,
+            },
+        ]);
+    });
+
+    it('keeps the rest of the file applying when a near miss sits beside diagnostics', () => {
+        const read = readCsszyxFileConfig({ diagnostic: {}, diagnostics: { preset: 'atomic' } });
+        expect(read.problems).toEqual([
+            {
+                severity: 'error',
+                path: 'default export',
+                message: '`diagnostic` is not read — did you mean `diagnostics`?',
+            },
+        ]);
+        expect(read.config.preset).toBe('atomic');
+    });
+
+    it.each(['rules', 'preset', 'allow', 'overrides'])(
+        'names a top-level `%s` as an error that belongs under diagnostics',
+        key => {
+            // The ESLint flat-config habit: the levels sit one level too high
+            // and every one of them would be dropped with `check` passing.
+            expect(readCsszyxFileConfig({ [key]: {} }).problems).toEqual([
+                {
+                    severity: 'error',
+                    path: 'default export',
+                    message: `\`${key}\` is not read at the top level — did you mean \`diagnostics.${key}\`?`,
+                    fileIgnored: true,
+                },
+            ]);
+        },
+    );
+
     it('warns about a plugin option written in the file, which only the bundler reads', () => {
         const read = readCsszyxFileConfig({ development: { debug: true }, diagnostics: {} });
         expect(read.problems).toEqual([
@@ -256,6 +298,85 @@ describe('readCsszyxFileConfig', () => {
                     '`development` is not read from this file; plugin options belong in the bundler config.',
             },
         ]);
+    });
+});
+
+describe('overrides[].files', () => {
+    /**
+     * The level an override built from these globs gives a dead class in a file.
+     *
+     * @param files - The globs as written.
+     * @returns A function from a project-relative file to its level.
+     */
+    function levelUnder(files: string[]) {
+        const read = readCsszyxFileConfig({
+            diagnostics: { overrides: [{ files, rules: { 'dead-class': 'off' } }] },
+        });
+        const policy = createDiagnosticPolicy(read.config);
+        return {
+            problems: read.problems,
+            at: (file: string) => policy.levelOf({ rule: 'dead-class', file }),
+        };
+    }
+
+    it('reads a leading ./ as the project root', () => {
+        const { problems, at } = levelUnder(['./src/legacy/**']);
+        expect(problems).toEqual([]);
+        expect(at('src/legacy/Old.tsx')).toBe('off');
+    });
+
+    it('reads a bare directory as everything under it, and a plain path as that file', () => {
+        const { problems, at } = levelUnder(['src/legacy', 'lib/Old.tsx', 'pages/']);
+        expect(problems).toEqual([]);
+        expect(at('src/legacy/deep/Old.tsx')).toBe('off');
+        expect(at('lib/Old.tsx')).toBe('off');
+        expect(at('pages/index.tsx')).toBe('off');
+        expect(at('src/legacyish.tsx')).toBe('error');
+    });
+
+    it('refuses a glob anchored outside the project root, which no file can match', () => {
+        const refused = [
+            '/src/**',
+            '\\src\\**',
+            '../shared/**',
+            // `./` is stripped before the `..` check, not after.
+            './../src/**',
+            'src/../../x/**',
+            'C:\\app\\src\\**',
+            'C:/app/src/**',
+        ];
+        const { problems, at } = levelUnder([...refused, 'src/**']);
+        expect(problems).toEqual(
+            refused.map(glob => ({
+                severity: 'error',
+                path: 'diagnostics.overrides[0].files',
+                message: `\`${glob}\` can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with \`..\`.`,
+            })),
+        );
+        // The globs that can match still apply.
+        expect(at('src/A.tsx')).toBe('off');
+    });
+
+    it('reads backslashes as separators, so a Windows-written glob matches', () => {
+        const { problems, at } = levelUnder(['src\\core\\**', 'src\\legacy', '.\\lib']);
+        expect(problems).toEqual([]);
+        expect(at('src/core/deep/A.tsx')).toBe('off');
+        expect(at('src/legacy/Old.tsx')).toBe('off');
+        expect(at('lib/B.tsx')).toBe('off');
+        expect(at('src/other.tsx')).toBe('error');
+    });
+
+    it.each(['.', './', './.', '.\\'])('reads `%s` as the whole project', glob => {
+        const { problems, at } = levelUnder([glob]);
+        expect(problems).toEqual([]);
+        expect(at('A.tsx')).toBe('off');
+        expect(at('src/deep/B.tsx')).toBe('off');
+    });
+
+    it('drops `.` segments inside a path', () => {
+        const { problems, at } = levelUnder(['src/./legacy']);
+        expect(problems).toEqual([]);
+        expect(at('src/legacy/Old.tsx')).toBe('off');
     });
 });
 
@@ -275,14 +396,37 @@ describe('createDiagnosticPolicy serialization', () => {
 });
 
 describe('diagnosticConfigProblemsMessage', () => {
-    it('names the file and lists each problem under its path', () => {
+    const CONFIG_HELP =
+        'https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server or `csszyx next watch` reads the file again only when restarted.';
+
+    it('names the file and lists each problem under its path, tagged with its severity', () => {
         const message = diagnosticConfigProblemsMessage('csszyx.config.ts', [
             { severity: 'error', path: 'diagnostics.rules', message: '`x` is not a rule id.' },
+            { severity: 'warning', path: 'development', message: 'is not read.' },
         ]);
         expect(message).toBe(
-            '[csszyx] csszyx.config.ts has 1 problem(s):\n' +
-                '  - diagnostics.rules: `x` is not a rule id.\n' +
-                'Each one is ignored; the rest of the file applies.',
+            '[csszyx] csszyx.config.ts has 2 problem(s):\n' +
+                '  - (error) diagnostics.rules: `x` is not a rule id.\n' +
+                '  - (warning) development: is not read.\n' +
+                'Each one is ignored; the rest of the file applies.\n' +
+                `  help: ${CONFIG_HELP}`,
+        );
+    });
+
+    it('says the whole file was not applied when it did not load, naming the file once', () => {
+        const message = diagnosticConfigProblemsMessage('csszyx.config.mjs', [
+            {
+                severity: 'error',
+                path: 'csszyx.config.mjs',
+                message: 'could not be loaded: Unexpected token',
+                fileIgnored: true,
+            },
+        ]);
+        expect(message).toBe(
+            '[csszyx] csszyx.config.mjs has 1 problem(s):\n' +
+                '  - (error) could not be loaded: Unexpected token\n' +
+                'The file is not applied, so every finding keeps its default level.\n' +
+                `  help: ${CONFIG_HELP}`,
         );
     });
 });

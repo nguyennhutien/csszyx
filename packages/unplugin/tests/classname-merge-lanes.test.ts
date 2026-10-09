@@ -146,7 +146,9 @@ describe('the count a dev server prints at start', () => {
         expect(await start('serve')).toEqual([
             '[csszyx] 2 class(es) in 1 file(s) were removed: another class on the same element sets every property they set.\n' +
                 '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
-                "  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of csszyx.config.ts to hide this line; `build.mergeCoveredClasses: false` keeps the classes.",
+                // No config and no tsconfig.json or `"type": "module"`: the
+                // name `csszyx init` would give this project.
+                "  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of `csszyx.config.mjs` to hide this line; `build.mergeCoveredClasses: false` keeps the classes.",
         ]);
     }, 60_000);
 
