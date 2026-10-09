@@ -16,43 +16,18 @@ import path from 'node:path';
 import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import {
     auditMerges,
-    type MergeAuditFinding,
+    MERGE_AUDIT_KINDS,
     type MergeAuditKind,
+    mergeRemovalMessage,
     openStylesheetModel,
 } from '@csszyx/unplugin/next-prebuild';
 
 import type { Reporter } from './check-report.js';
 
 /** The rules this pass answers. */
-export const MERGE_AUDIT_RULES: readonly MergeAuditKind[] = [
-    'merge-covered-key',
-    'merge-covered-class',
-];
+export const MERGE_AUDIT_RULES: readonly MergeAuditKind[] = MERGE_AUDIT_KINDS;
 
 export type { MergeAuditKind };
-
-/** What each rule says a class lost to. */
-const REASON: Record<MergeAuditKind, string> = {
-    'merge-covered-key':
-        'removed: a later key in the same `sz` object sets every property it sets.',
-    'merge-covered-class':
-        'removed from `className`: an `sz` class on the same element sets every property it sets.',
-};
-
-/**
- * What one finding says: the class, and for a key the key it was written as,
- * since that is what the author searches the source for.
- *
- * @param finding - One removed class.
- * @returns The message, without the file and line.
- */
-function removalMessage(finding: MergeAuditFinding): string {
-    const removed =
-        finding.key === undefined
-            ? `\`${finding.className}\``
-            : `\`${finding.key}\` (\`${finding.className}\`)`;
-    return `${removed} ${REASON[finding.kind]}`;
-}
 
 /**
  * Report what the build removes, for the audit rules the run selected;
@@ -99,7 +74,7 @@ export async function reportMergeAudit(
             out.levelOf({ rule: finding.kind, file: finding.file }) !== 'off',
     );
     for (const finding of findings) {
-        const message = removalMessage(finding);
+        const message = mergeRemovalMessage(finding);
         out.info(`  ${finding.file}:${finding.line}: ${message}`);
         out.push({ rule: finding.kind, file: finding.file, line: finding.line, message });
     }

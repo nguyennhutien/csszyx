@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { auditMerges } from '../src/merge-audit.js';
+import { auditMerges, mergeFindingsOf } from '../src/merge-audit.js';
 import { openStylesheetModel } from '../src/next-stylesheet-facts.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
@@ -90,4 +90,10 @@ describe('the merge audit', () => {
         const files = [{ path: join(root, 'src/A.tsx'), relative: 'src/A.tsx', source }];
         expect(auditMerges({ model, classPrefix: null, files })).toEqual([]);
     }, 60_000);
+});
+
+describe('the findings of one first pass', () => {
+    it('reads a pass with no merge lists as nothing removed', () => {
+        expect(mergeFindingsOf({}, 'src/A.tsx', () => null)).toEqual([]);
+    });
 });

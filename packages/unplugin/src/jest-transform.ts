@@ -41,9 +41,11 @@ import path from 'node:path';
 import {
     VERSION as compilerVersion,
     type SourceTransformResult,
-    szFallbackConsequenceOf,
     transformSource,
 } from '@csszyx/compiler';
+
+import { readDiagnosticPolicyState } from './csszyx-config-file.js';
+import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 
 import {
     importMergeRegistration,
@@ -59,12 +61,14 @@ import {
     resolveNextClassPrefix,
 } from './next-stylesheet-facts.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { type DiagnosticIssue, routeTransformDiagnostics } from './transform-diagnostics.js';
 
 /** The compiled output and what it needs, as both sources shape it. */
 interface CompiledFile extends NextRuntimeImportUsage {
     code?: unknown;
     transformed?: unknown;
     diagnostics?: unknown;
+    issues?: unknown;
     mergeGroups?: unknown;
     mergeOverrides?: unknown;
 }
@@ -435,25 +439,6 @@ function readStylesheetsInChild(input: {
 const DEFAULT_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'] as const;
 
 /**
- * Print the diagnostics that say a class is dead.
- *
- * A usage nudge — the runtime path taken where a compiled one was possible —
- * is the plugin's business; under jest the runtime path renders the same
- * classes. A dead key or value, or missing CSS, is the finding this lane
- * exists to surface, and it goes to the console the way the plugin's does.
- *
- * @param sourcePath - The file the diagnostics belong to.
- * @param diagnostics - The result's diagnostics, whatever their shape.
- */
-function reportDeadClasses(sourcePath: string, diagnostics: unknown): void {
-    if (!Array.isArray(diagnostics)) return;
-    for (const message of diagnostics) {
-        if (typeof message !== 'string' || szFallbackConsequenceOf(message) === 'nudge') continue;
-        console.warn(`[csszyx] ${sourcePath}\n  ${message}`);
-    }
-}
-
-/**
  * Finish compiled code the way the plugin does before handing it to a bundler.
  *
  * @param code - The compiled module.
@@ -587,7 +572,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
     return {
         process(sourceText, sourcePath, jestOptions) {
             if (!compiles(sourcePath)) return { code: sourceText };
-            const { cached, classPrefix, root } = projectOf(jestOptions);
+            const { cached, classPrefix, root, report } = projectOf(jestOptions);
             const prefix = classPrefix();
             // jest in its default mode cannot load an ES module, and one that
             // runs native ESM imports the runtime's ES build, which a CommonJS
@@ -611,7 +596,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                           root,
                       );
             if (built !== null && typeof built.code === 'string') {
-                reportDeadClasses(sourcePath, built.diagnostics);
+                report(sourcePath, sourceText, built);
                 const merged = withTable(built);
                 return {
                     code: merges(
@@ -623,7 +608,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
             }
             const first = transformSource(sourceText, sourcePath, { classPrefix: prefix });
             const result = withTable(first) ?? first;
-            reportDeadClasses(sourcePath, result.diagnostics);
+            report(sourcePath, sourceText, result);
             return {
                 code: merges(result.transformed ? finish(result.code, result, prefix) : sourceText),
             };
@@ -684,6 +669,19 @@ interface JestProject {
      * @returns The prefix, or null for none.
      */
     classPrefix(): string | null;
+    /**
+     * Print a result's diagnostics at the level the project's policy gives
+     * them.
+     *
+     * @param sourcePath - The file the diagnostics belong to.
+     * @param sourceText - Its contents, whose version decides what was said.
+     * @param result - The result, from the engine or the build's cache.
+     */
+    report(
+        sourcePath: string,
+        sourceText: string,
+        result: Pick<CompiledFile, 'diagnostics' | 'issues'>,
+    ): void;
 }
 
 /**
@@ -736,11 +734,39 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
             throw settled;
         }
     };
+    // jest cannot import `csszyx.config.ts`; it reads what `csszyx next
+    // prebuild` resolved, as the Turbopack loader does, once per worker.
+    const policy = readDiagnosticPolicyState(root);
+    const limiter = createDiagnosticLimiter();
+    const capFlush = createCapFlush(limiter);
     return {
         root,
         cached: (sourceText, sourcePath, prefix) =>
             index.find(normalizePathSeparators(sourcePath), sourceText, prefix),
         classPrefix,
+        report(sourcePath, sourceText, result) {
+            const { diagnostics, issues } = result;
+            if (!Array.isArray(diagnostics) || diagnostics.length === 0) return;
+            const file = path.relative(root, sourcePath).split(path.sep).join('/');
+            limiter.version(file, createHash('sha256').update(sourceText).digest('hex'));
+            // A test run is no place for `info`: under jest the runtime path
+            // renders the same classes, so advice about how they got there is
+            // the bundler's business. `warn` and `error` are what this lane
+            // exists to surface.
+            const routed = routeTransformDiagnostics({
+                diagnostics: diagnostics.map(String),
+                issues: Array.isArray(issues) ? (issues as DiagnosticIssue[]) : undefined,
+                id: sourcePath,
+                file,
+                quiet: 'off',
+                holdInfo: true,
+                policy,
+                limiter,
+            });
+            for (const line of routed.immediate) console.warn(line);
+            for (const line of routed.spread) console.warn(`[csszyx] ${line}`);
+            capFlush.schedule();
+        },
     };
 }
 

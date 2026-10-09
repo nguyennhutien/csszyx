@@ -27,22 +27,24 @@
  * and is answered by {@link DiagnosticPolicy.allowsClass} and
  * {@link DiagnosticPolicy.allowsToken}, never by a level.
  *
- * ## For the next consumers
+ * ## Consumers
  *
- * - Bundler lanes route each diagnostic through {@link DiagnosticPolicy.levelOf}
- *   with `rule: 'sz-diagnostic'`, `kind: result.issues[i].code` and the file
- *   relative to the project root, and treat `off` as "drop", `info` as
- *   "counted / summarised", `warn` and `error` as "printed with file:line".
- *   A build never fails on a level. The plugin already loads the policy once
- *   per root (`loadProjectDiagnosticPolicy` in `unplugin.ts`); the place to
- *   apply it is `routeTransformDiagnostics` in `transform-diagnostics.ts`,
- *   which today classifies by text.
+ * - Bundler lanes (Vite, webpack, rollup, esbuild) route each engine
+ *   diagnostic through {@link DiagnosticPolicy.levelOf} with
+ *   `rule: 'sz-diagnostic'`, `kind: result.issues[i].code` and the file
+ *   relative to the project root, in `routeTransformDiagnostics`
+ *   (`transform-diagnostics.ts`): `off` drops it, `info` is listed on a dev
+ *   build and counted in production, `warn` and `error` are listed with
+ *   file:line in every mode. A build never fails on a level. The plugin loads
+ *   the policy once per root (`loadProjectDiagnosticPolicy` in `unplugin.ts`).
  * - The Turbopack loader and jest cannot import a TypeScript config; they read
  *   the policy `csszyx next prebuild`/`watch` resolved into
  *   `.csszyx/diagnostic-policy.json` with `readDiagnosticPolicyState`, which
  *   rebuilds it through {@link createDiagnosticPolicy} from
  *   {@link DiagnosticPolicy.toJSON}'s `config`.
- * - A build-time `dead-class` finding uses `rule: 'dead-class'`; the className
+ * - The build-time `dead-class` finding (`dead-class.ts`) uses
+ *   `rule: 'dead-class'` and {@link DiagnosticPolicy.allowsClass}; the merge
+ *   report uses `merge-covered-key`/`merge-covered-class`. The className
  *   vocabulary uses `custom-class` / `unknown-class`, both `off` under
  *   `recommended`.
  *

@@ -110,12 +110,20 @@ describe('the count a dev server prints at start', () => {
      *
      * @param command - `serve` or `build`.
      * @param build - Build options.
-     * @returns What was printed.
+     * @param config - `csszyx.config.mjs`, when the case sets levels.
+     * @param starts - How many times the same plugin starts.
+     * @returns What was printed about removed classes.
      */
-    async function start(command: 'serve' | 'build', build: Record<string, unknown> = {}) {
+    async function start(
+        command: 'serve' | 'build',
+        build: Record<string, unknown> = {},
+        config?: string,
+        starts = 1,
+    ) {
         const root = tailwindProject('csszyx-classname-merge-count-', {
             'src/index.css': '@import "tailwindcss";\n',
             'src/App.tsx': `${APP}export const Keys = () => <b sz={{ px: 2, p: 4 }} />;\n`,
+            ...(config === undefined ? {} : { 'csszyx.config.mjs': config }),
         });
         vi.spyOn(process, 'cwd').mockReturnValue(root);
         const warnings: string[] = [];
@@ -128,21 +136,53 @@ describe('the count a dev server prints at start', () => {
                 production: { mangle: false },
             }) as unknown as Record<string, unknown>[],
         );
-        await call('configResolved', { root, command });
-        return warnings.filter(line => line.includes('were removed:'));
+        for (let index = 0; index < starts; index++) {
+            await call('configResolved', { root, command });
+        }
+        return warnings.filter(line => line.includes('removed'));
     }
 
-    it('says once how many classes the build removed, and where to see them', async () => {
+    it('says once how many classes the build removed, which ids they are, and how to hide it', async () => {
         expect(await start('serve')).toEqual([
             '[csszyx] 2 class(es) in 1 file(s) were removed: another class on the same element sets every property they set.\n' +
                 '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
-                '  note: set `build.mergeCoveredClasses: false` to keep them.',
+                "  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of csszyx.config.ts to hide this line; `build.mergeCoveredClasses: false` keeps the classes.",
         ]);
     }, 60_000);
 
-    it('prints nothing on a build, or with the merge off', async () => {
+    it('prints nothing on a build, with the merge off, or with the ids off', async () => {
         expect(await start('build')).toEqual([]);
         expect(await start('serve', { mergeCoveredClasses: false })).toEqual([]);
+        expect(
+            await start(
+                'serve',
+                {},
+                'export default { diagnostics: { rules: { "merge-covered-key": "off", "merge-covered-class": "off" } } };\n',
+            ),
+        ).toEqual([]);
+    }, 60_000);
+
+    it('names only the ids still at info', async () => {
+        const [line] = await start(
+            'serve',
+            {},
+            'export default { diagnostics: { rules: { "merge-covered-class": "off" } } };\n',
+        );
+        expect(line).toContain('1 class(es) in 1 file(s) were removed');
+        expect(line).toContain('`csszyx check --rule merge-covered-key` lists them.');
+        expect(line).not.toContain('merge-covered-class');
+    }, 60_000);
+
+    it('lists each site with its file, line and key under the atomic preset, on a build too', async () => {
+        const atomic = 'export default { diagnostics: { preset: "atomic" } };\n';
+        const expected = [
+            '[csszyx] src/App.tsx:1: `pb-2` removed from `className`: an `sz` class on the same element sets every property it sets. (merge-covered-class)',
+            '[csszyx] src/App.tsx:3: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets. (merge-covered-key)',
+        ];
+        expect(await start('serve', {}, atomic)).toEqual(expected);
+        expect(await start('build', {}, atomic)).toEqual(expected);
+        // A second start of the same plugin has nothing new to say.
+        expect(await start('serve', {}, atomic, 2)).toEqual(expected);
     }, 60_000);
 });
 

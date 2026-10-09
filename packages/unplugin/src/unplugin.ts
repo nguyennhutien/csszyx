@@ -72,7 +72,12 @@ import {
     mangleCSSSync,
 } from './css-mangler.js';
 import { loadDiagnosticPolicy } from './csszyx-config-file.js';
-import { type DiagnosticPolicy, diagnosticConfigProblemsMessage } from './diagnostic-policy.js';
+import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
+import {
+    createDiagnosticPolicy,
+    type DiagnosticPolicy,
+    diagnosticConfigProblemsMessage,
+} from './diagnostic-policy.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -162,6 +167,13 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import {
+    type MergeAuditFinding,
+    type MergeAuditKind,
+    mergeFindingsOf,
+    mergeRemovalMessage,
+    mergeRemovalSummaryMessage,
+} from './merge-audit.js';
 import { loadsCsszyxRuntime, writeMergeRegistrationModule } from './merge-registration.js';
 import {
     createMergeSignatureTable,
@@ -214,6 +226,7 @@ import {
     writeTransformCache,
 } from './transform-cache.js';
 import {
+    channelOfLevel,
     type QuietMode,
     resolveQuietMode,
     routeTransformDiagnostics,
@@ -250,12 +263,8 @@ import {
 // The diagnostic gates moved to their own module so the Next Turbopack loader
 // shares them; they stay importable from here.
 export {
-    emitKeyValueDiagnostic,
-    emitMissingCssFallback,
-    isAdvisoryDiagnostic,
     type QuietMode,
     resolveQuietMode,
-    shouldEmitMissingCssFallback,
     shouldHoldAdvisories,
 } from './transform-diagnostics.js';
 
@@ -3213,6 +3222,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /** The policy of the project last loaded, by root, so every hook shares one read. */
     let diagnosticPolicyLoad: { root: string; policy: Promise<DiagnosticPolicy> } | undefined;
     /**
+     * The policy every report of this instance reads, once its load settled.
+     * Each lane awaits the load in its first hook, before any transform.
+     */
+    let diagnosticPolicy: DiagnosticPolicy = createDiagnosticPolicy();
+    /** What this instance listed, per file version, and the cap per id. */
+    const diagnosticLimiter = createDiagnosticLimiter();
+    /** Prints what the cap held back: at a build's end, or after a dev server's burst. */
+    const capFlush = createCapFlush(diagnosticLimiter);
+    /**
      * Read the project's `csszyx.config` once per root, printing what is wrong
      * with it.
      *
@@ -3236,6 +3254,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         ),
                     );
                 }
+                diagnosticPolicy = loaded.policy;
                 return loaded.policy;
             });
             diagnosticPolicyLoad = { root, policy };
@@ -3717,35 +3736,57 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     const objectRuleClasses = new Set<string>();
     /**
-     * Classes the merge removed, per file, for the count a dev server prints.
+     * Classes the merge removed, per file, for what a build says about them.
      *
-     * Holds one number per file and is SET, not added to: it is right only
-     * because `withObjectRule` runs once per first-pass result of a whole file
-     * (the `objectRuleMerged` guard). A caller that merges one file in parts,
-     * or twice under different results, must sum here instead, or the count
-     * under-reports. A file that stops removing anything keeps its old count,
-     * which is harmless while the count prints only at start.
+     * SET per file, not added to: it is right only because `withObjectRule`
+     * runs once per first-pass result of a whole file (the `objectRuleMerged`
+     * guard). A caller that merges one file in parts, or twice under different
+     * results, must append here instead. A file that stops removing anything
+     * keeps its old findings, which is harmless while they print only at start.
      */
-    const mergeRemovals = new Map<string, number>();
+    const mergeRemovals = new Map<string, MergeAuditFinding[]>();
 
     /**
-     * Print, once at dev start, how many classes the merge removed.
+     * Say, once at start, what the merge removed, at the level the project's
+     * policy gives `merge-covered-key` and `merge-covered-class`.
      *
      * Nothing marks a removed class in the output, so an upgrade would change
-     * rendering with no sign of it. One line points at the audit that lists
-     * them; per-class lines would repeat on every intentional override.
+     * rendering with no sign of it. At `info` (the recommended preset) one
+     * line on a dev server points at the audit that lists them — per-class
+     * lines would repeat on every intentional override — and a production
+     * build says nothing. At `warn` or `error` (the atomic preset) each site is
+     * listed with its file, line and key, in every mode.
+     *
+     * @param production - Whether this start is a production build.
      */
-    function printMergeRemovals(): void {
-        let classes = 0;
-        for (const count of mergeRemovals.values()) classes += count;
-        if (classes === 0) return;
-        const files = mergeRemovals.size;
-        emitWarning(
-            `[csszyx] ${classes} class(es) in ${files} file(s) were removed: another class on the same element sets every property they set.\n` +
-                '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
-                '  note: set `build.mergeCoveredClasses: false` to keep them.',
-            { devOnly: true },
-        );
+    function reportMergeRemovals(production: boolean): void {
+        const held = new Map<MergeAuditKind, number>();
+        const files = new Set<string>();
+        for (const [file, findings] of mergeRemovals) {
+            for (const finding of findings) {
+                const level = diagnosticPolicy.levelOf({ rule: finding.kind, file });
+                const channel = channelOfLevel(level, quiet, production || quiet !== 'off');
+                if (channel === 'list' && level === 'info') {
+                    held.set(finding.kind, (held.get(finding.kind) ?? 0) + 1);
+                    files.add(file);
+                    continue;
+                }
+                if (channel !== 'list') continue;
+                const admitted = diagnosticLimiter.admit({
+                    id: finding.kind,
+                    file,
+                    line: finding.line,
+                    key: finding.className,
+                });
+                if (!admitted) continue;
+                console.warn(
+                    `[csszyx] ${file}:${finding.line}: ${mergeRemovalMessage(finding)} (${finding.kind})`,
+                );
+            }
+        }
+        if (serving) capFlush.schedule();
+        if (held.size === 0) return;
+        console.warn(mergeRemovalSummaryMessage(held, files.size));
     }
 
     /**
@@ -3810,11 +3851,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             groups.some(group => mergeRemovesFrom(group, signatureOf)) ||
             overrides.some(pair => overrideRemovesFrom(pair.base, pair.over, signatureOf))
         ) {
-            const removed = [
-                ...groups.flatMap(group => removedByMerge(group, signatureOf)),
-                ...overrides.flatMap(pair => removedByOverride(pair.base, pair.over, signatureOf)),
-            ];
-            mergeRemovals.set(effectiveFilename, removed.length);
+            mergeRemovals.set(
+                projectRelative(effectiveFilename),
+                mergeFindingsOf(first, projectRelative(effectiveFilename), signatureOf),
+            );
             const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
             merged = runConfiguredParser(source, effectiveFilename, {
                 ...compilerOptions,
@@ -4505,9 +4545,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         discoveredClasses: Set<string>,
         rawDiscoveredClasses: Set<string>,
     ): void {
-        const budgetExceeded = result.diagnostics.some(diagnostic =>
-            diagnostic.includes('AST budget exceeded'),
-        );
+        // Read by code: the engine's wording is not a contract.
+        const codes = new Set(result.issues?.map(issue => issue.code));
+        const budgetExceeded = codes.has('ast-budget');
         if (cacheEnabled && !budgetExceeded && content !== undefined) {
             prescanResultHandoff.set(normalizeSourceFilename(filePath), {
                 inputSha256: createHash('sha256').update(content).digest('hex'),
@@ -4518,9 +4558,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             warnPrescanBudgetSkip(filePath);
             return;
         }
-        const parseFailed = result.diagnostics.some(diagnostic =>
-            diagnostic.includes('[csszyx] parse error in '),
-        );
+        const parseFailed = codes.has('parse-error');
         if (result.classes.size === 0 && result.rawClassNames.size === 0 && parseFailed) {
             console.warn(
                 `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
@@ -6425,26 +6463,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Surface compiler diagnostics through their production-safe channels.
+     * Surface compiler diagnostics at the level the project's policy gives
+     * each one.
      *
      * @param result Compiler transform result.
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
+     * @param source The module source, whose version decides what was already said.
      */
     function reportTransformDiagnostics(
         result: SourceTransformResult,
         id: string,
         warn: (message: string) => void,
+        source: string,
     ): void {
-        const routed = routeTransformDiagnostics(
-            result.diagnostics,
+        if (result.diagnostics.length === 0) return;
+        const [file] = id.split('?');
+        const relative = projectRelative(file);
+        diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
+        const routed = routeTransformDiagnostics({
+            diagnostics: result.diagnostics,
+            issues: result.issues,
             id,
+            file: relative,
             quiet,
-            shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
-        );
+            holdInfo: shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+            policy: diagnosticPolicy,
+            limiter: diagnosticLimiter,
+        });
         for (const warning of routed.spread) state.spreadWarnings.add(warning);
         for (const line of routed.immediate) console.warn(line);
-        // Held back, but counted. These are advisory by design — the runtime
+        // Held back, but counted. These are `info` by the policy — the runtime
         // path works and the classes are collected — so a production build is
         // right not to list them. It is not right to leave the reader
         // believing the fallbacks it DID list are all of them, which is how a
@@ -6452,6 +6501,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // anyone reading the log.
         state.suppressedAdvisories += routed.heldAdvisories;
         for (const line of routed.advisories) warn(line);
+        if (serving) capFlush.schedule();
     }
 
     /**
@@ -6508,7 +6558,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
-        reportTransformDiagnostics(result, id, warn);
+        reportTransformDiagnostics(result, id, warn, code);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
     }
@@ -7268,7 +7318,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ].filter(file => file.endsWith('.css'));
                     if (state.classes.size === 0) {
                         await prescanAndWriteClasses();
-                        if (compiler.options?.mode !== 'production') printMergeRemovals();
+                        reportMergeRemovals(compiler.options?.mode === 'production');
                     } else if (styleModel !== undefined && changedStylesheets.length > 0) {
                         // A rebuild skips the prescan, so a stylesheet edit is
                         // the one moment the prefix can have changed under it.
@@ -7378,7 +7428,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     runAutoThemeScan(root);
                     // Pre-scan source files so Tailwind can discover classes
                     await prescanAndWriteClasses();
-                    if (config.command === 'serve') printMergeRemovals();
+                    reportMergeRemovals(config.command !== 'serve');
                     skipRscRecords =
                         config.command === 'build' &&
                         !config.build?.watch &&
@@ -7701,6 +7751,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function reportBuildSummary(): void {
         reportMangleSize();
+        capFlush.now();
         // Blunt mode asked for silence and gets it; `'nudges'` asked for a
         // calmer log, and one line saying how much was left out is the opposite
         // of noise — it is what stops the calm log from reading as a clean one.

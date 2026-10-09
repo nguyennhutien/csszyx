@@ -243,6 +243,8 @@ export function runNextTurboLoader(
     // reports them as a fresh run does — as the plugin's lanes do.
     reportNextLoaderDiagnostics({
         diagnostics: lowered.diagnostics,
+        issues: lowered.issues,
+        root: context.root,
         resourcePath: loaderContext.resourcePath,
         source,
         mode: context.manifestExpectation.mode,

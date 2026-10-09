@@ -169,7 +169,7 @@ describe('Next Turbopack loader diagnostics', () => {
         expect(run.console[0]).toContain('"ordinal" was replaced');
     });
 
-    it('starts its console record again once it is full, rather than growing without bound', () => {
+    it('prints a console line again once the module source changes, and keeps one version per module', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const report = (source: string): void =>
             reportNextLoaderDiagnostics({
@@ -182,10 +182,10 @@ describe('Next Turbopack loader diagnostics', () => {
         report('first');
         report('first');
         expect(warn).toHaveBeenCalledTimes(1);
-        // Every other version of the module fills the record past its bound.
-        for (let index = 0; index < 10_000; index++) report(`v${index}`);
-        warn.mockClear();
+        // Only the version last reported is remembered, so the record cannot
+        // grow with the edits of a long session.
+        report('second');
         report('first');
-        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledTimes(3);
     });
 });

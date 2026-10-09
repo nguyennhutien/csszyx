@@ -1,8 +1,8 @@
 /**
  * `@csszyx/unplugin/diagnostics` — the diagnostic policy and the config file
  * it is read from, for every consumer outside the bundler plugins: `csszyx
- * check`, `csszyx next prebuild`/`watch`, and later the Turbopack loader and
- * jest.
+ * check` and `csszyx next prebuild`/`watch` — with the dedupe and cap the
+ * lanes print through.
  *
  * @module
  */
@@ -18,6 +18,11 @@ export {
     readDiagnosticPolicyState,
     writeDiagnosticPolicyState,
 } from './csszyx-config-file.js';
+export {
+    capOverflowMessage,
+    createDiagnosticLimiter,
+    type DiagnosticLimiter,
+} from './diagnostic-limiter.js';
 export {
     createDiagnosticPolicy,
     DIAGNOSTIC_POLICY_FORMAT,
