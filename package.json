@@ -61,6 +61,7 @@
     "check:package-size": "node --test scripts/check-package-size.test.mjs && node scripts/check-package-size.mjs",
     "check:warning-docs": "node --test scripts/validate-warning-docs.test.mjs && node scripts/validate-warning-docs.mjs",
     "check:undocumented-warnings": "node --test scripts/validate-undocumented-warnings.test.mjs && node scripts/validate-undocumented-warnings.mjs",
+    "check:szv-type-cost": "node --test scripts/check-szv-type-cost.test.mjs && node scripts/check-szv-type-cost.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run build --filter='./packages/*' && turbo run dev --parallel",
     "test": "turbo run test",
