@@ -15,13 +15,7 @@ import path from 'node:path';
 import { transformSource } from '@csszyx/compiler';
 import type { ContentScanner } from '@csszyx/tailwind-oracle';
 
-import {
-    type MergeSignature,
-    mergeGroupsOf,
-    mergeOverridesOf,
-    removedByMerge,
-    removedByOverride,
-} from './merge-signature.js';
+import { type MergeSignature, removedByMerge, removedByOverride } from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { SourceHookRegistry } from './source-hooks.js';
 
@@ -32,13 +26,20 @@ export type MergeAuditKind =
     /** An `sz` class covered a static class-name class beside it. */
     | 'merge-covered-class';
 
-/** The classes one file loses to one merge. */
+/** One class a merge removes, and where. */
 export interface MergeAuditFinding {
     /** The file, as the caller named it. */
     file: string;
+    /**
+     * 1-based line of the `sz` key the class was written as, or of the
+     * class-name attribute.
+     */
+    line: number;
     kind: MergeAuditKind;
-    /** The classes removed, in source order. */
-    classes: string[];
+    /** The class removed. */
+    className: string;
+    /** For `merge-covered-key`, the `sz` key the class was written as. */
+    key?: string;
 }
 
 /** One source file to audit. */
@@ -51,7 +52,8 @@ export interface MergeAuditFile {
 }
 
 /**
- * What every file loses to a merge, one finding per file and rule.
+ * Every class a merge removes, one finding per class, in file order and then
+ * line order.
  *
  * @param input - The project's model, the prefix it settled, and the files.
  * @param input.model - The opened style model.
@@ -82,16 +84,34 @@ export function auditMerges(input: {
         model.mergeSignature(candidate);
     const findings: MergeAuditFinding[] = [];
     for (const { file, first } of firstPasses) {
-        const keys = mergeGroupsOf(first).flatMap(group => removedByMerge(group, signatureOf));
-        const classes = mergeOverridesOf(first).flatMap(pair =>
-            removedByOverride(pair.base, pair.over, signatureOf),
-        );
-        if (keys.length > 0) {
-            findings.push({ file: file.relative, kind: 'merge-covered-key', classes: keys });
+        const inFile: MergeAuditFinding[] = [];
+        // The engine reports both lists on every first pass; one missing reads
+        // as nothing to merge, which is what the build does with it.
+        for (const group of first.mergeGroups ?? []) {
+            for (const className of removedByMerge(group.classes, signatureOf)) {
+                // A class is reported where its own key is written, not where
+                // the object starts: in a multi-line object they differ.
+                const at = group.classes.indexOf(className);
+                inFile.push({
+                    file: file.relative,
+                    line: group.positions[at].line,
+                    kind: 'merge-covered-key',
+                    className,
+                    key: group.keys[at],
+                });
+            }
         }
-        if (classes.length > 0) {
-            findings.push({ file: file.relative, kind: 'merge-covered-class', classes });
+        for (const pair of first.mergeOverrides ?? []) {
+            for (const className of removedByOverride(pair.base, pair.over, signatureOf)) {
+                inFile.push({
+                    file: file.relative,
+                    line: pair.line,
+                    kind: 'merge-covered-class',
+                    className,
+                });
+            }
         }
+        findings.push(...inFile.sort((left, right) => left.line - right.line));
     }
     return findings;
 }

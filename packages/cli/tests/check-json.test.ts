@@ -377,32 +377,42 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     const files = {
         'src/app.css': '@import "tailwindcss";',
         'src/App.tsx':
-            'export const A = () => <><div className="card pb-2" sz={{ p: 4 }} /><b sz={{ px: 2, p: 4 }} /></>;',
+            'export const A = () => <>\n<div className="card pb-2" sz={{ p: 4 }} />\n<b sz={{ m: 1,\n    px: 2, p: 4 }} /></>;',
     };
 
     // An audit of what the build changed, not a problem to fix: selected only
     // by name, and a finding does not fail the run.
-    it('lists what a build removes, file by file, and passes', async () => {
+    it('lists what a build removes, each at the line of its key, and passes', async () => {
         const report = await jsonFor(tailwindProject(files), {
             rule: ['merge-covered-key', 'merge-covered-class'],
         });
-        expect(report.findings.map(({ rule, file, message }) => ({ rule, file, message }))).toEqual(
-            [
-                {
-                    rule: 'merge-covered-key',
-                    file: 'src/App.tsx',
-                    message:
-                        '`px-2` removed: a later key in the same `sz` object sets every property it sets.',
-                },
-                {
-                    rule: 'merge-covered-class',
-                    file: 'src/App.tsx',
-                    message:
-                        '`pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.',
-                },
-            ],
-        );
+        expect(
+            report.findings.map(({ rule, file, line, message }) => ({ rule, file, line, message })),
+        ).toEqual([
+            {
+                rule: 'merge-covered-class',
+                file: 'src/App.tsx',
+                line: 2,
+                message:
+                    '`pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.',
+            },
+            {
+                rule: 'merge-covered-key',
+                file: 'src/App.tsx',
+                line: 4,
+                message:
+                    '`px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.',
+            },
+        ]);
         expect(process.exitCode).toBeUndefined();
+    });
+
+    it('prints each removal at its file and line, with the key it was written as', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({ cwd: tailwindProject(files), rule: ['merge-covered-key'] });
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            'src/App.tsx:4: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.',
+        );
     });
 
     it('lists nothing when nothing merges', async () => {

@@ -466,7 +466,7 @@ describe('the merge audit', () => {
             { path: join(root, 'src/B.tsx'), relative: 'src/B.tsx', source: late },
         ];
         expect(auditMerges({ model, classPrefix: null, files: files.slice(0, 1) })).toEqual([
-            { file: 'src/A.tsx', kind: 'merge-covered-class', classes: ['shadow-md'] },
+            { file: 'src/A.tsx', line: 1, kind: 'merge-covered-class', className: 'shadow-md' },
         ]);
         expect(auditMerges({ model, classPrefix: null, files })).toEqual([]);
     }, 60_000);

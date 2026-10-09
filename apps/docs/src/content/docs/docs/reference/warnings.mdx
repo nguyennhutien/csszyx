@@ -1445,7 +1445,8 @@ each time one was.
 `merge-covered-key` and `merge-covered-class` are an audit, not a problem: they
 list each class the build drops because a later one on the same element covers
 it — a later key in one static `sz` object, or an `sz` class over a static
-`className` — one finding per file. They run only when named with `--rule`, and
+`className` — one finding per removed class, with the line and the key it was
+written as. They run only when named with `--rule`, and
 a finding never fails the run:
 
 ```bash

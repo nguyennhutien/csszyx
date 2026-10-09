@@ -14,6 +14,7 @@ import path from 'node:path';
 import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import {
     auditMerges,
+    type MergeAuditFinding,
     type MergeAuditKind,
     openStylesheetModel,
 } from '@csszyx/unplugin/next-prebuild';
@@ -30,6 +31,21 @@ const REASON: Record<MergeAuditKind, string> = {
     'merge-covered-class':
         'removed from `className`: an `sz` class on the same element sets every property it sets.',
 };
+
+/**
+ * What one finding says: the class, and for a key the key it was written as,
+ * since that is what the author searches the source for.
+ *
+ * @param finding - One removed class.
+ * @returns The message, without the file and line.
+ */
+function removalMessage(finding: MergeAuditFinding): string {
+    const removed =
+        finding.key === undefined
+            ? `\`${finding.className}\``
+            : `\`${finding.key}\` (\`${finding.className}\`)`;
+    return `${removed} ${REASON[finding.kind]}`;
+}
 
 /**
  * Report what the build removes, for the audit rules the run named; nothing
@@ -74,11 +90,9 @@ export async function reportMergeAudit(
         scanner: loadContentScanner(input.cwd),
     }).filter(finding => selected.includes(finding.kind));
     for (const finding of findings) {
-        for (const className of finding.classes) {
-            const message = `\`${className}\` ${REASON[finding.kind]}`;
-            out.info(`  ${finding.file}: ${message}`);
-            out.push({ rule: finding.kind, file: finding.file, message });
-        }
+        const message = removalMessage(finding);
+        out.info(`  ${finding.file}:${finding.line}: ${message}`);
+        out.push({ rule: finding.kind, file: finding.file, line: finding.line, message });
     }
     if (findings.length === 0) out.success('No class is removed by a merge.');
     // The audit cannot read the plugin's options, which live in the bundler
