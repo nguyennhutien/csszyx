@@ -107,6 +107,42 @@ async function importConfig(file: string, importModule: ModuleImporter): Promise
     }
 }
 
+/**
+ * Whether a config file's text never mentions `diagnostics`, so it cannot be
+ * setting a level whatever it would have evaluated to.
+ *
+ * `csszyx init` used to write `csszyx.config.js` in TypeScript syntax, typed
+ * plugin options that nothing read, so it never failed anyone. Now the file is
+ * imported, that text does not load; failing `check` over it would turn a file
+ * the project never configured into a red CI. A file that does mention
+ * `diagnostics` and fails to load stays an error: its levels were meant.
+ *
+ * @param file - Absolute path.
+ * @returns True when the text was read and has no `diagnostics` in it.
+ */
+function setsNoDiagnostics(file: string): boolean {
+    try {
+        return !readFileSync(file, 'utf8').includes('diagnostics');
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The warning for a config that does not load and sets no `diagnostics`.
+ *
+ * @param reason - The first line of the load error.
+ * @returns The problem text.
+ */
+function unloadableTemplateMessage(reason: string): string {
+    return (
+        'could not be loaded and sets no `diagnostics`, so it is ignored. It looks like the ' +
+        'file `csszyx init` used to write, which nothing read: replace it with ' +
+        '`export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` ' +
+        `from \`csszyx\`, or delete it. Load error: ${reason}`
+    );
+}
+
 /** What loading a project's config produced. */
 export interface LoadedDiagnosticPolicy {
     /** Absolute path of the config read, or null when the project has none. */
@@ -122,7 +158,9 @@ export interface LoadedDiagnosticPolicy {
  *
  * Never throws: a config that does not load is an `error` problem and the
  * defaults apply, so each caller decides what a broken config costs — `check`
- * fails the run, a build prints the problem and carries on.
+ * fails the run, a build prints the problem and carries on. One that does not
+ * load and never mentions `diagnostics` is only a `warning`: see
+ * {@link setsNoDiagnostics}.
  *
  * @param root - The project root.
  * @param importModule - The importer; Node's `import()` by default.
@@ -144,12 +182,16 @@ export async function loadDiagnosticPolicy(
     try {
         module = await importConfig(found.file, importModule);
     } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        problems.unshift({
-            severity: 'error',
-            path: name,
-            message: `could not be loaded, so every diagnostic keeps its default level: ${reason.split('\n')[0]}`,
-        });
+        const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0];
+        problems.unshift(
+            setsNoDiagnostics(found.file)
+                ? { severity: 'warning', path: name, message: unloadableTemplateMessage(reason) }
+                : {
+                      severity: 'error',
+                      path: name,
+                      message: `could not be loaded, so every diagnostic keeps its default level: ${reason}`,
+                  },
+        );
         return { file: found.file, policy: createDiagnosticPolicy(), problems };
     }
     const read = readCsszyxFileConfig((module as { default?: unknown }).default);

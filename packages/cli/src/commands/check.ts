@@ -38,6 +38,13 @@ import {
     skippedDirGlobs,
     szValuePairs,
 } from '@csszyx/tailwind-oracle';
+import type { SzDiagnosticLevel } from '@csszyx/types';
+import {
+    type DiagnosticPolicy,
+    diagnosticConfigProblemsMessage,
+    isAtLeastLevel,
+    loadDiagnosticPolicy,
+} from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
 import {
     CHECK_RULES,
@@ -46,10 +53,14 @@ import {
     type Reporter,
     renderJsonReport,
 } from '../scanner/check-report.js';
-import { reportMergeAudit } from '../scanner/merge-audit-report.js';
+import {
+    MERGE_AUDIT_RULES,
+    type MergeAuditKind,
+    reportMergeAudit,
+} from '../scanner/merge-audit-report.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
-import { spinner } from '../utils/terminal-ui.js';
+import { printHeader, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
 export interface CheckOptions {
@@ -84,8 +95,14 @@ export interface CheckOptions {
      */
     allowToken?: string[];
     /**
+     * The quietest level that fails the run. Defaults to `error`: an `info`
+     * or `warn` finding is reported and the run still passes.
+     */
+    failOn?: SzDiagnosticLevel;
+    /**
      * Rule or diagnostic-kind ids to report; every other finding is left out of
-     * the report and the exit code. Empty or absent means every rule.
+     * the report and the exit code. Empty or absent means every rule. A
+     * selection, not a level: a selected `info` finding still passes.
      */
     rule?: string[];
     /** Rule or diagnostic-kind ids to leave out of the report and the exit code. */
@@ -327,7 +344,8 @@ function agreedPrefix(opened: OpenedOracles): {
  * @param allow - Classes the project vouched for.
  * @param wants - Whether the run reports findings of a rule.
  * @param disagreement - Why the entries give no single prefix, or null.
- * @returns Whether anything dead was found.
+ * @returns Whether the pass could not run on a project stylesheet, which
+ *          fails the run whatever the levels say.
  */
 function reportDeadClasses(
     out: Reporter,
@@ -350,7 +368,7 @@ function reportDeadClasses(
     if (disagreement !== null) {
         out.warn(`\n✖ ${disagreement}`);
         out.push({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT, message: disagreement });
-        return true;
+        return false;
     }
     if (oracles.length === 0) {
         // Every reason, not the first: there was at least one entry and none of
@@ -403,13 +421,14 @@ function reportDeadClasses(
             origin,
             value: brokenPerOracle[0].get(token) as string,
         }));
-    return printDeadClassReport(out, {
+    printDeadClassReport(out, {
         dead,
         broken,
         acceptedCount: accepted.length,
         emittedCount: origins.size,
         wants,
     });
+    return false;
 }
 
 /** One emitted class that carries an opacity modifier the stylesheet drops. */
@@ -437,9 +456,8 @@ interface DeadClassReport {
  *
  * @param out - Where this pass sends its prose and its findings.
  * @param report - What the scan concluded.
- * @returns Whether anything was found that should fail the command.
  */
-function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
+function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
     const { dead, broken, acceptedCount, emittedCount, wants } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
@@ -449,13 +467,20 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
         out.success(
             `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
-        return false;
+        return;
     }
 
     // Judged on every class before narrowing, so a run narrowed to one rule
-    // never prints "every class produces CSS" over a finding it left out.
-    const shownDead = wants('dead-class') ? dead : [];
-    const shownBroken = wants('broken-opacity') ? broken : [];
+    // never prints "every class produces CSS" over a finding it left out. A
+    // finding the config sets `off` is not reported at all.
+    const shownDead = wants('dead-class')
+        ? dead.filter(([, origin]) => out.levelOf({ rule: 'dead-class', file: origin }) !== 'off')
+        : [];
+    const shownBroken = wants('broken-opacity')
+        ? broken.filter(
+              entry => out.levelOf({ rule: 'broken-opacity', file: entry.origin }) !== 'off',
+          )
+        : [];
 
     if (shownDead.length > 0) {
         out.warn('\nClasses that produce no CSS:');
@@ -496,16 +521,16 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
                 'survive compilation.',
         );
     }
-    return shownDead.length > 0 || shownBroken.length > 0;
 }
 
 /**
- * Print captured diagnostics and mark the process as failed.
+ * Print captured diagnostics, each at its level.
  *
  * @param out - Where this pass sends its prose and its findings.
  * @param issues Captured compiler diagnostics, with the kind each one reports.
+ * @param failOn - The quietest level that fails the run.
  */
-function reportIssues(out: Reporter, issues: ClassifiedIssue[]): void {
+function reportIssues(out: Reporter, issues: ClassifiedIssue[], failOn: SzDiagnosticLevel): void {
     for (const { file, message, kind, suggestion } of issues) {
         out.push({
             rule: 'sz-diagnostic',
@@ -517,17 +542,39 @@ function reportIssues(out: Reporter, issues: ClassifiedIssue[]): void {
         });
     }
     const suggestionOf = new Map(issues.map(issue => [issue.message, issue.suggestion]));
+    const levelOf = new Map(issues.map(issue => [issue.message, issueLevel(out, issue)]));
     const byFile = groupIssuesByFile(issues);
     for (const [file, messages] of byFile) {
         out.warn(file);
         for (const message of messages) {
-            out.info(`  ${message}`);
+            // An error reads as it always has; a quieter level says so, since
+            // it is the reason the run can still pass.
+            const level = levelOf.get(message);
+            out.info(level === 'error' ? `  ${message}` : `  (${level}) ${message}`);
             const suggestion = suggestionOf.get(message);
             if (suggestion) out.info(`    Did you mean "${suggestion}"?`);
         }
     }
-    out.warn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
-    process.exitCode = 1;
+    const below = issues.filter(issue => !isAtLeastLevel(issueLevel(out, issue), failOn)).length;
+    if (below === 0) {
+        out.warn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
+        return;
+    }
+    const mark = below === issues.length ? '!' : '✖';
+    out.warn(
+        `\n${mark} ${issues.length} sz issue(s) in ${byFile.size} file(s); ${below} below --fail-on ${failOn}, which do not fail the run.`,
+    );
+}
+
+/**
+ * The level the project gives one sz diagnostic.
+ *
+ * @param out - The run's reporter.
+ * @param issue - The diagnostic.
+ * @returns Its level.
+ */
+function issueLevel(out: Reporter, issue: ClassifiedIssue): SzDiagnosticLevel {
+    return out.levelOf({ rule: 'sz-diagnostic', kind: issue.kind, file: issue.file });
 }
 
 /** What one scan pass learned about a project. */
@@ -652,14 +699,13 @@ function recordFileClasses(
  * @param out - Where this pass sends its prose and its findings.
  * @param opened - The project's compiled design systems.
  * @param pairsByFile - Literal sz pairs, keyed by project-relative file.
- * @returns Whether anything was found.
  */
 function reportSiblingKeywords(
     out: Reporter,
     opened: OpenedOracles,
     pairsByFile: Map<string, SzValuePair[]>,
-): boolean {
-    if (opened.oracles.length === 0 || pairsByFile.size === 0) return false;
+): void {
+    if (opened.oracles.length === 0 || pairsByFile.size === 0) return;
 
     const found: Array<{ file: string; finding: SiblingKeywordFinding }> = [];
     for (const [file, pairs] of pairsByFile) {
@@ -674,10 +720,11 @@ function reportSiblingKeywords(
             const everywhere = perOracle.every(findings =>
                 findings.some(other => other.key === finding.key && other.value === finding.value),
             );
-            if (everywhere) found.push({ file, finding });
+            const reported = out.levelOf({ rule: 'sibling-keyword', file }) !== 'off';
+            if (everywhere && reported) found.push({ file, finding });
         }
     }
-    if (found.length === 0) return false;
+    if (found.length === 0) return;
 
     out.warn('\nValues that belong to a different sz key:');
     for (const { file, finding } of found) {
@@ -701,7 +748,6 @@ function reportSiblingKeywords(
             'is simply absent. Move the value to the key that owns it, or declare a theme ' +
             'token by that name if the spelling was deliberate.',
     );
-    return true;
 }
 
 /**
@@ -718,15 +764,14 @@ function reportSiblingKeywords(
  * @param opened - The project's compiled design systems.
  * @param cwd - Project root, for relative paths.
  * @param allowToken - Token names the project accepted deliberately.
- * @returns Whether anything was found.
  */
 async function reportThemeCollisions(
     out: Reporter,
     opened: OpenedOracles,
     cwd: string,
     allowToken: readonly string[],
-): Promise<boolean> {
-    if (opened.oracles.length === 0) return false;
+): Promise<void> {
+    if (opened.oracles.length === 0) return;
 
     const declared: DeclaredToken[] = [];
     // A stylesheet that cannot be read declares nothing this pass can see; the
@@ -734,14 +779,16 @@ async function reportThemeCollisions(
     for (const stylesheet of await readTextFiles(await findTailwindCssEntries(cwd))) {
         declared.push(...declaredThemeTokens(stylesheet.text, relativePosix(cwd, stylesheet.path)));
     }
-    if (declared.length === 0) return false;
+    if (declared.length === 0) return;
 
     // The probe compile is paid only now, once there is something to ask about.
     const oracle = await opened.oracles[0].loadCollisionOracle();
-    if (oracle === null) return false;
+    if (oracle === null) return;
 
-    const found = findThemeCollisions(declared, oracle, allowToken);
-    if (found.length === 0) return false;
+    const found = findThemeCollisions(declared, oracle, allowToken).filter(
+        finding => out.levelOf({ rule: 'theme-collision', file: finding.file }) !== 'off',
+    );
+    if (found.length === 0) return;
 
     out.warn('\nTheme tokens a built-in utility already claims:');
     for (const finding of found) {
@@ -759,7 +806,6 @@ async function reportThemeCollisions(
             'spelling of the merge can fix this while the name is shared. To keep one anyway, ' +
             'pass --allow-token <name>.',
     );
-    return true;
 }
 
 /**
@@ -912,23 +958,31 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
  * @param issues - Every captured diagnostic, before selection.
  * @param fileCount - How many files the run scanned.
  * @param wants - The run's rule selection.
+ * @param failOn - The quietest level that fails the run.
  */
 function reportSelectedIssues(
     out: Reporter,
     issues: SzIssue[],
     fileCount: number,
     wants: RuleSelection,
+    failOn: SzDiagnosticLevel,
 ): void {
     const selected: ClassifiedIssue[] = [];
+    let silenced = 0;
     for (const issue of issues) {
         const kind = szDiagnosticKindOf(issue.message, issue.code);
         if (!wants('sz-diagnostic', kind)) continue;
+        // Set `off` in csszyx.config: not reported, and not "left out" by a flag.
+        if (out.levelOf({ rule: 'sz-diagnostic', kind, file: issue.file }) === 'off') {
+            silenced++;
+            continue;
+        }
         const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
         selected.push({ ...issue, kind, suggestion });
     }
-    const leftOut = issues.length - selected.length;
+    const leftOut = issues.length - selected.length - silenced;
     if (selected.length > 0) {
-        reportIssues(out, selected);
+        reportIssues(out, selected, failOn);
         if (leftOut > 0) {
             out.info(`${leftOut} more sz issue(s) left out by --rule or --ignore-rule.`);
         }
@@ -946,17 +1000,96 @@ function reportSelectedIssues(
     );
 }
 
+/** The levels `--fail-on` accepts; `off` would fail on nothing reported. */
+const FAIL_ON_LEVELS: readonly SzDiagnosticLevel[] = ['info', 'warn', 'error'];
+
+/**
+ * Read `--fail-on`, or fail the run explaining why it cannot be.
+ *
+ * @param options - scan options.
+ * @param out - reporter the failure is written to.
+ * @returns The level, or null when the run has already failed.
+ */
+function failOnLevel(options: CheckOptions, out: Reporter): SzDiagnosticLevel | null {
+    const level = options.failOn ?? 'error';
+    if (FAIL_ON_LEVELS.includes(level)) return level;
+    out.warn(
+        `\u2716 --fail-on "${level}" is not a level, so no finding could fail the run. ` +
+            `Use ${FAIL_ON_LEVELS.join(', ')}.`,
+    );
+    process.exitCode = 1;
+    return null;
+}
+
+/**
+ * Load `csszyx.config` and say what is wrong with it.
+ *
+ * A problem is printed and the rest of the file applies; an `error` problem —
+ * an id that would set nothing, a config that does not load — also fails the
+ * run, since a gate whose levels silently fell back to the defaults is not
+ * the gate that was configured. In `--json` mode it goes to stderr, keeping
+ * stdout one document.
+ *
+ * @param cwd - Project root.
+ * @param json - Whether stdout is reserved for the JSON document.
+ * @returns The project's policy.
+ */
+async function loadCheckPolicy(cwd: string, json: boolean): Promise<DiagnosticPolicy> {
+    const loaded = await loadDiagnosticPolicy(cwd);
+    if (loaded.file !== null && loaded.problems.length > 0) {
+        const message = diagnosticConfigProblemsMessage(
+            relativePosix(cwd, loaded.file),
+            loaded.problems,
+        );
+        if (json) console.error(message);
+        else printWarn(message);
+        if (loaded.problems.some(problem => problem.severity === 'error')) process.exitCode = 1;
+    }
+    return loaded.policy;
+}
+
+/**
+ * The merge-audit rules this run answers: the ones `--rule` names, and the
+ * ones `csszyx.config` reports at `warn` or louder, which an app reviewing
+ * what a merge changed sets so the audit runs on every check.
+ *
+ * @param options - scan options.
+ * @param wants - The run's rule selection.
+ * @param policy - The project's policy.
+ * @returns The rules to run, possibly none.
+ */
+function mergeAuditRules(
+    options: CheckOptions,
+    wants: (rule: CheckRule) => boolean,
+    policy: DiagnosticPolicy,
+): MergeAuditKind[] {
+    const { overrides } = policy.toJSON().config;
+    const loud = (rule: MergeAuditKind) =>
+        isAtLeastLevel(policy.levelOf({ rule }), 'warn') ||
+        overrides.some(override => {
+            const level = override.rules[rule];
+            return level !== undefined && isAtLeastLevel(level, 'warn');
+        });
+    return MERGE_AUDIT_RULES.filter(
+        rule => wants(rule) && (options.rule?.includes(rule) === true || loud(rule)),
+    );
+}
+
 /**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
- * Sets `process.exitCode` to 1 when any issue is found so the command can gate
- * CI. The scan runs the engine itself (native when available, wasm
- * otherwise), so what it flags is exactly what the build flags.
+ * Each finding carries the level `csszyx.config` gives it. `process.exitCode`
+ * is set to 1 when a finding is at `--fail-on` (default `error`) or louder,
+ * or when the run itself failed — a scan that could not read its files, a
+ * stylesheet that would not compile, a config with an id it does not know —
+ * so the command can gate CI. The scan runs the engine itself (native when
+ * available, wasm otherwise), so what it flags is exactly what the build
+ * flags.
  *
  * @param options - scan options.
  */
 export async function check(options: CheckOptions = {}): Promise<void> {
-    const out = createReporter(options.json === true);
+    const json = options.json === true;
     // Resolved once here: Tailwind and the content scanner are required from
     // this directory, and `createRequire` rejects a relative path.
     const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -969,11 +1102,16 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // "run `csszyx check`" hint while it runs over every file.
     process.env.CSSZYX_NO_PROJECT_SCAN_HINT = '1';
 
-    out.header('csszyx check — static sz diagnostics');
+    if (!json) printHeader('csszyx check — static sz diagnostics');
+    const policy = await loadCheckPolicy(cwd, json);
+    const out = createReporter(json, policy);
 
+    const failOn = failOnLevel(options, out);
+    if (!failOn) return;
     const wants = ruleSelection(options, out);
     if (!wants) return;
     const wantsRule = (rule: CheckRule) => wants(rule, rule);
+    const configAllow = policy.toJSON().config.allow;
 
     const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
     if (!files) return;
@@ -1000,7 +1138,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const { issues, classOrigins, pairsByFile } =
         prefix === null ? unprefixed : await collectSzDiagnostics(files, cwd, prefix);
 
-    reportSelectedIssues(out, issues, files.length, wants);
+    reportSelectedIssues(out, issues, files.length, wants, failOn);
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
@@ -1014,26 +1152,38 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     if (
         deadClassPass &&
         !disagreementLeftOut &&
-        reportDeadClasses(out, opened, classOrigins, options.allow ?? [], wantsRule, disagreement)
+        reportDeadClasses(
+            out,
+            opened,
+            classOrigins,
+            [...(options.allow ?? []), ...configAllow.classes],
+            wantsRule,
+            disagreement,
+        )
     ) {
         process.exitCode = 1;
     }
 
     // Runs last and independently: a value on the wrong key survives both
     // passes above, which is the whole reason it needs its own.
-    if (wantsRule('sibling-keyword') && reportSiblingKeywords(out, opened, pairsByFile)) {
-        process.exitCode = 1;
+    if (wantsRule('sibling-keyword')) reportSiblingKeywords(out, opened, pairsByFile);
+
+    if (wantsRule('theme-collision')) {
+        await reportThemeCollisions(out, opened, cwd, [
+            ...(options.allowToken ?? []),
+            ...configAllow.tokens,
+        ]);
     }
 
-    if (
-        wantsRule('theme-collision') &&
-        (await reportThemeCollisions(out, opened, cwd, options.allowToken ?? []))
-    ) {
+    await reportMergeAudit(out, {
+        cwd,
+        files,
+        selected: mergeAuditRules(options, wantsRule, policy),
+    });
+
+    if (out.findings.some(finding => isAtLeastLevel(finding.level, failOn))) {
         process.exitCode = 1;
     }
-
-    // An audit rather than a problem: run only when named, and never failing.
-    await reportMergeAudit(out, { cwd, files, rules: options.rule });
 
     // Written last, after every pass has recorded what it found, so the
     // document is the whole run rather than whatever had arrived by then.

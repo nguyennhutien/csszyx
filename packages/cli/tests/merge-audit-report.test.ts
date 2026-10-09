@@ -21,7 +21,7 @@ describe('the merge audit', () => {
         await reportMergeAudit(out, {
             cwd: '/nowhere',
             files: [],
-            rules: ['merge-covered-class'],
+            selected: ['merge-covered-class'],
         });
         expect(warn).toHaveBeenCalledWith('Merge audit skipped: no stylesheet');
         expect(out.findings).toEqual([]);

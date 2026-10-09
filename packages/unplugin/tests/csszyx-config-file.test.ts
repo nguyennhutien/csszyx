@@ -70,6 +70,17 @@ const TS_CONFIG = [
     'export default config;',
 ].join('\n');
 const JS_CONFIG = 'export default { diagnostics: { rules: { "dead-class": "warn" } } };\n';
+/** The file `csszyx init` wrote before csszyx read it, whatever the language. */
+const INIT_TEMPLATE = `import type { CsszyxConfig } from 'csszyx';
+
+const config: CsszyxConfig = {
+  development: {
+    debug: true,
+  },
+};
+
+export default config;
+`;
 
 describe('loadDiagnosticPolicy', () => {
     // TypeScript under every package type is loaded by plain Node in the CLI's
@@ -160,7 +171,7 @@ describe('loadDiagnosticPolicy', () => {
     });
 
     it('reports a config that does not load as an error, and keeps the defaults', async () => {
-        const root = project({ 'csszyx.config.mjs': 'export default {;\n' });
+        const root = project({ 'csszyx.config.mjs': 'export default { diagnostics: {;\n' });
 
         const loaded = await loadDiagnosticPolicy(root);
 
@@ -173,13 +184,40 @@ describe('loadDiagnosticPolicy', () => {
     it('reports a TypeScript config that fails as ESM too, without leaving its copy', async () => {
         const root = project({
             'package.json': '{"type":"commonjs"}',
-            'csszyx.config.ts': 'export default {;\n',
+            'csszyx.config.ts': 'export default { diagnostics: {;\n',
         });
 
         const loaded = await loadDiagnosticPolicy(root, commonJsNode);
 
         expect(loaded.problems[0]?.message).toContain('could not be loaded');
         expect(fs.readdirSync(root).filter(entry => entry.includes('timestamp'))).toEqual([]);
+    });
+
+    it('warns, without failing anything, about a file that cannot load and sets no diagnostics', async () => {
+        // What `csszyx init` wrote into a JavaScript project before the file was
+        // read: TypeScript syntax that no JavaScript loader accepts.
+        const root = project({ 'csszyx.config.js': INIT_TEMPLATE });
+
+        const loaded = await loadDiagnosticPolicy(root, () =>
+            Promise.reject(new SyntaxError("Unexpected token '{'")),
+        );
+
+        expect(loaded.problems).toHaveLength(1);
+        expect(loaded.problems[0]).toMatchObject({ severity: 'warning', path: 'csszyx.config.js' });
+        expect(loaded.problems[0]?.message).toContain('could not be loaded');
+        expect(loaded.problems[0]?.message).toContain('sets no `diagnostics`');
+        expect(loaded.problems[0]?.message).toContain('`csszyx init`');
+        expect(loaded.problems[0]?.message).toContain('`defineConfig`');
+        expect(loaded.problems[0]?.message).toContain("Unexpected token '{'");
+        expect(loaded.policy.levelOf({ rule: 'dead-class' })).toBe('error');
+    });
+
+    it('keeps a config it cannot even read as an error', async () => {
+        const root = project({ 'csszyx.config.mjs/placeholder': '' });
+
+        const loaded = await loadDiagnosticPolicy(root);
+
+        expect(loaded.problems[0]).toMatchObject({ severity: 'error', path: 'csszyx.config.mjs' });
     });
 
     it('reports a non-Error throw by its text', async () => {

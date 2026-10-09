@@ -668,7 +668,11 @@ not cover `text-wrap`.
 
 | Message | Kind |
 | --- | --- |
-| `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
+| `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, ``  - `{key}` is read from `{movedTo}`, not from the plugin options`` (for `diagnostics`), or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
+| `[csszyx] {file} has {n} problem(s):` followed by one line per problem — `  - {path}: {what}`: an id that is not a rule id, with the id it most likely means; a level, preset or shape the file cannot use; or a plugin option written in the file, which only the bundler config is read for — and closing with `Each one is ignored; the rest of the file applies.` | Warning, once per build; `csszyx check` prints it too and exits 1 unless every problem is a plugin option in the file or a file that does not load and never mentions `diagnostics`. [`csszyx.config`](/docs/reference/config/#csszyxconfig) explains each field. |
+| `{file}: could not be loaded, so every diagnostic keeps its default level: {reason}` | One line of the warning above. The config file threw, or has a syntax error. |
+| ``{file}: could not be loaded and sets no `diagnostics`, so it is ignored. It looks like the file `csszyx init` used to write, which nothing read: replace it with `export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` from `csszyx`, or delete it. Load error: {reason}`` | One line of the warning above, in place of the previous line when the file's text never mentions `diagnostics`. Usually the `csszyx.config.js` an older `csszyx init` wrote in TypeScript syntax into a JavaScript project. `csszyx check` does not exit 1 for it. |
+| `[csszyx] could not write .csszyx/diagnostic-policy.json: {reason}` + `note: the safelist is written; until the file can be written, the Turbopack loader reports every diagnostic at its default level.` | Warning from `csszyx next prebuild` and `csszyx next watch`; the command still succeeds. |
 | `[csszyx] production.mangleMapDelivery has been removed and is ignored. The runtime mangle map is always registered from inside the JS bundle now, on every lane, so the built HTML never carries an executable inline <script> and a strict script-src 'self' policy needs no exception. Delete the option. (\`window.__csszyx\` is now opt-in through \`production.mangleDebugGlobal\`.)` | Warning, once per build, whenever the removed option is set |
 | **Thrown.** `[csszyx] Invalid production.mangleGlobalVars config:` + errors | Error |
 | **Thrown.** `production.mangleGlobalVars.mode only supports 'alias'. A full rename needs every reference rewritten, including the ones csszyx cannot see.` | Error, listed under the line above |
@@ -1268,6 +1272,8 @@ from the project root, and `--pattern` is read relative to that directory.
 | `No selected sz issues across {n} files; {m} left out by --rule or --ignore-rule.` | Every issue found was left out by the rule selection. The run passes, and the line says it was not clean. |
 | `{m} more sz issue(s) left out by --rule or --ignore-rule.` | Printed under the report when the selection left some issues out. |
 | `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
+| `✖ {n} sz issue(s) in {m} file(s); {k} below --fail-on {level}, which do not fail the run.` | Some issues are at a level quieter than `--fail-on`; they are marked `(info)` or `(warn)` in the report. The line starts with `!` instead of `✖` when none of them fails the run. |
+| `✖ --fail-on "{level}" is not a level, so no finding could fail the run. Use {levels}.` | The run fails without scanning. |
 | `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
 | `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
 | `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind's @utility.` | Each offender is listed above it, with the sz key that produced it. |
@@ -1381,20 +1387,32 @@ a default the command line did not ask for:
 
 `csszyx check` is the command to gate CI on. A production build is the build CI
 usually runs, and it prints advisory notes only as a count; `check` lowers every
-source file the same way the build does, lists each finding with its file and
-line, and exits non-zero while any remain, whatever `NODE_ENV` says.
+source file the same way the build does and lists each finding with its file and
+line, whatever `NODE_ENV` says.
+
+Every finding has a level — `info`, `warn` or `error` — from
+[`csszyx.config`](/docs/reference/config/#csszyxconfig). The run exits 1 when
+at least one finding is `error`, or when the run itself failed: files that could
+not be read, a stylesheet that would not compile, a config with an id it does
+not know. `info` and `warn` findings are reported and the run still passes.
 
 ```yaml
 # .github/workflows/ci.yml
 - name: csszyx
-  run: npx csszyx check --ignore-rule class-precedence --ignore-rule duplicate-sz
+  run: npx csszyx check
 ```
 
-The two ignored kinds report styles that are present: `class-precedence` says
-`sz` wins over a runtime `className`, and `duplicate-sz` says which order two
-`sz` attributes merged in. Drop an `--ignore-rule` to fail on that kind too, or
-use `--rule` to gate on a chosen set only. Add `--json` when a later step reads
-the findings, for example to annotate a pull request; the exit code is the same.
+Under the default `recommended` preset every finding fails the run except the
+ones that report a choice or an audit rather than a mistake. `info`:
+`class-precedence` says `sz` wins over a runtime `className`, `duplicate-sz`
+says which order two `sz` attributes merged in, and `merge-covered-key` and
+`merge-covered-class` say what a merge removed. `warn`:
+`merge-classifier-unavailable`, where every class is kept and the output is only
+less merged. The preset also makes `fallback-nudge` and
+`mangle-vars-hoist-skipped` `info`, but neither is a `check` finding. To fail on
+any of them, set it to `error` in `csszyx.config.ts`, or pass `--fail-on info`;
+`--fail-on warn` fails on `warn` and `error` findings. Add `--json` when a later step reads the findings, for
+example to annotate a pull request; the exit code is the same.
 
 ### Running it as a git hook
 
@@ -1432,9 +1450,13 @@ finding:
   "file": "src/App.tsx",
   "line": 12,
   "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets.",
-  "kind": "sibling-keyword"
+  "kind": "sibling-keyword",
+  "level": "error"
 }
 ```
+
+`level` is the level the project's config gives the finding. A finding set to
+`off` is not in the document.
 
 `rule` is one of `sz-diagnostic`, `dead-class`, `broken-opacity`,
 `sibling-keyword`, `theme-collision`, `merge-covered-key`,
@@ -1446,8 +1468,10 @@ each time one was.
 list each class the build drops because a later one on the same element covers
 it — a later key in one static `sz` object, or an `sz` class over a static
 `className` — one finding per removed class, with the line and the key it was
-written as. They run only when named with `--rule`, and
-a finding never fails the run:
+written as. They run when named with `--rule`, or when `csszyx.config` sets
+them to `warn` or louder (the `atomic` preset does). Their findings are `info`
+under `recommended`, so they fail the run only where the config sets them to
+`error`:
 
 ```bash
 csszyx check --rule merge-covered-key --rule merge-covered-class
@@ -1477,8 +1501,8 @@ project serves with `@utility` is not second-guessed.
 
 `--rule <id>` keeps only the findings of that rule or kind, and
 `--ignore-rule <id>` leaves them out; both repeat, and both change the exit code
-as well as the report. A gate that fails on key mistakes but not on precedence
-notes is `csszyx check --ignore-rule class-precedence`. An id that is neither a
+as well as the report. They select findings and never set a level: a selected
+`info` finding still passes. An id that is neither a
 rule nor a kind fails the run rather than selecting nothing:
 
 ```text

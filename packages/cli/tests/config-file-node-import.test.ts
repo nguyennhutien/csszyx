@@ -33,6 +33,17 @@ const TS_CONFIG = [
     'export default config;',
 ].join('\n');
 const JS_CONFIG = "export default { diagnostics: { rules: { 'dead-class': 'warn' } } };\n";
+/** The file `csszyx init` wrote before csszyx read it, whatever the language. */
+const INIT_TEMPLATE = `import type { CsszyxConfig } from 'csszyx';
+
+const config: CsszyxConfig = {
+  development: {
+    debug: true,
+  },
+};
+
+export default config;
+`;
 
 /**
  * Load a project's config in a child Node and answer what it read.
@@ -40,7 +51,11 @@ const JS_CONFIG = "export default { diagnostics: { rules: { 'dead-class': 'warn'
  * @param root - The project root.
  * @returns The dead-class level, the problems, and the child's stderr.
  */
-function loadInNode(root: string): { level: string; problems: unknown[]; stderr: string } {
+function loadInNode(root: string): {
+    level: string;
+    problems: Array<{ severity: string; path: string; message: string }>;
+    stderr: string;
+} {
     const script = `
         const { loadDiagnosticPolicy } = await import(${JSON.stringify(LOADER)});
         const loaded = await loadDiagnosticPolicy(${JSON.stringify(root)});
@@ -55,6 +70,25 @@ function loadInNode(root: string): { level: string; problems: unknown[]; stderr:
     return { ...JSON.parse(child.stdout), stderr: child.stderr };
 }
 
+/**
+ * Lay down a project with a package type and one config file.
+ *
+ * @param type - The package type, or undefined for none.
+ * @param name - The config file name.
+ * @param text - Its contents.
+ * @returns The project root.
+ */
+function project(type: string | undefined, name: string, text: string): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-node-config-')));
+    dirs.push(root);
+    writeFileSync(
+        join(root, 'package.json'),
+        JSON.stringify(type === undefined ? { name: 'app' } : { name: 'app', type }),
+    );
+    writeFileSync(join(root, name), text);
+    return root;
+}
+
 describe('csszyx.config under plain Node', () => {
     it.each([
         ['module', 'csszyx.config.ts', TS_CONFIG],
@@ -64,17 +98,41 @@ describe('csszyx.config under plain Node', () => {
         ['commonjs', 'csszyx.config.js', JS_CONFIG],
         ['commonjs', 'csszyx.config.mjs', JS_CONFIG],
     ])('reads a %s-typed %s', (type, name, text) => {
-        const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-node-config-')));
-        dirs.push(root);
-        writeFileSync(
-            join(root, 'package.json'),
-            JSON.stringify(type === undefined ? { name: 'app' } : { name: 'app', type }),
-        );
-        writeFileSync(join(root, name), text);
-
-        const loaded = loadInNode(root);
+        const loaded = loadInNode(project(type, name, text));
 
         expect(loaded.problems).toEqual([]);
         expect(loaded.level).toBe('warn');
+    });
+
+    it.each([
+        ['an ES-module', 'module'],
+        ['an untyped', undefined],
+        ['a CommonJS', 'commonjs'],
+    ])(
+        'only warns about the TypeScript text `csszyx init` wrote into csszyx.config.js in %s package',
+        (_label, type) => {
+            const loaded = loadInNode(project(type, 'csszyx.config.js', INIT_TEMPLATE));
+
+            expect(loaded.problems).toHaveLength(1);
+            expect(loaded.problems[0]).toMatchObject({
+                severity: 'warning',
+                path: 'csszyx.config.js',
+            });
+            expect(loaded.problems[0]?.message).toContain('sets no `diagnostics`');
+            expect(loaded.level).toBe('error');
+        },
+    );
+
+    it('keeps a commonjs-typed csszyx.config.js that sets diagnostics and fails to load an error', () => {
+        const loaded = loadInNode(
+            project(
+                'commonjs',
+                'csszyx.config.js',
+                `import type { CsszyxFileConfig } from 'csszyx';\n${JS_CONFIG}`,
+            ),
+        );
+
+        expect(loaded.problems).toHaveLength(1);
+        expect(loaded.problems[0]).toMatchObject({ severity: 'error', path: 'csszyx.config.js' });
     });
 });

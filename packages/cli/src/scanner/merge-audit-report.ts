@@ -3,8 +3,10 @@
  * class a build drops because a later one on the same element covers it.
  *
  * An audit, not a problem to fix: an app upgrading to 0.18 reads it to find
- * the sites a merge changed, so it runs only when named and never fails the
- * run.
+ * the sites a merge changed. It runs when named, or when `csszyx.config`
+ * reports it at `warn` or louder (the `atomic` preset does); its findings are
+ * `info` under `recommended`, so they fail the run only where a config raises
+ * them to `error`.
  *
  * @module
  */
@@ -21,8 +23,13 @@ import {
 
 import type { Reporter } from './check-report.js';
 
-/** The rules this pass answers; a run that does not name one skips it. */
-const MERGE_AUDIT_RULES = ['merge-covered-key', 'merge-covered-class'] as const;
+/** The rules this pass answers. */
+export const MERGE_AUDIT_RULES: readonly MergeAuditKind[] = [
+    'merge-covered-key',
+    'merge-covered-class',
+];
+
+export type { MergeAuditKind };
 
 /** What each rule says a class lost to. */
 const REASON: Record<MergeAuditKind, string> = {
@@ -48,22 +55,20 @@ function removalMessage(finding: MergeAuditFinding): string {
 }
 
 /**
- * Report what the build removes, for the audit rules the run named; nothing
- * when it named none.
+ * Report what the build removes, for the audit rules the run selected;
+ * nothing when it selected none.
  *
  * @param out - Where findings go.
  * @param input - The run's root, files and selection.
  * @param input.cwd - Project root.
  * @param input.files - Absolute paths of the files the run scans.
- * @param input.rules - The rules the run named, if any.
+ * @param input.selected - The audit rules this run answers.
  */
 export async function reportMergeAudit(
     out: Reporter,
-    input: { cwd: string; files: readonly string[]; rules: readonly string[] | undefined },
+    input: { cwd: string; files: readonly string[]; selected: readonly MergeAuditKind[] },
 ): Promise<void> {
-    const selected: readonly MergeAuditKind[] = MERGE_AUDIT_RULES.filter(rule =>
-        input.rules?.includes(rule),
-    );
+    const { selected } = input;
     if (selected.length === 0) return;
     let model: Awaited<ReturnType<typeof openStylesheetModel>>['model'];
     try {
@@ -88,7 +93,11 @@ export async function reportMergeAudit(
         classPrefix: model.facts?.prefix ?? null,
         files,
         scanner: loadContentScanner(input.cwd),
-    }).filter(finding => selected.includes(finding.kind));
+    }).filter(
+        finding =>
+            selected.includes(finding.kind) &&
+            out.levelOf({ rule: finding.kind, file: finding.file }) !== 'off',
+    );
     for (const finding of findings) {
         const message = removalMessage(finding);
         out.info(`  ${finding.file}:${finding.line}: ${message}`);

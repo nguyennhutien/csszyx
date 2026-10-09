@@ -13,18 +13,19 @@
  *
  * @module
  */
+import type { SzDiagnosticLevel } from '@csszyx/types';
+import {
+    createDiagnosticPolicy,
+    type DiagnosticPolicy,
+    SZ_DIAGNOSTIC_PASS_IDS,
+} from '@csszyx/unplugin/diagnostics';
 import { printHeader, printInfo, printSuccess, printWarn } from '../utils/terminal-ui.js';
 
-/** Every pass that produces findings, by its stable id. */
-export const CHECK_RULES = [
-    'sz-diagnostic',
-    'dead-class',
-    'broken-opacity',
-    'sibling-keyword',
-    'theme-collision',
-    'merge-covered-key',
-    'merge-covered-class',
-] as const;
+/**
+ * Every pass that produces findings, by its stable id. The list is the
+ * policy's, so a level can be set for exactly the passes that exist.
+ */
+export const CHECK_RULES = SZ_DIAGNOSTIC_PASS_IDS;
 
 /** Which pass produced a finding. */
 export type CheckRule = (typeof CHECK_RULES)[number];
@@ -47,10 +48,17 @@ export interface CheckFinding {
     message: string;
     /** For an `unknown-key` finding, the known key it most likely misspells. */
     suggestion?: string;
+    /**
+     * How loudly the project reports it, from `csszyx.config`. Never `off`:
+     * an `off` finding is not reported. The run fails on `error`, or on what
+     * `--fail-on` names.
+     */
+    level: Exclude<SzDiagnosticLevel, 'off'>;
 }
 
-/** A finding as a pass records it, before its kind defaults to its rule. */
-export type FindingInput = Omit<CheckFinding, 'kind'> & Partial<Pick<CheckFinding, 'kind'>>;
+/** A finding as a pass records it, before its kind defaults to its rule and its level is read. */
+export type FindingInput = Omit<CheckFinding, 'kind' | 'level'> &
+    Partial<Pick<CheckFinding, 'kind'>>;
 
 /** The document `--json` writes. */
 export interface CheckReport {
@@ -65,8 +73,13 @@ export interface Reporter {
     info(text: string): void;
     warn(text: string): void;
     success(text: string): void;
-    /** Record a finding. Always collected, whatever the mode. A finding with no kind is its rule. */
+    /**
+     * Record a finding at its level. Always collected, whatever the mode. A
+     * finding with no kind is its rule; one the policy sets `off` is dropped.
+     */
     push(finding: FindingInput): void;
+    /** The level the project gives a finding; a pass prints nothing for `off`. */
+    levelOf(finding: Pick<FindingInput, 'rule' | 'kind' | 'file'>): SzDiagnosticLevel;
     /** Everything recorded so far. */
     readonly findings: readonly CheckFinding[];
     /** Whether prose is being suppressed. */
@@ -77,10 +90,16 @@ export interface Reporter {
  * Build a reporter for one run.
  *
  * @param json - True to suppress prose, so stdout holds one parseable document.
+ * @param policy - The project's diagnostic policy; the defaults when omitted.
  * @returns The reporter.
  */
-export function createReporter(json: boolean): Reporter {
+export function createReporter(
+    json: boolean,
+    policy: DiagnosticPolicy = createDiagnosticPolicy(),
+): Reporter {
     const findings: CheckFinding[] = [];
+    const levelOf: Reporter['levelOf'] = ({ rule, kind, file }) =>
+        policy.levelOf({ rule, kind: kind ?? rule, file });
     const say = (print: (text: string) => void) => (text: string) => {
         if (!json) print(text);
     };
@@ -89,7 +108,12 @@ export function createReporter(json: boolean): Reporter {
         info: say(printInfo),
         warn: say(printWarn),
         success: say(printSuccess),
-        push: finding => findings.push({ ...finding, kind: finding.kind ?? finding.rule }),
+        push: finding => {
+            const level = levelOf(finding);
+            if (level === 'off') return;
+            findings.push({ ...finding, kind: finding.kind ?? finding.rule, level });
+        },
+        levelOf,
         findings,
         quiet: json,
     };
