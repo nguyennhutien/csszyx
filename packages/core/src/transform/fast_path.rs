@@ -315,7 +315,12 @@ fn count_sz_attributes(source: &str) -> usize {
 fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<StaticSzObject> {
     let mut properties = Vec::new();
     let mut keys = HashSet::new();
+    // Where each comma-separated part starts in `source`: a key's span is its
+    // place in the object, not in its own part.
+    let mut raw_start = 0;
     for raw_part in source.split(',') {
+        let part_offset = raw_start;
+        raw_start += raw_part.len() + 1;
         let part = raw_part.trim();
         if part.is_empty() {
             continue;
@@ -336,7 +341,7 @@ fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<Static
         }
         let value_source = part[colon + 1..].trim();
         let value = parse_static_value(value_source)?;
-        let part_start = source_offset + raw_part.find(part)?;
+        let part_start = source_offset + part_offset + raw_part.find(part)?;
         properties.push(StaticSzProperty {
             key: key.to_string(),
             span: span(part_start, part_start + part.len())?,
@@ -511,7 +516,8 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 mod tests {
     use super::{
         element_name, is_identifier_key, non_code_ranges, opening_end, opening_start,
-        parse_simple_string, skip_group, triage_source, FastPathBailoutReason, FastPathTriage,
+        parse_flat_static_object, parse_simple_string, skip_group, triage_source,
+        FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
 
@@ -1100,5 +1106,18 @@ mod tests {
             matches!(triage_source(&file), FastPathTriage::NeedsParser(_)),
             "a marker inside a comment must not be rewritten without a parser"
         );
+    }
+
+    /// Each key starts where it is written in the object, not where it sits
+    /// inside its own comma-separated part.
+    #[test]
+    fn each_key_spans_its_own_place_in_the_object() {
+        let object = parse_flat_static_object(" p: 4,\n  m: 2, , px: 1", 10).expect("flat");
+        let starts: Vec<u32> = object
+            .properties
+            .iter()
+            .map(|property| property.span.start)
+            .collect();
+        assert_eq!(starts, [11, 19, 27]);
     }
 }
