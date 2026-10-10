@@ -120,6 +120,7 @@ fn transform_source_writes_exactly_what_the_typescript_transformer_writes() {
             inject_todos: case.options.inject_todos,
             keys_only: case.options.keys_only,
             custom_map: case.options.custom_map.then_some(&corpus.custom_map),
+            served: None,
         };
         let result = transform_source(&source.source, &source.file, &options);
         let mut actual = serde_json::to_value(&result).expect("a result serialises");
@@ -237,6 +238,7 @@ fn record_the_corpus() {
             inject_todos: case.options.inject_todos,
             keys_only: case.options.keys_only,
             custom_map: case.options.custom_map.then_some(&custom_map),
+            served: None,
         };
         case.result =
             serde_json::to_value(transform_source(&source.source, &source.file, &options))

@@ -178,3 +178,36 @@ describe('the class-level entry points', () => {
         },
     );
 });
+
+describe('the project answering where a migrate table would', () => {
+    const source = 'export const A = () => <div className="-z-auto -inset-1/2 p-4" />;';
+    const html = '<div class="-z-auto -inset-1/2 p-4"></div>';
+
+    it('reports what each table decided unasked, and only when it decided something', () => {
+        const [asked] = migrateRustBatch([{ filename: 'a.tsx', source }]);
+        expect(asked?.stats.tableVerdicts).toEqual([
+            { class: '-inset-1/2', served: true },
+            { class: '-z-auto', served: false },
+        ]);
+        const [plain] = migrateRustBatch([
+            { filename: 'b.tsx', source: 'export const B = () => <div className="p-4" />;' },
+        ]);
+        expect(plain?.stats).not.toHaveProperty('tableVerdicts');
+        expect(migrateRustHtml(html).stats.tableVerdicts).toHaveLength(2);
+    });
+
+    it('carries the answers across, both ways, and asks nothing it was answered', () => {
+        const served = new Map([
+            ['-z-auto', true],
+            ['-inset-1/2', false],
+        ]);
+        const [answered] = migrateRustBatch([{ filename: 'a.tsx', source }], { served });
+        expect(answered?.code).toContain("z: '-auto'");
+        expect(answered?.code).toContain('className="-inset-1/2"');
+        expect(answered?.stats).not.toHaveProperty('tableVerdicts');
+
+        const markup = migrateRustHtml(html, { served });
+        expect(markup.code).toContain("z: '-auto'");
+        expect(markup.code).toContain('class="-inset-1/2"');
+    });
+});

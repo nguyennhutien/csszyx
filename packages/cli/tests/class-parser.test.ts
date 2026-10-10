@@ -1227,10 +1227,50 @@ describe('class-parser', () => {
                 '-scale-3d',
                 '-outline-offset-none',
                 '-order-first',
+                // A dropped sign wrote `{ z: 'auto' }`, a served class, for an
+                // input Tailwind serves nothing for.
+                '-m-auto',
+                '-z-auto',
+                '-underline-offset-auto',
+                '-translate-y-screen',
             ]) {
                 expect(parseClass(className), className).toBeNull();
             }
             expect(parseClass('-scale-50')).toEqual({ prop: 'scale', value: -50 });
+            expect(parseClass('-m-px')).toEqual({ prop: 'm', value: '-px' });
+            expect(parseClass('-translate-x-full')).toEqual({ prop: 'translateX', value: '-full' });
+        });
+
+        it('a sign on a fraction is kept only where Tailwind serves it', () => {
+            // Margin takes no fraction, so `-m-1/2` styles nothing. Its `/2`
+            // was read as an opacity modifier and dropped: `{ m: -1 }`.
+            for (const className of ['-m-1/2', '-mx-1/3', '-scroll-m-1/2']) {
+                expect(parseClass(className), className).toBeNull();
+            }
+            expect(parseClass('-inset-1/2')).toEqual({ prop: 'inset', value: '-1/2' });
+            expect(parseClass('-translate-x-1/2')).toEqual({ prop: 'translateX', value: '-1/2' });
+        });
+
+        it('a fraction or a modifier on a number is not an opacity', () => {
+            // Tailwind 4.3.3 serves none of these. `m-1/2` read as `m-1` with
+            // an opacity modifier, which a number cannot carry, so it was
+            // dropped: `{ m: 1 }`.
+            for (const className of ['m-1/2', 'gap-1/2', 'bg-1/2', 'ring-2/50', 'font-700/50']) {
+                expect(parseClass(className), className).toBeNull();
+            }
+            expect(parseClass('bg-red-500/50')).toEqual({
+                prop: 'bg',
+                value: { color: 'red-500', op: 50 },
+            });
+        });
+
+        it('a shorter prefix does not read what the longer one refused', () => {
+            // `translate-z` takes no fraction; `translate` then read `-z-1/2`
+            // as a colour with an opacity: `{ color: '-z-1', op: 2 }`.
+            for (const className of ['-translate-z-1/2', 'scroll-m-red-500']) {
+                expect(parseClass(className), className).toBeNull();
+            }
+            expect(parseClass('-translate-z-2')).toEqual({ prop: 'translateZ', value: -2 });
         });
     });
 

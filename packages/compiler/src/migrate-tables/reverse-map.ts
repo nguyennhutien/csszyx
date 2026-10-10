@@ -325,9 +325,9 @@ export const KNOWN_BREAKPOINTS: ReadonlySet<string> = new Set(['sm', 'md', 'lg',
 // calling them unrecognized.
 export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     ...COMPILER_NEGATIVE_ALLOWED,
-    // Tailwind's old names for `inset-s` / `inset-e`, still found in markup.
-    'start',
-    'end',
+    // Tailwind 4.2+'s names for `start` / `end`, found in markup written for it.
+    'inset-s',
+    'inset-e',
 ]);
 
 // ============================================================================
@@ -338,8 +338,18 @@ export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
 // NEGATIVE_ALLOWED takes a sign on a number, a fraction, an arbitrary value or
 // a theme token (`-m-px`, `-tracking-tight`); on one of these keywords migrate
 // reports the class unrecognized instead of writing `scale: '-none'`. `auto`
-// and `screen` are not here: the value reading already drops their sign.
-export const UNSIGNED_KEYWORDS: ReadonlySet<string> = new Set(['none', '3d', 'first', 'last']);
+// and `screen` are here too: their sign used to be dropped, which wrote a
+// served class (`-z-auto` → `{ z: 'auto' }`) for an input Tailwind 4.3.3 serves
+// nothing for. `full` and `px` are not: `-translate-x-full` and `-m-px` are
+// served, and an unserved one (`-m-full`) migrates back to the same class.
+export const UNSIGNED_KEYWORDS: ReadonlySet<string> = new Set([
+    'none',
+    '3d',
+    'first',
+    'last',
+    'auto',
+    'screen',
+]);
 
 // ============================================================================
 // FRACTION_SUPPORTED: Props that support fractions (e.g., w-1/2)

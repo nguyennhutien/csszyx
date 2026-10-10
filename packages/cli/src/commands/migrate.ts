@@ -17,6 +17,7 @@ import {
 } from '@csszyx/compiler/migrate';
 import fg from 'fast-glob';
 
+import { createMigrateVerdicts, type MigrateVerdicts } from '../scanner/migrate-verdicts.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import {
     printError,
@@ -176,7 +177,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     const summary = createMigrationSummary();
     const progress = spinner.start('Migrating...');
     try {
-        processMigrationBatch(files, context, summary, log);
+        await processMigrationBatch(files, context, summary, log);
     } catch (error) {
         // The one failure with nothing behind it: migrate has no second
         // implementation, so an install without the engine cannot be answered
@@ -192,6 +193,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     progress.succeed('Migration complete');
 
     reportMigrationSummary(context, summary, log);
+    reportTailwindVerdicts(context, log);
     // Every other file was migrated, but a script must not read the run as
     // clean while some files were left as they were.
     if (summary.failed.length > 0) process.exitCode = 1;
@@ -213,6 +215,8 @@ interface MigrationContext {
     customMap?: CsszyxTodoMap;
     /** `customMap` serialised once, shared by every run of files. */
     customMapJson?: string;
+    /** The project's Tailwind, answering where a migrate table would decide. */
+    verdicts: MigrateVerdicts;
 }
 
 interface MigrationSummary {
@@ -261,6 +265,7 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
         injectTodos,
         customMap,
         customMapJson: customMap ? JSON.stringify(customMap) : undefined,
+        verdicts: createMigrateVerdicts(cwd),
     };
 }
 
@@ -399,6 +404,7 @@ function htmlOptions(context: MigrationContext) {
         injectRuntime: context.options.injectRuntime,
         cdnUrl: context.options.cdnUrl,
         localPath: context.options.localPath,
+        served: context.verdicts.answers,
     };
 }
 
@@ -409,6 +415,7 @@ function sourceOptions(context: MigrationContext) {
         customMap: context.customMap,
         customMapJson: context.customMapJson,
         keysOnly: context.options.keysOnly,
+        served: context.verdicts.answers,
     };
 }
 
@@ -448,21 +455,22 @@ const RUN_BYTES = 2 * 1024 * 1024;
  * are written as they finish, so an install that cannot run the engine at all
  * has to be found out while no file has been touched.
  */
-function processMigrationBatch(
+async function processMigrationBatch(
     files: string[],
     context: MigrationContext,
     summary: MigrationSummary,
     log: MigrationLog,
-): void {
+): Promise<void> {
     migrateRustBatch([], sourceOptions(context));
     const pending: MigrationInput[] = [];
     let pendingBytes = 0;
-    const send = (): void => {
+    const send = async (): Promise<void> => {
         if (pending.length === 0) return;
-        processMigrationRun(pending.splice(0), context, summary, log);
+        const run = pending.splice(0);
         pendingBytes = 0;
+        await processMigrationRun(run, context, summary, log);
     };
-    for (const filePath of files) {
+    const step = async (filePath: string): Promise<void> => {
         // A file the process cannot open costs itself, not the run: reported
         // as a warning and skipped, the way a scan that throws is.
         let input: MigrationInput | null;
@@ -470,20 +478,88 @@ function processMigrationBatch(
             input = readMigrationInput(filePath, context);
         } catch (error) {
             summary.warnings.push(`Could not read ${filePath}: ${String(error)}`);
-            continue;
+            return;
         }
-        if (!input) continue;
+        if (!input) return;
         if (input.isHtml) {
             // Sent ahead of the HTML file so the log keeps discovery order.
-            send();
-            migrateHtmlFile(input, context, summary, log);
-            continue;
+            await send();
+            await migrateHtmlFile(input, context, summary, log);
+            return;
         }
         pending.push(input);
         pendingBytes += input.source.length;
-        if (pending.length >= RUN_FILES || pendingBytes >= RUN_BYTES) send();
+        if (pending.length >= RUN_FILES || pendingBytes >= RUN_BYTES) await send();
+    };
+    // One file after another, each step finished before the next file is
+    // read: a run is written before the next one is gathered.
+    await files.reduce<Promise<void>>(
+        (previous, filePath) => previous.then(() => step(filePath)),
+        Promise.resolve(),
+    );
+    await send();
+}
+
+/**
+ * Whether a result holds a class a table decided otherwise than the project's
+ * Tailwind has since answered, so the file has to be migrated again.
+ *
+ * @param result - One file's result.
+ * @param context - Migration context, holding the answers.
+ * @returns True when the answers change the file.
+ */
+function contradicted(
+    result: MigrateRustResult | null | undefined,
+    context: MigrationContext,
+): boolean {
+    const { answers } = context.verdicts;
+    return (result?.stats.tableVerdicts ?? []).some(verdict => {
+        const answer = answers.get(verdict.class);
+        return answer !== undefined && answer !== verdict.served;
+    });
+}
+
+/**
+ * Ask the project's Tailwind about the classes a run left to the tables, and
+ * migrate again each file an answer changes.
+ *
+ * The first pass already carries every answer known so far, so a class is
+ * asked about once per run and a file is migrated a second time only when an
+ * answer contradicts a table — on a project whose Tailwind agrees with the one
+ * the tables were measured from, never. A second pass the engine refuses
+ * keeps the first pass's result: it is what the tables answer, the behaviour
+ * without the oracle.
+ *
+ * @param inputs - The files of the run.
+ * @param results - The first pass, in input order.
+ * @param context - Migration context.
+ * @returns The results, the contradicted ones replaced.
+ */
+async function settleTableVerdicts<Result extends MigrateRustResult | null | undefined>(
+    inputs: readonly MigrationInput[],
+    results: readonly Result[],
+    context: MigrationContext,
+): Promise<Array<Result | MigrateRustResult>> {
+    const settled: Array<Result | MigrateRustResult> = [...results];
+    const verdicts = results.flatMap(result => result?.stats.tableVerdicts ?? []);
+    if (!(await context.verdicts.settle(verdicts))) return settled;
+    const again = inputs.flatMap((input, index) =>
+        contradicted(results[index], context) ? [{ input, index }] : [],
+    );
+    try {
+        const redone = again.map(({ input }) =>
+            input.isHtml
+                ? migrateRustHtml(input.source, htmlOptions(context))
+                : (migrateRustBatch(
+                      [{ filename: input.filePath, source: input.source }],
+                      sourceOptions(context),
+                  )[0] as MigrateRustResult),
+        );
+        for (const [position, { index }] of again.entries()) settled[index] = redone[position];
+    } catch (error) {
+        if (error instanceof RustMigrateUnavailableError) throw error;
     }
-    send();
+    return settled;
 }
 
 /**
@@ -501,13 +577,13 @@ function processMigrationBatch(
  * @param summary - Collected counts and warnings.
  * @param log - Per-file migration log.
  */
-function migrateHtmlFile(
+async function migrateHtmlFile(
     input: MigrationInput,
     context: MigrationContext,
     summary: MigrationSummary,
     log: MigrationLog,
-): void {
-    let result: MigrateRustResult;
+): Promise<void> {
+    let result: MigrateRustResult | undefined;
     try {
         result = migrateRustHtml(input.source, htmlOptions(context));
     } catch (error) {
@@ -520,7 +596,8 @@ function migrateHtmlFile(
         );
         return;
     }
-    finishMigrationFile(input.filePath, result, context, summary, log);
+    [result] = await settleTableVerdicts([input], [result], context);
+    finishMigrationFile(input.filePath, result as MigrateRustResult, context, summary, log);
 }
 
 /**
@@ -533,13 +610,13 @@ function migrateHtmlFile(
  * is the one failure with nothing behind it, and it already stopped the
  * command before any file was read.
  */
-function processMigrationRun(
+async function processMigrationRun(
     inputs: MigrationInput[],
     context: MigrationContext,
     summary: MigrationSummary,
     log: MigrationLog,
-): void {
-    let results: MigrateRustResult[];
+): Promise<void> {
+    let results: Array<MigrateRustResult | null | undefined>;
     try {
         results = migrateRustBatch(
             inputs.map(input => ({ filename: input.filePath, source: input.source })),
@@ -547,11 +624,13 @@ function processMigrationRun(
         );
     } catch (error) {
         if (error instanceof RustMigrateUnavailableError) throw error;
-        for (const input of inputs) processMigrationFileAlone(input, context, summary, log);
-        return;
+        results = inputs.map(input => migrateFileAlone(input, context, summary));
     }
+    results = await settleTableVerdicts(inputs, results, context);
     for (const [index, input] of inputs.entries()) {
         const result = results[index];
+        // Already recorded by the retry that could not migrate it.
+        if (result === null) continue;
         if (result === undefined) {
             recordFailedMigration(
                 input.filePath,
@@ -565,13 +644,16 @@ function processMigrationRun(
     }
 }
 
-/** Retries one file from a run the engine refused, naming it if it fails again. */
-function processMigrationFileAlone(
+/**
+ * Retries one file from a run the engine refused, naming it if it fails again.
+ *
+ * @returns The file's result, or null when it was recorded as failed.
+ */
+function migrateFileAlone(
     input: MigrationInput,
     context: MigrationContext,
     summary: MigrationSummary,
-    log: MigrationLog,
-): void {
+): MigrateRustResult | null {
     let result: MigrateRustResult | undefined;
     try {
         [result] = migrateRustBatch(
@@ -586,13 +668,13 @@ function processMigrationFileAlone(
             context,
             summary,
         );
-        return;
+        return null;
     }
     if (result === undefined) {
         recordFailedMigration(input.filePath, 'the engine returned no result', context, summary);
-        return;
+        return null;
     }
-    finishMigrationFile(input.filePath, result, context, summary, log);
+    return result;
 }
 
 /** Records a file the engine could not migrate; the file is left as it was. */
@@ -783,6 +865,23 @@ function reportRemainingTodos(
     );
     printInfo('Re-run --audit to generate a fresh snapshot when ready.');
     log.writeLine(`Still unresolved (${unique.length}): ${unique.join(', ')}`);
+}
+
+/**
+ * Says in the log whose verdicts decided the classes a migrate table would
+ * have: the project's Tailwind, or — with the reason — the tables.
+ */
+function reportTailwindVerdicts(context: MigrationContext, log: MigrationLog): void {
+    const asked = context.verdicts.answers.size;
+    if (asked > 0) {
+        log.writeLine(`Asked the project's Tailwind about ${asked} classes a table would decide.`);
+    }
+    const skipped = context.verdicts.skipped();
+    if (skipped !== null) {
+        log.writeLine(
+            `csszyx's own tables decided, the project's Tailwind was not asked: ${skipped}`,
+        );
+    }
 }
 
 /** Reports imports that may be unused after migration. */

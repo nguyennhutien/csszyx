@@ -15,7 +15,7 @@ use oxc_span::GetSpan;
 
 use super::sz_codegen::{sz_expression, sz_object_literal};
 use super::value::{is_js_whitespace, SzObject};
-use super::variant_parser::class_name_to_sz_object;
+use super::variant_parser::{class_name_to_sz_object_with, Lookup};
 
 /// Function names read as className composition helpers.
 pub const CLSX_LIKE_NAMES: &[&str] = &["clsx", "cn", "cx", "twMerge", "classNames", "classnames"];
@@ -69,7 +69,7 @@ fn slice(source: &str, span: oxc_span::Span) -> &str {
 pub fn handle_clsx_call(
     call: &CallExpression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> PatternResult {
     let mut warnings = Vec::new();
     let mut all_unrecognized = Vec::new();
@@ -77,7 +77,7 @@ pub fn handle_clsx_call(
     let mut converted = 0;
 
     for argument in &call.arguments {
-        let Some((expression, unrecognized)) = convert_clsx_argument(argument, source, custom_map)
+        let Some((expression, unrecognized)) = convert_clsx_argument(argument, source, lookup)
         else {
             warnings.push(cannot_migrate_clsx_argument(argument, source));
             return skip(all_unrecognized, warnings);
@@ -107,16 +107,14 @@ pub fn handle_clsx_call(
 fn convert_clsx_argument(
     argument: &Argument<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> Option<(String, Vec<String>)> {
     match argument {
-        Argument::StringLiteral(literal) => migrate_string(&literal.value, custom_map),
+        Argument::StringLiteral(literal) => migrate_string(&literal.value, lookup),
         Argument::LogicalExpression(logical) if logical.operator == LogicalOperator::And => {
-            logical_and_inner(logical, source, custom_map)
+            logical_and_inner(logical, source, lookup)
         }
-        Argument::ConditionalExpression(conditional) => {
-            ternary_inner(conditional, source, custom_map)
-        }
+        Argument::ConditionalExpression(conditional) => ternary_inner(conditional, source, lookup),
         _ => None,
     }
 }
@@ -136,9 +134,9 @@ fn cannot_migrate_clsx_argument(argument: &Argument<'_>, source: &str) -> String
 pub fn handle_ternary(
     conditional: &ConditionalExpression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> PatternResult {
-    match ternary_inner(conditional, source, custom_map) {
+    match ternary_inner(conditional, source, lookup) {
         Some((expression, unrecognized)) => {
             migrated(format!("sz={{{expression}}}"), unrecognized, 1)
         }
@@ -154,9 +152,9 @@ pub fn handle_ternary(
 pub fn handle_logical_and(
     logical: &LogicalExpression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> PatternResult {
-    match logical_and_inner(logical, source, custom_map) {
+    match logical_and_inner(logical, source, lookup) {
         Some((expression, unrecognized)) => {
             migrated(format!("sz={{{expression}}}"), unrecognized, 1)
         }
@@ -173,7 +171,7 @@ pub fn handle_logical_and(
 pub fn handle_template_literal(
     template: &TemplateLiteral<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> PatternResult {
     let mut warnings = Vec::new();
     let mut unrecognized = Vec::new();
@@ -202,7 +200,7 @@ pub fn handle_template_literal(
     let mut dynamic = Vec::new();
     let mut converted = 0;
     if !trimmed_static.is_empty() {
-        let result = class_name_to_sz_object(&trimmed_static, custom_map);
+        let result = class_name_to_sz_object_with(&trimmed_static, lookup);
         base = result.sz_object;
         unrecognized.extend(result.unrecognized);
     }
@@ -211,7 +209,7 @@ pub fn handle_template_literal(
         if let Some(warning) = migrate_template_expression(
             expression,
             source,
-            custom_map,
+            lookup,
             &mut base,
             &mut dynamic,
             &mut unrecognized,
@@ -251,15 +249,15 @@ pub fn handle_template_literal(
 fn migrate_template_expression(
     expression: &Expression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
     base: &mut SzObject,
     dynamic: &mut Vec<String>,
     unrecognized: &mut Vec<String>,
     converted: &mut u32,
 ) -> Option<String> {
     if let Expression::StringLiteral(literal) = expression {
-        let (_, literal_unrecognized) = migrate_string(&literal.value, custom_map)?;
-        let converted_literal = class_name_to_sz_object(&literal.value, custom_map);
+        let (_, literal_unrecognized) = migrate_string(&literal.value, lookup)?;
+        let converted_literal = class_name_to_sz_object_with(&literal.value, lookup);
         for (key, value) in converted_literal.sz_object.js_ordered() {
             base.insert(key.clone(), value.clone());
         }
@@ -269,10 +267,10 @@ fn migrate_template_expression(
     }
     let result = match expression {
         Expression::ConditionalExpression(conditional) => {
-            ternary_inner(conditional, source, custom_map)
+            ternary_inner(conditional, source, lookup)
         }
         Expression::LogicalExpression(logical) if logical.operator == LogicalOperator::And => {
-            logical_and_inner(logical, source, custom_map)
+            logical_and_inner(logical, source, lookup)
         }
         _ => None,
     };
@@ -299,7 +297,7 @@ fn migrate_template_expression(
 fn ternary_inner(
     conditional: &ConditionalExpression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> Option<(String, Vec<String>)> {
     let (Expression::StringLiteral(consequent), Expression::StringLiteral(alternate)) =
         (&conditional.consequent, &conditional.alternate)
@@ -314,14 +312,14 @@ fn ternary_inner(
         if consequent.is_empty() {
             return None;
         }
-        let (object, unrecognized) = migrate_string(consequent, custom_map)?;
+        let (object, unrecognized) = migrate_string(consequent, lookup)?;
         if !unrecognized.is_empty() {
             return None;
         }
         return Some((format!("{condition} && {object}"), Vec::new()));
     }
     if consequent.is_empty() {
-        let (object, unrecognized) = migrate_string(alternate, custom_map)?;
+        let (object, unrecognized) = migrate_string(alternate, lookup)?;
         if !unrecognized.is_empty() {
             return None;
         }
@@ -331,8 +329,8 @@ fn ternary_inner(
         ));
     }
 
-    let (consequent_object, consequent_unrecognized) = migrate_string(consequent, custom_map)?;
-    let (alternate_object, alternate_unrecognized) = migrate_string(alternate, custom_map)?;
+    let (consequent_object, consequent_unrecognized) = migrate_string(consequent, lookup)?;
+    let (alternate_object, alternate_unrecognized) = migrate_string(alternate, lookup)?;
     if !consequent_unrecognized.is_empty() || !alternate_unrecognized.is_empty() {
         return None;
     }
@@ -347,12 +345,12 @@ fn ternary_inner(
 fn logical_and_inner(
     logical: &LogicalExpression<'_>,
     source: &str,
-    custom_map: Option<&SzObject>,
+    lookup: Lookup<'_>,
 ) -> Option<(String, Vec<String>)> {
     let Expression::StringLiteral(right) = &logical.right else {
         return None;
     };
-    let (object, unrecognized) = migrate_string(&right.value, custom_map)?;
+    let (object, unrecognized) = migrate_string(&right.value, lookup)?;
     if !unrecognized.is_empty() {
         return None;
     }
@@ -362,15 +360,12 @@ fn logical_and_inner(
 
 /// A class string as an object literal, or `None` when nothing in it is
 /// recognised.
-fn migrate_string(
-    class_name: &str,
-    custom_map: Option<&SzObject>,
-) -> Option<(String, Vec<String>)> {
+fn migrate_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String, Vec<String>)> {
     let trimmed = class_name.trim_matches(is_js_whitespace);
     if trimmed.is_empty() {
         return None;
     }
-    let converted = class_name_to_sz_object(trimmed, custom_map);
+    let converted = class_name_to_sz_object_with(trimmed, lookup);
     if converted.sz_object.is_empty() {
         return None;
     }

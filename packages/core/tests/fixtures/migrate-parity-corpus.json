@@ -4,9 +4,9 @@
   "golden": 804,
   "keyCases": 1437,
   "corpus": 2131,
-  "edgeCases": 379
+  "edgeCases": 412
  },
- "count": 3966,
+ "count": 4017,
  "entries": [
   {
    "c": "accent-2",
@@ -1806,19 +1806,16 @@
   },
   {
    "c": "border-spacing-red-500",
-   "p": {
-    "prop": "borderColor",
-    "value": "spacing-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "borderColor": "spacing-red-500"
-    },
-    "szText": "{\"borderColor\":\"spacing-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "border-spacing-red-500"
+    ],
     "k": [],
-    "g": "{ borderColor: 'spacing-red-500' }",
-    "h": "borderColor: 'spacing-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10386,19 +10383,16 @@
   },
   {
    "c": "scroll-m-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "m-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "m-red-500"
-    },
-    "szText": "{\"scroll\":\"m-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-m-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'm-red-500' }",
-    "h": "scroll: 'm-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10437,19 +10431,16 @@
   },
   {
    "c": "scroll-mb-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "mb-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "mb-red-500"
-    },
-    "szText": "{\"scroll\":\"mb-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-mb-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'mb-red-500' }",
-    "h": "scroll: 'mb-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10590,19 +10581,16 @@
   },
   {
    "c": "scroll-me-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "me-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "me-red-500"
-    },
-    "szText": "{\"scroll\":\"me-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-me-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'me-red-500' }",
-    "h": "scroll: 'me-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10641,19 +10629,16 @@
   },
   {
    "c": "scroll-ml-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "ml-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "ml-red-500"
-    },
-    "szText": "{\"scroll\":\"ml-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-ml-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'ml-red-500' }",
-    "h": "scroll: 'ml-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10692,19 +10677,16 @@
   },
   {
    "c": "scroll-mr-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "mr-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "mr-red-500"
-    },
-    "szText": "{\"scroll\":\"mr-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-mr-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'mr-red-500' }",
-    "h": "scroll: 'mr-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10743,19 +10725,16 @@
   },
   {
    "c": "scroll-ms-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "ms-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "ms-red-500"
-    },
-    "szText": "{\"scroll\":\"ms-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-ms-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'ms-red-500' }",
-    "h": "scroll: 'ms-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10794,19 +10773,16 @@
   },
   {
    "c": "scroll-mt-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "mt-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "mt-red-500"
-    },
-    "szText": "{\"scroll\":\"mt-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-mt-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'mt-red-500' }",
-    "h": "scroll: 'mt-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10845,19 +10821,16 @@
   },
   {
    "c": "scroll-mx-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "mx-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "mx-red-500"
-    },
-    "szText": "{\"scroll\":\"mx-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-mx-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'mx-red-500' }",
-    "h": "scroll: 'mx-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10896,19 +10869,16 @@
   },
   {
    "c": "scroll-my-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "my-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "my-red-500"
-    },
-    "szText": "{\"scroll\":\"my-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-my-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'my-red-500' }",
-    "h": "scroll: 'my-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10947,19 +10917,16 @@
   },
   {
    "c": "scroll-p-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "p-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "p-red-500"
-    },
-    "szText": "{\"scroll\":\"p-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-p-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'p-red-500' }",
-    "h": "scroll: 'p-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -10998,19 +10965,16 @@
   },
   {
    "c": "scroll-pb-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "pb-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "pb-red-500"
-    },
-    "szText": "{\"scroll\":\"pb-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-pb-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'pb-red-500' }",
-    "h": "scroll: 'pb-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11151,19 +11115,16 @@
   },
   {
    "c": "scroll-pe-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "pe-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "pe-red-500"
-    },
-    "szText": "{\"scroll\":\"pe-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-pe-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'pe-red-500' }",
-    "h": "scroll: 'pe-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11202,19 +11163,16 @@
   },
   {
    "c": "scroll-pl-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "pl-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "pl-red-500"
-    },
-    "szText": "{\"scroll\":\"pl-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-pl-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'pl-red-500' }",
-    "h": "scroll: 'pl-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11253,19 +11211,16 @@
   },
   {
    "c": "scroll-pr-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "pr-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "pr-red-500"
-    },
-    "szText": "{\"scroll\":\"pr-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-pr-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'pr-red-500' }",
-    "h": "scroll: 'pr-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11304,19 +11259,16 @@
   },
   {
    "c": "scroll-ps-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "ps-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "ps-red-500"
-    },
-    "szText": "{\"scroll\":\"ps-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-ps-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'ps-red-500' }",
-    "h": "scroll: 'ps-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11355,19 +11307,16 @@
   },
   {
    "c": "scroll-pt-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "pt-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "pt-red-500"
-    },
-    "szText": "{\"scroll\":\"pt-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-pt-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'pt-red-500' }",
-    "h": "scroll: 'pt-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11406,19 +11355,16 @@
   },
   {
    "c": "scroll-px-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "px-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "px-red-500"
-    },
-    "szText": "{\"scroll\":\"px-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-px-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'px-red-500' }",
-    "h": "scroll: 'px-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -11457,19 +11403,16 @@
   },
   {
    "c": "scroll-py-red-500",
-   "p": {
-    "prop": "scroll",
-    "value": "py-red-500"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "scroll": "py-red-500"
-    },
-    "szText": "{\"scroll\":\"py-red-500\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "scroll-py-red-500"
+    ],
     "k": [],
-    "g": "{ scroll: 'py-red-500' }",
-    "h": "scroll: 'py-red-500'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -20124,18 +20067,18 @@
   {
    "c": "decoration-(--v)",
    "p": {
-    "prop": "decorationThickness",
+    "prop": "decorationColor",
     "value": "--v"
    },
    "o": {
     "sz": {
-     "decorationThickness": "--v"
+     "decorationColor": "--v"
     },
-    "szText": "{\"decorationThickness\":\"--v\"}",
+    "szText": "{\"decorationColor\":\"--v\"}",
     "u": [],
     "k": [],
-    "g": "{ decorationThickness: '--v' }",
-    "h": "decorationThickness: '--v'"
+    "g": "{ decorationColor: '--v' }",
+    "h": "decorationColor: '--v'"
    }
   },
   {
@@ -63318,19 +63261,16 @@
   },
   {
    "c": "w-1/x",
-   "p": {
-    "prop": "w",
-    "value": 1
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "w": 1
-    },
-    "szText": "{\"w\":1}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "w-1/x"
+    ],
     "k": [],
-    "g": "{ w: 1 }",
-    "h": "w: 1"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -63572,19 +63512,16 @@
   },
   {
    "c": "-m-auto",
-   "p": {
-    "prop": "m",
-    "value": "auto"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "m": "auto"
-    },
-    "szText": "{\"m\":\"auto\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-m-auto"
+    ],
     "k": [],
-    "g": "{ m: 'auto' }",
-    "h": "m: 'auto'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -64059,53 +63996,44 @@
   },
   {
    "c": "outline-2/50",
-   "p": {
-    "prop": "outline",
-    "value": 2
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "outline": 2
-    },
-    "szText": "{\"outline\":2}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "outline-2/50"
+    ],
     "k": [],
-    "g": "{ outline: 2 }",
-    "h": "outline: 2"
+    "g": "{}",
+    "h": ""
    }
   },
   {
    "c": "ring-2/50",
-   "p": {
-    "prop": "ring",
-    "value": 2
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "ring": 2
-    },
-    "szText": "{\"ring\":2}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "ring-2/50"
+    ],
     "k": [],
-    "g": "{ ring: 2 }",
-    "h": "ring: 2"
+    "g": "{}",
+    "h": ""
    }
   },
   {
    "c": "font-700/50",
-   "p": {
-    "prop": "weight",
-    "value": 700
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "weight": 700
-    },
-    "szText": "{\"weight\":700}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "font-700/50"
+    ],
     "k": [],
-    "g": "{ weight: 700 }",
-    "h": "weight: 700"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -65077,19 +65005,16 @@
   },
   {
    "c": "content-[😀_x]",
-   "p": {
-    "prop": "content",
-    "value": "😀 x"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "content": "😀 x"
-    },
-    "szText": "{\"content\":\"😀 x\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "content-[😀_x]"
+    ],
     "k": [],
-    "g": "{ content: '😀 x' }",
-    "h": "content: '😀 x'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -65257,18 +65182,18 @@
   {
    "c": "decoration-(--t)",
    "p": {
-    "prop": "decorationThickness",
+    "prop": "decorationColor",
     "value": "--t"
    },
    "o": {
     "sz": {
-     "decorationThickness": "--t"
+     "decorationColor": "--t"
     },
-    "szText": "{\"decorationThickness\":\"--t\"}",
+    "szText": "{\"decorationColor\":\"--t\"}",
     "u": [],
     "k": [],
-    "g": "{ decorationThickness: '--t' }",
-    "h": "decorationThickness: '--t'"
+    "g": "{ decorationColor: '--t' }",
+    "h": "decorationColor: '--t'"
    }
   },
   {
@@ -67444,6 +67369,833 @@
     "k": [],
     "g": "{\n  group: {\n    hover: { p: 4 },\n  },\n}",
     "h": "group: {\n    hover: { p: 4 },\n  },"
+   }
+  },
+  {
+   "c": "-m-(--v)",
+   "p": {
+    "prop": "m",
+    "value": "-(--v)"
+   },
+   "o": {
+    "sz": {
+     "m": "-(--v)"
+    },
+    "szText": "{\"m\":\"-(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ m: '-(--v)' }",
+    "h": "m: '-(--v)'"
+   }
+  },
+  {
+   "c": "-mt-(--gap)",
+   "p": {
+    "prop": "mt",
+    "value": "-(--gap)"
+   },
+   "o": {
+    "sz": {
+     "mt": "-(--gap)"
+    },
+    "szText": "{\"mt\":\"-(--gap)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ mt: '-(--gap)' }",
+    "h": "mt: '-(--gap)'"
+   }
+  },
+  {
+   "c": "-z-(--layer)",
+   "p": {
+    "prop": "z",
+    "value": "-(--layer)"
+   },
+   "o": {
+    "sz": {
+     "z": "-(--layer)"
+    },
+    "szText": "{\"z\":\"-(--layer)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ z: '-(--layer)' }",
+    "h": "z: '-(--layer)'"
+   }
+  },
+  {
+   "c": "-inset-x-(--v)",
+   "p": {
+    "prop": "insetX",
+    "value": "-(--v)"
+   },
+   "o": {
+    "sz": {
+     "insetX": "-(--v)"
+    },
+    "szText": "{\"insetX\":\"-(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ insetX: '-(--v)' }",
+    "h": "insetX: '-(--v)'"
+   }
+  },
+  {
+   "c": "-space-x-(--v)",
+   "p": {
+    "prop": "spaceX",
+    "value": "-(--v)"
+   },
+   "o": {
+    "sz": {
+     "spaceX": "-(--v)"
+    },
+    "szText": "{\"spaceX\":\"-(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ spaceX: '-(--v)' }",
+    "h": "spaceX: '-(--v)'"
+   }
+  },
+  {
+   "c": "-outline-offset-(--v)",
+   "p": {
+    "prop": "outlineOffset",
+    "value": "-(--v)"
+   },
+   "o": {
+    "sz": {
+     "outlineOffset": "-(--v)"
+    },
+    "szText": "{\"outlineOffset\":\"-(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ outlineOffset: '-(--v)' }",
+    "h": "outlineOffset: '-(--v)'"
+   }
+  },
+  {
+   "c": "-translate-x-(--v,2px)",
+   "p": {
+    "prop": "translateX",
+    "value": "-(--v,2px)"
+   },
+   "o": {
+    "sz": {
+     "translateX": "-(--v,2px)"
+    },
+    "szText": "{\"translateX\":\"-(--v,2px)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ translateX: '-(--v,2px)' }",
+    "h": "translateX: '-(--v,2px)'"
+   }
+  },
+  {
+   "c": "-scale-(--v)",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-scale-(--v)"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-m-[var(--v)]",
+   "p": {
+    "prop": "m",
+    "value": "-(--v)"
+   },
+   "o": {
+    "sz": {
+     "m": "-(--v)"
+    },
+    "szText": "{\"m\":\"-(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ m: '-(--v)' }",
+    "h": "m: '-(--v)'"
+   }
+  },
+  {
+   "c": "-z-[var(--v,1)]",
+   "p": {
+    "prop": "z",
+    "value": "-(--v,1)"
+   },
+   "o": {
+    "sz": {
+     "z": "-(--v,1)"
+    },
+    "szText": "{\"z\":\"-(--v,1)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ z: '-(--v,1)' }",
+    "h": "z: '-(--v,1)'"
+   }
+  },
+  {
+   "c": "-m-[calc(1px+2px)]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-m-[calc(1px+2px)]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-m-[10px]",
+   "p": {
+    "prop": "m",
+    "value": "-10px"
+   },
+   "o": {
+    "sz": {
+     "m": "-10px"
+    },
+    "szText": "{\"m\":\"-10px\"}",
+    "u": [],
+    "k": [],
+    "g": "{ m: '-10px' }",
+    "h": "m: '-10px'"
+   }
+  },
+  {
+   "c": "w-[1/2]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "w-[1/2]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "translate-x-[1/2]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "translate-x-[1/2]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "flex-[1/2]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "flex-[1/2]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-top-[1/2]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-top-[1/2]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "aspect-[16/9]",
+   "p": {
+    "prop": "aspect",
+    "value": "16/9"
+   },
+   "o": {
+    "sz": {
+     "aspect": "16/9"
+    },
+    "szText": "{\"aspect\":\"16/9\"}",
+    "u": [],
+    "k": [],
+    "g": "{ aspect: '16/9' }",
+    "h": "aspect: '16/9'"
+   }
+  },
+  {
+   "c": "perspective-origin-(--v)",
+   "p": {
+    "prop": "perspectiveOrigin",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "perspectiveOrigin": "var(--v)"
+    },
+    "szText": "{\"perspectiveOrigin\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ perspectiveOrigin: 'var(--v)' }",
+    "h": "perspectiveOrigin: 'var(--v)'"
+   }
+  },
+  {
+   "c": "font-(--v)",
+   "p": {
+    "prop": "weight",
+    "value": "(--v)"
+   },
+   "o": {
+    "sz": {
+     "weight": "(--v)"
+    },
+    "szText": "{\"weight\":\"(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ weight: '(--v)' }",
+    "h": "weight: '(--v)'"
+   }
+  },
+  {
+   "c": "font-(family-name:--v)",
+   "p": {
+    "prop": "fontFamily",
+    "value": "(family-name:--v)"
+   },
+   "o": {
+    "sz": {
+     "fontFamily": "(family-name:--v)"
+    },
+    "szText": "{\"fontFamily\":\"(family-name:--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ fontFamily: '(family-name:--v)' }",
+    "h": "fontFamily: '(family-name:--v)'"
+   }
+  },
+  {
+   "c": "p-(length:--v)",
+   "p": {
+    "prop": "p",
+    "value": "(length:--v)"
+   },
+   "o": {
+    "sz": {
+     "p": "(length:--v)"
+    },
+    "szText": "{\"p\":\"(length:--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ p: '(length:--v)' }",
+    "h": "p: '(length:--v)'"
+   }
+  },
+  {
+   "c": "bg-(color:--c)",
+   "p": {
+    "prop": "bg",
+    "value": "(color:--c)"
+   },
+   "o": {
+    "sz": {
+     "bg": "(color:--c)"
+    },
+    "szText": "{\"bg\":\"(color:--c)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bg: '(color:--c)' }",
+    "h": "bg: '(color:--c)'"
+   }
+  },
+  {
+   "c": "-m-(length:--v)",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-m-(length:--v)"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-z-auto",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-z-auto"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-order-first",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-order-first"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-m-1/2",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-m-1/2"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "m-2/50",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "m-2/50"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "bg-[length:auto_100px]",
+   "p": {
+    "prop": "bgSize",
+    "value": "auto 100px"
+   },
+   "o": {
+    "sz": {
+     "bgSize": "auto 100px"
+    },
+    "szText": "{\"bgSize\":\"auto 100px\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bgSize: 'auto 100px' }",
+    "h": "bgSize: 'auto 100px'"
+   }
+  },
+  {
+   "c": "bg-(length:--bg-size)",
+   "p": {
+    "prop": "bgSize",
+    "value": "--bg-size"
+   },
+   "o": {
+    "sz": {
+     "bgSize": "--bg-size"
+    },
+    "szText": "{\"bgSize\":\"--bg-size\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bgSize: '--bg-size' }",
+    "h": "bgSize: '--bg-size'"
+   }
+  },
+  {
+   "c": "bg-[length:50%]!",
+   "p": {
+    "prop": "bgSize",
+    "value": "50%!"
+   },
+   "o": {
+    "sz": {
+     "bgSize": "50%!"
+    },
+    "szText": "{\"bgSize\":\"50%!\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bgSize: '50%!' }",
+    "h": "bgSize: '50%!'"
+   }
+  },
+  {
+   "c": "hover:bg-[length:10px]",
+   "p": null,
+   "o": {
+    "sz": {
+     "hover": {
+      "bgSize": "10px"
+     }
+    },
+    "szText": "{\"hover\":{\"bgSize\":\"10px\"}}",
+    "u": [],
+    "k": [],
+    "g": "{\n  hover: { bgSize: '10px' },\n}",
+    "h": "hover: { bgSize: '10px' },"
+   }
+  },
+  {
+   "c": "bg-[position:10px_20px]",
+   "p": {
+    "prop": "bgPos",
+    "value": "10px 20px"
+   },
+   "o": {
+    "sz": {
+     "bgPos": "10px 20px"
+    },
+    "szText": "{\"bgPos\":\"10px 20px\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bgPos: '10px 20px' }",
+    "h": "bgPos: '10px 20px'"
+   }
+  },
+  {
+   "c": "bg-(position:--bg-pos)",
+   "p": {
+    "prop": "bgPos",
+    "value": "--bg-pos"
+   },
+   "o": {
+    "sz": {
+     "bgPos": "--bg-pos"
+    },
+    "szText": "{\"bgPos\":\"--bg-pos\"}",
+    "u": [],
+    "k": [],
+    "g": "{ bgPos: '--bg-pos' }",
+    "h": "bgPos: '--bg-pos'"
+   }
+  },
+  {
+   "c": "border-t-(--v)",
+   "p": {
+    "prop": "borderTColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderTColor": "--v"
+    },
+    "szText": "{\"borderTColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderTColor: '--v' }",
+    "h": "borderTColor: '--v'"
+   }
+  },
+  {
+   "c": "border-t-[var(--v)]",
+   "p": {
+    "prop": "borderTColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderTColor": "var(--v)"
+    },
+    "szText": "{\"borderTColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderTColor: 'var(--v)' }",
+    "h": "borderTColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-r-(--v)",
+   "p": {
+    "prop": "borderRColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderRColor": "--v"
+    },
+    "szText": "{\"borderRColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderRColor: '--v' }",
+    "h": "borderRColor: '--v'"
+   }
+  },
+  {
+   "c": "border-r-[var(--v)]",
+   "p": {
+    "prop": "borderRColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderRColor": "var(--v)"
+    },
+    "szText": "{\"borderRColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderRColor: 'var(--v)' }",
+    "h": "borderRColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-b-(--v)",
+   "p": {
+    "prop": "borderBColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderBColor": "--v"
+    },
+    "szText": "{\"borderBColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderBColor: '--v' }",
+    "h": "borderBColor: '--v'"
+   }
+  },
+  {
+   "c": "border-b-[var(--v)]",
+   "p": {
+    "prop": "borderBColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderBColor": "var(--v)"
+    },
+    "szText": "{\"borderBColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderBColor: 'var(--v)' }",
+    "h": "borderBColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-l-(--v)",
+   "p": {
+    "prop": "borderLColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderLColor": "--v"
+    },
+    "szText": "{\"borderLColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderLColor: '--v' }",
+    "h": "borderLColor: '--v'"
+   }
+  },
+  {
+   "c": "border-l-[var(--v)]",
+   "p": {
+    "prop": "borderLColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderLColor": "var(--v)"
+    },
+    "szText": "{\"borderLColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderLColor: 'var(--v)' }",
+    "h": "borderLColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-x-(--v)",
+   "p": {
+    "prop": "borderXColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderXColor": "--v"
+    },
+    "szText": "{\"borderXColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderXColor: '--v' }",
+    "h": "borderXColor: '--v'"
+   }
+  },
+  {
+   "c": "border-x-[var(--v)]",
+   "p": {
+    "prop": "borderXColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderXColor": "var(--v)"
+    },
+    "szText": "{\"borderXColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderXColor: 'var(--v)' }",
+    "h": "borderXColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-y-(--v)",
+   "p": {
+    "prop": "borderYColor",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "borderYColor": "--v"
+    },
+    "szText": "{\"borderYColor\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderYColor: '--v' }",
+    "h": "borderYColor: '--v'"
+   }
+  },
+  {
+   "c": "border-y-[var(--v)]",
+   "p": {
+    "prop": "borderYColor",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "borderYColor": "var(--v)"
+    },
+    "szText": "{\"borderYColor\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderYColor: 'var(--v)' }",
+    "h": "borderYColor: 'var(--v)'"
+   }
+  },
+  {
+   "c": "border-s-(--v)",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "border-s-(--v)"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "border-bs-[var(--v)]",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "border-bs-[var(--v)]"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "shadow-[var(--v)]",
+   "p": {
+    "prop": "shadow",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "shadow": "var(--v)"
+    },
+    "szText": "{\"shadow\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ shadow: 'var(--v)' }",
+    "h": "shadow: 'var(--v)'"
+   }
+  },
+  {
+   "c": "font-[var(--v)]",
+   "p": {
+    "prop": "weight",
+    "value": "var(--v)"
+   },
+   "o": {
+    "sz": {
+     "weight": "var(--v)"
+    },
+    "szText": "{\"weight\":\"var(--v)\"}",
+    "u": [],
+    "k": [],
+    "g": "{ weight: 'var(--v)' }",
+    "h": "weight: 'var(--v)'"
+   }
+  },
+  {
+   "c": "decoration-(length:--v)",
+   "p": {
+    "prop": "decorationThickness",
+    "value": "--v"
+   },
+   "o": {
+    "sz": {
+     "decorationThickness": "--v"
+    },
+    "szText": "{\"decorationThickness\":\"--v\"}",
+    "u": [],
+    "k": [],
+    "g": "{ decorationThickness: '--v' }",
+    "h": "decorationThickness: '--v'"
+   }
+  },
+  {
+   "c": "decoration-[length:2px]",
+   "p": {
+    "prop": "decorationThickness",
+    "value": "2px"
+   },
+   "o": {
+    "sz": {
+     "decorationThickness": "2px"
+    },
+    "szText": "{\"decorationThickness\":\"2px\"}",
+    "u": [],
+    "k": [],
+    "g": "{ decorationThickness: '2px' }",
+    "h": "decorationThickness: '2px'"
    }
   }
  ],
