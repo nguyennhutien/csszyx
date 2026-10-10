@@ -1,7 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { DEPENDENCY_OUTPUT_DIRS, walkProject } from '@csszyx/tailwind-oracle';
+// The walk alone, not the oracle's index: that index loads the compiler, and
+// the Next state modules that read file patterns run without a built one.
+import { DEPENDENCY_OUTPUT_DIRS, walkProject } from '@csszyx/tailwind-oracle/project-walk';
 
 import { normalizePathSeparators } from './path-normalization.js';
 import { sortStrings } from './sort.js';

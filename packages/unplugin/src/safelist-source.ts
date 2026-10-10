@@ -9,7 +9,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { DEPENDENCY_OUTPUT_DIRS, stripCssBlockComments } from '@csszyx/tailwind-oracle';
+// The two modules alone, not the oracle's index, which loads the compiler.
+import { stripCssBlockComments } from '@csszyx/tailwind-oracle/css-comments';
+import { DEPENDENCY_OUTPUT_DIRS } from '@csszyx/tailwind-oracle/project-walk';
 
 import { normalizePathSeparators } from './path-normalization.js';
 
