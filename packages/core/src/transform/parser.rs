@@ -5646,6 +5646,27 @@ mod tests {
     use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
 
+    /// A syntax error the parser recovers from still marks the file: the
+    /// summary line is what the plugin turns into a build warning, and a
+    /// recovered parse is the case where nothing else would say so.
+    #[test]
+    fn a_recovered_syntax_error_still_reports_the_skip() {
+        let file = TransformFile {
+            filename: "/repo/src/Mixed.tsx".to_string(),
+            source: "export const a = 1 ?? 2 || 3;\n".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(!parsed.panicked, "the fixture must be a recovered parse");
+        let texts = parsed.diagnostics.texts();
+        assert!(texts.len() >= 2, "{texts:?}");
+        assert!(
+            texts[0].starts_with("[csszyx] parse error in /repo/src/Mixed.tsx"),
+            "{texts:?}"
+        );
+    }
+
     #[test]
     fn parser_shell_accepts_valid_tsx() {
         let file = TransformFile {
