@@ -50,11 +50,12 @@ describe('stripInvalidColorStrings', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('op: 50'));
     });
 
-    it('strips unrecognized colour values with a warning', () => {
+    it('keeps a colour value it does not recognise, as the engine writes it', () => {
+        // Whether the class is served is the build's verdict (ADR 0022).
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const result = stripInvalidColorStrings({ color: 'definitely not a colour!' });
-        expect(result).toEqual({});
-        expect(warn).toHaveBeenCalled();
+        expect(result).toEqual({ color: 'definitely not a colour!' });
+        expect(warn).not.toHaveBeenCalled();
     });
 
     it('recurses into nested variant objects', () => {

@@ -1,90 +1,55 @@
 /**
- * Shared color string validation helpers.
+ * The one colour-string rule the lowering applies: slash opacity in a string.
  *
  * Used by both the TypeScript compiler (transform-core.ts) and the
  * WASM pre-validator (compiler.ts) to guarantee identical behavior
- * across all transformation code paths.
+ * across all transformation code paths. Nothing here judges whether a colour
+ * class is served; the project's Tailwind does, at build (ADR 0022).
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { szNodeWarningsUnmuted } from './sz-dev-warnings.js';
+import { szWarningsQuiet } from './sz-dev-warnings.js';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
-export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
-    'inherit',
-    'current',
-    'transparent',
-    'black',
-    'white',
-    'none',
-]);
-
 /**
- * Returns true if a string value is a recognized color pattern.
+ * Whether a colour key drops this string for its slash opacity.
  *
- * Syntactic check only — does not require knowledge of the Tailwind theme.
- * Custom theme colors like brand-500 are accepted (word-number pattern).
+ * A colour key takes its opacity in the object form (`{ color, op }`), so
+ * `bg: 'red-500/50'` emits nothing and is reported as `slash-opacity-string`.
+ * That is a rule about csszyx's own input, not a verdict on a class: every
+ * other string is written as the engine writes it, and whether the project's
+ * Tailwind serves it is the build's verdict (ADR 0022). Mirrors
+ * `is_dropped_slash_opacity` in the engine: a bare fraction (`1/2`) is a
+ * sizing value, a numeric ratio (`4/2.5`) or a function value
+ * (`calc(100/5)`) is an arbitrary value, and only a slash after a digit, the
+ * shade, is opacity.
  *
- * @param value - The color string to validate.
- * @returns True if the value matches a known color pattern.
+ * @param key - The sz key.
+ * @param value - The value, without a trailing `!`.
+ * @returns True when the lowering emits nothing for it.
+ * @example isDroppedSlashOpacity('bg', 'blue-500/20') → true; ('bg', 'white/50') → false
  */
-export function isValidColorString(value: string): boolean {
-    if (COLOR_STRING_KEYWORDS.has(value)) {
-        return true;
-    }
-    if (value.startsWith('--')) {
-        return true;
-    } // CSS var: --my-color
-    if (value.startsWith('#')) {
-        return true;
-    } // Hex: #ff0000
-    if (value.startsWith('[') && value.endsWith(']')) {
-        return true;
-    } // Pre-bracketed
-    // Color functions (auto-bracketed downstream)
-    if (/^(rgb|hsl|oklch|color|hwb|lab|lch|oklab)\(/.test(value)) {
-        return true;
-    }
-    // Color scale: blue-500, brand-500, brand-primary-500 — any word-number pattern
-    if (/^[a-z][a-z0-9]*(-[a-z0-9]+)*-\d+$/i.test(value)) {
-        return true;
-    }
-    // Tailwind v4 semantic tokens: single-word or hyphenated identifiers without trailing number.
-    // Any CSS identifier is a potential semantic token (e.g. 'primary', 'muted-foreground').
-    // We accept these rather than falsely rejecting valid theme tokens.
-    if (/^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$/i.test(value)) {
-        return true;
-    }
-    return false;
+export function isDroppedSlashOpacity(key: string, value: string): boolean {
+    const slash = value.indexOf('/');
+    return (
+        PROPERTY_CATEGORY_MAP[key] === PropertyCategory.COLOR &&
+        slash > 0 &&
+        /\d/.test(value[slash - 1]) &&
+        !value.includes('(') &&
+        !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)
+    );
 }
 
 /**
- * Returns true if a color string uses slash opacity notation.
- * Only matches color-scale/number patterns where the character before
- * the slash is a digit (the shade number).
+ * Walks an sz object and strips the slash-opacity colour strings the
+ * lowering drops, warning once for each (see {@link warnStringColorOpacity}).
  *
- * @param value - The color string to check.
- * @returns True if the value contains slash opacity (e.g. "blue-500/20").
- * @example "blue-500/20" → true, "blue-500" → false
- */
-export function hasSlashOpacity(value: string): boolean {
-    const slashIdx = value.indexOf('/');
-    if (slashIdx === -1) {
-        return false;
-    }
-    return slashIdx > 0 && /\d$/.test(value.slice(0, slashIdx));
-}
-
-/**
- * Walks an sz object and strips invalid/slash-opacity color string values.
- * Emits console.warn for each stripped value.
- *
- * Returns a new object safe to pass to transform_sz (WASM path).
- * Only warns in non-production / server-side environments.
+ * Returns a new object safe to pass to transform_sz (WASM path), which
+ * cannot print the warning itself.
  *
  * @param sz - The sz prop object to sanitize.
  * @param _depth - The current recursion depth (for depth bounding).
- * @returns A new object with invalid color strings removed.
+ * @returns A new object with those strings removed.
  */
 export function stripInvalidColorStrings(
     sz: Record<string, unknown>,
@@ -120,66 +85,45 @@ function sanitizeColorEntry(
             value: stripInvalidColorStrings(value as Record<string, unknown>, depth + 1),
         };
     }
-    if (typeof value !== 'string' || PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.COLOR) {
-        return { keep: true, value };
-    }
+    if (typeof value !== 'string') return { keep: true, value };
     const color = value.replace(/!$/, '');
-    if (hasSlashOpacity(color)) {
-        warnInvalidColor(key, color, true);
-        return { keep: false, value };
-    }
-    if (!isValidColorString(color)) {
-        warnInvalidColor(key, color, false);
-        return { keep: false, value };
-    }
-    return { keep: true, value };
+    if (!isDroppedSlashOpacity(key, color)) return { keep: true, value };
+    warnStringColorOpacity(key, color);
+    return { keep: false, value };
 }
 
+/** Slash-opacity values already warned about, so a re-render cannot spam. */
+const warnedStringColorOpacity = new Set<string>();
+
 /**
- * Warn that a color string is not recognized and is therefore dropped.
- *
- * Exported because the same value is rejected on two paths — the TypeScript
- * transform and the WASM pre-validation — and the message must be one text.
- * It was written out twice before, and the copies had already drifted apart in
- * which conditions they printed under.
- *
- * @param key - Color property key.
- * @param color - Rejected color value.
+ * Forget which slash-opacity values were warned about, for a test that needs
+ * the warning again.
  */
-export function warnUnrecognizedColor(key: string, color: string): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    console.warn(
-        `[csszyx] "${key}: '${color}'" is not a recognized color value and will be ignored. ` +
-            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-    );
+export function __resetStringColorOpacityWarnings(): void {
+    warnedStringColorOpacity.clear();
 }
 
 /**
  * Warn that slash opacity in a string needs the color-object form instead.
  *
+ * Nothing is emitted for the value, so this is missing output (ADR 0011): it
+ * prints in every mode and in the browser, once per value, and only
+ * `CSSZYX_QUIET_SZ_WARNINGS` mutes it. The engines render the same text with
+ * the code `slash-opacity-string`.
+ *
  * @param key - Color property key.
- * @param color - Rejected color value, including the slash.
+ * @param color - Rejected color value, including the slash, without `!`.
+ * @param location - `file:line` of the sz object, when known.
  */
-export function warnStringColorOpacity(key: string, color: string): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
+export function warnStringColorOpacity(key: string, color: string, location?: string): void {
+    const token = `${key}:${color}`;
+    if (szWarningsQuiet() || warnedStringColorOpacity.has(token)) return;
+    warnedStringColorOpacity.add(token);
     const slash = color.indexOf('/');
+    const at = location ? ` at ${location}` : '';
     console.warn(
-        `[csszyx] "${key}: '${color}'" — string slash opacity is not supported. ` +
-            `Use object form: { color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
+        `[csszyx] "${key}: '${color}'"${at} — string slash opacity is not supported, and ` +
+            'nothing is emitted for it. Use object form: ' +
+            `{ color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
     );
-}
-
-/**
- * Emit development-only guidance for a rejected color string.
- * @param key - Color property key.
- * @param color - Rejected color value.
- * @param slashOpacity - Whether slash-opacity syntax caused rejection.
- */
-function warnInvalidColor(key: string, color: string, slashOpacity: boolean): void {
-    if (slashOpacity) {
-        warnStringColorOpacity(key, color);
-        return;
-    }
-    warnUnrecognizedColor(key, color);
 }

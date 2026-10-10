@@ -35,6 +35,8 @@
     "gen:parity-corpus": "node --import tsx/esm scripts/gen-rust-parity-corpus.mjs",
     "gen:parity-corpus:check": "node --import tsx/esm scripts/gen-rust-parity-corpus.mjs --check",
     "gen:parse-parity-corpus": "node --import tsx/esm scripts/gen-rust-parse-parity-corpus.mjs",
+    "gen:sz-capabilities": "node --import tsx/esm scripts/gen-sz-capabilities.mjs",
+    "gen:sz-capabilities:check": "node --import tsx/esm --test scripts/gen-sz-capabilities.test.mjs && node --import tsx/esm scripts/gen-sz-capabilities.mjs --check",
     "gen:rust-tables": "node scripts/generate-rust-transform-tables.mjs",
     "gen:rust-tables:check": "node --test scripts/extract-ts-tables.test.mjs && node scripts/generate-rust-transform-tables.mjs --check",
     "gen:reverse-map": "node scripts/generate-reverse-property-map.mjs",

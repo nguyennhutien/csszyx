@@ -695,8 +695,9 @@ function markDeclaredOnBoth(prefixes, keyRoles) {
  *
  * - `placeholder-<color>`: csszyx models the same CSS as a variant
  *   (`placeholder:text-gray`), so no key emits the utility spelling.
- * - `start-*` / `end-*`: the pre-v4.2 spelling of `inset-s-*` / `inset-e-*`.
- *   Deprecated upstream, still served, still in code written before v4.2.
+ * - `inset-s-*` / `inset-e-*`: the v4.2+ spelling of `start-*` / `end-*`.
+ *   csszyx writes `start-*` / `end-*`, which every v4 serves (ADR 0023); code
+ *   written for Tailwind 4.2+ may carry the newer names.
  *
  * These are ALIASES and GAPS, not a licence to grow a second vocabulary: an
  * entry belongs here only when Tailwind serves the class and csszyx's own
@@ -705,7 +706,7 @@ function markDeclaredOnBoth(prefixes, keyRoles) {
  * silently shadowed by a hand-written row.
  */
 const TAILWIND_ONLY_PREFIXES = [
-    { role: 'outer', category: 'position', prefixes: ['start', 'end'] },
+    { role: 'outer', category: 'position', prefixes: ['inset-s', 'inset-e'] },
     { role: 'inner', category: 'placeholder', prefixes: ['placeholder'] },
 ];
 

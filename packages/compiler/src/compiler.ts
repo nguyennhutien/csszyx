@@ -119,7 +119,7 @@ export class CsszyxCompiler {
         if (this.core) {
             // Pre-validate: Rust WASM cannot emit warnings, so we must warn here
             // before handing off to transform_sz. stripInvalidColorStrings returns
-            // a clean object with invalid/slash-opacity color strings removed.
+            // the object without the slash-opacity colour strings it warned about.
             const cleaned = stripInvalidColorStrings(sz as Record<string, unknown>);
             try {
                 return this.core.transform_sz(cleaned);

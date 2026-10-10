@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SZ_DIAGNOSTIC_CODES } from '../src/index.js';
-import { CODE_SOURCES } from './diagnostic-code-sources.js';
+import { CODE_SOURCES, ORACLE_CODES } from './diagnostic-code-sources.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 /**
@@ -28,8 +28,10 @@ function positionOf(source: string, index: number): { line: number; column: numb
 }
 
 describe('SZ_DIAGNOSTIC_CODES', () => {
-    it('has an engine-diagnosed source for every code', () => {
-        expect(CODE_SOURCES.map(([code]) => code).sort()).toEqual([...SZ_DIAGNOSTIC_CODES].sort());
+    it('has an engine-diagnosed source for every code the engine renders', () => {
+        expect([...CODE_SOURCES.map(([code]) => code), ...ORACLE_CODES].sort()).toEqual(
+            [...SZ_DIAGNOSTIC_CODES].sort(),
+        );
     });
 });
 
@@ -69,6 +71,15 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
         expect(JSON.parse(JSON.stringify(result.issues))).toEqual([
             { code: 'nesting-depth', line: 1, column: 1 },
         ]);
+    });
+
+    it.each(ORACLE_CODES)('never renders %s, the oracle’s verdict', code => {
+        // `p: -2` is the shape the engine reported as unsigned-value before the
+        // verdict moved to the project's Tailwind.
+        const result = transform('export const A = () => <div sz={{ p: -2 }} />;', '/p/src/A.tsx');
+
+        expect(result.issues?.map(issue => issue.code)).not.toContain(code);
+        expect(result.issues).toEqual([]);
     });
 
     it('reports no issue for a clean file', () => {

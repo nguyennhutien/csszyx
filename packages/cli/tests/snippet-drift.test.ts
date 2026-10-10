@@ -66,7 +66,12 @@ const BOTH_SPELLINGS_WORK: readonly string[] = [
  * Rows whose sz object only means what the snippet shows inside a surrounding
  * context the generator does not carry — a mask shorthand read on its own.
  */
-const NEEDS_SURROUNDING_CONTEXT: readonly string[] = ['{"b":{"from":"20%"}} mask-b-from-20% -> '];
+const NEEDS_SURROUNDING_CONTEXT: readonly string[] = [
+    // Read on its own, `b` is a variant and `from` the gradient stop colour,
+    // which every lane writes as given (`from-[20%]`): whether a colour class
+    // is served is the build's verdict, not the runtime's (ADR 0022).
+    '{"b":{"from":"20%"}} mask-b-from-20% -> b:from-[20%]',
+];
 
 /**
  * Renders one row the way the lists above spell it.

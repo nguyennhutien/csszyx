@@ -13,6 +13,23 @@ const outPath = path.join(repoRoot, 'packages/core/src/transform/generated/table
 
 const check = process.argv.includes('--check');
 
+/**
+ * The capability-table format this reader understands. The writer
+ * (`gen-sz-capabilities.mjs`) stamps its own; another number is refused rather
+ * than read as rows of a shape this reader does not know.
+ */
+const SZ_CAPABILITY_READ_FORMAT = 1;
+
+/**
+ * The column constants of the capability table, in bit order. A row letter no
+ * constant names fails the run, so a new column is rendered on purpose.
+ */
+const CAPABILITY_COLUMNS = [
+    'SZ_CAP_SIGN_NUMBER',
+    'SZ_CAP_SIGN_FRACTION',
+    'SZ_CAP_CSS_WIDE_BRACKET',
+];
+
 const tables = readTables();
 
 const generated = formatRust(renderRust(tables), 'generate-rust-transform-tables');
@@ -48,6 +65,12 @@ function readTables() {
         const varHostile = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/var-hostile-keys.ts'),
         );
+        const capabilities = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/sz-capabilities.generated.ts'),
+        );
+        const propertyTypes = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/property-types.ts'),
+        );
 
         return {
             propertyMap: core.stringObject('PROPERTY_MAP'),
@@ -58,7 +81,12 @@ function readTables() {
             knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
-            cssWideBracketPrefixes: core.stringSet('CSS_WIDE_BRACKET_PREFIXES'),
+            fractionSupportedProps: core.stringSet('FRACTION_SUPPORTED_PROPS'),
+            colorProperties: propertyTypes.objectKeysWhere(
+                'PROPERTY_CATEGORY_MAP',
+                'PropertyCategory.COLOR',
+            ),
+            ...readCapabilities(capabilities),
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
             removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
             replacedKeys: core.stringSet('REPLACED_KEYS'),
@@ -66,6 +94,7 @@ function readTables() {
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
             suggestionMap: core.stringObject('SUGGESTION_MAP'),
+            cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
             closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
@@ -79,6 +108,41 @@ function readTables() {
     }
 }
 
+/**
+ * Read the capability table: its column letters as bits, and each row.
+ *
+ * @param capabilities - Extractors over `sz-capabilities.generated.ts`.
+ * @returns The columns and the rows, rows with no column left out.
+ */
+function readCapabilities(capabilities) {
+    const format = capabilities.literal('SZ_CAPABILITY_FORMAT');
+    if (format !== SZ_CAPABILITY_READ_FORMAT) {
+        throw new Error(
+            `sz-capabilities.generated.ts has format ${format}; this reader knows ` +
+                `${SZ_CAPABILITY_READ_FORMAT}. Update generate-rust-transform-tables.mjs.`,
+        );
+    }
+    const capabilityColumns = CAPABILITY_COLUMNS.map((name, index) => ({
+        name,
+        letter: capabilities.literal(name),
+        bit: 1 << index,
+    }));
+    const bitOf = new Map(capabilityColumns.map(({ letter, bit }) => [letter, bit]));
+    const capabilityRows = capabilities
+        .stringObject('SZ_CAPABILITIES')
+        .map(([key, letters]) => [
+            key,
+            [...letters].reduce((bits, letter) => {
+                const bit = bitOf.get(letter);
+                if (bit === undefined)
+                    throw new Error(`SZ_CAPABILITIES.${key} has column ${letter}`);
+                return bits | bit;
+            }, 0),
+        ])
+        .filter(([, bits]) => bits !== 0);
+    return { capabilityColumns, capabilityRows };
+}
+
 function renderRust({
     propertyMap,
     variantMap,
@@ -88,7 +152,10 @@ function renderRust({
     knownSpecialProperties,
     cssWideKeywords,
     cssWideKeywordUtilities,
-    cssWideBracketPrefixes,
+    fractionSupportedProps,
+    colorProperties,
+    capabilityColumns,
+    capabilityRows,
     removedBooleanSugar,
     removedBooleanSugarReplacement,
     replacedKeys,
@@ -96,6 +163,7 @@ function renderRust({
     ariaStates,
     specialVariants,
     suggestionMap,
+    cssVarTypeHints,
     migrationNotes,
     closedEnumClasses,
     closedEnumAffixes,
@@ -129,6 +197,16 @@ ${renderMatchArms(variantMap)}
 pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
     match key {
 ${renderMatchArms(suggestionMap)}
+        _ => None,
+    }
+}
+
+/// The data type a key's variable value is written with, in front of it
+/// (\`bg-(position:--v)\`): Tailwind gives an untyped variable to the prefix's
+/// default utility. Mirrors \`CSS_VAR_TYPE_HINTS\`.
+pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
+    match key {
+${renderMatchArms(cssVarTypeHints)}
         _ => None,
     }
 }
@@ -193,13 +271,49 @@ ${renderMatchPatterns(cssWideKeywordUtilities)}
     )
 }
 
-/// Whether a CSS-wide keyword may take the arbitrary form on this prefix.
-/// Mirrors \`CSS_WIDE_BRACKET_PREFIXES\`.
-pub(crate) fn is_css_wide_bracket_prefix(prefix: &str) -> bool {
+/// Properties that take a native Tailwind fraction (\`w-1/2\`, \`basis-1/3\`)
+/// instead of brackets. Mirrors \`FRACTION_SUPPORTED_PROPS\`.
+pub(crate) fn is_fraction_supported_prop(key: &str) -> bool {
     matches!(
-        prefix,
-${renderMatchPatterns(cssWideBracketPrefixes)}
+        key,
+${renderMatchPatterns(fractionSupportedProps)}
     )
+}
+
+/// Keys whose value is a colour alone (\`bg\`, \`color\`, \`fill\`). Mirrors the
+/// \`PropertyCategory.COLOR\` entries of \`PROPERTY_CATEGORY_MAP\`.
+pub(crate) fn is_color_property(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(colorProperties)}
+    )
+}
+
+${capabilityColumns
+    .map(
+        ({ name, bit }) =>
+            `/// A bit of [\`sz_capabilities\`]. Mirrors \`${name}\`.\npub(crate) const ${name}: u8 = ${bit};`,
+    )
+    .join('\n')}
+
+/// The rows of \`SZ_CAPABILITIES\` that have a column, sorted by key bytes for
+/// [\`sz_capabilities\`]'s binary search. A sorted slice costs the wasm
+/// artifact ~400 gzip bytes less than a \`match\` over the same keys.
+pub(crate) static SZ_CAPABILITY_ROWS: [(&str, u8); ${capabilityRows.length}] = [
+${[...capabilityRows]
+    .sort(([a], [b]) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
+    .map(([key, bits]) => `    (${rustString(key)}, ${bits}),`)
+    .join('\n')}
+];
+
+/// How both lanes spell an sz key, as \`SZ_CAP_*\` bits. Mirrors
+/// \`SZ_CAPABILITIES\`, which \`gen-sz-capabilities.mjs\` measured against the
+/// Tailwind this repo pins: a spelling convention, not a verdict about a
+/// project's Tailwind (PROJECT-RULES §4). A key with no column, or unknown, is \`0\`.
+pub(crate) fn sz_capabilities(key: &str) -> u8 {
+    SZ_CAPABILITY_ROWS
+        .binary_search_by(|(row, _)| row.as_bytes().cmp(key.as_bytes()))
+        .map_or(0, |index| SZ_CAPABILITY_ROWS[index].1)
 }
 
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/

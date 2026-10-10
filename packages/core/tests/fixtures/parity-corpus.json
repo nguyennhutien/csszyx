@@ -2290,7 +2290,7 @@
         }
       ]
     },
-    "oxc": "bg-size-[8px_8px]"
+    "oxc": "bg-[length:8px_8px]"
   },
   {
     "sz": "{\"bgRepeat\":\"no-repeat\"}",
@@ -5673,7 +5673,7 @@
         }
       ]
     },
-    "oxc": "hover:inset-s-2"
+    "oxc": "hover:start-2"
   },
   {
     "sz": "{\"ringColor\":\"red-500\"}",
@@ -6761,6 +6761,25 @@
     "oxc": "bg-linear-to-r"
   },
   {
+    "sz": "{\"--my-var\":\"10px\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--my-var",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "10px"
+          }
+        }
+      ]
+    },
+    "oxc": "[--my-var:10px]"
+  },
+  {
     "sz": "{\"@container\":true}",
     "ir": {
       "properties": [
@@ -7120,6 +7139,63 @@
       ]
     },
     "oxc": "animate-spin"
+  },
+  {
+    "sz": "{\"animationDelay\":\"0.5s\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "animationDelay",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "0.5s"
+          }
+        }
+      ]
+    },
+    "oxc": "[animation-delay:0.5s]"
+  },
+  {
+    "sz": "{\"animationDelay\":0}",
+    "ir": {
+      "properties": [
+        {
+          "key": "animationDelay",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 0
+          }
+        }
+      ]
+    },
+    "oxc": "[animation-delay:0ms]"
+  },
+  {
+    "sz": "{\"animationDelay\":150}",
+    "ir": {
+      "properties": [
+        {
+          "key": "animationDelay",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 150
+          }
+        }
+      ]
+    },
+    "oxc": "[animation-delay:150ms]"
   },
   {
     "sz": "{\"appearance\":\"auto\"}",
@@ -9014,6 +9090,25 @@
     "oxc": "-bg-linear-4"
   },
   {
+    "sz": "{\"bgImg\":\"--my-image\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bgImg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--my-image"
+          }
+        }
+      ]
+    },
+    "oxc": "bg-(image:--my-image)"
+  },
+  {
     "sz": "{\"bgImg\":{\"gradient\":\"conic\"}}",
     "ir": {
       "properties": [
@@ -9579,7 +9674,7 @@
         }
       ]
     },
-    "oxc": "bg-(--bg-pos)"
+    "oxc": "bg-(position:--bg-pos)"
   },
   {
     "sz": "{\"bgPos\":\"center top 1rem\"}",
@@ -9599,6 +9694,25 @@
       ]
     },
     "oxc": "bg-[center_top_1rem]"
+  },
+  {
+    "sz": "{\"bgPos\":\"var(--bg-pos)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bgPos",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "var(--bg-pos)"
+          }
+        }
+      ]
+    },
+    "oxc": "bg-[position:var(--bg-pos)]"
   },
   {
     "sz": "{\"bgPos\":\"bottom\"}",
@@ -9848,6 +9962,44 @@
     "oxc": "bg-repeat-y"
   },
   {
+    "sz": "{\"bgSize\":\"--bg-size\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bgSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--bg-size"
+          }
+        }
+      ]
+    },
+    "oxc": "bg-(length:--bg-size)"
+  },
+  {
+    "sz": "{\"bgSize\":\"auto 100px\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bgSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "auto 100px"
+          }
+        }
+      ]
+    },
+    "oxc": "bg-[length:auto_100px]"
+  },
+  {
     "sz": "{\"bgSize\":\"auto\"}",
     "ir": {
       "properties": [
@@ -9884,44 +10036,6 @@
       ]
     },
     "oxc": "bg-contain"
-  },
-  {
-    "sz": "{\"bgSize\":\"--bg-size\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "bgSize",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "--bg-size"
-          }
-        }
-      ]
-    },
-    "oxc": "bg-size-(--bg-size)"
-  },
-  {
-    "sz": "{\"bgSize\":\"auto 100px\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "bgSize",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "auto 100px"
-          }
-        }
-      ]
-    },
-    "oxc": "bg-size-[auto_100px]"
   },
   {
     "sz": "{\"blockSize\":\"--bs\"}",
@@ -10244,7 +10358,7 @@
         }
       ]
     },
-    "oxc": "border-(--w)"
+    "oxc": "border-(length:--w)"
   },
   {
     "sz": "{\"border\":\"3px\"}",
@@ -13561,7 +13675,7 @@
         }
       ]
     },
-    "oxc": "decoration-(--v)"
+    "oxc": "decoration-(length:--v)"
   },
   {
     "sz": "{\"decorationThickness\":\"3px\"}",
@@ -14412,6 +14526,25 @@
     "oxc": "drop-shadow-xs"
   },
   {
+    "sz": "{\"dropShadowColor\":\"--c\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "dropShadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--c"
+          }
+        }
+      ]
+    },
+    "oxc": "drop-shadow-(color:--c)"
+  },
+  {
     "sz": "{\"duration\":0}",
     "ir": {
       "properties": [
@@ -14599,7 +14732,7 @@
         }
       ]
     },
-    "oxc": "inset-e-4"
+    "oxc": "end-4"
   },
   {
     "sz": "{\"fieldSizing\":\"content\"}",
@@ -15096,6 +15229,25 @@
     "oxc": "float-start"
   },
   {
+    "sz": "{\"fontFamily\":\"--f\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "fontFamily",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--f"
+          }
+        }
+      ]
+    },
+    "oxc": "font-(family-name:--f)"
+  },
+  {
     "sz": "{\"fontFamily\":\"mono\"}",
     "ir": {
       "properties": [
@@ -15473,7 +15625,7 @@
         }
       ]
     },
-    "oxc": "from-(--from-pos)"
+    "oxc": "from-(length:--from-pos)"
   },
   {
     "sz": "{\"fromPos\":\"300px\"}",
@@ -16822,7 +16974,7 @@
         }
       ]
     },
-    "oxc": "inset-e-4"
+    "oxc": "end-4"
   },
   {
     "sz": "{\"insetS\":4}",
@@ -16841,7 +16993,7 @@
         }
       ]
     },
-    "oxc": "inset-s-4"
+    "oxc": "start-4"
   },
   {
     "sz": "{\"insetShadow\":\"2xs\"}",
@@ -16880,6 +17032,69 @@
       ]
     },
     "oxc": "inset-shadow-none"
+  },
+  {
+    "sz": "{\"insetShadowColor\":\"--c\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "insetShadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--c"
+          }
+        }
+      ]
+    },
+    "oxc": "inset-shadow-(color:--c)"
+  },
+  {
+    "sz": "{\"insetShadowColor\":{\"color\":\"--c\",\"op\":30}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "insetShadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--c"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 30
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "inset-shadow-(color:--c)/30"
   },
   {
     "sz": "{\"insetShadowColor\":{\"color\":\"black\",\"op\":30}}",
@@ -21657,7 +21872,7 @@
         }
       ]
     },
-    "oxc": "outline-(--w)"
+    "oxc": "outline-(length:--w)"
   },
   {
     "sz": "{\"outline\":\"3px\"}",
@@ -26999,6 +27214,69 @@
     "oxc": "shadow-xs"
   },
   {
+    "sz": "{\"shadowColor\":{\"color\":\"--c\",\"op\":50}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--c"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 50
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-(color:--c)/50"
+  },
+  {
+    "sz": "{\"shadowColor\":\"--my-color\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--my-color"
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-(color:--my-color)"
+  },
+  {
     "sz": "{\"shadowColor\":\"blue-500\"}",
     "ir": {
       "properties": [
@@ -27952,7 +28230,7 @@
         }
       ]
     },
-    "oxc": "inset-s-4"
+    "oxc": "start-4"
   },
   {
     "sz": "{\"stroke\":\"--c\"}",
@@ -28104,7 +28382,7 @@
         }
       ]
     },
-    "oxc": "stroke-(--w)"
+    "oxc": "stroke-(length:--w)"
   },
   {
     "sz": "{\"strokeWidth\":\"0.5rem\"}",
@@ -28219,6 +28497,25 @@
       ]
     },
     "oxc": "table-fixed"
+  },
+  {
+    "sz": "{\"text\":\"--size\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--size"
+          }
+        }
+      ]
+    },
+    "oxc": "text-(length:--size)"
   },
   {
     "sz": "{\"text\":\"1.5rem\"}",
@@ -28465,7 +28762,7 @@
         }
       ]
     },
-    "oxc": "to-(--to-pos)"
+    "oxc": "to-(length:--to-pos)"
   },
   {
     "sz": "{\"toPos\":\"300px\"}",
@@ -29149,7 +29446,7 @@
         }
       ]
     },
-    "oxc": "via-(--via-pos)"
+    "oxc": "via-(length:--via-pos)"
   },
   {
     "sz": "{\"viaPos\":\"300px\"}",
@@ -29454,6 +29751,25 @@
       ]
     },
     "oxc": "w-svw"
+  },
+  {
+    "sz": "{\"weight\":\"--w\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--w"
+          }
+        }
+      ]
+    },
+    "oxc": "font-(--w)"
   },
   {
     "sz": "{\"weight\":100}",

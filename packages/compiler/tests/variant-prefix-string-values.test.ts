@@ -104,7 +104,7 @@ const STRING_VALUED: readonly (readonly [string, string, string, string])[] = [
     [
         'viaPos',
         '--via-pos',
-        'via-(--via-pos)',
+        'via-(length:--via-pos)',
         "export const A = () => <div sz={{ sm: { viaPos: '--via-pos' } }} />;",
     ],
     ['toPos', '50%', 'to-50%', "export const A = () => <div sz={{ sm: { toPos: '50%' } }} />;"],

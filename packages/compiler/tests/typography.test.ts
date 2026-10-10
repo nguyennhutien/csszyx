@@ -99,8 +99,9 @@ describe('typography — font weight', () => {
         expect(t({ weight: 550 })).toBe('font-[550]');
     });
 
-    it('{ weight: "--w" } → font-(weight:--w) (css variable)', () => {
-        expect(t({ weight: '--w' })).toBe('font-(weight:--w)');
+    it('{ weight: "--w" } → font-(--w) (css variable)', () => {
+        // Tailwind reads an untyped `font-(--w)` as the weight on every v4.
+        expect(t({ weight: '--w' })).toBe('font-(--w)');
     });
 });
 
@@ -316,8 +317,9 @@ describe('typography — text decoration', () => {
         expect(t({ decorationThickness: '3px' })).toBe('decoration-[3px]');
     });
 
-    it('{ decorationThickness: "--v" } → decoration-(--v) (css variable)', () => {
-        expect(t({ decorationThickness: '--v' })).toBe('decoration-(--v)');
+    it('{ decorationThickness: "--v" } → decoration-(length:--v) (css variable)', () => {
+        // `decoration-(--v)` is the decoration colour.
+        expect(t({ decorationThickness: '--v' })).toBe('decoration-(length:--v)');
     });
 
     it('{ decoration: "underline" } → underline', () => {

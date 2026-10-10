@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn generated_property_and_boolean_maps() {
         let classes = lower(vec![("start", n(4.0)), ("display", s("inline-block"))]);
-        assert!(classes.contains(&"inset-s-4".to_string()));
+        assert!(classes.contains(&"start-4".to_string()));
         assert!(classes.contains(&"inline-block".to_string()));
     }
 
@@ -154,14 +154,15 @@ mod tests {
     }
 
     #[test]
-    fn slash_opacity_string_suppressed() {
-        // String slash opacity must be suppressed — use object form via TS compiler.
+    fn slash_opacity_string_on_a_colour_key_is_suppressed() {
+        // A colour key takes its opacity in the object form, as in the
+        // TypeScript core; any other key writes the class as given.
         let classes = lower(vec![
             ("bg", s("red-500/50")),
             ("text", s("blue-600/75")),
             ("bg2", s("brand-500/20")),
         ]);
-        assert!(!classes.iter().any(|c| c.contains('/')));
+        assert_eq!(classes, ["text-blue-600/75", "bg2-brand-500/20"]);
     }
 
     #[test]

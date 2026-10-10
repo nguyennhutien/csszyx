@@ -1,102 +1,50 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-    hasSlashOpacity,
-    isValidColorString,
+    __resetStringColorOpacityWarnings,
+    isDroppedSlashOpacity,
     stripInvalidColorStrings,
 } from '../src/color-validation.js';
 import { transform } from '../src/transform-core.js';
 
 /**
- * Tests for strict color string validation.
+ * Tests for the one colour-string rule the lowering applies.
  *
- * Covers all 3 code paths:
- *   1. isValidColorString / hasSlashOpacity helpers (shared across paths)
- *   2. transform() end-to-end — JS path (transform-core.ts validates + warns)
+ * A colour key takes its opacity in the object form, so a string with slash
+ * opacity emits nothing and is reported. Every other string is written as the
+ * engine writes it: whether the class is served is the build's verdict
+ * (ADR 0022), so nothing here judges a colour.
+ *
+ * Covers both code paths:
+ *   1. isDroppedSlashOpacity (shared by the transform and WASM pre-validation)
+ *   2. transform() end-to-end — JS path (transform-core.ts drops + warns)
  */
 
-describe('isValidColorString', () => {
-    it('accepts known keywords', () => {
-        expect(isValidColorString('inherit')).toBe(true);
-        expect(isValidColorString('current')).toBe(true);
-        expect(isValidColorString('transparent')).toBe(true);
-        expect(isValidColorString('black')).toBe(true);
-        expect(isValidColorString('white')).toBe(true);
-        expect(isValidColorString('none')).toBe(true);
+describe('isDroppedSlashOpacity', () => {
+    it.each([
+        ['bg', 'blue-500/20'],
+        ['bg', 'brand-500/02'],
+        ['color', 'red-500/50'],
+        ['borderColor', '-red-500/50'],
+    ])('drops %s: %s', (key, value) => {
+        expect(isDroppedSlashOpacity(key, value)).toBe(true);
     });
 
-    it('accepts CSS variables', () => {
-        expect(isValidColorString('--my-color')).toBe(true);
-        expect(isValidColorString('--brand-primary')).toBe(true);
-    });
-
-    it('accepts hex colors', () => {
-        expect(isValidColorString('#ff0000')).toBe(true);
-        expect(isValidColorString('#333')).toBe(true);
-        expect(isValidColorString('#aabbcc')).toBe(true);
-    });
-
-    it('accepts pre-bracketed values', () => {
-        expect(isValidColorString('[#333]')).toBe(true);
-        expect(isValidColorString('[rgb(255,0,0)]')).toBe(true);
-    });
-
-    it('accepts color functions', () => {
-        expect(isValidColorString('rgb(255,0,0)')).toBe(true);
-        expect(isValidColorString('hsl(200,50%,50%)')).toBe(true);
-        expect(isValidColorString('oklch(50% 0.1 200)')).toBe(true);
-        expect(isValidColorString('color(display-p3 1 0 0)')).toBe(true);
-        expect(isValidColorString('hwb(200 10% 10%)')).toBe(true);
-        expect(isValidColorString('lab(50 20 -30)')).toBe(true);
-        expect(isValidColorString('lch(50 30 200)')).toBe(true);
-        expect(isValidColorString('oklab(0.5 0.1 -0.1)')).toBe(true);
-    });
-
-    it('accepts color scale patterns (word-number)', () => {
-        expect(isValidColorString('blue-500')).toBe(true);
-        expect(isValidColorString('red-100')).toBe(true);
-        expect(isValidColorString('brand-500')).toBe(true);
-        expect(isValidColorString('brand-primary-500')).toBe(true);
-        expect(isValidColorString('my-custom-color-900')).toBe(true);
-    });
-
-    it('rejects slash opacity strings', () => {
-        expect(isValidColorString('blue-500/20')).toBe(false);
-        expect(isValidColorString('brand-500/02')).toBe(false);
-        expect(isValidColorString('red-500/50')).toBe(false);
-    });
-
-    it('rejects non-identifier strings', () => {
-        expect(isValidColorString('500blue')).toBe(false); // starts with digit (invalid CSS ident)
-    });
-
-    it('accepts Tailwind v4 semantic tokens (CSS identifiers)', () => {
-        // Any CSS identifier is a potential semantic token in TW v4
-        expect(isValidColorString('primary')).toBe(true);
-        expect(isValidColorString('background')).toBe(true);
-        expect(isValidColorString('muted-foreground')).toBe(true);
-        expect(isValidColorString('card')).toBe(true);
-        expect(isValidColorString('popover')).toBe(true);
-    });
-});
-
-describe('hasSlashOpacity', () => {
-    it('detects slash opacity', () => {
-        expect(hasSlashOpacity('blue-500/20')).toBe(true);
-        expect(hasSlashOpacity('brand-500/02')).toBe(true); // typo — still detected
-        expect(hasSlashOpacity('red-500/50')).toBe(true);
-        expect(hasSlashOpacity('brand-primary-500/75')).toBe(true);
-    });
-
-    it('rejects plain color strings', () => {
-        expect(hasSlashOpacity('blue-500')).toBe(false);
-        expect(hasSlashOpacity('inherit')).toBe(false);
-        expect(hasSlashOpacity('#ff0000')).toBe(false);
-    });
-
-    it('detects slash when digit precedes it', () => {
-        // w-1/2 also matches (digit before slash) — but this is only called on COLOR props
-        expect(hasSlashOpacity('w-1/2')).toBe(true);
+    it.each([
+        // Not a shade before the slash: written as given.
+        ['bg', 'white/50'],
+        ['bg', 'blue-500'],
+        ['bg', '/50'],
+        // A sizing fraction, a numeric ratio, a function value.
+        ['bg', '1/2'],
+        ['bg', '4/2.5'],
+        ['bg', '-1/2'],
+        ['bg', 'calc(100/5)'],
+        // Not a colour key: the slash is Tailwind's on every v4.
+        ['text', 'red-500/50'],
+        ['w', '1/2'],
+    ])('keeps %s: %s', (key, value) => {
+        expect(isDroppedSlashOpacity(key, value)).toBe(false);
     });
 });
 
@@ -147,6 +95,19 @@ describe('transform() — color string validation (JS path)', () => {
                     expect.stringContaining('string slash opacity is not supported'),
                 );
             }
+        });
+    });
+
+    describe('strings no rule drops — written as the engine writes them', () => {
+        it.each([
+            ['white/50', 'bg-white/50'],
+            ['50%', 'bg-[50%]'],
+            ['var(--x)', 'bg-[var(--x)]'],
+            ['!!!', 'bg-!!!'],
+        ])('writes bg: %s as %s', (value, expectedClass) => {
+            const result = transform({ bg: value });
+            expect(result.className).toBe(expectedClass);
+            expect(console.warn).not.toHaveBeenCalled();
         });
     });
 
@@ -216,6 +177,7 @@ describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
 
     beforeEach(() => {
         warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        __resetStringColorOpacityWarnings();
     });
 
     afterEach(() => {
@@ -234,12 +196,6 @@ describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
      * — so honouring the switch on only one of the two paths makes the
      * documented behaviour depend on which engine happens to be active.
      */
-    it('silences the invalid-color warning', () => {
-        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
-        stripInvalidColorStrings({ color: '!!!' });
-        expect(warn).not.toHaveBeenCalled();
-    });
-
     it('silences the slash-opacity warning', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
         stripInvalidColorStrings({ color: 'blue-500/50' });
@@ -248,7 +204,13 @@ describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
 
     it('still warns when the switch is unset', () => {
         delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
-        stripInvalidColorStrings({ color: '!!!' });
+        stripInvalidColorStrings({ color: 'blue-500/50' });
         expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a value no rule drops, without a word', () => {
+        delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
+        expect(stripInvalidColorStrings({ color: '!!!' })).toEqual({ color: '!!!' });
+        expect(warn).not.toHaveBeenCalled();
     });
 });

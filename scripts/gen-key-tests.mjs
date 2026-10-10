@@ -38,7 +38,7 @@ const outPath = join(repoRoot, 'packages/cli/tests/generated/sz-key-cases.json')
 
 // Classes that look like utilities but are not (custom CSS imports, demo markers).
 const SKIP_CLASSES = new Set(["import './custom.css'", 'tw-text-center', 'tab-active', 'N/A']);
-const TW_TOKEN_RE = /^!?(?:[\w-]+:)*[\w\-./[\]()@#%]+$/;
+const TW_TOKEN_RE = /^!?(?:[\w-]+:)*[\w\-./[\]()@#%:]+$/;
 const CSS_FN_RE = /^(?:calc|var|url|rgb|rgba|hsl|hsla|oklch|color|env|min|max|clamp)\(/;
 
 /**
@@ -53,6 +53,25 @@ function isValidTwToken(token) {
 }
 
 /**
+ * Whether a class carries a variant: a `:` outside every `[]` and `()`.
+ *
+ * A colon inside one belongs to the value — a type hint (`bg-[length:8px]`,
+ * `bg-(position:--x)`, `shadow-(color:--v)`) or an arbitrary property
+ * (`[--brand:navy]`) — so those classes stay in the corpus.
+ * @param cls Candidate class string.
+ * @returns Whether a variant prefixes the utility.
+ */
+export function hasVariantColon(cls) {
+    let depth = 0;
+    for (const ch of cls) {
+        if (ch === '[' || ch === '(') depth++;
+        else if ((ch === ']' || ch === ')') && depth > 0) depth--;
+        else if (ch === ':' && depth === 0) return true;
+    }
+    return false;
+}
+
+/**
  * Returns true when a class is a single concrete utility we can both compile and
  * migrate — no placeholders, ranges, variants, or multi-class strings.
  * @param cls Candidate class string.
@@ -61,7 +80,7 @@ function isValidTwToken(token) {
 function isConcrete(cls) {
     if (!cls || SKIP_CLASSES.has(cls)) return false;
     if (/\s/.test(cls)) return false; // multi-class element string
-    if (cls.includes(':')) return false; // variant — covered by roundtrip.test.ts
+    if (hasVariantColon(cls)) return false; // variant — covered by roundtrip.test.ts
     if (/[<>]|\.\.\.|\betc\b|\(value\)|\(--x\)/.test(cls)) return false; // placeholder
     return isValidTwToken(cls);
 }
@@ -82,7 +101,7 @@ const PLACEHOLDER_SUBS = [
  * @returns A concrete class string, or null if it cannot be concretized.
  */
 function concretizeClass(cls) {
-    if (!cls || /\s/.test(cls) || cls.includes(':')) return null;
+    if (!cls || /\s/.test(cls) || hasVariantColon(cls)) return null;
     if (isConcrete(cls)) return cls;
     for (const [re, val] of PLACEHOLDER_SUBS) {
         if (re.test(cls)) {

@@ -60,10 +60,11 @@ the document.
   { sz: "{ inset: '-px' }", tw: "-inset-px" },
 ]} />
 
-:::tip[New in v4.2]
-Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
-`{ insetE: 4 }` → `inset-e-4` (inline-end), `{ insetBs: 4 }` → `inset-bs-4`
-(block-start), `{ insetBe: 4 }` → `inset-be-4` (block-end).
+:::tip[Logical insets]
+`{ insetS: 4 }` → `start-4` (inline-start) and `{ insetE: 4 }` → `end-4`
+(inline-end), the spelling every Tailwind v4 serves (`inset-s-*` / `inset-e-*`
+are the 4.2+ names for the same CSS). New in v4.2: `{ insetBs: 4 }` →
+`inset-bs-4` (block-start), `{ insetBe: 4 }` → `inset-be-4` (block-end).
 :::
 
 ## Overflow

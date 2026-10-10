@@ -30,6 +30,7 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
     'removed-key': "export const A = () => <div sz={{ maskFrom: '10%' }} />;",
     'numeric-key': "export const A = () => <div sz={{ 0: 'x' }} />;",
     'closed-enum-value': "export const A = () => <div sz={{ display: 'bogus' }} />;",
+    'slash-opacity-string': "export const A = () => <div sz={{ bg: 'red-500/50' }} />;",
     'off-scale-value': 'export const A = () => <div sz={{ p: 1.3 }} />;',
     'numeric-font-weight': "export const A = () => <div sz={{ weight: '700' }} />;",
     'per-side-border-style':
@@ -37,6 +38,8 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
     'property-object': 'export const A = () => <div sz={{ p: { x: 4 } }} />;',
     'non-variant-object': 'export const A = () => <div sz={{ container: { x: 1 } }} />;',
     'unknown-field': 'export const A = () => <div sz={{ maskLinear: { zzz: 1 } }} />;',
+    'moved-value':
+        "export const A = () => <div sz={{ touchAction: 'pan-y', hover: { mask: 'linear-45' } }} />;",
     'runtime-value': 'export const A = ({ v }) => <div sz={{ alignContent: v }} />;',
     'unresolvable-spread': 'export const A = (props) => <div sz={{ ...props.x, p: 4 }} />;',
     'style-override':
@@ -51,8 +54,9 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
 
 describe('SZ_DIAGNOSTIC_KIND_IDS', () => {
     it('is every engine code, then other', () => {
-        // Every code has an engine-diagnosed source (diagnostic-codes.test.ts),
-        // so no id here is one `csszyx check --rule` accepts and never selects.
+        // Every code has an engine-diagnosed source or is one the build-time
+        // oracle reports (diagnostic-codes.test.ts), so no id here is one
+        // `csszyx check --rule` accepts and nothing can ever select.
         expect(SZ_DIAGNOSTIC_KIND_IDS).toEqual([...SZ_DIAGNOSTIC_CODES, 'other']);
     });
 
@@ -96,6 +100,18 @@ describe.each(ENGINES)('diagnostic kinds — %s', (_name, transform) => {
             }
         },
     );
+});
+
+describe('a code only the build-time oracle reports', () => {
+    it('is read from its code, never from a runtime text', () => {
+        // The runtime said this once, from a table baked from the pinned
+        // Tailwind. It no longer judges (ADR 0022), so no text maps to the kind.
+        const text =
+            '[csszyx] "p: -2": Tailwind serves no negative "p" utility for this value, so the class generates no CSS.';
+
+        expect(szDiagnosticKindOf(text)).toBe('other');
+        expect(szDiagnosticKindOf(text, 'unsigned-value')).toBe('unsigned-value');
+    });
 });
 
 describe('a diagnostic with a code', () => {

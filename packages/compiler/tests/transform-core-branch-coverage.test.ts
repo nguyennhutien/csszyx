@@ -353,11 +353,11 @@ describe('bgImg string syntax and repeats', () => {
     });
     it('bgPos and bgSize', () => {
         expect(cls({ bgPos: 'center' })).toBe('bg-center');
-        expect(cls({ bgPos: '--p' })).toBe('bg-(--p)');
+        expect(cls({ bgPos: '--p' })).toBe('bg-(position:--p)');
         expect(cls({ bgPos: 'center top 1rem' })).toBe('bg-[center_top_1rem]');
         expect(cls({ bgSize: 'cover' })).toBe('bg-cover');
-        expect(cls({ bgSize: '--s' })).toBe('bg-size-(--s)');
-        expect(cls({ bgSize: '200px 100px' })).toBe('bg-size-[200px_100px]');
+        expect(cls({ bgSize: '--s' })).toBe('bg-(length:--s)');
+        expect(cls({ bgSize: '200px 100px' })).toBe('bg-[length:200px_100px]');
     });
 });
 
@@ -431,7 +431,7 @@ describe('string property handler chain', () => {
         expect(cls({ decorationColor: 'red-500' })).toBe('decoration-red-500');
         expect(cls({ decorationThickness: '2' })).toBe('decoration-2');
         expect(cls({ decorationThickness: '3px' })).toBe('decoration-[3px]');
-        expect(cls({ decorationThickness: '--t' })).toBe('decoration-(--t)');
+        expect(cls({ decorationThickness: '--t' })).toBe('decoration-(length:--t)');
     });
     it('fontStretch keyword / var / integer% / decimal% / arbitrary', () => {
         expect(cls({ fontStretch: 'condensed' })).toBe('font-stretch-condensed');
@@ -468,7 +468,7 @@ describe('string property handler chain', () => {
     it('fromPos/viaPos/toPos strings and numbers', () => {
         expect(cls({ fromPos: 50 })).toBe('from-50%');
         expect(cls({ viaPos: 30 })).toBe('via-30%');
-        expect(cls({ toPos: '--p' })).toBe('to-(--p)');
+        expect(cls({ toPos: '--p' })).toBe('to-(length:--p)');
         expect(cls({ fromPos: '15%' })).toBe('from-15%');
         expect(cls({ fromPos: '13.5%' })).toBe('from-[13.5%]');
     });
@@ -503,8 +503,11 @@ describe('color-string validation and snap/variant shortcuts', () => {
     it('warns and drops a string slash-opacity color', () => {
         expect(cls({ color: 'red-500/50' })).toBe('');
     });
-    it('warns and drops an unrecognized color string', () => {
-        expect(cls({ color: 'definitely not a color!!!' })).toBe('');
+    it('writes a colour string it does not recognise, as the engine does', () => {
+        // Whether the class is served is the build's verdict (ADR 0022).
+        expect(cls({ color: 'definitely not a color!!!' })).toBe(
+            'text-[definitely_not_a_color!!]!',
+        );
     });
     it('keeps a valid string color', () => {
         expect(cls({ color: 'red-500' })).toBe('text-red-500');

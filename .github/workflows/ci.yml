@@ -413,6 +413,14 @@ jobs:
       - name: Check Rust parity corpus is current
         run: pnpm gen:parity-corpus:check
 
+      # The spelling table (how each sz key writes a class for each value
+      # shape) is generated from the pinned Tailwind. Fail when it is stale, so
+      # a Tailwind bump that changes a column is regenerated and reviewed. It
+      # decides spelling only; whether a class has CSS is asked of the
+      # project's own Tailwind. Both engines read it through the Rust tables.
+      - name: Check sz capability table is current
+        run: pnpm gen:sz-capabilities:check
+
       # The Rust transform lookup tables are generated from the TS compiler's
       # PROPERTY_MAP/VARIANT_MAP. Fail if regenerating would change them, so the
       # native engine can't drift from the TS source of truth.

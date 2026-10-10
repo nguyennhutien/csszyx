@@ -114,6 +114,7 @@ env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --nat
 echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parity corpus, rust tables)..."
 pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
+pnpm gen:sz-capabilities:check
 pnpm gen:rust-tables:check
 pnpm gen:reverse-map:check
 pnpm gen:migrate-tables:check

@@ -8,7 +8,9 @@ export type SzDiagnosticCode =
     | 'removed-key'
     | 'numeric-key'
     | 'closed-enum-value'
+    | 'slash-opacity-string'
     | 'off-scale-value'
+    | 'unsigned-value'
     | 'numeric-font-weight'
     | 'per-side-border-style'
     | 'property-object'
@@ -41,7 +43,9 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'removed-key',
     'numeric-key',
     'closed-enum-value',
+    'slash-opacity-string',
     'off-scale-value',
+    'unsigned-value',
     'numeric-font-weight',
     'per-side-border-style',
     'property-object',

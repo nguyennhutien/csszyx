@@ -36,12 +36,12 @@ Utilities for controlling the stroke color of SVG elements.
 
 Utilities for controlling the stroke width of SVG elements.
 
-| Concept       | CSS Rule                 | Tailwind v4 Class | `sz` Prop (Object Syntax)   | Note                                                         |
-| :------------ | :----------------------- | :---------------- | :-------------------------- | :----------------------------------------------------------- |
-| **Scale**     | `stroke-width: <number>` | `stroke-<number>` | `{ strokeWidth: <number> }` | v4: fully dynamic, no static scale, accept any integer bare. |
-| **Arbitrary** | `stroke-width: 0.5`      | `stroke-[0.5]`    | `{ strokeWidth: 0.5 }`      | decimal                                                      |
-| **Arbitrary** | `stroke-width: 0.5rem`   | `stroke-[0.5rem]` | `{ strokeWidth: '0.5rem' }` | CSS unit                                                     |
-| **Variable**  | `stroke-width: var(--w)` | `stroke-(--w)`    | `{ strokeWidth: '--w' }`    | **Sugar**: Auto-detects `--`.                                |
+| Concept       | CSS Rule                 | Tailwind v4 Class     | `sz` Prop (Object Syntax)   | Note                                                         |
+| :------------ | :----------------------- | :-------------------- | :-------------------------- | :----------------------------------------------------------- |
+| **Scale**     | `stroke-width: <number>` | `stroke-<number>`     | `{ strokeWidth: <number> }` | v4: fully dynamic, no static scale, accept any integer bare. |
+| **Arbitrary** | `stroke-width: 0.5`      | `stroke-[0.5]`        | `{ strokeWidth: 0.5 }`      | decimal                                                      |
+| **Arbitrary** | `stroke-width: 0.5rem`   | `stroke-[0.5rem]`     | `{ strokeWidth: '0.5rem' }` | CSS unit                                                     |
+| **Variable**  | `stroke-width: var(--w)` | `stroke-(length:--w)` | `{ strokeWidth: '--w' }`    | `length:` hint: `stroke-(--w)` is the stroke colour.         |
 
 ## Accessibility
 

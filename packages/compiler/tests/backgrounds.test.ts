@@ -159,8 +159,9 @@ describe('backgrounds — gradient color stops', () => {
         expect(t({ fromPos: '300px' })).toBe('from-[300px]');
     });
 
-    it('{ fromPos: "--pos" } → from-(--pos) (css variable)', () => {
-        expect(t({ fromPos: '--pos' })).toBe('from-(--pos)');
+    it('{ fromPos: "--pos" } → from-(length:--pos) (css variable)', () => {
+        // `from-(--pos)` is the stop colour; the `length:` hint is the position.
+        expect(t({ fromPos: '--pos' })).toBe('from-(length:--pos)');
     });
 
     it('{ viaPos: 10 } → via-10%', () => {
@@ -171,8 +172,8 @@ describe('backgrounds — gradient color stops', () => {
         expect(t({ viaPos: '300px' })).toBe('via-[300px]');
     });
 
-    it('{ viaPos: "--pos" } → via-(--pos) (css variable)', () => {
-        expect(t({ viaPos: '--pos' })).toBe('via-(--pos)');
+    it('{ viaPos: "--pos" } → via-(length:--pos) (css variable)', () => {
+        expect(t({ viaPos: '--pos' })).toBe('via-(length:--pos)');
     });
 
     it('{ toPos: 10 } → to-10%', () => {
@@ -183,8 +184,8 @@ describe('backgrounds — gradient color stops', () => {
         expect(t({ toPos: '300px' })).toBe('to-[300px]');
     });
 
-    it('{ toPos: "--pos" } → to-(--pos) (css variable)', () => {
-        expect(t({ toPos: '--pos' })).toBe('to-(--pos)');
+    it('{ toPos: "--pos" } → to-(length:--pos) (css variable)', () => {
+        expect(t({ toPos: '--pos' })).toBe('to-(length:--pos)');
     });
 });
 
@@ -201,8 +202,9 @@ describe('backgrounds — background position', () => {
         expect(t({ bgPos: 'center top 1rem' })).toBe('bg-[center_top_1rem]');
     });
 
-    it('{ bgPos: "--bg-pos" } → bg-(--bg-pos) (css variable)', () => {
-        expect(t({ bgPos: '--bg-pos' })).toBe('bg-(--bg-pos)');
+    it('{ bgPos: "--bg-pos" } → bg-(position:--bg-pos) (css variable)', () => {
+        // `bg-(--bg-pos)` is a background colour; the hint sets the position.
+        expect(t({ bgPos: '--bg-pos' })).toBe('bg-(position:--bg-pos)');
     });
 });
 
@@ -219,16 +221,16 @@ describe('backgrounds — background size', () => {
         expect(t({ bgSize: 'contain' })).toBe('bg-contain');
     });
 
-    it('{ bgSize: "auto 100px" } → bg-size-[auto_100px] (arbitrary, Tailwind v4)', () => {
-        expect(t({ bgSize: 'auto 100px' })).toBe('bg-size-[auto_100px]');
+    it('{ bgSize: "auto 100px" } → bg-[length:auto_100px] (arbitrary, every Tailwind v4)', () => {
+        expect(t({ bgSize: 'auto 100px' })).toBe('bg-[length:auto_100px]');
     });
 
-    it('{ bgSize: "8px 8px" } → bg-size-[8px_8px] (arbitrary, Tailwind v4)', () => {
-        expect(t({ bgSize: '8px 8px' })).toBe('bg-size-[8px_8px]');
+    it('{ bgSize: "8px 8px" } → bg-[length:8px_8px] (arbitrary, every Tailwind v4)', () => {
+        expect(t({ bgSize: '8px 8px' })).toBe('bg-[length:8px_8px]');
     });
 
-    it('{ bgSize: "--bg-size" } → bg-size-(--bg-size) (css variable)', () => {
-        expect(t({ bgSize: '--bg-size' })).toBe('bg-size-(--bg-size)');
+    it('{ bgSize: "--bg-size" } → bg-(length:--bg-size) (css variable)', () => {
+        expect(t({ bgSize: '--bg-size' })).toBe('bg-(length:--bg-size)');
     });
 });
 
@@ -305,8 +307,8 @@ describe('backgrounds — variant prefix propagation (before/after/hover)', () =
         expect(t({ before: { bgPos: 'center top 1rem' } })).toBe('before:bg-[center_top_1rem]');
     });
 
-    it('{ before: { bgPos: "--bg-pos" } } → before:bg-(--bg-pos)', () => {
-        expect(t({ before: { bgPos: '--bg-pos' } })).toBe('before:bg-(--bg-pos)');
+    it('{ before: { bgPos: "--bg-pos" } } → before:bg-(position:--bg-pos)', () => {
+        expect(t({ before: { bgPos: '--bg-pos' } })).toBe('before:bg-(position:--bg-pos)');
     });
 
     it('{ hover: { bgPos: "top-left" } } → hover:bg-top-left', () => {
@@ -317,12 +319,12 @@ describe('backgrounds — variant prefix propagation (before/after/hover)', () =
         expect(t({ before: { bgSize: 'cover' } })).toBe('before:bg-cover');
     });
 
-    it('{ before: { bgSize: "8px 8px" } } → before:bg-size-[8px_8px]', () => {
-        expect(t({ before: { bgSize: '8px 8px' } })).toBe('before:bg-size-[8px_8px]');
+    it('{ before: { bgSize: "8px 8px" } } → before:bg-[length:8px_8px]', () => {
+        expect(t({ before: { bgSize: '8px 8px' } })).toBe('before:bg-[length:8px_8px]');
     });
 
-    it('{ before: { bgSize: "--sz" } } → before:bg-size-(--sz)', () => {
-        expect(t({ before: { bgSize: '--sz' } })).toBe('before:bg-size-(--sz)');
+    it('{ before: { bgSize: "--sz" } } → before:bg-(length:--sz)', () => {
+        expect(t({ before: { bgSize: '--sz' } })).toBe('before:bg-(length:--sz)');
     });
 
     it('{ before: { bgImg: "none" } } → before:bg-none', () => {

@@ -9,7 +9,14 @@
  */
 import type { SzDiagnosticCode, TransformSourceCodeOptions } from '../src/index.js';
 
-/** One source per code, with the options it needs to be diagnosed. */
+/**
+ * Codes no engine renders. The verdict behind them comes from the project's
+ * own Tailwind at build (ADR 0012, 0022), so the build-time oracle reports
+ * them, and an engine source for one would be a baked verdict.
+ */
+export const ORACLE_CODES: readonly SzDiagnosticCode[] = ['unsigned-value'];
+
+/** One source per code the engine renders, with the options it needs to be diagnosed. */
 export const CODE_SOURCES: ReadonlyArray<
     readonly [code: SzDiagnosticCode, source: string, options?: TransformSourceCodeOptions]
 > = [
@@ -18,6 +25,7 @@ export const CODE_SOURCES: ReadonlyArray<
     ['removed-key', "export const A = () => <div sz={{ maskFrom: '10%' }} />;"],
     ['numeric-key', "export const A = () => <div sz={{ 0: 'x' }} />;"],
     ['closed-enum-value', "export const A = () => <div sz={{ display: 'bogus' }} />;"],
+    ['slash-opacity-string', "export const A = () => <div sz={{ bg: 'red-500/50' }} />;"],
     ['off-scale-value', 'export const A = () => <div sz={{ p: 1.3 }} />;'],
     ['numeric-font-weight', "export const A = () => <div sz={{ weight: '700' }} />;"],
     [
