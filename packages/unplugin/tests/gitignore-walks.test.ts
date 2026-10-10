@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { type InlineConfig, resolveConfig } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { rollupPlugin, vitePlugin } from '../src/unplugin.js';
@@ -304,6 +305,7 @@ describe('the webpack lane', () => {
         const compilation = {
             errors: [],
             fileDependencies: new Set<string>(),
+            missingDependencies: new Set<string>(),
             hooks: {
                 finishModules: {
                     tapPromise: (_name: string, run: () => Promise<void>) => {
@@ -328,21 +330,135 @@ describe('the stylesheets a Vite build reads for theme tokens', () => {
      * The szcn theme-group module a Vite build serves.
      *
      * @param files - Project files.
+     * @param resolve - The resolved Vite config's `resolve`, given the root.
+     * @param warned - Collects what the build printed.
+     * @param tailwind - The integration the build runs Tailwind through.
      * @returns The module text.
      */
-    async function themeGroups(files: Record<string, string>): Promise<string> {
+    async function themeGroups(
+        files: Record<string, string>,
+        resolve: (root: string) => unknown = () => undefined,
+        warned: string[] = [],
+        tailwind: 'vite' | 'postcss' = 'vite',
+    ): Promise<string> {
         const root = tailwindProject('csszyx-gitignore-theme-', files);
         vi.spyOn(process, 'cwd').mockReturnValue(root);
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+            warned.push(String(message));
+        });
         const call = callHooks(
             vitePlugin({
                 build: { cache: false },
                 production: { mangle: false },
             }) as unknown as Record<string, unknown>[],
         );
-        await call('configResolved', { root, command: 'build' });
+        // A real resolved config: the lane asks Vite's own resolver.
+        const config = await resolveConfig(
+            {
+                root,
+                configFile: false,
+                logLevel: 'silent',
+                resolve: resolve(root) as InlineConfig['resolve'],
+                plugins: tailwind === 'vite' ? [{ name: '@tailwindcss/vite:scan' }] : [],
+            },
+            'build',
+        );
+        await call('configResolved', config);
         return (await call('load', RESOLVED_THEME_GROUPS_VIRTUAL_ID)) as string;
     }
+
+    /**
+     * A gitignored `@theme` file under `src/gen/`, imported by `src/index.css`.
+     *
+     * @param line - The importing line of `src/index.css`.
+     * @returns The project files.
+     */
+    const aliasedTheme = (line: string): Record<string, string> => ({
+        '.gitignore': 'src/gen/\n',
+        'src/index.css': `${TW}${line}\n`,
+        'src/gen/tokens.css': '@theme { --color-brand: #123456; }\n',
+        'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@/*': ['./src/*'] } } }),
+    });
+
+    it.each([
+        // What `@tailwindcss/vite` 4.3.3 reads on Vite 8.3.1, measured with a
+        // real `vite build`: each of these imports sets the token.
+        [
+            'a `resolve.alias`',
+            '@import "@/gen/tokens.css";',
+            (root: string) => ({ alias: [{ find: '@', replacement: join(root, 'src') }] }),
+        ],
+        [
+            'a `resolve.alias` whose customResolver is a function',
+            '@import "@/gen/tokens.css";',
+            (root: string) => ({
+                alias: [
+                    {
+                        find: '@',
+                        replacement: '@',
+                        customResolver: (id: string) => id.replace(/^@/, join(root, 'src')),
+                    },
+                ],
+            }),
+        ],
+        [
+            'tsconfig `paths` with `resolve.tsconfigPaths`',
+            '@import "@/gen/tokens.css";',
+            () => ({ alias: [], tsconfigPaths: true }),
+        ],
+        [
+            'a bare path against the importing folder',
+            '@import "gen/tokens.css";',
+            () => ({ alias: [] }),
+        ],
+    ])(
+        'keep the merge groups of a gitignored @theme file imported through %s',
+        async (_name, line, resolve) => {
+            expect(await themeGroups(aliasedTheme(line), resolve)).toContain('brand');
+        },
+        60_000,
+    );
+
+    it('leave out, and name, a stylesheet whose tsconfig `paths` import Vite does not read', async () => {
+        // Without `resolve.tsconfigPaths` the import fails a Vite build that
+        // loads the stylesheet, and only then: the model reads no theme from
+        // it, and the build goes on with one line that names it.
+        const warned: string[] = [];
+        const groups = await themeGroups(
+            aliasedTheme('@import "@/gen/tokens.css";'),
+            () => ({ alias: [] }),
+            warned,
+        );
+        expect(groups).not.toContain('brand');
+        expect(warned.join('\n')).toContain(
+            "[csszyx] src/index.css imports `@/gen/tokens.css`, which this build's Tailwind cannot resolve",
+        );
+    }, 60_000);
+
+    it.each([
+        // `@tailwindcss/postcss` 4.3.3 on Vite 8.3.1, measured with a real
+        // `vite build`: Vite inlines the import through its CSS resolver.
+        [
+            'a `resolve.alias`',
+            (root: string) => ({ alias: [{ find: '@', replacement: join(root, 'src') }] }),
+            true,
+        ],
+        ['tsconfig `paths`, `resolve.tsconfigPaths` on', () => ({ tsconfigPaths: true }), false],
+    ])(
+        'under `@tailwindcss/postcss`, read an import through %s as the Vite build does',
+        async (_name, resolve, follows) => {
+            const warned: string[] = [];
+            const groups = await themeGroups(
+                aliasedTheme('@import "@/gen/tokens.css";'),
+                resolve,
+                warned,
+                'postcss',
+            );
+            expect(groups.includes('brand')).toBe(follows);
+            expect(warned.join('\n').includes('imports `@/gen/tokens.css`')).toBe(!follows);
+        },
+        60_000,
+    );
 
     it('keep the merge groups of a gitignored @theme file a stylesheet imports', async () => {
         const groups = await themeGroups({

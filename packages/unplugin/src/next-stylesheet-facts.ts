@@ -41,6 +41,7 @@ import {
     type ProjectStyleModel,
     styleModelError,
     styleModelWarning,
+    unresolvedImportWarning,
 } from './project-style-model.js';
 import { createRootIgnoreMatcher } from './root-ignore-matcher.js';
 import { sortStrings } from './sort.js';
@@ -364,8 +365,9 @@ export async function openStylesheetModel(input: {
         ]),
     ];
     const candidates = listed.length > 0 ? listed.map(entry => entry.absolute) : walked;
+    // No lane resolver: Next runs Tailwind through `@tailwindcss/postcss`,
+    // whose `@import` follows no alias and no tsconfig `paths`.
     const model = await openProjectStyleModel(input.root, candidates, {
-        aliases: collectSpecifierAliases(input.root),
         // A named list decides the prefix; a stylesheet a page imports still
         // selects on its elements.
         hookStylesheets: listed.length > 0 ? walked : [],
@@ -427,7 +429,11 @@ export async function writeNextStylesheetFacts(input: {
         record,
         path: file,
         warning:
-            [styleModelWarning(model, input.root, input.setting), originWarning(model, input.root)]
+            [
+                styleModelWarning(model, input.root, input.setting),
+                unresolvedImportWarning(model, input.root, input.setting),
+                originWarning(model, input.root),
+            ]
                 .filter(message => message !== null)
                 .join('\n') || null,
         model,

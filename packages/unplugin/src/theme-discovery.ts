@@ -14,6 +14,7 @@ import { walkProjectStylesheets } from '@csszyx/tailwind-oracle';
 
 import { createRootIgnoreMatcher } from './root-ignore-matcher.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
+import type { StylesheetImportCandidates } from './vite-stylesheet-candidates.js';
 
 /** What a project-wide scan found. */
 export interface ThemeDiscovery {
@@ -64,12 +65,18 @@ function normalize(value: string): string {
  * @param ignore - Glob patterns, relative to the root, for paths whose
  * stylesheets are another app's and are left out. A directory they cover is
  * never opened: skipping another app should cost nothing.
+ * @param options - How the lane's Tailwind resolves an import.
+ * @param options.importCandidates - The bundler's resolver for an `@import`
+ * that is not a path, on the lane whose Tailwind resolves through it (Vite).
+ * Every other lane leaves it out: Tailwind there resolves such a target as a
+ * package and fails the build, so no aliased stylesheet is ever read.
  * @returns The merged tokens and the files they came from.
  */
 export function discoverProjectTheme(
     rootDir: string,
     extraDirs: readonly string[] = [],
     ignore: readonly string[] = [],
+    options: { importCandidates?: StylesheetImportCandidates } = {},
 ): ThemeDiscovery {
     const matcher = createRootIgnoreMatcher(rootDir, ignore);
     const normalizedRoot = normalize(rootDir);
@@ -83,6 +90,7 @@ export function discoverProjectTheme(
     const walked = walkProjectStylesheets(bases, {
         prune: dir => matcher.coversTree(dir),
         ignoresFile: file => matcher.ignoresFile(file),
+        importCandidates: options.importCandidates,
     });
 
     const themes: ParsedTheme[] = [];

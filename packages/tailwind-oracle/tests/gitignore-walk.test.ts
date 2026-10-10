@@ -17,10 +17,11 @@ import {
     readFileSync,
     realpathSync,
     rmSync,
+    symlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -513,5 +514,267 @@ describe('a relative root', () => {
         } finally {
             process.chdir(previous);
         }
+    });
+});
+
+/**
+ * Write files and symbolic links under a fresh temporary directory.
+ *
+ * @param files - Paths relative to it, with their content.
+ * @param links - Link paths relative to it, each with the target written
+ *        into the link as given (relative to the link's folder).
+ * @returns The directory.
+ */
+function linkedTree(files: Record<string, string>, links: Record<string, string>): string {
+    const root = tree(files);
+    for (const [link, target] of Object.entries(links)) {
+        mkdirSync(dirname(join(root, link)), { recursive: true });
+        symlinkSync(target, join(root, link));
+    }
+    return root;
+}
+
+/**
+ * The files a walk visits and the verdict on each, relative to a folder.
+ *
+ * @param root - Directory walked.
+ * @param mode - How the walk treats `.gitignore`.
+ * @param from - The folder the paths are made relative to.
+ * @returns `path` for a kept file, `path (ignored)` for a marked one, sorted.
+ */
+function walkedFiles(root: string, mode: GitignoreMode, from = root): string[] {
+    const files: string[] = [];
+    walkProject(root, { skipDirs: new Set(['node_modules']), gitignore: mode }, file => {
+        if (file.path.endsWith('.gitignore')) return;
+        const name = relative(from, file.path).split(sep).join('/');
+        files.push(file.gitignored ? `${name} (ignored)` : name);
+    });
+    return files.sort();
+}
+
+describe('symlinked folders and files', () => {
+    // Tailwind 4.3.3's Scanner follows links (the `ignore` crate with
+    // `follow_links`): it lists a linked folder's files under the link's path,
+    // a folder reached by two paths once per path, and stops only at a link
+    // whose target is a folder the walk is already inside.
+
+    it('enters a linked folder inside the root and outside it, as Tailwind does', () => {
+        const top = linkedTree(
+            {
+                'real/a.tsx': source('outside'),
+                'app/k.tsx': source('keep'),
+                'app/src/inner/b.tsx': source('inside'),
+            },
+            { 'app/linked': '../real', 'app/alias': 'src/inner', 'app/twice': '../real' },
+        );
+        const root = join(top, 'app');
+        expect(walkedFiles(root, 'skip')).toEqual([
+            'alias/b.tsx',
+            'k.tsx',
+            'linked/a.tsx',
+            'src/inner/b.tsx',
+            'twice/a.tsx',
+        ]);
+        expect([...new Set(walkSees(root))]).toEqual(tailwindSees(root));
+    });
+
+    it.each([
+        [
+            'a link to the folder above it',
+            { 'a/x.tsx': source('x') },
+            { 'a/link': '..' },
+            '',
+            ['a/x.tsx'],
+        ],
+        [
+            'a link to its own folder',
+            { 'a/x.tsx': source('x') },
+            { 'a/link': '.' },
+            '',
+            ['a/x.tsx'],
+        ],
+        [
+            'two folders linking to each other',
+            { 'a/x.tsx': source('x'), 'b/y.tsx': source('y') },
+            { 'a/l': '../b', 'b/l': '../a' },
+            '',
+            ['a/l/y.tsx', 'a/x.tsx', 'b/l/x.tsx', 'b/y.tsx'],
+        ],
+        [
+            'a link out of the root to a folder above it',
+            { 'app/k.tsx': source('k'), 'o.tsx': source('o') },
+            { 'app/up': '..' },
+            'app',
+            ['app/k.tsx', 'app/up/app/k.tsx', 'app/up/o.tsx'],
+        ],
+    ])('stops at %s, where Tailwind stops', (_name, files, links, sub, expected) => {
+        const top = linkedTree(files, links);
+        const root = join(top, sub);
+        expect(walkedFiles(root, 'skip', top)).toEqual(expected);
+        expect([...new Set(walkSees(root))]).toEqual(tailwindSees(root));
+    });
+
+    it('leaves out a broken link and a link loop, as Tailwind does', () => {
+        const root = linkedTree(
+            { 'k.tsx': source('keep') },
+            { gone: 'nowhere', 'gone.tsx': 'nowhere.tsx', 'loop-a': 'loop-b', 'loop-b': 'loop-a' },
+        );
+        expect(walkedFiles(root, 'mark')).toEqual(['k.tsx']);
+        expect(walkedFiles(root, 'off')).toEqual(['k.tsx']);
+        expect(walkSees(root)).toEqual(tailwindSees(root));
+    });
+
+    it('visits nothing under a root that does not exist', () => {
+        expect(walkedFiles(join(tree({}), 'missing'), 'skip')).toEqual([]);
+    });
+
+    it('visits a linked file under its link’s path', () => {
+        const top = linkedTree(
+            { 'real/f.tsx': source('linkedfile'), 'app/k.tsx': source('keep') },
+            { 'app/fl.tsx': '../real/f.tsx' },
+        );
+        const root = join(top, 'app');
+        expect(walkedFiles(root, 'skip')).toEqual(['fl.tsx', 'k.tsx']);
+        expect(walkSees(root)).toEqual(tailwindSees(root));
+    });
+
+    it('skips a linked folder by the link’s name', () => {
+        const top = linkedTree({ 'real/a.tsx': source('deps') }, { 'app/node_modules': '../real' });
+        expect(walkedFiles(join(top, 'app'), 'skip')).toEqual([]);
+    });
+
+    it.each([
+        [
+            'ignores the link as a folder',
+            { '.gitignore': 'alias/\n' },
+            ['fl.tsx', 'src/inner/b.tsx'],
+        ],
+        ['ignores the link by name', { '.gitignore': 'alias\n' }, ['fl.tsx', 'src/inner/b.tsx']],
+        [
+            'ignores the target, not the link',
+            { '.gitignore': 'src/inner/\n' },
+            ['alias/b.tsx', 'fl.tsx'],
+        ],
+        [
+            'takes the link back as a folder',
+            { '.gitignore': 'alias\n!alias/\n' },
+            ['alias/b.tsx', 'fl.tsx', 'src/inner/b.tsx'],
+        ],
+        [
+            'is the linked folder’s own, read under the link',
+            { 'src/inner/.gitignore': 'gen/\n', 'src/inner/gen/g.tsx': source('gen') },
+            ['alias/b.tsx', 'fl.tsx', 'src/inner/b.tsx'],
+        ],
+        [
+            'names a path through the link',
+            { '.gitignore': 'alias/gen/\n', 'src/inner/gen/g.tsx': source('gen') },
+            ['alias/b.tsx', 'fl.tsx', 'src/inner/b.tsx', 'src/inner/gen/g.tsx'],
+        ],
+        // Measured with the Scanner's file list: `fl.tsx` here is left out, and a
+        // `.gitignore` naming `other.tsx` leaves the link in.
+        [
+            'ignores a linked file by the link’s path',
+            { '.gitignore': 'fl.tsx\n' },
+            ['alias/b.tsx', 'src/inner/b.tsx'],
+        ],
+        [
+            'ignores a linked file’s target, not the link',
+            { '.gitignore': 'other.tsx\n' },
+            ['alias/b.tsx', 'fl.tsx', 'src/inner/b.tsx'],
+        ],
+    ])('reads a .gitignore that %s, as Tailwind does', (_name, extra, expected) => {
+        const root = linkedTree(
+            { 'src/inner/b.tsx': source('inside'), 'other.tsx': '', ...extra },
+            { alias: 'src/inner', 'fl.tsx': 'other.tsx' },
+        );
+        gitInit(root);
+        const kept = walkedFiles(root, 'skip').filter(file => file !== 'other.tsx');
+        expect(kept).toEqual(expected);
+        expect([...new Set(walkSees(root))]).toEqual(tailwindSees(root));
+        const marked = walkedFiles(root, 'mark').filter(file => !file.endsWith('(ignored)'));
+        expect(marked).toEqual(walkedFiles(root, 'skip'));
+        for (const [file, walked, queried] of walkAgainstQuery(root))
+            expect([file, queried]).toEqual([file, walked]);
+    });
+});
+
+describe('a walk root that is itself a link', () => {
+    // Measured with Tailwind 4.3.3's Scanner: a base that is a link is
+    // canonicalized first, so its files are listed under the real path and the
+    // parent `.gitignore`s that apply are the real location's, not the link's.
+    // The walk takes the same files by the same `.gitignore`s and hands them
+    // back under the path its caller gave, which every caller compares with.
+
+    /**
+     * `link/app` links to `real/app`; each parent ignores a different folder.
+     *
+     * @param git - Whether both parents are repositories.
+     * @returns The top folder and the root as the caller names it.
+     */
+    function linkedRoot(git: boolean): { top: string; root: string } {
+        const top = linkedTree(
+            {
+                'real/.gitignore': 'gen/\n',
+                'real/app/gen/a.tsx': source('realignored'),
+                'real/app/other/b.tsx': source('linkignored'),
+                'real/app/k.tsx': source('keep'),
+                'real/app/.gitignore': 'local.tsx\n',
+                'real/app/local.tsx': source('local'),
+                'link/.gitignore': 'other/\n',
+            },
+            { 'link/app': '../real/app' },
+        );
+        if (git) {
+            gitInit(join(top, 'real'));
+            gitInit(join(top, 'link'));
+        }
+        return { top, root: join(top, 'link', 'app') };
+    }
+
+    it.each([
+        ['with no git repository', false],
+        ['inside git repositories', true],
+    ])('reads the real location’s parent .gitignore %s, as Tailwind does', (_name, git) => {
+        const { root } = linkedRoot(git);
+        expect(walkSees(root)).toEqual(tailwindSees(root));
+        expect(walkSees(root)).toEqual(['cls-keep', 'cls-linkignored']);
+        expect(walkSees(root, 'mark')).toEqual(['cls-keep', 'cls-linkignored']);
+    });
+
+    it('hands every path back under the link, and names the .gitignores it read', () => {
+        const { top, root } = linkedRoot(true);
+        const visited: string[] = [];
+        const pruned: string[] = [];
+        const { gitignoreFiles } = walkProject(
+            root,
+            {
+                skipDirs: new Set(),
+                gitignore: 'skip',
+                prune: dir => {
+                    pruned.push(dir);
+                    return false;
+                },
+            },
+            file => visited.push(file.path),
+        );
+        expect(visited.sort()).toEqual(
+            ['.gitignore', 'k.tsx', 'other/b.tsx'].map(file => join(root, file)),
+        );
+        expect(pruned.sort()).toEqual([join(root, 'gen'), join(root, 'other')]);
+        expect(gitignoreFiles).toEqual([join(top, 'real/.gitignore'), join(root, '.gitignore')]);
+    });
+
+    it('answers a query under either spelling the way the walk decides', () => {
+        const { top, root } = linkedRoot(false);
+        const query = createGitignoreQuery(root);
+        expect(query(join(root, 'gen/a.tsx'))).toBe(true);
+        expect(query(join(root, 'local.tsx'))).toBe(true);
+        expect(query(join(root, 'other/b.tsx'))).toBe(false);
+        expect(query(join(top, 'real/app/gen/a.tsx'))).toBe(true);
+        expect(query(join(top, 'real/app/k.tsx'))).toBe(false);
+        expect(query(join(top, 'real/app'))).toBe(false);
+        expect(query(join(top, 'real/x.tsx'))).toBe(false);
+        for (const [file, walked, queried] of walkAgainstQuery(root))
+            expect([file, queried]).toEqual([file, walked]);
     });
 });

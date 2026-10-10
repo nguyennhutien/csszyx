@@ -25,6 +25,15 @@
  * a global `core.excludesFile` are not read: they differ from machine to
  * machine, and the build must not.
  *
+ * The walk follows symbolic links the way that Scanner does (Tailwind 4.3.3's
+ * oxide walks with `follow_links`): a linked folder is entered and its files
+ * are visited under the link's path, a folder reached by two paths is walked
+ * once per path, a broken link is left out, and a link whose target is a
+ * folder the walk is already inside is not entered, which ends every cycle.
+ * `.gitignore` judges the link's path, never the target's: `alias/` leaves a
+ * linked folder out, `src/inner/` does not leave out the link to it, and the
+ * linked folder's own `.gitignore` is read as the folder's at the link.
+ *
  * @module
  */
 import fs from 'node:fs';
@@ -421,6 +430,101 @@ function isSkippedDir(
     );
 }
 
+/** What the walk takes one listed entry for, a link followed. */
+interface FollowedEntry {
+    isDir: boolean;
+    /** The folder's real path, for a folder; empty for a file. */
+    real: string;
+}
+
+/**
+ * What one listed entry is once a symbolic link is followed, as Tailwind's
+ * Scanner follows it.
+ *
+ * Only a link costs a call: a folder that is not a link has the real path of
+ * its parent plus its name. Real paths come from `realpathSync.native`, here
+ * and for the root, because they are compared as strings: on a
+ * case-insensitive filesystem the JavaScript realpath keeps the case it was
+ * given, so a link spelled `../SRC` for `src` would not match the folder the
+ * walk is inside and be entered once more. The native call asks the
+ * filesystem, which answers in the folder's own case, the case `readdir`
+ * lists the names in.
+ *
+ * @param entry - The entry as listed.
+ * @param entryPath - Its path under the walk.
+ * @param parentReal - The real path of the folder listing it.
+ * @param ancestors - Real paths of the folders the walk is inside.
+ * @returns The entry, or null for a broken link, an unreadable one, or a link
+ *          to a folder the walk is already inside.
+ */
+function followEntry(
+    entry: fs.Dirent,
+    entryPath: string,
+    parentReal: string,
+    ancestors: ReadonlySet<string>,
+): FollowedEntry | null {
+    if (!entry.isSymbolicLink()) {
+        const isDir = entry.isDirectory();
+        return { isDir, real: isDir ? path.join(parentReal, entry.name) : '' };
+    }
+    try {
+        const stat = fs.statSync(entryPath, { throwIfNoEntry: false });
+        if (stat === undefined) return null;
+        if (!stat.isDirectory()) return { isDir: false, real: '' };
+        const real = fs.realpathSync.native(entryPath);
+        return ancestors.has(real) ? null : { isDir: true, real };
+    } catch {
+        // A link loop (`ELOOP`) or a target the process may not read.
+        return null;
+    }
+}
+
+/**
+ * The real path of a walk's root.
+ *
+ * @param root - Absolute path.
+ * @returns Its real path, or the path itself when it cannot be resolved; the
+ *          walk then lists nothing.
+ */
+function realRoot(root: string): string {
+    try {
+        return fs.realpathSync.native(root);
+    } catch {
+        return root;
+    }
+}
+
+/**
+ * A walk's root as Tailwind's Scanner takes it, and the way back to the path
+ * its caller gave.
+ *
+ * The Scanner (4.3.3) canonicalizes a base before it walks: a root that is
+ * itself a link, or sits under one, is listed under its real path, and the
+ * parent `.gitignore`s that apply are the real location's. The walk decides
+ * in that same place. Paths go back under the caller's spelling, since every
+ * caller compares them with paths of its own: an ignore matcher, a recorded
+ * candidate list, a watcher's report.
+ *
+ * @param walkRoot - The root as given; a relative one is resolved against the
+ *        working directory.
+ * @returns The real root, and a map from a path under it to the caller's.
+ */
+function canonicalRoot(walkRoot: string): { root: string; toCaller: (target: string) => string } {
+    // A relative root would turn the parent search into a walk over `.`.
+    const given = path.resolve(walkRoot);
+    const root = realRoot(given);
+    if (root === given) return { root, toCaller: target => target };
+    return {
+        root,
+        // A path under the root is spelled from it; one above it, a parent's
+        // `.gitignore`, is the file read and keeps its real path.
+        toCaller: target =>
+            target === root || target.startsWith(`${root}${path.sep}`)
+                ? given + target.slice(root.length)
+                : target,
+    };
+}
+
 /**
  * Visit every file under a directory, skipping the directories the options
  * name.
@@ -428,7 +532,8 @@ function isSkippedDir(
  * Directories are read in the order the filesystem lists them; a caller that
  * needs a stable order sorts what it collects. With `.gitignore` read, each
  * folder costs one extra stat-free lookup in the listing it already has, and
- * each path one match per `.gitignore` that applies to it.
+ * each path one match per `.gitignore` that applies to it. A symbolic link
+ * costs a stat, and a linked folder a `realpath`; nothing else does.
  *
  * @param walkRoot - Directory to walk; a relative one is resolved against the
  *        working directory.
@@ -441,51 +546,124 @@ export function walkProject(
     options: ProjectWalkOptions,
     visit: (file: WalkedFile) => void,
 ): ProjectWalkResult {
-    // A relative root would turn the parent search into a walk over `.`.
-    const root = path.resolve(walkRoot);
+    const { root, toCaller } = canonicalRoot(walkRoot);
     const skipDotDirs = options.skipDotDirs !== false;
     const gitignoreFiles: string[] = [];
     const above = (options.gitignore ?? 'off') === 'off' ? [] : parentLayers(root, gitignoreFiles);
     // A root a `.gitignore` ignores is walked as if none existed.
     const mode = above === null ? 'off' : (options.gitignore ?? 'off');
+    // The real paths of the folders the walk is inside, the root included.
+    const ancestors = new Set<string>();
+
+    /**
+     * Visit one listed entry: walk it when it is a folder, visit it when it
+     * is a file.
+     *
+     * @param dir - The folder listing it.
+     * @param real - The folder's real path.
+     * @param entry - The entry.
+     * @param applying - The `.gitignore` layers that apply to it.
+     * @param below - Whether the folder is ignored (`mark` mode only).
+     */
+    const walkEntry = (
+        dir: string,
+        real: string,
+        entry: fs.Dirent,
+        applying: readonly GitignoreLayer[],
+        below: boolean,
+    ): void => {
+        const entryPath = path.join(dir, entry.name);
+        const followed = followEntry(entry, entryPath, real, ancestors);
+        if (followed === null) return;
+        const { isDir } = followed;
+        if (isDir && isSkippedDir(options, skipDotDirs, entry.name, toCaller(entryPath))) return;
+        const ignored = below || (mode !== 'off' && isIgnored(applying, entryPath, isDir));
+        if (ignored && mode === 'skip') return;
+        if (isDir) walkDir(entryPath, followed.real, applying, ignored);
+        else {
+            visit({
+                path: toCaller(entryPath),
+                extension: path.extname(entry.name),
+                gitignored: ignored,
+            });
+        }
+    };
 
     /**
      * Walk one folder.
      *
-     * @param dir - The folder.
+     * @param dir - The folder, under the path the walk reached it by.
+     * @param real - Its real path.
      * @param layers - The `.gitignore` layers above it.
      * @param below - Whether the folder itself is ignored (`mark` mode only):
      *        nothing under an ignored folder can be taken back in.
      */
-    const walkDir = (dir: string, layers: readonly GitignoreLayer[], below: boolean): void => {
+    const walkDir = (
+        dir: string,
+        real: string,
+        layers: readonly GitignoreLayer[],
+        below: boolean,
+    ): void => {
         let entries: fs.Dirent[];
         try {
             entries = fs.readdirSync(dir, { withFileTypes: true });
         } catch {
             return;
         }
+        // A folder reached again under a link to its parent is already on the
+        // path; the outer visit keeps it there.
+        const entered = !ancestors.has(real);
+        if (entered) ancestors.add(real);
         const applying =
             mode !== 'off' && !below
                 ? withOwnGitignore(dir, entries, layers, gitignoreFiles)
                 : layers;
-        for (const entry of entries) {
-            const entryPath = path.join(dir, entry.name);
-            const isDir = entry.isDirectory();
-            if (isDir && isSkippedDir(options, skipDotDirs, entry.name, entryPath)) continue;
-            const ignored = below || (mode !== 'off' && isIgnored(applying, entryPath, isDir));
-            if (ignored && mode === 'skip') continue;
-            if (isDir) walkDir(entryPath, applying, ignored);
-            else
-                visit({
-                    path: entryPath,
-                    extension: path.extname(entry.name),
-                    gitignored: ignored,
-                });
-        }
+        for (const entry of entries) walkEntry(dir, real, entry, applying, below);
+        if (entered) ancestors.delete(real);
     };
 
-    walkDir(root, above ?? [], false);
-    return { gitignoreFiles };
+    walkDir(root, root, above ?? [], false);
+    return { gitignoreFiles: gitignoreFiles.map(toCaller) };
+}
+
+/**
+ * Whether a relative path names something strictly below the folder it is
+ * relative to.
+ *
+ * @param relative - A `path.relative` result.
+ * @returns False for the folder itself and for anything outside it.
+ */
+function insideRelative(relative: string): boolean {
+    return (
+        relative !== '' &&
+        relative !== '..' &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+    );
+}
+
+/**
+ * Where a path sits below a walk's root, under whichever spelling names it.
+ *
+ * A walk decides under the root's real path and reports files under the
+ * root as given ({@link walkProject}); a bundler or a watcher may name the
+ * same file either way, a Vite module id the real one. Both answer here.
+ *
+ * @param walkRoot - The walk's root; a relative one is resolved against the
+ *        working directory, as a relative target is.
+ * @returns The path relative to the root, or null for the root itself and for
+ *          anything outside it.
+ */
+export function createWalkRootRelative(walkRoot: string): (target: string) => string | null {
+    const given = path.resolve(walkRoot);
+    const { root } = canonicalRoot(given);
+    return target => {
+        const resolved = path.resolve(target);
+        const viaReal = path.relative(root, resolved);
+        if (insideRelative(viaReal)) return viaReal;
+        const viaGiven = path.relative(given, resolved);
+        return insideRelative(viaGiven) ? viaGiven : null;
+    };
 }
 
 /**
@@ -499,9 +677,12 @@ export function walkProject(
  * @param queryRoot - The walk's root; a relative one is resolved against the
  *        working directory, as a relative target is.
  * @returns A predicate; false for the root itself and for any path outside it.
+ *          A root reached through a link answers a target under either its
+ *          own path or the real one, as the walk decides in the real place.
  */
 export function createGitignoreQuery(queryRoot: string): (target: string) => boolean {
-    const root = path.resolve(queryRoot);
+    const { root } = canonicalRoot(queryRoot);
+    const below = createWalkRootRelative(queryRoot);
     const top = parentLayers(root, []);
     if (top === null) return () => false;
     const byDir = new Map<string, readonly GitignoreLayer[]>();
@@ -521,15 +702,8 @@ export function createGitignoreQuery(queryRoot: string): (target: string) => boo
         return layers;
     };
     return target => {
-        const relative = path.relative(root, path.resolve(target));
-        if (
-            relative === '' ||
-            relative === '..' ||
-            relative.startsWith(`..${path.sep}`) ||
-            path.isAbsolute(relative)
-        ) {
-            return false;
-        }
+        const relative = below(target);
+        if (relative === null) return false;
         const parts = relative.split(path.sep);
         let dir = root;
         for (const part of parts.slice(0, -1)) {
@@ -547,6 +721,31 @@ export interface StylesheetWalkOptions {
     prune?: (dir: string) => boolean;
     /** A caller's own question about a file: true leaves it out. */
     ignoresFile?: (file: string) => boolean;
+    /**
+     * The build's own resolver for an `@import` target that is not a path:
+     * see {@link StylesheetImportCandidates}.
+     */
+    importCandidates?: StylesheetImportCandidates;
+}
+
+/**
+ * The paths the build's own resolver tries for an `@import` target that is
+ * not a path (`@/gen/theme.css`, `gen/theme.css`), in its order, from the
+ * importing stylesheet's folder. Only the Vite lane has one:
+ * `@tailwindcss/vite` resolves every `@import` through Vite's resolver,
+ * aliases included, while Tailwind's other integrations resolve such a target
+ * as a package and fail the build. See {@link laneStylesheet} for how the
+ * paths are read.
+ *
+ * A bundler's resolver can be asynchronous while the walk is not. Such a lane
+ * answers the call from what it has resolved so far and sets `load`, which
+ * the compile awaits for each target before it reads the answer; the walk is
+ * run again by the lane until its answers settle.
+ */
+export interface StylesheetImportCandidates {
+    (specifier: string, fromDir: string): readonly string[];
+    /** Resolve one target now and give the paths the call would give. */
+    load?(specifier: string, fromDir: string): Promise<readonly string[]>;
 }
 
 /** What a stylesheet walk found. */
@@ -745,18 +944,64 @@ function asStylesheetFolder(dir: string): string | null {
 }
 
 /**
+ * Whether an `@import` target is a path rather than a specifier a resolver
+ * maps: `./x`, `../x`, `.`, `..`, or absolute.
+ *
+ * @param specifier - The target as written.
+ * @returns True for a path.
+ */
+export function isPathSpecifier(specifier: string): boolean {
+    return RELATIVE_SPECIFIER_RE.test(specifier) || path.isAbsolute(specifier);
+}
+
+/**
+ * The stylesheet the build's own resolver names for a target that is not a
+ * path: each path is tried as a file, then with `.css` added, never as a
+ * folder, and the first that names a file decides. Which answers count is the
+ * lane's to say before it gives them: `@tailwindcss/vite` 4.3.3 keeps a `.css`
+ * answer only, Vite's inlining in front of `@tailwindcss/postcss` any. With
+ * none, Tailwind falls back to its own resolver.
+ *
+ * @param specifier - The target as written.
+ * @param fromDir - The importing stylesheet's folder.
+ * @param candidates - The lane's resolver.
+ * @returns The stylesheet, or null when the lane's resolver names none.
+ */
+export function laneStylesheet(
+    specifier: string,
+    fromDir: string,
+    candidates: StylesheetImportCandidates,
+): string | null {
+    for (const candidate of candidates(specifier, fromDir)) {
+        const file = asStylesheetFile(candidate);
+        if (file !== null) return file;
+    }
+    return null;
+}
+
+/**
  * The file an `@import` names, resolved as Tailwind's `compile()` resolves
- * it: a relative or absolute path, as a file and then as a folder. A bare
- * specifier is a package, which the walk never reads.
+ * it: a relative or absolute path, as a file and then as a folder. Any other
+ * specifier is a package, which the walk never reads, unless the build's own
+ * resolver names a stylesheet for it.
  *
  * @param from - The importing stylesheet.
  * @param specifier - The target as written.
+ * @param candidates - The build's own resolver, when the lane has one.
  * @returns The file, or null.
  */
-function resolveImport(from: string, specifier: string): string | null {
-    if (!RELATIVE_SPECIFIER_RE.test(specifier) && !path.isAbsolute(specifier)) return null;
-    const target = path.resolve(path.dirname(from), specifier);
-    return asStylesheetFile(target) ?? asStylesheetFolder(target);
+function resolveImport(
+    from: string,
+    specifier: string,
+    candidates: StylesheetWalkOptions['importCandidates'],
+): string | null {
+    if (isPathSpecifier(specifier)) {
+        const target = path.resolve(path.dirname(from), specifier);
+        return asStylesheetFile(target) ?? asStylesheetFolder(target);
+    }
+    return candidates === undefined
+        ? null
+        : laneStylesheet(specifier, path.dirname(from), candidates);
 }
 
 /**
@@ -785,7 +1030,10 @@ function walkableUnder(base: string, target: string): boolean {
  * Tailwind's own `compile()` (`@tailwindcss/node` 4.3.3) follows it: a quoted
  * relative or absolute path after `@import` or `@reference`, resolved as a file, with `.css`
  * added, then as a folder; whatever its extension. A `url()` target, a bare
- * package name and an `@import` inside a comment or a string are not.
+ * package name and an `@import` inside a comment or a string are not. On a
+ * lane whose Tailwind resolves through the bundler (Vite), a target the
+ * bundler's resolver expands counts too: see
+ * {@link StylesheetWalkOptions.importCandidates}.
  *
  * The import is the exception because it is evidence the app loads the file:
  * a gitignored generated `@theme` file still sets tokens, and dropping it
@@ -832,7 +1080,7 @@ export function walkProjectStylesheets(
         texts.set(file, text);
         if (!text.includes('@import') && !text.includes('@reference')) continue;
         for (const written of importedSpecifiers(text)) {
-            const target = resolveImport(file, written);
+            const target = resolveImport(file, written, options.importCandidates);
             if (target === null || seen.has(target) || ignoresFile(target)) continue;
             if (!bases.some(base => walkableUnder(base, target))) continue;
             seen.add(target);

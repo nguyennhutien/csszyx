@@ -9,7 +9,7 @@
  * on it breaks the page with a green build, so the build reads them before
  * the first merge, and stops when a lane learns of one too late.
  */
-import { readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type ContentScanner, isHook, noClassHooks } from '@csszyx/tailwind-oracle';
@@ -29,7 +29,11 @@ import {
     tailwindProject,
 } from './tailwind-project.js';
 
+/** Links made in place of a project root, removed with the projects. */
+const linkedRoots: string[] = [];
+
 afterEach(() => {
+    for (const link of linkedRoots.splice(0)) rmSync(link, { force: true });
     removeTailwindProjects();
     vi.restoreAllMocks();
 });
@@ -317,7 +321,7 @@ describe('a Vite dev server', () => {
             };
             const server = {
                 config: { root },
-                watcher: { emit() {} },
+                watcher: { emit() {}, add() {}, on() {} },
                 ws: { send: (message: unknown) => sent.push(message) },
                 moduleGraph: graph,
                 environments: { client: { moduleGraph: graph } },
@@ -371,7 +375,7 @@ describe('a Vite dev server', () => {
         };
         const server = {
             config: { root },
-            watcher: { emit() {} },
+            watcher: { emit() {}, add() {}, on() {} },
             ws: { send: (message: unknown) => sent.push(message) },
             moduleGraph: graph,
             environments: { client: { moduleGraph: graph } },
@@ -394,6 +398,61 @@ describe('a Vite dev server', () => {
         await expect.poll(() => sent, { timeout: 10_000 }).toContainEqual({ type: 'full-reload' });
         expect(await transform()).toContain('card shadow-md shadow-lg');
     }, 60_000);
+});
+
+describe('a Vite dev server whose root is a link', () => {
+    it.each([
+        ['under the root as given', (linked: string, _real: string) => linked],
+        ['under its real path, as Vite names a module', (_linked: string, real: string) => real],
+    ])(
+        'reads no hooks from an edited gitignored file %s',
+        async (_name, base) => {
+            const real = tailwindProject('csszyx-source-hooks-link-', {
+                '.gitignore': 'generated/\n',
+                'src/index.css': TW,
+                'src/A.tsx': COVERED,
+                'generated/B.tsx': 'export const B = () => <b />;\n',
+            });
+            const linked = `${real}-link`;
+            symlinkSync(real, linked, 'dir');
+            linkedRoots.push(linked);
+            vi.spyOn(process, 'cwd').mockReturnValue(linked);
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const graph = {
+                getModuleById: () => undefined,
+                getModulesByFile: () => undefined,
+                invalidateModule() {},
+                invalidateAll() {},
+            };
+            const server = {
+                config: { root: linked },
+                watcher: { emit() {}, add() {}, on() {} },
+                ws: { send() {} },
+                moduleGraph: graph,
+                environments: { client: { moduleGraph: graph } },
+            };
+            const call = callHooks(
+                vitePlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configureServer', server);
+            await call('configResolved', { root: linked, command: 'serve' });
+            const transform = async () =>
+                ((await call('transform', COVERED, join(linked, 'src/A.tsx'))) as { code: string })
+                    .code;
+            expect(await transform()).toContain('card shadow-lg');
+
+            const b = join(base(linked, real), 'generated/B.tsx');
+            writeFileSync(b, 'export const B = () => <b className="group-[.shadow-md]:p-2" />;\n');
+            await call('hotUpdate', { type: 'update', file: b, modules: [], server });
+            // The hooks of a file the watcher reports are read before the hook
+            // returns, so the merge already answers without them.
+            expect(await transform()).toContain('card shadow-lg');
+        },
+        60_000,
+    );
 });
 
 describe('the source hook registry', () => {

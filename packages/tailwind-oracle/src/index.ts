@@ -54,15 +54,16 @@ export {
     type OriginOracle,
     styleBlockHooks,
 } from './origin-oracle.js';
-export type { StylesheetAlias } from './project-resolver.js';
 export {
     createGitignoreQuery,
+    createWalkRootRelative,
     DEPENDENCY_OUTPUT_DIRS,
     GENERATED_REPORT_DIRS,
     type GitignoreMode,
     type ProjectWalkOptions,
     type ProjectWalkResult,
     STYLESHEET_WALK_SKIP_DIRS,
+    type StylesheetImportCandidates,
     type StylesheetWalk,
     type StylesheetWalkOptions,
     skippedDirGlobs,

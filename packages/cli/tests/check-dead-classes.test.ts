@@ -7,12 +7,25 @@
  * fixture happens to sit in — inside this repository that finds the v3 copy
  * `csszyx migrate` pins — and every case would pass as a skip.
  */
+import { mkdirSync, symlinkSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { check } from '../src/commands/check.js';
 import { removeTailwindProjects, tailwindProject } from './helpers/tailwind-project.js';
+
+/** The repository's `@tailwindcss/node`, whose resolver the oracle borrows. */
+const TAILWIND_NODE = path.resolve(
+    path.dirname(
+        createRequire(path.resolve(import.meta.dirname, '../../../package.json')).resolve(
+            '@tailwindcss/node',
+        ),
+    ),
+    '..',
+);
 
 afterEach(() => {
     removeTailwindProjects();
@@ -21,7 +34,8 @@ afterEach(() => {
 });
 
 /**
- * Run the command over a project and return everything it printed.
+ * Run the command over a project and return everything it printed, without
+ * the colour codes a CI runner with `FORCE_COLOR` adds around each line.
  *
  * @param cwd - Project root.
  * @param allow - Classes to accept even when they produce no CSS.
@@ -31,7 +45,7 @@ async function reportFor(cwd: string, allow?: string[]): Promise<string> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await check({ cwd, allow });
-    return log.mock.calls.map(call => call.join(' ')).join('\n');
+    return stripVTControlCharacters(log.mock.calls.map(call => call.join(' ')).join('\n'));
 }
 
 describe('csszyx check — classes that style nothing', () => {
@@ -116,6 +130,26 @@ describe('csszyx check — classes that style nothing', () => {
 
         expect(report).toContain('skipped');
         expect(process.exitCode).toBe(1);
+    });
+
+    // Tailwind's own resolver (`@tailwindcss/node` 4.3.3) reads a bare target
+    // as a package; Vite's reads the file next door first. The check knows no
+    // bundler, so a stylesheet a Vite build compiles must not fail it.
+    it('reads a bare import as the sibling file, with a Tailwind integration installed', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";\n@import "tokens.css";',
+            'src/tokens.css': '@theme { --color-brand: #123456; }',
+            'src/Good.tsx': "export const Good = () => <div sz={{ bg: 'brand' }} />;",
+        });
+        const node = path.join(cwd, 'node_modules/@tailwindcss');
+        mkdirSync(node, { recursive: true });
+        symlinkSync(TAILWIND_NODE, path.join(node, 'node'), 'junction');
+
+        const report = await reportFor(cwd);
+
+        expect(report).not.toContain('skipped');
+        expect(report).not.toContain('bg-brand');
+        expect(process.exitCode).not.toBe(1);
     });
 
     it('still passes when the environment simply has nothing to ask', async () => {
@@ -279,5 +313,111 @@ describe('csszyx check — a relative --cwd', () => {
         await check({ cwd: path.relative(process.cwd(), root), rule: ['merge-covered-key'] });
 
         expect(log.mock.calls.flat().join('\n')).toContain('pb-2');
+    });
+});
+
+describe('csszyx check — a sign this project serves no negative of', () => {
+    /**
+     * Run the command in JSON mode over a project.
+     *
+     * @param cwd - Project root.
+     * @param rule - The `--rule` ids, when the run narrows to some.
+     * @returns The findings.
+     */
+    async function findingsFor(
+        cwd: string,
+        rule?: string[],
+    ): Promise<Array<{ rule: string; kind: string; file?: string; message: string }>> {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd, json: true, rule });
+        return JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+    }
+
+    const SIGNED =
+        "export const A = () => <div sz={{ p: -2, mt: -2, 'data-[state=open]': { p: -3 }, 'group-hover': { w: -4 } }} />;";
+
+    it('reports each class once, as unsigned-value under the dead-class pass', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': SIGNED,
+        });
+        const findings = (await findingsFor(cwd)).filter(entry => entry.rule === 'dead-class');
+        // `-mt-2` is served: margins have negatives.
+        expect(findings).toEqual([
+            {
+                rule: 'dead-class',
+                kind: 'unsigned-value',
+                file: 'src/A.tsx',
+                level: 'error',
+                message:
+                    '"-p-2" is emitted, and this project\'s Tailwind serves no negative "p-2": drop the sign, or define it with @utility.',
+            },
+            expect.objectContaining({
+                kind: 'unsigned-value',
+                message: expect.stringContaining('"data-[state=open]:-p-3"'),
+            }),
+            expect.objectContaining({
+                kind: 'unsigned-value',
+                message: expect.stringContaining('"group-hover:-w-4"'),
+            }),
+        ]);
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('says it apart from the dead classes in the human report', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': "export const A = () => <div sz={{ p: -2, break: 'bogus' }} />;",
+        });
+        const report = await reportFor(cwd);
+        expect(report).toContain('break-bogus');
+        expect(report).toMatch(
+            /Negative values this project's Tailwind does not serve:\n.*-p-2 +src\/A\.tsx/,
+        );
+        expect(report).not.toMatch(/Classes that produce no CSS:\n(.*\n)*.*-p-2 /);
+    });
+
+    it('runs the pass for --rule unsigned-value alone', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': "export const A = () => <div sz={{ p: -2, break: 'bogus' }} />;",
+        });
+        const findings = await findingsFor(cwd, ['unsigned-value']);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([
+            expect.objectContaining({ kind: 'unsigned-value', file: 'src/A.tsx' }),
+        ]);
+    });
+
+    it('says a class dead without its sign too as dead-class, once', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ p: '-medium', hover: { p: '-wide' } }} />;",
+        });
+        const findings = (await findingsFor(cwd)).filter(entry => entry.rule === 'dead-class');
+        expect(findings).toEqual([
+            expect.objectContaining({
+                file: 'src/A.tsx',
+                message:
+                    '"-p-medium" is emitted but produces no CSS under this project\'s Tailwind.',
+            }),
+            expect.objectContaining({
+                message:
+                    '"hover:-p-wide" is emitted but produces no CSS under this project\'s Tailwind.',
+            }),
+        ]);
+        expect(findings.filter(entry => entry.kind === 'unsigned-value')).toEqual([]);
+    });
+
+    it('passes a project that defines the negative with @utility', async () => {
+        const cwd = tailwindProject({
+            'src/app.css':
+                '@import "tailwindcss";\n@utility -p-* { padding: calc(--value(integer) * -1px); }',
+            'src/A.tsx': 'export const A = () => <div sz={{ p: -2 }} />;',
+        });
+        const findings = await findingsFor(cwd);
+        expect(findings.filter(entry => entry.kind === 'unsigned-value')).toEqual([]);
+        expect(process.exitCode).not.toBe(1);
     });
 });
