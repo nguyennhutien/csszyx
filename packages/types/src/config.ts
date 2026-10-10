@@ -771,9 +771,12 @@ export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
 };
 
 /**
- * Default csszyx configuration.
+ * Default csszyx configuration. Typed with the deprecated `CsszyxConfig` on
+ * purpose: the full, every-field-set shape is what this constant is, and
+ * consumers that read it keep that type until the deprecated one is removed.
  */
-export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = {
+// biome-ignore format: Sonar reads NOSONAR only on the line it flags.
+export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = { // NOSONAR: S1874, see above
     development: DEFAULT_DEVELOPMENT_CONFIG,
     production: DEFAULT_PRODUCTION_CONFIG,
     build: DEFAULT_BUILD_CONFIG,

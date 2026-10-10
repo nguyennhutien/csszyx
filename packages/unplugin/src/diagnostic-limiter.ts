@@ -204,7 +204,8 @@ let exitListenerInstalled = false;
 
 /** Print every flush still waiting; `exit` runs synchronous code only, which this is. */
 function flushAllAtExit(): void {
-    for (const flush of [...flushesAtExit]) flush();
+    // A flush removes itself; deleting the entry being visited is safe.
+    for (const flush of flushesAtExit) flush();
 }
 
 /**

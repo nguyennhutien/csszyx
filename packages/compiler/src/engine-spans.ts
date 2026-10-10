@@ -79,6 +79,7 @@ export type ByteOffsetLocator = (offset: number) => SourcePosition;
 function utf8Length(code: number): number {
     if (code < 0x80) return 1;
     if (code < 0x800) return 2;
+    if (code > 0xffff) return 4;
     if (code >= 0xd800 && code <= 0xdbff) return 4;
     if (code >= 0xdc00 && code <= 0xdfff) return 0;
     return 3;
@@ -102,7 +103,9 @@ export function createByteOffsetLocator(source: string): ByteOffsetLocator {
         const units = [0];
         let byte = 0;
         for (let index = 0; index < source.length; index++) {
-            const code = source.charCodeAt(index);
+            // At a pair's first half the code point counts all four bytes;
+            // the second half, read on its own, counts none.
+            const code = source.codePointAt(index) as number;
             byte += utf8Length(code);
             if (code === 0x0a) {
                 bytes.push(byte);
@@ -124,10 +127,10 @@ export function createByteOffsetLocator(source: string): ByteOffsetLocator {
         let byte = byteStarts[low] as number;
         let unit = unitStarts[low] as number;
         while (unit < source.length && byte < offset) {
-            const code = source.charCodeAt(unit);
+            const code = source.codePointAt(unit) as number;
             byte += utf8Length(code);
             // A surrogate pair is one character: step over both halves.
-            unit += code >= 0xd800 && code <= 0xdbff ? 2 : 1;
+            unit += code > 0xffff || (code >= 0xd800 && code <= 0xdbff) ? 2 : 1;
         }
         return { line: low + 1, column: unit - (unitStarts[low] as number) + 1 };
     };

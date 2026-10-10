@@ -2928,6 +2928,25 @@ function describePrefix(prefix: string | null): string {
 }
 
 /**
+ * Whether a file the project walk found sits in a folder of generated
+ * output: a coverage report, a built Storybook, a Rust `target/`. Their
+ * pages are not the app, and their `<style>` blocks select on nothing it
+ * renders. Read below the walked folder, so a project that itself lives
+ * under a folder named `target` is not skipped whole.
+ *
+ * Asked of walk-found files only: a module a bundler transforms is the
+ * app's wherever it lives.
+ *
+ * @param file - Its path.
+ * @param base - The folder the walk started from.
+ * @returns True when a folder below the base is one of those.
+ */
+function inGeneratedOutput(file: string, base: string): boolean {
+    const below = path.relative(base, file).split(/[\\/]/).slice(0, -1);
+    return below.some(directory => GENERATED_REPORT_DIRS.has(directory));
+}
+
+/**
  * Core factory that creates the shared state and both pre/post plugins.
  * @param options configuration options
  * @returns pre and post plugins
@@ -4007,25 +4026,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (sourceHooks.readText(normalizeSourceFilename(file), text, extension)) {
             followSourceHooks();
         }
-    }
-
-    /**
-     * Whether a file the project walk found sits in a folder of generated
-     * output: a coverage report, a built Storybook, a Rust `target/`. Their
-     * pages are not the app, and their `<style>` blocks select on nothing it
-     * renders. Read below the walked folder, so a project that itself lives
-     * under a folder named `target` is not skipped whole.
-     *
-     * Asked of walk-found files only: a module a bundler transforms is the
-     * app's wherever it lives.
-     *
-     * @param file - Its path.
-     * @param base - The folder the walk started from.
-     * @returns True when a folder below the base is one of those.
-     */
-    function inGeneratedOutput(file: string, base: string): boolean {
-        const below = path.relative(base, file).split(/[\\/]/).slice(0, -1);
-        return below.some(directory => GENERATED_REPORT_DIRS.has(directory));
     }
 
     // Whether a file a watcher reported is one the project walk would read

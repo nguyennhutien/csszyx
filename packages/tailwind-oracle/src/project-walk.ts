@@ -181,7 +181,7 @@ function ownPathVerdict(
 ): (relative: string) => GitignoreVerdict {
     const rules = (matcher as unknown as { _rules?: Partial<OwnPathRules> })._rules;
     if (typeof rules?.test !== 'function') {
-        throw new Error(
+        throw new TypeError(
             '[csszyx] the installed `ignore` package no longer matches one path apart from its parent folders; .gitignore cannot be read.\n' +
                 '  help: install ignore@7.0.6, the version @csszyx/unplugin pins, and remove any override that forces another.',
         );
@@ -333,7 +333,8 @@ function parentLayers(root: string, read: string[]): GitignoreLayer[] | null {
         if (parent === dir) break;
         dir = parent;
     }
-    read.push(...found.reverse());
+    found.reverse();
+    read.push(...found);
     return layers.some(layer => layerIgnoresRoot(layer, root)) ? null : layers;
 }
 

@@ -1088,7 +1088,7 @@ function reportSelectedIssues(
 }
 
 /** The levels `--fail-on` accepts; `off` is never reported, so it cannot be one. */
-const FAIL_ON_LEVELS: readonly SzDiagnosticLevel[] = ['info', 'warn', 'error'];
+const FAIL_ON_LEVELS: ReadonlySet<SzDiagnosticLevel> = new Set(['info', 'warn', 'error']);
 
 /**
  * Read `--fail-on`, or fail the run explaining why it cannot be.
@@ -1099,7 +1099,7 @@ const FAIL_ON_LEVELS: readonly SzDiagnosticLevel[] = ['info', 'warn', 'error'];
  */
 function failOnLevel(options: CheckOptions, out: Reporter): SzDiagnosticLevel | null {
     const level = options.failOn ?? 'error';
-    if (FAIL_ON_LEVELS.includes(level)) return level;
+    if (FAIL_ON_LEVELS.has(level)) return level;
     const refusal = level === 'off' ? 'cannot be a threshold' : 'is not a level';
     out.warn(
         `\u2716 --fail-on "${level}" ${refusal}: use info, warn or error. Nothing was scanned.`,
