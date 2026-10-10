@@ -201,6 +201,11 @@ pub struct TransformResult {
     /// table; objects of one class are left out.
     #[serde(default)]
     pub merge_groups: Vec<super::merge::MergeGroup>,
+    /// Each static object of one class, when the pass had no merge table, in
+    /// the shape of `merge_groups`: a merge reads nothing here, a report reads
+    /// the key and offset behind the class.
+    #[serde(default)]
+    pub single_class_groups: Vec<super::merge::MergeGroup>,
     /// Each static class name beside a static `sz` a merge would read, when
     /// the pass had no merge table; one side empty is left out.
     #[serde(default)]

@@ -33,6 +33,13 @@ const BREAK_SITE = {
 
 // `p` covers `px`, so the build merges this object and lowers the file a
 // second time; the key positions come from the first pass.
+/** Where `{ justify: 'safe-center' }` is written: a one-class object. */
+const JUSTIFY_SITE = {
+    line: 2,
+    column: 'export const B = () => <div className="my-own-class" sz={{ '.length + 1,
+    key: 'justify',
+};
+
 const SOURCE = [
     "export const A = () => <div sz={{ break: 'bogus', px: 2, p: 4 }} />;",
     'export const B = () => <div className="my-own-class" sz={{ justify: \'safe-center\' }} />;',
@@ -87,11 +94,11 @@ describe('a Vite build', () => {
     it('names each sz class that produces no CSS, with the file, line and key that emit it', async () => {
         const lines = deadLines();
         await viteBuild(project());
-        // `justify-safe-center` is the only class of its object, and the
-        // engine records a key position only for an object a merge reads.
+        // `justify-safe-center` is the only class of its object: the engine
+        // places it through `singleClassGroups`, beside the merge groups.
         expect(lines).toEqual([
             deadClassMessage('break-bogus', 'src/A.tsx', BREAK_SITE),
-            deadClassMessage('justify-safe-center', 'src/A.tsx'),
+            deadClassMessage('justify-safe-center', 'src/A.tsx', JUSTIFY_SITE),
         ]);
         expect(deadClassMessage('break-bogus', 'src/A.tsx')).toBe(
             "[csszyx] src/A.tsx: `break-bogus` is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n" +
@@ -112,7 +119,7 @@ describe('a Vite build', () => {
         await viteBuild(
             project('export default { diagnostics: { allow: { classes: ["break-bogus"] } } };\n'),
         );
-        expect(lines).toEqual([deadClassMessage('justify-safe-center', 'src/A.tsx')]);
+        expect(lines).toEqual([deadClassMessage('justify-safe-center', 'src/A.tsx', JUSTIFY_SITE)]);
     }, 60_000);
 
     it('applies an override to the file the class comes from', async () => {
@@ -188,6 +195,74 @@ describe('a Vite build', () => {
     }, 60_000);
 });
 
+describe('a Vite build, for a sign the project serves no negative of', () => {
+    const SIGNED = [
+        'export const A = () => <div sz={{ p: -2, mt: -2 }} />;',
+        "export const B = () => <div sz={{ 'data-[state=open]': { p: -3 }, 'group-hover': { w: -4 } }} />;",
+        '',
+    ].join('\n');
+
+    /**
+     * Collect every line the console receives under either id.
+     *
+     * @returns The live list.
+     */
+    function signLines(): string[] {
+        const lines: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            const line = args.map(String).join(' ');
+            if (line.includes('(dead-class)') || line.includes('(unsigned-value)'))
+                lines.push(line);
+        });
+        return lines;
+    }
+
+    it('names each one once, as unsigned-value, variants included', async () => {
+        const root = tailwindProject('csszyx-unsigned-', {
+            'src/index.css': '@import "tailwindcss";\n',
+            'src/A.tsx': SIGNED,
+        });
+        const lines = signLines();
+        await viteBuild(root);
+        // `-mt-2` is served: margins have negatives.
+        expect(lines).toEqual([
+            expect.stringContaining(
+                "`-p-2` (sz key `p`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `p-2`",
+            ),
+            expect.stringContaining('`data-[state=open]:-p-3`'),
+            expect.stringContaining('`group-hover:-w-4`'),
+        ]);
+        for (const line of lines) expect(line).toContain('(unsigned-value)');
+    }, 60_000);
+
+    it('names a class dead without its sign too as dead-class, once', async () => {
+        const root = tailwindProject('csszyx-unsigned-', {
+            'src/index.css': '@import "tailwindcss";\n',
+            'src/A.tsx': "export const A = () => <div sz={{ p: '-medium', mt: -2 }} />;\n",
+        });
+        const lines = signLines();
+        await viteBuild(root);
+        expect(lines).toEqual([
+            expect.stringContaining(
+                '`-p-medium` (sz key `p`) is emitted by an sz prop and produces no CSS under',
+            ),
+        ]);
+        expect(lines[0]).toContain('(dead-class)');
+    }, 60_000);
+
+    it('says nothing when the project defines the negative with @utility', async () => {
+        const root = tailwindProject('csszyx-unsigned-', {
+            'src/index.css':
+                '@import "tailwindcss";\n@utility -p-* { padding: calc(--value(integer) * -1px); }\n',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ p: -2, 'data-[state=open]': { p: -3 } }} />;\n",
+        });
+        const lines = signLines();
+        await viteBuild(root);
+        expect(lines).toEqual([]);
+    }, 60_000);
+});
+
 describe('a webpack build', () => {
     it('names the dead sz classes the prescan collected', async () => {
         const root = project();
@@ -214,7 +289,7 @@ describe('a webpack build', () => {
         expect(readFileSync(join(root, 'dist/bundle.js'), 'utf8')).toContain('ready');
         expect(lines).toEqual([
             deadClassMessage('break-bogus', 'src/A.tsx', BREAK_SITE),
-            deadClassMessage('justify-safe-center', 'src/A.tsx'),
+            deadClassMessage('justify-safe-center', 'src/A.tsx', JUSTIFY_SITE),
         ]);
     }, 120_000);
 });

@@ -5,7 +5,7 @@
 
 use napi_derive::napi;
 
-use crate::migrate::{self, HtmlTransformOptions, InjectRuntime, SzObject};
+use crate::migrate::{self, HtmlTransformOptions, InjectRuntime, ServedAnswers, SzObject};
 use crate::transform::{
     transform_batch_with_options, GlobalVarAliasEntry, ParserPath, RecoveryMode, TransformFile,
     TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -217,6 +217,16 @@ pub struct NativeMergeGroup {
     pub classes: Vec<String>,
 }
 
+impl From<crate::transform::merge::MergeGroup> for NativeMergeGroup {
+    fn from(group: crate::transform::merge::MergeGroup) -> Self {
+        Self {
+            keys: group.keys,
+            key_starts: group.key_starts,
+            classes: group.classes,
+        }
+    }
+}
+
 /// A static class name and the `sz` classes beside it.
 #[derive(Debug)]
 #[napi(object)]
@@ -243,6 +253,9 @@ pub struct NativeTransformResult {
     pub raw_class_names: Vec<String>,
     /// Each static object a merge would read.
     pub merge_groups: Vec<NativeMergeGroup>,
+    /// Each static object of one class, which a merge does not read: where its
+    /// class's key is written.
+    pub single_class_groups: Vec<NativeMergeGroup>,
     /// Each static class name beside a static `sz` a merge would read.
     pub merge_overrides: Vec<NativeMergeOverride>,
     /// Non-fatal transform diagnostics.
@@ -323,11 +336,12 @@ impl From<TransformResult> for NativeTransformResult {
             merge_groups: result
                 .merge_groups
                 .into_iter()
-                .map(|group| NativeMergeGroup {
-                    keys: group.keys,
-                    key_starts: group.key_starts,
-                    classes: group.classes,
-                })
+                .map(NativeMergeGroup::from)
+                .collect(),
+            single_class_groups: result
+                .single_class_groups
+                .into_iter()
+                .map(NativeMergeGroup::from)
                 .collect(),
             merge_overrides: result
                 .merge_overrides
@@ -448,6 +462,11 @@ pub struct NativeMigrateOptions {
     pub keys_only: Option<bool>,
     /// The migration-resolution map, as JSON text.
     pub custom_map_json: Option<String>,
+    /// Utilities the project's Tailwind serves, asked where one of migrate's
+    /// tables would otherwise decide.
+    pub served_classes: Option<Vec<String>>,
+    /// Utilities the project's Tailwind does not serve, asked the same way.
+    pub unserved_classes: Option<Vec<String>>,
 }
 
 /// Options passed from JavaScript to the native HTML migrate.
@@ -464,6 +483,10 @@ pub struct NativeMigrateHtmlOptions {
     pub cdn_url: Option<String>,
     /// The script path for `local`.
     pub local_path: Option<String>,
+    /// Utilities the project's Tailwind serves, as for JSX.
+    pub served_classes: Option<Vec<String>>,
+    /// Utilities the project's Tailwind does not serve, as for JSX.
+    pub unserved_classes: Option<Vec<String>>,
 }
 
 /// The counts of one migrated file.
@@ -480,6 +503,37 @@ pub struct NativeMigrateStats {
     pub classes_unrecognized: Vec<String>,
     /// Legacy sz keys rewritten; absent when the file was never parsed.
     pub sz_keys_normalized: Option<u32>,
+    /// Classes one of migrate's tables decided because the project's
+    /// Tailwind had not been asked about them.
+    pub table_verdicts: Vec<NativeTableVerdict>,
+}
+
+/// A class a table decided, with the table's verdict.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeTableVerdict {
+    /// The utility, with its sign, without variants or `!`.
+    pub class: String,
+    /// Whether the table took the class as served.
+    pub served: bool,
+}
+
+/// The project's answers, from the two lists JavaScript sends; `None` when
+/// it sent neither.
+fn served_answers(
+    served: Option<Vec<String>>,
+    unserved: Option<Vec<String>>,
+) -> Option<ServedAnswers> {
+    if served.is_none() && unserved.is_none() {
+        return None;
+    }
+    let answers = served
+        .into_iter()
+        .flatten()
+        .map(|class| (class, true))
+        .chain(unserved.into_iter().flatten().map(|class| (class, false)))
+        .collect();
+    Some(answers)
 }
 
 /// What migrate did to one file.
@@ -510,6 +564,15 @@ impl From<migrate::TransformResult> for NativeMigrateResult {
                 class_names_skipped_component: result.stats.class_names_skipped_component,
                 classes_unrecognized: result.stats.classes_unrecognized,
                 sz_keys_normalized: result.stats.sz_keys_normalized,
+                table_verdicts: result
+                    .stats
+                    .table_verdicts
+                    .into_iter()
+                    .map(|verdict| NativeTableVerdict {
+                        class: verdict.class,
+                        served: verdict.served,
+                    })
+                    .collect(),
             },
             potentially_unused_imports: result.potentially_unused_imports,
         }
@@ -536,10 +599,12 @@ pub fn migrate_batch_native(
         .map_err(|error| {
             napi::Error::from_reason(format!("customMapJson is not a JSON object: {error}"))
         })?;
+    let served = served_answers(options.served_classes, options.unserved_classes);
     let migrate_options = migrate::TransformOptions {
         inject_todos: options.inject_todos.unwrap_or(false),
         keys_only: options.keys_only.unwrap_or(false),
         custom_map: custom_map.as_ref(),
+        served: served.as_ref(),
     };
     Ok(files
         .into_iter()
@@ -612,6 +677,7 @@ pub fn migrate_html_native(
         inject_runtime,
         cdn_url: options.cdn_url,
         local_path: options.local_path,
+        served: served_answers(options.served_classes, options.unserved_classes),
     };
     Ok(migrate::transform_html_source(&source, &html_options).into())
 }

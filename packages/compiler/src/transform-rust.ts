@@ -250,6 +250,7 @@ function fromNativeResult(result: NativeTransformResult, source: string): Source
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         mergeGroups: spans.mergeGroups,
+        singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
         diagnostics: result.diagnostics,
         issues: spans.issues,

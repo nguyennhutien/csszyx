@@ -385,6 +385,32 @@ describe('the groups a first pass reports', () => {
         }
     });
 
+    it.each([
+        ['a one-class object', '<div sz={{ m: 2 }} />', ['m'], ['m-2']],
+        ['a one-class variant', '<div sz={{ hover: { m: 2 } }} />', ['hover'], ['hover:m-2']],
+    ])('places %s at its key, apart from the merge groups', (_, jsx, keys, classes) => {
+        // One class merges with nothing, so `mergeGroups` stays what a merge
+        // reads; the class still needs its key to be reported at.
+        const source = `export const A = () => ${jsx};`;
+        for (const [name, transform] of ENGINES) {
+            const result = transform(source, 'a.tsx');
+            expect(result.mergeGroups, name).toEqual([]);
+            expect(JSON.parse(JSON.stringify(result.singleClassGroups)), name).toEqual([
+                groupAt(source, keys, classes),
+            ]);
+        }
+    });
+
+    it('places each one-class object of an element on its own', () => {
+        const source = 'export const A = () => <><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>;';
+        for (const [name, transform] of ENGINES) {
+            expect(
+                JSON.parse(JSON.stringify(transform(source, 'a.tsx').singleClassGroups)),
+                name,
+            ).toEqual([groupAt(source, ['p'], ['p-4']), groupAt(source, ['pb'], ['pb-2'])]);
+        }
+    });
+
     it('leaves out an szv branch, which is never merged', () => {
         const source = [
             "import { szv, szr } from 'csszyx';",

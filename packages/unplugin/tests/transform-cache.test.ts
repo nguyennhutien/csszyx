@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { transformWasm } from '@csszyx/compiler';
 import { afterEach, describe, expect, it } from 'vitest';
+import { emittedClassSites } from '../src/dead-class.js';
 import {
     type CacheableTransformResult,
     createTransformCacheKey,
@@ -169,6 +170,42 @@ describe('transform cache', () => {
         expect(cached?.issues?.[0]?.line).toBe(3);
     });
 
+    it('keeps where each one-class object is written, so a cache hit still places its dead class', () => {
+        const source = [
+            "export const A = () => <div sz={{ break: 'bogus', p: 4 }} />;",
+            "export const B = () => <div sz={{ justify: 'safe-center' }} />;",
+        ].join('\n');
+        const engine = transformWasm(source, '/repo/src/App.tsx');
+        expect(engine.singleClassGroups).toHaveLength(1);
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const spannedInput = input({ source });
+        writeTransformCache(cacheRoot, spannedInput, { ...result(), ...engine });
+
+        const { key } = createTransformCacheKey(spannedInput);
+        const stored = JSON.parse(
+            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
+        ) as { result: Record<string, unknown> };
+        expect(stored.result.singleClassGroups).toEqual([
+            {
+                keys: ['justify'],
+                keyStarts: [Buffer.byteLength(source.slice(0, source.indexOf('justify')))],
+                classes: ['justify-safe-center'],
+            },
+        ]);
+
+        const cached = readTransformCache(cacheRoot, spannedInput);
+        expect(JSON.stringify(cached?.singleClassGroups)).toBe(
+            JSON.stringify(engine.singleClassGroups),
+        );
+        expect(
+            emittedClassSites(cached as CacheableTransformResult).get('justify-safe-center'),
+        ).toEqual({
+            line: 2,
+            column: 'export const B = () => <div sz={{ '.length + 1,
+            key: 'justify',
+        });
+    });
+
     it('misses when source, version, parser, producer, budget, mangle options, aliases, or filename changes', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input({ astBudget: 50_000 }), result());
@@ -231,7 +268,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":19');
+        expect(content).toContain('"version":20');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 

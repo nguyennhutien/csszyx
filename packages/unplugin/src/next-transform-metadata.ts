@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 
 import { type SourceTransformResult, transform } from '@csszyx/compiler';
 import { collectMergeCallClassNames } from './authored-class-scanner.js';
-import type { NextSafelistShardInput } from './next-safelist-state.js';
+import { emittedClassSites } from './dead-class.js';
+import type { NextSafelistShardInput, NextShardClassSite } from './next-safelist-state.js';
 import { sortStrings } from './sort.js';
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {
@@ -13,6 +14,11 @@ export interface NextTransformMetadata {
     rawClassNames: string[];
     /** String literals written inside `szcn(...)` calls, as the merge will see them. */
     mergeLiterals: string[];
+    /**
+     * Where the first pass placed each emitted class, by class: the line,
+     * column and key a `dead-class` line names.
+     */
+    classSites: NextShardClassSite[];
     recoveryTokenCount: number;
     cssVariableCount: number;
 }
@@ -32,12 +38,18 @@ export function collectNextTransformMetadata(
 ): NextTransformMetadata {
     const classes = new Set(result.classes);
     collectRuntimeStaticClasses(result, classes);
+    const placed = emittedClassSites(result);
+    const sorted = sortStrings(classes);
     return {
         sourcePath,
         sourceHash: createHash('sha256').update(source).digest('hex'),
-        classes: sortStrings(classes),
+        classes: sorted,
         rawClassNames: sortStrings(result.rawClassNames),
         mergeLiterals: sortStrings(collectMergeCallClassNames(source)),
+        classSites: sorted.flatMap(className => {
+            const site = placed.get(className);
+            return site === undefined ? [] : [{ className, ...site }];
+        }),
         recoveryTokenCount: result.recoveryTokens.size,
         cssVariableCount: result.cssVariableMap.size,
     };
@@ -61,6 +73,7 @@ export function createNextSafelistShardFromMetadata(
         classes: metadata.classes,
         authoredClasses: metadata.rawClassNames,
         mergeLiterals: metadata.mergeLiterals,
+        classSites: metadata.classSites,
     };
 }
 

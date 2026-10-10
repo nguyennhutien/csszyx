@@ -32,7 +32,10 @@ import {
 // diagnostics no rule can select and merge groups `csszyx check` cannot place.
 // A position is stored as the engine's byte offset and located again against
 // the source on read: a line and column per class grew an entry by ~45%.
-const CACHE_SCHEMA_VERSION = 19;
+// 20: entries keep each one-class object's key and where it is written
+// (`singleClassGroups`); a schema-19 entry would name such an object's dead
+// class by its file alone on every cache hit.
+const CACHE_SCHEMA_VERSION = 20;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -59,6 +62,8 @@ interface SerializedTransformResult {
     rawClassNames: string[];
     /** Absent from an entry written before the field existed. */
     mergeGroups?: StoredEngineSpans['mergeGroups'];
+    /** Absent from an entry written before the field existed. */
+    singleClassGroups?: StoredEngineSpans['singleClassGroups'];
     /** Absent from an entry written before the field existed. */
     mergeOverrides?: StoredEngineSpans['mergeOverrides'];
     diagnostics: string[];
@@ -447,17 +452,25 @@ function deserializeResult(
  *
  * @param result - A stored result, or the part of it with spans.
  * @param result.mergeGroups - Each static object's classes, as stored.
+ * @param result.singleClassGroups - Each one-class static object, as stored.
  * @param result.mergeOverrides - Each class name beside a static `sz`, as stored.
  * @param result.issues - Each diagnostic's code and offset, as stored.
  * @param source - The source the entry was transformed from.
  * @returns The spans, located lazily.
  */
 export function restoreCachedSpans(
-    result: { mergeGroups?: unknown; mergeOverrides?: unknown; issues?: unknown },
+    result: {
+        mergeGroups?: unknown;
+        singleClassGroups?: unknown;
+        mergeOverrides?: unknown;
+        issues?: unknown;
+    },
     source: string,
 ): ReturnType<typeof restoreEngineSpans> {
     const stored: StoredEngineSpans = {};
     if (Array.isArray(result.mergeGroups)) stored.mergeGroups = result.mergeGroups;
+    if (Array.isArray(result.singleClassGroups))
+        stored.singleClassGroups = result.singleClassGroups;
     if (Array.isArray(result.mergeOverrides)) stored.mergeOverrides = result.mergeOverrides;
     if (Array.isArray(result.issues)) stored.issues = result.issues;
     return restoreEngineSpans(source, stored);

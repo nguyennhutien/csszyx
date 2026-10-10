@@ -78,6 +78,12 @@ export interface NativeTransformResult {
      */
     mergeGroups: Array<{ keys: string[]; keyStarts: number[]; classes: string[] }>;
     /**
+     * Each static object of one class, in the shape of `mergeGroups`: a merge
+     * reads nothing here; the key behind the class and its byte offset are
+     * where a dead class is reported. Absent from a binary that predates it.
+     */
+    singleClassGroups?: Array<{ keys: string[]; keyStarts: number[]; classes: string[] }>;
+    /**
      * Each static class name and the static `sz` classes beside it a merge would
      * read, with the byte offset of the class-name attribute.
      */
@@ -208,6 +214,10 @@ export interface NativeMigrateOptions {
     keysOnly?: boolean;
     /** The migration-resolution map, as JSON text. */
     customMapJson?: string;
+    /** Utilities the project's Tailwind serves, where a migrate table would decide. */
+    servedClasses?: string[];
+    /** Utilities the project's Tailwind does not serve, asked the same way. */
+    unservedClasses?: string[];
 }
 
 /** Options for the native migrate of an HTML source. */
@@ -222,6 +232,10 @@ export interface NativeMigrateHtmlOptions {
     cdnUrl?: string;
     /** The script path for `local`. */
     localPath?: string;
+    /** Utilities the project's Tailwind serves, as for JSX. */
+    servedClasses?: string[];
+    /** Utilities the project's Tailwind does not serve, as for JSX. */
+    unservedClasses?: string[];
 }
 
 /** The counts of one migrated file. */
@@ -232,6 +246,20 @@ export interface NativeMigrateStats {
     classesUnrecognized: string[];
     /** Legacy sz keys rewritten; null when the file was never parsed. */
     szKeysNormalized: number | null;
+    /**
+     * Classes a migrate table decided because the project's Tailwind had not
+     * been asked about them, with the table's verdict. Absent on platform
+     * packages that predate the field.
+     */
+    tableVerdicts?: NativeTableVerdict[];
+}
+
+/** A class a migrate table decided, with the table's verdict. */
+export interface NativeTableVerdict {
+    /** The utility, with its sign, without variants or `!`. */
+    class: string;
+    /** Whether the table took the class as served. */
+    served: boolean;
 }
 
 /** What migrate did to one file. */

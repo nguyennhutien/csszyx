@@ -42,6 +42,39 @@ describe('Next transform metadata', () => {
             classes: ['p-2'],
             authoredClasses: ['raw'],
             mergeLiterals: [],
+            classSites: metadata.classSites,
         });
+    });
+
+    it('places each class at the key it was lowered from, as the Vite lane does', () => {
+        // The dead-class line of a Next command names the line, column and
+        // key, so the shard carries them from the first pass.
+        const source = "const App=()=> <div sz={{ break: 'bogus', p: 4 }} />;";
+        const result = transformSource(source, '/repo/src/App.tsx');
+        const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
+        const column = source.indexOf('break') + 1;
+
+        expect(metadata.classSites).toEqual([
+            { className: 'break-bogus', line: 1, column, key: 'break' },
+            { className: 'p-4', line: 1, column: source.indexOf('p: 4') + 1, key: 'p' },
+        ]);
+        expect(createNextSafelistShardFromMetadata(metadata).classSites).toEqual(
+            metadata.classSites,
+        );
+    });
+
+    it('places the class of a one-class object too', () => {
+        const source = "const App=()=> <div sz={{ justify: 'safe-center' }} />;";
+        const result = transformSource(source, '/repo/src/App.tsx');
+        const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
+
+        expect(metadata.classSites).toEqual([
+            {
+                className: 'justify-safe-center',
+                line: 1,
+                column: source.indexOf('justify') + 1,
+                key: 'justify',
+            },
+        ]);
     });
 });

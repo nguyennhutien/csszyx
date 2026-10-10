@@ -10,12 +10,14 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     acquireNextSafelistStateLock,
     atomicRenameWithRetry,
     atomicWriteFileSync,
     materializeNextSafelist,
+    NEXT_SAFELIST_SHARD_FORMAT,
+    NEXT_SAFELIST_SHARD_READ_FORMAT,
     readNextSafelistStateLockMetadata,
     resolveNextSafelistStatePaths,
     writeNextSafelistShard,
@@ -23,6 +25,33 @@ import {
 import { SAFELIST_HEADER } from '../src/safelist-format.js';
 
 const tempDirs: string[] = [];
+
+/**
+ * The shard check of the 0.17.2 reader, copied from
+ * `git show v0.17.2:packages/unplugin/src/next-safelist-state.ts`
+ * (`normalizeShardRecord`): it deleted every shard this returns null for.
+ * Kept verbatim as the old reader a shard written now has to pass.
+ *
+ * @param data - A parsed shard.
+ * @returns The fields that reader kept, or null for a shard it deleted.
+ */
+function readShardAs0172(data: Record<string, unknown>): { classes: unknown[] } | null {
+    if (
+        data.version !== 1 ||
+        typeof data.cacheKey !== 'string' ||
+        typeof data.sourcePath !== 'string' ||
+        typeof data.sourceHash !== 'string' ||
+        !Array.isArray(data.classes) ||
+        typeof data.timestamp !== 'number' ||
+        typeof data.pid !== 'number'
+    ) {
+        return null;
+    }
+    return { classes: data.classes };
+}
+
+/** Where a source writes `{ p: 8 }`: line 3, column 7. */
+const SITE_P8 = { className: 'p-8', line: 3, column: 7, key: 'p' };
 
 afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
@@ -47,7 +76,7 @@ describe('Next safelist state', () => {
         expect(paths.outputPath).toBe(join(root, '.csszyx/csszyx-classes.txt'));
     });
 
-    it('names the first source in path order as the origin of a shared class', () => {
+    it('names every source of a class in path order, at the key each writes it', () => {
         const root = tempRoot();
         mkdirSync(join(root, 'src'), { recursive: true });
         const paths = resolveNextSafelistStatePaths(root);
@@ -56,15 +85,149 @@ describe('Next safelist state', () => {
             writeFileSync(sourcePath, 'export {}');
             writeNextSafelistShard(
                 paths.shardsDir,
-                { sourcePath, sourceHash: name, classes: ['p-8', `only-${name}`], timestamp: 1 },
+                {
+                    sourcePath,
+                    sourceHash: name,
+                    classes: ['p-8', `only-${name}`],
+                    classSites: name === 'B.tsx' ? [SITE_P8] : [],
+                    timestamp: 1,
+                },
                 { retryDelayMs: 0 },
             );
         }
 
         const { classOrigins } = materializeNextSafelist(paths, { retryDelayMs: 0 });
 
-        expect(classOrigins.get('p-8')).toBe(join(root, 'src/A.tsx'));
-        expect(classOrigins.get('only-B.tsx')).toBe(join(root, 'src/B.tsx'));
+        expect(classOrigins.get('p-8')).toEqual([
+            { sourcePath: join(root, 'src/A.tsx') },
+            { sourcePath: join(root, 'src/B.tsx'), line: 3, column: 7, key: 'p' },
+        ]);
+        expect(classOrigins.get('only-B.tsx')).toEqual([{ sourcePath: join(root, 'src/B.tsx') }]);
+    });
+
+    it('reads a shard an older version wrote, and replaces it once the source is seen again', () => {
+        // Format 1 carried no sites. Its classes still reach the safelist; the
+        // next write for the same source is not skipped as equivalent, so the
+        // sites arrive with it.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const sourcePath = join(root, 'src/A.tsx');
+        writeFileSync(sourcePath, 'export {}');
+        mkdirSync(paths.shardsDir, { recursive: true });
+        const old = {
+            version: 1,
+            cacheKey: 'old',
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            timestamp: 1,
+            pid: 1,
+        };
+        writeFileSync(join(paths.shardsDir, 'old.json'), JSON.stringify(old));
+
+        expect(materializeNextSafelist(paths, { retryDelayMs: 0 }).classes).toEqual(['p-8']);
+        const input = {
+            cacheKey: 'old',
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            classSites: [SITE_P8],
+        };
+        expect(writeNextSafelistShard(paths.shardsDir, input).changed).toBe(true);
+        expect(writeNextSafelistShard(paths.shardsDir, input).changed).toBe(false);
+        expect(JSON.parse(readFileSync(join(paths.shardsDir, 'old.json'), 'utf8'))).toMatchObject({
+            version: NEXT_SAFELIST_SHARD_FORMAT,
+            classSites: [SITE_P8],
+        });
+    });
+
+    it('writes a shard the 0.17.2 reader keeps, so a session of each loses no class', () => {
+        // A field added beside the old ones breaks no reader: 0.17.2 reads the
+        // fields it knows and drops the rest. Bumping the number for it made
+        // that reader delete every shard this version wrote.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const sourcePath = join(root, 'src/A.tsx');
+        writeFileSync(sourcePath, 'export {}');
+        const { filePath } = writeNextSafelistShard(paths.shardsDir, {
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            authoredClasses: ['card'],
+            mergeLiterals: ['p-8'],
+            classSites: [SITE_P8],
+        });
+
+        const kept = readShardAs0172(JSON.parse(readFileSync(filePath, 'utf8')));
+        expect(kept?.classes).toEqual(['p-8']);
+    });
+
+    it('is read by the reader of the same release', () => {
+        expect(NEXT_SAFELIST_SHARD_FORMAT).toBe(NEXT_SAFELIST_SHARD_READ_FORMAT);
+    });
+
+    it('keeps a shard of a format it does not read on disk, uses none of it, and says how to rewrite it once', () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const sourcePath = join(root, 'src/A.tsx');
+        writeFileSync(sourcePath, 'export {}');
+        mkdirSync(paths.shardsDir, { recursive: true });
+        const shard = {
+            version: 99,
+            cacheKey: 'newer',
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            timestamp: 1,
+            pid: 1,
+        };
+        writeFileSync(join(paths.shardsDir, 'newer.json'), JSON.stringify(shard));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        expect(materializeNextSafelist(paths, { retryDelayMs: 0 }).classes).toEqual([]);
+        expect(materializeNextSafelist(paths, { retryDelayMs: 0 }).classes).toEqual([]);
+        expect(existsSync(join(paths.shardsDir, 'newer.json'))).toBe(true);
+        const lines = warn.mock.calls.map(call => String(call[0]));
+        expect(lines).toEqual([
+            // The line names the shard with `/` on every platform.
+            `[csszyx] .csszyx/cache/safelist-shards/newer.json is a safelist shard in format 99, and this version reads format ${NEXT_SAFELIST_SHARD_READ_FORMAT}: its classes are left out of the safelist.\n` +
+                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes every shard again.',
+        ]);
+        warn.mockRestore();
+    });
+
+    it('keeps a shard whose sites are not of the shape it writes, without the sites', () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const sourcePath = join(root, 'src/A.tsx');
+        writeFileSync(sourcePath, 'export {}');
+        mkdirSync(paths.shardsDir, { recursive: true });
+        const shard = {
+            version: NEXT_SAFELIST_SHARD_FORMAT,
+            cacheKey: 'odd',
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            timestamp: 1,
+            pid: 1,
+        };
+        for (const [index, classSites] of [
+            'p-8',
+            [{ className: 'p-8', line: '3', column: 7, key: 'p' }],
+            [null],
+        ].entries()) {
+            writeFileSync(
+                join(paths.shardsDir, 'odd.json'),
+                JSON.stringify({ ...shard, classSites, timestamp: index + 1 }),
+            );
+            expect(
+                materializeNextSafelist(paths, { retryDelayMs: 0 }).classOrigins.get('p-8'),
+            ).toEqual([{ sourcePath }]);
+        }
     });
 
     it('merges source shards into a deterministic Tailwind source file', () => {
@@ -92,9 +255,9 @@ describe('Next safelist state', () => {
             authoredClasses: [],
             mergeLiterals: [],
             classOrigins: new Map([
-                ['[&_.tab-item-header]:py-0!', sourcePath],
-                ['bg-red-500', sourcePath],
-                ['p-8', sourcePath],
+                ['[&_.tab-item-header]:py-0!', [{ sourcePath }]],
+                ['bg-red-500', [{ sourcePath }]],
+                ['p-8', [{ sourcePath }]],
             ]),
             classCount: 3,
             sourceCount: 1,
