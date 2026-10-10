@@ -23,7 +23,14 @@
  * node type into one of these, so the matrix stays free of engine-specific
  * node vocabulary.
  */
-export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory';
+export type SzFallbackKind =
+    | 'call'
+    | 'identifier'
+    | 'import'
+    | 'member'
+    | 'other'
+    | 'szv-factory'
+    | 'variant';
 
 /** Every kind, in the order the generated Rust match arms are emitted. */
 export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
@@ -33,6 +40,7 @@ export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
     'member',
     'other',
     'szv-factory',
+    'variant',
 ];
 
 /** One matrix entry: why the fallback happened, and the way out. */
@@ -99,6 +107,21 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
         reason: 'szv factory `{detail}()` did not precompile — its config disqualified at `{path}`',
         suggestion:
             'Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().',
+    },
+    // One KEY of an otherwise compiled sz object: a variant (`hover`,
+    // `md: { hover }`) holding a value the build cannot read. The key goes to
+    // the runtime through `_szPart` while the rest of the object compiles, so
+    // the reason names the key path rather than an expression shape.
+    //
+    // Any key no table claims takes this path too — the project may declare
+    // it as a variant (`@custom-variant`, `--breakpoint-*`), which the engine
+    // cannot see — so a typo (`tablt: x`) lands here as well. The text says
+    // how the key was treated, never that it IS a variant, so it stays true
+    // for both, and the suggestion covers both readings.
+    variant: {
+        reason: 'key `{detail}` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected',
+        suggestion:
+            'If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().',
     },
 };
 
@@ -218,11 +241,15 @@ export type SzFallbackConsequence = 'missing-css' | 'nudge';
  * and compiles correctly, and an object literal behind an assertion hands its
  * classes over on the way to the fallback.
  *
+ * A VARIANT key sits with the import: it is one key of an object literal the
+ * author wrote right there, so nobody upstream collects what it holds.
+ *
  * The cost of drawing the line here is under-reporting: an unresolvable
  * module-level const reads as advisory. That is the safe direction.
  */
 export const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
     'import',
+    'variant',
 ]);
 
 /**

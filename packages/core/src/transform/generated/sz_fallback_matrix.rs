@@ -16,6 +16,7 @@ pub(crate) enum SzFallbackKind {
     Member,
     Other,
     SzvFactory,
+    Variant,
 }
 
 /// Stand-in name for a callee with no statically readable name.
@@ -31,22 +32,13 @@ pub(crate) const SZ_FALLBACK_UNKNOWN_CALLEE: &str = "?";
 pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str, path: &str) -> String {
     let _ = (detail, path);
     match kind {
-        SzFallbackKind::Call => {
-            format!("function call `{detail}()` result is unknown at build time")
-        }
-        SzFallbackKind::Identifier => {
-            format!("identifier `{detail}` could not be resolved to a static value")
-        }
-        SzFallbackKind::Import => {
-            format!("imported binding `{detail}` could not be read at build time")
-        }
+        SzFallbackKind::Call => format!("function call `{detail}()` result is unknown at build time"),
+        SzFallbackKind::Identifier => format!("identifier `{detail}` could not be resolved to a static value"),
+        SzFallbackKind::Import => format!("imported binding `{detail}` could not be read at build time"),
         SzFallbackKind::Member => String::from("member expression is not statically resolvable"),
-        SzFallbackKind::Other => {
-            format!("expression of type `{detail}` is not statically analyzable")
-        }
-        SzFallbackKind::SzvFactory => format!(
-            "szv factory `{detail}()` did not precompile — its config disqualified at `{path}`"
-        ),
+        SzFallbackKind::Other => format!("expression of type `{detail}` is not statically analyzable"),
+        SzFallbackKind::SzvFactory => format!("szv factory `{detail}()` did not precompile — its config disqualified at `{path}`"),
+        SzFallbackKind::Variant => format!("key `{detail}` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected"),
     }
 }
 
@@ -62,6 +54,7 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
         SzFallbackKind::Member => "Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::Other => "Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::SzvFactory => "Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().",
+        SzFallbackKind::Variant => "If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().",
     }
 }
 
@@ -72,7 +65,7 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
 /// # Arguments
 /// * `kind` - Classified shape of the expression.
 pub(crate) const fn sz_site_fallback_misses_css(kind: SzFallbackKind) -> bool {
-    matches!(kind, SzFallbackKind::Import)
+    matches!(kind, SzFallbackKind::Import | SzFallbackKind::Variant)
 }
 
 /// Construct that produced a build-time-unresolvable diagnostic.

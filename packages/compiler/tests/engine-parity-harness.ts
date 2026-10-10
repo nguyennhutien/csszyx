@@ -39,6 +39,8 @@ export interface EngineParityResult {
     issues?: SourceTransformResult['issues'];
     /** The class lists a merge would read, from a pass with no merge table. */
     mergeGroups?: SourceTransformResult['mergeGroups'];
+    /** The one-class objects of a pass with no merge table, placed at their keys. */
+    singleClassGroups?: SourceTransformResult['singleClassGroups'];
     /** The class-name and `sz` pairs a merge would read, from a pass with no table. */
     mergeOverrides?: SourceTransformResult['mergeOverrides'];
 }

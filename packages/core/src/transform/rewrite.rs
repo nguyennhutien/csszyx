@@ -280,7 +280,10 @@ fn rewrite_array_sz_attribute(
         // pre-compiled. `szcn` then applies later-wins per property group.
         if let Some(span) = part.dynamic_span {
             let expression = &source[span.start as usize..span.end as usize];
-            arguments.push(format!("_szPart({expression})"));
+            arguments.push(format!(
+                "_szPart({})",
+                rebuild_variant_keys(expression, &part.dynamic_key_path)
+            ));
             continue;
         }
         if !part.classes.is_empty() || part.ternary.is_none() {
@@ -324,6 +327,30 @@ fn rewrite_array_sz_attribute(
             format!("className={{_szcn({rest})}}"),
         );
     }
+}
+
+/// Rebuild the variant keys a deferred value sat under around its source.
+///
+/// `["md", "hover"]` around `x` gives `{ md: { hover: x } }`. A key that is not
+/// a plain identifier (`'[&>li]'`, `'@md'`) is written as a string literal. No
+/// keys gives the expression unchanged — an sz array element.
+fn rebuild_variant_keys(expression: &str, keys: &[String]) -> String {
+    keys.iter()
+        .rev()
+        .fold(expression.to_string(), |inner, key| {
+            let is_identifier = key.chars().enumerate().all(|(index, ch)| {
+                ch == '_'
+                    || ch == '$'
+                    || ch.is_ascii_alphabetic()
+                    || (index > 0 && ch.is_ascii_digit())
+            });
+            let key = if is_identifier && !key.is_empty() {
+                key.clone()
+            } else {
+                js_string_literal(key)
+            };
+            format!("{{ {key}: {inner} }}")
+        })
 }
 
 /// Rewrite every static `sz` on one element into a single `className`.
@@ -996,10 +1023,35 @@ fn opening_attribute_insert_offset(source: &str, opening_end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        opening_attribute_insert_offset, rewrite_static_sz_attributes,
+        opening_attribute_insert_offset, rebuild_variant_keys, rewrite_static_sz_attributes,
         rewrite_static_sz_attributes_with_options, whitespace_start, RewriteOptions,
         StaticRewriteUnsupported,
     };
+
+    /// Each key the value sat under wraps it again, innermost last; a key that
+    /// is not an identifier is quoted, and a digit may follow a letter but not
+    /// lead.
+    #[test]
+    fn a_deferred_value_is_wrapped_in_the_keys_it_sat_under() {
+        assert_eq!(rebuild_variant_keys("x", &[]), "x");
+        assert_eq!(
+            rebuild_variant_keys("x", &["md".to_string(), "hover".to_string()]),
+            "{ md: { hover: x } }"
+        );
+        assert_eq!(rebuild_variant_keys("x", &["h2".to_string()]), "{ h2: x }");
+        assert_eq!(
+            rebuild_variant_keys("x", &["_a$".to_string()]),
+            "{ _a$: x }"
+        );
+        assert_eq!(
+            rebuild_variant_keys("x", &["2xl".to_string()]),
+            r#"{ "2xl": x }"#
+        );
+        assert_eq!(
+            rebuild_variant_keys("x", &["[&>li]".to_string()]),
+            r#"{ "[&>li]": x }"#
+        );
+    }
     use crate::transform::{parser::parse_source_shell, TransformFile};
 
     fn parse(source: &str) -> crate::transform::SourceIr {
@@ -1113,7 +1165,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "export const App = () => <div className=\"inset-s-4 hover:bg-red-500\" />;"
+            "export const App = () => <div className=\"start-4 hover:bg-red-500\" />;"
         );
     }
 

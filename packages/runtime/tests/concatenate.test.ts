@@ -287,6 +287,15 @@ describe('_szPart — dynamic sz array element normalizer', () => {
         expect(_szPart({ hover: { bg: 'blue-700' } })).toBe('hover:bg-blue-700');
     });
 
+    it('lowers a variant key the build deferred as the build lowers a literal one', () => {
+        // `sz={{ m: 1, md: { hover: x } }}` compiles to
+        // `_szcn("m-1", _szPart({ md: { hover: x } }))`; the runtime half must
+        // style `x` as the build would have styled it written in place.
+        const deferred = { md: { hover: { pb: 2, p: 4 } } };
+        expect(_szPart(deferred)).toBe(transform(deferred).className);
+        expect(_szPart({ hover: 'p-4 m-2' })).toBe(transform({ hover: 'p-4 m-2' }).className);
+    });
+
     it('resolves falsy guards to an empty string', () => {
         expect(_szPart(false)).toBe('');
         expect(_szPart(null)).toBe('');
