@@ -517,6 +517,29 @@ jobs:
       - name: Build core WASM
         run: pnpm --filter @csszyx/core build
 
+      # One csszyx release serves Tailwind 4.0 → latest (ADR 0023), and every
+      # gate above compiles against the pinned one. This asks the same lowering
+      # of each Tailwind v4 listed in scripts/check-tailwind-versions.mjs and
+      # fails when a spelling the lanes write is served on one version and dead
+      # on a later one, dead on a version where the pin serves it, or when the
+      # capability table disagrees with a version that has the utility — each
+      # against a ratchet baseline that only shrinks. Versions are `npm pack`ed
+      # into the runner's temp directory, never the workspace or the lockfile,
+      # their tarballs checked against pinned sha512s, and cached by the list.
+      # After the wasm build: it lowers through both engine artifacts.
+      - name: Cache Tailwind versions for the version matrix
+        if: needs.detect-changes.outputs.tw_versions == 'true' || needs.detect-changes.outputs.lock_code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: ${{ runner.temp }}/csszyx-tailwind-versions
+          key: tailwind-versions-${{ hashFiles('scripts/check-tailwind-versions.mjs') }}
+          restore-keys: |
+            tailwind-versions-
+
+      - name: Check csszyx output across Tailwind v4 versions
+        if: needs.detect-changes.outputs.tw_versions == 'true' || needs.detect-changes.outputs.lock_code == 'true'
+        run: pnpm check:tailwind-versions
+
       # Mirrors `test:unit` (`turbo run test --filter=!@csszyx/e2e` — keep in
       # sync with package.json). Playwright tests live in @csszyx/e2e and run
       # in their own job below — they need a different gate (runtime_critical,

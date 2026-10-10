@@ -187,6 +187,15 @@ pnpm corpus:check --require-no-broken
 echo "[verify-like-ci] Emitted-class oracle (dead classes vs real Tailwind)..."
 pnpm check:emitted-classes
 
+# The same lowering asked of every Tailwind v4 csszyx serves, not only the pin:
+# one release serves 4.0 → latest (ADR 0023), so a spelling the lanes adopt
+# from a newer Tailwind must not go dead on an older one. Installs each listed
+# version into a scratch directory (never the lockfile), cached by version.
+# Runs after the unit tests because it lowers through both engine artifacts,
+# and the wasm one is built by that turbo run.
+echo "[verify-like-ci] Tailwind v4 version matrix (csszyx output across every served version)..."
+pnpm check:tailwind-versions
+
 # The same oracle, read the other way. The gate above asks whether every class
 # csszyx EMITS still produces CSS; this one asks whether every class Tailwind
 # SERVES can be classified, because `classify` reads what the application wrote,

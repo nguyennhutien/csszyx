@@ -44,6 +44,9 @@ on:
       szv_types:
         description: Something the szv() row typing or its type-checking cost depends on changed.
         value: ${{ jobs.classify.outputs.szv_types }}
+      tw_versions:
+        description: Something csszyx's lowering, its tables or the Tailwind version gate depends on changed.
+        value: ${{ jobs.classify.outputs.tw_versions }}
       turbo_affected:
         description: Changes are confined to workspace packages, so turbo `--affected` is safe.
         value: ${{ jobs.classify.outputs.turbo_affected }}
@@ -76,6 +79,7 @@ jobs:
       next_state: ${{ steps.refine.outputs.next_real }}
       cli: ${{ steps.refine.outputs.cli_real }}
       szv_types: ${{ steps.filter.outputs.szv_types }}
+      tw_versions: ${{ steps.filter.outputs.tw_versions }}
       # 'true' only for PRs whose changes are confined to workspace
       # packages — the case where turbo's `--affected` is provably safe.
       # Pushes (main) and full_surface changes always run the full set.
@@ -225,6 +229,23 @@ jobs:
               - 'packages/compiler/src/transform-core.ts'
               - 'scripts/check-szv-type-cost.mjs'
               - 'scripts/check-szv-type-cost.test.mjs'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/detect-changes.yml'
+            # What the Tailwind version matrix gate measures: what both lanes
+            # write (the TypeScript lowering and the Rust engine), the tables
+            # they read, the oracle that asks each Tailwind, the case set, the
+            # gate and its baseline. A Tailwind bump arrives as a lockfile
+            # change, which ci.yml adds through lock_code.
+            tw_versions:
+              - 'packages/compiler/src/**'
+              - 'packages/core/src/**'
+              - 'packages/tailwind-oracle/src/**'
+              - 'packages/tailwind-oracle/tests/sz-capability-cases.ts'
+              - 'packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json'
+              - 'packages/unplugin/src/merge-signature.ts'
+              - 'scripts/gen-sz-capabilities.mjs'
+              - 'scripts/check-tailwind-versions.mjs'
+              - 'scripts/check-tailwind-versions.test.mjs'
               - '.github/workflows/ci.yml'
               - '.github/workflows/detect-changes.yml'
             pkg_json:
