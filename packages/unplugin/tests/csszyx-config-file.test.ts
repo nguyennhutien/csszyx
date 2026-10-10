@@ -17,14 +17,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     CSSZYX_CONFIG_FILE_NAMES,
     csszyxConfigFileNameFor,
+    DIAGNOSTIC_POLICY_READ_FORMAT,
     DIAGNOSTIC_POLICY_STATE_FILE,
+    diagnosticPolicyFromState,
     findCsszyxConfigFile,
     isLegacyInitTemplate,
     loadDiagnosticPolicy,
     readDiagnosticPolicyState,
     writeDiagnosticPolicyState,
 } from '../src/csszyx-config-file.js';
-import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
+import { createDiagnosticPolicy, DIAGNOSTIC_POLICY_FORMAT } from '../src/diagnostic-policy.js';
 
 const roots: string[] = [];
 
@@ -639,11 +641,40 @@ describe('the policy state file the Turbopack loader reads', () => {
         const file = path.join(root, '.csszyx', DIAGNOSTIC_POLICY_STATE_FILE);
         fs.writeFileSync(file, '{not json');
         expect(readDiagnosticPolicyState(root).levelOf({ rule: 'dead-class' })).toBe('error');
+        fs.writeFileSync(file, 'null\n');
+        expect(readDiagnosticPolicyState(root).levelOf({ rule: 'dead-class' })).toBe('error');
 
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         fs.writeFileSync(
             file,
             JSON.stringify({ format: 999, config: { rules: { 'dead-class': 'off' } } }),
         );
         expect(readDiagnosticPolicyState(root).levelOf({ rule: 'dead-class' })).toBe('error');
+    });
+
+    it('is read by the reader of the same release', () => {
+        expect(DIAGNOSTIC_POLICY_FORMAT).toBe(DIAGNOSTIC_POLICY_READ_FORMAT);
+        // A record of another number is never read as levels it does not hold.
+        const other = { format: 999, config: { rules: { 'dead-class': 'off' } } };
+        expect(diagnosticPolicyFromState(other as never).levelOf({ rule: 'dead-class' })).toBe(
+            'error',
+        );
+    });
+
+    it('says once that a file of another format is not used, and which command writes it again', () => {
+        const root = project({});
+        fs.mkdirSync(path.join(root, '.csszyx'));
+        const file = path.join(root, '.csszyx', DIAGNOSTIC_POLICY_STATE_FILE);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        fs.writeFileSync(file, JSON.stringify({ format: 999, config: {} }));
+        readDiagnosticPolicyState(root);
+        readDiagnosticPolicyState(root);
+        // A file with no number is not one of another format: it is unreadable.
+        fs.writeFileSync(file, JSON.stringify({ config: {} }));
+        readDiagnosticPolicyState(root);
+        expect(warn.mock.calls.map(call => String(call[0]))).toEqual([
+            `[csszyx] .csszyx/${DIAGNOSTIC_POLICY_STATE_FILE} is in format 999, and this version reads format ${DIAGNOSTIC_POLICY_READ_FORMAT}: the levels in it are not used.\n` +
+                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes it again.',
+        ]);
     });
 });

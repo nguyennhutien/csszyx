@@ -24,6 +24,7 @@ import { getNativePackageName } from '@csszyx/core/native';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
     createGitignoreQuery,
+    createWalkRootRelative,
     DEPENDENCY_OUTPUT_DIRS,
     GENERATED_REPORT_DIRS,
     type GitignoreMode,
@@ -71,7 +72,7 @@ import {
     classAttributeSelectorKey,
     mangleCSSSync,
 } from './css-mangler.js';
-import { csszyxConfigFileNameFor, loadDiagnosticPolicy } from './csszyx-config-file.js';
+import { csszyxConfigFileNameFor } from './csszyx-config-file.js';
 import {
     type DeadClassSite,
     findDeadSzClasses,
@@ -84,6 +85,12 @@ import {
     type DiagnosticPolicy,
     diagnosticConfigProblemsMessage,
 } from './diagnostic-policy.js';
+import {
+    type DiagnosticPolicyInput,
+    diagnosticPolicyInputs,
+    diagnosticPolicyInputsCurrent,
+    diagnosticPolicyWatchFiles,
+} from './diagnostic-policy-inputs.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -144,6 +151,7 @@ import {
     runtimeHelperGroupsFromUsage,
 } from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
+import { samePath } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import { isReadableProviderFile } from './provider-file.js';
 import {
@@ -203,11 +211,13 @@ import {
     type ProjectStyleModel,
     styleModelError,
     styleModelWarning,
+    unresolvedImportWarning,
     unsupportedStylesheetFactsMessage,
 } from './project-style-model.js';
 import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
+import { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
 import { discoverProjectTheme } from './theme-discovery.js';
 import {
     ensureThemeGroupsFile,
@@ -267,6 +277,13 @@ import {
     UNSERVED_VIRTUAL_ID,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
+import {
+    hasViteResolver,
+    type StylesheetImportCandidates,
+    settledRead,
+    type ViteStylesheetResolver,
+    viteStylesheetResolver,
+} from './vite-stylesheet-candidates.js';
 
 // The diagnostic gates moved to their own module so the Next Turbopack loader
 // shares them; they stay importable from here.
@@ -501,6 +518,12 @@ interface RustPrescanMiss {
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
+/**
+ * How long a dev server waits after an event on the config, or a module it
+ * imports, for the next one of the same save: an atomic save is a delete and
+ * a create a few milliseconds apart.
+ */
+const CONFIG_EDIT_SETTLE_MS = 50;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
 // Entry count alone is not a memory bound: each entry retains the FULL
 // transformed code string, so 1000 large generated files could hold ~hundreds
@@ -2928,6 +2951,28 @@ function describePrefix(prefix: string | null): string {
 }
 
 /**
+ * Whether a module may hold an `sz` value or an `szr()` call, read cheaply
+ * before the compiler runs.
+ *
+ * szr-only modules (no sz attribute) once skipped the compiler entirely,
+ * which also skipped the szr import rewrite and its fallback diagnostics.
+ * The test is deliberately loose: a false positive only costs one file the
+ * compiler pass, which then changes nothing.
+ *
+ * @param code - The module's source.
+ * @returns True when the compiler should look at it.
+ */
+function mayHoldSz(code: string): boolean {
+    return (
+        code.includes('sz=') ||
+        code.includes('szs=') ||
+        /\bsz\s*:\s*["'{]/.test(code) ||
+        code.includes('sz: "') ||
+        code.includes('szr(')
+    );
+}
+
+/**
  * Whether a file the project walk found sits in a folder of generated
  * output: a coverage report, a built Storybook, a Rust `target/`. Their
  * pages are not the app, and their `<style>` blocks select on nothing it
@@ -2942,7 +2987,18 @@ function describePrefix(prefix: string | null): string {
  * @returns True when a folder below the base is one of those.
  */
 function inGeneratedOutput(file: string, base: string): boolean {
-    const below = path.relative(base, file).split(/[\\/]/).slice(0, -1);
+    return belowGeneratedOutput(path.relative(base, file));
+}
+
+/**
+ * Whether a path relative to a walked folder sits in generated output; see
+ * {@link inGeneratedOutput}.
+ *
+ * @param relative - The path below the walked folder.
+ * @returns True when one of its folders is generated output.
+ */
+function belowGeneratedOutput(relative: string): boolean {
+    const below = relative.split(/[\\/]/).slice(0, -1);
     return below.some(directory => GENERATED_REPORT_DIRS.has(directory));
 }
 
@@ -3022,6 +3078,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // using this table, and the transform looks them up using the same table,
     // so a late assignment would collect a demand nothing later resolves.
     let specifierAliases: SpecifierAlias[] = [];
+    // How the Vite lane's Tailwind resolves an `@import` that is not a path,
+    // through Vite's resolver; unset on every lane whose Tailwind fails on one.
+    let stylesheetImportResolver: ViteStylesheetResolver | undefined;
+    let stylesheetImportCandidates: StylesheetImportCandidates | undefined;
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
@@ -3213,8 +3273,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             console.warn(message);
         }
     }
-    /** The policy of the project last loaded, by root, so every hook shares one read. */
-    let diagnosticPolicyLoad: { root: string; policy: Promise<DiagnosticPolicy> } | undefined;
+    /**
+     * The policy of the project last loaded, by root, so every hook shares one
+     * read, and the files it was read from, taken before the load.
+     */
+    let diagnosticPolicyLoad:
+        | { root: string; policy: Promise<DiagnosticPolicy>; inputs: DiagnosticPolicyInput[] }
+        | undefined;
     /**
      * The policy every report of this instance reads, once its load settled.
      * Each lane awaits the load in its first hook, before any transform.
@@ -3247,7 +3312,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function recordSzClasses(file: string, result: SourceTransformResult): void {
         const relative = projectRelative(file.split('?')[0] as string);
         const first = objectRuleOutputs.get(result) ?? result;
-        szClassesByFile.set(relative, szClassSites(relative, result.classes, first.mergeGroups));
+        szClassesByFile.set(relative, szClassSites(relative, result.classes, first));
     }
 
     /**
@@ -3291,8 +3356,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Read the project's `csszyx.config` once per root, printing what is wrong
-     * with it.
+     * Read the project's `csszyx.config` once per root and per version of the
+     * files it is read from, printing what is wrong with it.
      *
      * Called from the first hook on each lane that knows the root — Vite
      * `configResolved`, webpack `beforeCompile`, the shared `buildStart` — so
@@ -3300,12 +3365,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * config warning, muted by `quiet: true` like the others; the build never
      * fails on it.
      *
+     * webpack's `beforeCompile` and the `buildStart` of `rollup -w`,
+     * `vite build --watch` and an esbuild context run again for each rebuild,
+     * so this is where those sessions see an edit: once the config, or a
+     * module it imports, is not what the policy was read from, it is read
+     * again, and every finding already listed is said again at its new level.
+     *
      * @param root - The project root.
      * @returns The policy; the defaults when the project has no config.
      */
     function loadProjectDiagnosticPolicy(root: string): Promise<DiagnosticPolicy> {
-        if (diagnosticPolicyLoad?.root !== root) {
-            const policy = loadDiagnosticPolicy(root).then(loaded => {
+        const known = diagnosticPolicyLoad;
+        const stale = known?.root === root && !diagnosticPolicyInputsCurrent(root, known.inputs);
+        if (stale) diagnosticLimiter.reset();
+        if (known?.root !== root || stale) {
+            // Before the load, so an edit made while it runs reads as a change.
+            const inputs = diagnosticPolicyInputs(root);
+            const policy = loadCurrentDiagnosticPolicy(root, inputs).then(loaded => {
                 if (loaded.file !== null && loaded.problems.length > 0) {
                     emitWarning(
                         diagnosticConfigProblemsMessage(
@@ -3323,9 +3399,87 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         : path.basename(loaded.file);
                 return loaded.policy;
             });
-            diagnosticPolicyLoad = { root, policy };
+            diagnosticPolicyLoad = { root, policy, inputs };
         }
-        return diagnosticPolicyLoad.policy;
+        return (diagnosticPolicyLoad as { policy: Promise<DiagnosticPolicy> }).policy;
+    }
+
+    /**
+     * Read the project's `csszyx.config` again, after a session saw it change.
+     *
+     * Its problems are said again, and so is every finding already listed:
+     * the edit gave each one a new level.
+     *
+     * @param root - The project root.
+     * @returns The new policy.
+     */
+    function reloadProjectDiagnosticPolicy(root: string): Promise<DiagnosticPolicy> {
+        diagnosticPolicyLoad = undefined;
+        diagnosticLimiter.reset();
+        return loadProjectDiagnosticPolicy(root);
+    }
+
+    /**
+     * The files the current policy goes out of date with: every name the
+     * config can have and each module the config imports.
+     *
+     * @returns Absolute paths.
+     */
+    function diagnosticPolicyFiles(): string[] {
+        return diagnosticPolicyWatchFiles(state.rootDir, diagnosticPolicyLoad?.inputs ?? []);
+    }
+
+    /**
+     * Follow edits to `csszyx.config`, and to each module it imports, on a
+     * dev server: read it again, settle the dead-class report under it, and
+     * send every module through again so each finding is listed at its new
+     * level.
+     *
+     * Every name the file can have is watched, so creating or deleting one
+     * counts as well as editing it; after each read, the modules it imports
+     * now are watched too, wherever they are.
+     *
+     * Events that arrive together are one edit: an editor that saves by
+     * replacing the file reports a delete and a create, and reading each
+     * printed two lines and reloaded the page twice. A read waits until the
+     * events stop for {@link CONFIG_EDIT_SETTLE_MS}, and reads run one after
+     * another, so each line is said in the order the edits were made.
+     *
+     * @param server - The dev server.
+     */
+    function followConfigFileEdits(server: ViteDevServer): void {
+        // Vite resolves the config, and with it the root, before it creates
+        // the server; the root is still read per event, as every hook reads it.
+        server.watcher.add(diagnosticPolicyFiles());
+        const read = async (file: string): Promise<void> => {
+            const removalLevels = mergeRemovalLevels();
+            await reloadProjectDiagnosticPolicy(state.rootDir);
+            server.watcher.add(diagnosticPolicyFiles());
+            if (mergeTableSettled) await computeUnservedClasses();
+            recompileEveryModule(server);
+            // Ungated, like the prefix line: a reload that drops the
+            // page's state with no explanation would be its own surprise.
+            console.warn(
+                `[csszyx] ${path.basename(file)} changed: read its levels again, recompiled every module and reloaded the page.`,
+            );
+            // Said at start only, so said again when the edit moved it.
+            if (mergeRemovalLevels() !== removalLevels) reportMergeRemovals(false);
+        };
+        let reads: Promise<void> = Promise.resolve();
+        let settling: NodeJS.Timeout | undefined;
+        const follow = (file: string): void => {
+            // In any spelling the file system reads as the same file.
+            const resolved = path.resolve(file);
+            if (!diagnosticPolicyFiles().some(name => samePath(state.rootDir, name, resolved))) {
+                return;
+            }
+            clearTimeout(settling);
+            settling = setTimeout(() => {
+                reads = reads.then(() => read(file));
+            }, CONFIG_EDIT_SETTLE_MS);
+            settling.unref();
+        };
+        for (const event of ['add', 'change', 'unlink'] as const) server.watcher.on(event, follow);
     }
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
@@ -3640,7 +3794,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function runAutoThemeScan(rootDir: string): void {
         refreshCompileSourceDirs();
-        const discovered = discoverProjectTheme(rootDir, [...compileSourceDirs]);
+        const discovered = discoverProjectTheme(rootDir, [...compileSourceDirs], [], {
+            importCandidates: stylesheetImportCandidates,
+        });
         state.autoThemeCssFiles = discovered.files;
         // Every stylesheet, not only the ones with `@theme`: the global-var
         // planner needs to see each custom-property declaration in the project
@@ -3857,6 +4013,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (serving) capFlush.schedule();
         if (held.size === 0) return;
         console.warn(mergeRemovalSummaryMessage(held, files.size, diagnosticConfigName));
+    }
+
+    /**
+     * The level the current policy gives each class the merge removed, so a
+     * session that reads the config again can tell whether the start-up
+     * report would now say something else.
+     *
+     * @returns One token per removal, in a stable order.
+     */
+    function mergeRemovalLevels(): string {
+        const levels: string[] = [];
+        for (const [file, findings] of mergeRemovals) {
+            for (const finding of findings) {
+                levels.push(diagnosticPolicy.levelOf({ rule: finding.kind, file }));
+            }
+        }
+        return levels.join(',');
     }
 
     /**
@@ -4871,7 +5044,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         gitignore: GitignoreMode,
         visit: (filePath: string, extension: string, readsHooks: boolean) => void,
     ): void {
-        const queries: Array<[string, (file: string) => boolean]> = [];
+        // Each walked folder, asked under either spelling of its path: a Vite
+        // root given as a link names its modules by their real path.
+        const queries: Array<[(file: string) => string | null, (file: string) => boolean]> = [];
         const scanDir = (dir: string): void => {
             walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore }, file => {
                 visit(
@@ -4880,7 +5055,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     !file.gitignored && !inGeneratedOutput(file.path, dir),
                 );
             });
-            queries.push([dir, createGitignoreQuery(dir)]);
+            queries.push([createWalkRootRelative(dir), createGitignoreQuery(dir)]);
         };
         scanDir(state.rootDir);
         const normRoot = normalizeForMatch(state.rootDir);
@@ -4889,19 +5064,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             scanDir(sourceDir);
         }
         walkReadsHooksFrom = file => {
-            const resolved = path.resolve(file);
-            const owner = queries.find(([dir]) => {
-                const relative = path.relative(dir, resolved);
-                return (
-                    relative !== '' &&
-                    !relative.startsWith(`..${path.sep}`) &&
-                    relative !== '..' &&
-                    !path.isAbsolute(relative)
-                );
-            });
-            if (owner === undefined) return true;
-            const [dir, gitignored] = owner;
-            return !inGeneratedOutput(resolved, dir) && !gitignored(resolved);
+            for (const [below, gitignored] of queries) {
+                const relative = below(file);
+                if (relative !== null) return !belowGeneratedOutput(relative) && !gitignored(file);
+            }
+            return true;
         };
     }
 
@@ -5366,6 +5533,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns The model, which also lands in `styleModel`.
      */
     async function openStyleModel(): Promise<ProjectStyleModel> {
+        // The walk this reads is settled with Vite's answers already: every
+        // walk on a lane with a resolver runs through `settledRead`, a dev
+        // server's stylesheet edit in `followThemeTokenEdit`.
         const listed = tailwindStylesheets.map(file => ({
             file,
             absolute: path.resolve(state.rootDir, file),
@@ -5383,8 +5553,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // A named list decides the prefix and the table; a component's own
         // stylesheet still selects on its elements.
         const hookStylesheets = listed.length > 0 ? walked : [];
+        // Only the Vite lane has a resolver of its own: every other one runs
+        // Tailwind's `compile()`, whose `@import` follows no alias.
         const opened = await openProjectStyleModel(state.rootDir, candidates, {
-            aliases: specifierAliases,
+            importCandidates: stylesheetImportCandidates,
             hookStylesheets,
         });
         const problem = styleModelError(opened, state.rootDir);
@@ -5405,6 +5577,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         styleModelStamps = stylesheetStamps(styleModelFiles);
         const skipped = styleModelWarning(opened, state.rootDir);
         if (skipped !== null) emitWarning(skipped);
+        // An environment warning, so `quiet` alone decides (ADR 0011): the
+        // build goes on, and the prefix and the merge read nothing from it.
+        const unresolved = unresolvedImportWarning(opened, state.rootDir);
+        if (unresolved !== null) emitWarning(unresolved);
         const unmerged = originWarning(opened, state.rootDir);
         if (unmerged !== null) emitWarning(unmerged);
         try {
@@ -5472,7 +5648,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         await loadProjectDiagnosticPolicy(state.rootDir);
         if (styleModel === undefined) {
             refreshCompileSourceDirs();
-            const discovered = discoverProjectTheme(state.rootDir, [...compileSourceDirs]);
+            const discovered = discoverProjectTheme(state.rootDir, [...compileSourceDirs], [], {
+                importCandidates: stylesheetImportCandidates,
+            });
             projectCssFiles = discovered.scanned;
             projectGitignoreFiles = discovered.gitignoreFiles;
             readProjectSourceHooks();
@@ -6055,6 +6233,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Ask Vite again about every `@import` target it named no file for once
+     * the dev server's watcher reports a stylesheet created: Vite's resolver
+     * keeps a miss for its life, so the new file would stay unfollowed until a
+     * restart. Registered before the hot update reads it (Vite's own `add`
+     * handler awaits before it calls the hook), and cheap when nothing missed.
+     *
+     * @param server - The dev server.
+     */
+    function followStylesheetCreates(server: ViteDevServer): void {
+        server.watcher.on('add', file => {
+            if (file.endsWith('.css')) stylesheetImportResolver?.forgetMisses();
+        });
+    }
+
+    /**
      * Read the stylesheets again after one changed on a dev server, and follow
      * a prefix that changed with them.
      *
@@ -6268,6 +6461,55 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Re-run the theme scan after a CSS file changed on a dev server, and
+     * reload the page when the theme tokens changed.
+     *
+     * ANY css edit may add or remove @theme tokens, including in a file
+     * `scanCss` does not list and one the scan has not seen yet — so the scan
+     * re-discovers project-wide either way. A file that IS listed additionally
+     * refreshes the typing scan, which is what rewrites `.csszyx/theme.d.ts`.
+     *
+     * The walk is settled with Vite's answers before the tokens are compared:
+     * an edit that adds an aliased `@import` meets a target Vite has not
+     * answered yet, and comparing on that first walk missed the tokens the
+     * import brings, so the page kept the registration it booted with.
+     *
+     * @param ctx - The changed file and the dev server.
+     * @param ctx.file - Absolute path of the changed stylesheet.
+     * @param ctx.server - The dev server.
+     * @returns Nothing once the page has been told.
+     */
+    async function followThemeTokenEdit(ctx: {
+        file: string;
+        server: ViteDevServer;
+    }): Promise<void> {
+        const scanCss = options.build?.scanCss;
+        // The root `configResolved` settled; the dev server's is the same
+        // value, resolved once.
+        const root = state.rootDir;
+        const before = createThemeGroupsModule(themeGroupTokens());
+        if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
+            state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
+        }
+        await settledRead(stylesheetImportResolver, () => runAutoThemeScan(root));
+        // Adding or removing theme tokens changes the szcn merge groups, so
+        // the generated registration module is read again.
+        const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+            RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+        );
+        if (themeGroupsModule) ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+        // Invalidating is not enough. A stylesheet edit is a CSS hot update:
+        // Vite swaps the styles and never re-executes a JS module, so the
+        // registration the page booted with stays in memory and a DELETED
+        // token keeps grouping classes the stylesheet no longer defines. Only
+        // a reload re-runs it — and only when the tokens actually changed, so
+        // ordinary CSS edits keep the hot update they should.
+        if (createThemeGroupsModule(themeGroupTokens()) !== before) {
+            ctx.server.ws.send({ type: 'full-reload' });
+        }
+    }
+
+    /**
      * Answer a hot update, following changed stylesheet facts or source candidates.
      *
      * @param pass - Which pass this is and the graph its answer belongs to.
@@ -6302,7 +6544,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // A file gone since the event selects on nothing new.
             }
         }
-        if (ctx.file.endsWith('.css')) return followStyleModelEdit(ctx).then(() => answer);
+        if (ctx.file.endsWith('.css')) {
+            return followThemeTokenEdit(ctx)
+                .then(() => followStyleModelEdit(ctx))
+                .then(() => answer);
+        }
         if (shouldProcessSource(ctx.file)) {
             return followMergeTableEdit({ server: ctx.server, sourceEdit: true }).then(
                 () => answer,
@@ -6312,9 +6558,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * The one HMR handler behind both Vite hooks: re-runs the theme scan when
-     * a CSS file changes, and updates the safelist when a source file gains
-     * new `sz` classes.
+     * The one HMR handler behind both Vite hooks: updates the safelist when a
+     * source file gains new `sz` classes. A CSS file's theme scan follows it,
+     * in {@link followThemeTokenEdit}.
      *
      * Two hooks share it because Vite generations differ in which one they
      * call. Vite 6 and later run `hotUpdate` once per environment and ignore
@@ -6354,48 +6600,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // string for nothing.
             prescanResultHandoff.clear();
         }
-        // Theme scan for @theme CSS blocks
-        const scanCss = options.build?.scanCss;
-        /**
-         * Reloads the generated registration module: adding or
-         * removing theme tokens changes the szcn merge groups, so
-         * a dev server must pick them up without a restart.
-         */
-        const reloadThemeGroupsModule = (): void => {
-            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
-                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
-            );
-            if (themeGroupsModule) {
-                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
-            }
-        };
-        if (isClientPass && ctx.file.endsWith('.css')) {
-            // ANY css edit may add or remove @theme tokens, including
-            // in a file `scanCss` does not list and one the scan has
-            // not seen yet — so re-discover project-wide either way.
-            // A file that IS listed additionally refreshes the typing
-            // scan, which is what rewrites `.csszyx/theme.d.ts`.
-            // The root `configResolved` settled; the dev server's is the
-            // same value, resolved once.
-            const root = state.rootDir;
-            const before = createThemeGroupsModule(themeGroupTokens());
-            if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
-                state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
-            }
-            runAutoThemeScan(root);
-            reloadThemeGroupsModule();
-            // Invalidating is not enough. A stylesheet edit is a CSS
-            // hot update: Vite swaps the styles and never re-executes
-            // a JS module, so the registration the page booted with
-            // stays in memory and a DELETED token keeps grouping
-            // classes the stylesheet no longer defines. Only a reload
-            // re-runs it — and only when the tokens actually changed,
-            // so ordinary CSS edits keep the hot update they should.
-            if (createThemeGroupsModule(themeGroupTokens()) !== before) {
-                ctx.server.ws.send({ type: 'full-reload' });
-            }
-        }
-
         // A safelist write is not a file the dev server can match
         // to a module, and `@tailwindcss/vite` answers such a
         // change with an unaddressed full-reload when the file is
@@ -6526,12 +6730,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
      * @param source The module source, whose version decides what was already said.
+     * @param watch The bundler's `addWatchFile`, on a lane that keeps an
+     *        unchanged module across rebuilds; absent on a dev server, which
+     *        sends every module through again itself.
      */
     function reportTransformDiagnostics(
         result: SourceTransformResult,
         id: string,
         warn: (message: string) => void,
         source: string,
+        watch?: (file: string) => void,
     ): void {
         const [file] = id.split('?');
         const relative = projectRelative(file);
@@ -6539,6 +6747,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // findings must read as an edit, not as the version already said.
         diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
         if (result.diagnostics.length === 0) return;
+        // A watch rebuild keeps this module, and with it the levels it was
+        // reported at, unless it depends on the files the levels come from:
+        // an edit to one lowers it again, and its findings are said again.
+        // Only a module with findings: no level makes a clean one say anything.
+        if (watch !== undefined) for (const file of diagnosticPolicyFiles()) watch(file);
         const routed = routeTransformDiagnostics({
             diagnostics: result.diagnostics,
             issues: result.issues,
@@ -6563,6 +6776,30 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Read what a transformed module tells the build before it is lowered:
+     * the merge hooks its markup selects on, and for a source the authored
+     * classes and global variables it uses.
+     *
+     * @param id - The module id.
+     * @param code - Its source.
+     * @returns False when the module is neither a stylesheet nor a source
+     *          this plugin transforms.
+     */
+    function readTransformedSourceFacts(id: string, code: string): boolean {
+        const markup = MARKUP_EXTENSIONS.has(path.extname(id));
+        if (markup && !isHardIgnored(id) && !isUserExcluded(id)) {
+            readSourceHooks(id, code);
+        }
+        if (!shouldProcessCss(id) && !shouldProcessSource(id)) return false;
+        if (shouldProcessSource(id)) {
+            trackGlobalVarSourceFile(id, code);
+            recordAuthoredClasses(code);
+            if (!markup) readSourceHooks(id, code);
+        }
+        return true;
+    }
+
+    /**
      * Convert a compiler result into the shared pre-transform state.
      *
      * @param result Compiler transform result.
@@ -6578,12 +6815,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param code Source module contents.
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
+     * @param watch The bundler's `addWatchFile`, for {@link reportTransformDiagnostics}.
      * @returns Adapter or compiler output with runtime-helper usage.
      */
     function transformSzSource(
         code: string,
         id: string,
         warn: (message: string) => void,
+        watch?: (file: string) => void,
     ): PreTransformOutput {
         if (id.endsWith('.vue')) {
             const result = vuePreprocess(code, options as VueAdapterOptions);
@@ -6602,7 +6841,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
         recordSzClasses(id, result);
-        reportTransformDiagnostics(result, id, warn, code);
+        reportTransformDiagnostics(result, id, warn, code, watch);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
     }
@@ -7113,18 +7352,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Bundlers without the vite/webpack lifecycle hooks (rollup,
                 // esbuild) still announce on the first real transform.
                 announceActiveParser();
-                const markup = MARKUP_EXTENSIONS.has(path.extname(id));
-                if (markup && !isHardIgnored(id) && !isUserExcluded(id)) {
-                    readSourceHooks(id, code);
-                }
-                if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
-                    return null;
-                }
-                if (shouldProcessSource(id)) {
-                    trackGlobalVarSourceFile(id, code);
-                    recordAuthoredClasses(code);
-                    if (!markup) readSourceHooks(id, code);
-                }
+                if (!readTransformedSourceFacts(id, code)) return null;
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(code, id);
@@ -7134,19 +7362,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return transformTailwindCssEntry(code, id);
                 }
 
-                const hasSzProp =
-                    code.includes('sz=') ||
-                    code.includes('szs=') ||
-                    /\bsz\s*:\s*["'{]/.test(code) ||
-                    code.includes('sz: "') ||
-                    // szr-only modules (no sz attribute) historically skipped the
-                    // compiler entirely — which also skipped the szr import
-                    // rewrite AND the szr fallback diagnostics. The substring is
-                    // deliberately loose; a false positive only costs one file
-                    // the compiler pass, which then changes nothing.
-                    code.includes('szr(');
+                const hasSzProp = mayHoldSz(code);
+                // Every bundler's context has it; a caller that drives the
+                // hook by hand may not.
+                const watch =
+                    serving || typeof this.addWatchFile !== 'function'
+                        ? undefined
+                        : (file: string) => this.addWatchFile(file);
                 const output = hasSzProp
-                    ? transformSzSource(code, id, message => this.warn(message))
+                    ? transformSzSource(code, id, message => this.warn(message), watch)
                     : unchangedPreTransform(code);
                 if (!hasSzProp && shouldProcessSource(id)) {
                     recordFileVarMangleEntries(state, id, []);
@@ -7339,6 +7563,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    // A rebuild an edit to the config, or to a module it
+                    // imports, started reads it again; the dead-class report
+                    // of this compile then follows it.
+                    const removalLevels = mergeRemovalLevels();
                     await loadProjectDiagnosticPolicy(root);
                     // Next.js maps `@/*` with a resolver plugin rather than an
                     // alias table, so webpack's own alias object is empty on the
@@ -7360,13 +7588,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         ...(compiler.modifiedFiles ?? []),
                         ...(compiler.removedFiles ?? []),
                     ].filter(file => file.endsWith('.css'));
+                    const production = compiler.options?.mode === 'production';
                     if (state.classes.size === 0) {
                         await prescanAndWriteClasses();
-                        reportMergeRemovals(compiler.options?.mode === 'production');
-                    } else if (styleModel !== undefined && changedStylesheets.length > 0) {
+                        reportMergeRemovals(production);
+                    } else {
+                        // The start-up report, said again at the level a config
+                        // edit read just now gives it.
+                        if (mergeRemovalLevels() !== removalLevels) reportMergeRemovals(production);
                         // A rebuild skips the prescan, so a stylesheet edit is
                         // the one moment the prefix can have changed under it.
-                        await followStyleModelRebuild(styleModel, changedStylesheets);
+                        if (styleModel !== undefined && changedStylesheets.length > 0) {
+                            await followStyleModelRebuild(styleModel, changedStylesheets);
+                        }
                     }
                     // A rebuild skips the prescan above, so an edited factory
                     // would keep serving importers its startup table. webpack
@@ -7381,6 +7615,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 });
                 compiler.hooks.thisCompilation.tap('csszyx:style-model', compilation => {
                     for (const file of styleModelFiles) compilation.fileDependencies.add(file);
+                    // Every name the config can have and each module it
+                    // imports, so a watch rebuilds when one is created, edited
+                    // or deleted, and reads it again. The root and the policy
+                    // are set by `beforeCompile`, which runs first.
+                    for (const file of diagnosticPolicyFiles()) {
+                        (fs.existsSync(file)
+                            ? compilation.fileDependencies
+                            : compilation.missingDependencies
+                        ).add(file);
+                    }
                     if (styleModelRebuildError !== null) {
                         compilation.errors.push(
                             new compiler.webpack.WebpackError(styleModelRebuildError),
@@ -7426,7 +7670,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param server - The dev server.
                  */
                 configureServer(server) {
+                    followStylesheetCreates(server);
                     devServer = server;
+                    followConfigFileEdits(server);
                 },
 
                 /**
@@ -7447,6 +7693,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // from the RESOLVED config means an alias another plugin
                     // added is honoured exactly as the build will resolve it.
                     specifierAliases = collectSpecifierAliases(root, config.resolve?.alias);
+                    // Vite's own resolver, asked the way `@tailwindcss/vite`
+                    // or, in front of `@tailwindcss/postcss`, Vite's CSS
+                    // `@import` inlining asks it; the plugin list says which.
+                    // A host config without the resolver follows no alias.
+                    stylesheetImportResolver = hasViteResolver(config)
+                        ? viteStylesheetResolver(config)
+                        : undefined;
+                    stylesheetImportCandidates = stylesheetImportResolver?.candidates;
                     // Never mangle in a dev server — the runtime mangle map would
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
@@ -7468,8 +7722,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
                     // Always: project-wide @theme discovery feeds merge groups.
                     // Before the prescan: its stylesheet list is what the style
-                    // model reads the prefix from.
-                    runAutoThemeScan(root);
+                    // model reads the prefix from. Walked until Vite has
+                    // answered every aliased `@import` it meets.
+                    await settledRead(stylesheetImportResolver, () => runAutoThemeScan(root));
                     // Pre-scan source files so Tailwind can discover classes
                     await prescanAndWriteClasses();
                     reportMergeRemovals(config.command !== 'serve');

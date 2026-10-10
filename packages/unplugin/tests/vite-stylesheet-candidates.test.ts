@@ -19,6 +19,7 @@ import { type InlineConfig, type Plugin, resolveConfig } from 'vite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+    hasViteResolver,
     settledRead,
     type ViteTailwindIntegration,
     viteStylesheetResolver,
@@ -398,5 +399,13 @@ describe('which Tailwind integration a Vite build runs', () => {
             join(root, 'src'),
         );
         expect(answer).toEqual([join(root, 'src/gen/theme.tw')]);
+    });
+});
+
+describe('whether a Vite config can resolve stylesheet imports', () => {
+    it('needs the resolver factory, and follows no alias without one', () => {
+        expect(hasViteResolver({ createResolver: () => async () => undefined })).toBe(true);
+        expect(hasViteResolver({})).toBe(false);
+        expect(hasViteResolver({ createResolver: 'not a function' })).toBe(false);
     });
 });

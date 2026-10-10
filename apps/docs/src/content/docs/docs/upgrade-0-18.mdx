@@ -42,7 +42,9 @@ changes rename `sz` keys or change an API shape, and the type checker,
    Its findings are `info`, so the audit does not fail the run.
 7. Build. If the build stops, its message names the stylesheet or the option to
    fix. A line ending in `(dead-class)` names an `sz` class that
-   [produces no CSS](#the-build-names-sz-classes-that-produce-no-css).
+   [produces no CSS](#the-build-names-sz-classes-that-produce-no-css), and one
+   ending in `(unsigned-value)` a
+   [sign your Tailwind has no negative for](#a-negative-your-tailwind-does-not-serve-is-reported).
 
 | Change | What you see | Found by | Fixed by |
 | --- | --- | --- | --- |
@@ -62,6 +64,13 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
 | [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
+| [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
+| [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
+| [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `string slash opacity is not supported` | the build, `csszyx check` | you |
+| [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
+| [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
+| [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
+| [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
 
 ## Classes carry your Tailwind prefix
 
@@ -583,7 +592,7 @@ Every build start and every `csszyx check` run now prints:
 [csszyx] csszyx.config.ts has 1 problem(s):
   - (warning) development: `development` is not read from this file; plugin options belong in the bundler config.
 Each one is ignored; the rest of the file applies.
-  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server or `csszyx next watch` reads the file again only when restarted.
+  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.
 ```
 
 `csszyx check` still passes. In a project without TypeScript, `init` wrote the
@@ -623,10 +632,14 @@ section, so a hand-written object fails `tsc --strict`. Type plugin options with
 build; `tsc` now rejects an object literal that sets it. Delete the key, and
 gate on `csszyx check`.
 
-Each lane reads the file once, when it starts. After editing it, restart the dev
-server or `csszyx next watch`, and run `csszyx next prebuild` again before
-`next build`: the Turbopack loader and jest read the levels those commands write
-to `.csszyx/diagnostic-policy.json`. Every preset, id and lane is in
+A Vite dev server, every watch build (webpack, `rollup -w`, `vite build --watch`,
+an esbuild context) and `csszyx next watch` read the file again when it, or a
+module it imports by a relative path, is saved, and print each finding again at
+its new level. Run `csszyx next prebuild` again before `next build`: the
+Turbopack loader and jest read the levels those commands write to
+`.csszyx/diagnostic-policy.json`. That file lists the config and every module
+it imports by a relative path, and once one of them changed since it was
+written, the loader and jest load the config themselves. Every preset, id and lane is in
 [`csszyx.config`](/docs/reference/config/#csszyxconfig).
 
 **Tooling.** The build and `csszyx check` print each problem in the file, and
@@ -694,7 +707,7 @@ or `csszyx next watch` under Turbopack, now ask the project's Tailwind about
 every class an `sz` prop emitted, and print each one it serves no CSS for:
 
 ```text
-[csszyx] src/Card.tsx: `break-bogus` is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
+[csszyx] src/Card.tsx:3:22: `break-bogus` (sz key `break`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
   help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.
 ```
 
@@ -722,3 +735,164 @@ entry is
 
 **Tooling.** `csszyx check --rule dead-class` lists every class with the file
 that emits it.
+
+## A negative your Tailwind does not serve is reported
+
+The minus of a negative number goes on the utility, the way Tailwind spells a
+negative. Stock Tailwind has no negative padding or width, and no negative
+fraction on a margin, so those classes style nothing. 0.17 wrote them without a
+word, and its two lanes disagreed: `{ p: -2 }` gave `p--2` at runtime and
+`-p-2` at build. Both lanes now write `-p-2`, and the build asks the project's
+Tailwind whether it serves the class:
+
+```text
+[csszyx] src/Card.tsx:3:22: `-p-2` (sz key `p`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `p-2`; drop the sign, or define it with @utility (unsigned-value).
+  help: `csszyx check --rule unsigned-value` lists every one.
+```
+
+**You are affected** when an `sz` object gives a negative number to a key whose
+utility has no negative: `{ p: -2 }`, `{ w: -4 }`, `{ mt: '-1/2' }`, and the same
+under a variant (`{ hover: { p: -2 } }` → `hover:-p-2`).
+
+**What you see.** The line above, where the build prints
+[`dead-class`](#the-build-names-sz-classes-that-produce-no-css), in production
+too. It is a kind of `dead-class`, at `error` under both presets: the build
+carries on, and `csszyx check` lists the class under
+`Negative values this project's Tailwind does not serve:` and exits 1. A class
+that is dead without its sign as well (`{ p: '-medium' }`) is a plain
+`dead-class`. A length keeps its sign inside the bracket
+(`{ mt: '-10px' }` → `mt-[-10px]`) and is not reported.
+
+**The edit.** Drop the sign, or write a length where the property takes a
+negative one. A project that serves the negative on purpose defines it with
+`@utility -p-*` and hears nothing. `rules['dead-class']` sets the level of both
+findings, and `rules['unsigned-value']` of this one alone.
+
+**Tooling.** `csszyx check --rule unsigned-value`. `csszyx migrate` does not
+rewrite it.
+
+## A runtime value under a variant key is reported
+
+0.17 lowered `sz={{ m: 1, hover: x }}` into a CSS variable on a class Tailwind
+never serves, and said nothing. The static keys still lower at build. The
+variant key now goes to the runtime part of the class list, where `x` is
+styled:
+
+```tsx
+<div sz={{ m: 1, hover: x }} />
+// 0.18 → className={_szcn("m-1", _szPart({ hover: x }))}
+```
+
+No file tells Tailwind to generate the classes `x` lowers to, so the build
+reports the key under the kind `fallback-missing-css`, an `error`, printed in
+production too:
+
+```text
+[csszyx] src/Card.tsx:3:28
+  sz fallback at 3:28: key `hover` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected.
+  Suggestion: If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().
+```
+
+**You are affected** when an `sz` object holds a runtime value under a variant
+key, at any depth (`md.hover`), in an `sz` array element or a conditional
+branch, or under a namespace import. A key no sz table claims takes the same
+path, since it may be a variant your project declares, so a misspelt key such
+as `tablt: x` is reported here too. A two-branch `c ? { … } : { … }` with
+literal branches is unchanged and compiles.
+
+**The edit.** Write a static object under the variant, a two-branch ternary of
+literals, an `szv()` factory, or a `dynamic()` value for a true runtime value.
+Fix the spelling of a key that was meant as a property. The full matrix is in
+[`sz` — unresolved expressions](/docs/reference/warnings/#sz--unresolved-expressions).
+
+**Tooling.** The build only. `csszyx check` does not list runtime fallbacks.
+
+## A colour string with a slash opacity is reported
+
+A colour key takes its opacity in the object form, so `{ bg: 'red-500/50' }` has
+always emitted nothing. 0.17 said so only in the browser, in development. The
+build now names it under the kind `slash-opacity-string`, an `error` under
+`recommended`, and the runtime prints the same line once per value, in
+production too:
+
+```text
+[csszyx] "bg: 'red-500/50'" at src/Card.tsx:3 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 50 }.
+```
+
+**The edit.** Write the object form the line names:
+
+```tsx
+// before
+<div sz={{ bg: "red-500/50" }} />
+// after
+<div sz={{ bg: { color: "red-500", op: 50 } }} />
+```
+
+**Tooling.** `csszyx check` lists it under the kind `slash-opacity-string` and
+exits 1.
+
+## Some classes take the spelling every Tailwind v4 serves
+
+One csszyx release serves every Tailwind from 4.0, so a key now writes the
+spelling all of them serve. The CSS is the same; class names in the DOM and in
+snapshots change:
+
+| `sz` | 0.17 | 0.18 |
+| --- | --- | --- |
+| `{ start: 4 }`, `{ insetS: 4 }` | `inset-s-4` (Tailwind 4.2+) | `start-4` |
+| `{ end: 4 }`, `{ insetE: 4 }` | `inset-e-4` (Tailwind 4.2+) | `end-4` |
+| `{ bgSize: 'auto 100px' }` | `bg-size-[auto_100px]` (Tailwind 4.1+) | `bg-[length:auto_100px]` |
+| `{ bgSize: '--x' }` | `bg-size-(--x)` (Tailwind 4.1+) | `bg-(length:--x)` |
+| `{ bgPos: '--x' }` | `bg-(--x)`, which Tailwind reads as a colour | `bg-(position:--x)` |
+| `{ shadowColor: x }`, `x` known at runtime | `shadow-(--…)`, which Tailwind reads as the shadow | `shadow-(color:--…)` |
+
+**You are affected** when a test or a selector matches one of the 0.17 names.
+On Tailwind older than 4.2, `start` and `end` now style the element, and so
+does `bgSize` on 4.0.
+
+**The edit.** Update the snapshots and selectors. Nothing in your `sz` code
+changes.
+
+## Logical block and inline keys need Tailwind 4.2
+
+The block-direction keys lower to utilities Tailwind added in 4.2: `pbs`, `pbe`,
+`mbs`, `mbe`, `scrollMbs`, `scrollMbe`, `scrollPbs`, `scrollPbe`, `insetBs`,
+`insetBe`, `borderBs`, `borderBe`, `blockSize`, `minBlockSize`, `maxBlockSize`,
+`inlineSize`, `minInlineSize` and `maxInlineSize`. On an older Tailwind their
+classes style nothing. 0.17 wrote them without a word; the build now reports
+each one as [`dead-class`](#the-build-names-sz-classes-that-produce-no-css):
+
+```text
+[csszyx] src/Card.tsx:3:22: `pbs-4` (sz key `pbs`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
+```
+
+**The edit.** Upgrade Tailwind to 4.2 or later, or write the physical key
+(`pt` for `pbs` in a horizontal writing mode).
+
+**Tooling.** `csszyx check --rule dead-class` lists every one.
+
+## migrate leaves classes your Tailwind does not serve
+
+0.17's `csszyx migrate` turned some classes into `sz` that styles something
+the original never did: `-z-auto` became `{ z: 'auto' }`, `-m-1/2` became
+`{ m: -1 }`, and a shorter prefix could take a longer one's class. A sign on a
+keyword, a fraction on a key that takes none, and an opacity modifier on a
+value that is not a colour (`m-2/50`) now stay in `className` and are listed
+under `Unrecognized classes`. The longest matching prefix decides which key a
+class belongs to.
+
+Where csszyx's own tables would decide whether a class is served, migrate asks
+the stylesheets of your project with the Tailwind it installs, as
+`csszyx check` does, and the migration log says how many classes it asked
+about. Without a Tailwind v4 stylesheet to ask, the tables decide, and the log
+says why.
+
+Two classes migrate now reads by their type hint: `bg-[length:auto_100px]`
+becomes `{ bgSize: 'auto 100px' }` and `bg-[position:10px_20px]` becomes
+`{ bgPos: '10px 20px' }`, also in the `bg-(length:--x)` form. 0.17 read both as
+the colour key `bg`. The 4.1 spellings `bg-size-[…]` still read as `bgSize`.
+
+**You are affected** when you run `csszyx migrate` over classes like these.
+
+**The edit.** Resolve the listed classes by hand or through
+`csszyx migrate --audit`, as for any unrecognized class.

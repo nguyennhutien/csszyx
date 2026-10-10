@@ -30,12 +30,13 @@ import { pathToFileURL } from 'node:url';
 import { atomicWriteFileSync } from './atomic-write.js';
 import {
     createDiagnosticPolicy,
-    DIAGNOSTIC_POLICY_FORMAT,
     type DiagnosticConfigProblem,
     type DiagnosticPolicy,
     type DiagnosticPolicyState,
     readCsszyxFileConfig,
 } from './diagnostic-policy.js';
+import type { DiagnosticPolicyInput } from './diagnostic-policy-inputs.js';
+import { samePath } from './path-case.js';
 
 /** Every name the config file can have, in the order they are looked for. */
 export const CSSZYX_CONFIG_FILE_NAMES = [
@@ -47,6 +48,47 @@ export const CSSZYX_CONFIG_FILE_NAMES = [
 
 /** The state file the Turbopack loader and jest read, under `.csszyx/`. */
 export const DIAGNOSTIC_POLICY_STATE_FILE = 'diagnostic-policy.json';
+
+/**
+ * The format of the policy state file this version reads.
+ *
+ * The reader's own number, not the writer's (`DIAGNOSTIC_POLICY_FORMAT` in
+ * `diagnostic-policy.ts`): a test holds the two equal within a release, and a
+ * file another release wrote is refused with a line naming the command that
+ * writes it again, instead of being read as the levels it does not hold.
+ */
+export const DIAGNOSTIC_POLICY_READ_FORMAT = 2;
+
+/** Each project and format already said to be unread, so it is said once. */
+const unreadStateFormats = new Set<string>();
+
+/**
+ * Whether a parsed state file is of the format this version reads.
+ *
+ * A file of another number is said once per project and number; one without
+ * a number is not a state file of any format, and is passed over in silence
+ * like a file that does not parse.
+ *
+ * @param root - The project root.
+ * @param state - The parsed file.
+ * @param state.format - Its format number, as written.
+ * @returns True when its levels can be read.
+ */
+export function isReadableDiagnosticPolicyState(
+    root: string,
+    state: { format?: unknown },
+): boolean {
+    if (state.format === DIAGNOSTIC_POLICY_READ_FORMAT) return true;
+    const key = `${path.resolve(root)}\0${String(state.format)}`;
+    if (typeof state.format === 'number' && !unreadStateFormats.has(key)) {
+        unreadStateFormats.add(key);
+        console.warn(
+            `[csszyx] .csszyx/${DIAGNOSTIC_POLICY_STATE_FILE} is in format ${state.format}, and this version reads format ${DIAGNOSTIC_POLICY_READ_FORMAT}: the levels in it are not used.\n` +
+                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes it again.',
+        );
+    }
+    return false;
+}
 
 /** The config file a project has, and any others it holds that are not read. */
 export interface FoundConfigFile {
@@ -66,6 +108,33 @@ export function findCsszyxConfigFile(root: string): FoundConfigFile | null {
     const present = CSSZYX_CONFIG_FILE_NAMES.filter(name => existsSync(path.join(root, name)));
     const [first, ...ignored] = present;
     return first === undefined ? null : { file: path.join(root, first), ignored };
+}
+
+/**
+ * Every path a project's config file can have, present or not: what a session
+ * watches so that creating, editing or deleting any of them is seen.
+ *
+ * @param root - The project root.
+ * @returns Absolute paths, in the order they are looked for.
+ */
+export function csszyxConfigFilePaths(root: string): string[] {
+    return CSSZYX_CONFIG_FILE_NAMES.map(name => path.join(root, name));
+}
+
+/**
+ * Whether a path a watcher reported is one of the project's config file names.
+ *
+ * Compared by the rule of the file system the project lives on: where it
+ * folds case, `C:\App\csszyx.config.ts` and `c:\app\CSSZYX.config.ts` are
+ * one file, as Node's own lookup of the name reads them.
+ *
+ * @param root - The project root.
+ * @param file - The reported path.
+ * @returns True for `csszyx.config.*` at the root, false for anything else.
+ */
+export function isCsszyxConfigFile(root: string, file: string): boolean {
+    const resolved = path.resolve(file);
+    return csszyxConfigFilePaths(root).some(name => samePath(root, name, resolved));
 }
 
 /** Imports a module by URL; Node's `import()` unless a caller substitutes one. */
@@ -554,6 +623,16 @@ export function diagnosticPolicyStatePath(root: string): string {
     return path.join(root, '.csszyx', DIAGNOSTIC_POLICY_STATE_FILE);
 }
 
+/** What the state file holds: the policy, and the files it was resolved from. */
+export interface DiagnosticPolicyStateFile extends DiagnosticPolicyState {
+    /**
+     * Every file the config load read, the config first, as they stood before
+     * it ran; empty when the project has no config. A lane trusts the levels
+     * only while each is unchanged.
+     */
+    inputs: DiagnosticPolicyInput[];
+}
+
 /**
  * Write the policy for the lanes that cannot load the config, when it changed.
  *
@@ -562,11 +641,18 @@ export function diagnosticPolicyStatePath(root: string): string {
  *
  * @param root - The project root.
  * @param policy - The resolved policy.
+ * @param inputs - The files the load read, from `diagnosticPolicyInputs`
+ *        taken before it ran; none for a project without a config.
  * @returns Whether the file was written.
  */
-export function writeDiagnosticPolicyState(root: string, policy: DiagnosticPolicy): boolean {
+export function writeDiagnosticPolicyState(
+    root: string,
+    policy: DiagnosticPolicy,
+    inputs: readonly DiagnosticPolicyInput[] = [],
+): boolean {
     const target = diagnosticPolicyStatePath(root);
-    const text = `${JSON.stringify(policy.toJSON())}\n`;
+    const state: DiagnosticPolicyStateFile = { ...policy.toJSON(), inputs: [...inputs] };
+    const text = `${JSON.stringify(state)}\n`;
     if (existsSync(target) && readFileSync(target, 'utf8') === text) return false;
     atomicWriteFileSync(target, text);
     return true;
@@ -576,16 +662,24 @@ export function writeDiagnosticPolicyState(root: string, policy: DiagnosticPolic
  * Read the policy a Next command wrote.
  *
  * A missing, unreadable or other-format file gives the defaults: the policy
- * only decides how loudly something is said, never what is built.
+ * only decides how loudly something is said, never what is built. A file of
+ * another format is said once ({@link isReadableDiagnosticPolicyState}).
  *
  * @param root - The project root.
  * @returns The policy.
  */
 export function readDiagnosticPolicyState(root: string): DiagnosticPolicy {
-    let state: Partial<DiagnosticPolicyState>;
+    let state: Partial<DiagnosticPolicyState> | null;
     try {
         state = JSON.parse(readFileSync(diagnosticPolicyStatePath(root), 'utf8'));
     } catch {
+        return createDiagnosticPolicy();
+    }
+    if (
+        typeof state !== 'object' ||
+        state === null ||
+        !isReadableDiagnosticPolicyState(root, state)
+    ) {
         return createDiagnosticPolicy();
     }
     return diagnosticPolicyFromState(state);
@@ -598,6 +692,6 @@ export function readDiagnosticPolicyState(root: string): DiagnosticPolicy {
  * @returns The policy; the defaults for another format.
  */
 export function diagnosticPolicyFromState(state: Partial<DiagnosticPolicyState>): DiagnosticPolicy {
-    if (state.format !== DIAGNOSTIC_POLICY_FORMAT) return createDiagnosticPolicy();
+    if (state.format !== DIAGNOSTIC_POLICY_READ_FORMAT) return createDiagnosticPolicy();
     return createDiagnosticPolicy(readCsszyxFileConfig({ diagnostics: state.config }).config);
 }

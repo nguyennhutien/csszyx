@@ -10,7 +10,12 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { createDiagnosticLimiter } from '@csszyx/unplugin/diagnostics';
+import {
+    createDiagnosticLimiter,
+    diagnosticPolicyInputsCurrent,
+    isCsszyxConfigFile,
+    isDiagnosticPolicyWatchFile,
+} from '@csszyx/unplugin/diagnostics';
 import {
     createRootIgnoreMatcher,
     prepareNextStylesheetFacts,
@@ -191,8 +196,9 @@ export interface NextWatchDependencies {
      */
     deliveryProbeTimeoutMs?: number;
     /**
-     * How often the sources the safelist holds are checked on the disk.
-     * Present so tests can see a lost deletion reaped without waiting for
+     * How often the sources the safelist holds, and the files the policy was
+     * read from, are checked on the disk. Present so tests can see a lost
+     * deletion reaped, or an edit outside the root read, without waiting for
      * the real interval.
      */
     sourceSweepMs?: number;
@@ -210,7 +216,8 @@ const DELIVERY_PROBE_NAME = '.csszyx-watch-probe';
 const DELIVERY_PROBE_TIMEOUT_MS = 2000;
 
 /**
- * How often the sources the safelist holds are checked on the disk.
+ * How often the sources the safelist holds, and the files the diagnostic
+ * policy was read from, are checked on the disk.
  *
  * A watcher can lose the events of a file written into a directory it has
  * just started watching: chokidar did on macOS under load, and on Linux CI a
@@ -280,9 +287,9 @@ export async function startNextWatch(
     // The loader lowers with the prefix these record, so they are read before
     // the first cycle, the way a bundler build reads them.
     await recordStylesheetFacts();
-    // Read once, at start: the loader reads the policy this writes. An edit to
-    // the config takes effect at the next start.
-    const diagnostics = await writeNextDiagnosticPolicy(root);
+    // The loader reads the policy this writes; an edit to the config writes it
+    // again (see `refreshDiagnosticPolicy`).
+    let diagnostics = await writeNextDiagnosticPolicy(root);
     for (const warning of diagnostics.warnings) printWatcherNotice(warning);
     // Kept for the session: a dead class is said once, not after every cycle.
     const deadClassLimiter = createDiagnosticLimiter();
@@ -389,6 +396,19 @@ export async function startNextWatch(
                 );
             });
     };
+    // A config edit: the loader reads the levels again from the file this
+    // rewrites, and every dead class is said again at its new level. Asked
+    // by an event and by the sweep alike, so the step itself checks: a step
+    // queued behind one that already read the edit has nothing to do.
+    const refreshDiagnosticPolicy = (): void => {
+        factsWrites = factsWrites.then(async () => {
+            if (diagnosticPolicyInputsCurrent(root, diagnostics.inputs)) return;
+            diagnostics = await writeNextDiagnosticPolicy(root);
+            for (const warning of diagnostics.warnings) printWatcherNotice(warning);
+            deadClassLimiter.reset();
+            writeRegistration();
+        });
+    };
     fsWatcher.on('all', (event, filePath) => {
         // The platform saw a change and could not say where, so anything may
         // have changed: the stylesheets are read again and every shard is
@@ -405,6 +425,15 @@ export async function startNextWatch(
         if (absolutePath.endsWith('.css')) {
             refreshStylesheetFacts();
             return;
+        }
+        if (isCsszyxConfigFile(root, absolutePath)) {
+            refreshDiagnosticPolicy();
+            return;
+        }
+        // A module the config imports can hold styles too: the levels are
+        // read again, and the module is a source like any other.
+        if (isDiagnosticPolicyWatchFile(root, diagnostics.inputs, absolutePath)) {
+            refreshDiagnosticPolicy();
         }
         // A directory removed or moved in one step can arrive as a single
         // event for the directory and none for the sources in it. Every cycle
@@ -445,6 +474,9 @@ export async function startNextWatch(
         if (!controller.pending && census.sourcePaths.some(source => !fs.existsSync(source))) {
             controller.rescan();
         }
+        // The watcher sees only the root's tree, and not what it ignores; a
+        // module the config imports from elsewhere is seen by its stamp.
+        if (!diagnosticPolicyInputsCurrent(root, diagnostics.inputs)) refreshDiagnosticPolicy();
     }, dependencies.sourceSweepMs ?? SOURCE_SWEEP_MS);
     sweep.unref();
 

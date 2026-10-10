@@ -60,6 +60,11 @@ export interface DiagnosticLimiter {
      * @param present - Every finding of it the report has now.
      */
     retain(id: string, present: readonly LimitedFinding[]): void;
+    /**
+     * Forget every finding listed or held back, and every file version: an
+     * edited config gives each finding a new level, so each is said again.
+     */
+    reset(): void;
     /** Whether a finding was held back by the cap since the last flush. */
     readonly pending: boolean;
     /** Whether anything was listed or held since the last flush. */
@@ -167,6 +172,11 @@ export function createDiagnosticLimiter(cap: number = DIAGNOSTIC_LINE_CAP): Diag
                 }
             }
             forgetHeld((heldKey, heldId) => heldId === id && !kept.has(heldKey));
+        },
+        reset() {
+            files.clear();
+            listedPerId.clear();
+            heldPerId.clear();
         },
         get pending() {
             return heldPerId.size > 0;

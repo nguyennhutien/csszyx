@@ -77,6 +77,21 @@ export interface ViteResolverConfig {
     createResolver(options: object): ViteResolveFn;
 }
 
+/**
+ * Whether a resolved Vite config carries the resolver factory this reads.
+ *
+ * Vite 6+ marks `createResolver` deprecated in favour of `createIdResolver`,
+ * but it is what `@tailwindcss/vite` 4.3.3 itself calls for the client and SSR
+ * environments, and `createIdResolver` does not exist on Vite 5, which the
+ * peer range accepts. A host config without it follows no alias.
+ *
+ * @param config - The resolved config.
+ * @returns True when `createResolver` is a function.
+ */
+export function hasViteResolver(config: object): config is ViteResolverConfig {
+    return typeof (config as { createResolver?: unknown }).createResolver === 'function';
+}
+
 /** The options both integrations give Vite's resolver for a stylesheet. */
 const STYLESHEET_RESOLVE = {
     extensions: ['.css'],

@@ -249,10 +249,182 @@ describe('csszyx next-watch command', () => {
         try {
             const said = warn.mock.calls.map(call => String(call[0]));
             expect(said.join('\n')).toContain('did you mean `dead-class`?');
-            expect(said.filter(line => line.includes('`break-bogus` is emitted'))).toHaveLength(1);
+            // The line, column and key, as the Vite lane names them.
+            const column = 'export const App = () => <div sz={{ '.length + 1;
+            expect(
+                said.filter(line =>
+                    line.includes(`src/App.tsx:1:${column}: \`break-bogus\` (sz key \`break\`)`),
+                ),
+            ).toHaveLength(1);
         } finally {
             await session.close();
             warn.mockRestore();
+        }
+    }, 60_000);
+
+    it('reads an edited config, rewrites the policy file and says what it now lists', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(
+            join(root, 'src/App.tsx'),
+            "export const App = () => <div sz={{ break: 'bogus', p: 4 }} />;",
+        );
+        const config = join(root, 'csszyx.config.mjs');
+        writeFileSync(
+            config,
+            "export default { diagnostics: { rules: { 'dead-class': 'off' } } };",
+        );
+        const state = join(root, '.csszyx/diagnostic-policy.json');
+        const said: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            said.push(args.map(String).join(' '));
+        });
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch(events) },
+        );
+        const dead = (): number => said.filter(line => line.includes('`break-bogus`')).length;
+        try {
+            expect(readFileSync(state, 'utf8')).toContain('"dead-class":"off"');
+            expect(dead()).toBe(0);
+
+            writeFileSync(config, "export default { diagnostics: { preset: 'atomic' } };");
+            await waitFor(() => readFileSync(state, 'utf8').includes('"preset":"atomic"'), {
+                describe: () =>
+                    describeWatchState(events, [{ label: 'policy', path: state, content: true }]),
+            });
+            await waitFor(() => dead() === 1, { describe: () => said.join('\n') });
+
+            // A config that no longer loads is said, and the defaults apply.
+            writeFileSync(config, 'export default {');
+            await waitFor(() => said.some(line => line.includes('could not be loaded')), {
+                describe: () => said.join('\n'),
+            });
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
+    it.each([
+        ['an edit to a module the config imports', false],
+        ['an edit to the config after a module it imports changed', true],
+    ])(
+        'writes the levels %s sets',
+        async (_, touchConfig) => {
+            // Node keeps a module this process imported by URL, so a load in the
+            // watch's own process reads the config's edit and every module it
+            // imports as first read: a policy file with fresh inputs and stale
+            // levels, which every lane then trusts.
+            const root = realpathSync(tempRoot());
+            linkTailwind(root);
+            mkdirSync(join(root, 'app'), { recursive: true });
+            writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+            writeFileSync(
+                join(root, 'src/App.tsx'),
+                'export const App = () => <div sz={{ p: 4 }} />;',
+            );
+            const config = join(root, 'csszyx.config.mjs');
+            const configText =
+                "import rules from './csszyx.levels.mjs';\nexport default { diagnostics: { rules } };\n";
+            writeFileSync(config, configText);
+            const levels = join(root, 'csszyx.levels.mjs');
+            writeFileSync(levels, "export default { 'dead-class': 'off' };\n");
+            const state = join(root, '.csszyx/diagnostic-policy.json');
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const events: string[] = [];
+            const session = await startNextWatch(
+                { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+                { watch: recordingWatch(events), sourceSweepMs: 50 },
+            );
+            try {
+                expect(readFileSync(state, 'utf8')).toContain('"dead-class":"off"');
+
+                writeFileSync(levels, "export default { 'dead-class': 'error' };\n");
+                if (touchConfig) writeFileSync(config, `${configText}// edited\n`);
+                await waitFor(() => readFileSync(state, 'utf8').includes('"dead-class":"error"'), {
+                    describe: () =>
+                        describeWatchState(events, [
+                            { label: 'policy', path: state, content: true },
+                        ]),
+                });
+            } finally {
+                await session.close();
+                vi.restoreAllMocks();
+            }
+        },
+        60_000,
+    );
+
+    it('reads the config again when a module it imports outside the root changes', async () => {
+        const outside = realpathSync(tempRoot());
+        const root = join(outside, 'app');
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(join(root, 'package.json'), '{"name":"app","private":true}\n');
+        linkTailwind(root);
+        writeFileSync(join(root, 'globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ p: 4 }} />;');
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "import rules from '../shared-levels.mjs';\nexport default { diagnostics: { rules } };\n",
+        );
+        const levels = join(outside, 'shared-levels.mjs');
+        writeFileSync(levels, "export default { 'dead-class': 'off' };\n");
+        const state = join(root, '.csszyx/diagnostic-policy.json');
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch([]), sourceSweepMs: 50 },
+        );
+        try {
+            expect(readFileSync(state, 'utf8')).toContain('"dead-class":"off"');
+            writeFileSync(levels, "export default { 'dead-class': 'warn' };\n");
+            await waitFor(() => readFileSync(state, 'utf8').includes('"dead-class":"warn"'));
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
+    it('reaps the shard of a deleted module the config imports when it holds styles too', async () => {
+        // One delete is two things here: an input of the levels gone and a
+        // source of classes gone. Reading the levels again must not stand in
+        // for reaping the source's shard.
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        writeFileSync(join(root, 'globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 2 }} />;');
+        const shared = join(root, 'src/shared.jsx');
+        writeFileSync(
+            shared,
+            "export const levels = { 'dead-class': 'off' };\nexport const Card = () => <div sz={{ p: 6 }} />;\n",
+        );
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "import { levels } from './src/shared.jsx';\nexport default { diagnostics: { rules: levels } };\n",
+        );
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            // The sweep would find the source gone on its own; this asks the event.
+            { watch: recordingWatch(events), sourceSweepMs: 600_000 },
+        );
+        try {
+            expect(readFileSync(session.safelistOutputPath, 'utf8')).toContain('p-6');
+            rmSync(shared);
+            await waitFor(() => !readFileSync(session.safelistOutputPath, 'utf8').includes('p-6'), {
+                describe: () =>
+                    describeWatchState(events, [
+                        { label: 'safelist', path: session.safelistOutputPath, content: true },
+                    ]),
+            });
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
         }
     }, 60_000);
 

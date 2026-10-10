@@ -397,7 +397,7 @@ describe('createDiagnosticPolicy serialization', () => {
 
 describe('diagnosticConfigProblemsMessage', () => {
     const CONFIG_HELP =
-        'https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server or `csszyx next watch` reads the file again only when restarted.';
+        'https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.';
 
     it('names the file and lists each problem under its path, tagged with its severity', () => {
         const message = diagnosticConfigProblemsMessage('csszyx.config.ts', [

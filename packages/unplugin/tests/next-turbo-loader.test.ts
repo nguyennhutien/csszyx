@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { csszyxConfigFilePaths, diagnosticPolicyStatePath } from '../src/csszyx-config-file.js';
 import { mergeRegistrationPath } from '../src/merge-registration.js';
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { acquireNextSafelistStateLock } from '../src/next-safelist-state.js';
@@ -115,10 +116,13 @@ describe('Next Turbopack loader core', () => {
         // their content changes, so declaring them cascades nothing.
         expect(result.dependencies).toEqual([]);
         // The merge table is an input too: the watch rewrites it only when its
-        // content changes, and the module imports it.
+        // content changes, and the module imports it. The spread is a finding,
+        // so the module also depends on the files its level comes from.
         expect(ctx.dependencies).toEqual([
             // The fixture has no package.json, so the app root is src/.
             resolveNextStylesheetFactsPath(result.context.cacheDir),
+            diagnosticPolicyStatePath(result.context.root),
+            ...csszyxConfigFilePaths(result.context.root),
             mergeRegistrationPath(result.context.root),
         ]);
     });

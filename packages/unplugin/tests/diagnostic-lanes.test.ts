@@ -9,13 +9,14 @@
  * bundler drives it, and only what reached the console or the loader channel
  * counts.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { writeDiagnosticPolicyState } from '../src/csszyx-config-file.js';
+import { loadDiagnosticPolicy, writeDiagnosticPolicyState } from '../src/csszyx-config-file.js';
 import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
+import { diagnosticPolicyInputs } from '../src/diagnostic-policy-inputs.js';
 import { createTransformer } from '../src/jest-transform.js';
 import nextTurboLoader, { type NextTurboLoaderContext } from '../src/next-turbo-loader.js';
 import { unplugin as rawInstance, vitePlugin } from '../src/unplugin.js';
@@ -220,6 +221,26 @@ function turbopack(input: {
         writeDiagnosticPolicyState(root, createDiagnosticPolicy(input.policy));
     }
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+    return runTurbopackLoader({ root, file, source: input.source, mode: input.mode });
+}
+
+/**
+ * Run the Turbopack loader once over a module of a project.
+ *
+ * @param input - What to run.
+ * @param input.root - The project root.
+ * @param input.file - The module.
+ * @param input.source - Its source.
+ * @param input.mode - The Next mode.
+ * @returns What the loader emitted through its channel.
+ */
+function runTurbopackLoader(input: {
+    root: string;
+    file: string;
+    source: string;
+    mode?: 'development' | 'production';
+}): string[] {
+    const { root, file } = input;
     const emitted: string[] = [];
     const mode = input.mode ?? 'development';
     const context: NextTurboLoaderContext = {
@@ -257,6 +278,35 @@ describe('the Turbopack loader', () => {
 
     it('names the line the engine placed the finding on', () => {
         expect(turbopack({ source: UNKNOWN })[0]).toMatch(/src\/A\.tsx:1:\d+\n/);
+    });
+
+    it('loads the config itself once a module the config imports changed since next prebuild', async () => {
+        const { root, file } = project(
+            UNKNOWN,
+            'import rules from "./levels.mjs";\nexport default { diagnostics: { rules } };\n',
+        );
+        writeFileSync(join(root, 'levels.mjs'), 'export default {};\n');
+        const inputs = diagnosticPolicyInputs(root);
+        writeDiagnosticPolicyState(root, (await loadDiagnosticPolicy(root)).policy, inputs);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(runTurbopackLoader({ root, file, source: UNKNOWN }).join('\n')).toContain(
+            'Unknown property',
+        );
+        writeFileSync(join(root, 'levels.mjs'), 'export default { "unknown-key": "off" };\n');
+        const later = new Date(Date.now() + 60_000);
+        utimesSync(join(root, 'levels.mjs'), later, later);
+        expect(runTurbopackLoader({ root, file, source: UNKNOWN })).toEqual([]);
+        // Asked again with nothing changed, it keeps what it loaded.
+        expect(runTurbopackLoader({ root, file, source: UNKNOWN })).toEqual([]);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('keeps the built-in levels without a state file, as before', () => {
+        const { root, file } = project(UNKNOWN, OFF);
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(runTurbopackLoader({ root, file, source: UNKNOWN }).join('\n')).toContain(
+            'Unknown property',
+        );
     });
 });
 
