@@ -70,18 +70,21 @@ export interface SzMergeOverride extends SourcePosition {
 export type ByteOffsetLocator = (offset: number) => SourcePosition;
 
 /**
- * The UTF-8 length of the UTF-16 code unit at an index, with a surrogate pair
- * counted on its high half.
+ * The UTF-8 length of the code point read at an index, with a surrogate pair
+ * counted where it starts.
  *
- * @param code - The code unit.
- * @returns Bytes it contributes: 1–3, or 4 for a high surrogate, 0 for a low one.
+ * @param code - The code point `codePointAt` read there.
+ * @returns Bytes it contributes: 1–4, or 0 for the second half of a pair.
  */
 function utf8Length(code: number): number {
     if (code < 0x80) return 1;
     if (code < 0x800) return 2;
     if (code > 0xffff) return 4;
-    if (code >= 0xd800 && code <= 0xdbff) return 4;
+    // The second half of a pair, read on its own: the code point read at the
+    // first half already counted all four bytes.
     if (code >= 0xdc00 && code <= 0xdfff) return 0;
+    // Anything else, a lone first half included, which an encoder writes as
+    // U+FFFD.
     return 3;
 }
 
@@ -130,7 +133,7 @@ export function createByteOffsetLocator(source: string): ByteOffsetLocator {
             const code = source.codePointAt(unit) as number;
             byte += utf8Length(code);
             // A surrogate pair is one character: step over both halves.
-            unit += code > 0xffff || (code >= 0xd800 && code <= 0xdbff) ? 2 : 1;
+            unit += code > 0xffff ? 2 : 1;
         }
         return { line: low + 1, column: unit - (unitStarts[low] as number) + 1 };
     };
