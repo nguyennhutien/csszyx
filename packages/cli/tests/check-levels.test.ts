@@ -13,6 +13,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +33,8 @@ const CSS = '@import "tailwindcss";';
  *
  * @param cwd - Project root.
  * @param options - Options besides the root.
- * @returns The exit code and the printed text.
+ * @returns The exit code and the printed text, without colour: CI forces
+ *          colour on, and the assertions read the words.
  */
 async function run(
     cwd: string,
@@ -41,7 +43,9 @@ async function run(
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await check({ ...options, cwd });
-    const printed = [...log.mock.calls, ...warn.mock.calls].flat().join('\n');
+    const printed = stripVTControlCharacters(
+        [...log.mock.calls, ...warn.mock.calls].flat().join('\n'),
+    );
     const exitCode = process.exitCode === undefined ? undefined : Number(process.exitCode);
     process.exitCode = undefined;
     log.mockRestore();
