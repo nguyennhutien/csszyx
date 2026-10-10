@@ -57,4 +57,75 @@ describe('discoverProjectTheme walk', () => {
         expect(found.scanned.map(file => relative(root, file))).toEqual(['src/index.css']);
         expect(opened.filter(directory => directory.startsWith('legacy'))).toEqual([]);
     });
+
+    it('skips a stylesheet .gitignore covers, at any depth', () => {
+        // A stale build copy under `out/` or `.output/`-style folders the
+        // name list does not know: git does.
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-walk-gitignore-'));
+        roots.push(root);
+        for (const [file, content] of Object.entries({
+            '.gitignore': 'out/\n',
+            'src/.gitignore': 'legacy.css\n',
+            'src/index.css': '@import "tailwindcss";\n',
+            'src/legacy.css': '@theme { --color-legacy: #000; }\n',
+            'out/static/index.css': '@import "tailwindcss" prefix(old);\n',
+        })) {
+            mkdirSync(dirname(join(root, file)), { recursive: true });
+            writeFileSync(join(root, file), content);
+        }
+
+        const found = discoverProjectTheme(root);
+
+        expect(found.scanned.map(file => relative(root, file))).toEqual(['src/index.css']);
+        expect(found.theme).toBeNull();
+        expect(found.gitignoreFiles.map(file => relative(root, file)).sort()).toEqual([
+            '.gitignore',
+            'src/.gitignore',
+        ]);
+    });
+
+    it('still reads a gitignored stylesheet another stylesheet imports', () => {
+        // A generated `@theme` file is often gitignored; the import is the
+        // evidence the app loads it, and without it its tokens lose their
+        // merge groups.
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-walk-gitignore-import-'));
+        roots.push(root);
+        for (const [file, content] of Object.entries({
+            '.gitignore': 'generated/\n',
+            'src/index.css': '@import "tailwindcss";\n@import "../generated/tokens.css";\n',
+            'generated/tokens.css':
+                '@import "./colors.css" layer(theme);\n@theme { --text-huge: 4rem; }\n',
+            'generated/colors.css': '@theme { --color-brand: #123456; }\n',
+            'generated/unused.css': '@theme { --color-unused: #000; }\n',
+        })) {
+            mkdirSync(dirname(join(root, file)), { recursive: true });
+            writeFileSync(join(root, file), content);
+        }
+
+        const found = discoverProjectTheme(root);
+
+        expect(found.scanned.map(file => relative(root, file)).sort()).toEqual([
+            'generated/colors.css',
+            'generated/tokens.css',
+            'src/index.css',
+        ]);
+        expect(found.theme?.colors).toEqual(['brand']);
+        expect(found.theme?.textSizes).toEqual(['huge']);
+    });
+
+    it('does not follow an import into a folder the walk skips by name', () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-walk-import-skipped-'));
+        roots.push(root);
+        for (const [file, content] of Object.entries({
+            'src/index.css': '@import "../dist/tokens.css";\n@import "missing.css";\n',
+            'dist/tokens.css': '@theme { --color-built: #000; }\n',
+        })) {
+            mkdirSync(dirname(join(root, file)), { recursive: true });
+            writeFileSync(join(root, file), content);
+        }
+
+        expect(discoverProjectTheme(root).scanned.map(file => relative(root, file))).toEqual([
+            'src/index.css',
+        ]);
+    });
 });

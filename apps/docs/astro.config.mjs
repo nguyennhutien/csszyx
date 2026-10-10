@@ -200,6 +200,7 @@ export default defineConfig({
                         { label: 'Installation', slug: 'docs/installation' },
                         { label: 'Monorepo & Content Scope', slug: 'docs/monorepo-content-scope' },
                         { label: 'Migrate from Tailwind', slug: 'docs/migrate' },
+                        { label: 'Upgrading to 0.18', slug: 'docs/upgrade-0-18' },
                         { label: 'Sz Props Basics', slug: 'docs/sz-props' },
                         { label: 'Variants & Modifiers', slug: 'docs/variants' },
                         { label: 'SSR & Hydration', slug: 'docs/ssr' },

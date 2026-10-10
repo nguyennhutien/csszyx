@@ -5,8 +5,11 @@ description: Full reference for CSSzyx plugin configuration options.
 
 import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
-CSSzyx is configured by passing options directly to the plugin. There is no
-standalone `csszyx.config.ts` file — all config lives in your bundler config.
+CSSzyx is configured in two places. Plugin options — what the build does — are
+passed to the plugin in your bundler config. Diagnostic levels — how loudly each
+finding is reported — live in [`csszyx.config`](#csszyxconfig) at the project
+root, the one file every bundler plugin, `csszyx check` and the Next commands
+read.
 
 <Aside type="caution" title="Removed: options that never did anything">
 Nine options were listed here, typed, and given defaults while no part of the
@@ -105,6 +108,86 @@ scans them to generate CSS.
   </TabItem>
 </Tabs>
 
+## `csszyx.config`
+
+`csszyx.config.ts` (or `.mts`, `.js`, `.mjs`) at the project root sets the level
+of each kind of finding. Plugin options in a bundler config reach only that
+bundler, so `csszyx check` could never see them; this file is read by every
+bundler plugin, by `csszyx check`, and by `csszyx next prebuild` and
+`csszyx next watch`, which hand it to the Turbopack loader.
+
+```ts
+// csszyx.config.ts
+import { defineConfig } from 'csszyx';
+
+export default defineConfig({
+  diagnostics: {
+    preset: 'recommended', // or 'atomic'
+    rules: { 'class-precedence': 'error', 'merge-covered-key': 'off' },
+    allow: { classes: ['my-later-class'], tokens: ['brand'] },
+    overrides: [{ files: ['src/legacy/**'], rules: { 'class-precedence': 'off' } }],
+  },
+});
+```
+
+| Field | Meaning |
+| --- | --- |
+| `preset` | The starting levels. `recommended` (the default) makes every finding an `error` except notes about a choice the author made or output that is still complete — `class-precedence`, `duplicate-sz`, `merge-covered-key`, `merge-covered-class`, `fallback-nudge` and `mangle-vars-hoist-skipped` are `info`, and `merge-classifier-unavailable` is `warn`. `atomic` raises the notes to `warn`, for an app reviewing every site where csszyx changed what was written. |
+| `rules` | A level per id: `off`, `info`, `warn` or `error`. An id is a pass of `csszyx check` (`sz-diagnostic`, `dead-class`, `broken-opacity`, `sibling-keyword`, `theme-collision`, `merge-covered-key`, `merge-covered-class`) or a kind (`unknown-key`, `class-precedence`, `prefix-disagreement` and the rest of the [kinds `check --json` reports](/docs/reference/warnings/#running-it-as-a-git-hook)). A pass id sets every kind under it; a kind id beats its pass. |
+| `allow` | Names to leave out of every report: `classes` that produce no CSS on purpose (as `check --allow`), theme `tokens` that shadow a utility on purpose (as `check --allow-token`). A filter on the report only — the class is still emitted. |
+| `overrides` | Levels for some files, applied after `rules` and in order. `files` takes globs relative to the project root: `./src/**` reads as `src/**`, `.` as the whole project, a backslash as `/`, and a plain path such as `src/legacy` covers that path and everything under it. An absolute glob (`/src`, `C:/app`) or one with a `..` segment can match no file, so it is reported like an unknown id. |
+
+Precedence is preset, then `rules`, then each matching `overrides` entry.
+`defineConfig` returns its argument unchanged; it is there for the types, and
+every field is optional.
+
+| Level | Dev server / development build | Production build | `csszyx check` |
+| --- | --- | --- | --- |
+| `off` | Not printed. | Not printed. | Not reported. |
+| `info` | Printed (the merge report as one summary line). | Counted in one closing line, not listed; the merge report prints nothing. | Reported; the run passes. |
+| `warn` | Printed with its file and line. | Printed. | Reported; the run passes. |
+| `error` | Printed with its file and line. | Printed. | Reported; the run exits 1. |
+
+A build never fails on a level: an `error` is printed, and the build goes on.
+Every bundler lane reads the levels — Vite, webpack (Next.js `--webpack`
+included), Rollup, esbuild, the jest transform and the Turbopack loader — and
+prints each site once per process while its file is unchanged, at most ten lines
+per id per start or build (on a dev server, per burst of compiles); [Warnings](/docs/reference/warnings/#levels-in-a-build)
+lists what each lane prints. `quiet: true` still mutes all of it. `csszyx check --fail-on info` or `--fail-on warn`
+fails the run on quieter findings too; `--rule` and `--ignore-rule` still only
+choose which findings are reported.
+
+An id the file does not know, a level or preset it cannot use, a misspelt
+`diagnostics` key, a key of `diagnostics` (`rules`, `preset`, `allow`,
+`overrides`) written at the top level, an override glob that can never match, a file with no
+default export (`export const config = …`) and a file that does not load are
+printed as a warning at build and fail `csszyx check`, naming the id or key
+they most likely meant. A plugin option written in this file is not read from
+it, and says so. One file that does not load is only reported and ignored,
+without failing `check`: the `csszyx.config.js` that `csszyx init` 0.17 and
+earlier wrote into a JavaScript project, recognised by its shape
+(`import type { CsszyxConfig }`, `const config: CsszyxConfig = { … }`,
+`export default config`, in either quote style, with any spacing, comments or
+semicolons) — TypeScript syntax that no JavaScript loader
+accepts, holding plugin options nothing read. Replace it with
+`export default defineConfig({ diagnostics: { … } })`, importing `defineConfig`
+from `csszyx`, or delete it. Passing `diagnostics` to the plugin itself is refused the
+same way as any unknown option: it would apply to one bundler and drift from the
+gate.
+
+The file is read once, when the dev server, the watch or the build starts. After
+editing it, restart `vite`, `next dev` or `csszyx next watch`; under Turbopack
+the levels reach the loader through `.csszyx/diagnostic-policy.json`, which
+`csszyx next prebuild` and `csszyx next watch` write.
+
+Node loads the file itself — Node 22.18 or 24.11 and later strip TypeScript
+types natively, so nothing else is installed. Outside a `"type": "module"`
+package — `"type": "commonjs"`, or no `"type"` at all — a `.ts` or `.js` file
+written with `export default` is still loaded, and Node prints no advice to
+change the package type: csszyx imports it as an ES module from a copy written
+beside it, and removes the copy. In such a package `csszyx init` names the file
+`csszyx.config.mts` (or `.mjs`), which Node always reads as an ES module.
+
 ## TypeScript Types
 
 ```ts
@@ -125,15 +208,17 @@ Controls development mode behavior.
 
 ```ts
 interface DevelopmentConfig {
-  strictMode: boolean; // Treat warnings as errors
   debug: boolean; // Enable debug logging
 }
 ```
 
-| Option       | Default | Description                               |
-| ------------ | ------- | ----------------------------------------- |
-| `strictMode` | `false` | Treat all CSSzyx warnings as build errors |
-| `debug`      | `false` | Enable verbose debug logging              |
+| Option  | Default | Description                  |
+| ------- | ------- | ---------------------------- |
+| `debug` | `false` | Enable verbose debug logging |
+
+`strictMode` was removed: nothing read it, so it never turned a warning into an
+error. A build never fails on a diagnostic level; gate on
+[`csszyx check`](/docs/reference/warnings/#running-it-in-ci) instead.
 
 For per-element hydration recovery, use the `szRecover` JSX attribute
 on individual elements rather than a global flag — see

@@ -2,7 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
+import {
+    type CssVariableMangleValue,
+    restoreEngineSpans,
+    type SourceTransformResult,
+    type StoredEngineSpans,
+    storeEngineSpans,
+    type TokenData,
+} from '@csszyx/compiler';
 
 // 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
 // resurrect it as `undefined`, and the injection would then route a file's
@@ -19,7 +26,13 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // 18: entries keep the class name and `sz` pairs the pass without a table
 // reported; a schema-17 entry lacks them, and a build reading it would leave
 // every static class name unmerged.
-const CACHE_SCHEMA_VERSION = 18;
+// 19: entries keep each diagnostic's code and position (`issues`), each merge
+// pair where it is written, and for each merge group class the key it came
+// from and where that key is written; a schema-18 entry would replay
+// diagnostics no rule can select and merge groups `csszyx check` cannot place.
+// A position is stored as the engine's byte offset and located again against
+// the source on read: a line and column per class grew an entry by ~45%.
+const CACHE_SCHEMA_VERSION = 19;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -45,10 +58,12 @@ interface SerializedTransformResult {
     classes: string[];
     rawClassNames: string[];
     /** Absent from an entry written before the field existed. */
-    mergeGroups?: string[][];
+    mergeGroups?: StoredEngineSpans['mergeGroups'];
     /** Absent from an entry written before the field existed. */
-    mergeOverrides?: Array<{ base: string[]; over: string[] }>;
+    mergeOverrides?: StoredEngineSpans['mergeOverrides'];
     diagnostics: string[];
+    /** Absent from an entry whose result carried none. */
+    issues?: StoredEngineSpans['issues'];
     recoveryTokens: Array<[string, TokenData]>;
     cssVariableMap: Array<[string, CssVariableMangleValue]>;
 }
@@ -222,7 +237,7 @@ export function readTransformCache(
         return null;
     }
 
-    return deserializeResult(entry.result);
+    return deserializeResult(entry.result, input.source);
 }
 
 /**
@@ -337,13 +352,33 @@ function cacheEntryPath(cacheRoot: string, key: string): string {
     return path.join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
 }
 
+/** The fields of a transform result that carry over unconverted. */
+export type ScalarFields = Pick<
+    CacheableTransformResult,
+    | 'code'
+    | 'transformed'
+    | 'usesRuntime'
+    | 'usesMerge'
+    | 'usesSzcn'
+    | 'usesSzPart'
+    | 'usesSzvPick'
+    | 'usesSzvPick1'
+    | 'szPartArgsProvable'
+    | 'usesColorVar'
+    | 'usesSpacingVar'
+    | 'usesUnitVar'
+    | 'usesBoolClass'
+>;
+
 /**
- * Serialize Set/Map fields into JSON arrays.
+ * Copy the fields of a transform result that need no conversion, so every
+ * place that carries a result along — the cache entry written and read, the
+ * plugin's pre-transform state — agrees on which ones there are.
  *
- * @param result Transform result.
- * @returns JSON-safe transform result.
+ * @param result A result or a stored entry.
+ * @returns Its scalar fields.
  */
-function serializeResult(result: CacheableTransformResult): SerializedTransformResult {
+export function scalarFieldsOf(result: ScalarFields): ScalarFields {
     return {
         code: result.code,
         transformed: result.transformed,
@@ -358,10 +393,22 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
         usesBoolClass: result.usesBoolClass,
+    };
+}
+
+/**
+ * Serialize Set/Map fields into JSON arrays.
+ *
+ * @param result Transform result.
+ * @returns JSON-safe transform result.
+ */
+function serializeResult(result: CacheableTransformResult): SerializedTransformResult {
+    return {
+        ...scalarFieldsOf(result),
         classes: [...result.classes],
         rawClassNames: [...result.rawClassNames],
-        ...(result.mergeGroups === undefined ? {} : { mergeGroups: result.mergeGroups }),
-        ...(result.mergeOverrides === undefined ? {} : { mergeOverrides: result.mergeOverrides }),
+        // Offsets, not positions: see schema 19.
+        ...storeEngineSpans(result),
         diagnostics: [...result.diagnostics],
         recoveryTokens: [...result.recoveryTokens],
         cssVariableMap: [...(result.cssVariableMap ?? new Map())],
@@ -372,32 +419,48 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
  * Rehydrate JSON arrays back into Set/Map fields.
  *
  * @param result Serialized transform result.
+ * @param source The source the result was transformed from, to place its spans.
  * @returns Cacheable transform result.
  */
-function deserializeResult(result: SerializedTransformResult): CacheableTransformResult {
+function deserializeResult(
+    result: SerializedTransformResult,
+    source: string,
+): CacheableTransformResult {
     return {
-        code: result.code,
-        transformed: result.transformed,
-        usesRuntime: result.usesRuntime,
-        usesMerge: result.usesMerge,
-        usesSzcn: result.usesSzcn,
-        usesSzPart: result.usesSzPart,
-        usesSzvPick: result.usesSzvPick,
-        usesSzvPick1: result.usesSzvPick1,
-        szPartArgsProvable: result.szPartArgsProvable,
-        usesColorVar: result.usesColorVar,
-        usesSpacingVar: result.usesSpacingVar,
-        usesUnitVar: result.usesUnitVar,
-        usesBoolClass: result.usesBoolClass,
+        ...scalarFieldsOf(result),
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         // An entry from before the field reads as one list of every class.
-        ...(Array.isArray(result.mergeGroups) ? { mergeGroups: result.mergeGroups } : {}),
-        ...(Array.isArray(result.mergeOverrides) ? { mergeOverrides: result.mergeOverrides } : {}),
+        ...restoreCachedSpans(result, source),
         diagnostics: [...result.diagnostics],
         recoveryTokens: new Map(result.recoveryTokens),
         cssVariableMap: new Map(result.cssVariableMap ?? []),
     };
+}
+
+/**
+ * Place the spans a cache entry stores as offsets back against their source.
+ *
+ * The transform cache's reader and the jest transformer's index both read
+ * entries this module wrote; both need positions, not the offsets the entry
+ * keeps. A field an older entry lacks, or holds in another shape, stays absent.
+ *
+ * @param result - A stored result, or the part of it with spans.
+ * @param result.mergeGroups - Each static object's classes, as stored.
+ * @param result.mergeOverrides - Each class name beside a static `sz`, as stored.
+ * @param result.issues - Each diagnostic's code and offset, as stored.
+ * @param source - The source the entry was transformed from.
+ * @returns The spans, located lazily.
+ */
+export function restoreCachedSpans(
+    result: { mergeGroups?: unknown; mergeOverrides?: unknown; issues?: unknown },
+    source: string,
+): ReturnType<typeof restoreEngineSpans> {
+    const stored: StoredEngineSpans = {};
+    if (Array.isArray(result.mergeGroups)) stored.mergeGroups = result.mergeGroups;
+    if (Array.isArray(result.mergeOverrides)) stored.mergeOverrides = result.mergeOverrides;
+    if (Array.isArray(result.issues)) stored.issues = result.issues;
+    return restoreEngineSpans(source, stored);
 }
 
 /**

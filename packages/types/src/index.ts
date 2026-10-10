@@ -62,6 +62,18 @@ export {
 } from './config.js';
 // Re-export core WASM contract
 export type { CsszyxCorePkg, CsszyxCoreWasm } from './core.js';
+// The csszyx.config file and its diagnostics section
+export type {
+    CsszyxFileConfig,
+    SzDiagnosticLevel,
+    SzDiagnosticOverride,
+    SzDiagnosticPassId,
+    SzDiagnosticPreset,
+    SzDiagnosticRuleId,
+    SzDiagnosticRules,
+    SzDiagnosticsConfig,
+} from './diagnostics.js';
+export { defineConfig } from './diagnostics.js';
 // Export JSX types (also auto-augments React namespace)
 export type { SzProps, SzPropValue } from './jsx.js';
 // Re-export all runtime types

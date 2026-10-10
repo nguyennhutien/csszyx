@@ -1,0 +1,724 @@
+---
+title: Upgrading to 0.18
+description: Every breaking change in csszyx 0.18, how to tell whether it reaches your project, and the edit that fixes it.
+---
+
+From 0.18, csszyx reads the CSS your project's Tailwind compiles before it writes a
+class. Each class it emits carries the prefix your stylesheet sets. A class that a
+later class on the same element fully covers is removed. Every finding has a level
+that `csszyx.config` sets, and `csszyx check` fails only on `error`. The other
+changes rename `sz` keys or change an API shape, and the type checker,
+`csszyx check` or `csszyx migrate --keys-only` finds those for you.
+
+## Upgrade in this order
+
+1. Install 0.18 for `csszyx` and every `@csszyx/*` package at once. A plugin and
+   an engine from different releases cannot read each other's merge table, and
+   the build then keeps every class and tells you to align the versions.
+2. If `csszyx init` wrote a `csszyx.config.ts` or `csszyx.config.js` for you,
+   replace it with the
+   [0.18 template](#csszyxconfig-sets-how-loudly-each-finding-is-reported).
+3. Rewrite the renamed keys:
+
+   ```bash
+   npx @csszyx/cli migrate --keys-only --dry-run   # preview
+   npx @csszyx/cli migrate --keys-only             # apply
+   ```
+
+4. Run `tsc --noEmit`. It flags `szv` rows that do not type-check, and calls to
+   `transform`, `csszyxTurbopack` and the `@csszyx/unplugin` entry that use the
+   0.17 shape.
+5. Run `npx @csszyx/cli check`. It lists the keys `--keys-only` could not reach,
+   class names cut off by a spread, and Tailwind entries that set different
+   prefixes, and it exits 1 while any remain. It no longer fails on
+   `class-precedence` or `duplicate-sz`; if your CI relied on that,
+   [opt back in](#csszyx-check-fails-only-on-error-findings).
+6. List the classes the build now removes, and decide whether each one should go:
+
+   ```bash
+   npx @csszyx/cli check --rule merge-covered-key --rule merge-covered-class
+   ```
+
+   Its findings are `info`, so the audit does not fail the run.
+7. Build. If the build stops, its message names the stylesheet or the option to
+   fix. A line ending in `(dead-class)` names an `sz` class that
+   [produces no CSS](#the-build-names-sz-classes-that-produce-no-css).
+
+| Change | What you see | Found by | Fixed by |
+| --- | --- | --- | --- |
+| [Tailwind prefix](#classes-carry-your-tailwind-prefix) | Classes gain `tw:`; the build can stop on your stylesheets | the build, `csszyx check` | you |
+| [A later key covers an earlier one](#a-later-sz-key-replaces-an-earlier-one-it-covers) | `{ pb: 2, p: 4 }` emits `p-4` | the merge audit | you |
+| [`sz` covers a `className` class](#sz-removes-a-classname-class-it-covers) | `className="card pb-2" sz={{ p: 4 }}` emits `card p-4` | the merge audit | you |
+| [A spread splits the class names](#class-names-on-either-side-of-a-spread-no-longer-merge) | `spread-split-class` warning; Svelte `attribute_duplicate` | the build, `csszyx check` | you |
+| [`szcn` merges on compiled CSS](#szcn-merges-only-what-compiled-css-proves) | `szcn` keeps or drops different classes | dev warning | you |
+| [`font-variant-numeric` keys](#font-variant-numeric-takes-one-key-per-group) | `"tabularNums" was replaced` | the build, `csszyx check` | `migrate --keys-only` |
+| [`touch-action` keys, `contain`](#touch-action-takes-one-key-per-group-contain-gains-keys) | `"touch: pan-x" moved to` | the build, `csszyx check` | `migrate --keys-only` |
+| [`szv()` returns `SzProps`](#szv-returns-szprops-and-checks-every-row) | type errors in `szv` rows | `tsc` | you |
+| [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
+| [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
+| [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
+| [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
+| [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
+| [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
+| [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
+| [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
+
+## Classes carry your Tailwind prefix
+
+With `@import "tailwindcss" prefix(tw)`, Tailwind serves `tw:p-4` and nothing for
+`p-4`. 0.17 emitted `p-4` and only warned, so every `sz` class in a prefixed project
+styled nothing. 0.18 writes the prefix before every class:
+
+```tsx
+<div sz={{ p: 4 }} />
+// 0.17 → className="p-4"
+// 0.18 → className="tw:p-4"
+```
+
+**You are affected** when a stylesheet your build reads sets `prefix(...)`, or when
+your project holds more than one stylesheet that imports Tailwind: a test fixture,
+a Storybook copy, an old file the app no longer loads.
+
+**What you see.** In a prefixed project, classes in the DOM and in snapshots gain
+the prefix, so a test that selects `.p-4` stops matching. When two Tailwind entries
+set different prefixes, the build stops before it transforms anything:
+
+```text
+[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:
+  src/index.css      prefix(tw)
+  fixtures/old.css   no prefix
+  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.
+  note: the build stopped before transforming any module; nothing was written.
+```
+
+A stylesheet that imports Tailwind and fails to compile also stops the build, since
+csszyx cannot read its prefix. See
+[Tailwind entries set different prefixes](/docs/reference/warnings/#tailwind-entries-set-different-prefixes)
+for every variant of these messages.
+
+**The edit.** Name the stylesheets your app loads, and csszyx reads the prefix from
+those alone:
+
+```ts
+csszyx({ tailwindStylesheet: "src/index.css" });
+```
+
+On Next.js with Turbopack, pass the same list to the loader and to the two
+commands, and run `csszyx next prebuild` before `next build`. Without it the build
+stops with `has not read the Tailwind prefix`:
+
+```js
+// next.config.mjs
+turbopack: csszyxTurbopack({ tailwindStylesheet: "app/globals.css" }),
+```
+
+```json
+"build": "csszyx next prebuild 'app/**/*.tsx' --tailwind-stylesheet app/globals.css && next build --turbopack"
+```
+
+A watch build (webpack, `rollup -w`, `vite build --watch`, esbuild, Rspack) whose
+prefix changes mid-session fails each rebuild until you restart it. A Vite dev
+server recompiles every module and reloads the page instead.
+
+**Tooling.** `csszyx check` reports two entries that disagree as a
+`prefix-disagreement` finding and exits 1. `csszyx migrate` changes nothing here.
+
+## A later sz key replaces an earlier one it covers
+
+In a static `sz` object or array, a later key now removes an earlier key whose CSS
+it fully covers. 0.17 emitted both classes, and because Tailwind writes the
+shorthand's rule first, the earlier `pb-2` won whatever order you wrote:
+
+```tsx
+<div sz={{ pb: 2, p: 4 }} />   // 0.17 → "pb-2 p-4"   0.18 → "p-4"
+<div sz={{ p: 4, pb: 2 }} />   // 0.17 → "p-4 pb-2"   0.18 → "p-4 pb-2"
+```
+
+**You are affected** when a static object writes a narrower key before a wider key
+of the same property: `pb` before `p`, `mt` before `m`, `w` before `size`.
+
+**What you see.** A production build prints nothing, and the element renders the
+later key. A Vite dev server or a webpack development build prints one count at
+start:
+
+```text
+[csszyx] {n} class(es) in {m} file(s) were removed: another class on the same element sets every property they set.
+  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.
+  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of `{config}` to hide this line; `build.mergeCoveredClasses: false` keeps the classes.
+```
+
+The line names only the ids that removed a class. Under the `atomic` preset each
+removal prints on its own line with its file and line, in production too.
+
+A jest snapshot of a class list changes too, because jest reads the table the
+build wrote.
+
+**The edit.** Write the refining key last: `{ p: 4, pb: 2 }`. The merge audit lists
+each removal at the line and key you wrote:
+
+```text
+src/App.tsx:3: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.
+```
+
+Values the runtime resolves keep every class, and so do `szv` factories and the
+Svelte and Vue adapters. The full list is in
+[A later key covers an earlier one](/docs/sz-props/#a-later-key-covers-an-earlier-one).
+
+If your stylesheet is read wrong and a class you need is removed, set
+`build.mergeCoveredClasses: false` (on Turbopack,
+`csszyxTurbopack({ mergeCoveredClasses: false })`). The build then keeps every
+class, as 0.17 did, and the setting also turns off the next rule.
+
+**Tooling.** The merge audit finds every site. `csszyx migrate` does not reorder
+keys.
+
+## sz removes a className class it covers
+
+In 0.17 a static `className` and the `sz` beside it both reached the element, and
+the stylesheet order decided between their classes. Now a Tailwind class in a
+static `className` is dropped when a class the static `sz` beside it emits sets
+every property it sets:
+
+```tsx
+<div className="card pb-2" sz={{ p: 4 }} />
+// 0.17 → className="card pb-2 p-4"
+// 0.18 → className="card p-4"
+```
+
+**You are affected** when a static `className` holds a Tailwind utility that a key
+in the `sz` beside it covers. Two classes inside one `className` are never compared
+with each other. A class from `@utility`, a plugin or plain CSS is never removed,
+and neither is a Tailwind class that one of your own CSS rules selects on.
+
+**What you see.** The same dev-server count as the object rule, and this finding in
+the merge audit:
+
+```text
+src/App.tsx:2: `pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.
+```
+
+**The edit.** Move the refinement into `sz`, after the key that covers it:
+
+```tsx
+// before
+<div className="card pb-2" sz={{ p: 4 }} />
+// after → className="card p-4 pb-2"
+<div className="card" sz={{ p: 4, pb: 2 }} />
+```
+
+`build.mergeCoveredClasses: false` turns this rule off together with the previous
+one. Details in
+[`sz` over a static `className`](/docs/sz-props/#sz-over-a-static-classname).
+
+**Tooling.** The merge audit. `csszyx migrate` does not move classes.
+
+## Class names on either side of a spread no longer merge
+
+0.17 folded every class name and every `sz` on an element into the first class
+name, before a spread. A `className` the spread carried then replaced all of them.
+In 0.18 a spread is a wall: what is written on one side of it merges, and each
+side becomes one class name where its `sz` stood. In React, Preact, Solid and Qwik
+the last one replaces the others:
+
+```tsx
+export const Card = (rest) => <div className="card pb-2" {...rest} sz={{ p: 4 }} />;
+// 0.18 → <div className="card pb-2" {...rest} className="p-4" />   React renders class="p-4"
+```
+
+**You are affected** when a `className` or `sz` sits before a spread and another
+`sz` or class name sits after it. An element with no spread between them is
+unchanged.
+
+**What you see.** The build prints this in every mode, production included:
+
+```text
+[csszyx] <div> at src/Card.tsx:1:36: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card pb-2` will not apply there (Vue JSX merges every class instead).
+  help: write them in one `sz` array after `{...rest}`, in the order that should win: `sz={['card pb-2', rest.className, { … }]}`.
+```
+
+**The edit.** Write everything in one `sz` array after the spread, in the order that
+should win:
+
+```tsx
+// before
+<div className="card" {...rest} sz={{ p: 4 }} />
+// after
+<div {...rest} sz={["card", rest.className, { p: 4 }]} />
+```
+
+In Solid the spread's attribute is `rest.class`. A Svelte component with `class` and
+`sz` on either side of a spread fails to compile with `attribute_duplicate`. Put
+both after the spread and read the spread's class inside the string:
+
+```svelte
+<div {...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}></div>
+```
+
+**Tooling.** `csszyx check` lists the element under the kind `spread-split-class`
+and exits 1. `csszyx migrate` does not rewrite it.
+
+## szcn merges only what compiled CSS proves
+
+`szcn` and `_szcn` used to decide which class a later one replaces from a
+hand-written table of prefixes. They now drop an earlier class only when the table
+the build generates from your compiled CSS shows that the later class sets
+everything it set. Some pairs come out differently:
+
+| Call | 0.18 result |
+| --- | --- |
+| `szcn('flex', 'block')` | `block` |
+| `szcn('border-t-2', 'border-2')` | `border-2` |
+| `szcn('text-2xl', 'text-[0.8rem]')` | both kept: `text-2xl` also sets a line height |
+| `szcn('transition', 'transition-none')` | both kept |
+| a pair that differs only in its `!` flag | both kept |
+
+Only Tailwind's own utilities merge. A class from `@utility`, a plugin or plain
+CSS, and a Tailwind class one of your CSS rules selects on, is never removed and
+never removes another, so `szcn('z-10', 'z-modal')` with a hand-written
+`.z-modal` keeps both.
+
+**You are affected** when a component relies on `szcn` to drop a class, when you
+call `registerSzcnGroups` or `setSzcnGroups` to make a custom class merge, or when
+you build with esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun. Those lanes ship no
+table, and neither does jest before a build or `csszyx next prebuild` has run, nor
+the runtime used on its own. Without a table, `szcn` removes exact repeats only.
+
+**What you see.** Once per run, in development, a lane with no table prints:
+
+```text
+[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.
+  help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; for jest, run the build or `csszyx next prebuild` first.
+  note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.
+```
+
+A call to `registerSzcnGroups` prints, once in development, that it
+`no longer changes what szcn merges`. It still names the property `classify` and
+`splitBox` read.
+
+**The edit.** For a custom class that should merge, declare it as a `@theme` token
+and delete the rule you wrote for it, then remove the `registerSzcnGroups` call:
+
+```css
+/* before */
+.text-brand { color: #0b5fff; }
+
+/* after */
+@theme {
+  --color-brand: #0b5fff;
+}
+```
+
+For a lane with no table, drop the earlier class yourself, or run jest after the
+build. [Where the table comes from](/docs/reference/runtime/#where-the-table-comes-from)
+lists every lane.
+
+**Tooling.** No command finds these calls. Search your code for `szcn(` and
+`registerSzcnGroups`.
+
+## font-variant-numeric takes one key per group
+
+CSS allows one keyword per group of `font-variant-numeric` (figure, spacing,
+fraction, ordinal, slashed zero) and combines the groups. The eight boolean flags
+let one object hold both keywords of a group, and on the page the stylesheet
+order, not the object, then decided which one applied. Each group is now one key,
+so a later value in the same group replaces the earlier one and different groups
+combine:
+
+| Before (replaced) | After | Group |
+|---|---|---|
+| `{ liningNums: true }` / `{ oldstyleNums: true }` | `{ numFigure: 'lining' }` / `{ numFigure: 'oldstyle' }` | figure |
+| `{ proportionalNums: true }` / `{ tabularNums: true }` | `{ numSpacing: 'proportional' }` / `{ numSpacing: 'tabular' }` | spacing |
+| `{ diagonalFractions: true }` / `{ stackedFractions: true }` | `{ numFraction: 'diagonal' }` / `{ numFraction: 'stacked' }` | fraction |
+| `{ ordinal: true }` | `{ numOrdinal: true }` | ordinal |
+| `{ slashedZero: true }` | `{ numSlashedZero: true }` | slashed zero |
+| `{ fontVariant: 'normal-nums' }` | `{ nums: 'normal' }` | resets every group |
+
+**What you see.** The old keys emit nothing, and the build names the replacement,
+in production too:
+
+```text
+[csszyx] "tabularNums" was replaced at src/Table.tsx:4. Use { numSpacing: 'tabular' } instead, or run `csszyx migrate`.
+```
+
+**The edit.** `csszyx migrate --keys-only` rewrites them, including a ternary of
+literals (`tabularNums: c ? true : false` becomes
+`numSpacing: c ? 'tabular' : undefined`). Two old keys of one group in one object
+become one key holding the value that rendered before. Both classes used to ship,
+and Tailwind's stylesheet order picked one, so
+`{ tabularNums: true, proportionalNums: true }` becomes `{ numSpacing: 'tabular' }`
+whichever was written last. The same goes for `oldstyle` over `lining` and
+`stacked` over `diagonal`. A stand-alone `fontVariant: 'normal-nums'` sorted after
+every group and rendered, so migrate keeps `{ nums: 'normal' }` and drops the old
+group keys beside it.
+
+**Tooling.** `csszyx check` lists what `--keys-only` left, under the kind
+`removed-key`.
+
+## touch-action takes one key per group, contain gains keys
+
+`touch-action` has the same shape as `font-variant-numeric`: groups that combine
+(horizontal pan, vertical pan, pinch zoom) and keywords that stand alone. The
+groups moved to their own keys, and `touch` keeps the stand-alone keywords.
+`contain` had no key; it now follows the same shape.
+
+| Before | After |
+|---|---|
+| `{ touch: 'pan-x' }` / `'pan-left'` / `'pan-right'` | `{ touchPanX: 'x' }` / `'left'` / `'right'` |
+| `{ touch: 'pan-y' }` / `'pan-up'` / `'pan-down'` | `{ touchPanY: 'y' }` / `'up'` / `'down'` |
+| `{ touch: 'pinch-zoom' }` | `{ touchPinchZoom: true }` |
+| `{ touch: 'auto' }` / `'none'` / `'manipulation'` | unchanged |
+| none | `{ contain: 'none' \| 'strict' \| 'content' }`, `{ containSize: 'size' \| 'inline-size' }`, `containLayout` / `containPaint` / `containStyle: true` |
+
+**What you see.** A moved value emits nothing. The build reports it with its
+replacement, in a ternary and inside any variant as well as at the top of the
+object:
+
+```text
+[csszyx] "touch: pan-x" moved to { touchPanX: 'x' } at src/Map.tsx:3. Run `csszyx migrate` to rewrite it.
+```
+
+**The edit.** `csszyx migrate --keys-only` rewrites it, also under the old alias
+(`touchAction: 'pan-x'` becomes `touchPanX: 'x'` in one run) and in a ternary of
+literals. When every branch lands on one group the ternary keeps its test
+(`touch: c ? 'pan-x' : 'pan-left'` becomes `touchPanX: c ? 'x' : 'left'`).
+Branches on two groups split into one key per group, each branch of the other
+group reading `undefined`.
+
+In one object the later key wins for all three properties (`nums`, `touch`,
+`contain` against their groups): the stand-alone keyword replaces the groups
+written before it, and groups written after it replace it. A `touch` keyword
+beside an old group key in one object (`{ touch: 'none', touchAction: 'pan-x' }`)
+rendered the keyword before, so migrate keeps `touch: 'none'` and drops the
+group key.
+
+**Tooling.** `csszyx check` lists what `--keys-only` left, under the kind
+`moved-value`. The shapes `--keys-only` skips (objects inside `szv(…)` or an `sz`
+array, HTML files, spreads, runtime ternaries) are listed in
+[What `--keys-only` leaves for the build](/docs/migrate/#what---keys-only-leaves-for-the-build).
+
+## szv returns SzProps and checks every row
+
+A `szv()` factory returned `SzObject`, which a typed `sz` prop does not accept, and
+its variant rows were never type-checked: a typo compiled and lowered to a class
+with no CSS. Factories now return `SzProps`, and every row is checked the way
+`sz={...}` is, nested variants included. Runtime behaviour is unchanged.
+
+**What you see.** `tsc` errors inside `szv` configs:
+
+```tsx
+szv({ variants: { size: { sm: { p: 2, bgg: "red-500" } } } });          // ❌ `bgg` is not an sz key
+szv({ variants: { size: { sm: { hover: { bgg: "red-500" } } } } });     // ❌ nested too
+szv({ variants: { layout: { row: { display: "flexx" } } } });           // ❌ not a display value
+```
+
+An unknown key is reported once, on that key, and the error names it:
+`Type '"red-500"' is not assignable to type '"red-500" & NotAnSzKey<"bgg">'`. The keys
+beside it in the row stay clean.
+
+**The edit.** Fix the key or value the error names. A row shared between configs
+needs `as const` or the type `SzProps` when it sets a key with a closed value type
+such as `display`, as it already did at `sz={row}`: without `as const`,
+`{ display: "flex" }` widens to `{ display: string }`. A row
+typed `SzObject` no longer compiles, and neither does a variable that receives a
+factory's result as `SzObject`:
+
+```tsx
+// before
+const pill: SzObject = { rounded: "full", px: 3 };
+const o: SzObject = badgeSz({ shape: "pill" });
+
+// after
+const pill = { rounded: "full", px: 3 } as const;
+const o: SzProps = badgeSz({ shape: "pill" });
+```
+
+A row table built at runtime as `Record<string, SzProps>` still compiles.
+
+**Tooling.** `tsc --noEmit`. Neither `csszyx check` nor `csszyx migrate` changes
+types.
+
+## transform takes an options object
+
+`transform` from `@csszyx/compiler` took the variant prefix and the mangle map as
+positional arguments. Both are now keys of one options object:
+
+```ts
+// before
+transform(sz, "hover:");
+transform(sz, "", map);
+
+// after
+transform(sz, { prefix: "hover:" });
+transform(sz, { mangleMap: map });
+```
+
+**What you see.** `tsc` rejects the old call. Untyped code throws:
+
+```text
+[csszyx] transform takes options: the prefix and the mangle map are keys in one object.
+  help: transform(sz, { prefix: 'hover:', mangleMap }) — a second argument that is not an options object is no longer read.
+```
+
+**Tooling.** `tsc --noEmit`. `csszyx migrate` does not rewrite calls.
+
+## csszyxTurbopack takes one options object
+
+`csszyxTurbopack` took the Turbopack config to extend first and loader options
+second. Everything is now one object, with the config under `turbopack`:
+
+```js
+// before
+csszyxTurbopack({}, { tailwindStylesheet: "app/globals.css" });
+csszyxTurbopack(existingConfig, { mergeCoveredClasses: false });
+
+// after
+csszyxTurbopack({ tailwindStylesheet: "app/globals.css" });
+csszyxTurbopack({ turbopack: existingConfig, mergeCoveredClasses: false });
+```
+
+For a config alone, write `csszyxTurbopack({ turbopack: existingConfig })`.
+`rules` and `resolveAlias` belong inside `turbopack`.
+
+**What you see.** A second argument, or a top-level key that is not a loader
+option, throws when Next loads the config:
+
+```text
+[csszyx] csszyxTurbopack takes one object: the config to extend goes in it, under `turbopack`.
+  help: csszyxTurbopack({ turbopack: <your config>, ...options }) — put loader options beside `turbopack`.
+```
+
+**Tooling.** `tsc` on a typed `next.config.ts`; the throw otherwise.
+
+## @csszyx/unplugin exports seven names
+
+The main entry of `@csszyx/unplugin` re-exported whole internal files. It now
+exports `unplugin` (also the default export), `vitePlugin`, `webpackPlugin`,
+`rollupPlugin`, `esbuildPlugin`, `parseThemeBlocks` and `hasTokens`. The other
+names are internal, and each lane's own entry exports what that lane offers:
+
+```ts
+// before
+import { mangleCSS } from "@csszyx/unplugin";
+
+// after
+import { mangleCSS } from "@csszyx/unplugin/css-mangler";
+```
+
+The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
+`/jest` and `/postcss`.
+
+**What you see.** `tsc` reports that the module has no such exported member, and an
+ES module import fails when the bundler or Node loads it.
+
+## require of the Vue and Svelte adapters returns the exports
+
+Under `require`, `@csszyx/vue-adapter` and `@csszyx/svelte-adapter` returned a bare
+function. They now return the same named exports as `import`, `default` included:
+
+```js
+// before
+const csszyx = require("@csszyx/vue-adapter");
+
+// after
+const { vitePlugin } = require("@csszyx/vue-adapter");
+// Svelte: const { preprocessor } = require("@csszyx/svelte-adapter");
+```
+
+An ES module `import` is unchanged.
+
+**What you see.** A CommonJS config that calls the result as a function fails with
+a `TypeError` when it loads.
+
+## check --json no longer reports other for engine diagnostics
+
+`csszyx check --json` read each diagnostic's `kind` from its wording, so families
+added since then came out as `other`. The kind now comes from the engine's code,
+and an engine diagnostic is never `other`. The new kinds are `moved-value`,
+`global-before-group`, `runtime-family-conflict`, `merge-classifier-unavailable`,
+`parse-error`, `nesting-depth`, `unsupported-dynamic-sz` and `ast-budget`. The
+TypeScript type `SzDiagnosticKindId` from `@csszyx/compiler` names every one, so
+an exhaustive `switch` over it needs the new cases.
+
+**The edit.** A CI filter, `--rule` or `--ignore-rule` that selected `other` must
+name the new ids:
+
+```bash
+# before
+csszyx check --ignore-rule other
+# after
+csszyx check --ignore-rule parse-error --ignore-rule ast-budget
+```
+
+`--rule other` is still accepted. The full list is under
+[Running it in CI](/docs/reference/warnings/#running-it-in-ci).
+
+## csszyx.config sets how loudly each finding is reported
+
+0.17 did not read `csszyx.config.ts`: `csszyx init` wrote one, and no build or
+command loaded it. In 0.18 every bundler plugin, `csszyx check`,
+`csszyx next prebuild` and `csszyx next watch` load `csszyx.config.ts` (or
+`.mts`, `.js`, `.mjs`) from the project root. They read one section from it,
+`diagnostics`, which sets the level of each kind of finding: `off`, `info`,
+`warn` or `error`.
+
+```ts
+// csszyx.config.ts
+import { defineConfig } from "csszyx";
+
+export default defineConfig({
+  diagnostics: {
+    preset: "recommended",
+    rules: { "class-precedence": "error" },
+  },
+});
+```
+
+**You are affected** when the project holds a config file that 0.17's
+`csszyx init` wrote, or any `csszyx.config` file that sets plugin options.
+
+**What you see.** The 0.17 template set `development.debug`, a plugin option.
+Every build start and every `csszyx check` run now prints:
+
+```text
+[csszyx] csszyx.config.ts has 1 problem(s):
+  - (warning) development: `development` is not read from this file; plugin options belong in the bundler config.
+Each one is ignored; the rest of the file applies.
+  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server or `csszyx next watch` reads the file again only when restarted.
+```
+
+`csszyx check` still passes. In a project without TypeScript, `init` wrote the
+same TypeScript text into `csszyx.config.js`, which does not load. While that
+file keeps the template's shape (a formatter changing its quotes, spacing or
+semicolons, or a comment, does not count), the build and `csszyx check` print one warning
+that it ``could not be loaded and is ignored``, and `csszyx check` still passes.
+Any other config that fails to load, or has no default export, is an error, and
+`csszyx check` exits 1, so levels you meant are never dropped without a word.
+
+**The edit.** Replace the file with the one 0.18's `init` writes. It loads under
+either name, since it holds no type annotation:
+
+```ts
+import { defineConfig } from "csszyx";
+
+export default defineConfig({
+  diagnostics: {
+    preset: "recommended",
+  },
+});
+```
+
+In a package without `"type": "module"`, 0.18's `init` names the file
+`csszyx.config.mts` (or `.mjs` without TypeScript), which Node always reads as
+an ES module; a `.ts` or `.js` name keeps working there too. Running 0.18's
+`init` again does the replacement for you: it deletes the 0.17 template and
+writes the new file, and keeps any other `csszyx.config` it finds.
+
+Deleting the file works too: without one, every lane uses `recommended`. Plugin
+options such as `development.debug` stay in the bundler config.
+
+Two type changes come with it. `CsszyxConfig` is deprecated: it requires every
+section, so a hand-written object fails `tsc --strict`. Type plugin options with
+`PartialCsszyxConfig` and the config file with `defineConfig`.
+`development.strictMode` is removed. Nothing ever read it, so it never failed a
+build; `tsc` now rejects an object literal that sets it. Delete the key, and
+gate on `csszyx check`.
+
+Each lane reads the file once, when it starts. After editing it, restart the dev
+server or `csszyx next watch`, and run `csszyx next prebuild` again before
+`next build`: the Turbopack loader and jest read the levels those commands write
+to `.csszyx/diagnostic-policy.json`. Every preset, id and lane is in
+[`csszyx.config`](/docs/reference/config/#csszyxconfig).
+
+**Tooling.** The build and `csszyx check` print each problem in the file, and
+name the id a misspelt one most likely means. `csszyx migrate` does not rewrite
+the file.
+
+## csszyx check fails only on error findings
+
+`csszyx check` 0.17 exited 1 on every finding it reported. In 0.18 each finding
+carries a level from `csszyx.config`, and the run exits 1 when a finding is at
+`error`, or when the config itself has an error such as an unknown id. `info`
+and `warn` findings are still listed, and the run passes.
+
+The default `recommended` preset keeps the 0.17 verdict for every finding except
+two notes about a choice the code made: `class-precedence` (`sz` wins over a
+runtime `className`) and `duplicate-sz` (two `sz` attributes merged in order).
+Both are `info` now:
+
+```tsx
+export const Card = (props) => <div className={props.className} sz={{ p: 4 }} />;
+```
+
+```text
+src/Card.tsx
+  (info) "sz" takes precedence over the runtime "className" on this element at src/Card.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.
+  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.
+
+! 1 sz issue(s) in 1 file(s); 1 below --fail-on error, which do not fail the run.
+```
+
+**You are affected** when CI runs `csszyx check` and relied on it failing for
+either note, or when a CI step reads `--json` and treats every finding as a
+failure.
+
+**The edit.** To fail on everything the run reports, as 0.17 did, pass
+`--fail-on info`:
+
+```bash
+npx @csszyx/cli check --fail-on info
+```
+
+To fail on one note only, raise it in `csszyx.config` (`.ts`, `.mts`, `.js` or `.mjs`):
+
+```ts
+export default defineConfig({
+  diagnostics: { rules: { "class-precedence": "error", "duplicate-sz": "error" } },
+});
+```
+
+`--rule` and `--ignore-rule` still only choose what is reported:
+`--rule class-precedence` lists the note and passes. Each `--json` finding gains
+a `level` field; a step that fails on the document should read `level`, or the
+exit code. A finding set to `off` is not in the document.
+
+**Tooling.** No command changes your CI. See
+[Running it in CI](/docs/reference/warnings/#running-it-in-ci).
+
+## The build names sz classes that produce no CSS
+
+An `sz` value your Tailwind has no utility for lowered to a class with no CSS,
+and only `csszyx check` said so. `{ break: "bogus" }` is a real key with a value
+Tailwind does not serve, so no key warning fired and `break-bogus` reached the
+DOM styling nothing. A Vite, Rollup or webpack build, and `csszyx next prebuild`
+or `csszyx next watch` under Turbopack, now ask the project's Tailwind about
+every class an `sz` prop emitted, and print each one it serves no CSS for:
+
+```text
+[csszyx] src/Card.tsx: `break-bogus` is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
+  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.
+```
+
+**You are affected** when `csszyx check` already reported `dead-class` findings
+for your project. The build now prints the same classes, in production too. It
+does not fail: `csszyx check` is still the gate, and exits 1 on them. A class
+written in `className` is never reported here.
+
+**The edit.** Fix the key or value the line names. For a class you serve on
+purpose outside Tailwind, list it in the config, which also stops
+`csszyx check` reporting it:
+
+```ts
+export default defineConfig({
+  diagnostics: { allow: { classes: ["my-legacy-class"] } },
+});
+```
+
+`diagnostics.rules: { "dead-class": "off" }` hides every such line, in the
+build and in `csszyx check`. `quiet: "nudges"` does not hide it, since the
+finding is an `error`. `quiet: true` does, together with every other plugin
+warning, including the reports of other classes that have no CSS. The full
+entry is
+[An sz class produces no CSS](/docs/reference/warnings/#an-sz-class-produces-no-css).
+
+**Tooling.** `csszyx check --rule dead-class` lists every class with the file
+that emits it.

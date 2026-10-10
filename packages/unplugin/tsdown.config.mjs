@@ -19,6 +19,7 @@ export default defineBuild([
             'css-mangler': 'src/css-mangler.ts',
             'next-turbo-loader': 'src/next-turbo-loader.ts',
             'next-prebuild': 'src/next-prebuild.ts',
+            diagnostics: 'src/diagnostics.ts',
             'next-watcher': 'src/next-watcher.ts',
             'next-config': 'src/next-config.ts',
             'jest-transform': 'src/jest-transform.ts',

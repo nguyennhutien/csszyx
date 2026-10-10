@@ -140,6 +140,110 @@ describe('csszyx next-prebuild command', () => {
         }
     }, 60_000);
 
+    it('writes the diagnostic policy the Turbopack loader reads, warning about its problems', async () => {
+        // The loader cannot import a TypeScript config, so the prebuild resolves
+        // it into `.csszyx/` beside the merge table.
+        const root = tailwindApp('@import "tailwindcss";\n');
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "export default { diagnostics: { rules: { 'dead-class': 'warn', 'dead-clas': 'off' } } };",
+        );
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(
+                await nextPrebuild({
+                    root,
+                    cwd: root,
+                    mode: 'development',
+                    parserMode: 'wasm',
+                    json: true,
+                }),
+            ).toBe(0);
+            const state = JSON.parse(
+                readFileSync(join(root, '.csszyx/diagnostic-policy.json'), 'utf8'),
+            ) as { format: number; config: { rules: Record<string, string> } };
+            expect(state.format).toBe(1);
+            expect(state.config.rules).toEqual({ 'dead-class': 'warn' });
+            expect(warnSpy.mock.calls.flat().join('\n')).toContain('did you mean `dead-class`?');
+        } finally {
+            logSpy.mockRestore();
+            warnSpy.mockRestore();
+        }
+    }, 60_000);
+
+    describe('the sz classes the project Tailwind serves nothing for', () => {
+        /**
+         * Prebuild an app whose page emits two dead classes and a served one.
+         *
+         * @param config - `csszyx.config.mjs`, when the case sets levels.
+         * @returns The dead-class lines printed.
+         */
+        async function deadLines(config?: string): Promise<string[]> {
+            const root = tailwindApp('@import "tailwindcss";\n');
+            writeFileSync(
+                join(root, 'app/page.tsx'),
+                "export default () => <div sz={{ break: 'bogus', justify: 'safe-center', p: 4 }} />;\n",
+            );
+            if (config !== undefined) writeFileSync(join(root, 'csszyx.config.mjs'), config);
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            try {
+                expect(
+                    await nextPrebuild({ root, cwd: root, mode: 'production', parserMode: 'wasm' }),
+                ).toBe(0);
+                return warnSpy.mock.calls
+                    .map(call => String(call[0]))
+                    .filter(line => line.includes('(dead-class)'));
+            } finally {
+                logSpy.mockRestore();
+                warnSpy.mockRestore();
+            }
+        }
+
+        it('names each one with the file that emits it, and still succeeds', async () => {
+            const lines = await deadLines();
+            expect(lines).toHaveLength(2);
+            expect(lines[0]).toContain(
+                '[csszyx] app/page.tsx: `break-bogus` is emitted by an sz prop',
+            );
+            expect(lines[1]).toContain('`justify-safe-center`');
+        }, 60_000);
+
+        it('says nothing when the config sets dead-class to off', async () => {
+            expect(
+                await deadLines(
+                    "export default { diagnostics: { rules: { 'dead-class': 'off' } } };",
+                ),
+            ).toEqual([]);
+        }, 60_000);
+    });
+
+    it('still succeeds, and says so, when the diagnostic policy cannot be written', async () => {
+        const root = tailwindApp('@import "tailwindcss";\n');
+        // A directory where the file goes: the write fails, the prebuild does not.
+        mkdirSync(join(root, '.csszyx/diagnostic-policy.json'), { recursive: true });
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(
+                await nextPrebuild({
+                    root,
+                    cwd: root,
+                    mode: 'development',
+                    parserMode: 'wasm',
+                    json: true,
+                }),
+            ).toBe(0);
+            expect(warnSpy.mock.calls.flat().join('\n')).toContain(
+                'could not write .csszyx/diagnostic-policy.json',
+            );
+        } finally {
+            logSpy.mockRestore();
+            warnSpy.mockRestore();
+        }
+    }, 60_000);
+
     it('still succeeds, and says so, when the merge table cannot be written', async () => {
         // The safelist the build needs is already written by then; the table
         // only lets Turbopack and jest merge. Failing the prebuild over it

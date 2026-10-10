@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    emitMissingCssFallback,
     missingTailwindEntryMessage,
     resolveQuietMode,
-    shouldEmitMissingCssFallback,
     shouldEmitWarning,
     shouldWarnMissingTailwindEntry,
 } from '../src/unplugin.js';
@@ -34,18 +32,15 @@ describe('the gates survive an untyped boolean caller', () => {
     // these are exported from the package entry, and a JavaScript caller has no
     // compiler to stop it passing `true` — which must not mean `off`, or quiet
     // would be set with warnings still printing.
-    const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
     const untyped = <T>(value: unknown): T => value as T;
 
     it('treats true exactly as all', () => {
         expect(shouldEmitWarning(untyped('true' && true), false, false)).toBe(false);
-        expect(shouldEmitMissingCssFallback(untyped(true), missingCss)).toBe(false);
     });
 
     it('treats false and undefined exactly as off', () => {
         expect(shouldEmitWarning(untyped(false), false, false)).toBe(true);
         expect(shouldEmitWarning(untyped(undefined), false, false)).toBe(true);
-        expect(shouldEmitMissingCssFallback(untyped(false), missingCss)).toBe(true);
     });
 });
 
@@ -67,31 +62,6 @@ describe('shouldEmitWarning', () => {
         expect(shouldEmitWarning('off', true, false)).toBe(true); // dev → shown
         expect(shouldEmitWarning('off', true, true)).toBe(false); // prod → silent
         expect(shouldEmitWarning('nudges', true, false)).toBe(false);
-    });
-});
-
-describe('shouldEmitMissingCssFallback', () => {
-    const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
-
-    it('emits only actionable missing-CSS diagnostics when not fully quiet', () => {
-        expect(shouldEmitMissingCssFallback('off', missingCss)).toBe(true);
-        expect(shouldEmitMissingCssFallback('all', missingCss)).toBe(false);
-        expect(shouldEmitMissingCssFallback('off', 'ordinary diagnostic')).toBe(false);
-    });
-
-    it('survives the nudges mode, which is the whole point of that mode', () => {
-        expect(shouldEmitMissingCssFallback('nudges', missingCss)).toBe(true);
-    });
-
-    it('routes an eligible diagnostic through the supplied channel', () => {
-        const emitted: string[] = [];
-        emitMissingCssFallback('off', missingCss, '/src/Card.tsx', message =>
-            emitted.push(message),
-        );
-        emitMissingCssFallback('all', missingCss, '/src/Card.tsx', message =>
-            emitted.push(message),
-        );
-        expect(emitted).toEqual([`[csszyx] /src/Card.tsx\n  ${missingCss}`]);
     });
 });
 

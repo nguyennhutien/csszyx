@@ -142,13 +142,20 @@ export const SIZE_BUDGETS = [
         // measured by no budget before), on top of `./browser` at 14,969.
         // Re-measured later the same day at 15,891, with `./browser` at
         // 15,104 after the special-key box roles.
-        maxGzipBytes: 16_050,
+        //
+        // Raised from 16,050 on 2026-10-09, measured 16,420: the CSS-wide
+        // keyword tables (the keywords, the prefixes whose bracket sets the
+        // key's own property, the utilities Tailwind names) and the added
+        // negative-capable and fraction-taking keys ship with the runtime
+        // lowering, so the browser carries them. Budget the usual ~300 above.
+        maxGzipBytes: 16_750,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
         // ~300 above the measurement.
         entryBudgets: {
-            './browser': 15_400,
+            // 15,646 after the CSS-wide keyword tables, 2026-10-09.
+            './browser': 15_950,
             './sz-limits': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
@@ -205,7 +212,22 @@ export const SIZE_BUDGETS = [
         // in a ternary or parametric variant, a dynamic family conflict and a
         // spread override, cost 7,099 gzip bytes here (547,198 before,
         // 554,297 after, un-optimized, same build).
-        maxGzipBytes: 557_500,
+        //
+        // Raised from 557,500 on 2026-10-09: the branch base already measured
+        // 558,738 (the negative-scale and fraction class fixes), and every
+        // diagnostic now carries a code and a byte offset beside its text,
+        // and each merge group the key behind each class and where it is,
+        // which costs 1,073 gzip bytes here (559,811 after, un-optimized,
+        // same build). Serializing the code as a number instead of its id
+        // saved 204 of those and was not taken: the id is what keeps an
+        // engine and a compiler from mislabelling each other's codes.
+        // Raised again the same day: each merge group places every class at
+        // the key it came from, one offset per class instead of one per
+        // object (561,094 → 561,272), and a registry object's nested keys
+        // are placed where the importing module names it, as its top-level
+        // keys are (561,293, un-optimized, same build). The budget keeps
+        // ~300 bytes of headroom, as the JS budgets do.
+        maxGzipBytes: 561_600,
     },
 ];
 

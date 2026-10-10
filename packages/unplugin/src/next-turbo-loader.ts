@@ -26,6 +26,7 @@ import {
     validateNextGenerationManifest,
 } from './next-generation-manifest.js';
 import type { NextLaneOptions } from './next-lane-options.js';
+import { reportNextLoaderDiagnostics } from './next-loader-diagnostics.js';
 import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
 import {
@@ -43,6 +44,7 @@ import { createNextStateContext, type NextStateContext } from './next-state-cont
 import {
     type NextClassPrefix,
     projectStylesheetCandidates,
+    projectStylesheetGitignore,
     recordedStylesheetIgnore,
     resolveNextClassPrefix,
     unreadNextPrefixMessage,
@@ -87,6 +89,8 @@ export interface NextTurboLoaderContext {
     query?: unknown;
     getOptions?: () => NextTurboLoaderOptions;
     addDependency?: (file: string) => void;
+    /** Reports a warning as an issue on this module, as Turbopack's runner does. */
+    emitWarning?: (warning: Error | string) => void;
     /** Loader-runner compilation identity; changes when an input invalidates the build. */
     _compilation?: object;
     /** Turns the call asynchronous and returns the callback that completes it. */
@@ -235,6 +239,18 @@ export function runNextTurboLoader(
         options.mergeCoveredClasses === false
             ? transform.result
             : withNextObjectRule(transform.result, transformInput, context, loaderContext);
+    // A cached transform carries the diagnostics it was made with, so a hit
+    // reports them as a fresh run does — as the plugin's lanes do.
+    reportNextLoaderDiagnostics({
+        diagnostics: lowered.diagnostics,
+        issues: lowered.issues,
+        root: context.root,
+        resourcePath: loaderContext.resourcePath,
+        source,
+        mode: context.manifestExpectation.mode,
+        env: options.env ?? process.env,
+        emitWarning: loaderContext.emitWarning?.bind(loaderContext),
+    });
     const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
@@ -401,6 +417,10 @@ function prefixForCompilation(
                 tailwindStylesheet.length > 0
                     ? undefined
                     : projectStylesheetCandidates(context.root, context.cacheDir),
+            gitignore:
+                tailwindStylesheet.length > 0
+                    ? undefined
+                    : projectStylesheetGitignore(context.root, context.cacheDir),
         });
     if (compilation === undefined) return resolve();
 

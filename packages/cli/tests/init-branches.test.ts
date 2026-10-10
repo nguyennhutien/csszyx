@@ -346,7 +346,8 @@ describe('init interactive prompts and default cwd', () => {
         } finally {
             process.chdir(prev);
         }
-        expect(readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8')).toContain('debug: true');
+        // No `"type": "module"` in the fixture, so the name Node reads as ESM.
+        expect(readFileSync(join(cwd, 'csszyx.config.mts'), 'utf8')).toContain('defineConfig({');
         vi.doUnmock('prompts');
     });
 });

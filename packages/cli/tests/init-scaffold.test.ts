@@ -13,6 +13,7 @@ vi.mock('execa', () => ({
     execa: vi.fn(async () => ({ stdout: '', stderr: '' })),
 }));
 
+import { CSSZYX_CONFIG_FILE_NAMES } from '@csszyx/unplugin/diagnostics';
 import { execa } from 'execa';
 
 import { init } from '../src/commands/init.js';
@@ -64,8 +65,7 @@ describe('init --yes on a Vite React TS project', () => {
         });
 
         // A csszyx config exists.
-        const hasConfig =
-            existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
+        const hasConfig = CSSZYX_CONFIG_FILE_NAMES.some(file => existsSync(join(cwd, file)));
         expect(hasConfig).toBe(true);
 
         // .gitignore gained the .csszyx cache dir.
@@ -73,6 +73,91 @@ describe('init --yes on a Vite React TS project', () => {
 
         // tsconfig picked up the generated theme types.
         expect(readFileSync(join(cwd, 'tsconfig.json'), 'utf8')).toContain('.csszyx/theme.d.ts');
+    });
+});
+
+describe('the name init gives the config file', () => {
+    // Outside a `"type": "module"` package Node reads `.ts`/`.js` as
+    // CommonJS: `export default` then fails (commonjs) or loads with a warning
+    // advising `"type": "module"` (no type). `.mts`/`.mjs` is always ESM.
+    it.each([
+        [undefined, true, 'csszyx.config.mts'],
+        ['commonjs', false, 'csszyx.config.mjs'],
+        ['module', true, 'csszyx.config.ts'],
+        ['module', false, 'csszyx.config.js'],
+    ])('writes a %s-typed project with TypeScript %s as %s', async (type, typescript, name) => {
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = viteReactFixture();
+        const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
+        if (!typescript) {
+            rmSync(join(cwd, 'tsconfig.json'));
+            delete manifest.devDependencies.typescript;
+        }
+        writeFileSync(join(cwd, 'package.json'), JSON.stringify({ ...manifest, type }));
+
+        await init({ yes: true, cwd });
+
+        expect(CSSZYX_CONFIG_FILE_NAMES.filter(file => existsSync(join(cwd, file)))).toEqual([
+            name,
+        ]);
+    });
+});
+
+describe('init in a project that already has a csszyx config', () => {
+    /** What `csszyx init` 0.17 wrote, which nothing read. */
+    const OLD_TEMPLATE =
+        "import type { CsszyxConfig } from 'csszyx';\n\nconst config: CsszyxConfig = {\n  development: {\n    debug: true,\n  },\n};\n\nexport default config;\n";
+
+    /**
+     * Run init quietly and answer what it printed.
+     *
+     * @param cwd - Project root.
+     * @returns The printed text.
+     */
+    async function initPrinting(cwd: string): Promise<string> {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await init({ yes: true, cwd });
+        return log.mock.calls.flat().join('\n');
+    }
+
+    it('replaces the old 0.17 template with the new file, and says so', async () => {
+        const cwd = viteReactFixture();
+        // Prettier rewrote the quotes; it is still the template.
+        writeFileSync(join(cwd, 'csszyx.config.ts'), OLD_TEMPLATE.replace("'csszyx'", '"csszyx"'));
+
+        const printed = await initPrinting(cwd);
+
+        expect(CSSZYX_CONFIG_FILE_NAMES.filter(file => existsSync(join(cwd, file)))).toEqual([
+            'csszyx.config.mts',
+        ]);
+        expect(readFileSync(join(cwd, 'csszyx.config.mts'), 'utf8')).toContain('defineConfig({');
+        expect(printed).toContain(
+            'Replaced csszyx.config.ts, the file csszyx init 0.17 wrote, with csszyx.config.mts',
+        );
+    });
+
+    it('keeps a config the project wrote, and writes no second one', async () => {
+        const cwd = viteReactFixture();
+        const mine = "export default { diagnostics: { preset: 'atomic' } };\n";
+        writeFileSync(join(cwd, 'csszyx.config.ts'), mine);
+
+        const printed = await initPrinting(cwd);
+
+        expect(CSSZYX_CONFIG_FILE_NAMES.filter(file => existsSync(join(cwd, file)))).toEqual([
+            'csszyx.config.ts',
+        ]);
+        expect(readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8')).toBe(mine);
+        expect(printed).toContain('Kept csszyx.config.ts');
+    });
+
+    it('rewrites the old template in place when it already has the right name', async () => {
+        const cwd = viteReactFixture();
+        writeFileSync(join(cwd, 'csszyx.config.mts'), OLD_TEMPLATE);
+
+        const printed = await initPrinting(cwd);
+
+        expect(readFileSync(join(cwd, 'csszyx.config.mts'), 'utf8')).toContain('defineConfig({');
+        expect(printed).toContain('Replaced csszyx.config.mts');
     });
 });
 
@@ -109,8 +194,7 @@ describe('init --yes on a Next.js App Router project', () => {
             ['add', '-D', '@tailwindcss/postcss'],
             expect.anything(),
         );
-        const hasConfig =
-            existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
+        const hasConfig = CSSZYX_CONFIG_FILE_NAMES.some(file => existsSync(join(cwd, file)));
         expect(hasConfig).toBe(true);
         // Next wiring: either a next.config or a postcss config appears.
         const wroteNextWiring =
@@ -152,9 +236,10 @@ describe('init interactive path with mocked prompts', () => {
         // scaffolds a `production` block: the one key it used to write was
         // `injectChecksum`, which nothing read — so a project started here
         // carried a switch that never moved anything.
-        const config = (readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8') as string) ?? '';
+        // The fixture's package.json sets no `"type"`, so the name is `.mts`.
+        const config = (readFileSync(join(cwd, 'csszyx.config.mts'), 'utf8') as string) ?? '';
         expect(config).not.toContain('injectChecksum');
-        expect(config).toContain('debug: true');
+        expect(config).toContain("import { defineConfig } from 'csszyx';");
         // gitignore was declined — .csszyx not appended.
         expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).not.toContain('.csszyx');
         vi.doUnmock('prompts');

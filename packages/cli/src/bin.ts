@@ -201,6 +201,10 @@ cli.command(
     .option('--json', 'Emit one machine-readable document instead of the prose report')
     .option('--rule <id>', 'Report only this rule or diagnostic kind (repeatable)')
     .option('--ignore-rule <id>', 'Leave out this rule or diagnostic kind (repeatable)')
+    .option(
+        '--fail-on <level>',
+        'Fail on findings at this level or louder: info, warn or error (default: error)',
+    )
     .action(async (dir, options) => {
         await (await import('./commands/check.js')).check({
             cwd: options.cwd,
@@ -213,6 +217,7 @@ cli.command(
             json: options.json,
             rule: repeatableOption(options.rule),
             ignoreRule: repeatableOption(options.ignoreRule),
+            failOn: options.failOn,
         });
     });
 

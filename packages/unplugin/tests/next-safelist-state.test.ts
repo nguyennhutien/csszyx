@@ -47,6 +47,26 @@ describe('Next safelist state', () => {
         expect(paths.outputPath).toBe(join(root, '.csszyx/csszyx-classes.txt'));
     });
 
+    it('names the first source in path order as the origin of a shared class', () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        for (const name of ['B.tsx', 'A.tsx']) {
+            const sourcePath = join(root, 'src', name);
+            writeFileSync(sourcePath, 'export {}');
+            writeNextSafelistShard(
+                paths.shardsDir,
+                { sourcePath, sourceHash: name, classes: ['p-8', `only-${name}`], timestamp: 1 },
+                { retryDelayMs: 0 },
+            );
+        }
+
+        const { classOrigins } = materializeNextSafelist(paths, { retryDelayMs: 0 });
+
+        expect(classOrigins.get('p-8')).toBe(join(root, 'src/A.tsx'));
+        expect(classOrigins.get('only-B.tsx')).toBe(join(root, 'src/B.tsx'));
+    });
+
     it('merges source shards into a deterministic Tailwind source file', () => {
         const root = tempRoot();
         const sourcePath = join(root, 'src/App.tsx');
@@ -71,6 +91,11 @@ describe('Next safelist state', () => {
             classes: ['[&_.tab-item-header]:py-0!', 'bg-red-500', 'p-8'],
             authoredClasses: [],
             mergeLiterals: [],
+            classOrigins: new Map([
+                ['[&_.tab-item-header]:py-0!', sourcePath],
+                ['bg-red-500', sourcePath],
+                ['p-8', sourcePath],
+            ]),
             classCount: 3,
             sourceCount: 1,
             tombstonedSourceCount: 0,

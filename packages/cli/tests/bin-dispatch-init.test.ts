@@ -63,8 +63,7 @@ describe('bin init dispatch (real command)', () => {
         writeFileSync(join(cwd, 'src/index.css'), '@import "tailwindcss";\n');
         writeFileSync(join(cwd, '.gitignore'), 'node_modules\n');
 
-        const hasConfig = (): boolean =>
-            existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
+        const hasConfig = (): boolean => existsSync(join(cwd, 'csszyx.config.mts'));
 
         process.argv = ['node', 'csszyx', 'init', '--yes', '--cwd', cwd];
         await import('../src/bin.js?scenario=init-yes');

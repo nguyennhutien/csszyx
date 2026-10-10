@@ -63,6 +63,8 @@ pub struct CssVariableHoistDiagnostic {
     pub usage_count: usize,
     /// Maximum cascade depth, when relevant.
     pub max_depth: Option<usize>,
+    /// Id of the group's first usage, for the caller to place the diagnostic.
+    pub first_usage_id: usize,
 }
 
 /// Hoist planner options.
@@ -183,6 +185,7 @@ fn build_hoist_diagnostic(
         reason,
         usage_count: group.len(),
         max_depth,
+        first_usage_id: group.first().map_or(0, |usage| usage.id),
     }
 }
 
@@ -326,6 +329,7 @@ mod tests {
                 reason: CssVariableHoistSkipReason::MaxDepth,
                 usage_count: 2,
                 max_depth: Some(5),
+                first_usage_id: 0,
             }]
         );
         assert_eq!(
@@ -378,6 +382,7 @@ mod tests {
                 reason: CssVariableHoistSkipReason::NonHostAncestor,
                 usage_count: 2,
                 max_depth: None,
+                first_usage_id: 0,
             }]
         );
     }
@@ -401,6 +406,7 @@ mod tests {
                 reason: CssVariableHoistSkipReason::NoLca,
                 usage_count: 2,
                 max_depth: None,
+                first_usage_id: 0,
             }]
         );
     }

@@ -72,12 +72,23 @@ export interface NativeTransformResult {
     classes: string[];
     /** Static className/class strings discovered in the source. */
     rawClassNames: string[];
-    /** The class list of each static object a merge would read. */
-    mergeGroups: string[][];
-    /** Each static class name and the static `sz` classes beside it a merge would read. */
-    mergeOverrides: Array<{ base: string[]; over: string[] }>;
+    /**
+     * Each static object a merge would read: the key behind each class and that
+     * key's byte offset (both index-parallel to `classes`), and its classes.
+     */
+    mergeGroups: Array<{ keys: string[]; keyStarts: number[]; classes: string[] }>;
+    /**
+     * Each static class name and the static `sz` classes beside it a merge would
+     * read, with the byte offset of the class-name attribute.
+     */
+    mergeOverrides: Array<{ start: number; base: string[]; over: string[] }>;
     /** Non-fatal transform diagnostics. */
     diagnostics: string[];
+    /**
+     * The code and byte offset of each diagnostic, index-parallel to
+     * `diagnostics`. Codes are the ids `csszyx check --rule` accepts.
+     */
+    issues: Array<{ code: string; start: number }>;
     /** Recovery token metadata emitted for hydration safety. */
     recoveryTokens: Array<{
         /** Public token inserted into generated code. */

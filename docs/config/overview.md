@@ -1,7 +1,8 @@
 # Configuration Overview
 
 CSSzyx is configured by passing options directly to the plugin in your bundler config.
-There is no standalone `csszyx.config.ts` file — all config lives where your build tool is configured.
+Diagnostic levels live in `csszyx.config.ts` at the project root, which every plugin and
+`csszyx check` read; see the Plugin Config reference on the docs site.
 
 ## Quick Start
 
@@ -95,14 +96,12 @@ Controls development mode behavior:
 
 ```ts
 interface DevelopmentConfig {
-  strictMode: boolean; // Treat warnings as errors
   debug: boolean; // Enable debug logging
 }
 ```
 
 **Defaults:**
 
-- `strictMode`: `false`
 - `debug`: `false`
 
 > Recovery is now opt-in per element via the `szRecover` JSX attribute (`"csr"` or `"dev-only"`). The legacy global `autoInjectRecovery` and `allowCSRRecovery` flags were removed in 0.6.0.

@@ -24,6 +24,7 @@
  */
 
 import { devWarn } from './dev-warn.js';
+import { describeValue, selectionValueKey } from './selection-value.js';
 
 /** A build-precompiled szv config: every branch lowered to its class string. */
 export interface SzvCompiledTable {
@@ -152,40 +153,10 @@ function warnUnknownPickValue(table: SzvCompiledTable, key: string, value: unkno
         return;
     }
     if (value === null || value === undefined) return;
-    const valueKey = pickSelectionValueKey(value);
+    const valueKey = selectionValueKey(value);
     if (valueKey === null || !(valueKey in table.d[key])) {
         devWarn(
-            `szv()(selection): "${valueKey ?? describePickValue(value)}" is not a value of variant "${key}" — it has no styles.`,
+            `szv()(selection): "${valueKey ?? describeValue(value)}" is not a value of variant "${key}" — it has no styles.`,
         );
     }
-}
-
-/**
- * Convert a primitive selection to the string key used by variant tables.
- *
- * @param value - Candidate selection value.
- * @returns Variant-table key, or null for a structurally invalid selection.
- */
-function pickSelectionValueKey(value: unknown): string | null {
-    if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean' ||
-        typeof value === 'bigint' ||
-        typeof value === 'symbol'
-    ) {
-        return String(value);
-    }
-    return null;
-}
-
-/**
- * Describe a structurally invalid selection value, mirroring `szv()`.
- *
- * @param value - The rejected value.
- * @returns A short description for the dev warning.
- */
-function describePickValue(value: unknown): string {
-    if (Array.isArray(value)) return 'an array';
-    return typeof value;
 }

@@ -176,6 +176,16 @@ pub enum ParserPath {
     Semantic,
 }
 
+/// What one diagnostic reports, and where.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Issue {
+    /// The kind of problem.
+    pub code: super::DiagnosticCode,
+    /// Byte offset in the source the diagnostic points at; `0` for one about
+    /// the whole file.
+    pub start: u32,
+}
+
 /// Transform output shape returned per source file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransformResult {
@@ -187,16 +197,20 @@ pub struct TransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
-    /// The class list of each static object a merge would read, when the pass
-    /// had no merge table; lists of one class are left out.
+    /// Each static object a merge would read, when the pass had no merge
+    /// table; objects of one class are left out.
     #[serde(default)]
-    pub merge_groups: Vec<Vec<String>>,
+    pub merge_groups: Vec<super::merge::MergeGroup>,
     /// Each static class name beside a static `sz` a merge would read, when
     /// the pass had no merge table; one side empty is left out.
     #[serde(default)]
     pub merge_overrides: Vec<super::merge::MergeOverride>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
+    /// The code and position of each diagnostic, index-parallel to
+    /// `diagnostics`.
+    #[serde(default)]
+    pub issues: Vec<Issue>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<RecoveryToken>,
     /// CSS custom property mangle metadata.

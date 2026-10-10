@@ -340,14 +340,60 @@ describe('a Vite dev server', () => {
             const b = join(root, 'src/B.tsx');
             writeFileSync(b, 'export const B = () => <b className="group-[.shadow-md]:p-2" />;\n');
             await call('hotUpdate', { type: 'update', file: b, modules: [], server });
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            expect(invalidated).toBeGreaterThan(0);
-            expect(sent).toContainEqual({ type: 'full-reload' });
+            // The reload is sent once the table settled again, after the hook returns.
+            await expect
+                .poll(() => sent, { timeout: 10_000 })
+                .toContainEqual({ type: 'full-reload' });
+            await expect.poll(() => invalidated, { timeout: 10_000 }).toBeGreaterThan(0);
             expect(await transform()).toContain('card shadow-md shadow-lg');
         },
         60_000,
     );
+
+    it('reads the hooks of an edited file outside every walked folder', async () => {
+        const root = tailwindProject('csszyx-source-hooks-dev-', {
+            'src/index.css': TW,
+            'src/A.tsx': COVERED,
+        });
+        // No walk owns a file beside the project, so no `.gitignore` decides
+        // for it: its hooks are read, as the bundler transforms it anyway.
+        const outside = tailwindProject('csszyx-source-hooks-outside-', {
+            'B.tsx': 'export const B = () => <b />;\n',
+        });
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const sent: unknown[] = [];
+        const graph = {
+            getModuleById: () => undefined,
+            getModulesByFile: () => undefined,
+            invalidateModule() {},
+            invalidateAll() {},
+        };
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            ws: { send: (message: unknown) => sent.push(message) },
+            moduleGraph: graph,
+            environments: { client: { moduleGraph: graph } },
+        };
+        const call = callHooks(
+            vitePlugin({
+                build: { cache: false },
+                production: { mangle: false },
+            }) as unknown as Record<string, unknown>[],
+        );
+        await call('configureServer', server);
+        await call('configResolved', { root, command: 'serve' });
+        const transform = async () =>
+            ((await call('transform', COVERED, join(root, 'src/A.tsx'))) as { code: string }).code;
+        expect(await transform()).toContain('card shadow-lg');
+
+        const b = join(outside, 'B.tsx');
+        writeFileSync(b, 'export const B = () => <b className="group-[.shadow-md]:p-2" />;\n');
+        await call('hotUpdate', { type: 'update', file: b, modules: [], server });
+        await expect.poll(() => sent, { timeout: 10_000 }).toContainEqual({ type: 'full-reload' });
+        expect(await transform()).toContain('card shadow-md shadow-lg');
+    }, 60_000);
 });
 
 describe('the source hook registry', () => {
@@ -466,7 +512,7 @@ describe('the merge audit', () => {
             { path: join(root, 'src/B.tsx'), relative: 'src/B.tsx', source: late },
         ];
         expect(auditMerges({ model, classPrefix: null, files: files.slice(0, 1) })).toEqual([
-            { file: 'src/A.tsx', kind: 'merge-covered-class', classes: ['shadow-md'] },
+            { file: 'src/A.tsx', line: 1, kind: 'merge-covered-class', className: 'shadow-md' },
         ]);
         expect(auditMerges({ model, classPrefix: null, files })).toEqual([]);
     }, 60_000);

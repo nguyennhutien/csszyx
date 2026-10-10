@@ -72,8 +72,9 @@ pub struct SourceIr {
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
     pub recovery_attributes: Vec<RecoveryAttributeIr>,
-    /// `szRecover` attributes that could not emit a token, and why.
-    pub unsupported_recovery_attributes: Vec<UnsupportedRecoveryIr>,
+    /// `szRecover` attributes that could not emit a token: the attribute's
+    /// offset, and why.
+    pub unsupported_recovery_attributes: Vec<(u32, UnsupportedRecoveryIr)>,
     /// JSX opening elements that contain csszyx-relevant static attributes.
     pub jsx_opening_elements: Vec<JsxOpeningElementIr>,
     /// JSX `szs` slot-map attributes found in source order.
@@ -81,7 +82,7 @@ pub struct SourceIr {
     pub szs_attributes: Vec<SzsAttributeIr>,
     /// Diagnostics from `szs` attributes (host misuse / unsupported shapes).
     #[serde(default)]
-    pub szs_diagnostics: Vec<String>,
+    pub szs_diagnostics: Vec<SzsDiagnosticIr>,
     /// Static objects read out of `szv()` catalogs (base + each variant leaf)
     /// and static `szr()` arguments — recorded so the engine can run the same
     /// unknown/numeric key checks an `sz` prop gets. Keys keep their source
@@ -137,6 +138,15 @@ pub struct SzsSlotEntryIr {
     pub class_name: String,
     /// Exact value text to emit in the rewritten attribute.
     pub emit_text: String,
+}
+
+/// One `szs` diagnostic and the attribute it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzsDiagnosticIr {
+    /// Byte offset of the `szs` attribute.
+    pub start: u32,
+    /// The rendered message.
+    pub message: String,
 }
 
 /// A `szs` slot-map attribute with every slot compiled.

@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 
+import { loadDiagnosticPolicy } from '@csszyx/unplugin/diagnostics';
 import fs from 'fs-extra';
 
 import { getProjectInfo } from '../utils/framework-detector.js';
@@ -34,8 +35,8 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
     printHeader('csszyx Doctor');
 
-    checkConfiguration(cwd);
-    let issueCount = checkTailwind(projectInfo.hasTailwind, options.verbose);
+    let issueCount = await checkConfiguration(cwd);
+    issueCount += checkTailwind(projectInfo.hasTailwind, options.verbose);
     issueCount += checkPackageInstallation(cwd);
     checkBuildOutput(cwd, options.verbose);
     await reportOptionalTooling(cwd, options.verbose);
@@ -50,16 +51,30 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 }
 
 /**
- * Report whether a csszyx configuration exists.
+ * Load the csszyx config the way `check` and the plugins do, and report what
+ * is wrong with it: an `error` problem (one `check` fails on) as an issue, a
+ * `warning` as a note.
  * @param cwd - Project directory.
+ * @returns The number of `error` problems.
  */
-function checkConfiguration(cwd: string): void {
+async function checkConfiguration(cwd: string): Promise<number> {
     printSection('📋 Configuration Health');
-    const found = ['csszyx.config.ts', 'csszyx.config.js'].some(file =>
-        fs.existsSync(path.join(cwd, file)),
-    );
-    if (found) printSuccess('csszyx configuration found');
-    else printWarn('No csszyx.config found - using defaults');
+    const loaded = await loadDiagnosticPolicy(cwd);
+    if (loaded.file === null) {
+        printWarn('No csszyx.config found - using defaults');
+        return 0;
+    }
+    const name = path.basename(loaded.file);
+    printSuccess(`csszyx configuration found: ${name}`);
+    for (const problem of loaded.problems) {
+        const line =
+            problem.path === name
+                ? `${name} ${problem.message}`
+                : `${problem.path}: ${problem.message}`;
+        if (problem.severity === 'error') printError(line);
+        else printWarn(line);
+    }
+    return loaded.problems.filter(problem => problem.severity === 'error').length;
 }
 
 /**

@@ -1,19 +1,20 @@
 /**
- * Which kind of problem a rendered engine diagnostic reports.
+ * Which kind of problem a rendered diagnostic reports.
  *
- * Both engine artifacts return diagnostics as text. A consumer that wants to
- * treat kinds differently — a CI gate that fails on a typo'd key and not on a
- * precedence note, a build that holds advice back in production — otherwise
- * matches the English, and a reworded message turns such a gate green without
- * a word. This module is that match, kept in the package that owns the wording
- * and pinned against real engine output by its tests, so a reworded message
- * fails here rather than in someone's pipeline. Structured fields on the
- * engine result would replace it; this is the single point of coupling until
- * they exist.
+ * A consumer that treats kinds differently — a CI gate that fails on a typo'd
+ * key and not on a precedence note, a build that holds advice back in
+ * production — reads the kind here. An engine diagnostic carries its code
+ * (`result.issues[i].code`), and the code is the kind. A diagnostic with no
+ * code — the runtime channel's console warnings, which share the engine's
+ * wording — is matched on its text instead, by the table below, kept in the
+ * package that owns the wording and pinned against the engine's own codes by
+ * its tests, so a reworded message fails here rather than in someone's
+ * pipeline.
  *
  * @module sz-diagnostic-kind
  */
 
+import { SZ_DIAGNOSTIC_CODES, type SzDiagnosticCode } from './diagnostic-codes.generated.js';
 import { szFallbackConsequenceOf } from './sz-fallback-matrix.js';
 
 /** The tag every `[csszyx]` diagnostic starts with. */
@@ -29,38 +30,21 @@ interface KindMatcher {
     pattern?: RegExp;
 }
 
-/** A kind `csszyx check` can report, or `other` for a message no matcher accepts. */
-export type SzDiagnosticKindId =
-    | 'unknown-key'
-    | 'canonical-key'
-    | 'removed-key'
-    | 'numeric-key'
-    | 'closed-enum-value'
-    | 'off-scale-value'
-    | 'numeric-font-weight'
-    | 'per-side-border-style'
-    | 'property-object'
-    | 'non-variant-object'
-    | 'unknown-field'
-    | 'runtime-value'
-    | 'unresolvable-spread'
-    | 'style-override'
-    | 'szs-slot-map'
-    | 'sz-recover'
-    | 'class-precedence'
-    | 'duplicate-sz'
-    | 'spread-split-class'
-    | 'other';
+/**
+ * A kind `csszyx check` can report: an engine code, or `other` for a message
+ * with no code that no text matcher accepts.
+ */
+export type SzDiagnosticKindId = SzDiagnosticCode | 'other';
 
 /**
- * Kinds in match order, each tested against the message with its tag removed.
- * No two matchers accept the same engine message, so the order only decides
- * where a lookup stops.
+ * Kinds in match order, each tested against the message with its tag removed,
+ * for a diagnostic that carries no code. No two matchers accept the same
+ * engine message, so the order only decides where a lookup stops.
  *
- * Only diagnostics `csszyx check` reports have a kind. A runtime fallback
- * carries no `[csszyx]` tag and a mangleVars note needs an option `check` does
- * not pass, so a kind for either would be an id `--rule` accepts and never
- * selects. Both still count as advisory below.
+ * Only the kinds the runtime channel shares wording with are matched; a
+ * diagnostic only the engine renders always arrives with its code. A runtime
+ * fallback and a mangleVars note are left to their codes, and still count as
+ * advisory below.
  */
 const KINDS: ReadonlyArray<
     readonly [id: Exclude<SzDiagnosticKindId, 'other'>, advisory: boolean, KindMatcher]
@@ -117,12 +101,12 @@ function matchesKind(body: string, matcher: KindMatcher): boolean {
 }
 
 /**
- * Every id {@link szDiagnosticKindOf} can return, `other` last, for validating
- * an id a user typed: a misspelt id that matched nothing would select nothing
- * and pass.
+ * Every id {@link szDiagnosticKindOf} can return — each engine code, `other`
+ * last — for validating an id a user typed: a misspelt id that matched
+ * nothing would select nothing and pass.
  */
 export const SZ_DIAGNOSTIC_KIND_IDS: readonly SzDiagnosticKindId[] = [
-    ...KINDS.map(([id]) => id),
+    ...SZ_DIAGNOSTIC_CODES,
     'other',
 ];
 
@@ -145,17 +129,20 @@ function classify(message: string): readonly [id: SzDiagnosticKindId, advisory: 
 /**
  * Classify one rendered diagnostic.
  *
- * A message no kind accepts is `other`, so a consumer that selects kinds never
- * silently loses one it could not read.
+ * The engine's code, when the diagnostic has one, is its kind. Without one the
+ * text decides, and a message no kind accepts is `other`, so a consumer that
+ * selects kinds never silently loses one it could not read.
  *
  * @param message - One diagnostic line, with or without the `[csszyx]` tag.
+ * @param code - The code the engine gave it (`result.issues[i].code`), if any.
  * @returns The kind id.
  * @example
+ * szDiagnosticKindOf(result.diagnostics[0], result.issues?.[0]?.code);
  * szDiagnosticKindOf('[csszyx] Unknown property "workBreak" in sz prop at a.tsx:1.');
  * // 'unknown-key'
  */
-export function szDiagnosticKindOf(message: string): SzDiagnosticKindId {
-    return classify(message)[0];
+export function szDiagnosticKindOf(message: string, code?: SzDiagnosticCode): SzDiagnosticKindId {
+    return code ?? classify(message)[0];
 }
 
 /**

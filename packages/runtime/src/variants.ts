@@ -8,15 +8,69 @@
  * @module @csszyx/runtime/variants
  */
 
+import type { SzProps, VariantModifiers } from '@csszyx/compiler';
 import type { SzObject } from '@csszyx/compiler/browser';
 import { keysDisplacedBy, keysSettledAway } from '@csszyx/compiler/keyword-families';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 import { devWarn } from './dev-warn.js';
+import { describeValue, selectionValueKey } from './selection-value.js';
 
 /**
- *
+ * Dimension → option → sz row. Row VALUES are checked by this constraint, with
+ * the same messages `sz={...}` gives.
  */
-type VariantSchema = Record<string, Record<string, SzObject>>;
+type VariantSchema = Record<string, Record<string, SzProps>>;
+
+/**
+ * The variant keys whose body is a TABLE of sz rows (`aria`, `data`, `has`,
+ * `supports` — typed `Record<string, SzProps>`) rather than one sz row. Read
+ * off `VariantModifiers` so a new table-shaped variant is picked up without
+ * an edit here; not generic, so it is computed once.
+ */
+type RowTableVariant = {
+    [K in keyof VariantModifiers]-?: string extends keyof NonNullable<VariantModifiers[K]>
+        ? K
+        : never;
+}[keyof VariantModifiers];
+
+/**
+ * What an unknown row key is re-typed to. An object no string or number
+ * satisfies, so the typo is an error, and one that names the key. A string
+ * literal would not do: the row is also checked against `V`, and the
+ * intersection of the key's literal value with another string literal is
+ * `never`, which puts an error on every key of the row and names none.
+ */
+type NotAnSzKey<P> = { readonly 'not an sz key': P };
+
+/**
+ * Re-types one row so that a key `SzProps` does not have becomes
+ * `NotAnSzKey`, which turns a typo into a compile error at that key alone.
+ * The constraint on `V` cannot do this: an inferred row is checked
+ * structurally, and a structural check ignores extra keys. Recurses only
+ * through variant keys (`hover`, `md`, `group-hover`, `aria.expanded`, ...),
+ * whose bodies are sz rows; an object VALUE such as `bgImg: { gradient }` or
+ * `css: { ... }` is left to the constraint, its keys are not sz keys.
+ */
+type KnownRowKeys<T> = {
+    [P in keyof T]: P extends keyof SzProps
+        ? P extends keyof VariantModifiers
+            ? VariantBodyKeys<T[P], P extends RowTableVariant ? true : false>
+            : T[P]
+        : NotAnSzKey<P>;
+};
+
+/**
+ * A variant body: an sz row, or a table of sz rows. Scalars (`group: true`,
+ * `'@container': true`) pass through.
+ */
+type VariantBodyKeys<T, IsTable extends boolean> = T extends object
+    ? IsTable extends true
+        ? { [K in keyof T]: KnownRowKeys<T[K]> }
+        : KnownRowKeys<T>
+    : T;
+
+/** Every row of every dimension, key-checked. */
+type KnownSchemaKeys<V> = { [K in keyof V]: { [R in keyof V[K]]: KnownRowKeys<V[K][R]> } };
 
 /**
  *
@@ -31,9 +85,20 @@ type VariantSelection<V extends VariantSchema> = {
  * one compiled-and-extracted class bundle for reuse.
  */
 interface SzvConfig<V extends VariantSchema> {
-    base?: SzObject;
-    variants?: V;
+    base?: SzProps;
+    variants?: V & KnownSchemaKeys<V>;
     defaultVariants?: Partial<VariantSelection<V>>;
+}
+
+/**
+ * The shape the resolver works on. The public types above do not describe
+ * every config that reaches it — runtime data, `as any`, a JS caller — so the
+ * internals take the loose shape and `validateSzvConfig` checks it.
+ */
+interface LooseSzvConfig {
+    base?: SzObject;
+    variants?: Record<string, Record<string, SzObject>>;
+    defaultVariants?: Record<string, unknown>;
 }
 
 /**
@@ -124,14 +189,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function validateVariantDimension(dimension: string, values: unknown): void {
     if (!isPlainObject(values)) {
         devWarn(
-            `szv(config): variants.${dimension} must be an object of values, got ${describe(values)}.`,
+            `szv(config): variants.${dimension} must be an object of values, got ${describeValue(values)}.`,
         );
         return;
     }
     for (const [token, value] of Object.entries(values)) {
         if (value !== null && value !== undefined && !isPlainObject(value)) {
             devWarn(
-                `szv(config): variants.${dimension}.${token} must be an sz object, got ${describe(value)}. It will be skipped.`,
+                `szv(config): variants.${dimension}.${token} must be an sz object, got ${describeValue(value)}. It will be skipped.`,
             );
         } else if (isPlainObject(value)) {
             assertBoundedDepth(value, `variants.${dimension}.${token}`);
@@ -155,11 +220,11 @@ function validateSzvConfig(config: unknown): boolean {
         return true;
     }
     if (!isPlainObject(config)) {
-        devWarn(`szv(config): config must be an object, got ${describe(config)}. Ignoring.`);
+        devWarn(`szv(config): config must be an object, got ${describeValue(config)}. Ignoring.`);
         return false;
     }
     if (config.base !== undefined && !isPlainObject(config.base)) {
-        devWarn(`szv(config): base must be an sz object, got ${describe(config.base)}.`);
+        devWarn(`szv(config): base must be an sz object, got ${describeValue(config.base)}.`);
     }
     // A base-only config (no `variants` key) is valid: it declares one reusable
     // class bundle. Warning here while still returning the base object was the
@@ -169,7 +234,7 @@ function validateSzvConfig(config: unknown): boolean {
     }
     if (!isPlainObject(config.variants)) {
         devWarn(
-            `szv(config): variants must be an object when present, got ${describe(config.variants)}. Ignoring.`,
+            `szv(config): variants must be an object when present, got ${describeValue(config.variants)}. Ignoring.`,
         );
         return false;
     }
@@ -178,7 +243,7 @@ function validateSzvConfig(config: unknown): boolean {
     }
     if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
         devWarn(
-            `szv(config): defaultVariants must be an object, got ${describe(config.defaultVariants)}.`,
+            `szv(config): defaultVariants must be an object, got ${describeValue(config.defaultVariants)}.`,
         );
     }
     return true;
@@ -213,26 +278,19 @@ function assertBoundedDepth(obj: Record<string, unknown>, where: string, depth =
 }
 
 /**
- * One-line description of a bad value for a warning message.
- *
- * @param value - The offending value.
- * @returns A short type description.
- */
-function describe(value: unknown): string {
-    if (value === null) return 'null';
-    if (Array.isArray(value)) return 'an array';
-    return typeof value;
-}
-
-/**
  * Creates a variant-based sz object factory with strong TypeScript inference.
  *
- * TypeScript catches invalid variant values at compile time — no runtime
- * surprises. All variant objects are plain sz objects, fully compatible
- * with the sz prop and @csszyx/dynamic's sz() function.
+ * The factory returns `SzProps` — the type `sz={...}` takes — so its result
+ * goes into `sz=`, `szr()`, or another row without a cast. Rows are checked
+ * like `sz={...}`: an unknown key (also nested, e.g. `hover: { bgg }`) or a bad
+ * value is a compile error, and the dimension/option names are inferred and
+ * checked at the call site. A row shared between configs is declared
+ * `as const` (or typed `SzProps`); a row table built at runtime as
+ * `Record<string, SzProps>` is accepted, and `validateSzvConfig` checks what
+ * the types cannot see.
  *
  * @param {SzvConfig<V>} config - Variant configuration with base, variants, and defaultVariants
- * @returns {Function} A factory function that accepts a variant selection and returns an SzObject
+ * @returns {Function} A factory function that accepts a variant selection and returns `SzProps`
  *
  * @example
  * ```tsx
@@ -269,22 +327,41 @@ function describe(value: unknown): string {
  * <button className={sz(buttonSz({ variant: props.variant }))} />
  * ```
  */
-export function szv<V extends VariantSchema>(
+export function szv<const V extends VariantSchema>(
     config: SzvConfig<V>,
-): (selection?: VariantSelection<V>) => SzObject {
+): (selection?: VariantSelection<V>) => SzProps {
+    // The public type checks the literal config; from here on the config is
+    // data — it may come from JSON or an `as any` — so the resolver reads the
+    // loose shape and `validateSzvConfig` vouches for it.
+    const loose = config as LooseSzvConfig;
     // Validate the config shape once at factory creation (dev only). A
     // structurally broken config returns a safe factory (base or {}) so a bad
     // schema degrades instead of throwing per render.
-    const configValid = validateSzvConfig(config);
+    const configValid = validateSzvConfig(loose);
 
-    return function szVariantFn(selection?: VariantSelection<V>): SzObject {
-        if (!configValid) {
-            return invalidConfigFallback(config);
-        }
-        warnInvalidSelection(selection, config.variants);
-        const resolved = resolveVariantSelection(selection, config.defaultVariants);
-        return attachStringCoercionGuard(applySelectedVariants(config, resolved));
+    return function szVariantFn(selection?: VariantSelection<V>): SzProps {
+        const selected = selection as Record<string, unknown> | undefined;
+        const result = configValid
+            ? resolveSelection(loose, selected)
+            : invalidConfigFallback(loose);
+        // A merge of sz rows is an sz row; the resolver works on the loose shape.
+        return result as SzProps;
     };
+}
+
+/**
+ * Resolve one selection against a validated config.
+ * @param config - The validated variant config.
+ * @param selection - The caller's requested variant values.
+ * @returns The merged, guarded sz object.
+ */
+function resolveSelection(
+    config: LooseSzvConfig,
+    selection: Record<string, unknown> | undefined,
+): SzObject {
+    warnInvalidSelection(selection, config.variants);
+    const resolved = resolveVariantSelection(selection, config.defaultVariants);
+    return attachStringCoercionGuard(applySelectedVariants(config, resolved));
 }
 
 /**
@@ -292,8 +369,8 @@ export function szv<V extends VariantSchema>(
  * @param config - The rejected variant config.
  * @returns A guarded copy of its valid base, or an empty object.
  */
-function invalidConfigFallback<V extends VariantSchema>(config: SzvConfig<V>): SzObject {
-    const base = isPlainObject(config?.base) ? { ...(config.base as SzObject) } : {};
+function invalidConfigFallback(config: LooseSzvConfig): SzObject {
+    const base = isPlainObject(config?.base) ? { ...config.base } : {};
     return attachStringCoercionGuard(base);
 }
 
@@ -302,16 +379,16 @@ function invalidConfigFallback<V extends VariantSchema>(config: SzvConfig<V>): S
  * @param selection - The caller's requested variant values.
  * @param variants - The configured variant dimensions.
  */
-function warnInvalidSelection<V extends VariantSchema>(
-    selection: VariantSelection<V> | undefined,
-    variants: V | undefined,
+function warnInvalidSelection(
+    selection: Record<string, unknown> | undefined,
+    variants: LooseSzvConfig['variants'],
 ): void {
     if (process.env.NODE_ENV === 'production' || !selection) {
         return;
     }
 
     for (const key of Object.keys(selection)) {
-        const value = (selection as Record<string, unknown>)[key];
+        const value = selection[key];
         warnInvalidSelectionValue(key, value, variants);
     }
 }
@@ -325,7 +402,7 @@ function warnInvalidSelection<V extends VariantSchema>(
 function warnInvalidSelectionValue(
     key: string,
     value: unknown,
-    variants: VariantSchema | undefined,
+    variants: LooseSzvConfig['variants'],
 ): void {
     if (!(key in (variants ?? {}))) {
         devWarn(`szv()(selection): unknown variant "${key}" — not declared in config.variants.`);
@@ -336,29 +413,9 @@ function warnInvalidSelectionValue(
     const valueKey = selectionValueKey(value);
     if (valueKey === null || !(valueKey in (variants?.[key] ?? {}))) {
         devWarn(
-            `szv()(selection): "${valueKey ?? describe(value)}" is not a value of variant "${key}" — it has no styles.`,
+            `szv()(selection): "${valueKey ?? describeValue(value)}" is not a value of variant "${key}" — it has no styles.`,
         );
     }
-}
-
-/**
- * Convert a primitive selection to the string key used by variant tables.
- * Objects and functions are invalid selections and deliberately remain unstringified.
- *
- * @param value Candidate selection value.
- * @returns Variant-table key, or null for a structurally invalid selection.
- */
-function selectionValueKey(value: unknown): string | null {
-    if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean' ||
-        typeof value === 'bigint' ||
-        typeof value === 'symbol'
-    ) {
-        return String(value);
-    }
-    return null;
 }
 
 /**
@@ -367,9 +424,9 @@ function selectionValueKey(value: unknown): string | null {
  * @param defaults - The configured default variant values.
  * @returns The effective selection table.
  */
-function resolveVariantSelection<V extends VariantSchema>(
-    selection: VariantSelection<V> | undefined,
-    defaults: Partial<VariantSelection<V>> | undefined,
+function resolveVariantSelection(
+    selection: Record<string, unknown> | undefined,
+    defaults: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
     const resolved: Record<string, unknown> = { ...defaults };
     if (!selection) {
@@ -377,7 +434,7 @@ function resolveVariantSelection<V extends VariantSchema>(
     }
 
     for (const key of Object.keys(selection)) {
-        const value = (selection as Record<string, unknown>)[key];
+        const value = selection[key];
         if (!isForbiddenSzKey(key) && value !== null && value !== undefined) {
             resolved[key] = value;
         }
@@ -391,8 +448,8 @@ function resolveVariantSelection<V extends VariantSchema>(
  * @param resolved - The effective variant selections.
  * @returns The merged sz object.
  */
-function applySelectedVariants<V extends VariantSchema>(
-    config: SzvConfig<V>,
+function applySelectedVariants(
+    config: LooseSzvConfig,
     resolved: Record<string, unknown>,
 ): SzObject {
     let result: SzObject = config.base ? { ...config.base } : {};

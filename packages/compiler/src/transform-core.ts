@@ -12,6 +12,7 @@ import {
     warnStringColorOpacity,
     warnUnrecognizedColor,
 } from './color-validation.js';
+import type { SzDiagnosticIssue, SzMergeGroup, SzMergeOverride } from './engine-spans.js';
 import {
     GROUPS_OF_GLOBAL_KEYWORD,
     keysDisplacedBy,
@@ -1302,6 +1303,9 @@ export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'rotate-x',
     'rotate-y',
     'rotate-z',
+    'scale',
+    'scale-x',
+    'scale-y',
     'scale-z',
     'skew-x',
     'skew-y',
@@ -1321,6 +1325,12 @@ export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'scroll-mr',
     'scroll-mb',
     'scroll-ml',
+    'scroll-ms',
+    'scroll-me',
+    'scroll-mbs',
+    'scroll-mbe',
+    'outline-offset',
+    'underline-offset',
     'hue-rotate',
     'backdrop-hue-rotate',
 ]);
@@ -1603,6 +1613,13 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'maxH',
     'maxHeight',
     'size',
+    // Logical sizing
+    'blockSize',
+    'minBlockSize',
+    'maxBlockSize',
+    'inlineSize',
+    'minInlineSize',
+    'maxInlineSize',
     // Flex
     'basis',
     'flexBasis',
@@ -1619,6 +1636,10 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'left',
     'start',
     'end',
+    'insetS',
+    'insetE',
+    'insetBs',
+    'insetBe',
     // Translate
     'translate',
     'translate-x',
@@ -3395,7 +3416,8 @@ function formatShadowFamilyColor(base: string, value: string): string {
 
 /** Formats string-valued filters and scale without numeric coercion. */
 function formatArbitraryEffect(key: string, value: string): string {
-    if (key === 'scale' && value === '3d') return 'scale-3d';
+    // The two keywords `scale` serves by name; any other value is a number.
+    if (key === 'scale' && (value === '3d' || value === 'none')) return `scale-${value}`;
     const property = key.startsWith('backdrop') ? `backdrop-${key.slice(8).toLowerCase()}` : key;
     return value.startsWith('--') ? `${property}-(${value})` : `${property}-[${value}]`;
 }
@@ -3882,6 +3904,7 @@ function isComplexUtilityValue(value: string): boolean {
 /** Formats a perspective utility. */
 function formatPerspective(value: string): string {
     if (STANDARD_PERSPECTIVE.has(value)) return `perspective-${value}`;
+    if (bracketsCssWideKeyword('perspective', value)) return `perspective-[${value}]`;
     if (value.startsWith('--')) return `perspective-(${value})`;
     return needsArbitraryBrackets(value)
         ? `perspective-[${normalizeArbitraryValue(value)}]`
@@ -4000,6 +4023,183 @@ function buildGenericStringClass(
     return importantValue.important ? `${className}!` : className;
 }
 
+/**
+ * The CSS-wide keywords. Every property takes them, but Tailwind serves only a
+ * few as a named utility (`text-inherit`); for every other key the keyword
+ * needs the arbitrary form (`p-[inherit]`), and the bare one is a class with
+ * no CSS.
+ */
+export const CSS_WIDE_KEYWORDS: Set<string> = new Set([
+    'inherit',
+    'initial',
+    'unset',
+    'revert',
+    'revert-layer',
+]);
+
+/**
+ * The prefixes whose arbitrary form sets the one property the key controls,
+ * so a CSS-wide keyword can take it (`p-[inherit]`). Elsewhere the bracket
+ * would set another property sharing the prefix (`bg-[inherit]` is a colour,
+ * not a position), so the keyword is left as written and the build reports it
+ * as a class with no CSS. Measured against Tailwind 4.3; a test re-checks it.
+ */
+export const CSS_WIDE_BRACKET_PREFIXES: Set<string> = new Set([
+    'p',
+    'px',
+    'py',
+    'pt',
+    'pr',
+    'pb',
+    'pl',
+    'ps',
+    'pe',
+    'pbs',
+    'pbe',
+    'm',
+    'mx',
+    'my',
+    'mt',
+    'mr',
+    'mb',
+    'ml',
+    'ms',
+    'me',
+    'mbs',
+    'mbe',
+    'w',
+    'h',
+    'size',
+    'min-w',
+    'max-w',
+    'min-h',
+    'max-h',
+    'block',
+    'inline',
+    'min-block',
+    'max-block',
+    'min-inline',
+    'max-inline',
+    'inset',
+    'inset-x',
+    'inset-y',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'gap',
+    'gap-x',
+    'gap-y',
+    'z',
+    'order',
+    'basis',
+    'grow',
+    'shrink',
+    'opacity',
+    'aspect',
+    'columns',
+    'indent',
+    'leading',
+    'tracking',
+    'scroll-m',
+    'scroll-mx',
+    'scroll-my',
+    'scroll-mt',
+    'scroll-mr',
+    'scroll-mb',
+    'scroll-ml',
+    'scroll-ms',
+    'scroll-me',
+    'scroll-mbs',
+    'scroll-mbe',
+    'scroll-p',
+    'scroll-px',
+    'scroll-py',
+    'scroll-pt',
+    'scroll-pr',
+    'scroll-pb',
+    'scroll-pl',
+    'scroll-ps',
+    'scroll-pe',
+    'scroll-pbs',
+    'scroll-pbe',
+    'space-x',
+    'space-y',
+    'perspective',
+    'rotate',
+    'scale',
+    'hue-rotate',
+    'line-clamp',
+    'tab',
+]);
+
+/**
+ * The `<prefix>-<keyword>` utilities Tailwind 4 serves by name for a CSS-wide
+ * keyword. Measured against the design system of Tailwind 4.3: every other
+ * prefix serves the keyword only bracketed, or not at all. The engine reads
+ * this table through the generated Rust tables.
+ */
+export const CSS_WIDE_KEYWORD_UTILITIES: Set<string> = new Set([
+    'bg-inherit',
+    'from-inherit',
+    'via-inherit',
+    'to-inherit',
+    'border-inherit',
+    'border-t-inherit',
+    'border-r-inherit',
+    'border-b-inherit',
+    'border-l-inherit',
+    'border-x-inherit',
+    'border-y-inherit',
+    'border-s-inherit',
+    'border-e-inherit',
+    'border-bs-inherit',
+    'border-be-inherit',
+    'divide-inherit',
+    'outline-inherit',
+    'ring-inherit',
+    'ring-offset-inherit',
+    'inset-ring-inherit',
+    'text-inherit',
+    'decoration-inherit',
+    'shadow-inherit',
+    'inset-shadow-inherit',
+    'text-shadow-inherit',
+    'drop-shadow-inherit',
+    'caret-inherit',
+    'accent-inherit',
+    'fill-inherit',
+    'stroke-inherit',
+    'scrollbar-thumb-inherit',
+    'scrollbar-track-inherit',
+    'flex-initial',
+    'shadow-initial',
+    'inset-shadow-initial',
+    'text-shadow-initial',
+    'duration-initial',
+    'ease-initial',
+]);
+
+/**
+ * Whether a CSS-wide keyword on this prefix needs the arbitrary form.
+ *
+ * @param prefix - The utility prefix (`p`, `perspective`).
+ * @param value - The value written.
+ * @returns True when the value is a CSS-wide keyword Tailwind does not serve
+ *          by name here and the bracket sets the key's own property.
+ */
+function bracketsCssWideKeyword(prefix: string, value: string): boolean {
+    return (
+        CSS_WIDE_KEYWORDS.has(value) &&
+        !CSS_WIDE_KEYWORD_UTILITIES.has(`${prefix}-${value}`) &&
+        CSS_WIDE_BRACKET_PREFIXES.has(prefix)
+    );
+}
+
 /** Normalizes string values into Tailwind utility suffix syntax. */
 function normalizeGenericStringValue(rawKey: string, key: string, value: string): string {
     // `ring: 'none'` reads like CSS, but Tailwind spells the zero ring
@@ -4009,6 +4209,7 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     // `font-features-normal` styles nothing while `font-features-[normal]`
     // compiles.
     if (rawKey === 'fontFeatures' && value === 'normal') return '[normal]';
+    if (bracketsCssWideKeyword(key, value)) return `[${value}]`;
     if (isArbitraryFunctionValue(value)) return `[${normalizeArbitraryValue(value)}]`;
     const variable = normalizeCustomPropertyValue(rawKey, value);
     if (variable) return variable;
@@ -4789,21 +4990,30 @@ export interface SourceTransformResult {
     /** Raw className/class strings collected for Tailwind discovery only. */
     rawClassNames: Set<string>;
     /**
-     * The class list of each static object a merge would read, from a pass
-     * without a merge table. Absent from a result an older engine or cache
-     * entry produced; a reader then treats every class of the file as one list.
+     * Each static object a merge would read, from a pass without a merge
+     * table: its classes, the key behind each, and where it is written. Absent
+     * from a result an older engine or cache entry produced; a reader then
+     * treats every class of the file as one list.
+     *
+     * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
-    mergeGroups?: string[][];
+    mergeGroups?: SzMergeGroup[];
     /**
      * Each static class name and the static `sz` classes beside it, from a pass
      * without a merge table: the class name loses what the `sz` classes cover.
      * Absent from a result an older engine or cache entry produced.
      *
-     * @internal Read by the bundler plugin; not a stable shape.
+     * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
-    mergeOverrides?: Array<{ base: string[]; over: string[] }>;
+    mergeOverrides?: SzMergeOverride[];
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
+    /**
+     * The code and position of each diagnostic, index-parallel to
+     * `diagnostics`. Absent from a result a cache entry written before the
+     * engine reported codes produced.
+     */
+    issues?: SzDiagnosticIssue[];
     /** Recovery tokens emitted by szRecover attributes. */
     recoveryTokens: Map<string, TokenData>;
     /** CSS custom property original-to-mangled names emitted by mangleVars. */

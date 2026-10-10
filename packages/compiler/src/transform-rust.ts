@@ -5,6 +5,7 @@ import {
     transformBatch,
 } from '@csszyx/core/native';
 
+import { locateEngineSpans } from './engine-spans.js';
 import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
 import type {
     CssVariableMangleValue,
@@ -62,6 +63,10 @@ export function transformRust(
     return result;
 }
 
+/** Memoized result of the native-availability probe (loading the addon is a
+ * one-time cost; the binary cannot appear or vanish mid-process). */
+let rustAvailability: boolean | undefined;
+
 /**
  * Verify that the native Rust transform binding can be loaded.
  *
@@ -70,11 +75,19 @@ export function transformRust(
  * output. If the native addon is missing, `rust` must fail loudly instead of
  * returning a stale cache entry.
  *
+ * The probe hands the binding one empty module rather than an empty batch: a
+ * platform package older than `@csszyx/core` loads and answers an empty batch
+ * like a current one, and only a result shows it cannot be read. A good answer
+ * is remembered for the process, since a loaded binding cannot turn stale; a
+ * failure is not, so every call reports it with its own detail.
+ *
  * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
  */
 export function ensureRustTransformAvailable(): void {
+    if (rustAvailability === true) return;
     try {
-        transformBatch([]);
+        transformBatch([{ filename: 'csszyx-probe.tsx', source: '' }]);
+        rustAvailability = true;
     } catch (err) {
         if (err instanceof OxcRustNotImplementedError) {
             throw err;
@@ -85,10 +98,6 @@ export function ensureRustTransformAvailable(): void {
         throw err;
     }
 }
-
-/** Memoized result of the native-availability probe (loading the addon is a
- * one-time cost; the binary cannot appear or vanish mid-process). */
-let rustAvailability: boolean | undefined;
 
 /**
  * Non-throwing companion to {@link ensureRustTransformAvailable}: returns whether
@@ -104,13 +113,13 @@ let rustAvailability: boolean | undefined;
 export function isRustTransformAvailable(): boolean {
     if (rustAvailability === undefined) {
         try {
+            // Remembers a good answer itself.
             ensureRustTransformAvailable();
-            rustAvailability = true;
         } catch {
             rustAvailability = false;
         }
     }
-    return rustAvailability;
+    return rustAvailability === true;
 }
 
 /**
@@ -156,7 +165,7 @@ export function transformRustBatch(
                     ? JSON.stringify(options.mergeTable)
                     : undefined,
             },
-        ).map(fromNativeResult);
+        ).map((result, index) => fromNativeResult(result, files[index].source));
     } catch (err) {
         throw asRustUnavailable(err);
     }
@@ -218,9 +227,11 @@ export function normalizeGlobalVarAliases(
  * Convert the native package result shape into the compiler result shape.
  *
  * @param result Native transform result.
+ * @param source The source the result was transformed from, to place its spans.
  * @returns Compiler transform result.
  */
-function fromNativeResult(result: NativeTransformResult): SourceTransformResult {
+function fromNativeResult(result: NativeTransformResult, source: string): SourceTransformResult {
+    const spans = locateEngineSpans(source, result);
     return {
         code: result.code,
         transformed: result.metadata.transformed,
@@ -238,9 +249,10 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         usesBoolClass: result.metadata.usesBoolClass ?? false,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
-        mergeGroups: result.mergeGroups,
-        mergeOverrides: result.mergeOverrides,
+        mergeGroups: spans.mergeGroups,
+        mergeOverrides: spans.mergeOverrides,
         diagnostics: result.diagnostics,
+        issues: spans.issues,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [
                 token,

@@ -380,15 +380,15 @@ const resolvedSignatures = new WeakMap<MergeSignature, ResolvedSignature>();
  * list then, which is what the plugin did before the lists existed.
  *
  * @param result - What the first pass returned.
- * @param result.mergeGroups - The lists the engine reported, when it did.
+ * @param result.mergeGroups - The groups the engine reported, when it did.
  * @param result.classes - Every class the file lowered to.
  * @returns The lists to ask about.
  */
 export function mergeGroupsOf(result: {
-    mergeGroups?: readonly (readonly string[])[];
+    mergeGroups?: ReadonlyArray<{ readonly classes: readonly string[] }>;
     classes: ReadonlySet<string>;
 }): readonly (readonly string[])[] {
-    return result.mergeGroups ?? [[...result.classes]];
+    return result.mergeGroups?.map(group => group.classes) ?? [[...result.classes]];
 }
 
 /** A static class name and the static `sz` classes beside it on one element. */

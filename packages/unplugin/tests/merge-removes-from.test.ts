@@ -212,7 +212,19 @@ describe('which classes a merge removes', () => {
 describe('the lists a merge would read', () => {
     it('are the ones the engine reported', () => {
         expect(
-            mergeGroupsOf({ mergeGroups: [['pb-2', 'p-4']], classes: new Set(['m-2']) }),
+            mergeGroupsOf({
+                mergeGroups: [
+                    {
+                        keys: ['pb', 'p'],
+                        positions: [
+                            { line: 1, column: 1 },
+                            { line: 2, column: 1 },
+                        ],
+                        classes: ['pb-2', 'p-4'],
+                    },
+                ],
+                classes: new Set(['m-2']),
+            }),
         ).toEqual([['pb-2', 'p-4']]);
     });
 

@@ -15,14 +15,6 @@ import {
  */
 export interface DevelopmentConfig {
     /**
-     * Enable strict mode - fail build on warnings.
-     * When enabled, warnings are treated as errors.
-     *
-     * @default false
-     */
-    strictMode: boolean;
-
-    /**
      * Enable debug logging during build.
      *
      * @default false
@@ -604,7 +596,11 @@ export interface HydrationConfig {
 }
 
 /**
- * Main csszyx configuration.
+ * Every plugin option section, all required: the shape the defaults fill in.
+ *
+ * @deprecated Not a type to write a config with — it requires every field,
+ * so a hand-written object fails `--strict` (TS2741). Plugin options take
+ * {@link PartialCsszyxConfig}; `csszyx.config.ts` takes `defineConfig`.
  */
 export interface CsszyxConfig {
     /**
@@ -727,7 +723,6 @@ export type PartialCsszyxConfig = {
  * Default development configuration.
  */
 export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
-    strictMode: false,
     debug: false,
 };
 
@@ -776,9 +771,12 @@ export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
 };
 
 /**
- * Default csszyx configuration.
+ * Default csszyx configuration. Typed with the deprecated `CsszyxConfig` on
+ * purpose: the full, every-field-set shape is what this constant is, and
+ * consumers that read it keep that type until the deprecated one is removed.
  */
-export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = {
+// biome-ignore format: Sonar reads NOSONAR only on the line it flags.
+export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = { // NOSONAR: S1874, see above
     development: DEFAULT_DEVELOPMENT_CONFIG,
     production: DEFAULT_PRODUCTION_CONFIG,
     build: DEFAULT_BUILD_CONFIG,

@@ -388,8 +388,11 @@ Full guide: `/docs/reusing-styles`
 
 ## szv() — Variant Authoring
 
-CVA-equivalent that returns sz objects. TypeScript infers valid keys/values from config — no
-manual type annotations needed. Numeric variant keys are supported.
+CVA-equivalent. A factory returns `SzProps`, the same type `sz={…}` takes, so its
+result goes into `sz=`, `szr()`, or another row without a cast. TypeScript infers the
+dimension and option names from the config — no manual type annotations needed — and
+checks every row like `sz={…}`: an unknown key (top level or nested, e.g.
+`hover: { bgg: … }`) or a bad value is a compile error. Numeric variant keys are supported.
 
 ```tsx
 import { szv } from "csszyx";
@@ -431,6 +434,15 @@ const itemSz = szv({
 // TypeScript catches invalid values:
 buttonSz({ variant: "invalid" }); // ❌ TS error: '"invalid"' not assignable
 ```
+
+A row shared between configs is declared `as const` (or typed `SzProps`), as for
+`sz={row}`: `const pill = { display: "inline-flex", px: 3 } as const;`. Without
+`as const` the values widen, and the row fails inside `szv` exactly as at `sz={row}`
+for any key with a closed value type (`{ display: string }` is not a display value);
+keys that take any string (`rounded`, `bg`) still compile widened. A row typed
+`SzObject` (an index signature, any key) is rejected — type it `SzProps`. A mistyped
+row key errors once, on that key: `... not assignable to type '"red-500" & NotAnSzKey<"bgg">'`.
+A row table built at runtime as `Record<string, SzProps>` is accepted.
 
 All variant class combinations are catalogued at build time (compiler prescan) — Tailwind
 generates CSS for every combination, no runtime injection needed. Cataloguing is

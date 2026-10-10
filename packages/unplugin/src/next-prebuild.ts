@@ -19,9 +19,11 @@ import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-styleshe
 // same entry it already imports the prebuild from.
 export {
     auditMerges,
+    MERGE_AUDIT_KINDS,
     type MergeAuditFile,
     type MergeAuditFinding,
     type MergeAuditKind,
+    mergeRemovalMessage,
 } from './merge-audit.js';
 export {
     MERGE_REGISTRATION_FILE,

@@ -25,9 +25,19 @@ class FakeUnavailable extends Error {
     }
 }
 
+/**
+ * Whether the fake binding loads and refuses only the result it would return:
+ * a platform package older than `@csszyx/core` exports `transformBatch` and
+ * fails only once it is handed a file.
+ */
+const stale = vi.hoisted(() => ({ current: false }));
+
 vi.mock('@csszyx/core/native', () => ({
     CsszyxNativeUnavailableError: FakeUnavailable,
-    transformBatch: () => {
+    transformBatch: (files: unknown[]) => {
+        if (stale.current && files.length === 0) {
+            return [];
+        }
         throw new FakeUnavailable();
     },
     scanModuleLinks: () => {
@@ -38,6 +48,16 @@ vi.mock('@csszyx/core/native', () => ({
 describe('the native transform on an install without it', () => {
     beforeEach(() => {
         vi.resetModules();
+        stale.current = false;
+    });
+
+    it('reports a binding that loads but cannot answer as unavailable', async () => {
+        // The availability probe has to hand the binding a file: an empty batch
+        // comes back empty from an old package too, and the auto lane would then
+        // pick a binding whose first real result it cannot read.
+        stale.current = true;
+        const { isRustTransformAvailable } = await import('../src/transform-rust.js');
+        expect(isRustTransformAvailable()).toBe(false);
     });
 
     it('reports itself unavailable without throwing', async () => {

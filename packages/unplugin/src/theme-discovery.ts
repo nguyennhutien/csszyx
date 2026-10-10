@@ -10,32 +10,10 @@
  *
  * @module
  */
-import fs from 'node:fs';
-import path from 'node:path';
+import { walkProjectStylesheets } from '@csszyx/tailwind-oracle';
 
-import { createRootIgnoreMatcher, type RootIgnoreMatcher } from './root-ignore-matcher.js';
+import { createRootIgnoreMatcher } from './root-ignore-matcher.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
-
-/**
- * Directories a project's own stylesheets never live in.
- *
- * Dot-directories are skipped separately, which also keeps the walk out of
- * `.csszyx/` — the directory this discovery's own output is written to.
- */
-export const THEME_SCAN_IGNORE_DIRS: ReadonlySet<string> = new Set([
-    'node_modules',
-    '.next',
-    '.git',
-    'dist',
-    'build',
-    '.turbo',
-    // Build output that carries copies of the app's stylesheets: a Rust
-    // `target/`, a coverage report, a built Storybook. A copy from an older
-    // build can set an older prefix and stop the build over a file no app loads.
-    'target',
-    'coverage',
-    'storybook-static',
-]);
 
 /** What a project-wide scan found. */
 export interface ThemeDiscovery {
@@ -51,6 +29,11 @@ export interface ThemeDiscovery {
      * noticed, because it adds tokens the merge groups do not have yet.
      */
     scanned: string[];
+    /**
+     * Every `.gitignore` the walk applied. A record of what the walk found
+     * fingerprints them: an edit to one can add or drop a stylesheet.
+     */
+    gitignoreFiles: string[];
 }
 
 /**
@@ -65,46 +48,22 @@ function normalize(value: string): string {
 }
 
 /**
- * Collect every `.css` file under a directory, skipping build output.
- *
- * @param dir - Directory to walk.
- * @param out - Accumulator for absolute file paths.
- * @param ignore - What the caller left out. A directory it covers is never
- * opened: skipping another app should cost nothing.
- */
-function walkCss(dir: string, out: string[], ignore: RootIgnoreMatcher): void {
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return;
-    }
-    for (const entry of entries) {
-        const entryPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            if (
-                !THEME_SCAN_IGNORE_DIRS.has(entry.name) &&
-                !entry.name.startsWith('.') &&
-                !ignore.coversTree(entryPath)
-            ) {
-                walkCss(entryPath, out, ignore);
-            }
-            continue;
-        }
-        if (entry.name.endsWith('.css') && !ignore.ignoresFile(entryPath)) {
-            out.push(entryPath);
-        }
-    }
-}
-
-/**
  * Walk a project for `@theme` blocks and merge what they declare.
+ *
+ * The walk skips dependencies, build output, generated reports, dot-folders
+ * (which keeps it out of `.csszyx/`, where this discovery's own output goes)
+ * and whatever `.gitignore` covers: a Rust `target/`, a coverage report, a
+ * built Storybook or a gitignored `out/` carries a copy of the app's
+ * stylesheets from an older build, which can set an older prefix and stop the
+ * build over a file no app loads. A gitignored stylesheet another one imports
+ * is read all the same.
  *
  * @param rootDir - Project root to walk.
  * @param extraDirs - Directories outside the root to include as well; ones
  * already inside the root are skipped so their files are not read twice.
  * @param ignore - Glob patterns, relative to the root, for paths whose
- * stylesheets are another app's and are left out.
+ * stylesheets are another app's and are left out. A directory they cover is
+ * never opened: skipping another app should cost nothing.
  * @returns The merged tokens and the files they came from.
  */
 export function discoverProjectTheme(
@@ -112,27 +71,27 @@ export function discoverProjectTheme(
     extraDirs: readonly string[] = [],
     ignore: readonly string[] = [],
 ): ThemeDiscovery {
-    const cssFiles: string[] = [];
     const matcher = createRootIgnoreMatcher(rootDir, ignore);
-    walkCss(rootDir, cssFiles, matcher);
     const normalizedRoot = normalize(rootDir);
-    for (const dir of extraDirs) {
-        const normalized = normalize(dir);
-        if (normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`)) continue;
-        walkCss(dir, cssFiles, matcher);
-    }
+    const bases = [
+        rootDir,
+        ...extraDirs.filter(dir => {
+            const normalized = normalize(dir);
+            return normalized !== normalizedRoot && !normalized.startsWith(`${normalizedRoot}/`);
+        }),
+    ];
+    const walked = walkProjectStylesheets(bases, {
+        prune: dir => matcher.coversTree(dir),
+        ignoresFile: file => matcher.ignoresFile(file),
+    });
 
     const themes: ParsedTheme[] = [];
     const files: string[] = [];
-    for (const file of cssFiles) {
-        let content: string;
-        try {
-            content = fs.readFileSync(file, 'utf-8');
-        } catch {
-            continue;
-        }
-        // A cheap text test before parsing: most stylesheets have no @theme.
-        if (!content.includes('@theme')) continue;
+    for (const file of walked.files) {
+        const content = walked.texts.get(file);
+        // A cheap text test before parsing: most stylesheets have no @theme,
+        // and one that could not be read has no text at all.
+        if (!content?.includes('@theme')) continue;
         themes.push(parseThemeBlocks(content));
         files.push(file);
     }
@@ -140,6 +99,7 @@ export function discoverProjectTheme(
     return {
         theme: themes.length > 0 ? mergeThemes(themes) : null,
         files,
-        scanned: cssFiles,
+        scanned: walked.files,
+        gitignoreFiles: walked.gitignoreFiles,
     };
 }

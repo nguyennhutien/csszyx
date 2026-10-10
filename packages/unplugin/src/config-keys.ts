@@ -50,6 +50,18 @@ const RENAMED_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Options read from another file, mapped to that file.
+ *
+ * `diagnostics` is read from `csszyx.config` (`.ts`, `.mts`, `.js` or
+ * `.mjs`) so that `csszyx check` and every bundler plugin see one set of
+ * levels; an inline copy would apply to this bundler only and drift from the
+ * gate.
+ */
+const MOVED_KEYS: Readonly<Record<string, string>> = {
+    diagnostics: 'csszyx.config',
+};
+
+/**
  * The nearest known key, when the author plausibly meant one.
  *
  * One edit-distance pass over the known option names; a typo of a short option
@@ -74,6 +86,8 @@ export interface UnknownConfigKey {
     key: string;
     /** What replaced it, when it is a known rename. */
     renamedTo?: string;
+    /** The file it is read from instead, when it is not a plugin option. */
+    movedTo?: string;
     /** Nearest known key, when it looks like a typo. */
     suggestion?: string;
 }
@@ -95,6 +109,11 @@ export function findUnknownConfigKeys(options: unknown): UnknownConfigKey[] {
     const unknown: UnknownConfigKey[] = [];
     for (const key of Object.keys(options)) {
         if (KNOWN_TOP_LEVEL_KEYS.has(key)) continue;
+        const movedTo = MOVED_KEYS[key];
+        if (movedTo !== undefined) {
+            unknown.push({ key, movedTo });
+            continue;
+        }
         const renamedTo = RENAMED_KEYS[key];
         if (renamedTo !== undefined) {
             unknown.push({ key, renamedTo });
@@ -116,6 +135,9 @@ export function unknownConfigKeysMessage(unknown: readonly UnknownConfigKey[]): 
     const lines = unknown.map(entry => {
         if (entry.renamedTo !== undefined) {
             return `  - \`${entry.key}\` was replaced by \`${entry.renamedTo}\``;
+        }
+        if (entry.movedTo !== undefined) {
+            return `  - \`${entry.key}\` is read from \`${entry.movedTo}\`, not from the plugin options`;
         }
         return entry.suggestion === undefined
             ? `  - \`${entry.key}\``

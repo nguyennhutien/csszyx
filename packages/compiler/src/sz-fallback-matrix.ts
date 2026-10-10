@@ -221,7 +221,9 @@ export type SzFallbackConsequence = 'missing-css' | 'nudge';
  * The cost of drawing the line here is under-reporting: an unresolvable
  * module-level const reads as advisory. That is the safe direction.
  */
-const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>(['import']);
+export const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
+    'import',
+]);
 
 /**
  * Each kind's reason text up to the point the detail is substituted.

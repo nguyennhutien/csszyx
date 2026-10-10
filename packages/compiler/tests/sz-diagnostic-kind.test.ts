@@ -9,17 +9,20 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { SZ_DIAGNOSTIC_CODES } from '../src/diagnostic-codes.generated.js';
 import {
     isAdvisorySzDiagnostic,
     SZ_DIAGNOSTIC_KIND_IDS,
     szDiagnosticKindOf,
 } from '../src/sz-diagnostic-kind.js';
+import { CODE_SOURCES } from './diagnostic-code-sources.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 /**
- * One source per kind, each diagnosed by the engines themselves. Every id the
- * classifier can name, `other` aside, must appear here: an id no source reaches
- * is an id `csszyx check --rule` would accept and never select.
+ * One source per kind the text table names, each diagnosed by the engines
+ * themselves. The table stays for diagnostics that carry no code — the runtime
+ * channel's console warnings share this wording — so each of its kinds is
+ * pinned here against the code the engine gives the same message.
  */
 const ENGINE_SOURCES: Readonly<Record<string, string>> = {
     'unknown-key': 'export const A = () => <div sz={{ xyzzy: 4 }} />;',
@@ -47,10 +50,10 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
 };
 
 describe('SZ_DIAGNOSTIC_KIND_IDS', () => {
-    it('has an engine-diagnosed source for every kind it names', () => {
-        expect(Object.keys(ENGINE_SOURCES).sort()).toEqual(
-            SZ_DIAGNOSTIC_KIND_IDS.filter(id => id !== 'other').sort(),
-        );
+    it('is every engine code, then other', () => {
+        // Every code has an engine-diagnosed source (diagnostic-codes.test.ts),
+        // so no id here is one `csszyx check --rule` accepts and never selects.
+        expect(SZ_DIAGNOSTIC_KIND_IDS).toEqual([...SZ_DIAGNOSTIC_CODES, 'other']);
     });
 
     it('ends with other, the kind of a message no matcher accepts', () => {
@@ -64,9 +67,52 @@ describe.each(ENGINES)('diagnostic kinds — %s', (_name, transform) => {
         (kind, source) => {
             const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
 
-            expect(diagnostics.map(szDiagnosticKindOf)).toContain(kind);
+            expect(diagnostics.map(message => szDiagnosticKindOf(message))).toContain(kind);
         },
     );
+
+    it.each(Object.entries(ENGINE_SOURCES))(
+        'reads %s from the text as the engine codes it',
+        (_kind, source) => {
+            const result = transform(source, '/p/src/A.tsx');
+
+            for (const [index, message] of (result.diagnostics ?? []).entries()) {
+                const byText = szDiagnosticKindOf(message);
+                if (byText === 'other') continue;
+                expect(byText, message).toBe(result.issues?.[index]?.code);
+            }
+        },
+    );
+
+    it.each(CODE_SOURCES)(
+        'gives every %s diagnostic its code as its kind',
+        (_code, source, options) => {
+            const result = transform(source, '/p/src/A.tsx', options);
+
+            for (const [index, message] of (result.diagnostics ?? []).entries()) {
+                const code = result.issues?.[index]?.code;
+                expect(szDiagnosticKindOf(message, code), message).toBe(code);
+                expect(szDiagnosticKindOf(message, code), message).not.toBe('other');
+            }
+        },
+    );
+});
+
+describe('a diagnostic with a code', () => {
+    it('takes its kind from the code, not the text', () => {
+        expect(
+            szDiagnosticKindOf(
+                '[csszyx] Unknown property "xyzzy" in sz prop at a.tsx:1.',
+                'moved-value',
+            ),
+        ).toBe('moved-value');
+    });
+
+    it('falls back to the text without one', () => {
+        expect(szDiagnosticKindOf('[csszyx] Unknown property "xyzzy" in sz prop at a.tsx:1.')).toBe(
+            'unknown-key',
+        );
+    });
 });
 
 describe.each(ENGINES)('removed keys in either wording — %s', (_name, transform) => {
@@ -76,7 +122,7 @@ describe.each(ENGINES)('removed keys in either wording — %s', (_name, transfor
     ])('reads removed-key from %s', (_label, source) => {
         const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
 
-        expect(diagnostics.map(szDiagnosticKindOf)).toEqual(['removed-key']);
+        expect(diagnostics.map(message => szDiagnosticKindOf(message))).toEqual(['removed-key']);
     });
 });
 

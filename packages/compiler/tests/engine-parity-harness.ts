@@ -17,6 +17,7 @@ import {
     isRustTransformAvailable,
     type ModuleLinks,
     type ModuleLinksFile,
+    type SourceTransformResult,
     scanModuleLinksRust,
     scanModuleLinksWasm,
     type TransformSourceCodeOptions,
@@ -34,6 +35,12 @@ export interface EngineParityResult {
      * stays identical — the exact shape a runtime fallback produces.
      */
     classes?: Iterable<string>;
+    /** The code and position of each diagnostic, index-parallel to `diagnostics`. */
+    issues?: SourceTransformResult['issues'];
+    /** The class lists a merge would read, from a pass with no merge table. */
+    mergeGroups?: SourceTransformResult['mergeGroups'];
+    /** The class-name and `sz` pairs a merge would read, from a pass with no table. */
+    mergeOverrides?: SourceTransformResult['mergeOverrides'];
 }
 
 /** One engine entry, narrowed to the shared result surface. */

@@ -24,7 +24,17 @@ pub(crate) struct BooleanValue {
 
 /// `ALIGN_CONTENT_KEYWORDS` from reverse-map.ts, in source order.
 pub(crate) const ALIGN_CONTENT_KEYWORDS: &[&str] = &[
-    "normal", "center", "start", "end", "between", "around", "evenly", "baseline", "stretch",
+    "normal",
+    "center",
+    "center-safe",
+    "start",
+    "end",
+    "end-safe",
+    "between",
+    "around",
+    "evenly",
+    "baseline",
+    "stretch",
 ];
 
 /// Whether `value` is in `ALIGN_CONTENT_KEYWORDS`.
@@ -33,8 +43,10 @@ pub(crate) fn align_content_keywords(value: &str) -> bool {
         value,
         "normal"
             | "center"
+            | "center-safe"
             | "start"
             | "end"
+            | "end-safe"
             | "between"
             | "around"
             | "evenly"
@@ -340,6 +352,12 @@ pub(crate) const FRACTION_SUPPORTED: &[&str] = &[
     "inset-e",
     "inset-bs",
     "inset-be",
+    "block",
+    "inline",
+    "min-block",
+    "max-block",
+    "min-inline",
+    "max-inline",
     "translate-x",
     "translate-y",
     "translate",
@@ -371,6 +389,12 @@ pub(crate) fn fraction_supported(value: &str) -> bool {
             | "inset-e"
             | "inset-bs"
             | "inset-be"
+            | "block"
+            | "inline"
+            | "min-block"
+            | "max-block"
+            | "min-inline"
+            | "max-inline"
             | "translate-x"
             | "translate-y"
             | "translate"
@@ -640,6 +664,8 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "my",
     "ms",
     "me",
+    "mbs",
+    "mbe",
     "top",
     "right",
     "bottom",
@@ -647,15 +673,10 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "inset",
     "inset-x",
     "inset-y",
-    "start",
-    "end",
     "inset-s",
     "inset-e",
     "inset-bs",
     "inset-be",
-    "mbs",
-    "mbe",
-    "translate",
     "z",
     "order",
     "col",
@@ -668,10 +689,17 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "rotate-x",
     "rotate-y",
     "rotate-z",
+    "scale",
+    "scale-x",
+    "scale-y",
+    "scale-z",
     "skew-x",
     "skew-y",
+    "translate",
     "translate-x",
     "translate-y",
+    "translate-z",
+    "mask",
     "space-x",
     "space-y",
     "tracking",
@@ -683,8 +711,16 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "scroll-mr",
     "scroll-mb",
     "scroll-ml",
+    "scroll-ms",
+    "scroll-me",
+    "scroll-mbs",
+    "scroll-mbe",
+    "outline-offset",
+    "underline-offset",
     "hue-rotate",
     "backdrop-hue-rotate",
+    "start",
+    "end",
 ];
 
 /// Whether `value` is in `NEGATIVE_ALLOWED`.
@@ -699,6 +735,8 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "my"
             | "ms"
             | "me"
+            | "mbs"
+            | "mbe"
             | "top"
             | "right"
             | "bottom"
@@ -706,15 +744,10 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "inset"
             | "inset-x"
             | "inset-y"
-            | "start"
-            | "end"
             | "inset-s"
             | "inset-e"
             | "inset-bs"
             | "inset-be"
-            | "mbs"
-            | "mbe"
-            | "translate"
             | "z"
             | "order"
             | "col"
@@ -727,10 +760,17 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "rotate-x"
             | "rotate-y"
             | "rotate-z"
+            | "scale"
+            | "scale-x"
+            | "scale-y"
+            | "scale-z"
             | "skew-x"
             | "skew-y"
+            | "translate"
             | "translate-x"
             | "translate-y"
+            | "translate-z"
+            | "mask"
             | "space-x"
             | "space-y"
             | "tracking"
@@ -742,8 +782,16 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "scroll-mr"
             | "scroll-mb"
             | "scroll-ml"
+            | "scroll-ms"
+            | "scroll-me"
+            | "scroll-mbs"
+            | "scroll-mbe"
+            | "outline-offset"
+            | "underline-offset"
             | "hue-rotate"
             | "backdrop-hue-rotate"
+            | "start"
+            | "end"
     )
 }
 
@@ -1046,6 +1094,14 @@ pub(crate) fn transition_property_keywords(value: &str) -> bool {
     )
 }
 
+/// `UNSIGNED_KEYWORDS` from reverse-map.ts, in source order.
+pub(crate) const UNSIGNED_KEYWORDS: &[&str] = &["none", "3d", "first", "last"];
+
+/// Whether `value` is in `UNSIGNED_KEYWORDS`.
+pub(crate) fn unsigned_keywords(value: &str) -> bool {
+    matches!(value, "none" | "3d" | "first" | "last")
+}
+
 /// One keyword set: its TypeScript name, its members, and its predicate.
 pub(crate) type MigrateSet = (&'static str, &'static [&'static str], fn(&str) -> bool);
 
@@ -1150,6 +1206,7 @@ pub(crate) const MIGRATE_SETS: &[MigrateSet] = &[
         TRANSITION_PROPERTY_KEYWORDS,
         transition_property_keywords,
     ),
+    ("UNSIGNED_KEYWORDS", UNSIGNED_KEYWORDS, unsigned_keywords),
 ];
 
 /// `REVERSE_BOOLEAN_MAP` from reverse-map.ts, in source order.

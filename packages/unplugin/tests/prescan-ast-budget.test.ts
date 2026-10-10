@@ -128,6 +128,7 @@ describe('prescan AST budget', () => {
                               diagnostics: [
                                   `[csszyx] AST budget exceeded in ${file.filename}: the IR walk stopped mid-file.`,
                               ],
+                              issues: [{ code: 'ast-budget', line: 1, column: 1 }],
                           }
                         : {
                               ...emptyBatchResult(),

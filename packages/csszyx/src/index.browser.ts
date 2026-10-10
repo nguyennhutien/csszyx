@@ -45,13 +45,22 @@ export { _sz as _szLite } from '@csszyx/runtime/lite';
 // === Types ===
 export type {
     CsszyxConfig,
+    CsszyxFileConfig,
     DevelopmentConfig,
     PartialCsszyxConfig,
     ProductionConfig,
     RecoveryManifest,
+    SzDiagnosticLevel,
+    SzDiagnosticPreset,
+    SzDiagnosticRuleId,
+    SzDiagnosticsConfig,
     SzProp,
     SzProps,
 } from '@csszyx/types';
+// === csszyx.config ===
+// Browser-safe on purpose: an identity function, so a config file importing
+// it pulls nothing Node-only into whatever loads the file.
+export { defineConfig } from '@csszyx/types';
 
 // === JSX Type Augmentation ===
 // Triple-slash reference: extends React.HTMLAttributes and React.SVGAttributes

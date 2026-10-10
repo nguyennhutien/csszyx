@@ -8,13 +8,10 @@ import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
-    isAdvisorySzDiagnostic,
     isRustTransformAvailable,
     isWasmTransformAvailable,
     type SourceTransformResult,
     sortStrings,
-    szFallbackConsequenceOf,
-    szKeySuggestionFor,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -25,7 +22,15 @@ import {
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import { loadContentScanner } from '@csszyx/tailwind-oracle';
+import {
+    createGitignoreQuery,
+    DEPENDENCY_OUTPUT_DIRS,
+    GENERATED_REPORT_DIRS,
+    type GitignoreMode,
+    loadContentScanner,
+    stripCssBlockComments,
+    walkProject,
+} from '@csszyx/tailwind-oracle';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
@@ -66,6 +71,19 @@ import {
     classAttributeSelectorKey,
     mangleCSSSync,
 } from './css-mangler.js';
+import { csszyxConfigFileNameFor, loadDiagnosticPolicy } from './csszyx-config-file.js';
+import {
+    type DeadClassSite,
+    findDeadSzClasses,
+    reportDeadSzClasses,
+    szClassSites,
+} from './dead-class.js';
+import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
+import {
+    createDiagnosticPolicy,
+    type DiagnosticPolicy,
+    diagnosticConfigProblemsMessage,
+} from './diagnostic-policy.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -146,7 +164,6 @@ import {
     legacySourceMessage,
     removeLegacySafelists,
     SAFELIST_FILE,
-    stripCssBlockComments,
 } from './safelist-source.js';
 
 export {
@@ -156,6 +173,13 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import {
+    type MergeAuditFinding,
+    type MergeAuditKind,
+    mergeFindingsOf,
+    mergeRemovalMessage,
+    mergeRemovalSummaryMessage,
+} from './merge-audit.js';
 import { loadsCsszyxRuntime, writeMergeRegistrationModule } from './merge-registration.js';
 import {
     createMergeSignatureTable,
@@ -184,7 +208,7 @@ import {
 import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
-import { discoverProjectTheme, THEME_SCAN_IGNORE_DIRS } from './theme-discovery.js';
+import { discoverProjectTheme } from './theme-discovery.js';
 import {
     ensureThemeGroupsFile,
     THEME_GROUPS_FILE_MARKER,
@@ -203,10 +227,19 @@ import {
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
+    scalarFieldsOf,
     type TransformCacheKey,
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
+import {
+    channelOfLevel,
+    type QuietMode,
+    resolveQuietMode,
+    routeTransformDiagnostics,
+    shouldHoldAdvisories,
+    suppressedAdvisoryMessage,
+} from './transform-diagnostics.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
@@ -234,6 +267,15 @@ import {
     UNSERVED_VIRTUAL_ID,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
+
+// The diagnostic gates moved to their own module so the Next Turbopack loader
+// shares them; they stay importable from here.
+export {
+    type QuietMode,
+    resolveQuietMode,
+    shouldHoldAdvisories,
+    suppressedAdvisoryMessage,
+} from './transform-diagnostics.js';
 
 /**
  * Plugin state for mangle map management.
@@ -1072,84 +1114,6 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
- * Whether a diagnostic is an advisory one — the class a build may hold back.
- *
- * Advisory means one thing: the styles are THERE, and the note is about how
- * they got there. An `sz`-site nudge fallback took the runtime path where a
- * compiled one was possible; the precedence advisory says which of two sources
- * won. Everything else describes output that is absent or dead, and a
- * production build has to print it.
- *
- * Asked positively on purpose. The predicate used to be "not one of three known
- * kinds", which quietly made every key and value diagnostic advisory: a
- * production build of a file with five typo'd keys printed nothing but a census
- * calling them fallbacks, while `csszyx check` on the same tree named all six.
- * The answer now comes from the compiler's diagnostic table, which also names
- * each kind for `csszyx check`, so the markers live beside the wording.
- *
- * @param message - One raw diagnostic line as an engine emitted it.
- * @returns True when the diagnostic is advisory rather than a build result.
- */
-export function isAdvisoryDiagnostic(message: string): boolean {
-    return isAdvisorySzDiagnostic(message);
-}
-
-/**
- * Build the one-line disclosure that the fallback list above is partial.
- *
- * Four of the five `sz`-site fallback kinds never print in a production build,
- * so a log can list the `szr` fallbacks it found and silently hold every
- * `sz={factory()}` beside them. A consumer counting affected sites from that
- * log counts a lower bound and has no way to know it — one reported a site
- * count that was short by half for exactly this reason, and only caught it by
- * reading sources instead.
- *
- * Suppression is the right default; implying zero is not. One line costs
- * nothing and keeps the difference visible.
- *
- * @param count - Advisory notes the build declined to list.
- * @returns The disclosure, or null when nothing was held back.
- */
-export function suppressedAdvisoryMessage(count: number): string | null {
-    if (count <= 0) return null;
-    // Count and noun interpolate together so the sentence after them is one
-    // unbroken literal: the docs-sync gate matches verbatim runs, and a
-    // placeholder in the middle splits the run it is trying to match.
-    //
-    // The noun is "note", not "sz fallback": the count is everything
-    // `isAdvisoryDiagnostic` holds back, and two of its three kinds never touch
-    // an sz prop. A build with no fallback at all was being told it had some.
-    const held = count === 1 ? '1 advisory note' : `${count} advisory notes`;
-    return (
-        `[csszyx] ${held} not listed above. An advisory reports something csszyx handled — a ` +
-        'fallback at an sz prop, a className whose precedence over sz is unstated, or a variable ' +
-        'hoist the planner declined — so the styles are there and a production build keeps the ' +
-        'list short. A development build prints each one with its file and position.'
-    );
-}
-
-/**
- * The `quiet` option, normalized.
- *
- * `'all'` is the blunt setting a plain `true` selects; `'nudges'` keeps every
- * report that the build produced less output than it was asked for.
- */
-export type QuietMode = 'off' | 'nudges' | 'all';
-
-/**
- * Normalize the authored `quiet` value. Idempotent, so a already-normalized
- * mode passes through unchanged.
- *
- * @param quiet - Authored option value, or an already-resolved mode.
- * @returns The mode the gates read.
- */
-export function resolveQuietMode(quiet: boolean | 'nudges' | QuietMode | undefined): QuietMode {
-    if (quiet === true || quiet === 'all') return 'all';
-    if (quiet === 'nudges') return 'nudges';
-    return 'off';
-}
-
-/**
  * Whether a csszyx build warning should be emitted.
  *
  * `devOnly` is already this plugin's marker for "usage nudge": it suppresses
@@ -1181,96 +1145,6 @@ export function shouldEmitWarning(
         return false;
     }
     return true;
-}
-
-/**
- * Emit one key or value diagnostic — the family that says a class is dead.
- *
- * Its own channel because the two that existed both answer a different
- * question: `emitMissingCssFallback` handles fallback sites, and the advisory
- * channel handles notes about styles that ARE present. A typo'd key matched
- * neither, so a production build dropped it on the floor while `csszyx check`
- * on the same tree exited 1 and named it. Muted only by `quiet: true`, on the
- * same reasoning as the missing-css channel: wrong output is not a usage nudge.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify and emit.
- * @param id - Bundler module identifier included in the warning.
- * @param emit - Warning output channel.
- */
-export function emitKeyValueDiagnostic(
-    quiet: QuietMode,
-    message: string,
-    id: string,
-    emit: (message: string) => void,
-): void {
-    if (
-        resolveQuietMode(quiet) === 'all' ||
-        szFallbackConsequenceOf(message) !== undefined ||
-        isAdvisoryDiagnostic(message)
-    ) {
-        return;
-    }
-    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
-    const suggestion = szKeySuggestionFor(message);
-    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
-    emit(`[csszyx] ${id}\n  ${message}${hint}`);
-}
-
-/**
- * Whether a transform diagnostic describes missing CSS and may be printed.
- *
- * Only the blunt mode hides these. A missing-CSS diagnostic says classes never
- * reached the safelist, so the styles are absent from the output — a build
- * result, not a style opinion, and `'nudges'` exists so a calmer log does not
- * have to cost it.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify.
- * @returns True when the diagnostic is an unsilenced missing-CSS failure.
- */
-export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
-    return resolveQuietMode(quiet) !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
-}
-
-/**
- * Whether this run holds the advisory fallback list back and counts it instead.
- *
- * A build prints the count once the bundle closes, so holding the list back
- * still leaves a reader a number to act on. A dev server never closes a bundle:
- * anything held back there is held back for good, which is why serving lists
- * its fallbacks whatever the environment says. `NODE_ENV` alone was the whole
- * test, and a monorepo script that exports it while running a dev server turned
- * every advisory into a number nothing would print.
- *
- * @param quiet - Resolved quiet mode.
- * @param serving - Whether this is a dev server rather than a build.
- * @param nodeEnv - `process.env.NODE_ENV` as the process sees it.
- * @returns True when the list is withheld in favour of a count.
- */
-export function shouldHoldAdvisories(
-    quiet: QuietMode,
-    serving: boolean,
-    nodeEnv: string | undefined,
-): boolean {
-    return quiet !== 'off' || (!serving && nodeEnv === 'production');
-}
-
-/**
- * Emit one missing-CSS fallback through the caller's output channel.
- *
- * @param quiet - Resolved quiet mode.
- * @param message - Compiler diagnostic to classify and emit.
- * @param id - Bundler module identifier included in the warning.
- * @param emit - Warning output channel.
- */
-export function emitMissingCssFallback(
-    quiet: QuietMode,
-    message: string,
-    id: string,
-    emit: (message: string) => void,
-): void {
-    if (shouldEmitMissingCssFallback(quiet, message)) emit(`[csszyx] ${id}\n  ${message}`);
 }
 
 /**
@@ -3054,6 +2928,25 @@ function describePrefix(prefix: string | null): string {
 }
 
 /**
+ * Whether a file the project walk found sits in a folder of generated
+ * output: a coverage report, a built Storybook, a Rust `target/`. Their
+ * pages are not the app, and their `<style>` blocks select on nothing it
+ * renders. Read below the walked folder, so a project that itself lives
+ * under a folder named `target` is not skipped whole.
+ *
+ * Asked of walk-found files only: a module a bundler transforms is the
+ * app's wherever it lives.
+ *
+ * @param file - Its path.
+ * @param base - The folder the walk started from.
+ * @returns True when a folder below the base is one of those.
+ */
+function inGeneratedOutput(file: string, base: string): boolean {
+    const below = path.relative(base, file).split(/[\\/]/).slice(0, -1);
+    return below.some(directory => GENERATED_REPORT_DIRS.has(directory));
+}
+
+/**
  * Core factory that creates the shared state and both pre/post plugins.
  * @param options configuration options
  * @returns pre and post plugins
@@ -3171,6 +3064,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Every stylesheet the project walk read, used to plan global-var aliases
     // before the first CSS module is transformed.
     let projectCssFiles: readonly string[] = [];
+    // The `.gitignore` files the walk that found them applied.
+    let projectGitignoreFiles: readonly string[] = [];
     /**
      * Stylesheets the prescan found imported from JavaScript, which the `.css`
      * walk cannot see when an app keeps no stylesheet of its own.
@@ -3318,6 +3213,120 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             console.warn(message);
         }
     }
+    /** The policy of the project last loaded, by root, so every hook shares one read. */
+    let diagnosticPolicyLoad: { root: string; policy: Promise<DiagnosticPolicy> } | undefined;
+    /**
+     * The policy every report of this instance reads, once its load settled.
+     * Each lane awaits the load in its first hook, before any transform.
+     */
+    let diagnosticPolicy: DiagnosticPolicy = createDiagnosticPolicy();
+    /** The config file a message tells the user to edit: theirs, or the one init would write. */
+    let diagnosticConfigName = 'csszyx.config';
+    /** What this instance listed, per file version, and the cap per id. */
+    const diagnosticLimiter = createDiagnosticLimiter();
+    /** Prints what the cap held back: at a build's end, or after a dev server's burst. */
+    const capFlush = createCapFlush(diagnosticLimiter);
+    /**
+     * The classes `sz` emitted, per project-relative file, as of each file's
+     * latest transform, each with where its key is written when the engine
+     * recorded it. A build asks the design system about them for the
+     * `dead-class` report, and names the first file that emits each one.
+     */
+    const szClassesByFile = new Map<string, ReadonlyMap<string, DeadClassSite>>();
+
+    /**
+     * Record what one transform of a file emitted, replacing its last answer.
+     *
+     * The engine places a class at its key only in a first pass, and only for
+     * an object a merge reads (two classes or more); any other class is named
+     * by its file alone.
+     *
+     * @param file - The file or bundler id.
+     * @param result - The transform, merged or not.
+     */
+    function recordSzClasses(file: string, result: SourceTransformResult): void {
+        const relative = projectRelative(file.split('?')[0] as string);
+        const first = objectRuleOutputs.get(result) ?? result;
+        szClassesByFile.set(relative, szClassSites(relative, result.classes, first.mergeGroups));
+    }
+
+    /**
+     * Each emitted class and every site, in path order, that emits it.
+     *
+     * @returns Class to sites.
+     */
+    function szClassOrigins(): Map<string, DeadClassSite[]> {
+        const origins = new Map<string, DeadClassSite[]>();
+        for (const file of sortStrings(szClassesByFile.keys())) {
+            // Every key read here was set with a map.
+            for (const [className, site] of szClassesByFile.get(file) as ReadonlyMap<
+                string,
+                DeadClassSite
+            >) {
+                const sites = origins.get(className);
+                if (sites === undefined) origins.set(className, [site]);
+                else sites.push(site);
+            }
+        }
+        return origins;
+    }
+
+    /**
+     * Print the `sz` classes the design system serves no CSS for, at the level
+     * the project's policy gives `dead-class`. Never fails the build.
+     *
+     * @param model - The opened style model.
+     */
+    function reportDeadClasses(model: ProjectStyleModel): void {
+        const findings = findDeadSzClasses(model, szClassOrigins());
+        const { lines, held } = reportDeadSzClasses(findings, {
+            policy: diagnosticPolicy,
+            quiet,
+            holdInfo: shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+            limiter: diagnosticLimiter,
+        });
+        for (const line of lines) console.warn(line);
+        state.suppressedAdvisories += held;
+        if (serving) capFlush.schedule();
+    }
+
+    /**
+     * Read the project's `csszyx.config` once per root, printing what is wrong
+     * with it.
+     *
+     * Called from the first hook on each lane that knows the root — Vite
+     * `configResolved`, webpack `beforeCompile`, the shared `buildStart` — so
+     * a misspelt id is reported before any build output, once. A problem is a
+     * config warning, muted by `quiet: true` like the others; the build never
+     * fails on it.
+     *
+     * @param root - The project root.
+     * @returns The policy; the defaults when the project has no config.
+     */
+    function loadProjectDiagnosticPolicy(root: string): Promise<DiagnosticPolicy> {
+        if (diagnosticPolicyLoad?.root !== root) {
+            const policy = loadDiagnosticPolicy(root).then(loaded => {
+                if (loaded.file !== null && loaded.problems.length > 0) {
+                    emitWarning(
+                        diagnosticConfigProblemsMessage(
+                            path.basename(loaded.file),
+                            loaded.problems,
+                        ),
+                    );
+                }
+                diagnosticPolicy = loaded.policy;
+                diagnosticConfigName =
+                    loaded.file === null
+                        ? csszyxConfigFileNameFor(root, {
+                              typescript: fs.existsSync(path.join(root, 'tsconfig.json')),
+                          })
+                        : path.basename(loaded.file);
+                return loaded.policy;
+            });
+            diagnosticPolicyLoad = { root, policy };
+        }
+        return diagnosticPolicyLoad.policy;
+    }
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
     // optional deps omitted, or a cross-platform frozen lockfile), fall back to
@@ -3454,7 +3463,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         '.mts',
         '.cts',
     ]);
-    const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
      * User exclude filters must run before any parser call. This is the escape
@@ -3638,6 +3646,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // planner needs to see each custom-property declaration in the project
         // before the first CSS module is rewritten.
         projectCssFiles = discovered.scanned;
+        projectGitignoreFiles = discovered.gitignoreFiles;
         // Recomputed from both sources every time rather than merged into the
         // previous value: a token deleted from a stylesheet must disappear, and
         // accumulating into `state.parsedTheme` would keep it registered.
@@ -3778,8 +3787,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         { model: ProjectStyleModel; merged: SourceTransformResult }
     >();
 
-    /** Results a second pass produced, which no path should merge again. */
-    const objectRuleOutputs = new WeakSet<SourceTransformResult>();
+    /**
+     * Results a second pass produced, which no path should merge again, and
+     * the first pass each came from: only a first pass records where each
+     * class's key is written.
+     */
+    const objectRuleOutputs = new WeakMap<SourceTransformResult, SourceTransformResult>();
 
     /**
      * Every class a first pass handed the object rule. The classes it removed
@@ -3793,35 +3806,57 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     const objectRuleClasses = new Set<string>();
     /**
-     * Classes the merge removed, per file, for the count a dev server prints.
+     * Classes the merge removed, per file, for what a build says about them.
      *
-     * Holds one number per file and is SET, not added to: it is right only
-     * because `withObjectRule` runs once per first-pass result of a whole file
-     * (the `objectRuleMerged` guard). A caller that merges one file in parts,
-     * or twice under different results, must sum here instead, or the count
-     * under-reports. A file that stops removing anything keeps its old count,
-     * which is harmless while the count prints only at start.
+     * SET per file, not added to: it is right only because `withObjectRule`
+     * runs once per first-pass result of a whole file (the `objectRuleMerged`
+     * guard). A caller that merges one file in parts, or twice under different
+     * results, must append here instead. A file that stops removing anything
+     * keeps its old findings, which is harmless while they print only at start.
      */
-    const mergeRemovals = new Map<string, number>();
+    const mergeRemovals = new Map<string, MergeAuditFinding[]>();
 
     /**
-     * Print, once at dev start, how many classes the merge removed.
+     * Say, once at start, what the merge removed, at the level the project's
+     * policy gives `merge-covered-key` and `merge-covered-class`.
      *
      * Nothing marks a removed class in the output, so an upgrade would change
-     * rendering with no sign of it. One line points at the audit that lists
-     * them; per-class lines would repeat on every intentional override.
+     * rendering with no sign of it. At `info` (the recommended preset) one
+     * line on a dev server points at the audit that lists them — per-class
+     * lines would repeat on every intentional override — and a production
+     * build says nothing. At `warn` or `error` (the atomic preset) each site is
+     * listed with its file, line and key, in every mode.
+     *
+     * @param production - Whether this start is a production build.
      */
-    function printMergeRemovals(): void {
-        let classes = 0;
-        for (const count of mergeRemovals.values()) classes += count;
-        if (classes === 0) return;
-        const files = mergeRemovals.size;
-        emitWarning(
-            `[csszyx] ${classes} class(es) in ${files} file(s) were removed: another class on the same element sets every property they set.\n` +
-                '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
-                '  note: set `build.mergeCoveredClasses: false` to keep them.',
-            { devOnly: true },
-        );
+    function reportMergeRemovals(production: boolean): void {
+        const held = new Map<MergeAuditKind, number>();
+        const files = new Set<string>();
+        for (const [file, findings] of mergeRemovals) {
+            for (const finding of findings) {
+                const level = diagnosticPolicy.levelOf({ rule: finding.kind, file });
+                const channel = channelOfLevel(level, quiet, production || quiet !== 'off');
+                if (channel === 'list' && level === 'info') {
+                    held.set(finding.kind, (held.get(finding.kind) ?? 0) + 1);
+                    files.add(file);
+                    continue;
+                }
+                if (channel !== 'list') continue;
+                const admitted = diagnosticLimiter.admit({
+                    id: finding.kind,
+                    file,
+                    line: finding.line,
+                    key: finding.className,
+                });
+                if (!admitted) continue;
+                console.warn(
+                    `[csszyx] ${file}:${finding.line}: ${mergeRemovalMessage(finding)} (${finding.kind})`,
+                );
+            }
+        }
+        if (serving) capFlush.schedule();
+        if (held.size === 0) return;
+        console.warn(mergeRemovalSummaryMessage(held, files.size, diagnosticConfigName));
     }
 
     /**
@@ -3886,11 +3921,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             groups.some(group => mergeRemovesFrom(group, signatureOf)) ||
             overrides.some(pair => overrideRemovesFrom(pair.base, pair.over, signatureOf))
         ) {
-            const removed = [
-                ...groups.flatMap(group => removedByMerge(group, signatureOf)),
-                ...overrides.flatMap(pair => removedByOverride(pair.base, pair.over, signatureOf)),
-            ];
-            mergeRemovals.set(effectiveFilename, removed.length);
+            mergeRemovals.set(
+                projectRelative(effectiveFilename),
+                mergeFindingsOf(first, projectRelative(effectiveFilename), signatureOf),
+            );
             const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
             merged = runConfiguredParser(source, effectiveFilename, {
                 ...compilerOptions,
@@ -3913,7 +3947,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (merged === first) mergeRemovedClasses.delete(effectiveFilename);
         objectRuleMerged.set(first, { model, merged });
-        if (merged !== first) objectRuleOutputs.add(merged);
+        if (merged !== first) objectRuleOutputs.set(merged, first);
         return merged;
     }
 
@@ -3988,27 +4022,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function readSourceHooks(file: string, text: string): void {
         if (file.includes('?') || options.build?.mergeCoveredClasses === false) return;
-        if (inGeneratedOutput(file)) return;
         const extension = path.extname(file).slice(1);
         if (sourceHooks.readText(normalizeSourceFilename(file), text, extension)) {
             followSourceHooks();
         }
     }
 
-    /**
-     * Whether a file sits in a directory the stylesheet walk skips as build
-     * output: a coverage report, a built Storybook, a Rust `target/`. Their
-     * pages are not the app, and their `<style>` blocks select on nothing it
-     * renders. Read below the root, so a project that itself lives under a
-     * directory named `build` is not skipped whole.
-     *
-     * @param file - Its path.
-     * @returns True when a directory below the root is one of those.
-     */
-    function inGeneratedOutput(file: string): boolean {
-        const below = path.relative(state.rootDir, file).split(/[\\/]/).slice(0, -1);
-        return below.some(directory => THEME_SCAN_IGNORE_DIRS.has(directory));
-    }
+    // Whether a file a watcher reported is one the project walk would read
+    // hooks from: outside generated output and not gitignored. Rebuilt with
+    // each walk, so an edit to a `.gitignore` counts from the next prescan.
+    let walkReadsHooksFrom: (file: string) => boolean = () => true;
 
     /**
      * What a build must say when it removed a class a rule it read later
@@ -4568,27 +4591,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function processPrescanTransform(
         filePath: string,
-        content: string | undefined,
+        content: string,
         result: SourceTransformResult,
         discoveredClasses: Set<string>,
         rawDiscoveredClasses: Set<string>,
     ): void {
-        const budgetExceeded = result.diagnostics.some(diagnostic =>
-            diagnostic.includes('AST budget exceeded'),
-        );
-        if (cacheEnabled && !budgetExceeded && content !== undefined) {
-            prescanResultHandoff.set(normalizeSourceFilename(filePath), {
-                inputSha256: createHash('sha256').update(content).digest('hex'),
-                result,
-            });
+        // Read by code: the engine's wording is not a contract.
+        const codes = new Set(result.issues?.map(issue => issue.code));
+        const budgetExceeded = codes.has('ast-budget');
+        const inputSha256 = createHash('sha256').update(content).digest('hex');
+        // The version the transform hook will see again, so a table settled
+        // between the prescan and that transform is not said twice.
+        diagnosticLimiter.version(projectRelative(filePath), inputSha256);
+        if (cacheEnabled && !budgetExceeded) {
+            prescanResultHandoff.set(normalizeSourceFilename(filePath), { inputSha256, result });
         }
         if (budgetExceeded) {
             warnPrescanBudgetSkip(filePath);
             return;
         }
-        const parseFailed = result.diagnostics.some(diagnostic =>
-            diagnostic.includes('[csszyx] parse error in '),
-        );
+        const parseFailed = codes.has('parse-error');
         if (result.classes.size === 0 && result.rawClassNames.size === 0 && parseFailed) {
             console.warn(
                 `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
@@ -4834,25 +4856,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * the root are already covered; `shouldProcessSource` relaxes the ignore for
      * these, since they are opted in.
      *
-     * @param visit - Called with each file and its extension.
+     * Dependencies and framework output only are skipped: a folder named
+     * `target` or `coverage` among the sources is still read, and so is a
+     * gitignored one, or the sz it holds loses its CSS. Whether the file may
+     * add merge hooks is passed along: not when `.gitignore` covers it or it
+     * sits in generated output.
+     *
+     * @param gitignore - `mark` to visit every file, `skip` to visit only
+     *        those that may add hooks.
+     * @param visit - Called with each file, its extension, and whether its
+     *        hooks are read.
      */
-    function walkProjectFiles(visit: (filePath: string, extension: string) => void): void {
+    function walkProjectFiles(
+        gitignore: GitignoreMode,
+        visit: (filePath: string, extension: string, readsHooks: boolean) => void,
+    ): void {
+        const queries: Array<[string, (file: string) => boolean]> = [];
         const scanDir = (dir: string): void => {
-            let entries: fs.Dirent[];
-            try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                        scanDir(path.join(dir, entry.name));
-                    }
-                    continue;
-                }
-                visit(path.join(dir, entry.name), path.extname(entry.name));
-            }
+            walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore }, file => {
+                visit(
+                    file.path,
+                    file.extension,
+                    !file.gitignored && !inGeneratedOutput(file.path, dir),
+                );
+            });
+            queries.push([dir, createGitignoreQuery(dir)]);
         };
         scanDir(state.rootDir);
         const normRoot = normalizeForMatch(state.rootDir);
@@ -4860,6 +4888,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) continue;
             scanDir(sourceDir);
         }
+        walkReadsHooksFrom = file => {
+            const resolved = path.resolve(file);
+            const owner = queries.find(([dir]) => {
+                const relative = path.relative(dir, resolved);
+                return (
+                    relative !== '' &&
+                    !relative.startsWith(`..${path.sep}`) &&
+                    relative !== '..' &&
+                    !path.isAbsolute(relative)
+                );
+            });
+            if (owner === undefined) return true;
+            const [dir, gitignored] = owner;
+            return !inGeneratedOutput(resolved, dir) && !gitignored(resolved);
+        };
     }
 
     /**
@@ -4886,7 +4929,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function readProjectSourceHooks(): void {
         if (options.build?.mergeCoveredClasses === false) return;
-        walkProjectFiles((filePath, extension) => {
+        walkProjectFiles('skip', (filePath, extension, readsHooks) => {
+            if (!readsHooks) return;
             if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
             else if (SOURCE_EXTENSIONS.has(extension) && shouldProcessSource(filePath)) {
                 try {
@@ -4951,8 +4995,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * Read one processable source into the prescan queue.
          *
          * @param filePath Source file path.
+         * @param readsHooks Whether its merge hooks are read too.
          */
-        function collectPrescanSource(filePath: string): void {
+        function collectPrescanSource(filePath: string, readsHooks: boolean): void {
             if (!shouldProcessSource(filePath)) {
                 recordPackagesSkipIfSz(filePath);
                 return;
@@ -4964,7 +5009,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return;
             }
             if (mayImportStylesheet(content)) cssImportingSources.push({ filePath, content });
-            readSourceHooks(filePath, content);
+            if (readsHooks) readSourceHooks(filePath, content);
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
@@ -5008,9 +5053,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         const walkStarted = performance.now();
-        walkProjectFiles((filePath, extension) => {
-            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath);
-            else if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+        // Every source is read for the safelist, gitignored or not: Tailwind
+        // cannot read an sz object. Only what git keeps adds merge hooks.
+        walkProjectFiles('mark', (filePath, extension, readsHooks) => {
+            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
+            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
         });
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
@@ -5041,7 +5088,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const { filePath, result } of firstPasses) {
             processPrescanTransform(
                 filePath,
-                prescanContentByPath.get(filePath),
+                // Every first pass came from one of these sources.
+                prescanContentByPath.get(filePath) as string,
                 merged.get(result) ?? result,
                 discoveredClasses,
                 rawDiscoveredClasses,
@@ -5099,6 +5147,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const cls of result.rawClassNames) {
             rawDiscoveredClasses.add(cls);
         }
+        recordSzClasses(filePath, result);
         for (const [token, data] of result.recoveryTokens) {
             state.recoveryTokens.set(token, data);
         }
@@ -5364,6 +5413,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 state.rootDir,
                 path.dirname(resolveTransformCacheDir(state.rootDir, options.build?.cacheDir)),
                 candidates,
+                { gitignoreFiles: projectGitignoreFiles },
             );
         } catch {
             // The file is for lanes with no bundler; a project where it cannot
@@ -5419,9 +5469,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the model lands in `styleModel`.
      */
     async function openStyleModelAtBuildStart(): Promise<void> {
+        await loadProjectDiagnosticPolicy(state.rootDir);
         if (styleModel === undefined) {
             refreshCompileSourceDirs();
-            projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
+            const discovered = discoverProjectTheme(state.rootDir, [...compileSourceDirs]);
+            projectCssFiles = discovered.scanned;
+            projectGitignoreFiles = discovered.gitignoreFiles;
             readProjectSourceHooks();
             await openStyleModel();
             return;
@@ -5505,6 +5558,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model.facts === null) return;
+        reportDeadClasses(model);
         // Tailwind's own scan as well as what the build saw: a map of variants
         // reaches `szcn` through a variable, and a package the plugin never
         // transforms still has its classes generated.
@@ -5901,6 +5955,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // overlap, but discovering either must still grow the safelist.
         recordAuthoredClasses(fileContent);
         trackGlobalVarSourceFile(file, fileContent);
+        recordSzClasses(file, result);
         for (const cls of result.classes) {
             addSafelistClass(cls);
             state.ownedClasses.add(cls);
@@ -6234,9 +6289,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): TModule[] | undefined | Promise<TModule[] | undefined> {
         const answer = handleHotFile(pass, ctx);
         if (!pass.isClientPass) return answer;
-        if (shouldProcessSource(ctx.file) || MARKUP_EXTENSIONS.has(path.extname(ctx.file))) {
+        if (
+            (shouldProcessSource(ctx.file) || MARKUP_EXTENSIONS.has(path.extname(ctx.file))) &&
+            walkReadsHooksFrom(ctx.file)
+        ) {
             // Before the module is transformed again: a hook it gained keeps a
-            // class in the modules already served.
+            // class in the modules already served. A file the walk would not
+            // read hooks from is read when the bundler transforms it.
             try {
                 readSourceHooks(ctx.file, fs.readFileSync(ctx.file, 'utf8'));
             } catch {
@@ -6460,52 +6519,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Surface compiler diagnostics through their production-safe channels.
+     * Surface compiler diagnostics at the level the project's policy gives
+     * each one.
      *
      * @param result Compiler transform result.
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
+     * @param source The module source, whose version decides what was already said.
      */
     function reportTransformDiagnostics(
         result: SourceTransformResult,
         id: string,
         warn: (message: string) => void,
+        source: string,
     ): void {
-        for (const message of result.diagnostics) {
-            if (message.includes('unresolvable sz spread')) {
-                state.spreadWarnings.add(`${id}\n  ${message}`);
-                continue;
-            }
-            if (message.includes('AST budget exceeded')) {
-                console.warn(`[csszyx] ${id}\n  ${message}`);
-                continue;
-            }
-            // missing-css means the classes never reached the safelist — the
-            // styles are simply absent, which is the failure class that must
-            // surface in production builds too (same tier as the spread
-            // warning above). Only `quiet: true` silences it; `'nudges'` exists
-            // precisely so a calmer log does not have to cost this report.
-            emitMissingCssFallback(quiet, message, id, console.warn);
-            // A dead key or value is the same tier and had no channel at all:
-            // it is not a fallback, so the line above skips it, and it is not
-            // advice, so the advisory list below skips it too.
-            emitKeyValueDiagnostic(quiet, message, id, console.warn);
-        }
-        const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
-        if (advisories.length === 0) return;
-        if (shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV)) {
-            // Held back, but counted. These are advisory by design — the
-            // runtime path works and the classes are collected — so a
-            // production build is right not to list them. It is not right to
-            // leave the reader believing the fallbacks it DID list are all of
-            // them, which is how a site that only ever falls back at an sz prop
-            // stays invisible to anyone reading the log.
-            state.suppressedAdvisories += advisories.length;
-            return;
-        }
-        for (const message of advisories) {
-            warn(`[csszyx] ${id}\n  ${message}`);
-        }
+        const [file] = id.split('?');
+        const relative = projectRelative(file);
+        // Every version, clean ones too: an undo back to a version that had
+        // findings must read as an edit, not as the version already said.
+        diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
+        if (result.diagnostics.length === 0) return;
+        const routed = routeTransformDiagnostics({
+            diagnostics: result.diagnostics,
+            issues: result.issues,
+            id,
+            file: relative,
+            quiet,
+            holdInfo: shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+            policy: diagnosticPolicy,
+            limiter: diagnosticLimiter,
+        });
+        for (const warning of routed.spread) state.spreadWarnings.add(warning);
+        for (const line of routed.immediate) console.warn(line);
+        // Held back, but counted. These are `info` by the policy — the runtime
+        // path works and the classes are collected — so a production build is
+        // right not to list them. It is not right to leave the reader
+        // believing the fallbacks it DID list are all of them, which is how a
+        // site that only ever falls back at an sz prop stays invisible to
+        // anyone reading the log.
+        state.suppressedAdvisories += routed.heldAdvisories;
+        for (const line of routed.advisories) warn(line);
+        if (serving) capFlush.schedule();
     }
 
     /**
@@ -6515,22 +6569,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Transform output carrying compiler helper usage and classes.
      */
     function compilerPreTransformOutput(result: SourceTransformResult): PreTransformOutput {
-        return {
-            code: result.code,
-            transformed: result.transformed,
-            usesRuntime: result.usesRuntime,
-            usesMerge: result.usesMerge,
-            usesSzcn: result.usesSzcn,
-            usesSzPart: result.usesSzPart,
-            usesSzvPick: result.usesSzvPick,
-            usesSzvPick1: result.usesSzvPick1,
-            szPartArgsProvable: result.szPartArgsProvable,
-            usesColorVar: result.usesColorVar,
-            usesSpacingVar: result.usesSpacingVar,
-            usesUnitVar: result.usesUnitVar,
-            usesBoolClass: result.usesBoolClass,
-            szClasses: result.classes,
-        };
+        return { ...scalarFieldsOf(result), szClasses: result.classes };
     }
 
     /**
@@ -6562,7 +6601,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
-        reportTransformDiagnostics(result, id, warn);
+        recordSzClasses(id, result);
+        reportTransformDiagnostics(result, id, warn, code);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
     }
@@ -7299,6 +7339,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    await loadProjectDiagnosticPolicy(root);
                     // Next.js maps `@/*` with a resolver plugin rather than an
                     // alias table, so webpack's own alias object is empty on the
                     // framework that needs this most; `collectSpecifierAliases`
@@ -7321,7 +7362,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ].filter(file => file.endsWith('.css'));
                     if (state.classes.size === 0) {
                         await prescanAndWriteClasses();
-                        if (compiler.options?.mode !== 'production') printMergeRemovals();
+                        reportMergeRemovals(compiler.options?.mode === 'production');
                     } else if (styleModel !== undefined && changedStylesheets.length > 0) {
                         // A rebuild skips the prescan, so a stylesheet edit is
                         // the one moment the prefix can have changed under it.
@@ -7400,6 +7441,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    await loadProjectDiagnosticPolicy(root);
                     // Vite has already normalized `resolve.alias` into its array
                     // form here, which is also the form this reads — taking it
                     // from the RESOLVED config means an alias another plugin
@@ -7430,7 +7472,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     runAutoThemeScan(root);
                     // Pre-scan source files so Tailwind can discover classes
                     await prescanAndWriteClasses();
-                    if (config.command === 'serve') printMergeRemovals();
+                    reportMergeRemovals(config.command !== 'serve');
                     skipRscRecords =
                         config.command === 'build' &&
                         !config.build?.watch &&
@@ -7753,6 +7795,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function reportBuildSummary(): void {
         reportMangleSize();
+        capFlush.now();
         // Blunt mode asked for silence and gets it; `'nudges'` asked for a
         // calmer log, and one line saying how much was left out is the opposite
         // of noise — it is what stops the calm log from reading as a clean one.

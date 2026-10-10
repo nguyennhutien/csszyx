@@ -88,13 +88,13 @@ const MERGE_NOTE =
  *          name sits beside an `sz`.
  */
 function mergesSomewhere(result: {
-    mergeGroups?: readonly (readonly string[])[];
+    mergeGroups?: ReadonlyArray<{ readonly classes: readonly string[] }>;
     mergeOverrides?: readonly unknown[];
     classes: ReadonlySet<string>;
 }): boolean {
     if (result.mergeGroups === undefined) return result.classes.size > 1;
     return (
-        result.mergeGroups.some(group => group.length > 1) ||
+        result.mergeGroups.some(group => group.classes.length > 1) ||
         (result.mergeOverrides?.length ?? 0) > 0
     );
 }

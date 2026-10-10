@@ -119,6 +119,7 @@ pnpm gen:reverse-map:check
 pnpm gen:migrate-tables:check
 pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
+pnpm gen:diagnostic-codes:check
 pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
 pnpm gen:longhand:check
@@ -197,6 +198,14 @@ pnpm check:emitted-classes
 echo "[verify-like-ci] Classify coverage (served utilities vs the box-role table)..."
 pnpm exec turbo run build --filter=@csszyx/compiler
 pnpm check:classify-coverage
+
+# Type-checking cost of the `szv()` row typing, as an instantiation count —
+# deterministic, so a budget rather than a timing. Reads the compiler's built
+# declarations, which the build just above wrote. CI runs it after "Type check"
+# in the Lint job, only when `detect-changes` reports `szv_types` or `lock_code`;
+# here it always runs.
+echo "[verify-like-ci] szv type-checking cost (tsc instantiations of a fixed fixture)..."
+pnpm check:szv-type-cost
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build

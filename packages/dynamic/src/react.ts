@@ -27,7 +27,8 @@
  * </CsszyxProvider>
  */
 
-import type { SzObject } from '@csszyx/compiler/browser';
+import type { SzProps } from '@csszyx/compiler';
+import type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
 import {
     createContext,
     createElement,
@@ -73,7 +74,7 @@ export interface UseSzReturn {
      * Converts sz props to a class string, injecting CSS for new classes.
      * Stable reference — safe to pass as a prop without useMemo.
      */
-    sz: (props: SzObject) => string;
+    sz: (props: SzObject | ReadonlySzObject | SzProps) => string;
 }
 
 /**
@@ -138,7 +139,10 @@ export function _resetUseSzLifecycle(): void {
  */
 export function useSz(): UseSzReturn {
     const { manifestUrl } = useContext(CsszyxContext);
-    const stableSz = useCallback((props: SzObject) => dynamic(props), []);
+    const stableSz = useCallback(
+        (props: SzObject | ReadonlySzObject | SzProps) => dynamic(props),
+        [],
+    );
 
     useEffect(() => {
         _mountedConsumers++;

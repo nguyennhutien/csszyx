@@ -348,13 +348,23 @@ fn parse_exact_prefix(prefix: &'static str, negative: bool) -> Option<ParsedClas
 /// A prefix followed by `-` and a value the prefix accepts.
 fn parse_valued_prefix(source: &str, prefix: &'static str, negative: bool) -> Option<ParsedClass> {
     let raw_value = source.strip_prefix(prefix)?.strip_prefix('-')?;
-    if raw_value.is_empty() || (negative && !tables::negative_allowed(prefix)) {
+    if raw_value.is_empty() || (negative && !negates(prefix, raw_value)) {
         return None;
     }
     if tables::spacing_props(prefix) && !is_valid_spacing_value(raw_value) {
         return None;
     }
     disambiguate_and_parse(prefix, raw_value, negative)
+}
+
+/// Whether a negative sign applies to `value` after `prefix`.
+///
+/// The keyword is read off the value's last segment, so a shorter prefix
+/// cannot take the axis in as part of its value: with `scale-x` refused,
+/// `-scale-x-none` would otherwise read as `scale` of `-x-none`.
+fn negates(prefix: &str, value: &str) -> bool {
+    let last = value.rsplit('-').next().unwrap_or(value);
+    tables::negative_allowed(prefix) && !tables::unsigned_keywords(last)
 }
 
 /// `[--name:value]`: an arbitrary custom property declaration.
@@ -622,6 +632,92 @@ mod tests {
         assert_eq!(width.prop, "ring");
         let colour = parse_class("ring-blue-500").expect("a ring colour migrates");
         assert_eq!(colour.prop, "ringColor");
+    }
+
+    /// One parsed class as `prop=value`, for a compact expectation.
+    fn prop_value(class: &str) -> String {
+        parse_class(class).map_or_else(
+            || "null".to_string(),
+            |parsed| {
+                let value = serde_json::to_string(&parsed.value).expect("a value serialises");
+                format!("{}={value}", parsed.prop)
+            },
+        )
+    }
+
+    #[test]
+    fn a_logical_size_fraction_keeps_its_fraction() {
+        // `block-1/2` is half the containing block. Read as an opacity
+        // modifier it became `blockSize: 1`, a quarter-rem, with no warning.
+        for (class, expected) in [
+            ("block-1/2", r#"blockSize="1/2""#),
+            ("inline-1/3", r#"inlineSize="1/3""#),
+            ("min-block-1/2", r#"minBlockSize="1/2""#),
+            ("max-block-2/3", r#"maxBlockSize="2/3""#),
+            ("min-inline-1/4", r#"minInlineSize="1/4""#),
+            ("max-inline-3/4", r#"maxInlineSize="3/4""#),
+            ("block-4", "blockSize=4"),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+    }
+
+    #[test]
+    fn a_negative_keyword_is_not_read_as_a_value() {
+        // Tailwind serves `scale-none` and `order-first` as fixed classes and
+        // no negative of them, so `-scale-none` styles nothing. Migrated, it
+        // became `scale: '-none'` and left the report saying every class was
+        // understood; unrecognized is the answer that keeps it visible.
+        for class in [
+            "-scale-none",
+            "-scale-3d",
+            "-scale-x-none",
+            "-outline-offset-none",
+            "-rotate-none",
+            "-translate-none",
+            "-order-first",
+            "-order-last",
+        ] {
+            assert_eq!(prop_value(class), "null", "{class}");
+        }
+        // A number, a fraction, an arbitrary value and a theme token keep
+        // their sign: Tailwind serves each of these.
+        for (class, expected) in [
+            ("-scale-50", "scale=-50"),
+            ("-outline-offset-2", "outlineOffset=-2"),
+            ("-m-px", r#"m="-px""#),
+            ("-translate-x-full", r#"translateX="-full""#),
+            ("-top-1/2", r#"top="-1/2""#),
+            ("-mt-[5px]", r#"mt="-5px""#),
+            ("-tracking-tight", r#"tracking="-tight""#),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+    }
+
+    #[test]
+    fn every_align_content_keyword_is_align_content() {
+        // `content-center-safe` is `align-content: safe center`; read as the
+        // `content` property it lowered to `content-[center-safe]`.
+        for keyword in [
+            "normal",
+            "center",
+            "center-safe",
+            "start",
+            "end",
+            "end-safe",
+            "between",
+            "around",
+            "evenly",
+            "baseline",
+            "stretch",
+        ] {
+            assert_eq!(
+                prop_value(&format!("content-{keyword}")),
+                format!(r#"alignContent="{keyword}""#),
+                "content-{keyword}"
+            );
+        }
     }
 
     /// One parsed mask class as JSON, for a compact expectation.

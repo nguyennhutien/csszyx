@@ -41,9 +41,17 @@ import path from 'node:path';
 import {
     VERSION as compilerVersion,
     type SourceTransformResult,
-    szFallbackConsequenceOf,
     transformSource,
 } from '@csszyx/compiler';
+
+import {
+    diagnosticPolicyFromState,
+    diagnosticPolicyStatePath,
+    findCsszyxConfigFile,
+    readDiagnosticPolicyState,
+} from './csszyx-config-file.js';
+import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
+import type { DiagnosticPolicy } from './diagnostic-policy.js';
 
 import {
     importMergeRegistration,
@@ -52,19 +60,22 @@ import {
     mergeTableFor,
     mergeTablePath,
 } from './merge-registration.js';
-import type { MergeOverride } from './merge-signature.js';
+import { type MergeOverride, mergeGroupsOf } from './merge-signature.js';
 import { injectNextRuntimeImports, type NextRuntimeImportUsage } from './next-runtime-injection.js';
 import {
     failedNextClassPrefixInputsStamp,
     resolveNextClassPrefix,
 } from './next-stylesheet-facts.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { restoreCachedSpans } from './transform-cache.js';
+import { type DiagnosticIssue, routeTransformDiagnostics } from './transform-diagnostics.js';
 
 /** The compiled output and what it needs, as both sources shape it. */
 interface CompiledFile extends NextRuntimeImportUsage {
     code?: unknown;
     transformed?: unknown;
     diagnostics?: unknown;
+    issues?: unknown;
     mergeGroups?: unknown;
     mergeOverrides?: unknown;
 }
@@ -229,10 +240,13 @@ class TransformCacheIndex {
      */
     find(filename: string, source: string, classPrefix: string | null): CompiledFile | null {
         const wanted = createHash('sha256').update(source).digest('hex');
-        const hit = this.pick(filename, wanted, classPrefix);
-        if (hit !== null) return hit;
-        this.refresh();
-        return this.pick(filename, wanted, classPrefix);
+        let hit = this.pick(filename, wanted, classPrefix);
+        if (hit === null) {
+            this.refresh();
+            hit = this.pick(filename, wanted, classPrefix);
+        }
+        // The entry keeps byte offsets; a replayed diagnostic needs its line.
+        return hit === null ? null : { ...hit, ...restoreCachedSpans(hit, source) };
     }
 
     /**
@@ -431,27 +445,152 @@ function readStylesheetsInChild(input: {
     return JSON.parse(result.stdout) as string | null;
 }
 
-/** Files carrying an `sz` prop; others are handed back untouched. */
-const DEFAULT_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'] as const;
+/**
+ * Marks the line the config loader prints its result on. A config that logs
+ * while it loads — a `console.log`, a dotenv banner — writes to the same
+ * stdout, so the result is the line after this mark, wherever it lands.
+ */
+const RESULT_MARK = '@@csszyx-jest-config-result@@';
 
 /**
- * Print the diagnostics that say a class is dead.
- *
- * A usage nudge — the runtime path taken where a compiled one was possible —
- * is the plugin's business; under jest the runtime path renders the same
- * classes. A dead key or value, or missing CSS, is the finding this lane
- * exists to surface, and it goes to the console the way the plugin's does.
- *
- * @param sourcePath - The file the diagnostics belong to.
- * @param diagnostics - The result's diagnostics, whatever their shape.
+ * Load `csszyx.config` in a child process and print its resolved policy,
+ * with the problems message every other lane prints, as JSON on its own
+ * marked line of stdout.
  */
-function reportDeadClasses(sourcePath: string, diagnostics: unknown): void {
-    if (!Array.isArray(diagnostics)) return;
-    for (const message of diagnostics) {
-        if (typeof message !== 'string' || szFallbackConsequenceOf(message) === 'nudge') continue;
-        console.warn(`[csszyx] ${sourcePath}\n  ${message}`);
+const LOAD_CONFIG = `
+const [, entry, root] = process.argv;
+const { diagnosticConfigProblemsMessage, loadDiagnosticPolicy } = await import(entry);
+const { basename } = await import('node:path');
+const { EOL } = await import('node:os');
+const loaded = await loadDiagnosticPolicy(root);
+process.stdout.write(EOL + ${JSON.stringify(RESULT_MARK)} + JSON.stringify({
+    state: loaded.policy.toJSON(),
+    problems: loaded.file !== null && loaded.problems.length > 0
+        ? diagnosticConfigProblemsMessage(basename(loaded.file), loaded.problems)
+        : null,
+}) + EOL);
+`;
+
+/** How long a worker waits for the config to load before keeping the defaults. */
+const CONFIG_LOAD_TIMEOUT_MS = 30_000;
+
+/** What the config loader may print before a worker stops reading it. */
+const CONFIG_LOAD_MAX_BUFFER = 16 * 1024 * 1024;
+
+/** What the config loader printed as its result. */
+interface LoadedConfig {
+    state: Parameters<typeof diagnosticPolicyFromState>[0];
+    problems: string | null;
+}
+
+/**
+ * Read the loader's result off its stdout.
+ *
+ * @param stdout - Everything the child printed.
+ * @returns The result, or null when no marked line parses.
+ */
+function loadedConfigOf(stdout: string): LoadedConfig | null {
+    const start = stdout.lastIndexOf(RESULT_MARK);
+    if (start === -1) return null;
+    const line = stdout.slice(start + RESULT_MARK.length).split('\n', 1)[0] as string;
+    try {
+        return JSON.parse(line) as LoadedConfig;
+    } catch {
+        return null;
     }
 }
+
+/**
+ * The line a worker prints when it keeps the defaults because the config's
+ * levels could not be read.
+ *
+ * @param configName - The config's file name.
+ * @param reason - Why, without a closing full stop.
+ * @returns The warning, `[csszyx]`-prefixed.
+ */
+function jestConfigNotReadMessage(configName: string, reason: string): string {
+    return (
+        `[csszyx] jest could not read the levels ${configName} sets: ${reason}.\n` +
+        '  note: this worker reports at the levels in .csszyx/diagnostic-policy.json, or the ' +
+        'recommended levels without that file.'
+    );
+}
+
+/** The policy each root resolved to in this worker. */
+const jestPolicies = new Map<string, DiagnosticPolicy>();
+
+/**
+ * The diagnostic policy of a project, read once per worker.
+ *
+ * What `csszyx next prebuild`/`watch` resolved into `.csszyx/` is read while
+ * it is at least as new as the config. Without it — a jest-only run — or when
+ * the config was edited since, the config itself is loaded: jest calls a
+ * transformer synchronously and `import()` is not, so the loader runs in a
+ * child process, as the stylesheets are read. Its problems are printed here,
+ * once per worker, in the text the bundler lanes print.
+ *
+ * @param root - The project root.
+ * @returns The policy.
+ */
+function jestDiagnosticPolicy(root: string): DiagnosticPolicy {
+    let policy = jestPolicies.get(root);
+    if (policy === undefined) {
+        policy = loadJestDiagnosticPolicy(root);
+        jestPolicies.set(root, policy);
+    }
+    return policy;
+}
+
+/**
+ * Read the state file, or load the config when the state is missing or older.
+ *
+ * @param root - The project root.
+ * @returns The policy; the defaults when the child process fails.
+ */
+function loadJestDiagnosticPolicy(root: string): DiagnosticPolicy {
+    const found = findCsszyxConfigFile(root);
+    const stateTime = fs.statSync(diagnosticPolicyStatePath(root), {
+        throwIfNoEntry: false,
+    })?.mtimeMs;
+    if (
+        found === null ||
+        (stateTime !== undefined && stateTime >= fs.statSync(found.file).mtimeMs)
+    ) {
+        return readDiagnosticPolicyState(root);
+    }
+    const entry = new URL('../dist/diagnostics.mjs', import.meta.url).href;
+    const configName = path.basename(found.file);
+    const timeout = Number(process.env.CSSZYX_JEST_CONFIG_TIMEOUT_MS) || CONFIG_LOAD_TIMEOUT_MS;
+    const result = spawnSync(
+        process.execPath,
+        ['--input-type=module', '-e', LOAD_CONFIG, entry, root],
+        { encoding: 'utf8', timeout, maxBuffer: CONFIG_LOAD_MAX_BUFFER },
+    );
+    if (result.stderr) console.warn(result.stderr);
+    if (result.error !== undefined) {
+        const timedOut = (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+        console.warn(
+            jestConfigNotReadMessage(
+                configName,
+                timedOut
+                    ? `it did not finish loading within ${timeout / 1000} s`
+                    : result.error.message,
+            ),
+        );
+        return readDiagnosticPolicyState(root);
+    }
+    if (result.status !== 0) return readDiagnosticPolicyState(root);
+    const loaded = loadedConfigOf(result.stdout);
+    if (loaded === null) {
+        console.warn(jestConfigNotReadMessage(configName, 'the config loader printed no result'));
+        return readDiagnosticPolicyState(root);
+    }
+    if (loaded.problems !== null) console.warn(loaded.problems);
+    return diagnosticPolicyFromState(loaded.state);
+}
+
+/** Files carrying an `sz` prop; others are handed back untouched. */
+const DEFAULT_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'] as const;
 
 /**
  * Finish compiled code the way the plugin does before handing it to a bundler.
@@ -520,7 +659,12 @@ function mergedWithSettledTable<T>(
     compile: (mergeTable: NonNullable<ReturnType<typeof mergeTableFor>>) => T,
     root: string,
 ): T | null {
-    const groups = Array.isArray(first.mergeGroups) ? (first.mergeGroups as string[][]) : [];
+    const groups = Array.isArray(first.mergeGroups)
+        ? mergeGroupsOf({
+              mergeGroups: first.mergeGroups as Array<{ classes: string[] }>,
+              classes: new Set(),
+          })
+        : [];
     const overrides = Array.isArray(first.mergeOverrides)
         ? (first.mergeOverrides as MergeOverride[])
         : [];
@@ -582,7 +726,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
     return {
         process(sourceText, sourcePath, jestOptions) {
             if (!compiles(sourcePath)) return { code: sourceText };
-            const { cached, classPrefix, root } = projectOf(jestOptions);
+            const { cached, classPrefix, root, report } = projectOf(jestOptions);
             const prefix = classPrefix();
             // jest in its default mode cannot load an ES module, and one that
             // runs native ESM imports the runtime's ES build, which a CommonJS
@@ -606,7 +750,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                           root,
                       );
             if (built !== null && typeof built.code === 'string') {
-                reportDeadClasses(sourcePath, built.diagnostics);
+                report(sourcePath, sourceText, built);
                 const merged = withTable(built);
                 return {
                     code: merges(
@@ -618,7 +762,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
             }
             const first = transformSource(sourceText, sourcePath, { classPrefix: prefix });
             const result = withTable(first) ?? first;
-            reportDeadClasses(sourcePath, result.diagnostics);
+            report(sourcePath, sourceText, result);
             return {
                 code: merges(result.transformed ? finish(result.code, result, prefix) : sourceText),
             };
@@ -679,6 +823,19 @@ interface JestProject {
      * @returns The prefix, or null for none.
      */
     classPrefix(): string | null;
+    /**
+     * Print a result's diagnostics at the level the project's policy gives
+     * them.
+     *
+     * @param sourcePath - The file the diagnostics belong to.
+     * @param sourceText - Its contents, whose version decides what was said.
+     * @param result - The result, from the engine or the build's cache.
+     */
+    report(
+        sourcePath: string,
+        sourceText: string,
+        result: Pick<CompiledFile, 'diagnostics' | 'issues'>,
+    ): void;
 }
 
 /**
@@ -731,11 +888,42 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
             throw settled;
         }
     };
+    const limiter = createDiagnosticLimiter();
+    const capFlush = createCapFlush(limiter);
     return {
         root,
         cached: (sourceText, sourcePath, prefix) =>
             index.find(normalizePathSeparators(sourcePath), sourceText, prefix),
         classPrefix,
+        report(sourcePath, sourceText, result) {
+            const { diagnostics, issues } = result;
+            const file = path.relative(root, sourcePath).split(path.sep).join('/');
+            // Every version, clean ones too: an undo back to a version that
+            // had findings must read as an edit, not as the version already said.
+            limiter.version(file, createHash('sha256').update(sourceText).digest('hex'));
+            if (!Array.isArray(diagnostics) || diagnostics.length === 0) return;
+            // A test run is no place for `info`: under jest the runtime path
+            // renders the same classes, so advice about how they got there is
+            // the bundler's business. `warn` and `error` are what this lane
+            // exists to surface.
+            const routed = routeTransformDiagnostics({
+                diagnostics: diagnostics.map(String),
+                issues: Array.isArray(issues) ? (issues as DiagnosticIssue[]) : undefined,
+                id: sourcePath,
+                file,
+                quiet: 'off',
+                holdInfo: true,
+                // Resolved here, not when the project opens: jest opens it to
+                // compute cache keys, and a fully cached run must not pay for
+                // loading the config. The key does not depend on the policy,
+                // which only decides what is printed, never the code.
+                policy: jestDiagnosticPolicy(root),
+                limiter,
+            });
+            for (const line of routed.immediate) console.warn(line);
+            for (const line of routed.spread) console.warn(`[csszyx] ${line}`);
+            capFlush.schedule();
+        },
     };
 }
 

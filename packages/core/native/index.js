@@ -20,6 +20,7 @@ const INSTALL_HELP =
 const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
 const LINKS_HELP =
     'update @csszyx/core and its platform package together, to a version that carries scanModuleLinks';
+const RESULT_HELP = 'update @csszyx/core and its platform package together, to the same version';
 
 /** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
 function missingText(what, packageName) {
@@ -106,9 +107,39 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     return binding;
 }
 
+/**
+ * A package's name with its version, read only to word an error.
+ *
+ * @param {string} name - The package.
+ * @param {string} manifest - Its `package.json`, as `require` resolves it.
+ * @returns {string} `name version`, or the name alone when the manifest cannot be read.
+ */
+function named(name, manifest) {
+    try {
+        return `${name} ${require(manifest).version}`;
+    } catch {
+        return name;
+    }
+}
+
 export function transformBatch(_files, options) {
     const binding = loadNativeBinding();
-    return binding.transformBatch(_files, options);
+    const results = binding.transformBatch(_files, options);
+    // A platform package older than this one still exports transformBatch, so
+    // the loader's export check passes; only the result tells. Without this the
+    // caller fails on the first missing field, with a TypeError that names
+    // neither package. One result is enough: every result has the same shape.
+    if (results.length > 0 && !Array.isArray(results[0].issues)) {
+        // Versions when the manifests can be read, which a fixture's cannot.
+        const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
+        const core = named('@csszyx/core', '../package.json');
+        throw new CsszyxNativeUnavailableError(
+            `csszyx native package ${native} is older than ${core} and returns a result it cannot read`,
+            cachedPackageName,
+            RESULT_HELP,
+        );
+    }
+    return results;
 }
 
 /**

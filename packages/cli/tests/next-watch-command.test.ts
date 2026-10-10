@@ -204,6 +204,58 @@ describe('csszyx next-watch command', () => {
         }
     }, 60_000);
 
+    it('writes the diagnostic policy the Turbopack loader reads when it starts', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ p: 4 }} />;');
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "export default { diagnostics: { preset: 'atomic' } };",
+        );
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch([]) },
+        );
+        try {
+            const state = JSON.parse(
+                readFileSync(join(root, '.csszyx/diagnostic-policy.json'), 'utf8'),
+            ) as { config: { preset: string } };
+            expect(state.config.preset).toBe('atomic');
+        } finally {
+            await session.close();
+        }
+    }, 60_000);
+
+    it('names a dead sz class and a config problem when it starts', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(
+            join(root, 'src/App.tsx'),
+            "export const App = () => <div sz={{ break: 'bogus', p: 4 }} />;",
+        );
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "export default { diagnostics: { rules: { 'dead-clas': 'off' } } };",
+        );
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch([]) },
+        );
+        try {
+            const said = warn.mock.calls.map(call => String(call[0]));
+            expect(said.join('\n')).toContain('did you mean `dead-class`?');
+            expect(said.filter(line => line.includes('`break-bogus` is emitted'))).toHaveLength(1);
+        } finally {
+            await session.close();
+            warn.mockRestore();
+        }
+    }, 60_000);
+
     it('rewrites the merge registration when a stylesheet drops a theme token', async () => {
         const root = realpathSync(tempRoot());
         linkTailwind(root);

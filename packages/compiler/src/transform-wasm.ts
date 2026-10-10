@@ -15,6 +15,7 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+import { locateEngineSpans } from './engine-spans.js';
 import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
@@ -29,9 +30,10 @@ interface WasmResultJson {
     code: string;
     classes: string[];
     raw_class_names: string[];
-    merge_groups: string[][];
-    merge_overrides?: Array<{ base: string[]; over: string[] }>;
+    merge_groups: Array<{ keys: string[]; key_starts: number[]; classes: string[] }>;
+    merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
     diagnostics: string[];
+    issues: Array<{ code: string; start: number }>;
     recovery_tokens: Array<{
         token: string;
         mode: 'csr' | 'dev-only';
@@ -191,7 +193,7 @@ export function transformWasmBatch(
     const results = JSON.parse(
         wasm.transform_batch_json(filesJson, optionsJson),
     ) as WasmResultJson[];
-    return results.map(fromWasmResult);
+    return results.map((result, index) => fromWasmResult(result, files[index].source));
 }
 
 /**
@@ -201,9 +203,19 @@ export function transformWasmBatch(
  * the wasm boundary is JSON, so the snake_case mapping lives here.
  *
  * @param result Raw wasm transform result.
+ * @param source The source the result was transformed from, to place its spans.
  * @returns Compiler transform result.
  */
-function fromWasmResult(result: WasmResultJson): SourceTransformResult {
+function fromWasmResult(result: WasmResultJson, source: string): SourceTransformResult {
+    const spans = locateEngineSpans(source, {
+        issues: result.issues,
+        mergeGroups: result.merge_groups.map(({ keys, key_starts, classes }) => ({
+            keys,
+            keyStarts: key_starts,
+            classes,
+        })),
+        mergeOverrides: result.merge_overrides,
+    });
     return {
         code: result.code,
         transformed: result.metadata.transformed,
@@ -220,9 +232,10 @@ function fromWasmResult(result: WasmResultJson): SourceTransformResult {
         usesBoolClass: result.metadata.uses_bool_class,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
-        mergeGroups: result.merge_groups,
-        mergeOverrides: result.merge_overrides,
+        mergeGroups: spans.mergeGroups,
+        mergeOverrides: spans.mergeOverrides,
         diagnostics: result.diagnostics,
+        issues: spans.issues,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [
                 token,

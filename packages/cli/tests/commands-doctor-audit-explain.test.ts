@@ -64,6 +64,54 @@ describe('doctor', () => {
         expect(output).toContain('Checksum injection working');
     });
 
+    it.each(['csszyx.config.mts', 'csszyx.config.mjs'])(
+        'finds a config written as %s, a name the loader reads',
+        async name => {
+            const { logs } = captureLogs();
+            const cwd = tempRoot();
+            writeFileSync(join(cwd, name), 'export default {};');
+            writeFileSync(join(cwd, 'package.json'), JSON.stringify({}));
+
+            await doctor({ cwd });
+
+            expect(logs.join('\n')).toContain('csszyx configuration found');
+        },
+    );
+
+    it('reports what is wrong in the config, an error as an issue and a warning as a note', async () => {
+        const { logs } = captureLogs();
+        const cwd = tempRoot();
+        writeFileSync(
+            join(cwd, 'csszyx.config.mjs'),
+            "export default { development: {}, diagnostics: { rules: { 'dead-clas': 'off' } } };",
+        );
+        writeFileSync(
+            join(cwd, 'package.json'),
+            JSON.stringify({ devDependencies: { tailwindcss: '^4', csszyx: '^0.18' } }),
+        );
+
+        await doctor({ cwd });
+        const output = logs.join('\n');
+
+        expect(output).toContain('csszyx configuration found: csszyx.config.mjs');
+        expect(output).toContain(
+            '\u2717 diagnostics.rules: `dead-clas` is not a rule id — did you mean `dead-class`?',
+        );
+        expect(output).toContain('\u26a0 development: `development` is not read from this file');
+        expect(output).toContain('Found 1 issue(s)');
+    });
+
+    it('names the file when the config does not load', async () => {
+        const { logs } = captureLogs();
+        const cwd = tempRoot();
+        writeFileSync(join(cwd, 'csszyx.config.mjs'), 'export default {;');
+        writeFileSync(join(cwd, 'package.json'), JSON.stringify({}));
+
+        await doctor({ cwd });
+
+        expect(logs.join('\n')).toContain('\u2717 csszyx.config.mjs could not be loaded:');
+    });
+
     it('counts the missing pieces on an empty project', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();

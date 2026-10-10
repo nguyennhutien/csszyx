@@ -4,6 +4,11 @@
 
 import path from 'node:path';
 
+import {
+    csszyxConfigFileNameFor,
+    findCsszyxConfigFile,
+    isLegacyInitTemplate,
+} from '@csszyx/unplugin/diagnostics';
 import { execa } from 'execa';
 import fs from 'fs-extra';
 import prompts from 'prompts';
@@ -307,11 +312,7 @@ async function createInitFiles(
 ): Promise<boolean> {
     const spin = spinner.start('Creating config files...');
     try {
-        const configPath = path.join(
-            cwd,
-            projectInfo.hasTypeScript ? 'csszyx.config.ts' : 'csszyx.config.js',
-        );
-        await fs.writeFile(configPath, generateConfigFile());
+        await writeCsszyxConfig(cwd, projectInfo.hasTypeScript);
         if (config.installTailwind) await setupTailwindCss(cwd);
         if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) {
             await setupNextPostcss(cwd, projectInfo, config.installTailwind);
@@ -327,6 +328,35 @@ async function createInitFiles(
         printError(String(error));
         return false;
     }
+}
+
+/**
+ * Write `csszyx.config`, unless the project already has one.
+ *
+ * The file `csszyx init` 0.17 wrote holds plugin options nothing read, and it
+ * would be read before a new file beside it, so it is replaced. Any other
+ * config is the project's own and is kept: a second file would not be read.
+ *
+ * @param cwd - Project directory.
+ * @param typescript - Whether the project uses TypeScript.
+ */
+async function writeCsszyxConfig(cwd: string, typescript: boolean): Promise<void> {
+    // `.mts`/`.mjs` outside a `"type": "module"` package, where Node would
+    // read `.ts`/`.js` as CommonJS and the `export default` below with it.
+    const name = csszyxConfigFileNameFor(cwd, { typescript });
+    const found = findCsszyxConfigFile(cwd);
+    if (found === null) {
+        await fs.writeFile(path.join(cwd, name), generateConfigFile());
+        return;
+    }
+    const existing = path.basename(found.file);
+    if (!isLegacyInitTemplate(await fs.readFile(found.file, 'utf8'))) {
+        printInfo(`Kept ${existing}; init writes a csszyx config only where there is none.`);
+        return;
+    }
+    await fs.remove(found.file);
+    await fs.writeFile(path.join(cwd, name), generateConfigFile());
+    printInfo(`Replaced ${existing}, the file csszyx init 0.17 wrote, with ${name}.`);
 }
 
 /**
@@ -681,24 +711,26 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
 }
 
 /**
- * Generate csszyx.config.ts content for a new project.
+ * Generate the `csszyx.config` content for a new project.
  *
- * It takes no answers any more. The one key the interactive flow used to write
- * here was `production.injectChecksum`, and nothing read it — so the questions
- * it was gathered from decided nothing about the file.
+ * Every plugin, `csszyx check` and the Next commands read this file, for its
+ * `diagnostics` section. It goes through `defineConfig`, whose argument is
+ * all optional: the file used to declare `const config: CsszyxConfig`, which
+ * requires every section, so a fresh project failed `tsc --strict` (TS2741).
+ * The same text loads as `.js`: there is no type annotation in it.
  *
  * @returns The config file content as a string.
  */
-function generateConfigFile(): string {
-    return `import type { CsszyxConfig } from 'csszyx';
+export function generateConfigFile(): string {
+    return `import { defineConfig } from 'csszyx';
 
-const config: CsszyxConfig = {
-  development: {
-    debug: true,
+export default defineConfig({
+  diagnostics: {
+    // 'recommended' fails \`csszyx check\` on mistakes only; 'atomic' also
+    // reports every site where csszyx changed what was written.
+    preset: 'recommended',
   },
-};
-
-export default config;
+});
 `;
 }
 

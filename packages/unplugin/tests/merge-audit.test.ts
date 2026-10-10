@@ -11,17 +11,17 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { auditMerges } from '../src/merge-audit.js';
+import { auditMerges, mergeFindingsOf, mergeRemovalSummaryMessage } from '../src/merge-audit.js';
 import { openStylesheetModel } from '../src/next-stylesheet-facts.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 afterEach(removeTailwindProjects);
 
 describe('the merge audit', () => {
-    it('lists what each file loses, and to which rule', async () => {
+    it('lists what each file loses, where, and to which rule', async () => {
         const files = {
             'src/A.tsx':
-                'export const A = () => <><div className="card pb-2" sz={{ p: 4 }} />' +
+                'export const A = () => <><div className="card pb-2" sz={{ p: 4 }} />\n' +
                 '<b sz={{ px: 2, p: 4 }} /></>;\n',
             'src/B.tsx': 'export const B = () => <div className="pb-2" sz={{ m: 2 }} />;\n',
         };
@@ -43,8 +43,37 @@ describe('the merge audit', () => {
             })),
         });
         expect(findings).toEqual([
-            { file: 'src/A.tsx', kind: 'merge-covered-key', classes: ['px-2'] },
-            { file: 'src/A.tsx', kind: 'merge-covered-class', classes: ['pb-2'] },
+            { file: 'src/A.tsx', line: 1, kind: 'merge-covered-class', className: 'pb-2' },
+            { file: 'src/A.tsx', line: 2, kind: 'merge-covered-key', className: 'px-2', key: 'px' },
+        ]);
+    }, 60_000);
+
+    it('places a removed key on its own line, and a nested one on its variant key', async () => {
+        const source =
+            'export const A = () => <><b sz={{ m: 1,\n' +
+            '    pb: 2,\n' +
+            '    p: 4 }} />\n' +
+            '<i sz={[{ m: 1,\n' +
+            '    hover: { pb: 2 } },\n' +
+            '    { hover: { p: 4 } }]} /></>;\n';
+        const root = tailwindProject('csszyx-merge-audit-lines-', {
+            'src/index.css': '@import "tailwindcss";\n',
+            'src/A.tsx': source,
+        });
+        const { model } = await openStylesheetModel({
+            root,
+            cacheDir: join(root, '.csszyx/cache'),
+        });
+        const files = [{ path: join(root, 'src/A.tsx'), relative: 'src/A.tsx', source }];
+        expect(auditMerges({ model, classPrefix: null, files })).toEqual([
+            { file: 'src/A.tsx', line: 2, kind: 'merge-covered-key', className: 'pb-2', key: 'pb' },
+            {
+                file: 'src/A.tsx',
+                line: 5,
+                kind: 'merge-covered-key',
+                className: 'hover:pb-2',
+                key: 'hover',
+            },
         ]);
     }, 60_000);
 
@@ -61,4 +90,23 @@ describe('the merge audit', () => {
         const files = [{ path: join(root, 'src/A.tsx'), relative: 'src/A.tsx', source }];
         expect(auditMerges({ model, classPrefix: null, files })).toEqual([]);
     }, 60_000);
+});
+
+describe('the findings of one first pass', () => {
+    it('reads a pass with no merge lists as nothing removed', () => {
+        expect(mergeFindingsOf({}, 'src/A.tsx', () => null)).toEqual([]);
+    });
+});
+
+describe('the summary line a dev server prints', () => {
+    it('names the config file the project has, not a fixed one', () => {
+        const line = mergeRemovalSummaryMessage(
+            new Map([['merge-covered-key', 2]]),
+            1,
+            'csszyx.config.mjs',
+        );
+
+        expect(line).toContain('`diagnostics.rules` of `csszyx.config.mjs`');
+        expect(line).not.toContain('csszyx.config.ts');
+    });
 });

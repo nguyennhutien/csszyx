@@ -88,8 +88,14 @@ describe('a static class name beside a static sz', () => {
         for (const [name, transform] of ENGINES) {
             const source = 'export const A = () => <div className="card pb-2" sz={{ p: 4 }} />;';
             const result = transform(source, 'a.tsx', {});
-            expect(result.mergeOverrides, name).toEqual([
-                { base: ['card', 'pb-2'], over: ['p-4'] },
+            // As plain data: the position is an accessor, which `toEqual` does not read.
+            expect(JSON.parse(JSON.stringify(result.mergeOverrides)), name).toEqual([
+                {
+                    line: 1,
+                    column: source.indexOf('className') + 1,
+                    base: ['card', 'pb-2'],
+                    over: ['p-4'],
+                },
             ]);
         }
     });

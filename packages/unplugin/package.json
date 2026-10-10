@@ -74,6 +74,16 @@
         "default": "./dist/next-config.cjs"
       }
     },
+    "./diagnostics": {
+      "import": {
+        "types": "./dist/diagnostics.d.mts",
+        "default": "./dist/diagnostics.mjs"
+      },
+      "require": {
+        "types": "./dist/diagnostics.d.cts",
+        "default": "./dist/diagnostics.cjs"
+      }
+    },
     "./next-turbo-loader": {
       "import": {
         "types": "./dist/next-turbo-loader.d.mts",
@@ -144,6 +154,7 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
+    "ignore": "7.0.6",
     "minimatch": "^10.2.6",
     "postcss": "^8.5.28",
     "postcss-selector-parser": "^7.1.6",

@@ -163,7 +163,6 @@ Pass options to customize behavior:
 csszyx({
   development: {
     debug: true, // Enable debug logging
-    strictMode: false, // Treat warnings as errors
   },
   build: {
     astBudgetLimit: 50_000, // Skip transform (warned) past this AST node count

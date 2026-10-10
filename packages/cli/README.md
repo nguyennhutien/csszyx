@@ -25,7 +25,8 @@ npx csszyx init
 
 ### `doctor`
 
-Diagnose configuration and mangling issues.
+Diagnose configuration and mangling issues. It loads `csszyx.config` the way
+`check` does and lists each problem in it.
 
 ```bash
 npx csszyx doctor
@@ -34,8 +35,10 @@ npx csszyx doctor
 ### `check`
 
 Scan the whole project for unknown or aliased `sz` keys, then ask your own
-Tailwind whether every class csszyx emitted actually produces CSS — CI-friendly
-(non-zero exit on findings).
+Tailwind whether every class csszyx emitted actually produces CSS. It exits 1
+on a finding at `error`, the level the
+[`csszyx.config`](https://csszyx.com/docs/reference/config/#csszyxconfig) of
+the project gives it, so it can gate CI.
 
 ```bash
 npx csszyx check
@@ -69,15 +72,18 @@ Accepted classes are counted in the summary, so the list cannot quietly grow
 into a place where findings go to be forgotten.
 
 This is the command to gate CI on: a production build only counts its advisory
-notes, while `check` lists every finding and fails the job. Pass a directory to
-scan part of the project, and leave out the notes about styles that are present:
+notes, while `check` lists every finding with its level. Notes such as
+`class-precedence` and `duplicate-sz` are `info` under the default preset: they
+are listed and do not fail the run. Set a level per id in `csszyx.config`, or
+fail on quieter findings for one run:
 
 ```bash
-npx csszyx check src --ignore-rule class-precedence --ignore-rule duplicate-sz
+npx csszyx check src --fail-on warn
 ```
 
-`--rule` and `--ignore-rule` take a rule or diagnostic kind, and `--json` writes
-one document for a later step to read.
+A config with an error in it fails the run as well. `--rule` and
+`--ignore-rule` choose which findings are reported, and `--json` writes one
+document for a later step to read.
 
 ### `explain`
 

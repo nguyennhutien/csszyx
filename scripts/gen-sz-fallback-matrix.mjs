@@ -28,6 +28,7 @@ import {
     SZ_FALLBACK_MATRIX,
     SZ_FALLBACK_PATH_PLACEHOLDER,
     SZ_FALLBACK_UNKNOWN_CALLEE,
+    SZ_SITE_MISSING_CSS_KINDS,
     szsUnsupportedDiagnostic,
 } from '../packages/compiler/src/sz-fallback-matrix.js';
 
@@ -220,6 +221,16 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
     match kind {
 ${suggestionArms}
     }
+}
+
+/// Whether an unread \`sz\` value of this kind also cost its classes — the
+/// split \`szFallbackConsequenceOf\` draws for the \`sz\` site. Such a fallback
+/// reports \`fallback-missing-css\`; the others \`fallback-nudge\`.
+///
+/// # Arguments
+/// * \`kind\` - Classified shape of the expression.
+pub(crate) const fn sz_site_fallback_misses_css(kind: SzFallbackKind) -> bool {
+    matches!(kind, ${[...SZ_SITE_MISSING_CSS_KINDS].map(kind => `SzFallbackKind::${variantName(kind)}`).join(' | ')})
 }
 
 /// Construct that produced a build-time-unresolvable diagnostic.

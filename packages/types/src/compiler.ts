@@ -66,11 +66,6 @@ export interface CompilerOptions {
     development?: boolean;
 
     /**
-     * Strict mode - fail build on warnings
-     */
-    strictMode?: boolean;
-
-    /**
      * Enable debug output
      */
     debug?: boolean;
