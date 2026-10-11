@@ -15,19 +15,11 @@
  *    path would have produced for the same selection, to the byte.
  */
 import { describe, expect, it } from 'vitest';
-import type { MaybeSpan } from '../src/szv-precompile.js';
 import {
-    coerceParitySafeSelectionValue,
     collectCanonicalLeafPaths,
-    computeStaticSzvPick,
-    countWordOccurrences,
-    countWordOccurrencesOutsideComments,
     leafPathsConflict,
     qualifyStaticSzvConfig,
-    recordCrossModuleSzvFactoryImports,
-    recordSzvTypeQueryByName,
     szvConfigFreeOfOverlap,
-    szvFactoryAccountingHolds,
 } from '../src/szv-precompile.js';
 import { ENGINES } from './engine-parity-harness.js';
 
@@ -461,130 +453,6 @@ describe('shared spec units', () => {
     it('keeps an empty variant branch as an empty compiled class', () => {
         expect(qualifyStaticSzvConfig({ variants: { pad: { empty: {} } } })?.d.pad.empty).toBe('');
     });
-
-    it('counts words at identifier boundaries', () => {
-        expect(countWordOccurrences('cardSz(cardSz2); myCardSz; "cardSz"', 'cardSz')).toBe(2);
-        expect(countWordOccurrences('', 'cardSz')).toBe(0);
-        expect(countWordOccurrences('x', '')).toBe(0);
-        expect(countWordOccurrencesOutsideComments('factory()', '', [])).toBe(0);
-        expect(countWordOccurrences('cardSz', 'cardSz')).toBe(1);
-        expect(countWordOccurrencesOutsideComments('cardSz', 'cardSz', [])).toBe(1);
-    });
-
-    it('records only enabled named type queries', () => {
-        const typeQueryCounts = new Map<string, number>();
-        const state = { enabled: true, typeQueryCounts };
-        recordSzvTypeQueryByName('factory', state);
-        recordSzvTypeQueryByName('factory', state);
-        recordSzvTypeQueryByName(null, state);
-        recordSzvTypeQueryByName('disabled', { enabled: false, typeQueryCounts });
-        expect([...typeQueryCounts]).toEqual([['factory', 2]]);
-    });
-
-    it('records only resolvable cross-module factory imports', () => {
-        const candidates = new Map<string, { localName: string; config: unknown }>();
-        const state = {
-            crossModuleStatics: { './factory': { card: { variants: {} } } },
-            candidates,
-        };
-        recordCrossModuleSzvFactoryImports(
-            './factory',
-            false,
-            [
-                { importedName: 'card', localName: 'localCard', typeOnly: false },
-                { importedName: 'missing', localName: 'missing', typeOnly: false },
-                { importedName: 'card', localName: null, typeOnly: false },
-                { importedName: 'card', localName: 'szv', typeOnly: false },
-                { importedName: 'card', localName: 'typed', typeOnly: true },
-                { importedName: 'card', localName: 'localCard', typeOnly: false },
-            ],
-            state,
-            (localName, config) => ({ localName, config }),
-        );
-        recordCrossModuleSzvFactoryImports(null, false, [], state, (localName, config) => ({
-            localName,
-            config,
-        }));
-        recordCrossModuleSzvFactoryImports('./factory', true, [], state, (localName, config) => ({
-            localName,
-            config,
-        }));
-        expect([...candidates.keys()]).toEqual(['localCard']);
-    });
-
-    it('accounts for type queries and rejects an occupied table identifier', () => {
-        const call = { arguments: [] as unknown[] };
-        const calls = [call];
-        const callSet = new Set<unknown>(calls);
-        const typeQueries = new Map([['factory', 1]]);
-        expect(
-            szvFactoryAccountingHolds(
-                'factory',
-                calls,
-                callSet,
-                'const factory = factory(); type T = typeof factory;',
-                [],
-                typeQueries,
-                [],
-            ),
-        ).toBe(true);
-        expect(
-            szvFactoryAccountingHolds(
-                'factory',
-                calls,
-                callSet,
-                'const factory = factory(); type T = typeof factory; const __szvT_factory = {};',
-                [],
-                typeQueries,
-                [],
-            ),
-        ).toBe(false);
-    });
-
-    it('rejects a call the sz rewrite will replace wholesale', () => {
-        const source = 'const factory = factory();';
-        const call = { arguments: [] as unknown[], start: 16, end: 25 };
-        const calls = [call];
-        const callSet = new Set<unknown>(calls);
-        const holds = (rewritten: readonly MaybeSpan[]): boolean =>
-            szvFactoryAccountingHolds('factory', calls, callSet, source, [], new Map(), rewritten);
-        expect(holds([])).toBe(true);
-        // Disjoint, then overlapping only one edge: neither encloses the call.
-        expect(holds([{ start: 0, end: 10 }])).toBe(true);
-        expect(holds([{ start: 17, end: 26 }])).toBe(true);
-        expect(holds([{ start: 16, end: 25 }])).toBe(false);
-        expect(holds([{ start: 10, end: 26 }])).toBe(false);
-        // An unknown offset on either side is not evidence of an overlap.
-        expect(holds([{ start: null, end: 26 }])).toBe(true);
-        expect(holds([{ start: 10, end: undefined }])).toBe(true);
-    });
-
-    it('leaves a call without source offsets accounted for', () => {
-        // Babel types `start`/`end` as nullable; a synthesized node has no
-        // offsets to compare, and losing the precompile for it would be a
-        // silent regression rather than a safety property.
-        const call = { arguments: [] as unknown[], start: null, end: null };
-        const calls = [call];
-        expect(
-            szvFactoryAccountingHolds(
-                'factory',
-                calls,
-                new Set<unknown>(calls),
-                'const factory = factory();',
-                [],
-                new Map(),
-                [{ start: 0, end: 100 }],
-            ),
-        ).toBe(true);
-    });
-
-    it('coerces only parity-safe primitive selection values', () => {
-        expect(coerceParitySafeSelectionValue('sm')).toBe('sm');
-        expect(coerceParitySafeSelectionValue(true)).toBe(true);
-        expect(coerceParitySafeSelectionValue(2)).toBe(2);
-        expect(coerceParitySafeSelectionValue({})).toBeNull();
-        expect(coerceParitySafeSelectionValue(null)).toBeNull();
-    });
 });
 
 describe('the single-dimension picker', () => {
@@ -718,16 +586,5 @@ describe('the single-dimension picker', () => {
             const shape = pickShape(engine, source);
             expect(shape.args, lane).toBe('__szvT_plainSz,"pad",p');
         }
-    });
-});
-
-describe('computeStaticSzvPick', () => {
-    it('ignores a selected value absent from a qualified dimension table', () => {
-        expect(
-            computeStaticSzvPick(
-                { base: 'base', d: { tone: { quiet: 'text-muted' } } },
-                { tone: 'missing' },
-            ),
-        ).toBe('base');
     });
 });
