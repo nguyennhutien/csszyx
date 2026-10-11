@@ -5,7 +5,6 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-    ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
@@ -4586,10 +4585,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Historical prescan behavior keeps the build alive, but the skip
                 // itself must be visible: every class in this file is silently
                 // dead under Tailwind `source(none)`.
-                if (err instanceof ASTBudgetExceededError) {
-                    warnPrescanBudgetSkip(file.filePath);
-                    continue;
-                }
                 console.warn(
                     `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
                         `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,

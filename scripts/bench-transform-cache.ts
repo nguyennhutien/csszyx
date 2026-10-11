@@ -133,7 +133,7 @@ function tryPreloadRustBinding(): boolean {
         return false;
     }
     // Final smoke: `transformRust` must reach the binding through the public
-    // entry without throwing `OxcRustNotImplementedError`.
+    // entry without throwing `RustTransformUnavailableError`.
     try {
         transformRust('const X = () => <div sz={{ p: 4 }} />;', '/bench/preload.tsx');
         return true;
@@ -680,7 +680,7 @@ function assertRustUnavailableThrows(source: string, filename: string): void {
     try {
         transformRust(source, filename);
     } catch (err) {
-        if (err instanceof Error && err.name === 'OxcRustNotImplementedError') {
+        if (err instanceof Error && err.name === 'RustTransformUnavailableError') {
             return;
         }
         throw err;

@@ -11,7 +11,7 @@
 import { version as packageVersion } from '../package.json';
 
 // Export transform functionality
-export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
+export { AST_BUDGET } from './ast-budget.js';
 export { CsszyxCompiler } from './compiler.js';
 export {
     type CrossModuleExportKind,
@@ -116,7 +116,7 @@ export {
 export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
-    OxcRustNotImplementedError,
+    RustTransformUnavailableError,
     scanModuleLinksRust,
     type TransformRustFile,
     transformRust,

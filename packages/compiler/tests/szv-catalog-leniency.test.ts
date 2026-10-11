@@ -23,7 +23,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    OxcRustNotImplementedError,
+    RustTransformUnavailableError,
     transformRust,
     transformSource,
     transformWasm,
@@ -48,7 +48,7 @@ function expectCatalogParity(source: string, expected: string[]): void {
         expect(rust, 'rust classes').toEqual(wanted);
     } catch (err) {
         // Native binary absent on this host — the JS parity above still holds.
-        expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+        expect(err).toBeInstanceOf(RustTransformUnavailableError);
     }
 }
 
@@ -261,7 +261,7 @@ const P = P;`,
             expect(rust).toContain('text-blue-500');
             expect([...rust].sort()).toEqual([...oxc].sort());
         } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+            expect(err).toBeInstanceOf(RustTransformUnavailableError);
         }
     });
 });

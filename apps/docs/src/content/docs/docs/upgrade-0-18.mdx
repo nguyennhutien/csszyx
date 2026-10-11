@@ -59,6 +59,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
+| [`@csszyx/compiler` errors](#csszyxcompiler-renames-one-error-and-drops-another) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
@@ -518,6 +519,29 @@ The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
 
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it.
+
+## @csszyx/compiler renames one error and drops another
+
+The error `transformRust` throws when the native engine cannot load is now
+`RustTransformUnavailableError`, the counterpart of `WasmTransformUnavailableError`.
+It was `OxcRustNotImplementedError`, a name left from an engine that no longer
+exists. `ASTBudgetExceededError` is gone: nothing threw it. A file over the AST
+budget is left as written and reported as an `ast-budget` issue on the result.
+
+```ts
+// before
+import { OxcRustNotImplementedError, ASTBudgetExceededError } from "@csszyx/compiler";
+if (err instanceof OxcRustNotImplementedError) { /* … */ }
+
+// after
+import { RustTransformUnavailableError } from "@csszyx/compiler";
+if (err instanceof RustTransformUnavailableError) { /* … */ }
+const overBudget = result.issues?.some(issue => issue.code === "ast-budget");
+```
+
+**What you see.** `tsc` reports that the module has no such exported member, and an
+ES module import fails when the bundler or Node loads it. Code that compared
+`err.name` with `"OxcRustNotImplementedError"` no longer matches.
 
 ## require of the Vue and Svelte adapters returns the exports
 

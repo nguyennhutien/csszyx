@@ -8,7 +8,7 @@
  *
  * When the Rust native binding is not available (`@csszyx/core/native`
  * cannot load a platform addon), `transformRust` throws
- * `OxcRustNotImplementedError`. The harness records that as
+ * `RustTransformUnavailableError`. The harness records that as
  * `rustIsUnavailable`; fixtures expected to be `pending` still pass.
  * Non-pending fixtures fail with a descriptive error so CI surfaces a
  * missing-build situation instead of silently green-lighting.
@@ -16,7 +16,7 @@
 
 import {
     type CssVariableMangleValue,
-    OxcRustNotImplementedError,
+    RustTransformUnavailableError,
     type SourceTransformResult,
     type TransformSourceCodeOptions,
     transformRust,
@@ -66,7 +66,7 @@ export interface RustParityFixture {
     options?: TransformSourceCodeOptions;
     /**
      * Expected current parity state:
-     * - `pending`: Rust throws `OxcRustNotImplementedError` (native unavailable
+     * - `pending`: Rust throws `RustTransformUnavailableError` (native unavailable
      *   OR fixture exercises a path the Rust engine has not yet ported).
      * - `classes-only-parity`: Rust produces the same class set, code may
      *   differ. Reserved for paths where Rust intentionally leaves source
@@ -113,7 +113,7 @@ export function compareRustVsOxc(
         rust = transformRust(source, filename, options);
     } catch (err) {
         rustError = err instanceof Error ? err.message : String(err);
-        rustIsUnavailable = err instanceof OxcRustNotImplementedError;
+        rustIsUnavailable = err instanceof RustTransformUnavailableError;
     }
 
     if (!rust) {

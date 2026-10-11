@@ -1321,7 +1321,6 @@ lanes it described.
 
 | Message | Kind |
 | --- | --- |
-| **Thrown.** ``[csszyx] AST budget exceeded: {filename} has more than {budget} nodes (traversal aborted at {n}). Files this large are almost always machine-generated and should be excluded from sz transformation. Either exclude the file from the plugin (Vite: `csszyx({ exclude: [/large-data\.ts$/] })`), or raise the limit globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.`` | Caught and printed by the plugin in every mode |
 | **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
 | `[csszyx] {filename}: source nesting exceeded {max} levels (found {n}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)` | Native engine |
 | ``[csszyx] AST budget exceeded in {filename}: the IR walk stopped mid-file, so the file was left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` or split the file.`` | Native engine |

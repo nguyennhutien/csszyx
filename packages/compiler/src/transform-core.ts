@@ -4861,12 +4861,12 @@ export function normalizeClassName(className: string): string {
 }
 
 /**
- * Options for {@link transformSourceCode}.
+ * Options for `transformSource`.
  */
 export interface TransformSourceCodeOptions {
     /**
-     * Override the AST node budget. Files larger than this throw
-     * {@link ASTBudgetExceededError}. Defaults to {@link AST_BUDGET} (50 000).
+     * Override the AST node budget. A file larger than this is left as written
+     * and reported as an `ast-budget` issue. Defaults to {@link AST_BUDGET} (50 000).
      * Useful for repos with legitimately large generated files (json-as-ts
      * fixtures, GraphQL schema snapshots) that exceed the default cap but
      * are still safe to transform.
