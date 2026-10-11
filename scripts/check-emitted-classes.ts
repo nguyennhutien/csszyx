@@ -123,7 +123,7 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
 /** One corpus record: an sz input and the class string every engine emits. */
 interface CorpusRecord {
     sz: string;
-    oxc?: string;
+    runtime?: string;
 }
 
 /**
@@ -135,7 +135,7 @@ interface CorpusRecord {
 function collectTokens(records: readonly CorpusRecord[]): Map<string, string> {
     const origins = new Map<string, string>();
     for (const record of records) {
-        for (const token of (record.oxc ?? '').split(/\s+/)) {
+        for (const token of (record.runtime ?? '').split(/\s+/)) {
             if (token && !origins.has(token)) {
                 origins.set(token, record.sz);
             }
