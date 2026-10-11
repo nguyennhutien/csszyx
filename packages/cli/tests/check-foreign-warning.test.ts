@@ -1,11 +1,10 @@
 /**
- * The scan redirects `console.warn` for the whole process, not just for itself.
+ * A warning something else prints while the scan runs is not a finding.
  *
- * It has to: the compiler reports unknown and aliased `sz` keys by warning, and
- * there is no other channel to read them from. But anything else running while
- * that redirect is in place warns into the same function — a dependency, a
- * framework, Node itself — and a captured line is reported to the user as a
- * diagnostic in whichever file happened to be under the cursor at the time.
+ * The scan reads findings from the engine's result, not from `console.warn`.
+ * It once redirected `console.warn` for the whole process to collect them, and
+ * then reported a dependency's or Node's own warning as a diagnostic in
+ * whichever file was being scanned. This pins that it does not again.
  *
  * Lives in its own file because the case is built by mocking the compiler, and
  * `vi.mock` applies to a whole module graph.
@@ -23,9 +22,9 @@ vi.mock('@csszyx/compiler', async importOriginal => {
     const actual = await importOriginal<typeof import('@csszyx/compiler')>();
     return {
         ...actual,
-        transformSourceCode: (...args: Parameters<typeof actual.transformSourceCode>) => {
+        transformSource: (...args: Parameters<typeof actual.transformSource>) => {
             console.warn(FOREIGN);
-            return actual.transformSourceCode(...args);
+            return actual.transformSource(...args);
         },
     };
 });
@@ -43,6 +42,7 @@ afterEach(() => {
 describe('csszyx check — warnings that are not ours', () => {
     it('reports the compiler diagnostic and drops the unrelated warning', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const dir = mkdtempSync(join(tmpdir(), 'csszyx-cli-foreign-'));
         dirs.push(dir);
         mkdirSync(join(dir, 'src'), { recursive: true });
@@ -56,5 +56,7 @@ describe('csszyx check — warnings that are not ours', () => {
         const printed = log.mock.calls.map(call => call.join(' ')).join('\n');
         expect(printed).toContain('pading');
         expect(printed).not.toContain('something else entirely');
+        // The mocked compiler ran: the foreign line was printed, just not as a finding.
+        expect(warn.mock.calls.flat()).toContain(FOREIGN);
     });
 });
