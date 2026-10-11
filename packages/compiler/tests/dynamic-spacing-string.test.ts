@@ -2,21 +2,22 @@
  * Field-report regression: a runtime expression on a spacing-scale key used to
  * bake `calc(v * var(--spacing))` into the emitted style, silently producing
  * invalid CSS for every string the sz type system accepts on those keys
- * ('full', '100%', '3/12', 'max-content'). Both TS engines must now route the
- * value through __szSpacingVar/__szUnitVar, flag the helper import, and keep
- * engine parity — including the array-element _szPart diagnostic and the
+ * ('full', '100%', '3/12', 'max-content'). Both engine artifacts must now route
+ * the value through __szSpacingVar/__szUnitVar, flag the helper import, and keep
+ * artifact parity — including the array-element _szPart diagnostic and the
  * best-effort safelist of partially-static array elements.
  */
 import { describe, expect, it } from 'vitest';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import type { SourceTransformResult } from '../src/index.js';
 
-const ENGINES = [
-    ['auto', (jsx: string) => transformSource(jsx, 'probe.tsx', {})],
-    ['wasm', (jsx: string) => transformWasm(jsx, 'probe.tsx', {})],
-] as const;
+import { ENGINES } from './engine-parity-harness.js';
 
-describe.each(ENGINES)('dynamic spacing/unit lowering (%s)', (_name, run) => {
+const RUNNERS = ENGINES.map(
+    ([name, transform]) =>
+        [name, (jsx: string) => transform(jsx, 'probe.tsx', {}) as SourceTransformResult] as const,
+);
+
+describe.each(RUNNERS)('dynamic spacing/unit lowering (%s)', (_name, run) => {
     it('routes a dynamic spacing value through __szSpacingVar with its key', () => {
         const jsx = 'export const A = ({ width }) => <div sz={{ w: width, h: "max" }} />;';
         const result = run(jsx);
@@ -78,10 +79,14 @@ describe('engine parity for the report scenarios', () => {
             'export const A = ({ on, other }) => ' +
                 '<div sz={[{ py: 2, border: true, opacity: on ? 50 : 100 }, other]} />;',
         ],
-    ])('babel and oxc agree on classes and diagnostics: %s', jsx => {
-        const babel = transformSource(jsx, 'probe.tsx', {});
-        const oxc = transformWasm(jsx, 'probe.tsx', {});
-        expect([...babel.classes].sort()).toEqual([...oxc.classes].sort());
-        expect(babel.diagnostics).toEqual(oxc.diagnostics);
+    ])('every artifact agrees on code, classes and diagnostics: %s', jsx => {
+        const [[, reference], ...others] = RUNNERS;
+        const expected = reference(jsx);
+        for (const [name, run] of others) {
+            const actual = run(jsx);
+            expect(actual.code, `${name} code`).toBe(expected.code);
+            expect([...actual.classes], `${name} classes`).toEqual([...expected.classes]);
+            expect(actual.diagnostics, `${name} diagnostics`).toEqual(expected.diagnostics);
+        }
     });
 });

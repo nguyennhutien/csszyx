@@ -90,7 +90,7 @@ describe('Next source transformer', () => {
         expect(result.result.code).toBe('const value = "p-4";');
     });
 
-    it('caches supported oxc output without falling back to Babel', () => {
+    it('caches the wasm artifact output on write and hits it on rerun', () => {
         const root = tempRoot();
         const cacheRoot = resolveTransformCacheDir(root);
         const first = transformNextSource(

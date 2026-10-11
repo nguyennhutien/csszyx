@@ -97,8 +97,8 @@ describe('AST budget guard', () => {
     });
 
     it('returns invalid syntax unchanged when source has no sz token', () => {
-        // Parser independence contract: csszyx must not invoke Babel/OXC for
-        // files that cannot contain csszyx syntax. Generated files can be huge
+        // Parser independence contract: csszyx must not parse files that
+        // cannot contain csszyx syntax. Generated files can be huge
         // or syntactically invalid for the TSX parser, but they are outside
         // csszyx's transform surface when they have no `sz` marker.
         const source = 'const broken = ;';

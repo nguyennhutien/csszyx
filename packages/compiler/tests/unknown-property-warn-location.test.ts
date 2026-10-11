@@ -9,7 +9,7 @@ import {
     setSzWarnLocation,
     transform,
 } from '../src/transform-core.js';
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 // Runtime reports print once per message per process; each test asks afresh.
 beforeEach(() => {
@@ -105,17 +105,16 @@ describe('unknown-property warning — source location', () => {
         '%s emits its class without an unknown-property warning',
         key => {
             const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
-            expect(
-                transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
-            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-            expect(
-                transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
-            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-            const all = [
-                ...transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
-                ...transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
-            ];
-            expect(all.some(m => m.includes('Unknown property'))).toBe(false);
+            for (const [name, transform] of ENGINES) {
+                const result = transform(source, '/proj/src/Text.tsx', { rootDir: '/proj' });
+                expect(result.code, name).toContain(
+                    key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+                );
+                expect(
+                    (result.diagnostics ?? []).some(m => m.includes('Unknown property')),
+                    name,
+                ).toBe(false);
+            }
         },
     );
 });
@@ -421,9 +420,11 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const src =
             'import { szv } from "@csszyx/runtime";\n' +
             'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });';
-        const native = transformSource(src, '/proj/src/F.tsx', { rootDir: '/proj' });
         const wasm = transformWasm(src, '/proj/src/F.tsx', { rootDir: '/proj' });
-        expect(wasm.diagnostics).toEqual(native.diagnostics);
+        for (const [name, transform] of ENGINES) {
+            const result = transform(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+            expect(result.diagnostics, name).toEqual(wasm.diagnostics);
+        }
     });
 });
 

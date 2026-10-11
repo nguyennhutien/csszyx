@@ -1,10 +1,10 @@
 /**
  * The sz runtime-fallback matrix, and the parity it exists to guarantee.
  *
- * A build can switch engines with `build.parser`. If the wording differs
- * between them, the same source produces different build logs depending on a
- * setting that is supposed to be a pure implementation detail — so these tests
- * pin both the rendering rules and the fact that the two TypeScript lanes agree
+ * The engine ships as two artifacts, native and wasm, and a host runs whichever
+ * loads. If the wording differs between them, the same source produces
+ * different build logs depending on a detail the user never chose — so these
+ * tests pin both the rendering rules and the fact that the two artifacts agree
  * character for character.
  */
 import { describe, expect, it } from 'vitest';
@@ -20,10 +20,8 @@ import {
     szFallbackConsequenceOf,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
-import { transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, ENGINES, RUST_LANE } from './engine-parity-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -33,8 +31,8 @@ const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
     ['call without a readable name', 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;'],
     ['identifier', 'export const A = ({ v }) => <div sz={v} />;'],
     ['member', 'export const A = () => <div sz={cfg.card} />;'],
-    // Babel's AST has no parenthesized nodes; the JavaScript lane it replaced unwraps them to
-    // match. Diverged before that fix: other/ParenthesizedExpression at 1:33
+    // The removed Babel lane's AST had no parenthesized nodes; the engine
+    // unwraps them to match. Diverged before that fix: other/ParenthesizedExpression at 1:33
     // versus member at 1:34.
     ['member behind parentheses', 'export const A = () => <div sz={(cfg.card)} />;'],
     [
@@ -170,58 +168,73 @@ describe('szFallbackConsequenceOf', () => {
     });
 });
 
+/**
+ * Each artifact's diagnostics for one source.
+ *
+ * @param source - Module source.
+ * @returns `[artifact name, diagnostics]` per engine artifact.
+ */
+function diagnosticsPerEngine(source: string): Array<readonly [string, string[]]> {
+    return ENGINES.map(
+        ([name, transform]) => [name, transform(source, '/p/t.tsx').diagnostics ?? []] as const,
+    );
+}
+
+// The Rust integration suite (sz_fallback_parity.rs) pins the same wording
+// against goldens; this block compares the two artifacts LIVE, so a wording
+// change on either side fails without regenerating a snapshot.
 describe('engine parity for sz fallback diagnostics', () => {
     for (const [label, source] of FALLBACK_SOURCES) {
-        it(`babel and oxc agree on ${label}`, () => {
-            const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
-            const oxc = transformWasm(source, '/p/t.tsx').diagnostics ?? [];
+        it(`every artifact agrees on ${label}`, () => {
+            const wasm = transformWasm(source, '/p/t.tsx').diagnostics ?? [];
+            expect(wasm.length).toBeGreaterThan(0);
 
-            // Both lanes must report the same thing, in the same words: this is
-            // the whole reason the matrix is shared rather than copied.
-            expect(oxc).toEqual(babel);
-            expect(babel.length).toBeGreaterThan(0);
+            // Both artifacts must report the same thing, in the same words:
+            // this is the whole reason the matrix is shared rather than copied.
+            for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
+                expect(diagnostics, name).toEqual(wasm);
+            }
         });
     }
 
     it('names the callee when the call has a readable name', () => {
-        const diagnostics = transformSource(
-            'export const A = () => <div sz={makeSz()} />;',
-            '/p/t.tsx',
-        ).diagnostics;
-        expect(diagnostics?.[0]).toContain('function call `makeSz()`');
+        const tsx = 'export const A = () => <div sz={makeSz()} />;';
+        for (const [name, diagnostics] of diagnosticsPerEngine(tsx)) {
+            expect(diagnostics[0], name).toContain('function call `makeSz()`');
+        }
     });
 
     it('falls back to the stand-in name for an unreadable callee', () => {
-        const diagnostics = transformSource(
-            'export const A = ({ c }) => <div sz={(c ? f : g)()} />;',
-            '/p/t.tsx',
-        ).diagnostics;
-        expect(diagnostics?.[0]).toContain(
-            `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` result is unknown`,
-        );
+        const tsx = 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;';
+        for (const [name, diagnostics] of diagnosticsPerEngine(tsx)) {
+            expect(diagnostics[0], name).toContain(
+                `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` result is unknown`,
+            );
+        }
     });
 
     it('prints the index variable for a computed member callee', () => {
         // `table[key]()` names `key` even though that is the index, not a
-        // method. Both engines read the property node without checking
-        // `computed`, so they agree — recorded here so the shared behaviour is
-        // deliberate rather than rediscovered as a parity surprise.
+        // method. The engine reads the property node without checking
+        // `computed` — recorded here so the behaviour is deliberate rather
+        // than rediscovered as a surprise.
         const source = 'export const A = () => <div sz={table[key]()} />;';
-        const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
-        expect(babel[0]).toContain('function call `key()`');
-        expect(transformWasm(source, '/p/t.tsx').diagnostics ?? []).toEqual(babel);
+        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
+            expect(diagnostics[0], name).toContain('function call `key()`');
+        }
     });
 
     it('reports no fallback for a statically resolvable sz prop', () => {
         const source = 'export const A = () => <div sz={{ p: 4 }} />;';
-        expect(transformSource(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
-        expect(transformWasm(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
+        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
+            expect(diagnostics, name).toEqual([]);
+        }
     });
 });
 
 // The classifier reads rendered text, and each engine renders it from its own
 // call site. Asserting against a hand-written message would prove only that the
-// classifier parses that string — these run the real transforms, so a lane that
+// classifier parses that string — these run the real transforms, so an artifact that
 // words its diagnostic differently is caught by the routing that depends on it.
 describe('engine parity for the sz consequence split', () => {
     const CONSEQUENCE_SOURCES: ReadonlyArray<readonly [string, string, SzFallbackConsequence]> = [
@@ -264,19 +277,5 @@ describe('engine parity for the sz consequence split', () => {
                 }
             });
         }
-    }
-});
-
-// The Rust integration suite (sz_fallback_parity.rs) pins the same wording
-// against hand-captured Babel output; this block compares the two lanes LIVE,
-// so a wording change on either side fails without regenerating a snapshot.
-describe.skipIf(!RUST_LANE)('rust lane parity for sz fallback diagnostics', () => {
-    for (const [label, source] of FALLBACK_SOURCES) {
-        it(`rust and babel agree on ${label}`, () => {
-            const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
-            const rust = transformRust(source, '/p/t.tsx').diagnostics ?? [];
-            expect(rust).toEqual(babel);
-            expect(babel.length).toBeGreaterThan(0);
-        });
     }
 });

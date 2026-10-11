@@ -3,16 +3,17 @@
  *
  * A `szRecover` attribute that emits no recovery token has two distinct
  * causes — a value that is not a string literal, and a string literal naming a
- * mode csszyx does not have — and they need different fixes. The Babel and oxc
- * lanes said which one happened; the native engine folded both into a single
- * sentence, because its IR recorded only the span of the offending attribute
- * and not the reason. A build can switch lanes with `build.parser`, so the same
- * source printed different advice depending on a setting that is supposed to be
- * an implementation detail.
+ * mode csszyx does not have — and they need different fixes. The removed Babel
+ * and oxc lanes said which one happened; the Rust engine folded both into a
+ * single sentence, because its IR recorded only the span of the offending
+ * attribute and not the reason. A build could switch lanes with `build.parser`,
+ * so the same source printed different advice depending on a setting that was
+ * supposed to be an implementation detail.
  *
- * The the JavaScript lane it replaced also named the wrong file: it reports through the filename it
- * hands the parser, which substitutes `file.tsx` so JSX is detected at all, so
- * a caller that passed no filename was told about a file that does not exist.
+ * The removed oxc lane also named the wrong file: it reported through the
+ * filename it handed the parser, which substituted `file.tsx` so JSX was
+ * detected at all, so a caller that passed no filename was told about a file
+ * that does not exist.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -56,11 +57,12 @@ describe('szRecover diagnostics are identical on every engine', () => {
     });
 
     it('names no file the caller never passed', () => {
-        // Scoped to the two lanes a caller can invoke without a filename. The
-        // native lane is reached through a BATCH wrapper that substitutes
+        // Scoped to the two entry points a caller can invoke without a
+        // filename: the `auto` selector and the wasm artifact. `transformRust`
+        // is reached through a BATCH wrapper that substitutes
         // `file-<index>.tsx`, and that substitute also seeds recovery-token
         // generation, so aligning it is a token-stability change rather than a
-        // wording one. The message SHAPE above is what all three share.
+        // wording one. The message SHAPE above is what both artifacts share.
         const tsx = 'export const A = ({ mode }) => <div szRecover={mode}>x</div>;';
         // Called with the filename argument OMITTED — a default parameter would
         // swallow an explicit `undefined`, so the harness cannot express this.

@@ -9,7 +9,7 @@
  * `build.parser` changed the safelist (field-reported by a design-system
  * consumer as "rust drops tokens from a multi-key szv variant object").
  *
- * Contract locked here, identical in the JavaScript lanes and rust:
+ * Contract locked here, identical on both engine artifacts:
  *   - unreadable KEYS are skipped individually; siblings and other variants
  *     always survive;
  *   - finite conditionals contribute BOTH branches (the runtime picks one at
@@ -22,12 +22,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-    RustTransformUnavailableError,
-    transformRust,
-    transformSource,
-    transformWasm,
-} from '../src/index.js';
+import { transformWasm } from '../src/index.js';
+
+import { ENGINES } from './engine-parity-harness.js';
 
 const IMPORT = "import { szv } from 'csszyx';";
 
@@ -38,17 +35,10 @@ const IMPORT = "import { szv } from 'csszyx';";
  * @param expected Classes every engine must extract (order-insensitive).
  */
 function expectCatalogParity(source: string, expected: string[]): void {
-    const oxc = [...transformWasm(source, 'catalog.tsx').classes].sort();
-    const babel = [...transformSource(source, 'catalog.tsx').classes].sort();
     const wanted = [...expected].sort();
-    expect(oxc, 'oxc classes').toEqual(wanted);
-    expect(babel, 'babel classes').toEqual(wanted);
-    try {
-        const rust = [...transformRust(source, 'catalog.tsx').classes].sort();
-        expect(rust, 'rust classes').toEqual(wanted);
-    } catch (err) {
-        // Native binary absent on this host — the JS parity above still holds.
-        expect(err).toBeInstanceOf(RustTransformUnavailableError);
+    for (const [name, transform] of ENGINES) {
+        const classes = [...(transform(source, 'catalog.tsx').classes ?? [])].sort();
+        expect(classes, `${name} classes`).toEqual(wanted);
     }
 }
 
@@ -248,20 +238,12 @@ const P = P;`,
         // bottom out empty — they are here to prove the walk TERMINATES, and
         // the parity assertion proves all engines cap identically.
         const source = `${IMPORT}\n${lines.join('\n')}`;
-        const oxc = [...transformWasm(source, 'catalog.tsx').classes];
-        const babel = [...transformSource(source, 'catalog.tsx').classes];
-        for (const classes of [oxc, babel]) {
-            expect(classes).toContain('text-red-500');
-            expect(classes).toContain('text-blue-500');
-        }
-        expect([...oxc].sort()).toEqual([...babel].sort());
-        try {
-            const rust = [...transformRust(source, 'catalog.tsx').classes];
-            expect(rust).toContain('text-red-500');
-            expect(rust).toContain('text-blue-500');
-            expect([...rust].sort()).toEqual([...oxc].sort());
-        } catch (err) {
-            expect(err).toBeInstanceOf(RustTransformUnavailableError);
+        const wasm = [...transformWasm(source, 'catalog.tsx').classes].sort();
+        expect(wasm).toContain('text-red-500');
+        expect(wasm).toContain('text-blue-500');
+        for (const [name, transform] of ENGINES) {
+            const classes = [...(transform(source, 'catalog.tsx').classes ?? [])].sort();
+            expect(classes, name).toEqual(wasm);
         }
     });
 });
@@ -270,7 +252,7 @@ describe('szv catalog + a coexisting static sz attribute (fast-path parity)', ()
     // Regression: a file with a plain static `sz={{ … }}` AND an szv catalog
     // used to fast-path in the native engine — the AST-free path handled the
     // `sz=` attribute and silently DROPPED the whole szv catalog, so `rust`
-    // safelisted fewer classes than `oxc`/`babel` for identical source (a
+    // safelisted fewer classes than the removed TS lanes for identical source (a
     // `build.parser` flip changed the produced CSS). Every case here pairs an
     // szv catalog with a static `sz={{ p: 4 }}` so the static-sz path is live,
     // and asserts both engine artifacts agree.

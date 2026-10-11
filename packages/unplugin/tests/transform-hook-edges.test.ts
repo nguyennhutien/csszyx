@@ -109,9 +109,8 @@ describe('transform hook branch edges', () => {
         expect(result?.code).toContain("from '@csszyx/runtime'");
     });
 
-    // The spacing/unit-var cases pin the oxc parser: the default rust lane
-    // resolves to whatever engine binary is installed, which may predate the
-    // __szSpacingVar/__szUnitVar emission these cases exercise.
+    // The spacing/unit-var cases run on the default parser, so they cover
+    // whichever engine artifact this host loads.
     it('injects the spacing-var runtime helper when a dynamic spacing value is used', async () => {
         const { root, transform } = await boot({ build: {} });
         const result = (await transform(

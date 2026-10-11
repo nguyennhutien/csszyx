@@ -9,7 +9,7 @@
  * stylesheet declares, silently. The native engine dash-joined even `hover`.
  * The same report's second bug: a negative utility keyword under any variant
  * hoisted its minus in front of the whole selector (`-hover:translate-x-full`)
- * on the JS lanes, while Rust placed it correctly.
+ * on the since-removed JS lanes, while Rust placed it correctly.
  *
  * Both fixes are pinned here as lane parity: the decision lives in
  * `variantStringPrefix` (transform-core.ts) and `variant_string_prefix`
@@ -17,8 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { variantStringPrefix } from '../src/transform-core.js';
-import { transformRust } from '../src/transform-rust.js';
-import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 /** [sz object source, expected className] — the Tailwind-valid output. */
 const VARIANT_STRING_CASES: ReadonlyArray<readonly [string, string]> = [
@@ -109,13 +108,6 @@ describe.each(LANES)('%s lane', (_lane, transform) => {
 
     it.each(NON_VARIANT_CASES)('leaves a non-variant key alone: %s', (szObject, want) => {
         expect(classNameFor(transform, szObject)).toBe(want);
-    });
-});
-
-describe.skipIf(!RUST_LANE)('rust lane', () => {
-    const all = [...VARIANT_STRING_CASES, ...NEGATIVE_CASES, ...NON_VARIANT_CASES];
-    it.each(all)('matches the JS lanes: %s', (szObject, want) => {
-        expect(classNameFor(transformRust, szObject)).toBe(want);
     });
 });
 

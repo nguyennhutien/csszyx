@@ -1,7 +1,7 @@
 /**
  * Dynamic Pattern Tests for Migration CLI Phase 2.
  *
- * Tests the Babel AST-based transformer for dynamic className expressions:
+ * Tests the migrate transformer for dynamic className expressions:
  * - clsx/cn/cx/twMerge calls
  * - Ternary (conditional) expressions
  * - Logical AND expressions

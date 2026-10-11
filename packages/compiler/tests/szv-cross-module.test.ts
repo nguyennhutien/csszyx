@@ -138,9 +138,9 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
         const start = code.indexOf('__szvT_orderSz');
         const table = start === -1 ? '' : code.slice(start, code.indexOf(';', start));
         // Position comparison rather than a key-matching pattern: a quantified
-        // digit class is exactly what the ReDoS gate rejects, and the lanes
-        // spell the keys differently anyway (a numeric key is always quoted,
-        // `pad` is bare in the Babel literal and quoted in the Rust JSON).
+        // digit class is exactly what the ReDoS gate rejects, and a key may be
+        // spelled either way (a numeric key is always quoted, `pad` is bare in
+        // a JS object literal and quoted in JSON).
         const keyIndex = (key: string): number => {
             const quoted = table.indexOf(`"${key}"`);
             return quoted === -1 ? table.indexOf(`${key}:`) : quoted;

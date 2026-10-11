@@ -19,26 +19,14 @@
  * introduce.
  */
 import { describe, expect, it } from 'vitest';
-import { transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
 
 /** Cross-module sz objects, keyed by specifier then export name. */
 type SzObjectRegistry = Record<string, Record<string, Record<string, unknown>>>;
 
-type Engine = (
-    source: string,
-    filename?: string,
-    options?: { crossModuleSzObjects?: SzObjectRegistry },
-) => { code?: string; classes?: Set<string>; diagnostics?: string[] };
-
-const ENGINES: ReadonlyArray<readonly [string, Engine]> = [
-    ['auto', transformSource as Engine],
-    ['wasm', transformWasm as Engine],
-    ...(RUST_LANE ? ([['rust', transformRust as Engine]] as const) : []),
-];
+type Engine = ParityEngine;
 
 /** The registry a bundler would hand a file importing from `./styles`. */
 const REGISTRY: SzObjectRegistry = {
@@ -419,34 +407,14 @@ describe('where the resolved binding is used', () => {
         });
     }
 
-    it('babel keeps the runtime path when a local const re-wraps the import', () => {
-        // Resolution is one hop: the registry answers for the IMPORTED binding,
-        // and `local` is a different binding whose initializer merely mentions
-        // it. Following that would mean folding arbitrary local dataflow.
-        const out = run(
-            transformSource as Engine,
-            'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
-        );
-        expect(out.code).toContain('_sz(local)');
-        expect(out.classes).toEqual([]);
-    });
-
-    it('wasm keeps the runtime path when a local const re-wraps the import', () => {
-        // The artifacts answer this case identically: a spread re-wrap is not
-        // statically readable, so the value stays on the runtime path instead
-        // of being resolved through the registry.
-        const out = run(
-            transformWasm as Engine,
-            'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
-        );
-        expect(out.code).toContain('_sz(local)');
-        expect(out.classes).toEqual([]);
-    });
-
-    if (RUST_LANE) {
-        it('rust keeps the runtime path when a local const re-wraps the import', () => {
+    for (const [name, engine] of ENGINES) {
+        it(`${name} keeps the runtime path when a local const re-wraps the import`, () => {
+            // Resolution is one hop: the registry answers for the IMPORTED
+            // binding, and `local` is a different binding whose initializer
+            // merely mentions it. Following that would mean folding arbitrary
+            // local dataflow, so a spread re-wrap stays on the runtime path.
             const out = run(
-                transformRust as Engine,
+                engine,
                 'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
             );
             expect(out.code).toContain('_sz(local)');
@@ -455,7 +423,7 @@ describe('where the resolved binding is used', () => {
     }
 });
 
-describe('import shapes the oxc reader has to tell apart', () => {
+describe('import shapes the engine reader has to tell apart', () => {
     it('ignores a specifier marked type-only inside a value import', () => {
         // `import { type cardSz, other }` is a VALUE import carrying a type-only
         // specifier. Reading it as a value would bind a name that does not exist
@@ -486,10 +454,10 @@ describe('import shapes the oxc reader has to tell apart', () => {
         expect(out.code).toContain('p-4');
     });
 
-    it('is read the same way by the JavaScript lane it replaced', () => {
-        // The two lanes read the specifier through different AST shapes, and a
-        // lane that fell back to the LOCAL name here would resolve a different
-        // entry than its sibling for the same source.
+    it('reads a string-literal export name through the specifier', () => {
+        // The removed lanes read the specifier through different AST shapes,
+        // and a reader that fell back to the LOCAL name here would resolve a
+        // different entry than its sibling for the same source.
         const tsx =
             'import { "card-sz" as card } from \'./styles\';\n' +
             'export const A = () => <div sz={card} />;';
@@ -510,11 +478,13 @@ describe('an export named by a string literal', () => {
         const tsx =
             'import { "card-sz" as card } from \'./styles\';\n' +
             'export const A = () => <div sz={card} />;';
-        const out = transformSource(tsx, '/p/Card.tsx', {
-            crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
-        } as never);
+        for (const [name, engine] of ENGINES) {
+            const out = engine(tsx, '/p/Card.tsx', {
+                crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
+            });
 
-        expect(out.code).toContain('p-4');
+            expect(out.code, name).toContain('p-4');
+        }
     });
 });
 

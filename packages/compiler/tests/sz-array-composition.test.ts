@@ -12,14 +12,14 @@
  *
  * Before this contract, arrays CONCATENATED conflicting classes
  * (`[{text:'base'},{text:'lg'}]` kept both) and stylesheet order decided the
- * winner — a field-reported footgun. rust must stay byte-identical to oxc;
- * babel matches whitespace-normalized.
+ * winner — a field-reported footgun. The native artifact must stay
+ * byte-identical to the wasm artifact.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { transformRust, transformSource, transformWasm } from '../src/index.js';
-import { RUST_LANE } from './engine-parity-harness.js';
+import { type SourceTransformResult, transformRust, transformWasm } from '../src/index.js';
+import { ENGINES, type ParityEngine, RUST_LANE } from './engine-parity-harness.js';
 
 const PRELUDE = `const BASE = { p: 2, m: 1 };
 declare const szsc: { title?: string } | undefined;
@@ -27,22 +27,9 @@ declare const big: boolean;
 declare const things: object[];
 `;
 
-/**
- * Strip whitespace differences for babel comparisons.
- *
- * @param code - Transformed source to normalize.
- * @returns The code with whitespace runs collapsed to single spaces.
- */
-function norm(code: string): string {
-    return code.replace(/\s+/g, ' ');
-}
-
-function run(engine: 'wasm' | 'auto' | 'rust', attr: string) {
+function run(transform: ParityEngine, attr: string) {
     const source = `${PRELUDE}export const A = () => <div ${attr} />;`;
-    let fn = transformSource;
-    if (engine === 'wasm') fn = transformWasm;
-    else if (engine === 'rust') fn = transformRust;
-    const result = fn(source, 'array.tsx');
+    const result = transform(source, 'array.tsx') as SourceTransformResult;
     return {
         code: result.code,
         div: result.code.match(/<div[\s\S]*?\/>/)?.[0] ?? '',
@@ -56,7 +43,7 @@ function run(engine: 'wasm' | 'auto' | 'rust', attr: string) {
 interface Fixture {
     name: string;
     attr: string;
-    /** Expected `<div …/>` from oxc (rust must equal byte-for-byte). */
+    /** Expected `<div …/>` from every artifact, byte-for-byte. */
     expectDiv: string;
     /** Expected class discovery order (identical across engines). */
     classes: string[];
@@ -169,45 +156,39 @@ const FIXTURES: Fixture[] = [
 describe('sz array composition — later wins (lane parity)', () => {
     for (const fixture of FIXTURES) {
         it(fixture.name, () => {
-            const oxc = run('wasm', fixture.attr);
-            const babel = run('auto', fixture.attr);
-            expect(oxc.div, 'oxc emission').toBe(fixture.expectDiv);
-            expect(norm(babel.div), 'babel matches (normalized)').toBe(norm(fixture.expectDiv));
-            expect(oxc.classes, 'oxc class discovery order').toEqual(fixture.classes);
-            expect(babel.classes, 'babel class discovery order').toEqual(fixture.classes);
-            expect(oxc.usesSzcn, 'oxc usesSzcn').toBe(fixture.usesSzcn ?? false);
-            expect(oxc.usesSzPart, 'oxc usesSzPart').toBe(fixture.usesSzPart ?? false);
-            expect(babel.usesSzcn, 'babel usesSzcn').toBe(fixture.usesSzcn ?? false);
-            expect(babel.usesSzPart, 'babel usesSzPart').toBe(fixture.usesSzPart ?? false);
+            for (const [name, transform] of ENGINES) {
+                const out = run(transform, fixture.attr);
+                expect(out.div, `${name} emission`).toBe(fixture.expectDiv);
+                expect(out.classes, `${name} class discovery order`).toEqual(fixture.classes);
+                expect(out.usesSzcn, `${name} usesSzcn`).toBe(fixture.usesSzcn ?? false);
+                expect(out.usesSzPart, `${name} usesSzPart`).toBe(fixture.usesSzPart ?? false);
+            }
         });
 
-        it.skipIf(!RUST_LANE)(`rust is byte-identical — ${fixture.name}`, () => {
-            const oxc = run('wasm', fixture.attr);
-            const rust = run('rust', fixture.attr);
-            expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
-            expect(rust.classes, 'rust class discovery order equals oxc').toEqual(oxc.classes);
-            expect(rust.usesSzcn).toBe(oxc.usesSzcn);
-            expect(rust.usesSzPart).toBe(oxc.usesSzPart);
+        it.skipIf(!RUST_LANE)(`native is byte-identical to wasm — ${fixture.name}`, () => {
+            const wasm = run(transformWasm as ParityEngine, fixture.attr);
+            const rust = run(transformRust as ParityEngine, fixture.attr);
+            expect(rust.code, 'native code equals wasm byte-for-byte').toBe(wasm.code);
+            expect(rust.classes, 'native class discovery order equals wasm').toEqual(wasm.classes);
+            expect(rust.usesSzcn).toBe(wasm.usesSzcn);
+            expect(rust.usesSzPart).toBe(wasm.usesSzPart);
         });
     }
 
     it('arrays no longer set usesMerge (szcn replaced _szMerge for composition)', () => {
-        for (const engine of ['wasm', 'auto'] as const) {
-            const out = run(engine, 'sz={[{ p: 4 }, big && { p: 8 }]}');
-            expect(out.usesMerge, engine).toBe(false);
-        }
-        if (RUST_LANE) {
-            expect(run('rust', 'sz={[{ p: 4 }, big && { p: 8 }]}').usesMerge).toBe(false);
+        for (const [name, transform] of ENGINES) {
+            const out = run(transform, 'sz={[{ p: 4 }, big && { p: 8 }]}');
+            expect(out.usesMerge, name).toBe(false);
         }
     });
 
     it('three-level deep merge keeps unrelated branches intact', () => {
         const attr =
             'sz={[{ md: { hover: { bg: "red-500", p: 2 } } }, { md: { hover: { bg: "blue-500" } } }]}';
-        const oxc = run('wasm', attr);
-        expect(oxc.div).toBe('<div className="md:hover:bg-blue-500 md:hover:p-2" />');
+        const wasm = run(transformWasm as ParityEngine, attr);
+        expect(wasm.div).toBe('<div className="md:hover:bg-blue-500 md:hover:p-2" />');
         if (RUST_LANE) {
-            expect(run('rust', attr).code).toBe(oxc.code);
+            expect(run(transformRust as ParityEngine, attr).code).toBe(wasm.code);
         }
     });
 });

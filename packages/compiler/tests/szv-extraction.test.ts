@@ -1,22 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { transformSource, transformWasm } from '../src/index.js';
+import { transformWasm } from '../src/index.js';
 
-// szv catalog extraction runs through both engine artifacts: `transformSource`
-// serves whichever lane the platform can load, `transformWasm` pins the wasm
-// one. These lock the build-time safelist behaviour AND assert the two agree,
-// so a regression in one surfaces here instead of as silent dead classes in a
-// consumer. The matrix is deliberately wide: it was a wide pass that found the
+import { ENGINES } from './engine-parity-harness.js';
+
+// szv catalog extraction runs through both engine artifacts (`ENGINES`: wasm,
+// plus native when the binding loads). These lock the build-time safelist
+// behaviour AND assert the artifacts agree, so a regression in one surfaces
+// here instead of as silent dead classes in a consumer. The matrix is
+// deliberately wide: it was a wide pass that found the
 // `compoundVariants`/non-static-sibling gap and a cross-lane divergence.
 
 const IMPORT = "import { szv } from 'csszyx';";
-const sorted = (classes: Set<string>) => [...classes].sort();
-const babel = (src: string) => sorted(transformSource(`${IMPORT} ${src}`).classes);
-const oxc = (src: string) => sorted(transformWasm(`${IMPORT} ${src}`).classes);
 
-describe('szv extraction — Babel engine', () => {
+/**
+ * Sorted classes every artifact extracts from one module, after asserting the
+ * artifacts agree.
+ * @param source - Full module source.
+ * @param filename - Filename handed to each artifact.
+ * @returns The shared, sorted class list.
+ */
+function agreedClasses(source: string, filename?: string): string[] {
+    const perEngine = ENGINES.map(
+        ([name, transform]) =>
+            [name, [...(transform(source, filename).classes ?? [])].sort()] as const,
+    );
+    const [[, expected]] = perEngine;
+    for (const [name, classes] of perEngine) {
+        expect(classes, `${name} classes`).toEqual(expected);
+    }
+    return expected;
+}
+
+/**
+ * {@link agreedClasses} for a snippet behind the szv import.
+ * @param src - Snippet that calls `szv`.
+ * @returns The shared, sorted class list.
+ */
+const extract = (src: string): string[] => agreedClasses(`${IMPORT} ${src}`);
+
+describe('szv extraction — base, variants and const-bound configs', () => {
     it('extracts base + every variant value (no usage required)', () => {
         expect(
-            babel(
+            extract(
                 "const b = szv({ base: { rounded: 'md' }, variants: { tone: { ok: { bg: 'success' }, warn: { bg: 'warning' } } } });",
             ),
         ).toEqual(['bg-success', 'bg-warning', 'rounded-md']);
@@ -24,7 +49,7 @@ describe('szv extraction — Babel engine', () => {
 
     it('extracts variants-only configs', () => {
         expect(
-            babel('const b = szv({ variants: { size: { sm: { px: 2 }, lg: { px: 4 } } } });'),
+            extract('const b = szv({ variants: { size: { sm: { px: 2 }, lg: { px: 4 } } } });'),
         ).toEqual(['px-2', 'px-4']);
     });
 
@@ -32,7 +57,7 @@ describe('szv extraction — Babel engine', () => {
         // A `compoundVariants` array used to null the WHOLE config and drop every
         // class. base + variants must still extract; the array is ignored.
         expect(
-            babel(
+            extract(
                 "const b = szv({ base: { rounded: 'md' }, variants: { v: { a: { bg: 'red-500' } } }, compoundVariants: [{ v: 'a', sz: { p: 4 } }] });",
             ),
         ).toEqual(['bg-red-500', 'rounded-md']);
@@ -40,7 +65,7 @@ describe('szv extraction — Babel engine', () => {
 
     it('ignores defaultVariants without dropping the catalog', () => {
         expect(
-            babel(
+            extract(
                 "const b = szv({ variants: { s: { x: { m: 4 } } }, defaultVariants: { s: 'x' } });",
             ),
         ).toEqual(['m-4']);
@@ -48,7 +73,7 @@ describe('szv extraction — Babel engine', () => {
 
     it('extracts nested responsive / state variant classes', () => {
         expect(
-            babel(
+            extract(
                 "const b = szv({ variants: { c: { blue: { bg: 'blue-50', hover: { bg: 'blue-100' }, md: { p: 8 } } } } });",
             ),
         ).toEqual(['bg-blue-50', 'hover:bg-blue-100', 'md:p-8']);
@@ -58,24 +83,24 @@ describe('szv extraction — Babel engine', () => {
         // A same-scope `const` identifier bound to an object literal is followed —
         // for the whole config and for an inner base/variants value.
         expect(
-            babel('const cfg = { variants: { s: { x: { p: 2 } } } }; const b = szv(cfg);'),
+            extract('const cfg = { variants: { s: { x: { p: 2 } } } }; const b = szv(cfg);'),
         ).toEqual(['p-2']);
-        expect(babel('const V = { s: { x: { p: 2 } } }; const b = szv({ variants: V });')).toEqual([
-            'p-2',
-        ]);
+        expect(
+            extract('const V = { s: { x: { p: 2 } } }; const b = szv({ variants: V });'),
+        ).toEqual(['p-2']);
     });
 
     it('does NOT follow a reassigned `let` binding (unsound)', () => {
         const src =
             'let cfg = { variants: { s: { x: { p: 2 } } } }; cfg = { variants: {} }; const b = szv(cfg);';
-        expect(babel(src)).toEqual([]);
+        expect(extract(src)).toEqual([]);
     });
 });
 
-describe('szv extraction — oxc engine', () => {
-    it('extracts base + variants like Babel', () => {
+describe('szv extraction — sibling keys and export position', () => {
+    it('extracts base + variants', () => {
         expect(
-            oxc(
+            extract(
                 "const b = szv({ base: { rounded: 'md' }, variants: { tone: { ok: { bg: 'success' } } } });",
             ),
         ).toEqual(['bg-success', 'rounded-md']);
@@ -83,20 +108,20 @@ describe('szv extraction — oxc engine', () => {
 
     it('keeps the catalog when a non-static sibling key is present', () => {
         expect(
-            oxc(
+            extract(
                 "const b = szv({ variants: { v: { a: { bg: 'red-500' } } }, compoundVariants: [{ v: 'a', sz: { p: 4 } }] });",
             ),
         ).toEqual(['bg-red-500']);
     });
 
     it('extracts an `export default szv(...)` call (visited at any position)', () => {
-        expect(oxc('export default szv({ variants: { s: { x: { gap: 8 } } } });')).toEqual([
+        expect(extract('export default szv({ variants: { s: { x: { gap: 8 } } } });')).toEqual([
             'gap-8',
         ]);
     });
 });
 
-describe('szv extraction — the removed JavaScript lanes parity', () => {
+describe('szv extraction — artifact parity', () => {
     const CASES: Array<[string, string]> = [
         [
             'base + variants + defaultVariants',
@@ -136,15 +161,16 @@ describe('szv extraction — the removed JavaScript lanes parity', () => {
         ],
     ];
 
-    it.each(CASES)('Babel and oxc agree: %s', (_label, src) => {
-        expect(babel(src)).toEqual(oxc(src));
+    it.each(CASES)('every artifact agrees: %s', (_label, src) => {
+        // `extract` asserts the artifacts agree before returning.
+        expect(Array.isArray(extract(src))).toBe(true);
     });
 });
 
 describe('szv extraction — "dị" value cases lower to the right TW class', () => {
     // szv now lowers variant props / important / negative / arbitrary / css-var
-    // VALUES inside the catalog directly. Lock the exact emitted classes (Babel)
-    // and assert oxc agrees, so the catalog matches what `sz={fn(...)}` renders.
+    // VALUES inside the catalog directly. Lock the exact emitted classes on
+    // every artifact, so the catalog matches what `sz={fn(...)}` renders.
     const C: Array<[string, string, string[]]> = [
         [
             'state variant inside a variant value',
@@ -203,25 +229,21 @@ describe('szv extraction — "dị" value cases lower to the right TW class', ()
         ],
     ];
 
-    it.each(C)('Babel emits the expected class(es): %s', (_label, src, expected) => {
-        expect(babel(src)).toEqual([...expected].sort());
-    });
-
-    it.each(C)('oxc agrees with Babel: %s', (_label, src) => {
-        expect(oxc(src)).toEqual(babel(src));
+    it.each(C)('every artifact emits the expected class(es): %s', (_label, src, expected) => {
+        expect(extract(src)).toEqual([...expected].sort());
     });
 });
 
 describe('szv extraction — transformed flag must not gate class collection', () => {
     // A szv-only file (no `sz=` to rewrite) extracts a catalog of classes but the
-    // oxc/Rust engines report `transformed: false` (no source edit happened),
-    // while Babel reports true. The unplugin prescan must collect the classes
-    // regardless of the flag — gating on `transformed` alone silently drops every
-    // szv class from the safelist on the oxc/Rust path (the real "szv standalone /
+    // engine reports `transformed: false` (no source edit happened), while the
+    // removed Babel lane reported true. The unplugin prescan must collect the
+    // classes regardless of the flag — gating on `transformed` alone silently
+    // dropped every szv class from the safelist (the real "szv standalone /
     // arbitrary value does not work" bug). This locks the invariant the fix needs.
     const szvOnly = `${IMPORT} const b = szv({ variants: { s: { x: { p: 4 } } } });`;
 
-    it('oxc reports transformed=false but still extracts the catalog', () => {
+    it('wasm reports transformed=false but still extracts the catalog', () => {
         const r = transformWasm(szvOnly);
         expect(r.transformed).toBe(false);
         expect(r.classes.size).toBeGreaterThan(0);
@@ -232,10 +254,12 @@ describe('szv extraction — transformed flag must not gate class collection', (
         // transformed=true; the engine leaves an szv-only file's code alone
         // (transformed=false) — the CONTRACT this suite exists for is that
         // class collection is not gated on either answer.
-        const r = transformSource(szvOnly);
-        expect(r.transformed).toBe(false);
-        expect(r.code).toBe(szvOnly);
-        expect(r.classes.size).toBeGreaterThan(0);
+        for (const [name, transform] of ENGINES) {
+            const r = transform(szvOnly) as ReturnType<typeof transformWasm>;
+            expect(r.transformed, name).toBe(false);
+            expect(r.code, name).toBe(szvOnly);
+            expect(r.classes.size, name).toBeGreaterThan(0);
+        }
     });
 });
 
@@ -269,11 +293,8 @@ describe('szv extraction — TypeScript wrappers are looked through', () => {
     ];
 
     for (const [name, source] of wrapped) {
-        it(`extracts through ${name} (both JavaScript lanes agreed)`, () => {
-            const babel = [...transformSource(source, 'F.tsx').classes].sort();
-            const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
-            expect(babel, 'babel extracts the catalog').toContain('bg-tag-blue');
-            expect(oxc, 'oxc extracts the catalog').toEqual(babel);
+        it(`extracts through ${name} on every artifact`, () => {
+            expect(agreedClasses(source, 'F.tsx')).toContain('bg-tag-blue');
         });
     }
 });
@@ -302,18 +323,14 @@ describe('szr literal-arg extraction', () => {
     ];
 
     for (const [name, source, expected] of shapes) {
-        it(`extracts a ${name} (both JavaScript lanes agreed)`, () => {
-            const babel = [...transformSource(source, 'F.tsx').classes].sort();
-            const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
-            expect(babel).toEqual(expected);
-            expect(oxc).toEqual(expected);
+        it(`extracts a ${name} on every artifact`, () => {
+            expect(agreedClasses(source, 'F.tsx')).toEqual(expected);
         });
     }
 
     it('a runtime-dependent szr arg extracts nothing (no false candidates)', () => {
         const source =
             'import {szr} from "@csszyx/runtime"; export const f = (x) => szr({ p: x });';
-        expect([...transformSource(source, 'F.tsx').classes]).toEqual([]);
-        expect([...transformWasm(source, 'F.tsx').classes]).toEqual([]);
+        expect(agreedClasses(source, 'F.tsx')).toEqual([]);
     });
 });

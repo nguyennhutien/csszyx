@@ -51,7 +51,7 @@ function outputShape(engine: Engine, source: string) {
     const code = result.code ?? source;
     const statics = [...code.matchAll(/szr\(("[^"]*")/g)].map(match => match[1]);
     const tableMatch = /__szvT_cardSz\s*=\s*(\{[\s\S]*?\});/.exec(code);
-    // Babel regenerates identifier keys unquoted; normalize to compare content.
+    // Identifier keys may print quoted or bare; normalize to compare content.
     const table = tableMatch ? tableMatch[1].replace(/\s+/g, '').replace(/"/g, '') : null;
     return {
         usesSzvPick: result.usesSzvPick === true,

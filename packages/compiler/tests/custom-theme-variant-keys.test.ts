@@ -37,7 +37,7 @@ const CUSTOM_VARIANT_SOURCES: ReadonlyArray<readonly [string, string]> = [
 /**
  * Transform one sz object and count warnings on BOTH channels.
  *
- * The JS lanes emit dev warnings through `console.warn` while the native engine
+ * transform-core emits dev warnings through `console.warn` while the engine
  * returns them as diagnostics, so a comparison that reads only one channel
  * would call two identical behaviours a divergence.
  *

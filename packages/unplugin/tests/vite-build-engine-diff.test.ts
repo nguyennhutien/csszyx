@@ -3,8 +3,8 @@
  * once per engine — and assert BOTH artifacts match: the emitted bundle and the
  * safelist. The prescan parity harness covers the scan pipeline; this covers
  * the layer it cannot see — what the transform actually EMITS into production
- * output (the vui 0.10.10 CRITICAL was exactly there: the oxc static path
- * deleted className expressions from the bundle while every scan looked fine).
+ * output (the vui 0.10.10 CRITICAL was exactly there: the since-removed oxc
+ * static path deleted className expressions from the bundle while every scan looked fine).
  *
  * No browser, no playground: programmatic vite, a dependency-free JSX factory
  * injected via esbuild, and csszyx runtime imports left external.

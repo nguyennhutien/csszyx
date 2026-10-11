@@ -27,8 +27,9 @@ function setup(overrides: Partial<ResolveParserModeInput> & { rustAvailable?: bo
         envParser: undefined,
         defaultParser: 'rust',
         isRustAvailable: isRustAvailable ?? probe,
-        // Default the wasm probe to "missing" so the pre-wasm degrade tests
-        // keep exercising the oxc last-resort arm unchanged.
+        // Default the wasm probe to "missing": a test opts into the
+        // rust-to-wasm degrade explicitly (`wasmSetup`), so without it an
+        // unavailable rust stays rust and fails loud.
         isWasmAvailable: () => false,
         ...rest,
     };
@@ -80,7 +81,7 @@ describe('resolveParserMode — explicit rust keeps its loud-failure contract', 
             explicit: true,
         });
         // The probe must NOT run — explicit rust must reach the loud-fail path,
-        // not be silently swapped for oxc.
+        // not be silently swapped for wasm.
         expect(probe).not.toHaveBeenCalled();
     });
 
@@ -244,7 +245,7 @@ describe('resolveParserMode — robustness / no hidden side effects', () => {
                     const { input } = setup({ envParser, configParser, rustAvailable });
                     const out = resolveParserMode(input);
                     expect(isParserMode(out.parser)).toBe(true);
-                    // degraded implies the resolved parser is oxc and it was not explicit
+                    // degraded implies the resolved parser is wasm and it was not explicit
                     if (out.degraded) {
                         expect(out.parser).toBe('wasm');
                         expect(out.explicit).toBe(false);
@@ -307,7 +308,7 @@ describe('resolveParserMode — wasm degrade target', () => {
     });
 });
 
-describe('resolveParserMode — rust-only world (no JavaScript lane left)', () => {
+describe('resolveParserMode — the removed JavaScript lanes stay removed', () => {
     it.each(['oxc', 'babel'] as const)('rejects the removed mode %s', mode => {
         expect(isParserMode(mode)).toBe(false);
     });
