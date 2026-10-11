@@ -18,11 +18,6 @@
  *    uncertain shape must therefore KEEP.
  */
 import { describe, expect, it } from 'vitest';
-import {
-    countSzrWordOccurrences,
-    countSzrWordOccurrencesOutsideComments,
-    szrRewriteProofHolds,
-} from '../src/szr-import-rewrite.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 type Engine = (source: string, filename?: string) => { code?: string };
@@ -175,51 +170,5 @@ describe('decision parity across the lanes', () => {
     it.each(all)('every engine agrees on: %s', (_name, source) => {
         const verdicts = LANES.map(([, engine]) => rewrites(engine, source));
         expect(new Set(verdicts).size).toBe(1);
-    });
-});
-
-describe('countSzrWordOccurrencesOutsideComments', () => {
-    it('subtracts occurrences inside the given comment spans', () => {
-        const source = "// szr docs\nszr('a');";
-        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 11 }])).toBe(1);
-    });
-
-    it('handles a word flush against the span edges', () => {
-        const source = '/*szr*/szr();';
-        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 7 }])).toBe(1);
-    });
-
-    it('is the raw count with no comments', () => {
-        expect(countSzrWordOccurrencesOutsideComments("szr('a')", [])).toBe(1);
-    });
-});
-
-describe('countSzrWordOccurrences', () => {
-    it('counts standalone words only', () => {
-        expect(countSzrWordOccurrences("szr('a'); myszr(); szr2(); a.szr; 'szr'")).toBe(3);
-    });
-
-    it('counts a word flush with both source boundaries', () => {
-        expect(countSzrWordOccurrences('szr')).toBe(1);
-    });
-
-    it('treats non-ASCII neighbours as boundaries — the overcounting direction', () => {
-        // `szrΩ` is one identifier, but counting it can only FAIL the proof.
-        expect(countSzrWordOccurrences('const szrΩ = 1;')).toBe(1);
-    });
-
-    it('returns zero for an empty or unrelated source', () => {
-        expect(countSzrWordOccurrences('')).toBe(0);
-        expect(countSzrWordOccurrences('const sz = 1; const zr = 2;')).toBe(0);
-    });
-});
-
-describe('szrRewriteProofHolds', () => {
-    it('rejects missing or incomplete argument analyses', () => {
-        const call = { arguments: [{}] };
-        expect(szrRewriteProofHolds([call], new Map(), new Set(), 'szr(x)', [])).toBe(false);
-        expect(szrRewriteProofHolds([call], new Map([[call, []]]), new Set(), 'szr(x)', [])).toBe(
-            false,
-        );
     });
 });

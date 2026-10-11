@@ -6,7 +6,7 @@
  * Usage:
  *   pnpm bench:docs-build
  *   pnpm bench:docs-build -- --iterations 3 --warmups 1
- *   pnpm bench:docs-build -- --modes oxc,rust --shapes cold
+ *   pnpm bench:docs-build -- --modes rust,wasm --shapes cold
  *   pnpm bench:docs-build -- --modes rust,rust-mangle-vars --shapes cold
  */
 
@@ -17,19 +17,22 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
+import { parseAllowlistedCsv } from './bench-args.ts';
 import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
 
 /**
- * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
+ * Bench mode. `rust` (native addon) and `wasm` run csszyx's one Rust engine
+ * through each shipped artifact. The removed `oxc` and `babel` lanes are
+ * rejected by `--modes` instead of being ignored by the plugin.
  * `rust-mangle-vars` uses Rust with production.mangleVars enabled through the
  * docs bench-only env knob. `no-csszyx` skips the csszyx plugin (Tailwind-only
  * baseline). `no-tailwind` skips both csszyx and Tailwind so the report can
  * show the Astro/Vite/React pipeline floor with no styling plugins.
  */
-type BenchMode = 'oxc' | 'rust' | 'rust-mangle-vars' | 'no-csszyx' | 'no-tailwind';
+type BenchMode = 'rust' | 'wasm' | 'rust-mangle-vars' | 'no-csszyx' | 'no-tailwind';
 type BuildShape = 'cold' | 'warm';
 
-const BENCH_MODES = ['oxc', 'rust', 'rust-mangle-vars', 'no-csszyx', 'no-tailwind'] as const;
+const BENCH_MODES = ['rust', 'wasm', 'rust-mangle-vars', 'no-csszyx', 'no-tailwind'] as const;
 const BUILD_SHAPES = ['cold', 'warm'] as const;
 
 interface CliOptions {
@@ -160,31 +163,15 @@ function parseArgs(args: string[]): CliOptions {
         } else if (arg === '--warmups') {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
         } else if (arg === '--modes') {
-            parsed.modes = parseListOption(args[++i] ?? '', BENCH_MODES);
+            parsed.modes = parseAllowlistedCsv(args[++i] ?? '', BENCH_MODES, '--modes');
         } else if (arg === '--shapes') {
-            parsed.shapes = parseListOption(args[++i] ?? '', BUILD_SHAPES);
+            parsed.shapes = parseAllowlistedCsv(args[++i] ?? '', BUILD_SHAPES, '--shapes');
         } else if (arg === '--out-dir') {
             parsed.outDir = args[++i] ?? parsed.outDir;
         }
     }
 
     return parsed;
-}
-
-/**
- * Parses a comma-separated allowlisted CLI option.
- *
- * @param value comma-separated option value
- * @param allowed allowed values
- * @returns parsed values, or all allowed values when parsing yields none
- */
-function parseListOption<const T extends string>(value: string, allowed: readonly T[]): T[] {
-    const allowedSet = new Set<string>(allowed);
-    const parsed = value
-        .split(',')
-        .map(item => item.trim())
-        .filter((item): item is T => allowedSet.has(item));
-    return parsed.length > 0 ? parsed : [...allowed];
 }
 
 /**
@@ -404,19 +391,19 @@ function parsePrescanTimings(stdout: string, stderr: string): number[] {
  */
 function renderReport(payload: ReportPayload): string {
     const { rows } = payload;
-    const coldOxc = findRow(rows, 'oxc', 'cold');
+    const coldWasm = findRow(rows, 'wasm', 'cold');
     const coldRust = findRow(rows, 'rust', 'cold');
     const coldRustMangleVars = findRow(rows, 'rust-mangle-vars', 'cold');
     const coldBaseline = findRow(rows, 'no-csszyx', 'cold');
     const coldFloor = findRow(rows, 'no-tailwind', 'cold');
-    const warmOxc = findRow(rows, 'oxc', 'warm');
+    const warmWasm = findRow(rows, 'wasm', 'warm');
     const warmRust = findRow(rows, 'rust', 'warm');
     const warmRustMangleVars = findRow(rows, 'rust-mangle-vars', 'warm');
     const warmBaseline = findRow(rows, 'no-csszyx', 'warm');
     const warmFloor = findRow(rows, 'no-tailwind', 'warm');
     const shareBreakdown = [
-        formatShareBreakdown('Cold', coldFloor, coldBaseline, coldOxc, coldRust),
-        formatShareBreakdown('Warm', warmFloor, warmBaseline, warmOxc, warmRust),
+        formatShareBreakdown('Cold', coldFloor, coldBaseline, coldWasm, coldRust),
+        formatShareBreakdown('Warm', warmFloor, warmBaseline, warmWasm, warmRust),
     ].filter(Boolean);
     const shareBreakdownText =
         shareBreakdown.length > 0 ? `${shareBreakdown.join('\n')}\n\n` : '\n';
@@ -437,14 +424,14 @@ Environment:
 
 ## Summary
 
-- Cold docs build: ${formatComparison(coldOxc, coldRust)}.
-- Warm docs build: ${formatComparison(warmOxc, warmRust)}.
-- Cold csszyx prescan: ${formatPrescanComparison(coldOxc, coldRust)}.
-- Warm csszyx prescan: ${formatPrescanComparison(warmOxc, warmRust)}.
+- Cold docs build: ${formatComparison(coldWasm, coldRust)}.
+- Warm docs build: ${formatComparison(warmWasm, warmRust)}.
+- Cold csszyx prescan: ${formatPrescanComparison(coldWasm, coldRust)}.
+- Warm csszyx prescan: ${formatPrescanComparison(warmWasm, warmRust)}.
 - Cold mangleVars overhead: ${formatMangleVarsComparison(coldRust, coldRustMangleVars)}.
 - Warm mangleVars overhead: ${formatMangleVarsComparison(warmRust, warmRustMangleVars)}.
-- Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldOxc, coldRust)}.
-- Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
+- Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldWasm, coldRust)}.
+- Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmWasm, warmRust)}.
 - Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
 - Warm pipeline floor (no csszyx, no Tailwind): ${formatFloor(warmFloor, warmBaseline)}.
 ${shareBreakdownText}This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
@@ -492,46 +479,46 @@ function findRow(rows: BuildStats[], parser: BenchMode, shape: BuildShape): Buil
 }
 
 /**
- * Formats rust-vs-oxc comparison text.
+ * Formats rust-vs-wasm comparison text.
  *
- * @param oxc oxc row
+ * @param wasm wasm row
  * @param rust rust row
  * @returns summary text
  */
-function formatComparison(oxc: BuildStats | undefined, rust: BuildStats | undefined): string {
-    if (!oxc || !rust) {
+function formatComparison(wasm: BuildStats | undefined, rust: BuildStats | undefined): string {
+    if (!wasm || !rust) {
         return 'not selected';
     }
-    if (oxc.status !== 'measured' || rust.status !== 'measured') {
+    if (wasm.status !== 'measured' || rust.status !== 'measured') {
         return 'not measured successfully';
     }
-    return `rust is ${formatRatio(oxc.medianMs / rust.medianMs)} vs oxc by median wall time`;
+    return `rust is ${formatRatio(wasm.medianMs / rust.medianMs)} vs wasm by median wall time`;
 }
 
 /**
  * Formats csszyx prescan timing comparison text.
  *
- * @param oxc oxc row
+ * @param wasm wasm row
  * @param rust rust row
  * @returns summary text
  */
 function formatPrescanComparison(
-    oxc: BuildStats | undefined,
+    wasm: BuildStats | undefined,
     rust: BuildStats | undefined,
 ): string {
-    if (!oxc || !rust) {
+    if (!wasm || !rust) {
         return 'not selected';
     }
-    if (oxc.status !== 'measured' || rust.status !== 'measured') {
+    if (wasm.status !== 'measured' || rust.status !== 'measured') {
         return 'not measured successfully';
     }
-    const oxcPrescan = median(oxc.prescanMs);
+    const wasmPrescan = median(wasm.prescanMs);
     const rustPrescan = median(rust.prescanMs);
-    if (!Number.isFinite(oxcPrescan) || !Number.isFinite(rustPrescan) || rustPrescan === 0) {
+    if (!Number.isFinite(wasmPrescan) || !Number.isFinite(rustPrescan) || rustPrescan === 0) {
         return 'not traced';
     }
-    return `rust ${formatMs(rustPrescan)} vs oxc ${formatMs(oxcPrescan)} (${formatRatio(
-        oxcPrescan / rustPrescan,
+    return `rust ${formatMs(rustPrescan)} vs wasm ${formatMs(wasmPrescan)} (${formatRatio(
+        wasmPrescan / rustPrescan,
     )})`;
 }
 
@@ -563,13 +550,13 @@ function formatMangleVarsComparison(
  * second look).
  *
  * @param baseline no-csszyx row
- * @param oxc csszyx oxc row
+ * @param wasm csszyx wasm row
  * @param rust csszyx rust row
  * @returns comparison line
  */
 function formatBaselineComparison(
     baseline: BuildStats | undefined,
-    oxc: BuildStats | undefined,
+    wasm: BuildStats | undefined,
     rust: BuildStats | undefined,
 ): string {
     if (!baseline) {
@@ -579,8 +566,8 @@ function formatBaselineComparison(
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline.medianMs)} (Tailwind only)`];
-    if (oxc?.status === 'measured') {
-        parts.push(`csszyx oxc is ${formatRatio(oxc.medianMs / baseline.medianMs)} vs baseline`);
+    if (wasm?.status === 'measured') {
+        parts.push(`csszyx wasm is ${formatRatio(wasm.medianMs / baseline.medianMs)} vs baseline`);
     }
     if (rust?.status === 'measured') {
         parts.push(`csszyx rust is ${formatRatio(rust.medianMs / baseline.medianMs)} vs baseline`);
@@ -619,7 +606,7 @@ function formatFloor(floor: BuildStats | undefined, baseline: BuildStats | undef
  * @param shape build shape label
  * @param floor no-tailwind row for the shape
  * @param baseline no-csszyx row for the shape
- * @param oxc csszyx oxc row for the shape
+ * @param wasm csszyx wasm row for the shape
  * @param rust csszyx rust row for the shape
  * @returns share breakdown line
  */
@@ -627,21 +614,21 @@ function formatShareBreakdown(
     shape: 'Cold' | 'Warm',
     floor: BuildStats | undefined,
     baseline: BuildStats | undefined,
-    oxc: BuildStats | undefined,
+    wasm: BuildStats | undefined,
     rust: BuildStats | undefined,
 ): string {
     if (
         floor?.status !== 'measured' ||
         baseline?.status !== 'measured' ||
-        oxc?.status !== 'measured' ||
+        wasm?.status !== 'measured' ||
         rust?.status !== 'measured'
     ) {
         return '';
     }
     const tailwindAdd = baseline.medianMs - floor.medianMs;
-    const csszyxOxcAdd = oxc.medianMs - baseline.medianMs;
+    const csszyxWasmAdd = wasm.medianMs - baseline.medianMs;
     const csszyxRustAdd = rust.medianMs - baseline.medianMs;
-    return `- ${shape} share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx oxc adds ${formatMs(csszyxOxcAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
+    return `- ${shape} share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx wasm adds ${formatMs(csszyxWasmAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
 }
 
 /**

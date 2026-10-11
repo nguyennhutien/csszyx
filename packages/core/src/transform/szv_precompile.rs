@@ -1,10 +1,8 @@
-//! szv per-key precompile — Rust mirror of `szv-precompile.ts`.
-//!
-//! The decision spec lives in the TypeScript module; this file re-implements
-//! the pure halves — canonical-overlap detection, table compilation, the
-//! static pick, JSON serialization, reference accounting — over the native
-//! IR types. The cross-engine suite locks every verdict to the JS lanes: a
-//! `build.parser` flip must not change the emitted code.
+//! szv per-key precompile: canonical-overlap detection, table compilation,
+//! the static pick, JSON serialization and reference accounting, over the
+//! engine's IR types. The qualification half is shared with the TypeScript
+//! cross-module extractor (`qualifyStaticSzvConfig` in `szv-precompile.ts`);
+//! the rest lives only here. The native and wasm artifacts emit the same code.
 
 #![allow(clippy::redundant_pub_crate)]
 
@@ -497,8 +495,8 @@ pub(crate) fn compile_szv_table(config: &StaticSzvConfig) -> SzvTable {
 pub(crate) type StaticSelection = Vec<(String, String)>;
 
 /// What `__szvPick(table, selection)` returns for a static selection.
-/// Mirrors `computeStaticSzvPick` (with the tri-lane restriction, a selection
-/// value can no longer be nullish, so the default only fills ABSENT keys).
+/// A selection value cannot be nullish here, so the default only fills ABSENT
+/// keys.
 pub(crate) fn compute_static_szv_pick(
     table: &SzvTable,
     selection: Option<&StaticSelection>,
@@ -563,8 +561,8 @@ pub(crate) fn json_string_literal(text: &str) -> String {
     out
 }
 
-/// Serialize the emitted table constant, mirroring `serializeSzvTable`
-/// (`JSON.stringify` of `{base, d, defaults?}` in declaration order).
+/// Serialize the emitted table constant: the `JSON.stringify` shape of
+/// `{base, d, defaults?}` in declaration order.
 pub(crate) fn serialize_szv_table(table: &SzvTable) -> String {
     let mut out = String::from("{\"base\":");
     json_escape_into(&mut out, &table.base);
@@ -604,9 +602,9 @@ pub(crate) fn serialize_szv_table(table: &SzvTable) -> String {
     out
 }
 
-/// Count word-boundary occurrences of an identifier in raw source, mirroring
-/// `countWordOccurrences` (ASCII identifier boundaries; non-ASCII neighbours
-/// count, which overcounts and can only suppress a rewrite).
+/// Count word-boundary occurrences of an identifier in raw source (ASCII
+/// identifier boundaries; non-ASCII neighbours count, which overcounts and can
+/// only suppress a rewrite).
 pub(crate) fn count_word_occurrences(source: &str, word: &str) -> usize {
     if word.is_empty() {
         return 0;
@@ -713,7 +711,7 @@ fn decode_ordered_value(value: &serde_json::Value) -> Option<StaticSzValue> {
     }
 }
 
-/// Name of the emitted table constant, mirroring `szvTableIdentifier`.
+/// Name of the emitted table constant.
 pub(crate) fn szv_table_identifier(factory_name: &str) -> String {
     format!("__szvT_{factory_name}")
 }

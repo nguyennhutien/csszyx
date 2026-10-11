@@ -212,7 +212,7 @@ async function runBench(options: CliOptions): Promise<BenchRow[]> {
                 iterations: options.iterations,
                 warmups: options.warmups,
                 run: () => runPipeline(fixture),
-                note: 'Pure Phase H pipeline: CSS scan/plan/rewrite plus oxc TSX rewrite with the same alias table.',
+                note: 'Pure Phase H pipeline: CSS scan/plan/rewrite plus wasm-artifact TSX rewrite with the same alias table.',
             });
         }),
     );
@@ -462,7 +462,7 @@ async function runViteBuild(
         },
         plugins: [
             ...(vitePlugin({
-                build: { cache: false, parser: 'oxc' },
+                build: { cache: false },
                 production: {
                     mangleGlobalVars: enabled
                         ? {

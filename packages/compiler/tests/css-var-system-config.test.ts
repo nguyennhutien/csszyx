@@ -3,10 +3,35 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { transformRust, transformWasm } from '../src/index.js';
+import {
+    type SourceTransformResult,
+    type TransformSourceCodeOptions,
+    transformRust,
+    transformWasm,
+} from '../src/index.js';
+
+import { ENGINES } from './engine-parity-harness.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '../../..');
+
+/**
+ * Run one source through every engine artifact.
+ *
+ * @param source - Module source.
+ * @param filename - Filename handed to each artifact.
+ * @param options - Transform options handed to each artifact.
+ * @returns One full transform result per artifact.
+ */
+function everyArtifact(
+    source: string,
+    filename: string,
+    options: TransformSourceCodeOptions,
+): SourceTransformResult[] {
+    return ENGINES.map(
+        ([, transform]) => transform(source, filename, options) as SourceTransformResult,
+    );
+}
 
 describe('CSS variable system config contract', () => {
     it('keeps production.mangleVars opt-in by default', () => {
@@ -69,10 +94,7 @@ describe('CSS variable system config contract', () => {
         const source =
             "const App = ({ flex }) => <div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />;";
 
-        for (const result of [
-            transformWasm(source, 'nullable-vars-oxc.tsx', { mangleVars: true }),
-            transformRust(source, 'nullable-vars-rust.tsx', { mangleVars: true }),
-        ]) {
+        for (const result of everyArtifact(source, 'nullable-vars.tsx', { mangleVars: true })) {
             expect(result.code).toContain(`typeof flex === 'number' ? "flex-(--sz)" : undefined`);
             expect(result.code).toContain(`"--sz": typeof flex === 'number' ? flex : undefined`);
             expect(result.code).not.toContain('--_sz-flex');
@@ -96,12 +118,9 @@ describe('CSS variable system config contract', () => {
     it('keeps one-to-many CSS variable metadata when one original uses scoped and hoisted tiers', () => {
         const source =
             'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
-        const oxc = transformWasm(source, 'mangle-vars-mixed-tiers.tsx', { mangleVars: true });
-        const rust = transformRust(source, 'rust-mangle-vars-mixed-tiers.tsx', {
+        for (const result of everyArtifact(source, 'mangle-vars-mixed-tiers.tsx', {
             mangleVars: true,
-        });
-
-        for (const result of [oxc, rust]) {
+        })) {
             expect(result.code).toContain('p-(--cz)');
             expect(result.code).toContain('p-(--sz)');
             expect(new Set(asArray(result.cssVariableMap.get('--_sz-p')))).toEqual(
@@ -253,21 +272,16 @@ describe('CSS variable system config contract', () => {
         expect(result.cssVariableMap).toEqual(new Map());
     });
 
-    it('rewrites selected global variable tokens in static sz objects on oxc and Rust paths', () => {
+    it('rewrites selected global variable tokens in static sz objects on every artifact', () => {
         const source =
             "const App = () => <div sz={{ bg: '--brand-primary', hover: { text: '--brand-secondary' }, borderColor: '--other-token' }} />;";
         const aliases = new Map([
             ['--brand-primary', '--g0'],
             ['--brand-secondary', '--g1'],
         ]);
-        const oxc = transformWasm(source, 'global-var-aliases.tsx', {
+        for (const result of everyArtifact(source, 'global-var-aliases.tsx', {
             globalVarAliases: aliases,
-        });
-        const rust = transformRust(source, 'rust-global-var-aliases.tsx', {
-            globalVarAliases: aliases,
-        });
-
-        for (const result of [oxc, rust]) {
+        })) {
             expect(result.code).toContain('bg-(--g0)');
             expect(result.code).toContain('hover:text-(length:--g1)');
             expect(result.code).toContain('border-(--other-token)');
@@ -296,18 +310,13 @@ describe('CSS variable system config contract', () => {
         expect(result.cssVariableMap).toEqual(new Map());
     });
 
-    it('does not alias runtime fallback sz expressions on oxc and Rust paths', () => {
+    it('does not alias runtime fallback sz expressions on every artifact', () => {
         const source =
             "const App = ({ styles }: { styles: { bg: '--brand-primary' } }) => <div sz={styles} />;";
         const aliases = new Map([['--brand-primary', '--g0']]);
-        const oxc = transformWasm(source, 'global-var-runtime-fallback.tsx', {
+        for (const result of everyArtifact(source, 'global-var-runtime-fallback.tsx', {
             globalVarAliases: aliases,
-        });
-        const rust = transformRust(source, 'rust-global-var-runtime-fallback.tsx', {
-            globalVarAliases: aliases,
-        });
-
-        for (const result of [oxc, rust]) {
+        })) {
             expect(result.code).toContain('_sz(styles)');
             expect(result.code).toContain("'--brand-primary'");
             expect(result.code).not.toContain('--g0');

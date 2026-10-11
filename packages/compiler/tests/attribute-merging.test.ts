@@ -18,7 +18,7 @@ describe('Attribute Merging (transformSource)', () => {
                 'const App = () => <div className={isActive ? "active" : "inactive"} sz={{ p: 4, bg: \'red-500\' }} />';
             const result = transformSource(source);
             expect(result.transformed).toBe(true);
-            // Babel does not wrap ternary in extra parens — direct args to _szMerge
+            // The engine does not wrap the ternary in extra parens — direct args to _szMerge
             expect(result.code).toContain(
                 '_szMerge(isActive ? "active" : "inactive", "p-4 bg-red-500")',
             );

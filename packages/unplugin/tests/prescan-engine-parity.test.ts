@@ -2,8 +2,8 @@
  * Prescan engine-parity harness.
  *
  * Runs the REAL unplugin prescan (no compiler mocks) over one deliberately
- * dirty fixture tree with each parser — rust, oxc, babel — and asserts the
- * safelist token set is IDENTICAL across engines. This is the in-repo version
+ * dirty fixture tree with each engine artifact — rust (native) and wasm — and
+ * asserts the safelist token set is IDENTICAL across them. This is the in-repo version
  * of the harness a field user had to build themselves to discover that the
  * native engine silently dropped whole files (JSX-in-.js) the removed JavaScript lanes kept:
  * per-snippet transform tests can never see pipeline bugs (file discovery,
@@ -86,7 +86,7 @@ export const controlSz = szv({ variants: { layout: {
 `,
     // Regression: an szv catalog AND a plain static \`sz={{ … }}\` in ONE file.
     // The native fast path handled the \`sz=\` attribute and dropped the whole
-    // szv catalog, so \`rust\` safelisted fewer classes than \`oxc\`/\`babel\` for
+    // szv catalog, so \`rust\` safelisted fewer classes than the removed TS lanes for
     // identical source (the field-reported \`build.parser\` flip that lost mx-0).
     // A component leaf that both defines a variant table and renders a static
     // sz is exactly the vui compileSources shape.
@@ -129,7 +129,7 @@ export const Button = () => <button className="ds-button" sz={{ rounded: 'lg', i
 // semantic string classes (`dg-row-item`, `layout-header`), AND a static sz. The
 // native fast path used to see the static `sz={{ p: 4 }}`, take the AST-free path,
 // and drop the szv catalog (mx-0/grow-1/my-4) — so `rust`'s safelist was smaller
-// than `oxc`'s for this file while the semantic strings survived, the divergence
+// than the since-removed oxc lane's for this file while the semantic strings survived, the divergence
 // vui measured. Both engine artifacts must now agree.
 const UNIMPORTED_VUI_LEAF_FIXTURE = `
 import { szv } from '@csszyx/runtime';
@@ -292,8 +292,8 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
     });
 
     it('a parse-rejected file warns on every engine — never a silent skip', () => {
-        // The exact phrasing differs per lane (rust: "prescan skipped"; the JS
-        // lanes surface Babel's own parse-failure warning) — the CONTRACT is
+        // The exact phrasing is not pinned here (the removed JS lanes surfaced
+        // Babel's own parse-failure warning) — the CONTRACT is
         // that some warning names the file, so a developer can find the dead
         // classes before a field user does.
         for (const engine of ['rust', 'wasm'] as const) {
@@ -315,7 +315,8 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         // The reported divergence: the native fast path saw the static
         // `sz={{ p: 4 }}` in an unimported vui leaf, took the AST-free path, and
         // dropped the szv catalog (`mx-0`/`grow-1`/`my-4`) while the semantic
-        // string classes survived — so `rust` safelisted fewer tokens than `oxc`.
+        // string classes survived — so `rust` safelisted fewer tokens than the
+        // since-removed oxc lane.
         // Every token this file contributes must appear on both engine artifacts.
         for (const engine of ['rust', 'wasm'] as const) {
             for (const token of [

@@ -5,9 +5,8 @@
  * string (keeping the key) so a component forwards `props.szs?.<slot>` into a
  * child className. The v1 contract — identifier keys; pure-literal object or
  * class-string values; custom components only — is enforced identically by
- * babel, oxc, and the native engine, and the compiled output is byte-identical
- * between rust and oxc (babel is compared whitespace-normalized because it
- * reprints the file).
+ * both artifacts, and the compiled output is byte-identical between the native
+ * and wasm artifacts.
  *
  * Discovery order is part of the contract: per file, every sz-derived class
  * (document order) is discovered BEFORE every szs-derived class (document
@@ -21,10 +20,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
 import { transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, type ParityEngine, RUST_LANE } from './engine-parity-harness.js';
 
 interface EngineOutput {
     code: string;
@@ -33,30 +31,18 @@ interface EngineOutput {
 }
 
 /**
- * Run one engine and normalize its result shape.
- * @param engine - which engine to run.
+ * Run one engine artifact and normalize its result shape.
+ * @param transform - which artifact to run.
  * @param tsx - source to transform.
  * @returns code, ordered classes, and diagnostic count.
  */
-function run(engine: 'auto' | 'wasm' | 'rust', tsx: string): EngineOutput {
-    let result = transformSource(tsx, 'F.tsx');
-    if (engine === 'wasm') result = transformWasm(tsx, 'F.tsx');
-    else if (engine === 'rust') result = transformRust(tsx, 'F.tsx');
+function run(transform: ParityEngine, tsx: string): EngineOutput {
+    const result = transform(tsx, 'F.tsx');
     return {
-        code: typeof result === 'string' ? result : result.code,
+        code: result.code ?? '',
         classes: [...(result.classes ?? [])],
         diagnostics: (result.diagnostics ?? []).length,
     };
-}
-
-/**
- * Whitespace-normalize a code string for babel comparisons (babel reprints the
- * whole file, so only token-level equality is meaningful).
- * @param code - code to normalize.
- * @returns single-spaced code.
- */
-function norm(code: string): string {
-    return code.replace(/\s+/g, ' ').trim();
 }
 
 const COMPILED: Array<{ name: string; tsx: string; expectAttr: string; classes: string[] }> = [
@@ -174,51 +160,37 @@ describe('szs slot-map parity', () => {
         try {
             loadNativeBinding();
         } catch {
-            // Binding absent — rust assertions are skipped below.
+            // Binding absent — the native lane is reported by the harness.
         }
     });
 
     for (const fixture of COMPILED) {
         it(`compiles — ${fixture.name}`, () => {
-            const oxc = run('wasm', fixture.tsx);
-            const babel = run('auto', fixture.tsx);
-            expect(oxc.code, 'oxc emits the shared format').toContain(fixture.expectAttr);
-            // babel keeps a kept string slot's ORIGINAL quotes (verbatim), so the
-            // expected attribute text matches without quote rewriting.
-            expect(norm(babel.code), 'babel matches (normalized)').toContain(
-                norm(fixture.expectAttr),
-            );
-            expect(oxc.classes, 'oxc classes in slot order').toEqual(fixture.classes);
-            expect(babel.classes, 'babel classes in slot order').toEqual(fixture.classes);
-            expect(oxc.diagnostics).toBe(0);
-            expect(babel.diagnostics).toBe(0);
+            for (const [name, transform] of ENGINES) {
+                const out = run(transform, fixture.tsx);
+                expect(out.code, `${name} emits the shared format`).toContain(fixture.expectAttr);
+                expect(out.classes, `${name} classes in slot order`).toEqual(fixture.classes);
+                expect(out.diagnostics, `${name} diagnostics`).toBe(0);
+            }
         });
 
-        it.skipIf(!RUST_LANE)(`rust is byte-identical — ${fixture.name}`, () => {
-            const oxc = run('wasm', fixture.tsx);
-            const rust = run('rust', fixture.tsx);
-            expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
-            expect(rust.classes, 'rust class order equals oxc').toEqual(oxc.classes);
-            expect(rust.diagnostics).toBe(oxc.diagnostics);
+        it.skipIf(!RUST_LANE)(`native is byte-identical to wasm — ${fixture.name}`, () => {
+            const wasm = run(transformWasm as ParityEngine, fixture.tsx);
+            const rust = run(transformRust as ParityEngine, fixture.tsx);
+            expect(rust.code, 'native code equals wasm byte-for-byte').toBe(wasm.code);
+            expect(rust.classes, 'native class order equals wasm').toEqual(wasm.classes);
+            expect(rust.diagnostics).toBe(wasm.diagnostics);
         });
     }
 
     for (const fixture of REJECTED) {
         it(`leaves the attribute untouched with a diagnostic — ${fixture.name}`, () => {
-            const oxc = run('wasm', fixture.tsx);
-            const babel = run('auto', fixture.tsx);
-            expect(oxc.code, 'oxc leaves the source unchanged').toBe(fixture.tsx);
-            expect(oxc.classes).toEqual([]);
-            expect(oxc.diagnostics, 'oxc records one diagnostic').toBe(1);
-            expect(babel.classes).toEqual([]);
-            expect(babel.diagnostics, 'babel records one diagnostic').toBe(1);
-        });
-
-        it.skipIf(!RUST_LANE)(`rust also rejects it identically — ${fixture.name}`, () => {
-            const rust = run('rust', fixture.tsx);
-            expect(rust.code, 'rust leaves the source unchanged').toBe(fixture.tsx);
-            expect(rust.classes).toEqual([]);
-            expect(rust.diagnostics, 'rust records one diagnostic').toBe(1);
+            for (const [name, transform] of ENGINES) {
+                const out = run(transform, fixture.tsx);
+                expect(out.code, `${name} leaves the source unchanged`).toBe(fixture.tsx);
+                expect(out.classes, `${name} classes`).toEqual([]);
+                expect(out.diagnostics, `${name} records one diagnostic`).toBe(1);
+            }
         });
     }
 
@@ -226,42 +198,29 @@ describe('szs slot-map parity', () => {
         const tsx =
             'export const A = () => (<Card sz={{ m: 1 }} szs={{ a: { p: 1 } }}><Card.Sub szs={{ b: { p: 2 } }} sz={{ m: 2 }} /></Card>);';
         const expected = ['m-1', 'm-2', 'p-1', 'p-2'];
-        expect(run('wasm', tsx).classes).toEqual(expected);
-        expect(run('auto', tsx).classes).toEqual(expected);
-        if (RUST_LANE) {
-            expect(run('rust', tsx).classes).toEqual(expected);
+        for (const [name, transform] of ENGINES) {
+            expect(run(transform, tsx).classes, name).toEqual(expected);
         }
     });
 
     it('is idempotent: re-transforming pass-1 output changes nothing and warns nothing', () => {
         const tsx =
             'export const A = () => <Card sz={{ p: 4 }} szs={{ header: { bg: "gray-100" } }} />;';
-        for (const engine of ['wasm', 'auto'] as const) {
-            const first = run(engine, tsx);
-            const second = run(engine, first.code);
-            expect(norm(second.code), `${engine} pass-2 output stable`).toBe(norm(first.code));
-            expect(second.diagnostics, `${engine} pass-2 emits no diagnostics`).toBe(0);
-        }
-        if (RUST_LANE) {
-            const first = run('rust', tsx);
-            const second = run('rust', first.code);
-            expect(second.code, 'rust pass-2 output stable').toBe(first.code);
-            expect(second.diagnostics).toBe(0);
+        for (const [name, transform] of ENGINES) {
+            const first = run(transform, tsx);
+            const second = run(transform, first.code);
+            expect(second.code, `${name} pass-2 output stable`).toBe(first.code);
+            expect(second.diagnostics, `${name} pass-2 emits no diagnostics`).toBe(0);
         }
     });
 
     it('empty szs map renames to szsc without classes or diagnostics', () => {
         const tsx = 'export const A = () => <Card szs={{}} />;';
-        for (const engine of ['wasm', 'auto'] as const) {
-            const out = run(engine, tsx);
-            expect(norm(out.code)).toContain(norm('szsc={{}}'));
-            expect(out.classes).toEqual([]);
-            expect(out.diagnostics).toBe(0);
-        }
-        if (RUST_LANE) {
-            const out = run('rust', tsx);
-            expect(out.code).toContain('szsc={{}}');
-            expect(out.diagnostics).toBe(0);
+        for (const [name, transform] of ENGINES) {
+            const out = run(transform, tsx);
+            expect(out.code, name).toContain('szsc={{}}');
+            expect(out.classes, name).toEqual([]);
+            expect(out.diagnostics, name).toBe(0);
         }
     });
 });

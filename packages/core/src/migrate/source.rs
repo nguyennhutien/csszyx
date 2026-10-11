@@ -111,7 +111,8 @@ pub fn transform_source(
         })
         .parse();
     // oxc folds warnings into `diagnostics`; only error-severity entries are
-    // parse failures, which is what Babel throws on.
+    // parse failures, which is what the removed TypeScript migrate's Babel
+    // parse threw on.
     let first_error = parsed.diagnostics.errors().next();
     if parsed.panicked || first_error.is_some() {
         let message = first_error.map_or(String::new(), |error| error.message.to_string());

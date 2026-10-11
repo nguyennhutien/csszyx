@@ -9,7 +9,7 @@ import {
     setSzWarnLocation,
     transform,
 } from '../src/transform-core.js';
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 // Runtime reports print once per message per process; each test asks afresh.
 beforeEach(() => {
@@ -102,34 +102,30 @@ describe('unknown-property warning — source location', () => {
     });
 
     it.each(['textEllipsis', 'textClip'])(
-        '%s emits its class without a Babel or oxc warning',
+        '%s emits its class without an unknown-property warning',
         key => {
             const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
-            expect(
-                transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
-            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-            expect(
-                transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
-            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-            const all = [
-                ...transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
-                ...transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
-            ];
-            expect(all.some(m => m.includes('Unknown property'))).toBe(false);
+            for (const [name, transform] of ENGINES) {
+                const result = transform(source, '/proj/src/Text.tsx', { rootDir: '/proj' });
+                expect(result.code, name).toContain(
+                    key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+                );
+                expect(
+                    (result.diagnostics ?? []).some(m => m.includes('Unknown property')),
+                    name,
+                ).toBe(false);
+            }
         },
     );
 });
 
 /**
- * The native (Rust) engine emits the same warning via `result.diagnostics`. The
- * hard safety invariant is that it must NEVER over-warn — flag a key the oxc
- * engine considers valid (that would be a false typo warning on real code). It
- * MAY under-warn on value-dependent edge cases (a missed dev nudge is harmless).
- * This is the drift gate: a new special-cased key in the Rust lowering that is
- * not taught to `is_known_sz_key` would fail here. Skips when no native binary is
+ * The native and wasm artifacts are one engine, so they warn on exactly the same
+ * keys. This is the drift gate for a build of one artifact that differs from the
+ * other (a feature-gated table, a stale binary). Skips when no native binary is
  * installed (the diagnostic can only be exercised through the real addon).
  */
-describe('unknown-property warning — Rust engine parity (no over-warn)', () => {
+describe('unknown-property warning — native and wasm warn on the same keys', () => {
     const rustAvailable = RUST_LANE;
     const runOr = rustAvailable ? it : it.skip;
 
@@ -219,15 +215,15 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             'wibble',
             'zzz',
         ];
-        const overWarns: string[] = [];
+        const disagree: string[] = [];
         for (const key of keys) {
             for (const value of ['"x"', '4', 'true']) {
-                if (rustWarns(key, value) && !wasmWarns(key, value)) {
-                    overWarns.push(`${key}:${value}`);
+                if (rustWarns(key, value) !== wasmWarns(key, value)) {
+                    disagree.push(`${key}:${value}`);
                 }
             }
         }
-        expect(overWarns).toEqual([]);
+        expect(disagree).toEqual([]);
     });
 
     runOr('accepts the css escape hatch without diagnosing its sub-properties', () => {
@@ -368,8 +364,7 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
 });
 
 /**
- * `csszyx check` runs the Babel reference lowering and captures `[csszyx]`
- * warnings. Unknown/numeric keys inside a `szv()` catalog or a static `szr()`
+ * `csszyx check` runs the engine (`transformSource`) and reads its diagnostics. Unknown/numeric keys inside a `szv()` catalog or a static `szr()`
  * argument already warn (the walk compiles each object through `transform()`),
  * but used to carry no location, so `check` could only attribute them to a file,
  * not a line. The catalog walk now points those warnings at the `szv()` / `szr()`
@@ -425,9 +420,11 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const src =
             'import { szv } from "@csszyx/runtime";\n' +
             'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });';
-        const native = transformSource(src, '/proj/src/F.tsx', { rootDir: '/proj' });
         const wasm = transformWasm(src, '/proj/src/F.tsx', { rootDir: '/proj' });
-        expect(wasm.diagnostics).toEqual(native.diagnostics);
+        for (const [name, transform] of ENGINES) {
+            const result = transform(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+            expect(result.diagnostics, name).toEqual(wasm.diagnostics);
+        }
     });
 });
 

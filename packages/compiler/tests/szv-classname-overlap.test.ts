@@ -4,11 +4,11 @@
  * `className={szr(factory({...}))}` beside an `sz` attribute made both rewrites
  * target overlapping source ranges. The span-based engines cannot edit text they
  * have already replaced, so this shape used to end a build three different ways:
- * the rust lane aborted the process at `string_wizard` with no file name, the
- * the JavaScript lane it replaced threw from magic-string, and one the JavaScript path it replaced emitted malformed JSX with
- * no error at all. The babel lane survived only by silently dropping the
- * precompile — it re-descends into the attribute value it just rewrote and
- * counted the same factory call twice.
+ * the rust lane aborted the process at `string_wizard` with no file name, a
+ * since-removed TS lane threw from magic-string, and another path emitted
+ * malformed JSX with no error at all. The removed Babel lane survived only by
+ * silently dropping the precompile — it re-descended into the attribute value
+ * it had just rewritten and counted the same factory call twice.
  *
  * The rule now: the sz merge edits only the text on either side of the authored
  * className expression, so the precompile keeps the inner range. Where that is

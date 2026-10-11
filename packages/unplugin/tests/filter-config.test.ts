@@ -1,4 +1,3 @@
-import { ASTBudgetExceededError } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import { unplugin, vitePlugin } from '../src/unplugin.js';
@@ -17,7 +16,7 @@ describe('csszyx plugin include/exclude filters', () => {
         const file = '/project/src/generated/icons.tsx';
 
         expect(prePlugin.transformInclude(file)).toBe(false);
-        expect(() => prePlugin.transform(hugeSzSource(), file)).not.toThrow(ASTBudgetExceededError);
+        expect(() => prePlugin.transform(hugeSzSource(), file)).not.toThrow();
         // unplugin v3 short-circuits excluded files to undefined before the
         // handler runs; bundlers treat undefined and null the same (no-op).
         expect(prePlugin.transform(hugeSzSource(), file)).toBeUndefined();

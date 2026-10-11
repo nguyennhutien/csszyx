@@ -40,10 +40,10 @@ it('probes the binding once after it answers', async () => {
 
 it('probes again after a failure, so each call reports it', async () => {
     binding.fail = true;
-    const { ensureRustTransformAvailable, OxcRustNotImplementedError } = await import(
+    const { ensureRustTransformAvailable, RustTransformUnavailableError } = await import(
         '../src/transform-rust.js'
     );
-    expect(() => ensureRustTransformAvailable()).toThrow(OxcRustNotImplementedError);
-    expect(() => ensureRustTransformAvailable()).toThrow(OxcRustNotImplementedError);
+    expect(() => ensureRustTransformAvailable()).toThrow(RustTransformUnavailableError);
+    expect(() => ensureRustTransformAvailable()).toThrow(RustTransformUnavailableError);
     expect(binding.calls).toBe(2);
 });

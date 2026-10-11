@@ -5,14 +5,14 @@
  * Sources two sets of sz objects: the hand-curated edge cases below (variants,
  * nesting, color-opacity, arbitrary spaces) plus every documented single-key
  * forward case from the per-key matrix fixture
- * (`packages/cli/tests/generated/sz-key-cases.json`), so the rust default engine
- * is proven equivalent to the TS engine for every key the snippets document —
- * not just the curated edges. For each object it records the canonical the JavaScript engines it replaced
- * `transform()` className and serializes the object into the Rust
- * `StaticSzObject` IR shape. `packages/core/tests/parity_corpus.rs` replays the
- * same objects through the native `lower_static_sz_object` and asserts identical
- * class output, so a divergence between the two parser paths fails closed
- * instead of shipping a silent default-parser bug.
+ * (`packages/cli/tests/generated/sz-key-cases.json`), so the Rust engine is
+ * proven equivalent to the TS runtime lowering for every key the snippets
+ * document — not just the curated edges. For each object it records the
+ * transform-core `transform()` className as `runtime` and serializes the object
+ * into the Rust `StaticSzObject` IR shape. `packages/core/tests/parity_corpus.rs`
+ * replays the same objects through the native `lower_static_sz_object` and
+ * asserts identical class output, so a divergence between build-time and
+ * runtime lowering fails closed instead of shipping silently.
  *
  * Usage: pnpm gen:parity-corpus       (write)
  *        pnpm gen:parity-corpus:check (verify committed file is in sync)
@@ -387,7 +387,7 @@ for (const entry of Object.values(keyCases.keys)) {
 const records = [...byKey.values()].map(sz => ({
     sz: JSON.stringify(sz),
     ir: toIrObject(sz),
-    oxc: transform(sz).className,
+    runtime: transform(sz).className,
 }));
 
 const serialized = `${JSON.stringify(records, null, 2)}\n`;

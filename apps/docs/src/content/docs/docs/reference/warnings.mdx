@@ -629,6 +629,14 @@ runtime prints the same text once per value, in the browser and in production
 too, because the class is missing. A trailing `!` is left out of the value it
 names.
 
+The object form is the one spelling for an opacity. A plain slash opacity
+inside it (`bg: { color: 'red-500/50' }`) is still written as the class, and the
+build reports it with the kind `color-slash-opacity` (an `error` under
+`recommended`) so the opacity moves to `op`. When both are given, `op` is the
+opacity: `{ color: 'red-500/50', op: 20 }` writes `bg-red-500/20`. A trailing
+`!` ends the class (`bg-red-500/20!`). Anything else after the slash
+(`red-500/50/30`) is written as given and judged at build.
+
 Any other colour string is written as given, on every lane: `bg: 'white/50'`
 is `bg-white/50`, `bg: '50%'` is `bg-[50%]`. Whether the project's Tailwind
 serves the class is its answer at build, where the dead-class check reports a
@@ -637,6 +645,7 @@ class that produces no CSS; the runtime does not judge it.
 | Message | Notes |
 | --- | --- |
 | `[csszyx] "{key}: '{value}'"{ at LOC} — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: '{color}', op: {opacity} }.` | build, **browser too**, production too. |
+| `[csszyx] "{key}: { color: '{color}'{, op: OP} }"{ at LOC} — a colour object takes its opacity in op, not in color. Write { color: '{base}', op: {opacity} }.` | build (`color-slash-opacity`), runtime in development. The class is still written; with both, `op` is the opacity. An `op` that is not a number or a string is named as if absent. |
 
 ### Mask layers
 
@@ -1321,7 +1330,6 @@ lanes it described.
 
 | Message | Kind |
 | --- | --- |
-| **Thrown.** ``[csszyx] AST budget exceeded: {filename} has more than {budget} nodes (traversal aborted at {n}). Files this large are almost always machine-generated and should be excluded from sz transformation. Either exclude the file from the plugin (Vite: `csszyx({ exclude: [/large-data\.ts$/] })`), or raise the limit globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.`` | Caught and printed by the plugin in every mode |
 | **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
 | `[csszyx] {filename}: source nesting exceeded {max} levels (found {n}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)` | Native engine |
 | ``[csszyx] AST budget exceeded in {filename}: the IR walk stopped mid-file, so the file was left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` or split the file.`` | Native engine |
@@ -1694,7 +1702,7 @@ csszyx check --rule merge-covered-key --rule merge-covered-class
 ```
 
 `kind` says what an `sz-diagnostic` found: `unknown-key`, `canonical-key`,
-`removed-key`, `numeric-key`, `closed-enum-value`, `slash-opacity-string`, `off-scale-value`,
+`removed-key`, `numeric-key`, `closed-enum-value`, `slash-opacity-string`, `color-slash-opacity`, `off-scale-value`,
 `numeric-font-weight`, `per-side-border-style`, `property-object`,
 `non-variant-object`, `unknown-field`, `runtime-value`, `unresolvable-spread`,
 `style-override`, `szs-slot-map`, `sz-recover`, `class-precedence`,

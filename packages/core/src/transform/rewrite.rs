@@ -456,8 +456,7 @@ fn rewrite_ternary_sz_attribute(
     // Lower just the static object so the ternaries' own branch classes are
     // not duplicated. Runtime css-var siblings (`w: width`) append their
     // `w-(--_sz-w)` class here — their style props are emitted by
-    // apply_dynamic_style_props — in the same statics-then-vars order Babel
-    // emits.
+    // apply_dynamic_style_props — statics first, then vars.
     let mut static_classes = lower_static_sz_object(&only_attribute.object);
     static_classes.extend(
         only_attribute
@@ -491,9 +490,8 @@ fn rewrite_ternary_sz_attribute(
     };
 
     // Template literal appending one `${…}` segment per conditional after the
-    // static/var classes — byte-for-byte the Babel engine's emission: first
-    // quasi is `"statics "` (trailing space) or empty, separator is a single
-    // space.
+    // static/var classes: first quasi is `"statics "` (trailing space) or
+    // empty, separator is a single space.
     let template_literal = || {
         let mut out = String::from("`");
         if !static_classes.is_empty() {
@@ -515,10 +513,10 @@ fn rewrite_ternary_sz_attribute(
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
         // A companion-less single ternary merges bare; anything with static/var
-        // classes merges the SAME template literal the Babel engine emits —
-        // the old 3-arg form (existing, "statics", ternary) was functionally
-        // equal but byte-different, breaking cross-producer transform-cache
-        // reuse for this shape.
+        // classes merges the SAME template literal the multi-ternary shape
+        // emits — the old 3-arg form (existing, "statics", ternary) was
+        // functionally equal but byte-different, so one element printed two
+        // ways depending on how many conditionals it carried.
         let merged = match (ternaries.as_slice(), static_classes.is_empty()) {
             ([only_ternary], true) => ternary_source(only_ternary),
             _ => template_literal(),
@@ -1438,8 +1436,8 @@ mod tests {
 
     #[test]
     fn rewrites_two_property_ternaries_as_template_segments() {
-        // Byte-parity with the Babel engine: one `${…}` segment per
-        // conditional in source property order, single-space separators.
+        // One `${…}` segment per conditional in source property order,
+        // single-space separators.
         let source = "const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
@@ -1467,8 +1465,8 @@ mod tests {
     #[test]
     fn merges_a_single_ternary_with_statics_as_the_babel_template() {
         // The old 3-arg _szMerge(existing, "statics", ternary) was functionally
-        // equal to Babel's 2-arg template merge but byte-different, breaking
-        // cross-producer transform-cache reuse for this shape.
+        // equal to the 2-arg template merge every multi-ternary shape emits,
+        // but byte-different.
         let source =
             "export const A = ({ on }) => <div className=\"q\" sz={{ bg: 'white', p: on ? 2 : 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");
@@ -1497,8 +1495,8 @@ mod tests {
         // ONE object used to punt the whole attribute to the runtime fallback,
         // which never safelists the dynamic utilities — Tailwind emitted no CSS
         // for them and the styling silently never applied (field-reported).
-        // Expected shape mirrors the Babel output: statics, then var classes,
-        // then the ternary appended in a template literal.
+        // Expected shape: statics, then var classes, then the ternary
+        // appended in a template literal.
         let source = "const A = ({ width, flex, cond }) => <div sz={{ w: width, h: 'max', flex: cond ? flex : undefined }} />;";
         let rewritten = rewrite(source).expect("rewritten");
 

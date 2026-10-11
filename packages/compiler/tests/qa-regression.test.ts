@@ -107,12 +107,12 @@ describe('a finite ternary in a value sub-property expands into both branches', 
         expect(code).toContain('c ? "bg-black/30" : "bg-black/100"');
     });
 
-    it('matches the babel engine (parity)', () => {
-        const oxc = transformWasm(source, 'App.tsx').code;
-        const babel = transform({ bg: { color: 'black', op: 30 } }); // sanity: branch is real
-        expect(babel.className).toBe('bg-black/30');
-        expect(oxc).toContain('bg-black/30');
-        expect(oxc).toContain('bg-black/100');
+    it('matches the runtime lowering (parity)', () => {
+        const code = transformWasm(source, 'App.tsx').code;
+        const runtime = transform({ bg: { color: 'black', op: 30 } }); // sanity: branch is real
+        expect(runtime.className).toBe('bg-black/30');
+        expect(code).toContain('bg-black/30');
+        expect(code).toContain('bg-black/100');
     });
 });
 

@@ -1,22 +1,20 @@
 /**
- * Rust transform parity harness — compares `transformRust` output against
- * `transformWasm` (the v0.8.0 default) on the same fixture set. Catches
- * silent drift as the Rust native engine grows coverage. Sister harness
- * to `oxc-parity-harness.ts`; same state model but the baseline is
- * `transformWasm` instead of `transformSource` because the JavaScript pipeline is the
- * production parser that Rust must match before it can take over.
+ * Native-vs-wasm parity harness — compares `transformRust` (the native napi
+ * artifact of the Rust engine) against `transformWasm` (the wasm artifact of
+ * the same engine) on one source. Both are builds of one engine, so the only
+ * acceptable relationship is identical output: same rewritten code, same
+ * class set, same `transformed` flag, same CSS custom-property metadata.
  *
- * When the Rust native binding is not available (`@csszyx/core/native`
- * cannot load a platform addon), `transformRust` throws
- * `OxcRustNotImplementedError`. The harness records that as
- * `rustIsUnavailable`; fixtures expected to be `pending` still pass.
- * Non-pending fixtures fail with a descriptive error so CI surfaces a
- * missing-build situation instead of silently green-lighting.
+ * When the native binding is not available (`@csszyx/core/native` cannot load
+ * a platform addon), `transformRust` throws `RustTransformUnavailableError`.
+ * The comparison records that as `rustIsUnavailable`, and
+ * {@link assertNativeMatchesWasm} fails with the error text so CI surfaces a
+ * missing build instead of passing on one artifact.
  */
 
 import {
     type CssVariableMangleValue,
-    OxcRustNotImplementedError,
+    RustTransformUnavailableError,
     type SourceTransformResult,
     type TransformSourceCodeOptions,
     transformRust,
@@ -24,86 +22,66 @@ import {
 } from '../src/index.js';
 
 /**
- * Side-by-side Rust vs the JavaScript pipeline comparison for one fixture.
+ * Side-by-side native vs wasm comparison for one source.
  */
 export interface RustParityComparison {
-    /** Did Rust and the JavaScript pipeline agree on the class set? */
+    /** Did the two artifacts agree on the class set? */
     classesEqual: boolean;
-    /** Did Rust and the JavaScript pipeline agree on the rewritten source? */
+    /** Did the two artifacts agree on the rewritten source? */
     codeEqual: boolean;
-    /** Did Rust and the JavaScript pipeline agree on the `transformed` flag? */
+    /** Did the two artifacts agree on the `transformed` flag? */
     transformedEqual: boolean;
-    /** Did Rust and the JavaScript pipeline agree on emitted CSS custom-property metadata? */
+    /** Did the two artifacts agree on emitted CSS custom-property metadata? */
     cssVariableMapEqual: boolean;
-    /** the JavaScript pipeline output — always populated unless oxc itself throws. */
-    oxc: {
+    /** Wasm output — always populated unless the wasm artifact itself throws. */
+    wasm: {
         code: string;
         classes: string[];
         transformed: boolean;
         cssVariableMap: [string, CssVariableMangleValue][];
     };
-    /** Rust output — null when the Rust path threw. */
+    /** Native output — null when the native path threw. */
     rust: SourceTransformResult | null;
-    /** Error message when Rust threw, otherwise null. */
+    /** Error message when the native path threw, otherwise null. */
     rustError: string | null;
-    /** True when the Rust error was the unavailable-binding throw. */
+    /** True when the native error was the unavailable-binding throw. */
     rustIsUnavailable: boolean;
 }
 
 /**
- * Fixture descriptor for the Rust parity suite. Mirrors the oxc-parity
- * `ParityFixture` shape but `expected` describes Rust's relationship to
- * the JavaScript pipeline (the v0.8.0 baseline), not Babel.
+ * Fixture descriptor for the native-vs-wasm parity suite.
  */
 export interface RustParityFixture {
     /** Human-readable test name. */
     name: string;
     /** TSX/JSX source for the harness. */
     source: string;
-    /** Filename passed to both implementations. */
+    /** Filename passed to both artifacts. */
     filename: string;
-    /** Optional transform options passed to both parser implementations. */
+    /** Optional transform options passed to both artifacts. */
     options?: TransformSourceCodeOptions;
-    /**
-     * Expected current parity state:
-     * - `pending`: Rust throws `OxcRustNotImplementedError` (native unavailable
-     *   OR fixture exercises a path the Rust engine has not yet ported).
-     * - `classes-only-parity`: Rust produces the same class set, code may
-     *   differ. Reserved for paths where Rust intentionally leaves source
-     *   unchanged (e.g. dynamic sz fail-closed) while the JavaScript pipeline emits a
-     *   runtime helper call.
-     * - `surgical-parity`: classes match, code differs by formatting (rare
-     *   for Rust vs the JavaScript pipeline since both go through magic-string-equivalent
-     *   surgical edits; included for symmetry).
-     * - `rust-ahead`: Rust intentionally produces stricter static output than
-     *   the JavaScript pipeline for this fixture. Rust's class set must be a superset of the JavaScript pipeline.
-     * - `parity`: full match — classes + code + transformed flag.
-     */
-    expected: 'pending' | 'classes-only-parity' | 'surgical-parity' | 'rust-ahead' | 'parity';
-    /** Why this fixture is pending — link to the slice that lands it. */
-    pendingReason?: string;
 }
 
 /**
- * Run Rust and the JavaScript pipeline on the same source. Never throws — Rust failures
- * are captured in the return value, oxc failures propagate.
+ * Run the native and wasm artifacts on the same source. Never throws — native
+ * failures are captured in the return value, wasm failures propagate.
  *
  * @param source Source TSX/JSX text.
- * @param filename Filename passed to both implementations.
- * @param options Optional transform options passed to both implementations.
+ * @param filename Filename passed to both artifacts.
+ * @param options Optional transform options passed to both artifacts.
  * @returns Side-by-side comparison.
  */
-export function compareRustVsOxc(
+export function compareNativeVsWasm(
     source: string,
     filename: string,
     options?: TransformSourceCodeOptions,
 ): RustParityComparison {
-    const oxc = transformWasm(source, filename, options);
-    const oxcView = {
-        code: oxc.code,
-        classes: [...oxc.classes].sort(),
-        transformed: oxc.transformed,
-        cssVariableMap: sortedMapEntries(oxc.cssVariableMap),
+    const wasmResult = transformWasm(source, filename, options);
+    const wasm = {
+        code: wasmResult.code,
+        classes: [...wasmResult.classes].sort(),
+        transformed: wasmResult.transformed,
+        cssVariableMap: sortedMapEntries(wasmResult.cssVariableMap),
     };
 
     let rust: SourceTransformResult | null = null;
@@ -113,7 +91,7 @@ export function compareRustVsOxc(
         rust = transformRust(source, filename, options);
     } catch (err) {
         rustError = err instanceof Error ? err.message : String(err);
-        rustIsUnavailable = err instanceof OxcRustNotImplementedError;
+        rustIsUnavailable = err instanceof RustTransformUnavailableError;
     }
 
     if (!rust) {
@@ -122,7 +100,7 @@ export function compareRustVsOxc(
             codeEqual: false,
             transformedEqual: false,
             cssVariableMapEqual: false,
-            oxc: oxcView,
+            wasm,
             rust: null,
             rustError,
             rustIsUnavailable,
@@ -131,14 +109,14 @@ export function compareRustVsOxc(
 
     const rustClassesSorted = [...rust.classes].sort();
     return {
-        classesEqual: arraysEqual(oxcView.classes, rustClassesSorted),
-        codeEqual: oxcView.code === rust.code,
-        transformedEqual: oxcView.transformed === rust.transformed,
+        classesEqual: arraysEqual(wasm.classes, rustClassesSorted),
+        codeEqual: wasm.code === rust.code,
+        transformedEqual: wasm.transformed === rust.transformed,
         cssVariableMapEqual: mapEntriesEqual(
-            oxcView.cssVariableMap,
+            wasm.cssVariableMap,
             sortedMapEntries(rust.cssVariableMap),
         ),
-        oxc: oxcView,
+        wasm,
         rust,
         rustError: null,
         rustIsUnavailable: false,
@@ -146,127 +124,45 @@ export function compareRustVsOxc(
 }
 
 /**
- * Assert the intentionally divergent contract of one pending Rust fixture.
- *
- * @param fixture Pending Rust parity fixture.
- * @param comparison Current Oxc/Rust comparison.
- */
-function assertPendingRustParity(
-    fixture: RustParityFixture,
-    comparison: RustParityComparison,
-): void {
-    if (comparison.rustError) return;
-    if (!comparison.classesEqual || !comparison.codeEqual) return;
-    throw new Error(
-        `Fixture "${fixture.name}" marked as pending but Rust matched the JavaScript pipeline exactly. ` +
-            'Flip its `expected` to "parity" and drop `pendingReason`.',
-    );
-}
-
-/**
- * Assert that a comparison matches the fixture's expected state. Throws
- * a descriptive error when the actual state differs.
+ * Assert that the native and wasm artifacts agreed completely on one fixture.
+ * Throws a descriptive error naming the first field that differs.
  *
  * @param fixture The fixture under test.
- * @param comparison Output from {@link compareRustVsOxc}.
+ * @param comparison Output from {@link compareNativeVsWasm}.
  */
-export function assertExpectedRustParity(
+export function assertNativeMatchesWasm(
     fixture: RustParityFixture,
     comparison: RustParityComparison,
 ): void {
-    if (fixture.expected === 'pending') {
-        assertPendingRustParity(fixture, comparison);
-        return;
-    }
     if (comparison.rustError) {
-        throw new Error(
-            `Fixture "${fixture.name}" marked as ${fixture.expected} but Rust threw: ${comparison.rustError}`,
-        );
-    }
-    if (fixture.expected === 'rust-ahead') {
-        assertRustAhead(fixture, comparison);
-        return;
+        throw new Error(`Fixture "${fixture.name}": native threw: ${comparison.rustError}`);
     }
     if (!comparison.classesEqual) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as ${fixture.expected} but class sets differ.\n` +
-                `  oxc:  [${comparison.oxc.classes.join(', ')}]\n` +
-                `  rust: [${comparison.rust ? [...comparison.rust.classes].sort().join(', ') : ''}]`,
+            `Fixture "${fixture.name}": class sets differ.\n` +
+                `  wasm:   [${comparison.wasm.classes.join(', ')}]\n` +
+                `  native: [${comparison.rust ? [...comparison.rust.classes].sort().join(', ') : ''}]`,
         );
     }
     if (!comparison.cssVariableMapEqual) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as ${fixture.expected} but cssVariableMap differs.\n` +
-                `  oxc:  ${JSON.stringify(comparison.oxc.cssVariableMap)}\n` +
-                `  rust: ${JSON.stringify(sortedMapEntries(comparison.rust?.cssVariableMap ?? new Map()))}`,
+            `Fixture "${fixture.name}": cssVariableMap differs.\n` +
+                `  wasm:   ${JSON.stringify(comparison.wasm.cssVariableMap)}\n` +
+                `  native: ${JSON.stringify(sortedMapEntries(comparison.rust?.cssVariableMap ?? new Map()))}`,
         );
     }
-    if (fixture.expected === 'classes-only-parity') {
-        if (comparison.codeEqual) {
-            throw new Error(
-                `Fixture "${fixture.name}" marked as classes-only-parity but code also matches the JavaScript pipeline. ` +
-                    'Flip its `expected` to "parity".',
-            );
-        }
-        return;
-    }
-    if (fixture.expected === 'surgical-parity') {
-        if (comparison.codeEqual) {
-            throw new Error(
-                `Fixture "${fixture.name}" marked as surgical-parity but code matches the JavaScript pipeline byte-for-byte. ` +
-                    'Flip its `expected` to "parity".',
-            );
-        }
-        return;
+    if (!comparison.transformedEqual) {
+        throw new Error(
+            `Fixture "${fixture.name}": transformed flag differs.\n` +
+                `  wasm:   ${comparison.wasm.transformed}\n` +
+                `  native: ${comparison.rust?.transformed}`,
+        );
     }
     if (!comparison.codeEqual) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as parity but rewritten code differs.\n` +
-                `  oxc:  ${JSON.stringify(comparison.oxc.code)}\n` +
-                `  rust: ${JSON.stringify(comparison.rust?.code ?? '')}`,
-        );
-    }
-}
-
-/**
- * One-line progress summary across all fixtures.
- *
- * @param fixtures All fixtures the suite tracks.
- * @returns Human-readable summary.
- */
-export function summariseRust(fixtures: readonly RustParityFixture[]): string {
-    const total = fixtures.length;
-    const parity = fixtures.filter(f => f.expected === 'parity').length;
-    const surgical = fixtures.filter(f => f.expected === 'surgical-parity').length;
-    const classesOnly = fixtures.filter(f => f.expected === 'classes-only-parity').length;
-    const rustAhead = fixtures.filter(f => f.expected === 'rust-ahead').length;
-    const pending = fixtures.filter(f => f.expected === 'pending').length;
-    const covered = parity + surgical + classesOnly + rustAhead;
-    const pct = total === 0 ? 0 : Math.round((covered / total) * 100);
-    return (
-        `Rust vs the JavaScript pipeline coverage: ${pct}% — ${parity} full, ${surgical} surgical, ` +
-        `${classesOnly} classes-only, ${rustAhead} rust-ahead, ${pending} pending (${total} total)`
-    );
-}
-
-function assertRustAhead(fixture: RustParityFixture, comparison: RustParityComparison): void {
-    if (!comparison.rust?.transformed) {
-        throw new Error(
-            `Fixture "${fixture.name}" marked as rust-ahead but Rust did not transform source.`,
-        );
-    }
-    if (comparison.codeEqual) {
-        throw new Error(
-            `Fixture "${fixture.name}" marked as rust-ahead but code matches the JavaScript pipeline. ` +
-                'Flip its `expected` to "parity".',
-        );
-    }
-    const rustClasses = [...comparison.rust.classes].sort();
-    if (!isSuperset(rustClasses, comparison.oxc.classes)) {
-        throw new Error(
-            `Fixture "${fixture.name}" marked as rust-ahead but Rust lost the JavaScript pipeline classes.\n` +
-                `  oxc:  [${comparison.oxc.classes.join(', ')}]\n` +
-                `  rust: [${rustClasses.join(', ')}]`,
+            `Fixture "${fixture.name}": rewritten code differs.\n` +
+                `  wasm:   ${JSON.stringify(comparison.wasm.code)}\n` +
+                `  native: ${JSON.stringify(comparison.rust?.code ?? '')}`,
         );
     }
 }
@@ -311,9 +207,4 @@ function sortedMapEntries(
     return [...map.entries()]
         .map(([key, value]) => [key, Array.isArray(value) ? [...value].sort() : value] as const)
         .sort(([a], [b]) => a.localeCompare(b));
-}
-
-function isSuperset(a: readonly string[], b: readonly string[]): boolean {
-    const seen = new Set(a);
-    return b.every(item => seen.has(item));
 }

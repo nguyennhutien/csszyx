@@ -343,7 +343,7 @@ export interface BuildRecoveryManifestResult {
  * checksum is stable across runs that produce the same set of tokens
  * (otherwise Map iteration order would surface differently per build).
  *
- * @param tokens Per-build token map collected from `transformSourceCode`.
+ * @param tokens Per-build token map collected from the engine transform.
  * @param options Build options.
  * @param options.production When `true`, strip `mode: 'dev-only'` tokens
  *   from the manifest and report their source paths via

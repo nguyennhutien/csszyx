@@ -5,8 +5,8 @@
  * unknown top-level key, which at least leaves a dead class in the DOM to
  * find. The slot shapes are closed, so member NAMES are fully checkable;
  * member VALUES stay unvalidated by design (the compiler is a prefix-mapping
- * engine). The JS lanes share `warnMaskSlotMember` in transform-core (console
- * channel), the native engine mirrors it as a diagnostic.
+ * engine). The runtime lowering warns through `warnMaskSlotMember` in
+ * transform-core (console channel); the Rust engine mirrors it as a diagnostic.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';

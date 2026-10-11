@@ -2,12 +2,12 @@
  * A className EXPRESSION next to a static `sz` object must survive as a runtime
  * merge — never be overwritten by the compiled classes.
  *
- * Regression for the vui 0.10.10 field report item 1: the oxc static-sz path
- * merged only a string-literal className and OVERWROTE any expression
- * (`className={isMobile ? undefined : 'dems-panel'}` next to `sz={{ p: 4 }}`
- * compiled to `className="p-4"`, silently deleting the panel class). Babel and
- * the native engine already emitted `className={_szMerge(<expr>, "<compiled>")}`;
- * oxc now matches byte-for-byte.
+ * Regression for the vui 0.10.10 field report item 1: the since-removed oxc
+ * static-sz lane merged only a string-literal className and OVERWROTE any
+ * expression (`className={isMobile ? undefined : 'dems-panel'}` next to
+ * `sz={{ p: 4 }}` compiled to `className="p-4"`, silently deleting the panel
+ * class). The engine emits `className={_szMerge(<expr>, "<compiled>")}`, and
+ * its native and wasm artifacts must agree byte-for-byte.
  *
  * Fixtures are field-named (not `const source = ...`) so the extracted-corpus
  * meta-test does not sample them.
@@ -17,10 +17,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
 import { transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 /**
  * Extract the transformed JSX element for stable comparison.
@@ -94,30 +93,27 @@ describe('className expression + static sz merges (never overwritten)', () => {
     });
 
     for (const fixture of FIXTURES) {
-        it(`oxc merges and matches babel — ${fixture.name}`, () => {
-            const oxc = transformWasm(fixture.tsx, 'F.tsx');
-            const babel = transformSource(fixture.tsx, 'F.tsx');
-            expect(element(oxc.code), 'oxc keeps the expression').toContain(fixture.expectMerge);
-            expect(element(babel.code), 'babel keeps the expression').toContain(
-                fixture.expectMerge,
-            );
-            // The static classes are still safelisted even though the emission is
-            // a runtime merge.
-            expect([...oxc.classes]).toEqual([...babel.classes]);
+        it(`every artifact keeps the expression as a merge — ${fixture.name}`, () => {
+            for (const [name, transform] of ENGINES) {
+                const code = transform(fixture.tsx, 'F.tsx').code ?? '';
+                expect(element(code), `${name} keeps the expression`).toContain(
+                    fixture.expectMerge,
+                );
+            }
         });
 
-        it.skipIf(!RUST_LANE)(`rust is byte-identical to oxc — ${fixture.name}`, () => {
-            const oxc = transformWasm(fixture.tsx, 'F.tsx');
+        it.skipIf(!RUST_LANE)(`native is byte-identical to wasm — ${fixture.name}`, () => {
+            const wasm = transformWasm(fixture.tsx, 'F.tsx');
             const rust = transformRust(fixture.tsx, 'F.tsx');
-            expect(element(rust.code)).toBe(element(oxc.code));
-            expect([...rust.classes]).toEqual([...oxc.classes]);
+            expect(rust.code).toBe(wasm.code);
+            expect([...rust.classes]).toEqual([...wasm.classes]);
         });
     }
 
     it('string-literal className still merges into one static string', () => {
         const tsx = 'export const A = () => <Row className="static-x" sz={{ p: 4 }} />;';
-        for (const engine of [transformWasm, transformSource]) {
-            const out = element(engine(tsx, 'F.tsx').code);
+        for (const [, transform] of ENGINES) {
+            const out = element(transform(tsx, 'F.tsx').code ?? '');
             expect(out).toContain('className="static-x p-4"');
             expect(out).not.toContain('_szMerge');
         }
@@ -128,14 +124,14 @@ describe('className expression + static sz merges (never overwritten)', () => {
         // which carries no classes. The engine does not treat it as a
         // mergeable className and emits its own attribute after it — React
         // resolves duplicate props last-wins, so the compiled value applies.
-        // (The deleted the JavaScript lane it replaced used to fold it into the merge as `""`.)
+        // (The removed TS lanes folded it into the merge as `""`.)
         const tsx = 'export const A = ({ r }) => <Row className sz={{ ...r }} />;';
         expect(element(transformWasm(tsx, 'F.tsx').code)).toContain(
             'className className={_sz({ ...r })}',
         );
     });
 
-    it('sets the runtime/merge flags so the import gets injected (oxc)', () => {
+    it('sets the runtime/merge flags so the import gets injected (wasm)', () => {
         const tsx = 'export const A = ({ c }) => <Row className={c} sz={{ p: 4 }} />;';
         const result = transformWasm(tsx, 'F.tsx');
         expect(result.metadata?.usesRuntime ?? result.usesRuntime).toBe(true);

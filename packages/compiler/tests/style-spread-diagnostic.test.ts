@@ -1,43 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import { transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
-import { RUST_LANE } from './engine-parity-harness.js';
+import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 const collisionSource =
     'const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;';
 const diagnosticMarker = 'possible style override';
 
-function babelDiagnostics(source: string): string[] {
-    return transformSource(source, 'probe.tsx').diagnostics;
-}
-
-function oxcDiagnostics(source: string): string[] {
-    return transformWasm(source, 'probe.tsx').diagnostics;
+/**
+ * Each artifact's diagnostics for one source, joined for substring checks.
+ *
+ * @param source - Module source.
+ * @returns `[artifact name, joined diagnostics]` per engine artifact.
+ */
+function diagnosticsPerEngine(source: string): Array<readonly [string, string]> {
+    return ENGINES.map(
+        ([name, transform]) =>
+            [name, (transform(source, 'probe.tsx').diagnostics ?? []).join('\n')] as const,
+    );
 }
 
 describe('style supplied by a prop spread beside runtime sz values', () => {
-    it.each([
-        ['auto', babelDiagnostics],
-        ['wasm', oxcDiagnostics],
-    ] as const)('%s normalizes safe conditional object branches', (_, transform) => {
-        expect(transform(collisionSource).join('\n')).not.toContain(diagnosticMarker);
-    });
-
-    it('injects generated style into every conditional branch exactly once', () => {
-        for (const transform of [transformSource, transformWasm]) {
-            const result = transform(collisionSource, 'probe.tsx');
-            expect(result.code.match(/__szSpacingVar/g)).toHaveLength(2);
-            expect(result.code).not.toMatch(/\sstyle=\{\{/);
+    it('every artifact normalizes safe conditional object branches', () => {
+        for (const [name, diagnostics] of diagnosticsPerEngine(collisionSource)) {
+            expect(diagnostics, name).not.toContain(diagnosticMarker);
         }
     });
 
-    it.runIf(RUST_LANE)('rust is byte-identical to oxc for safe branches', () => {
-        const oxc = transformWasm(collisionSource, 'probe.tsx');
+    it('injects generated style into every conditional branch exactly once', () => {
+        for (const [, transform] of ENGINES) {
+            const code = transform(collisionSource, 'probe.tsx').code ?? '';
+            expect(code.match(/__szSpacingVar/g)).toHaveLength(2);
+            expect(code).not.toMatch(/\sstyle=\{\{/);
+        }
+    });
+
+    it.runIf(RUST_LANE)('native is byte-identical to wasm for safe branches', () => {
+        const wasm = transformWasm(collisionSource, 'probe.tsx');
         const rust = transformRust(collisionSource, 'probe.tsx');
-        expect(rust.code).toBe(oxc.code);
-        expect(rust.diagnostics).toEqual(oxc.diagnostics);
+        expect(rust.code).toBe(wasm.code);
+        expect(rust.diagnostics).toEqual(wasm.diagnostics);
     });
 
     it.each([
@@ -52,20 +55,16 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
             'const A=({width,key,value})=><div sz={{w:width}} {...{[key]:value}}/>;',
         ],
     ])('keeps the warning for %s', (_, source) => {
-        expect(babelDiagnostics(source).join('\n')).toContain(diagnosticMarker);
-        expect(oxcDiagnostics(source).join('\n')).toContain(diagnosticMarker);
-        if (RUST_LANE) {
-            expect(transformRust(source, 'probe.tsx').diagnostics.join('\n')).toContain(
-                diagnosticMarker,
-            );
+        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
+            expect(diagnostics, name).toContain(diagnosticMarker);
         }
     });
 
     it('merges a safe expression-valued style without an explicit style attribute', () => {
         const source = 'const A=({width,base})=><div sz={{w:width}} {...{style:base,id:"x"}}/>;';
-        for (const transform of [transformSource, transformWasm]) {
+        for (const [, transform] of ENGINES) {
             const result = transform(source, 'probe.tsx');
-            expect(result.diagnostics.join('\n')).not.toContain(diagnosticMarker);
+            expect((result.diagnostics ?? []).join('\n')).not.toContain(diagnosticMarker);
             expect(result.code).toMatch(/\.\.\.\(?base\)?/);
             expect(result.code).not.toMatch(/\sstyle=\{\{/);
         }
@@ -82,12 +81,8 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
             'const A=({width})=><div sz={{w:width}}/>;',
         ],
     ])('does not warn when %s', (_, source) => {
-        expect(babelDiagnostics(source).join('\n')).not.toContain(diagnosticMarker);
-        expect(oxcDiagnostics(source).join('\n')).not.toContain(diagnosticMarker);
-        if (RUST_LANE) {
-            expect(transformRust(source, 'probe.tsx').diagnostics.join('\n')).not.toContain(
-                diagnosticMarker,
-            );
+        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
+            expect(diagnostics, name).not.toContain(diagnosticMarker);
         }
     });
 });

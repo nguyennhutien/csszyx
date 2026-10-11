@@ -181,8 +181,8 @@ describe('prescan AST budget', () => {
 
     it('wasm prescan extracts a real page file the transform-hook budget would reject', async () => {
         const root = tempRoot();
-        // >50k AST nodes for the removed JavaScript lanes (the compiler-level default throws
-        // ASTBudgetExceededError on this shape), yet well under the prescan cap.
+        // Over the default 50k-node budget of the transform hook, yet well under
+        // the prescan cap.
         const bigSource = `import { szv } from 'csszyx';
 const controlSz = szv({ variants: { layout: { a: { mx: 0, my: 4 } } } });
 export const Page = () => (<div>${'<span className="cell">x</span>'.repeat(30_000)}</div>);

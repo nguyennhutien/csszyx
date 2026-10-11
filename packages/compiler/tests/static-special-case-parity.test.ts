@@ -1,19 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformRust, transformSource, transformWasm } from '../src/index.js';
-
-type Transform = typeof transformSource;
-
-const engines: ReadonlyArray<[string, Transform]> = [
-    ['auto', transformSource],
-    ['wasm', transformWasm],
-    ['rust', transformRust],
-];
+import { ENGINES as engines } from './engine-parity-harness.js';
 
 function expectClasses(source: string, expected: readonly string[]): void {
     for (const [name, transform] of engines) {
         const result = transform(source, 'special-case.tsx');
-        expect([...result.classes].sort(), name).toEqual([...expected].sort());
+        expect([...(result.classes ?? [])].sort(), name).toEqual([...expected].sort());
     }
 }
 
@@ -89,11 +81,10 @@ describe('static special-case parser parity', () => {
 
     it('precompiles a static const spread alongside one conditional prop', () => {
         // The static spread (gradient + custom-var easing) must stay build-time;
-        // only the conditional `scale` is runtime. Regression: rust/oxc used to
+        // only the conditional `scale` is runtime. Regression: the engine used to
         // punt the whole object to `_sz(...)` at runtime, breaking the background.
         // Named `tsx` (not `source`) so the extracted-corpus meta-test does not
-        // sample this targeted case — rust is intentionally build-time-ahead of
-        // oxc here, which would otherwise shift that corpus's divergence count.
+        // sample this targeted case.
         const tsx = `
             const BOX = { p: 4, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'rose-400', to: 'pink-500', transition: 'transform', ease: '--custom-backinout' };
             const View = ({ shrunk }) => <div sz={{ ...BOX, scale: shrunk ? 75 : 100 }} />;

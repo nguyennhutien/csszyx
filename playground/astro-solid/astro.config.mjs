@@ -11,7 +11,7 @@ export default defineConfig({
         },
         plugins: [
             // csszyx must run before Tailwind so generated utility classes are visible.
-            csszyx({ build: { parser: process.env.CSSZYX_PARSER ?? 'oxc' } }),
+            csszyx(),
             tailwindcss(),
         ],
     },

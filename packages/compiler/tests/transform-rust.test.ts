@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
-    OxcRustNotImplementedError,
+    RustTransformUnavailableError,
     transformRust,
     transformRustBatch,
     transformWasm,
@@ -32,7 +32,7 @@ describe('isRustTransformAvailable — non-throwing native probe', () => {
         } else {
             // false MUST mean the loud path throws the documented error — otherwise
             // graceful degradation would mask a binary that is actually present.
-            expect(() => ensureRustTransformAvailable()).toThrow(OxcRustNotImplementedError);
+            expect(() => ensureRustTransformAvailable()).toThrow(RustTransformUnavailableError);
         }
     });
 });
@@ -47,7 +47,7 @@ describe('transformRust native wrapper', () => {
             expect(result.code).toContain('className="p-4"');
             expect(result.transformed).toBe(true);
         } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+            expect(err).toBeInstanceOf(RustTransformUnavailableError);
             expect((err as Error).message).toContain('native engine unavailable');
         }
     });
@@ -62,15 +62,15 @@ describe('transformRust native wrapper', () => {
             ]);
             expect(result?.code).toContain('className="p-4"');
         } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+            expect(err).toBeInstanceOf(RustTransformUnavailableError);
             expect((err as Error).message).toContain('native engine unavailable');
         }
     });
 
     it('keeps the compatibility error name for callers and benchmarks', () => {
-        const err = new OxcRustNotImplementedError('test detail');
+        const err = new RustTransformUnavailableError('test detail');
 
-        expect(err.name).toBe('OxcRustNotImplementedError');
+        expect(err.name).toBe('RustTransformUnavailableError');
         expect(err.message).toContain('transformRust: native engine unavailable');
         expect(err.message).toContain('test detail');
     });
@@ -91,7 +91,7 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
         try {
             result = transformRust(bigSource, '/repo/src/Big.tsx');
         } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+            expect(err).toBeInstanceOf(RustTransformUnavailableError);
             return;
         }
         expect(result.transformed).toBe(false);
@@ -105,7 +105,7 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
         try {
             result = transformRust(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
         } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+            expect(err).toBeInstanceOf(RustTransformUnavailableError);
             return;
         }
         expect(result.classes.has('mx-0')).toBe(true);

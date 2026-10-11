@@ -1,49 +1,40 @@
 # Native Transform Boundary
 
-This document locks the package boundary for the Rust transform core. The
-native engine is still opt-in, but the packaging and loader contract is now
-active and covered by CI.
+This document describes the package boundary of the Rust transform engine: how
+it is built, shipped and loaded.
 
 ## Decision
 
-`@csszyx/core` stays the umbrella package.
+There is one engine, written in Rust, shipped as two artifacts that produce the
+same output: a native N-API addon and a wasm build. `@csszyx/core` stays the
+umbrella package.
 
-- Browser and edge consumers keep using the existing WASM build.
-- Node build-time consumers may opt into the native transform through
-  `build.parser: "rust"`.
 - Native binaries ship as optional platform packages named
-  `@csszyx/core-<triple>`.
-- The compiler/unplugin layer lazy-loads native code only when the Rust parser
-  mode is selected.
-- If a matching native package is unavailable, the Rust parser mode fails with a
-  clear diagnostic and tells the user to choose `parser: "oxc"` or install a
-  supported native package.
+  `@csszyx/core-<triple>` and load through `@csszyx/core/native`.
+- The wasm build of the engine ships inside `@csszyx/core` as
+  `@csszyx/core/parser-wasm`.
+- `build.parser` accepts `"rust"` (native) and `"wasm"`; the default is
+  `"rust"`. A default `rust` with no native package for the host degrades to the
+  wasm build, which costs parse speed and nothing else. An explicit `rust` (in
+  config or `CSSZYX_PARSER`) fails with `RustTransformUnavailableError`, naming
+  the missing platform package.
+- Browser and edge consumers keep using the small WASM build exported from `.`,
+  which carries the encoder, token, checksum and mangle kernels and the
+  object-level `transform_sz`, not the source engine.
 
-The initial native path must not compile Rust during `pnpm install` or npm
-install. Source-build fallback can be revisited later, but it is not part of the
-first native boundary because install-time compilation adds CI and user-machine
-risk.
+Native code is never compiled during `pnpm install` or `npm install`.
 
 ## Dependency Pins
 
-Native build tooling is pinned instead of ranged:
-
-| Dependency      | Pin       | Where                                                       | Reason                                                                  |
-| --------------- | --------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.               |
-| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.               |
-| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for native exports.                                   |
-| `oxc_ast`       | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | AST node types used only inside the parser lowering module.             |
-| `oxc_ast_visit` | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Visitor traversal for lowering JSX attributes into csszyx IR.           |
-| `oxc_parser`    | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; requires rustc 1.93.         |
-| `oxc_semantic`  | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the semantic path; pinned with `oxc_parser`. |
-| `oxc_span`      | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                 |
-| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                |
-| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Span overwrite engine; still under exact review before default use.     |
+The versions live in `packages/core/Cargo.toml` (`napi`, `napi-derive`, the
+`oxc_*` crates, `rayon`, `string_wizard`), with the exact resolution in
+`Cargo.lock`, and in `packages/core/package.json` (`@napi-rs/cli`, pinned
+exactly); read them there rather than from a copy here.
 
 The N-API dependencies are behind `features.native`, while parser/rewrite
-dependencies are behind `features.native-engine`; default `cargo test` and the
-existing WASM build path must remain independent from both. CI should check both:
+dependencies are behind `features.native-engine`. Default `cargo test` and the
+small `.` WASM build must stay independent from both; the `./parser-wasm` build
+is made with `native-engine` on. CI checks each:
 
 ```bash
 cargo test --manifest-path packages/core/Cargo.toml
@@ -91,12 +82,13 @@ The native transform lives behind a separate export:
 ```
 
 Keeping native behind `./native` prevents existing WASM imports from changing
-resolution behavior. The compiler package can probe `@csszyx/core/native` only
-for `parser: "rust"`.
+resolution behavior. The engine's wasm build has its own export,
+`./parser-wasm`, which the compiler loads when the native addon is unavailable
+or `parser: "wasm"` is chosen.
 
 ## Platform Packages
 
-The planned optional package names are:
+The optional platform packages are:
 
 | Package                         | Triple                       |
 | ------------------------------- | ---------------------------- |
@@ -109,9 +101,9 @@ The planned optional package names are:
 | `@csszyx/core-win32-x64-msvc`   | `x86_64-pc-windows-msvc`     |
 | `@csszyx/core-win32-arm64-msvc` | `aarch64-pc-windows-msvc`    |
 
-FreeBSD can be added after the main matrix is stable. WASM stays in the umbrella
-package and is not a substitute for the Node native transform unless a separate
-fallback mode is explicitly designed.
+FreeBSD can be added after the main matrix is stable. On a host none of these
+packages serves, a build on the default parser runs the engine's wasm build
+instead; one that sets `parser: "rust"` fails with `RustTransformUnavailableError`.
 
 The platform package directories live under `packages/core-*` and are included
 in the workspace so release publish can ship them with `@csszyx/core`. This
@@ -183,8 +175,7 @@ verifies static rewrite output, and removes generated `.node`/`.d.ts` artifacts
 before exiting. The normal `native:smoke` command intentionally keeps validating
 the native-only unavailable contract.
 
-Current native-engine rewrite coverage is still opt-in, but now covers the main
-static and runtime fallback paths:
+The engine covers the static and runtime fallback paths:
 
 - Static `sz={{ ... }}`, `sz="..."`, and fully static `sz={[...]}` inputs can
   rewrite to `className`.
@@ -202,36 +193,23 @@ static and runtime fallback paths:
 
 ## Rust Source Layout
 
-The existing crate keeps the shared Rust kernels:
-
 ```text
 packages/core/src/
-  collision.rs
-  encoder.rs
-  mangle.rs
-  token.rs
-  transformer.rs
-```
-
-Future transform code should use these internal boundaries:
-
-```text
-packages/core/src/transform/
-  mod.rs              # orchestration and public Rust API
-  contract.rs         # serde/napi-safe request and result structs
-  ir.rs               # parser-neutral typed transform IR
-  lower.rs            # ordered static IR to class-list lowering
-  generated/tables.rs # generated lookup tables from transform-core.ts
-  fast_path.rs        # AST-free static sz path
-  parser.rs           # oxc_parser path
-  semantic.rs         # oxc_semantic path
-  rewrite.rs          # span replacement/string mutation
-```
-
-The napi bridge lives separately:
-
-```text
-packages/core/src/native.rs # #[napi] entrypoints, feature-gated by native
+  lib.rs              # wasm exports; engine entry points behind `native-engine`
+  native.rs           # #[napi] entry points, behind the `native` feature
+  collision.rs  encoder.rs  mangle.rs  token.rs  transformer.rs
+  migrate/            # the Rust side of `csszyx migrate` (`migrate` feature)
+  transform/          # the engine (`native-engine` feature)
+    engine.rs         # orchestration
+    contract.rs       # serde/napi-safe request and result structs
+    parser.rs         # oxc_parser path: AST to transform IR
+    scope.rs          # binding/scope analysis
+    fast_path.rs      # AST-free static sz path
+    ir.rs             # parser-neutral transform IR
+    lower.rs          # IR to class-list lowering
+    rewrite.rs        # span replacement
+    module_links.rs   # cross-module import/export links
+    generated/        # tables generated from the TypeScript sources
 ```
 
 The JS boundary should receive a compact result object and no AST. AST values
@@ -239,25 +217,6 @@ must not cross the napi boundary.
 
 ## Cache Boundary
 
-Parser identity remains part of the JS cache key. The first native transform
-should use the existing JS transform cache until the Rust cache design lands.
-
-The future Rust cache can use an opaque binary format internally, but any cache
-format change must be keyed by producer and schema version so Babel, JS oxc, and
-Rust entries never collide.
-
-## Deferred Decisions
-
-- `string_wizard` vendoring vs. exact pinning remains deferred until the Rust
-  rewrite module is added.
-- mmap cache format remains deferred until the Rust cache task.
-- SharedArrayBuffer worker transport remains deferred until the persistent
-  worker task.
-- Tailwind pre-bake output is out of scope for the first native transform.
-
-## Non-Goals
-
-- No default parser flip.
-- No removal of Babel or JS oxc.
-- No install-time Rust compilation.
-- No native dependency added before a minimal loader and error contract exist.
+The transform cache key carries the parser (`rust` or `wasm`) and a schema
+version, so entries written by one artifact or one schema are never read by
+another.

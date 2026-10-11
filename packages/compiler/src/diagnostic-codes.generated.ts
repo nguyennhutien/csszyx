@@ -34,7 +34,8 @@ export type SzDiagnosticCode =
     | 'nesting-depth'
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
-    | 'mangle-vars-hoist-skipped';
+    | 'mangle-vars-hoist-skipped'
+    | 'color-slash-opacity';
 
 /** Every code the engine produces, in the order `csszyx check` lists them. */
 export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
@@ -70,4 +71,5 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'unsupported-dynamic-sz',
     'ast-budget',
     'mangle-vars-hoist-skipped',
+    'color-slash-opacity',
 ];

@@ -32,10 +32,13 @@ class FakeUnavailable extends Error {
  */
 const stale = vi.hoisted(() => ({ current: false }));
 
+/** Whether the fake binding answers every batch with no results at all. */
+const empty = vi.hoisted(() => ({ current: false }));
+
 vi.mock('@csszyx/core/native', () => ({
     CsszyxNativeUnavailableError: FakeUnavailable,
     transformBatch: (files: unknown[]) => {
-        if (stale.current && files.length === 0) {
+        if (empty.current || (stale.current && files.length === 0)) {
             return [];
         }
         throw new FakeUnavailable();
@@ -49,6 +52,17 @@ describe('the native transform on an install without it', () => {
     beforeEach(() => {
         vi.resetModules();
         stale.current = false;
+        empty.current = false;
+    });
+
+    it('reports a binding that returns no result for the file as unavailable', async () => {
+        empty.current = true;
+        const { transformRust, RustTransformUnavailableError } = await import(
+            '../src/transform-rust.js'
+        );
+        expect(() => transformRust('<div />', 'a.tsx')).toThrow(
+            new RustTransformUnavailableError('native transform returned no result'),
+        );
     });
 
     it('reports a binding that loads but cannot answer as unavailable', async () => {
@@ -66,10 +80,10 @@ describe('the native transform on an install without it', () => {
     });
 
     it("keeps the loader's three lines under the transform prefix", async () => {
-        const { transformRust, OxcRustNotImplementedError } = await import(
+        const { transformRust, RustTransformUnavailableError } = await import(
             '../src/transform-rust.js'
         );
-        expect(() => transformRust('<div />', 'a.tsx')).toThrow(OxcRustNotImplementedError);
+        expect(() => transformRust('<div />', 'a.tsx')).toThrow(RustTransformUnavailableError);
         try {
             transformRust('<div />', 'a.tsx');
         } catch (error) {
@@ -86,11 +100,11 @@ describe('the native transform on an install without it', () => {
     });
 
     it('reports the module-link scan unavailable in the same words', async () => {
-        const { scanModuleLinksRust, OxcRustNotImplementedError } = await import(
+        const { scanModuleLinksRust, RustTransformUnavailableError } = await import(
             '../src/transform-rust.js'
         );
         expect(() => scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
-            OxcRustNotImplementedError,
+            RustTransformUnavailableError,
         );
         try {
             scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }]);

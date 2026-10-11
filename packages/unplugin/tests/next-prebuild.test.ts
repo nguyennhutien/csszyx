@@ -340,7 +340,7 @@ describe('Next Turbopack prebuild core', () => {
 
     it('fails closed if the source still contains csszyx sz syntax after transform', () => {
         const root = tempRoot();
-        // Force-fail by feeding the babel transformer an input that triggers a
+        // Force-fail by feeding the source transformer an input that triggers a
         // parser error inside a region that still mentions `sz=`. A bare invalid
         // JSX expression keeps `sz=` in the surviving code, which is exactly what
         // the source transformer's pass-through guard rejects.

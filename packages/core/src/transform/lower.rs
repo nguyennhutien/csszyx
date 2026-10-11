@@ -812,6 +812,52 @@ pub(crate) fn collect_slash_opacity_strings(
     }
 }
 
+/// A colour object whose `color` carries a slash opacity: key, `color` as
+/// written, `op` as written when given, offset.
+#[cfg(feature = "native-engine")]
+pub(crate) type ColorSlashOpacity = (String, String, Option<String>, u32);
+
+/// Collect the colour objects whose `color` carries a slash opacity
+/// (`color-slash-opacity`). Their class is written, with `op` as the opacity
+/// when both are given; the diagnostic points at the one spelling, `op`.
+/// Descends like [`collect_slash_opacity_strings`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_color_slash_opacities(
+    object: &StaticSzObject,
+    out: &mut Vec<ColorSlashOpacity>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let color = object_string_property(nested, "color");
+        match color {
+            Some(color) if property_prefix(&property.key).is_some() => {
+                if split_color_slash_opacity(&property.key, split_important(color).0).is_some() {
+                    let op = nested
+                        .properties
+                        .iter()
+                        .find(|prop| prop.key == "op")
+                        .and_then(|prop| match &prop.value {
+                            StaticSzValue::Number(value) => Some(format_number_literal(*value)),
+                            StaticSzValue::String(value) => Some(format!("'{value}'")),
+                            _ => None,
+                        });
+                    out.push((
+                        property.key.clone(),
+                        color.to_string(),
+                        op,
+                        property.span.start,
+                    ));
+                }
+            }
+            _ => for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_color_slash_opacities(object, out);
+            }),
+        }
+    }
+}
+
 /// Legal members of one mask slot, minus the linear sides.
 ///
 /// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
@@ -1498,7 +1544,7 @@ pub(crate) fn is_variant_key(key: &str) -> bool {
 }
 
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
-/// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
+/// kebab-case fallback), mirroring `getVariantPrefix` in `transform-core.ts`.
 fn get_variant_prefix(key: &str) -> Cow<'static, str> {
     variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
 }
@@ -1551,7 +1597,7 @@ fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
-/// Lowers the `group`/`peer` scope variants, mirroring the oxc `handleGroupPeer`:
+/// Lowers the `group`/`peer` scope variants, mirroring `handleGroupPeer` in `transform-core.ts`:
 /// known variants combine with `-` (group-hover), has/data/aria nest as
 /// parameters, arbitrary selectors bracket, and a named scope appends `/name`.
 fn lower_group_peer_variant(
@@ -1756,7 +1802,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // theme namespace, so it serves no `font-<number>` at all — not
             // even the nine standard steps. A numeric weight brackets the
             // literal instead of emitting a class that styles nothing.
-            // Mirrors the TypeScript lanes.
+            // Mirrors `collectNumericProperty` in `transform-core.ts`.
             if key == "weight" {
                 return Some(format!(
                     "{prefix}{}-[{}]",
@@ -1963,7 +2009,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 return Some(format!("{prefix}@container/{value}"));
             }
             // Named scope markers: { group: 'item' } → group/item, mirroring
-            // the oxc `collectUnresolvedStringProperty` branch.
+            // the `collectUnresolvedStringProperty` branch in `transform-core.ts`.
             if key == "group" || key == "peer" {
                 return Some(format!("{prefix}{key}/{value}"));
             }
@@ -2124,7 +2170,8 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Bracket the whole value (sign included) when it needs arbitrary
             // syntax, then hoist a surviving leading `-` to the utility prefix.
             // A negative length stays inside the bracket (top-[-1px]); a bare
-            // negative fraction hoists (-inset-1/2), mirroring the oxc transform.
+            // negative fraction hoists (-inset-1/2), mirroring
+            // `buildGenericStringClass` in `transform-core.ts`.
             let final_value = if key == "aspect" && is_decimal_ratio(value) {
                 format!("[{value}]")
             } else if needs_brackets(value) {
@@ -2548,9 +2595,49 @@ fn object_string_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&
         })
 }
 
+/// The colour and opacity of a `color` that carries a slash opacity
+/// (`red-500/50`), by the rule a colour-key string is dropped for: a colour
+/// object takes its opacity in `op`, so the class is still written and the
+/// build points at `op` (`color-slash-opacity`).
+///
+/// Only a plain opacity after the slash (`50`, `7.5`) is one `op` can take;
+/// `red-500/` or `red-500/50/30` is written as given. `color` is passed
+/// without its trailing `!`.
+fn split_color_slash_opacity<'a>(key: &str, color: &'a str) -> Option<(&'a str, &'a str)> {
+    if !is_dropped_slash_opacity(key, color) {
+        return None;
+    }
+    let (base, opacity) = color.split_once('/')?;
+    is_plain_opacity(opacity).then_some((base, opacity))
+}
+
+/// `50` or `7.5`: digits, at most one decimal point between digits.
+fn is_plain_opacity(value: &str) -> bool {
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, "0"));
+    !whole.is_empty()
+        && !fraction.is_empty()
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// A colour without its trailing important modifier, and the modifier. The
+/// modifier ends the class (`bg-red-500/20!`): written before the opacity it
+/// makes a class no Tailwind serves.
+fn split_important(color: &str) -> (&str, &'static str) {
+    color
+        .strip_suffix('!')
+        .map_or((color, ""), |color| (color, "!"))
+}
+
 fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
     let tw_prefix = property_prefix(key)?;
-    let raw_color = object_string_property(object, "color")?;
+    let (written_color, important) = split_important(object_string_property(object, "color")?);
+    // `op` is the opacity when both are given; the slash part only stands in
+    // for a missing `op`. Mirrors `buildColorObjectClass` in `transform-core.ts`.
+    let (raw_color, slash_opacity) = match split_color_slash_opacity(key, written_color) {
+        Some((color, opacity)) => (color, Some(opacity)),
+        None => (written_color, None),
+    };
 
     let color_base = if is_tailwind_build_function(raw_color)
         || (raw_color.starts_with("--") && raw_color.contains('('))
@@ -2580,12 +2667,17 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
         .find(|prop| prop.key == "op")
         .map(|prop| &prop.value);
 
-    match op_value {
-        Some(op_value) => {
+    match (op_value, slash_opacity) {
+        (Some(op_value), _) => {
             let op_str = format_opacity_value(op_value)?;
-            Some(format!("{prefix}{tw_prefix}-{color_base}/{op_str}"))
+            Some(format!(
+                "{prefix}{tw_prefix}-{color_base}/{op_str}{important}"
+            ))
         }
-        None => Some(format!("{prefix}{tw_prefix}-{color_base}")),
+        (None, Some(opacity)) => Some(format!(
+            "{prefix}{tw_prefix}-{color_base}/{opacity}{important}"
+        )),
+        (None, None) => Some(format!("{prefix}{tw_prefix}-{color_base}{important}")),
     }
 }
 
@@ -2697,9 +2789,9 @@ fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
 
 /// Render a number the way JavaScript prints it, sign kept.
 ///
-/// The TypeScript lanes interpolate the value straight into the class string,
-/// so an engine only agrees with them by dropping the `.0` that Rust's default
-/// float formatting keeps.
+/// The runtime lowering (`transform-core.ts`) interpolates the value straight
+/// into the class string, so the engine only agrees with it by dropping the
+/// `.0` that Rust's default float formatting keeps.
 fn format_number_literal(value: f64) -> String {
     if value.fract() == 0.0 {
         #[allow(clippy::cast_possible_truncation)]
@@ -2770,7 +2862,7 @@ fn is_unsigned_decimal(value: &str) -> bool {
     }
 }
 
-/// Kebab-cases a camelCase key the way the oxc fallback does:
+/// Kebab-cases a camelCase key the way `camelToKebab` in `transform-core.ts` does:
 /// inserts a `-` between a lowercase/digit and an uppercase letter, then
 /// lowercases (breakWord → break-word).
 fn kebab_case(key: &str) -> String {
@@ -2933,6 +3025,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "native-engine")]
+    use super::collect_color_slash_opacities;
+    #[cfg(feature = "native-engine")]
     use super::collect_dead_enum_values;
     #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
@@ -2962,6 +3056,40 @@ mod tests {
 
     fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
         StaticSzValue::Object(StaticSzObject { properties })
+    }
+
+    #[test]
+    fn a_plain_opacity_is_digits_with_at_most_one_inner_decimal_point() {
+        for value in ["50", "7.5", "0", "100.25"] {
+            assert!(super::is_plain_opacity(value), "{value}");
+        }
+        for value in ["", "5.", ".5", "50/30", "5a", "[0.5]", "1.2.3", "-5"] {
+            assert!(!super::is_plain_opacity(value), "{value}");
+        }
+        assert_eq!(super::split_important("red-500!"), ("red-500", "!"));
+        assert_eq!(super::split_important("red-500"), ("red-500", ""));
+    }
+
+    /// An `op` that is neither a number nor a string is not an opacity the
+    /// finding can name, so it is reported as if `op` were absent.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_colour_slash_finding_names_only_an_op_it_can_write() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "bg",
+                object(vec![
+                    property("color", StaticSzValue::String("red-500/50".to_string())),
+                    property("op", StaticSzValue::Boolean(true)),
+                ]),
+            )],
+        };
+        let mut found = Vec::new();
+        collect_color_slash_opacities(&object, &mut found);
+        assert_eq!(
+            found,
+            [("bg".to_string(), "red-500/50".to_string(), None, 0)]
+        );
     }
 
     /// A CSS-wide keyword takes the bracket only on a key the table marks:

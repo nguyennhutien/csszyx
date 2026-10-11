@@ -1,5 +1,5 @@
 /**
- * Tests for recovery-token generation + szRecover JSX integration.
+ * Tests for szRecover JSX integration: the engine's recovery-token emission.
  *
  * The runtime side (`@csszyx/runtime/verify`) reads tokens from a manifest
  * and matches them against `data-sz-recovery-token` attributes. These tests
@@ -9,45 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from '../src/recovery-tokens.js';
 import { transformSource } from '../src/transform-select.js';
-
-describe('generateInlineRecoveryToken', () => {
-    it('produces a 12-character hex token', () => {
-        const token = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
-        expect(token).toMatch(/^[0-9a-f]{12}$/);
-        expect(token).toHaveLength(12);
-    });
-
-    it('is deterministic for the same inputs', () => {
-        const a = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
-        const b = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
-        expect(a).toBe(b);
-    });
-
-    it('differs when any input differs', () => {
-        const base = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
-        expect(generateInlineRecoveryToken('src/Other.tsx', 10, 4, 'div')).not.toBe(base);
-        expect(generateInlineRecoveryToken('src/App.tsx', 11, 4, 'div')).not.toBe(base);
-        expect(generateInlineRecoveryToken('src/App.tsx', 10, 5, 'div')).not.toBe(base);
-        expect(generateInlineRecoveryToken('src/App.tsx', 10, 4, 'span')).not.toBe(base);
-    });
-});
-
-describe('isValidInlineRecoveryMode', () => {
-    it('accepts the two recognised modes', () => {
-        expect(isValidInlineRecoveryMode('csr')).toBe(true);
-        expect(isValidInlineRecoveryMode('dev-only')).toBe(true);
-    });
-
-    it('rejects everything else', () => {
-        expect(isValidInlineRecoveryMode('ssr')).toBe(false);
-        expect(isValidInlineRecoveryMode('')).toBe(false);
-        expect(isValidInlineRecoveryMode(null)).toBe(false);
-        expect(isValidInlineRecoveryMode(undefined)).toBe(false);
-        expect(isValidInlineRecoveryMode(0)).toBe(false);
-    });
-});
 
 describe('transformSource — szRecover handling', () => {
     it('emits data-sz-recovery-token + collects token entry for csr mode', () => {

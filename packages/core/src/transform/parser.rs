@@ -1560,8 +1560,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             // Everything under an `sz` attribute is replaced by a generated
             // expression, so a call nested in it cannot also be spliced: the
             // rewrite buffer refuses to split a range it already replaced and
-            // aborts the process. Mirrors `callInsideRewrittenSpan` in the JS
-            // lanes, so all three keep the runtime path for this shape.
+            // aborts the process, so this shape keeps the runtime path.
             if calls
                 .iter()
                 .any(|site| self.span_inside_sz_attribute(site.span))
@@ -1713,10 +1712,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
 
     /// Decide the szr import rewrite after the whole file was walked.
     ///
-    /// Mirrors the JS lanes' `szrRewriteApproved`: no unsafe call, and the raw
-    /// word count of `szr` equals one import specifier plus the proven calls.
-    /// A `build.parser` flip must not change the emitted import, so the three
-    /// verdicts are locked together by the cross-engine suite.
+    /// No unsafe call, and the raw word count of `szr` equals one import
+    /// specifier plus the proven calls.
+    /// The native and wasm artifacts emit the same import.
     fn finalize_szr_import_rewrite(&mut self, replaced_spans: &[super::TextSpan]) {
         let Some(record) = self.szr_import.take() else {
             return;
@@ -3316,8 +3314,7 @@ fn strict_literal_value_diagnosed(
 
 /// Slim-entry target for a rewritable szr import source.
 ///
-/// Same-package subpaths only, mirroring `SZR_IMPORT_REWRITE_TARGETS` in the
-/// TypeScript lanes: an app importing from `csszyx` may not resolve
+/// Same-package subpaths only: an app importing from `csszyx` may not resolve
 /// `@csszyx/runtime` under strict node_modules layouts.
 fn szr_rewrite_target(source: &str) -> Option<&'static str> {
     match source {
@@ -3334,8 +3331,7 @@ const fn is_identifier_byte(byte: u8) -> bool {
 
 /// Subtract in-comment occurrences from a raw word count.
 ///
-/// Mirrors `countWordOccurrencesOutsideComments` in the TypeScript lanes:
-/// comments are erased at runtime, so a doc comment mentioning a factory (or
+/// Comments are erased at runtime, so a doc comment mentioning a factory (or
 /// `szr`) must not fail the reference accounting. The spans come from the
 /// parser, delimiters included; subtraction per span is exact because comment
 /// delimiters are non-identifier characters, so no word straddles a span
@@ -3356,7 +3352,7 @@ fn subtract_comment_occurrences<F: Fn(&str) -> usize>(
 
 /// Count word-boundary occurrences of `szr` in the raw source.
 ///
-/// Mirrors `countSzrWordOccurrences` in the TypeScript lanes byte for byte: a
+/// Counts exactly as the removed TypeScript lanes' `countSzrWordOccurrences` did: a
 /// boundary is "not an ASCII identifier character", so a non-ASCII identifier
 /// continuation still counts — an overcount, which can only fail the proof.
 fn count_szr_word_occurrences(source: &str) -> usize {

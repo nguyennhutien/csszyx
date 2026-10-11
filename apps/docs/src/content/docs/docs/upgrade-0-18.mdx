@@ -59,6 +59,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
+| [`@csszyx/compiler` errors](#csszyxcompiler-renames-one-error-and-drops-another) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
@@ -67,6 +68,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `string slash opacity is not supported` | the build, `csszyx check` | you |
+| [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `takes its opacity in op, not in color` | the build, `csszyx check` | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -519,6 +521,29 @@ The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it.
 
+## @csszyx/compiler renames one error and drops another
+
+The error `transformRust` throws when the native engine cannot load is now
+`RustTransformUnavailableError`, the counterpart of `WasmTransformUnavailableError`.
+It was `OxcRustNotImplementedError`, a name left from an engine that no longer
+exists. `ASTBudgetExceededError` is gone: nothing threw it. A file over the AST
+budget is left as written and reported as an `ast-budget` issue on the result.
+
+```ts
+// before
+import { OxcRustNotImplementedError, ASTBudgetExceededError } from "@csszyx/compiler";
+if (err instanceof OxcRustNotImplementedError) { /* … */ }
+
+// after
+import { RustTransformUnavailableError } from "@csszyx/compiler";
+if (err instanceof RustTransformUnavailableError) { /* … */ }
+const overBudget = result.issues?.some(issue => issue.code === "ast-budget");
+```
+
+**What you see.** `tsc` reports that the module has no such exported member, and an
+ES module import fails when the bundler or Node loads it. Code that compared
+`err.name` with `"OxcRustNotImplementedError"` no longer matches.
+
 ## require of the Vue and Svelte adapters returns the exports
 
 Under `require`, `@csszyx/vue-adapter` and `@csszyx/svelte-adapter` returned a bare
@@ -830,6 +855,22 @@ production too:
 
 **Tooling.** `csszyx check` lists it under the kind `slash-opacity-string` and
 exits 1.
+
+The object form is the one spelling for an opacity, so a slash inside it is
+reported too, under the kind `color-slash-opacity`, an `error` under
+`recommended`: `csszyx check` exits 1 on a `{ color: "red-500/50" }` that 0.17
+passed. Its class is still written. When both are given, `op` is the opacity:
+`{ color: "red-500/50", op: 20 }` wrote `bg-red-500/50/50`, which no Tailwind
+serves, and now writes `bg-red-500/20`. The important modifier now ends the
+class, so `{ color: "red-500!", op: 20 }` writes `bg-red-500/20!` instead of
+the dead `bg-red-500!/20`.
+
+```tsx
+// before
+<div sz={{ bg: { color: "red-500/50" } }} />
+// after
+<div sz={{ bg: { color: "red-500", op: 50 } }} />
+```
 
 ## Some classes take the spelling every Tailwind v4 serves
 

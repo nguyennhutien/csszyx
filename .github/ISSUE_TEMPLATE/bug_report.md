@@ -1,9 +1,9 @@
 ---
 name: Bug report
 about: Report incorrect or broken behavior in CSSzyx
-title: ''
+title: ""
 labels: bug
-assignees: ''
+assignees: ""
 ---
 
 ## What happened
@@ -13,8 +13,9 @@ A clear description of the bug.
 ## Reproduction
 
 The smallest `sz` input / config that reproduces it, ideally a minimal repo
-or StackBlitz. Include the engine if relevant (`build.parser`: rust / oxc /
-babel).
+or StackBlitz. Include the engine artifact if relevant: the parser named in the
+build's `[csszyx] active parser:` line (rust / wasm), which can differ
+from `build.parser` when a default build falls back to wasm.
 
 ```tsx
 // e.g. <div sz={{ ... }} />

@@ -460,8 +460,7 @@ fn transform_static_classes_with_options(
 
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
-    // vanish — under Tailwind `source(none)` that is wrong CSS with no signal
-    // (and a rust-vs-oxc parity break, since the removed JavaScript lanes throw instead).
+    // vanish — under Tailwind `source(none)` that is wrong CSS with no signal.
     // Contribute nothing and let the diagnostic above carry the loud skip.
     let (classes, raw_class_names) = if parsed.ast_budget_exceeded {
         (Vec::new(), Vec::new())
@@ -583,11 +582,16 @@ fn szs_diagnostics(ir: &super::SourceIr) -> Diagnostics {
         .collect()
 }
 
-/// Resolve a byte offset to Babel-compatible `line:column` — 1-based line,
-/// 1-based column counted in UTF-16 code units, because that is what
-/// `expression.loc.start.column + 1` produces on the JS lanes and the three
-/// engines must print identical positions.
-fn babel_line_column(source: &str, lines: &mut Option<LineIndex>, offset: u32) -> (u32, usize) {
+/// Resolve a byte offset to a diagnostic `line:column` — 1-based line, 1-based
+/// column counted in UTF-16 code units, the convention JS tooling reports
+/// (`expression.loc.start.column + 1`). The goldens in `sz_fallback_parity.rs`
+/// were captured from the removed Babel lane under that convention, and both
+/// artifacts must keep printing identical positions.
+fn diagnostic_line_column(
+    source: &str,
+    lines: &mut Option<LineIndex>,
+    offset: u32,
+) -> (u32, usize) {
     let (line, byte_column) = lines
         .get_or_insert_with(|| LineIndex::new(source))
         .line_column(source, offset);
@@ -599,9 +603,8 @@ fn babel_line_column(source: &str, lines: &mut Option<LineIndex>, offset: u32) -
 /// Build-log diagnostics for `szr`/`szv` calls whose argument the parser could
 /// not read.
 ///
-/// Same wording, order and `line:column` semantics as the JS lanes — the site
-/// label and the advice come from the shared matrix, so a `build.parser` flip
-/// cannot change the text.
+/// The site label and the advice come from the shared matrix, so the wording,
+/// order and `line:column` semantics are byte-identical across artifacts.
 fn site_fallback_diagnostics(
     file: &TransformFile,
     ir: &super::SourceIr,
@@ -615,7 +618,7 @@ fn site_fallback_diagnostics(
     ir.site_fallbacks
         .iter()
         .map(|fallback| {
-            let (line, column) = babel_line_column(&file.source, lines, fallback.offset);
+            let (line, column) = diagnostic_line_column(&file.source, lines, fallback.offset);
             let kind = match fallback.kind {
                 RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
                 RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
@@ -662,7 +665,7 @@ fn deferred_variant_diagnostics(
     ir.deferred_variant_keys
         .iter()
         .map(|deferred| {
-            let (line, column) = babel_line_column(&file.source, lines, deferred.start);
+            let (line, column) = diagnostic_line_column(&file.source, lines, deferred.start);
             let reason = sz_fallback_reason(SzFallbackKind::Variant, &deferred.path, "");
             let suggestion = sz_fallback_suggestion(SzFallbackKind::Variant);
             (
@@ -681,9 +684,9 @@ fn deferred_variant_diagnostics(
 ///
 /// Emits the shared fallback matrix entry (why, and what to do instead) and —
 /// for an object literal with a top-level spread — the unresolvable-spread
-/// notice, in the same per-attribute order and with the same wording and
-/// `line:column` positions as the Babel and the JavaScript lane it replaceds, so a `build.parser`
-/// flip cannot change the build log. The `unresolvable sz spread` phrase is
+/// notice, in a fixed per-attribute order with byte-identical wording and
+/// `line:column` positions across artifacts, so which artifact a build loads
+/// cannot change the build log. The `unresolvable sz spread` phrase is
 /// the marker the bundler plugin matches to promote those to a build-log
 /// warning in every mode.
 fn runtime_fallback_diagnostics(
@@ -701,7 +704,7 @@ fn runtime_fallback_diagnostics(
         let Some(diagnostic) = &attr.runtime_fallback_diagnostic else {
             continue;
         };
-        let (line, column) = babel_line_column(&file.source, lines, attr.value_span.start);
+        let (line, column) = diagnostic_line_column(&file.source, lines, attr.value_span.start);
         let kind = match diagnostic.kind {
             RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
@@ -875,8 +878,8 @@ fn push_dead_spacing_step_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        // Wording matches the removed JavaScript lanes' warnDeadSpacingStep so a
-        // `build.parser` flip does not change the diagnostic text.
+        // Wording matches transform-core's warnDeadSpacingStep (the runtime lowering),
+        // so the build log and the runtime warning say the same thing.
         out.push_issue(DiagnosticCode::OffScaleValue, *offset, format!(
             "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
         ));
@@ -913,8 +916,8 @@ fn push_property_object_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        // Wording matches the removed JavaScript lanes' warnPropertyObjectValue so a
-        // `build.parser` flip does not change the diagnostic text.
+        // Wording matches transform-core's warnPropertyObjectValue (the runtime lowering),
+        // so the build log and the runtime warning say the same thing.
         out.push_issue(DiagnosticCode::PropertyObject, *offset, format!(
             "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
         ));
@@ -933,8 +936,8 @@ fn push_mask_member_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        // Wording matches the removed JavaScript lanes' warnMaskSlotMember so a
-        // `build.parser` flip does not change the diagnostic text.
+        // Wording matches transform-core's warnMaskSlotMember (the runtime lowering),
+        // so the build log and the runtime warning say the same thing.
         out.push_issue(DiagnosticCode::UnknownField, *offset, format!(
             "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
         ));
@@ -963,6 +966,7 @@ struct KeyValueFindings {
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
+    color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     mask_members: Vec<(String, String, String, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -982,6 +986,7 @@ impl KeyValueFindings {
         self.unknown_variants.clear();
         self.dead_enums.clear();
         self.slash_opacities.clear();
+        self.color_slash_opacities.clear();
         self.mask_members.clear();
         self.moved_values.clear();
         self.mask_layers.clear();
@@ -1026,6 +1031,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
         super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
+        super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
         super::lower::collect_moved_values(object, &mut found.moved_values);
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
@@ -1046,6 +1052,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.globals_before_groups, 10, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.slash_opacities, 11, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -1077,6 +1084,7 @@ fn push_group_key_value_diagnostics<'a>(
     push_owned_key_variant_diagnostics(file, &found.unknown_variants, location, lines, out);
     push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
     push_slash_opacity_diagnostics(file, &found.slash_opacities, location, lines, out);
+    push_color_slash_opacity_diagnostics(file, &found.color_slash_opacities, location, lines, out);
     push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
     push_moved_value_diagnostics(file, &found.moved_values, location, lines, out);
     push_mask_layer_diagnostics(file, &found.mask_layers, location, lines, out);
@@ -1313,7 +1321,7 @@ fn spread_split_class_diagnostics(
     ir.spread_split_classes
         .iter()
         .map(|split| {
-            let (line, column) = babel_line_column(&file.source, lines, split.span.start);
+            let (line, column) = diagnostic_line_column(&file.source, lines, split.span.start);
             (DiagnosticCode::SpreadSplitClass, split.span.start, format!(
                 "[csszyx] <{}> at {location}:{line}:{column}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array {}.",
                 split.element_name,
@@ -1338,7 +1346,7 @@ fn duplicate_sz_diagnostics(
     ir.duplicate_sz_attributes
         .iter()
         .map(|duplicate| {
-            let (line, column) = babel_line_column(&file.source, lines, duplicate.span.start);
+            let (line, column) = diagnostic_line_column(&file.source, lines, duplicate.span.start);
             (DiagnosticCode::DuplicateSz, duplicate.span.start, format!(
                 "[csszyx] <{}> at {location}:{line}:{column} carries {} `sz` attributes; they were merged as sz={{[first, …, last]}}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down.",
                 duplicate.element_name, duplicate.count
@@ -1375,8 +1383,8 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
 /// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
 /// utility and generates no CSS. The class is still emitted — the diagnostic
 /// reports what Tailwind will do with what the author wrote rather than
-/// rewriting it — and the wording is the TypeScript compiler's
-/// `warnDeadWeightValue`, so flipping `build.parser` does not change the log.
+/// rewriting it — and the wording is transform-core's `warnDeadWeightValue`,
+/// so the build log and the runtime warning say the same thing.
 fn push_dead_weight_diagnostics(
     file: &TransformFile,
     found: &[(String, u32)],
@@ -1544,6 +1552,36 @@ fn push_slash_opacity_diagnostics(
     }
 }
 
+/// A colour object whose `color` carries a slash opacity: the class is written
+/// (with `op` as the opacity when both are given), and the finding points at
+/// `op`, the one spelling.
+fn push_color_slash_opacity_diagnostics(
+    file: &TransformFile,
+    found: &[super::lower::ColorSlashOpacity],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Diagnostics,
+) {
+    for (key, color, op, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // The collector found a plain opacity, so the split cannot miss.
+        let (unmarked, important) = color
+            .strip_suffix('!')
+            .map_or((color.as_str(), ""), |color| (color, "!"));
+        let (base, opacity) = unmarked.split_once('/').unwrap_or_default();
+        let written = op
+            .as_ref()
+            .map_or_else(String::new, |op| format!(", op: {op}"));
+        let used = op.as_deref().unwrap_or(opacity);
+        // Wording matches transform-core's warnColorObjectSlashOpacity.
+        out.push_issue(DiagnosticCode::ColorSlashOpacity, *offset, format!(
+            "[csszyx] \"{key}: {{ color: '{color}'{written} }}\" at {location}:{line} — a colour object takes its opacity in op, not in color. Write {{ color: '{base}{important}', op: {used} }}."
+        ));
+    }
+}
+
 /// The group key and value whose class a stand-alone key's stray value emits:
 /// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
 /// Mirrors `siblingGroupOf` in the TypeScript core.
@@ -1638,12 +1676,11 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
         .collect()
 }
 
-/// Renders the `szRecover` diagnostics, byte-identical to the Babel and oxc
-/// lanes.
+/// Renders the `szRecover` diagnostics, byte-identical across artifacts.
 ///
 /// The two cases stay separate on purpose: a dynamic value and a misspelled
-/// mode need different fixes, and a build that switches `build.parser` must not
-/// change the text it prints.
+/// mode need different fixes, and the native and wasm artifacts must print the
+/// same text.
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Diagnostics {
     ir.unsupported_recovery_attributes
         .iter()
@@ -2189,8 +2226,7 @@ mod tests {
     /// A weight written as a numeric string emits a class Tailwind does not
     /// serve, and the build has to say so — silently emitting `font-700`,
     /// which generates no CSS, is how the defect went unseen. The wording is
-    /// the TypeScript compiler's, so flipping `build.parser` does not change
-    /// the build log.
+    /// transform-core's, so the build log and the runtime warning agree.
     #[test]
     fn diagnostics_distinguish_numeric_dead_step_and_deferred_array_values() {
         let file = TransformFile {
@@ -3224,7 +3260,7 @@ mod tests {
     fn budget_exceeded_file_contributes_no_partial_classes() {
         // szv catalog at the TOP so a partial walk WOULD have collected it —
         // the result must still be empty: partial safelists are silent wrong
-        // CSS under `source(none)` and a parity break vs the throwing JS lanes.
+        // CSS under `source(none)`.
         let source = format!(
             "import {{ szv }} from 'csszyx';\n\
              const controlSz = szv({{ variants: {{ layout: {{ a: {{ mx: 0, my: 4 }} }} }} }});\n\
@@ -3452,8 +3488,8 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        // Byte-identical to the Babel lane's diagnostic for this source — the
-        // fallback matrix is a cross-artifact parity surface (ADR 0011).
+        // The fallback matrix is a cross-artifact parity surface (ADR 0011):
+        // this wording must be byte-identical across artifacts.
         assert_eq!(
             result.diagnostics,
             vec![String::from(
@@ -5316,7 +5352,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 31] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 32] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5482,6 +5518,11 @@ mod tests {
                     ..TransformOptions::default()
                 },
             ),
+            (
+                DiagnosticCode::ColorSlashOpacity,
+                "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
+                TransformOptions::default(),
+            ),
         ];
         // `unsigned-value` is the build-time oracle's verdict, read from the
         // project's Tailwind (ADR 0012, 0022); the engine never renders it.
@@ -5630,6 +5671,91 @@ mod tests {
             slash("const A = () => <div sz={{ bg: { color: 'red-500/50', op: 50 } }} />;"),
             0
         );
+    }
+
+    /// A slash opacity in a colour object's `color` still writes a served
+    /// class, takes `op` as the opacity when both are given, and points at
+    /// `op`, found under variants too; a colour without one says nothing.
+    #[test]
+    fn a_colour_object_with_a_slash_opacity_writes_its_class_and_points_at_op() {
+        let cases: [(&str, &str, &str); 6] = [
+            (
+                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
+                r#"className="bg-red-500/[20]!""#,
+                "[csszyx] \"bg: { color: 'red-500/50!', op: '20' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+            ),
+            (
+                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
+                r#"className="bg-red-500/20""#,
+                "[csszyx] \"bg: { color: 'red-500/50', op: 20 }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 20 }.",
+            ),
+            (
+                "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
+                r#"className="bg-red-500/50""#,
+                "[csszyx] \"bg: { color: 'red-500/50' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 50 }.",
+            ),
+            (
+                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '20' } }} />;",
+                r#"className="bg-red-500/[20]""#,
+                "[csszyx] \"bg: { color: 'red-500/50', op: '20' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: '20' }.",
+            ),
+            (
+                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",
+                r#"className="hover:bg-red-500/0.5""#,
+                "[csszyx] \"bg: { color: 'red-500/50', op: 0.5 }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 0.5 }.",
+            ),
+            (
+                "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",
+                r#"className="md:hover:border-blue-600/75""#,
+                "[csszyx] \"borderColor: { color: 'blue-600/75' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'blue-600', op: 75 }.",
+            ),
+        ];
+        for (source, class_attr, message) in cases {
+            let result = run_variant_source(source);
+            assert!(
+                result.code.contains(class_attr),
+                "{source}\n{}",
+                result.code
+            );
+            let found = result
+                .issues
+                .iter()
+                .filter(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity)
+                .count();
+            assert_eq!(found, 1, "{source}: {:?}", result.issues);
+            assert_eq!(result.diagnostics, vec![message.to_string()], "{source}");
+        }
+        // A variant holding a `color` key is not a colour object: it is searched.
+        let result = run_variant_source(
+            "const A = () => <div sz={{ hover: { color: 'red-500', bg: { color: 'red-500/50', op: 2 } } }} />;",
+        );
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .filter(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity)
+                .count(),
+            1,
+            "{:?}",
+            result.issues
+        );
+        for source in [
+            "const A = () => <div sz={{ bg: { color: 'red-500', op: 20 } }} />;",
+            "const A = () => <div sz={{ bg: { color: 'white/50' } }} />;",
+            "const A = () => <div sz={{ bg: { color: 'red-500/' } }} />;",
+            "const A = () => <div sz={{ bg: { color: 'red-500/50/30', op: 2 } }} />;",
+            "const A = () => <div sz={{ p: { x: { color: 'red-500/50' } } }} />;",
+        ] {
+            let result = run_variant_source(source);
+            assert!(
+                !result
+                    .issues
+                    .iter()
+                    .any(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity),
+                "{source}: {:?}",
+                result.issues
+            );
+        }
     }
 
     /// One source through the parser lane with default options.

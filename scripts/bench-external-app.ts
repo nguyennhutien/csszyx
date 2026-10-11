@@ -24,6 +24,7 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
+import { parseAllowlistedCsv, parseCsv } from './bench-args.ts';
 import { formatDispersion, mean, median, recordBenchRun, summarize } from './bench-stats.ts';
 
 export type ExternalBenchParser = 'rust' | 'wasm';
@@ -607,26 +608,6 @@ function artifactParityVerdicts(rows: readonly ExternalBenchRow[]): string[] {
         }
     }
     return verdicts.length > 0 ? verdicts : ['- Native/WASM artifact parity not measured.'];
-}
-
-function parseAllowlistedCsv<const T extends string>(
-    value: string,
-    allowed: readonly T[],
-    option: string,
-): T[] {
-    const parsed = parseCsv(value);
-    for (const item of parsed) {
-        if (!allowed.includes(item as T)) throw new Error(`Unknown ${option} value "${item}".`);
-    }
-    if (parsed.length === 0) throw new Error(`${option} must not be empty.`);
-    return [...new Set(parsed)] as T[];
-}
-
-function parseCsv(value: string): string[] {
-    return value
-        .split(',')
-        .map(item => item.trim())
-        .filter(Boolean);
 }
 
 function parseCount(value: string, option: string, minimum: number): number {

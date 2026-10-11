@@ -5,6 +5,7 @@
  * Usage:
  *   pnpm bench:docs-hmr
  *   pnpm bench:docs-hmr -- --edits 20 --warmups 3
+ *   pnpm bench:docs-hmr -- --modes rust,wasm
  */
 
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from 'node:child_process';
@@ -14,6 +15,8 @@ import { dirname, join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright';
+
+import { parseAllowlistedCsv } from './bench-args.ts';
 import {
     coefficientOfVariation,
     formatDispersion,
@@ -23,21 +26,25 @@ import {
 } from './bench-stats.ts';
 
 /**
- * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
+ * Bench mode. `rust` (native addon) and `wasm` run csszyx's one Rust engine
+ * through each shipped artifact; `--modes` rejects the removed `oxc` and
+ * `babel` lanes instead of letting the plugin ignore them.
  * `no-csszyx` skips the csszyx plugin entirely (Tailwind-only baseline). The
  * `no-tailwind` mode skips both csszyx and Tailwind so the report can split
- * pipeline cost three ways: csszyx share = oxc - no-csszyx; Tailwind share =
+ * pipeline cost three ways: csszyx share = rust (or wasm) - no-csszyx; Tailwind share =
  * no-csszyx - no-tailwind; pipeline floor = no-tailwind.
  */
-type BenchMode = 'oxc' | 'rust' | 'no-csszyx' | 'no-tailwind';
+type BenchMode = 'rust' | 'wasm' | 'no-csszyx' | 'no-tailwind';
 
-const BENCH_MODES = ['oxc', 'rust', 'no-csszyx', 'no-tailwind'] as const;
+const BENCH_MODES = ['rust', 'wasm', 'no-csszyx', 'no-tailwind'] as const;
 
 interface CliOptions {
     /** Number of measured component edits. */
     edits: number;
     /** Number of warmup edits before measuring. */
     warmups: number;
+    /** Bench modes to run. */
+    modes: BenchMode[];
     /** Number of benchmark rounds; mode order alternates each round. */
     rounds: number;
     /** Base port used for the first dev server. */
@@ -138,6 +145,7 @@ function parseArgs(args: string[]): CliOptions {
     const parsed: CliOptions = {
         edits: 20,
         warmups: 3,
+        modes: [...BENCH_MODES],
         rounds: 1,
         port: 4329,
         outDir: '.agent/reports',
@@ -149,6 +157,8 @@ function parseArgs(args: string[]): CliOptions {
             parsed.edits = Math.max(1, Number(args[++i] ?? parsed.edits));
         } else if (arg === '--warmups') {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
+        } else if (arg === '--modes') {
+            parsed.modes = parseAllowlistedCsv(args[++i] ?? '', BENCH_MODES, '--modes');
         } else if (arg === '--rounds') {
             parsed.rounds = Math.max(1, Number(args[++i] ?? parsed.rounds));
         } else if (arg === '--port') {
@@ -169,11 +179,11 @@ function parseArgs(args: string[]): CliOptions {
  */
 async function runBenchmarks(opts: CliOptions): Promise<HmrStats[]> {
     const grouped = new Map<BenchMode, HmrStats[]>(
-        BENCH_MODES.map(mode => [mode, [] as HmrStats[]]),
+        opts.modes.map(mode => [mode, [] as HmrStats[]]),
     );
-    const modeCount = BENCH_MODES.length;
+    const modeCount = opts.modes.length;
     for (let round = 0; round < opts.rounds; round++) {
-        const order: BenchMode[] = rotateModes(round);
+        const order: BenchMode[] = rotateModes(opts.modes, round);
         for (const [index, mode] of order.entries()) {
             grouped
                 .get(mode)
@@ -181,18 +191,19 @@ async function runBenchmarks(opts: CliOptions): Promise<HmrStats[]> {
         }
     }
     cleanupBenchFiles();
-    return BENCH_MODES.map(mode => aggregateRows(mode, grouped.get(mode) ?? []));
+    return opts.modes.map(mode => aggregateRows(mode, grouped.get(mode) ?? []));
 }
 
 /**
  * Rotates the bench-mode order so each round starts with a different mode.
  * Keeps the pairing fair across rounds without introducing a noise sweep.
  *
+ * @param modes selected bench modes
  * @param round zero-based round index
  * @returns rotated mode order
  */
-function rotateModes(round: number): BenchMode[] {
-    const order = [...BENCH_MODES];
+function rotateModes(modes: readonly BenchMode[], round: number): BenchMode[] {
+    const order = [...modes];
     const shift = round % order.length;
     return [...order.slice(shift), ...order.slice(0, shift)];
 }
@@ -409,7 +420,7 @@ async function waitForServer(port: number): Promise<void> {
 function writeBenchFiles(
     version: number,
     label = `hmr-setup-${version}`,
-    mode: BenchMode = 'oxc',
+    mode: BenchMode = 'rust',
 ): void {
     mkdirSync(dirname(BENCH_COMPONENT), { recursive: true });
     mkdirSync(dirname(BENCH_PAGE), { recursive: true });
@@ -660,11 +671,11 @@ function summarizeLogs(logs: string[]): string {
  * @returns markdown report
  */
 function renderReport(rows: HmrStats[], opts: CliOptions): string {
-    const oxc = rows.find(row => row.parser === 'oxc');
+    const wasm = rows.find(row => row.parser === 'wasm');
     const rust = rows.find(row => row.parser === 'rust');
     const baseline = rows.find(row => row.parser === 'no-csszyx');
     const floor = rows.find(row => row.parser === 'no-tailwind');
-    const traceRows = rows.filter(row => row.parser === 'oxc' || row.parser === 'rust');
+    const traceRows = rows.filter(row => row.parser === 'wasm' || row.parser === 'rust');
 
     return `# Phase E Docs HMR Benchmark
 
@@ -676,17 +687,18 @@ Environment:
 - CPU parallelism: ${availableParallelism()}
 - Edits: ${opts.edits}
 - Warmups: ${opts.warmups}
+- Modes: ${opts.modes.join(', ')}
 - Rounds: ${opts.rounds}
 
 ## Summary
 
-- Docs HMR p95: ${formatComparison(oxc, rust, 'p95Ms')}.
-- Docs HMR median: ${formatComparison(oxc, rust, 'medianMs')}.
-- Tailwind-only baseline (no csszyx) p95: ${formatBaselineComparison(baseline, oxc, rust, 'p95Ms')}.
-- Tailwind-only baseline (no csszyx) median: ${formatBaselineComparison(baseline, oxc, rust, 'medianMs')}.
+- Docs HMR p95: ${formatComparison(wasm, rust, 'p95Ms')}.
+- Docs HMR median: ${formatComparison(wasm, rust, 'medianMs')}.
+- Tailwind-only baseline (no csszyx) p95: ${formatBaselineComparison(baseline, wasm, rust, 'p95Ms')}.
+- Tailwind-only baseline (no csszyx) median: ${formatBaselineComparison(baseline, wasm, rust, 'medianMs')}.
 - Pipeline floor (no csszyx, no Tailwind) median: ${formatFloor(floor, baseline, 'medianMs')}.
 - Pipeline floor (no csszyx, no Tailwind) p95: ${formatFloor(floor, baseline, 'p95Ms')}.
-${formatShareBreakdown(floor, baseline, oxc, rust)}
+${formatShareBreakdown(floor, baseline, wasm, rust)}
 
 This benchmark starts the real Astro docs dev server, opens Chromium, edits a
 temporary React component, and measures from file write to the browser
@@ -758,28 +770,28 @@ function formatFloor(
  *
  * @param floor no-tailwind row
  * @param baseline no-csszyx row
- * @param oxc csszyx oxc row
+ * @param wasm csszyx wasm row
  * @param rust csszyx rust row
  * @returns summary lines for the share breakdown
  */
 function formatShareBreakdown(
     floor: HmrStats | undefined,
     baseline: HmrStats | undefined,
-    oxc: HmrStats | undefined,
+    wasm: HmrStats | undefined,
     rust: HmrStats | undefined,
 ): string {
     if (
         floor?.status !== 'measured' ||
         baseline?.status !== 'measured' ||
-        oxc?.status !== 'measured' ||
+        wasm?.status !== 'measured' ||
         rust?.status !== 'measured'
     ) {
         return '';
     }
     const tailwindAdd = baseline.medianMs - floor.medianMs;
-    const csszyxOxcAdd = oxc.medianMs - baseline.medianMs;
+    const csszyxWasmAdd = wasm.medianMs - baseline.medianMs;
     const csszyxRustAdd = rust.medianMs - baseline.medianMs;
-    return `- HMR median share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx oxc adds ${formatMs(csszyxOxcAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
+    return `- HMR median share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx wasm adds ${formatMs(csszyxWasmAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
 }
 
 /**
@@ -788,14 +800,14 @@ function formatShareBreakdown(
  * judge whether csszyx is or is not a meaningful share of the HMR path.
  *
  * @param baseline no-csszyx row
- * @param oxc csszyx oxc row
+ * @param wasm csszyx wasm row
  * @param rust csszyx rust row
  * @param field metric field
  * @returns comparison line
  */
 function formatBaselineComparison(
     baseline: HmrStats | undefined,
-    oxc: HmrStats | undefined,
+    wasm: HmrStats | undefined,
     rust: HmrStats | undefined,
     field: 'medianMs' | 'p95Ms',
 ): string {
@@ -803,8 +815,8 @@ function formatBaselineComparison(
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline[field])} (Tailwind only)`];
-    if (oxc?.status === 'measured') {
-        parts.push(`csszyx oxc is ${formatRatio(oxc[field] / baseline[field])} vs baseline`);
+    if (wasm?.status === 'measured') {
+        parts.push(`csszyx wasm is ${formatRatio(wasm[field] / baseline[field])} vs baseline`);
     }
     if (rust?.status === 'measured') {
         parts.push(`csszyx rust is ${formatRatio(rust[field] / baseline[field])} vs baseline`);
@@ -813,22 +825,22 @@ function formatBaselineComparison(
 }
 
 /**
- * Formats rust-vs-oxc comparison text.
+ * Formats rust-vs-wasm comparison text.
  *
- * @param oxc oxc row
+ * @param wasm wasm row
  * @param rust rust row
  * @param field metric field
  * @returns comparison text
  */
 function formatComparison(
-    oxc: HmrStats | undefined,
+    wasm: HmrStats | undefined,
     rust: HmrStats | undefined,
     field: 'medianMs' | 'p95Ms',
 ): string {
-    if (!oxc || !rust || oxc.status !== 'measured' || rust.status !== 'measured') {
+    if (!wasm || !rust || wasm.status !== 'measured' || rust.status !== 'measured') {
         return 'not measured successfully';
     }
-    return `rust is ${formatRatio(oxc[field] / rust[field])} vs oxc`;
+    return `rust is ${formatRatio(wasm[field] / rust[field])} vs wasm`;
 }
 
 /**

@@ -17,11 +17,7 @@ export function extractCorpusSnippets(): ExtractedSnippet[] {
     for (const file of fs.readdirSync(testsDir).sort()) {
         // Branch-coverage files are not curated parity-corpus entries. Excluding
         // them keeps this signal stable as coverage-oriented cases are added.
-        if (
-            !file.endsWith('.test.ts') ||
-            file.startsWith('oxc-') ||
-            file.includes('branch-coverage')
-        ) {
+        if (!file.endsWith('.test.ts') || file.includes('branch-coverage')) {
             continue;
         }
 

@@ -305,11 +305,9 @@ describe('CSS Variable Auto-Compile (transformSource)', () => {
     });
 
     describe('runtime var beside conditionals (ternary-family sweep)', () => {
-        // Babel is the reference lane for this family: it compiles every shape
-        // below statically while rust/oxc still punt some to the runtime
-        // fallback (tracked in the rust parity corpus KNOWN_DIVERGENCES).
-        // These lock the reference behavior — a babel regression here would
-        // silently re-open the vui finding-1 class of missing CSS.
+        // The engine compiles every shape below statically. These lock that
+        // behaviour — a regression here would silently re-open the vui
+        // finding-1 class of missing CSS.
         it('keeps the var class beside a finite ternary', () => {
             const result = transformSource(
                 'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',

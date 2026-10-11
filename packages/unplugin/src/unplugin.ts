@@ -5,7 +5,6 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-    ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
@@ -4586,10 +4585,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Historical prescan behavior keeps the build alive, but the skip
                 // itself must be visible: every class in this file is silently
                 // dead under Tailwind `source(none)`.
-                if (err instanceof ASTBudgetExceededError) {
-                    warnPrescanBudgetSkip(file.filePath);
-                    continue;
-                }
                 console.warn(
                     `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
                         `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
@@ -5485,7 +5480,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Extracts classes from source code into the safelist (state.classes) so
      * Tailwind generates their CSS. This is the regex fallback for files the
-     * Babel sz pass did not handle (non-sz files, Vue/Svelte adapter output),
+     * engine's sz pass did not handle (non-sz files, Vue/Svelte adapter output),
      * where owned and author classes are indistinguishable by regex — so these
      * deliberately do NOT enter ownedClasses and are never mangled.
      * Handles both static patterns (className="...") and expression patterns

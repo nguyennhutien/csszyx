@@ -150,10 +150,10 @@ export interface CapturedRun {
 /**
  * Run one engine over a source, capturing both warning channels.
  *
- * The JS lanes warn through the console while the native engine reports
- * through `diagnostics`; parity assertions need the union of both, minus the
- * one-time "Tip: run a full project scan" hint whose firing depends on suite
- * order.
+ * The engine reports through `diagnostics`, and transform-core's shared
+ * helpers can still warn through the console; parity assertions need the
+ * union of both, minus the one-time "Tip: run a full project scan" hint whose
+ * firing depends on suite order.
  *
  * @param engine - Engine entry under test.
  * @param source - Full module source.

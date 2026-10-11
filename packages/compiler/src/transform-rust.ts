@@ -25,17 +25,16 @@ export interface TransformRustFile {
 }
 
 /**
- * Thrown when the Rust native transform cannot execute for the current host.
- *
- * The class name is kept for compatibility with earlier scaffold-era callers.
+ * Thrown when the native engine cannot run on the current host. The wasm
+ * artifact's counterpart is `WasmTransformUnavailableError`.
  */
-export class OxcRustNotImplementedError extends Error {
+export class RustTransformUnavailableError extends Error {
     /**
      * @param detail Native loader or transform failure detail.
      */
     constructor(detail: string) {
         super(`transformRust: native engine unavailable: ${detail}`);
-        this.name = 'OxcRustNotImplementedError';
+        this.name = 'RustTransformUnavailableError';
     }
 }
 
@@ -46,7 +45,7 @@ export class OxcRustNotImplementedError extends Error {
  * @param filename Source filename for diagnostics.
  * @param options Compiler options.
  * @returns Transform result.
- * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function transformRust(
     source: string,
@@ -58,7 +57,7 @@ export function transformRust(
     // index-based so recovery tokens keep unique per-file inputs.
     const [result] = transformRustBatch([{ filename: filename ?? '<anonymous>', source }], options);
     if (!result) {
-        throw new OxcRustNotImplementedError('native transform returned no result');
+        throw new RustTransformUnavailableError('native transform returned no result');
     }
     return result;
 }
@@ -81,7 +80,7 @@ let rustAvailability: boolean | undefined;
  * is remembered for the process, since a loaded binding cannot turn stale; a
  * failure is not, so every call reports it with its own detail.
  *
- * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function ensureRustTransformAvailable(): void {
     if (rustAvailability === true) return;
@@ -89,11 +88,8 @@ export function ensureRustTransformAvailable(): void {
         transformBatch([{ filename: 'csszyx-probe.tsx', source: '' }]);
         rustAvailability = true;
     } catch (err) {
-        if (err instanceof OxcRustNotImplementedError) {
-            throw err;
-        }
         if (err instanceof CsszyxNativeUnavailableError) {
-            throw new OxcRustNotImplementedError(err.detail);
+            throw new RustTransformUnavailableError(err.detail);
         }
         throw err;
     }
@@ -102,7 +98,7 @@ export function ensureRustTransformAvailable(): void {
 /**
  * Non-throwing companion to {@link ensureRustTransformAvailable}: returns whether
  * the native Rust addon can be loaded on the current host. Build integrations use
- * it to gracefully degrade the DEFAULT `rust` parser to `oxc` when no prebuilt
+ * it to degrade the DEFAULT `rust` parser to the wasm artifact when no prebuilt
  * binary is installed for the platform (unsupported arch, optional deps omitted,
  * or a cross-platform frozen lockfile) — instead of hard-failing a build the user
  * never explicitly opted into `rust` for. An EXPLICIT `rust` choice must still use
@@ -133,7 +129,7 @@ export function isRustTransformAvailable(): boolean {
  * @param files Source files to transform.
  * @param options Compiler options reserved for future native config plumbing.
  * @returns One transform result per input file, in input order.
- * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function transformRustBatch(
     files: readonly TransformRustFile[],
@@ -150,10 +146,8 @@ export function transformRustBatch(
                 mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
                 globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
                 rootDir: options?.rootDir,
-                // The node cap must reach the native parser too: engines count
-                // AST nodes differently, so an oxc-passing page file can trip
-                // the default cap under rust only — and the user's raised
-                // `build.astBudgetLimit` has to apply to whichever engine trips.
+                // The node cap is counted by the engine's parser, so the user's
+                // raised `build.astBudgetLimit` has to reach it.
                 astBudget: options?.astBudget,
                 crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
                 // Its own field, not folded into the szv payload: the two
@@ -176,7 +170,7 @@ export function transformRustBatch(
  *
  * @param files - Modules to read.
  * @returns One answer per module, in input order.
- * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function scanModuleLinksRust(files: readonly ModuleLinksFile[]): ModuleLinks[] {
     try {
@@ -194,7 +188,7 @@ export function scanModuleLinksRust(files: readonly ModuleLinksFile[]): ModuleLi
  */
 function asRustUnavailable(err: unknown): unknown {
     return err instanceof CsszyxNativeUnavailableError
-        ? new OxcRustNotImplementedError(err.detail)
+        ? new RustTransformUnavailableError(err.detail)
         : err;
 }
 

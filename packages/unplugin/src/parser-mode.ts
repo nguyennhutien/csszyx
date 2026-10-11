@@ -42,8 +42,8 @@ export interface ResolveParserModeInput {
     /**
      * Lazy native-availability probe. Called AT MOST once, and only when the
      * resolved parser is the non-explicit default `rust` — so an explicit `rust`
-     * never probes (it must fail loudly downstream) and `oxc`/`babel` never pay
-     * for a probe they don't need.
+     * never probes (it must fail loudly downstream) and an explicit `wasm` never
+     * pays for a probe it does not need.
      */
     isRustAvailable: () => boolean;
     /**

@@ -2676,8 +2676,11 @@ function buildLinearGradientClass(direction: string | number): string {
     return `bg-linear-[${normalizeArbitraryValue(direction)}]`;
 }
 
+/** A gradient's direction or position as written: absent, an angle, or a token. */
+type GradientDirection = string | number | undefined;
+
 /** Builds a radial background-gradient utility. */
-function buildRadialGradientClass(direction: string | number | undefined): string {
+function buildRadialGradientClass(direction: GradientDirection): string {
     if (direction === undefined || direction === null) return 'bg-radial';
     if (typeof direction !== 'string') return '';
     return direction.startsWith('--')
@@ -2686,7 +2689,7 @@ function buildRadialGradientClass(direction: string | number | undefined): strin
 }
 
 /** Builds a conic background-gradient utility. */
-function buildConicGradientClass(direction: string | number | undefined): string {
+function buildConicGradientClass(direction: GradientDirection): string {
     if (direction === undefined || direction === null) return 'bg-conic';
     if (typeof direction === 'number') {
         return direction < 0 ? `-bg-conic-${Math.abs(direction)}` : `bg-conic-${direction}`;
@@ -2716,17 +2719,82 @@ function buildColorObjectClass(
 ): string {
     const utilityPrefix =
         PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-    const rawColor = color.color;
+    // A colour object takes its opacity in `op`; a plain slash opacity in
+    // `color` still writes a served class, with `op` as the opacity when both
+    // are given, and points at `op`. The important modifier ends the class.
+    // Mirrors `format_color_opacity_object`.
+    const important = color.color.endsWith('!') ? '!' : '';
+    const unmarked = important ? color.color.slice(0, -1) : color.color;
+    const slash = colorSlashOpacityIndex(key, unmarked);
+    if (slash > 0) warnColorObjectSlashOpacity(key, color.color, color.op);
+    const rawColor = slash > 0 ? unmarked.slice(0, slash) : unmarked;
+    const slashOpacity = slash > 0 ? unmarked.slice(slash + 1) : undefined;
     const colorValue =
         SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
         rawColor.startsWith('--') &&
         !rawColor.includes('(')
             ? `(color:${rawColor})`
             : formatColorObjectBase(rawColor);
-    if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
+    if (color.op === undefined) {
+        return slashOpacity === undefined
+            ? `${prefix}${utilityPrefix}-${colorValue}${important}`
+            : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
+    }
     const opacity = formatOpacity(color.op);
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
-    return `${prefix}${utilityPrefix}-${colorValue}/${opacity}`;
+    return `${prefix}${utilityPrefix}-${colorValue}/${opacity}${important}`;
+}
+
+/**
+ * Where a colour object's `color` splits into colour and opacity, or -1. Only
+ * a plain opacity (`50`, `7.5`) is one `op` can take; `red-500/` or
+ * `red-500/50/30` is written as given. Mirrors `split_color_slash_opacity`.
+ *
+ * @param key - Colour property key.
+ * @param color - `color` without its trailing `!`.
+ * @returns The slash index, or -1.
+ */
+function colorSlashOpacityIndex(key: string, color: string): number {
+    if (!isDroppedSlashOpacity(key, color)) return -1;
+    const slash = color.indexOf('/');
+    return /^\d+(?:\.\d+)?$/.test(color.slice(slash + 1)) ? slash : -1;
+}
+
+const _warnedColorObjectSlashOpacity = new Set<string>();
+
+/**
+ * Point a colour object with a slash opacity in `color` at `op`, the one
+ * spelling. The class is written, so this is a development nudge. The engines
+ * render the same text with the code `color-slash-opacity`.
+ *
+ * @param key - Colour property key.
+ * @param color - `color` as written, slash included.
+ * @param op - `op` as written, when given.
+ */
+function warnColorObjectSlashOpacity(
+    key: string,
+    color: string,
+    op: number | string | undefined,
+): void {
+    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
+    // An `op` that is neither a number nor a string is named as if absent,
+    // as the engines name it.
+    let shown = '';
+    if (typeof op === 'number') shown = `${op}`;
+    else if (typeof op === 'string') shown = `'${op}'`;
+    const token = `${key}:${color}:${shown}`;
+    if (_warnedColorObjectSlashOpacity.has(token)) return;
+    _warnedColorObjectSlashOpacity.add(token);
+    const important = color.endsWith('!') ? '!' : '';
+    const unmarked = important ? color.slice(0, -1) : color;
+    const slash = unmarked.indexOf('/');
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const written = shown ? `, op: ${shown}` : '';
+    const used = shown || unmarked.slice(slash + 1);
+    console.warn(
+        `[csszyx] "${key}: { color: '${color}'${written} }"${at} — a colour object takes its ` +
+            `opacity in op, not in color. Write { color: '${unmarked.slice(0, slash)}${important}', op: ${used} }.`,
+    );
 }
 
 /** Formats a color-object base using Tailwind variable and arbitrary syntax. */
@@ -4539,6 +4607,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedSpacingSteps.clear();
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
+    _warnedColorObjectSlashOpacity.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();
     __resetStringColorOpacityWarnings();
@@ -4861,12 +4930,13 @@ export function normalizeClassName(className: string): string {
 }
 
 /**
- * Options for {@link transformSourceCode}.
+ * Options for the engine entry points (`transformSource`, `transformRust`,
+ * `transformWasm`).
  */
 export interface TransformSourceCodeOptions {
     /**
-     * Override the AST node budget. Files larger than this throw
-     * {@link ASTBudgetExceededError}. Defaults to {@link AST_BUDGET} (50 000).
+     * Override the AST node budget. A file larger than this is left as written
+     * and reported as an `ast-budget` issue. Defaults to {@link AST_BUDGET} (50 000).
      * Useful for repos with legitimately large generated files (json-as-ts
      * fixtures, GraphQL schema snapshots) that exceed the default cap but
      * are still safe to transform.
@@ -4960,7 +5030,7 @@ export type GlobalVarAliasTableInput =
 export type CssVariableMangleValue = string | string[];
 
 /**
- * Source transform result shared by the Babel and oxc parser paths.
+ * Source transform result shared by both engine artifacts (native and wasm).
  */
 export interface SourceTransformResult {
     /** Rewritten source code. */
