@@ -1498,7 +1498,7 @@ pub(crate) fn is_variant_key(key: &str) -> bool {
 }
 
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
-/// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
+/// kebab-case fallback), mirroring `getVariantPrefix` in `transform-core.ts`.
 fn get_variant_prefix(key: &str) -> Cow<'static, str> {
     variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
 }
@@ -1551,7 +1551,7 @@ fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
-/// Lowers the `group`/`peer` scope variants, mirroring the oxc `handleGroupPeer`:
+/// Lowers the `group`/`peer` scope variants, mirroring `handleGroupPeer` in `transform-core.ts`:
 /// known variants combine with `-` (group-hover), has/data/aria nest as
 /// parameters, arbitrary selectors bracket, and a named scope appends `/name`.
 fn lower_group_peer_variant(
@@ -1756,7 +1756,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // theme namespace, so it serves no `font-<number>` at all — not
             // even the nine standard steps. A numeric weight brackets the
             // literal instead of emitting a class that styles nothing.
-            // Mirrors the TypeScript lanes.
+            // Mirrors `collectNumericProperty` in `transform-core.ts`.
             if key == "weight" {
                 return Some(format!(
                     "{prefix}{}-[{}]",
@@ -1963,7 +1963,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 return Some(format!("{prefix}@container/{value}"));
             }
             // Named scope markers: { group: 'item' } → group/item, mirroring
-            // the oxc `collectUnresolvedStringProperty` branch.
+            // the `collectUnresolvedStringProperty` branch in `transform-core.ts`.
             if key == "group" || key == "peer" {
                 return Some(format!("{prefix}{key}/{value}"));
             }
@@ -2124,7 +2124,8 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Bracket the whole value (sign included) when it needs arbitrary
             // syntax, then hoist a surviving leading `-` to the utility prefix.
             // A negative length stays inside the bracket (top-[-1px]); a bare
-            // negative fraction hoists (-inset-1/2), mirroring the oxc transform.
+            // negative fraction hoists (-inset-1/2), mirroring
+            // `buildGenericStringClass` in `transform-core.ts`.
             let final_value = if key == "aspect" && is_decimal_ratio(value) {
                 format!("[{value}]")
             } else if needs_brackets(value) {
@@ -2697,9 +2698,9 @@ fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
 
 /// Render a number the way JavaScript prints it, sign kept.
 ///
-/// The TypeScript lanes interpolate the value straight into the class string,
-/// so an engine only agrees with them by dropping the `.0` that Rust's default
-/// float formatting keeps.
+/// The runtime lowering (`transform-core.ts`) interpolates the value straight
+/// into the class string, so the engine only agrees with it by dropping the
+/// `.0` that Rust's default float formatting keeps.
 fn format_number_literal(value: f64) -> String {
     if value.fract() == 0.0 {
         #[allow(clippy::cast_possible_truncation)]
@@ -2770,7 +2771,7 @@ fn is_unsigned_decimal(value: &str) -> bool {
     }
 }
 
-/// Kebab-cases a camelCase key the way the oxc fallback does:
+/// Kebab-cases a camelCase key the way `camelToKebab` in `transform-core.ts` does:
 /// inserts a `-` between a lowercase/digit and an uppercase letter, then
 /// lowercases (breakWord → break-word).
 fn kebab_case(key: &str) -> String {

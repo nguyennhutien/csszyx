@@ -191,8 +191,8 @@ fn plan_property<'a>(source: &str, property: &'a ObjectPropertyKind<'a>) -> Opti
     let ObjectPropertyKind::ObjectProperty(property) = property else {
         return None;
     };
-    // A method or an accessor is not a property to the TypeScript's Babel
-    // walk, and a computed key has no static name.
+    // A method or an accessor was not a property to the removed TypeScript
+    // migrate's Babel walk, and a computed key has no static name.
     if property.computed || property.method || property.kind != PropertyKind::Init {
         return None;
     }

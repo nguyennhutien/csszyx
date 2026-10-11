@@ -5480,7 +5480,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Extracts classes from source code into the safelist (state.classes) so
      * Tailwind generates their CSS. This is the regex fallback for files the
-     * Babel sz pass did not handle (non-sz files, Vue/Svelte adapter output),
+     * engine's sz pass did not handle (non-sz files, Vue/Svelte adapter output),
      * where owned and author classes are indistinguishable by regex — so these
      * deliberately do NOT enter ownedClasses and are never mangled.
      * Handles both static patterns (className="...") and expression patterns

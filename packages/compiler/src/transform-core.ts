@@ -4861,7 +4861,8 @@ export function normalizeClassName(className: string): string {
 }
 
 /**
- * Options for `transformSource`.
+ * Options for the engine entry points (`transformSource`, `transformRust`,
+ * `transformWasm`).
  */
 export interface TransformSourceCodeOptions {
     /**
@@ -4960,7 +4961,7 @@ export type GlobalVarAliasTableInput =
 export type CssVariableMangleValue = string | string[];
 
 /**
- * Source transform result shared by the Babel and oxc parser paths.
+ * Source transform result shared by both engine artifacts (native and wasm).
  */
 export interface SourceTransformResult {
     /** Rewritten source code. */

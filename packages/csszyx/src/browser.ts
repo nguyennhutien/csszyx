@@ -8,7 +8,7 @@
  * same `sz="..."` attribute.
  *
  * Imports the browser-safe compiler entry (`@csszyx/compiler/browser`) which
- * skips the babel-dependent transformer pipeline and exposes only the pure
+ * carries no oxc-parser or native-addon dependency and exposes only the pure
  * sz-object → className transform.
  *
  * Side-effect: on load, walks the DOM for `[sz]` elements, compiles each,

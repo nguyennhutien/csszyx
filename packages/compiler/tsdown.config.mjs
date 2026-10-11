@@ -7,7 +7,7 @@ export default defineBuild({
         'bool-class': 'src/bool-class.ts',
         'color-var': 'src/color-var.ts',
         'spacing-var': 'src/spacing-var.ts',
-        // Browser-pure transform (no Babel deps): what @csszyx/dynamic and
+        // Browser-pure transform (no oxc-parser or native deps): what @csszyx/dynamic and
         // @csszyx/runtime pull into an app bundle.
         'transform-core': 'src/transform-core.ts',
         // The depth limit, its error and the key guard on their own, so the
