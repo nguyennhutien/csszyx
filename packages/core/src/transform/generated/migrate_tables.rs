@@ -673,8 +673,8 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "inset",
     "inset-x",
     "inset-y",
-    "inset-s",
-    "inset-e",
+    "start",
+    "end",
     "inset-bs",
     "inset-be",
     "z",
@@ -719,8 +719,8 @@ pub(crate) const NEGATIVE_ALLOWED: &[&str] = &[
     "underline-offset",
     "hue-rotate",
     "backdrop-hue-rotate",
-    "start",
-    "end",
+    "inset-s",
+    "inset-e",
 ];
 
 /// Whether `value` is in `NEGATIVE_ALLOWED`.
@@ -744,8 +744,8 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "inset"
             | "inset-x"
             | "inset-y"
-            | "inset-s"
-            | "inset-e"
+            | "start"
+            | "end"
             | "inset-bs"
             | "inset-be"
             | "z"
@@ -790,8 +790,8 @@ pub(crate) fn negative_allowed(value: &str) -> bool {
             | "underline-offset"
             | "hue-rotate"
             | "backdrop-hue-rotate"
-            | "start"
-            | "end"
+            | "inset-s"
+            | "inset-e"
     )
 }
 
@@ -1095,11 +1095,11 @@ pub(crate) fn transition_property_keywords(value: &str) -> bool {
 }
 
 /// `UNSIGNED_KEYWORDS` from reverse-map.ts, in source order.
-pub(crate) const UNSIGNED_KEYWORDS: &[&str] = &["none", "3d", "first", "last"];
+pub(crate) const UNSIGNED_KEYWORDS: &[&str] = &["none", "3d", "first", "last", "auto", "screen"];
 
 /// Whether `value` is in `UNSIGNED_KEYWORDS`.
 pub(crate) fn unsigned_keywords(value: &str) -> bool {
-    matches!(value, "none" | "3d" | "first" | "last")
+    matches!(value, "none" | "3d" | "first" | "last" | "auto" | "screen")
 }
 
 /// One keyword set: its TypeScript name, its members, and its predicate.

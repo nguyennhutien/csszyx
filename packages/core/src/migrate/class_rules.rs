@@ -77,11 +77,12 @@ pub enum Test {
     Paren,
     /// `(color:--c)`: the custom property names the colour, not the value.
     ParenColor,
-    ParenOrArbitraryDimension,
     /// The value begins with a fixed marker.
     StartsWith(&'static str),
     /// `[center_top_1rem]`: several tokens led by a position keyword.
     BracketPositionList,
+    /// `[length:10px]` or `(length:--v)`: a value led by this type hint.
+    Hinted(&'static str),
 }
 
 /// How the matched rule spells the value.
@@ -102,6 +103,12 @@ pub enum Emit {
     ParseValueUnsigned,
     /// The value after a fixed marker, unwrapped.
     AfterMarker(&'static str),
+    /// A `(--name)` reference as the `var()` it stands for, for a key whose
+    /// lowering brackets a bare custom property name.
+    VarReference,
+    /// The value after a [`Test::Hinted`] hint: the bracket's inside with
+    /// underscores read as spaces, or the bare custom property.
+    AfterHint(&'static str),
 }
 
 /// Which sz key the matched rule writes.
@@ -134,13 +141,13 @@ macro_rules! rule {
 }
 
 use Emit::{
-    AfterMarker, BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue,
-    ParseValueUnsigned, Unwrapped, Verbatim,
+    AfterHint, AfterMarker, BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue,
+    ParseValueUnsigned, Unwrapped, VarReference, Verbatim,
 };
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
-    Always, ArbitraryDimension, Bracket, BracketPositionList, Digits, Integer, Is, Keyword, OneOf,
-    Paren, ParenColor, ParenOrArbitraryDimension, Percent, StartsWith, ThreeDigits,
+    Always, ArbitraryDimension, Bracket, BracketPositionList, Digits, Hinted, Integer, Is, Keyword,
+    OneOf, Paren, ParenColor, Percent, StartsWith, ThreeDigits,
 };
 
 /// Prefixes where the `/` modifier is the utility's own opacity, not a colour.
@@ -161,6 +168,20 @@ macro_rules! shadow_family {
             rule!(Paren, Key($size), ParenInner),
             rule!(Bracket, Key($size), Unwrapped),
             rule!(Always, Key($color), Unwrapped),
+        ]
+    };
+}
+
+/// A border side with a colour key: an untyped variable is the side's colour,
+/// as Tailwind reads `border-t-(--v)`, and anything else takes the general
+/// reading, as on a prefix with no table. The sides with no colour key
+/// (`border-s`, `border-bs`, …) leave an untyped variable in `className`.
+macro_rules! border_side {
+    ($colour:literal) => {
+        [
+            rule!(StartsWith("(--"), Key($colour), Unwrapped),
+            rule!(StartsWith("[var("), Key($colour), Unwrapped),
+            rule!(Always, Reverse, ParseValue),
         ]
     };
 }
@@ -219,6 +240,13 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
                 Key("fontStretch"),
                 AfterMarker("stretch-")
             ),
+            // A custom property is a weight unless its hint names a family:
+            // Tailwind reads `font-(--v)` as `font-weight: var(--v)`. Read as a
+            // family it lowered to `font-(family-name:--v)` and changed what
+            // the element set.
+            rule!(StartsWith("(family-name:"), Key("fontFamily"), Unwrapped),
+            rule!(Paren, Key("weight"), Verbatim),
+            rule!(StartsWith("[var("), Key("weight"), Unwrapped),
             // `font-condensed` is not a Tailwind class, so a bare keyword is
             // a family like any other word.
             rule!(Always, Key("fontFamily"), Unwrapped),
@@ -266,6 +294,10 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
                 Verbatim,
             ),
             rule!(BracketPositionList, Key("bgPos"), BracketInner),
+            // The lowering writes `bgSize` and `bgPos` with a type hint, which
+            // every v4 serves; `bg-size-*` and `bg-position-*` are 4.1+.
+            rule!(Hinted("length"), Key("bgSize"), AfterHint("length")),
+            rule!(Hinted("position"), Key("bgPos"), AfterHint("position")),
             rule!(Is("none"), Key("bgImg"), Verbatim),
             rule!(Always, Key("bg"), Unwrapped),
         ],
@@ -296,6 +328,8 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             ),
             rule!(ParenColor, Key("shadowColor"), ParenColorInner),
             rule!(Paren, Key("shadow"), ParenInner),
+            // `shadow-[var(--v)]` is the shadow itself, like `shadow-(--v)`.
+            rule!(StartsWith("[var("), Key("shadow"), Unwrapped),
             rule!(Always, Key("shadowColor"), Unwrapped),
         ],
     ),
@@ -325,11 +359,15 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
                 Key("decorationThickness"),
                 Verbatim,
             ),
+            // An untyped variable is the colour: Tailwind reads
+            // `decoration-(--v)` as `text-decoration-color`, and the lowering
+            // writes the thickness with the `length:` hint.
             rule!(
-                ParenOrArbitraryDimension,
+                Hinted("length"),
                 Key("decorationThickness"),
-                Unwrapped,
+                AfterHint("length"),
             ),
+            rule!(ArbitraryDimension, Key("decorationThickness"), Unwrapped),
             rule!(Always, Key("decorationColor"), Unwrapped),
         ],
     ),
@@ -398,6 +436,12 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             rule!(Always, Key("stroke"), Unwrapped),
         ],
     ),
+    ("border-t", &border_side!("borderTColor")),
+    ("border-r", &border_side!("borderRColor")),
+    ("border-b", &border_side!("borderBColor")),
+    ("border-l", &border_side!("borderLColor")),
+    ("border-x", &border_side!("borderXColor")),
+    ("border-y", &border_side!("borderYColor")),
     ("from", GRADIENT_STOP_RULES),
     ("via", GRADIENT_STOP_RULES),
     ("to", GRADIENT_STOP_RULES),
@@ -409,6 +453,16 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
         ],
     ),
     ("ease", &[rule!(Always, Key("ease"), ParseValue)]),
+    // `perspective-origin-(--v)` is `perspective-origin: var(--v)`, and the
+    // lowering brackets a bare `--v` for this key: the reference goes in as
+    // the `var()` it stands for.
+    (
+        "perspective-origin",
+        &[
+            rule!(Paren, Reverse, VarReference),
+            rule!(Always, Reverse, ParseValue),
+        ],
+    ),
     // `snap-*` classes are all fixed prop-and-value classes and never reach
     // the prefix rules; a value that does is not one Tailwind has.
     ("snap", &[]),
@@ -510,25 +564,43 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
         Bracket => shape.bracket.is_some(),
         Paren => shape.paren.is_some(),
         ParenColor => shape.paren.is_some_and(|inner| inner.starts_with("color:")),
-        ParenOrArbitraryDimension => shape.paren.is_some() || is_arbitrary_dimension(value),
         StartsWith(marker) => value.starts_with(marker),
         BracketPositionList => shape.bracket.is_some_and(|inner| {
             let inner = decode_arbitrary_spaces(inner);
             inner.contains(' ')
                 && tables::bg_position_keywords(inner.split(' ').next().unwrap_or_default())
         }),
+        Hinted(hint) => after_hint(shape, hint).is_some(),
     }
 }
 
-/// The value a matched rule writes.
-pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> SzValue {
+/// The inside of a bracket or paren value after `hint:`. A bracket's
+/// underscores are spaces; a paren holds a custom property, whose name may
+/// carry an underscore of its own.
+fn after_hint(shape: &Shape<'_>, hint: &str) -> Option<String> {
+    let strip = |inner: &'_ str| -> Option<String> {
+        inner
+            .strip_prefix(hint)?
+            .strip_prefix(':')
+            .map(str::to_string)
+    };
+    shape
+        .bracket
+        .and_then(strip)
+        .map(|inner| decode_arbitrary_spaces(&inner))
+        .or_else(|| shape.paren.and_then(strip))
+}
+
+/// The value a matched rule writes, or `None` when no sz value writes the
+/// class back.
+pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> Option<SzValue> {
     let value = shape.value;
-    match &rule.emit {
+    Some(match &rule.emit {
         Verbatim => SzValue::from(value),
         Literal(literal) => SzValue::from(*literal),
         Unwrapped => SzValue::from(parse_string_value(value)),
         Number => SzValue::Number(shape.number.unwrap_or(f64::NAN)),
-        ParenInner => SzValue::from(shape.paren.unwrap_or_default()),
+        ParenInner => SzValue::from(reference_value(shape.paren.unwrap_or_default())),
         ParenColorInner => SzValue::from(
             shape
                 .paren
@@ -536,10 +608,12 @@ pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> SzV
                 .unwrap_or_default(),
         ),
         BracketInner => SzValue::from(decode_arbitrary_spaces(shape.bracket.unwrap_or_default())),
-        ParseValue => parse_value(prefix, value, negative),
-        ParseValueUnsigned => parse_value(prefix, value, false),
+        ParseValue => return parse_value(prefix, value, negative),
+        ParseValueUnsigned => return parse_value(prefix, value, false),
         AfterMarker(marker) => SzValue::from(parse_string_value(&value[marker.len()..])),
-    }
+        VarReference => SzValue::from(var_reference(shape.paren.unwrap_or_default())),
+        AfterHint(hint) => SzValue::from(after_hint(shape, hint).unwrap_or_default()),
+    })
 }
 
 /// The sz key a matched rule writes.
@@ -582,9 +656,44 @@ pub fn parse_string_value(value: &str) -> String {
         return decode_arbitrary_spaces(inner);
     }
     if let Some(inner) = wrapped(value, '(', ')') {
-        return inner.to_string();
+        return reference_value(inner);
     }
     value.to_string()
+}
+
+/// The sz value for the inside of a `(…)` reference.
+///
+/// A bare custom property is the value itself, `--v`, which the lowering
+/// writes back as `(--v)`. One with a type hint keeps its parens: the bare
+/// `length:--v` lowered to `p-length:--v`, which is no class at all, and
+/// `(length:--v)` lowers to the class it came from.
+fn reference_value(inner: &str) -> String {
+    if is_hinted(inner) {
+        format!("({inner})")
+    } else {
+        inner.to_string()
+    }
+}
+
+/// [`reference_value`] for a key whose lowering brackets a bare name: the
+/// bare name goes in as the `var()` it stands for.
+fn var_reference(inner: &str) -> String {
+    if is_hinted(inner) {
+        format!("({inner})")
+    } else {
+        format!("var({inner})")
+    }
+}
+
+/// `length:--v`: a type hint before the custom property.
+fn is_hinted(inner: &str) -> bool {
+    inner.split_once(':').is_some_and(|(hint, name)| {
+        !hint.is_empty()
+            && hint
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+            && name.starts_with("--")
+    })
 }
 
 /// CSS length and dimension units, so `[1.5px]` reads as a size and not a
@@ -661,42 +770,91 @@ pub fn is_valid_spacing_value(value: &str) -> bool {
         || value.contains('/')
 }
 
-/// The general reading of a prefix's value.
-pub fn parse_value(prefix: &str, value: &str, negative: bool) -> SzValue {
+/// The general reading of a prefix's value, or `None` when the class has a
+/// sign no sz value carries.
+pub fn parse_value(prefix: &str, value: &str, negative: bool) -> Option<SzValue> {
     if let Some(inner) = wrapped(value, '[', ']') {
-        return SzValue::from(parse_arbitrary_value(
-            prefix,
-            &decode_arbitrary_spaces(inner),
-            negative,
-        ));
+        return parse_arbitrary_value(prefix, &decode_arbitrary_spaces(inner), negative)
+            .map(SzValue::from);
     }
     if let Some(inner) = wrapped(value, '(', ')') {
-        return SzValue::from(signed_string(inner, negative));
+        return Some(SzValue::from(signed_reference(inner, negative)));
     }
     if tables::fraction_supported(prefix) && is_fraction(value) {
-        return SzValue::from(signed_string(value, negative));
-    }
-    if value == "auto" || value == "screen" {
-        return SzValue::from(value);
+        return Some(SzValue::from(signed_string(value, negative)));
     }
     if let Some(number) = js_number(value) {
-        return SzValue::Number(if negative { -number } else { number });
+        return Some(SzValue::Number(if negative { -number } else { number }));
     }
-    SzValue::from(signed_string(value, negative))
+    Some(SzValue::from(signed_string(value, negative)))
+}
+
+/// A `(--name)` reference, signed outside the parens.
+///
+/// `-m-(--v)` is `calc(var(--v) * -1)`. A sign written into the name, as
+/// `m: '---v'`, lowered to `m-(---v)`: a property named `---v`. `m: '-(--v)'`
+/// lowers to the class it came from.
+fn signed_reference(inner: &str, negative: bool) -> String {
+    if negative {
+        format!("-({inner})")
+    } else {
+        reference_value(inner)
+    }
 }
 
 /// An arbitrary value's inside, with a `content` string's quotes normalised
 /// to double quotes so the compiler writes it back unchanged.
-fn parse_arbitrary_value(prefix: &str, inner: &str, negative: bool) -> String {
+///
+/// A sign goes inside the bracket only on a number: `-m-[10px]` is
+/// `m-[-10px]`, the same margin. On a whole `var()` it goes outside, as the
+/// reference `-(--v)`; `-var(--v)` is not CSS. Anything else has no signed
+/// sz form, and the class stays in `className`.
+fn parse_arbitrary_value(prefix: &str, inner: &str, negative: bool) -> Option<String> {
     if negative {
-        return format!("-{inner}");
+        if is_unsigned_dimension(inner) {
+            return Some(format!("-{inner}"));
+        }
+        return var_call_argument(inner).map(|argument| signed_reference(argument, true));
     }
     if prefix == "content" {
         if let Some(body) = wrapped(inner, '\'', '\'').or_else(|| wrapped(inner, '"', '"')) {
-            return format!("\"{body}\"");
+            return Some(format!("\"{body}\""));
         }
     }
-    inner.to_string()
+    Some(inner.to_string())
+}
+
+/// `10px`, `1.5`, `45deg`, `50%`: an unsigned number, with a unit or not.
+fn is_unsigned_dimension(value: &str) -> bool {
+    let magnitude = value.trim_end_matches(is_unit_char);
+    !magnitude.is_empty()
+        && magnitude.bytes().any(|byte| byte.is_ascii_digit())
+        && is_decimal_digits(magnitude.strip_prefix('.').unwrap_or(magnitude))
+}
+
+/// A character of a CSS unit: `px`, `deg`, `%`.
+const fn is_unit_char(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '%'
+}
+
+/// The argument of a value that is one whole `var(--…)` call.
+fn var_call_argument(value: &str) -> Option<&str> {
+    let argument = value.strip_prefix("var(")?.strip_suffix(')')?;
+    if !argument.starts_with("--") {
+        return None;
+    }
+    let mut depth = 0_i32;
+    for byte in argument.bytes() {
+        match byte {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        if depth < 0 {
+            return None;
+        }
+    }
+    (depth == 0).then_some(argument)
 }
 
 pub fn signed_string(value: &str, negative: bool) -> String {
@@ -704,5 +862,34 @@ pub fn signed_string(value: &str, negative: bool) -> String {
         format!("-{value}")
     } else {
         value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_type_hint_needs_a_lowercase_name_and_a_custom_property() {
+        assert!(is_hinted("length:--v"));
+        assert!(is_hinted("line-width:--v"));
+        assert!(!is_hinted(":--v"));
+        assert!(!is_hinted("length:v"));
+        assert!(!is_hinted("Length:--v"));
+        assert!(!is_hinted("--v"));
+    }
+
+    #[test]
+    fn a_var_call_is_one_balanced_call_to_a_custom_property() {
+        assert_eq!(var_call_argument("var(--x)"), Some("--x"));
+        assert_eq!(
+            var_call_argument("var(--x,calc(1px))"),
+            Some("--x,calc(1px)")
+        );
+        // Closes before the end: two calls, not one.
+        assert_eq!(var_call_argument("var(--a)x(y)"), None);
+        assert_eq!(var_call_argument("var(--a(b)"), None);
+        assert_eq!(var_call_argument("var(x)"), None);
+        assert_eq!(var_call_argument("calc(--x)"), None);
     }
 }

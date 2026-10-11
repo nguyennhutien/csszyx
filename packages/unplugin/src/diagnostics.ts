@@ -10,9 +10,11 @@ export {
     CSSZYX_CONFIG_FILE_NAMES,
     csszyxConfigFileNameFor,
     DIAGNOSTIC_POLICY_STATE_FILE,
+    type DiagnosticPolicyStateFile,
     diagnosticPolicyStatePath,
     type FoundConfigFile,
     findCsszyxConfigFile,
+    isCsszyxConfigFile,
     isLegacyInitTemplate,
     type LoadedDiagnosticPolicy,
     loadDiagnosticPolicy,
@@ -24,7 +26,10 @@ export {
     type DeadClassFinding,
     type DeadClassSite,
     deadClassMessage,
+    hoistedSignUtility,
     reportDeadSzClasses,
+    unsignedClass,
+    unsignedValueMessage,
 } from './dead-class.js';
 export {
     capOverflowMessage,
@@ -48,6 +53,14 @@ export {
     SZ_DIAGNOSTIC_PRESETS,
     SZ_DIAGNOSTIC_RULE_IDS,
 } from './diagnostic-policy.js';
+export {
+    type DiagnosticPolicyInput,
+    diagnosticPolicyInputs,
+    diagnosticPolicyInputsCurrent,
+    diagnosticPolicyWatchFiles,
+    isDiagnosticPolicyWatchFile,
+} from './diagnostic-policy-inputs.js';
+export { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
 export {
     type QuietMode,
     resolveQuietMode,

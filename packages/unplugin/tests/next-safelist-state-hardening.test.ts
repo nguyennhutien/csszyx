@@ -53,7 +53,9 @@ describe('materializeNextSafelist over a polluted shards directory', () => {
         mkdirSync(join(paths.shardsDir, 'not-a-file.json'));
         writeFileSync(join(paths.shardsDir, 'notes.txt'), 'ignore me');
         writeFileSync(join(paths.shardsDir, 'corrupt.json'), '{ nope');
-        writeFileSync(join(paths.shardsDir, 'invalid.json'), JSON.stringify({ version: 99 }));
+        // Of the format read, without the fields it needs. A shard of another
+        // format is kept for the version that wrote it (next-safelist-state.test.ts).
+        writeFileSync(join(paths.shardsDir, 'invalid.json'), JSON.stringify({ version: 1 }));
         // A shard whose source no longer exists — tombstoned.
         writeNextSafelistShard(
             paths.shardsDir,

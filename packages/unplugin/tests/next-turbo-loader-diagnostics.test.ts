@@ -14,6 +14,9 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { writeDiagnosticPolicyState } from '../src/csszyx-config-file.js';
+import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
+import { diagnosticPolicyInputs } from '../src/diagnostic-policy-inputs.js';
 import { reportNextLoaderDiagnostics } from '../src/next-loader-diagnostics.js';
 import { runNextPrebuild } from '../src/next-prebuild.js';
 import nextTurboLoader, { type NextTurboLoaderContext } from '../src/next-turbo-loader.js';
@@ -78,7 +81,10 @@ function project(source: string): { root: string; page: string } {
  * @param run.env - The loader's environment.
  * @param run.channel - Whether the context offers `emitWarning`, as Turbopack's does.
  * @param run.times - How many times to load the module.
- * @returns The emitted warnings and the csszyx console lines.
+ * @param run.files - More files at the root, by name.
+ * @param run.state - Write the policy file a Next command writes, from those files.
+ * @returns The root, the emitted warnings, the csszyx console lines and the
+ *          loader's file dependencies.
  */
 function load(
     source: string,
@@ -87,22 +93,31 @@ function load(
         env?: Record<string, string>;
         channel?: boolean;
         times?: number;
+        files?: Record<string, string>;
+        state?: boolean;
     } = {},
-): { emitted: string[]; console: string[] } {
-    const { mode = 'development', env = {}, channel = true, times = 1 } = run;
+): { root: string; emitted: string[]; console: string[]; dependencies: string[] } {
+    const { mode = 'development', env = {}, channel = true, times = 1, files = {} } = run;
     const { root, page } = project(source);
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(root, name), text);
+    if (run.state === true) {
+        writeDiagnosticPolicyState(root, createDiagnosticPolicy(), diagnosticPolicyInputs(root));
+    }
     const loaderOptions = options(mode, env);
     if (mode === 'production') {
         runNextPrebuild({ files: [page], explicitRoot: root, cwd: root, ...loaderOptions });
     }
     const emitted: string[] = [];
+    const dependencies: string[] = [];
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const context: NextTurboLoaderContext = {
         resourcePath: page,
         rootContext: root,
         context: join(root, 'src'),
         mode,
-        addDependency: () => {},
+        addDependency: file => {
+            dependencies.push(file);
+        },
         getOptions: () => loaderOptions,
         ...(channel
             ? {
@@ -116,7 +131,7 @@ function load(
         expect(nextTurboLoader.call(context, source)).toContain('export const App');
     }
     const lines = warn.mock.calls.map(call => String(call[0])).filter(l => l.includes('[csszyx]'));
-    return { emitted, console: lines };
+    return { root, emitted, console: lines, dependencies };
 }
 
 describe('Next Turbopack loader diagnostics', () => {
@@ -128,6 +143,33 @@ describe('Next Turbopack loader diagnostics', () => {
         expect(emitted[0]).toContain('"ordinal" was replaced');
         expect(emitted[0]).toContain('{ numOrdinal: true }');
         expect(lines).toEqual([]);
+    });
+
+    it('runs a module with findings again when the levels it was reported at can change', () => {
+        // `next watch` rewrites the policy file on a config edit; without
+        // `next watch`, the config and what it imports are what changed.
+        const { root, dependencies } = load(REPLACED, {
+            state: true,
+            files: {
+                'csszyx.config.mjs':
+                    "import rules from './levels.mjs';\nexport default { diagnostics: { rules } };\n",
+                'levels.mjs': 'export default {};\n',
+            },
+        });
+        expect(dependencies).toEqual(
+            expect.arrayContaining([
+                join(root, '.csszyx/diagnostic-policy.json'),
+                join(root, 'csszyx.config.ts'),
+                join(root, 'csszyx.config.mjs'),
+                join(root, 'levels.mjs'),
+            ]),
+        );
+    });
+
+    it('does not make a clean module depend on the levels', () => {
+        const { root, dependencies } = load(CLEAN);
+        expect(dependencies).not.toContain(join(root, '.csszyx/diagnostic-policy.json'));
+        expect(dependencies).not.toContain(join(root, 'csszyx.config.ts'));
     });
 
     it('warns about nothing for a clean source', () => {
@@ -187,6 +229,34 @@ describe('Next Turbopack loader diagnostics', () => {
         report('second');
         report('first');
         expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    it('reads a config created after the policy file recorded none', () => {
+        // The cached policy came from a project without a config: nothing it
+        // lists changed, and a check of its inputs alone would keep it.
+        const { root } = project(CLEAN);
+        writeDiagnosticPolicyState(root, createDiagnosticPolicy(), []);
+        const emitted: string[] = [];
+        const run = (source: string): void =>
+            reportNextLoaderDiagnostics({
+                diagnostics: ['[csszyx] "ordinal" was replaced at src/App.tsx:1.'],
+                issues: [{ code: 'canonical-key', start: 0, line: 1, column: 1 } as never],
+                root,
+                resourcePath: join(root, 'src/App.tsx'),
+                source,
+                mode: 'development',
+                env: {},
+                emitWarning: warning => emitted.push(String(warning)),
+            });
+        run('before');
+        expect(emitted).toHaveLength(1);
+        writeFileSync(
+            join(root, 'csszyx.config.mjs'),
+            "export default { diagnostics: { rules: { 'canonical-key': 'off' } } };\n",
+        );
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        run('after');
+        expect(emitted).toHaveLength(1);
     });
 
     it('prints a console line again when an undo brings back what an edit fixed', () => {

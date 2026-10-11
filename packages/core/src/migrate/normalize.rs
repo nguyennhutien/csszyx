@@ -483,7 +483,7 @@ fn normalize_ambiguous_font(
     push_resolved_value(
         property,
         &value,
-        &class_rules::emit(rule, "font", &shape, false),
+        &class_rules::emit(rule, "font", &shape, false)?,
         replacements,
     );
     Some(Outcome::one(canonical, None))

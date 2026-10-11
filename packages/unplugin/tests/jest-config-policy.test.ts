@@ -6,16 +6,26 @@
  * The config is loaded by the built `dist/diagnostics.mjs` in a child process,
  * so these cases need `pnpm --filter @csszyx/unplugin build` first.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     diagnosticPolicyStatePath,
+    loadDiagnosticPolicy,
     writeDiagnosticPolicyState,
 } from '../src/csszyx-config-file.js';
 import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
+import { diagnosticPolicyInputs } from '../src/diagnostic-policy-inputs.js';
 import { createTransformer } from '../src/jest-transform.js';
 
 const roots: string[] = [];
@@ -166,20 +176,69 @@ describe('when the jest transform loads the config', () => {
 });
 
 describe('the jest transform with a state file', () => {
-    it('reads the config when the state file is older than it', () => {
+    /**
+     * Write the state file the way `csszyx next prebuild` does: the inputs
+     * first, then the policy the config loads to.
+     *
+     * @param root - The project root.
+     */
+    async function prebuild(root: string): Promise<void> {
+        const inputs = diagnosticPolicyInputs(root);
+        writeDiagnosticPolicyState(root, (await loadDiagnosticPolicy(root)).policy, inputs);
+    }
+
+    /** A config whose levels live in a module it imports. */
+    const IMPORTS_LEVELS =
+        'import rules from "./levels.mjs";\nexport default { diagnostics: { rules } };\n';
+    const SAYS_LOADED = 'process.stderr.write("[csszyx] config loaded\\n");\n';
+
+    it('reads the config when it changed since the state was written', async () => {
         const { root, file } = project(UNKNOWN, OFF);
-        writeDiagnosticPolicyState(root, createDiagnosticPolicy());
-        const past = new Date(Date.now() - 60_000);
-        utimesSync(diagnosticPolicyStatePath(root), past, past);
+        await prebuild(root);
+        writeFileSync(join(root, 'csszyx.config.mjs'), `${SAYS_LOADED}${OFF}`);
+        expect(jest({ root, file, source: UNKNOWN })).toEqual(['[csszyx] config loaded\n']);
+    });
+
+    it('reads the config when a module it imports changed since the state was written', async () => {
+        const { root, file } = project(UNKNOWN, IMPORTS_LEVELS);
+        writeFileSync(join(root, 'levels.mjs'), 'export default { "unknown-key": "warn" };\n');
+        await prebuild(root);
+        // The config file itself is as the state records it; only its import moved.
+        writeFileSync(join(root, 'levels.mjs'), 'export default { "unknown-key": "off" };\n');
+        const later = new Date(Date.now() + 60_000);
+        utimesSync(join(root, 'levels.mjs'), later, later);
         expect(jest({ root, file, source: UNKNOWN })).toEqual([]);
     });
 
-    it('reads the state file when it is as new as the config', () => {
-        // The state says `recommended`, the config says off: the state is read.
+    it('reads the state file, and loads nothing, while every file it records is unchanged', async () => {
+        // The state says `recommended`; loading the config would print a line.
+        const { root, file } = project(UNKNOWN, `${SAYS_LOADED}${IMPORTS_LEVELS}`);
+        writeFileSync(join(root, 'levels.mjs'), 'export default {};\n');
+        writeDiagnosticPolicyState(root, createDiagnosticPolicy(), diagnosticPolicyInputs(root));
+        const lines = jest({ root, file, source: UNKNOWN }).join('\n');
+        expect(lines).toContain('Unknown property');
+        expect(lines).not.toContain('config loaded');
+    });
+
+    it('reads the config when the state file is of another format', () => {
         const { root, file } = project(UNKNOWN, OFF);
-        writeDiagnosticPolicyState(root, createDiagnosticPolicy());
-        const future = new Date(Date.now() + 60_000);
-        utimesSync(diagnosticPolicyStatePath(root), future, future);
+        writeDiagnosticPolicyState(root, createDiagnosticPolicy(), diagnosticPolicyInputs(root));
+        const state = JSON.parse(readFileSync(diagnosticPolicyStatePath(root), 'utf8'));
+        writeFileSync(diagnosticPolicyStatePath(root), JSON.stringify({ ...state, format: 1 }));
+        // Said once, and the levels are the config's, which turns the finding off.
+        expect(jest({ root, file, source: UNKNOWN })).toEqual([
+            expect.stringContaining('diagnostic-policy.json is in format 1'),
+        ]);
+    });
+
+    it('takes the defaults, and loads nothing, once the config the state records is gone', () => {
+        const { root, file } = project(UNKNOWN, OFF);
+        writeDiagnosticPolicyState(
+            root,
+            createDiagnosticPolicy({ rules: { 'unknown-key': 'off' } }),
+            diagnosticPolicyInputs(root),
+        );
+        rmSync(join(root, 'csszyx.config.mjs'));
         expect(jest({ root, file, source: UNKNOWN }).join('\n')).toContain('Unknown property');
     });
 });

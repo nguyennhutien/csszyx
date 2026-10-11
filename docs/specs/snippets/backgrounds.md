@@ -100,49 +100,50 @@ Appends `/method` suffix to gradient class:
 
 ## Gradient Color Stops
 
-| Concept                        | CSS Rule                  | Tailwind v4 Class   | `sz` Prop (Object Syntax)   | Note                                                        |
-| :----------------------------- | :------------------------ | :------------------ | :-------------------------- | :---------------------------------------------------------- |
-| **From**                       | `--tw-gradient-from: ...` | `from-blue-500`     | `{ from: 'blue-500' }`      |                                                             |
-| **Via**                        | `--tw-gradient-via: ...`  | `via-blue-500`      | `{ via: 'blue-500' }`       |                                                             |
-| **To**                         | `--tw-gradient-to: ...`   | `to-blue-500`       | `{ to: 'blue-500' }`        |                                                             |
-| **From Position**              | `... <number>%`           | `from-<number>%`    | `{ fromPos: <number> }`     | v4: fully dynamic, no static scale, accept any integer bare |
-| **From Position Arbitrary**    | `... <decimal>%`          | `from-[<decimal>%]` | `{ fromPos: <decimal> }`    |                                                             |
-| **From Position Arbitrary**    | `... 300px`               | `from-[300px]`      | `{ fromPos: '300px' }`      |                                                             |
-| **From Position CSS Variable** | `... var(--from-pos)`     | `from-(--from-pos)` | `{ fromPos: '--from-pos' }` | **Sugar**: Auto-detects `--`.                               |
-| **Via Position**               | `... <number>%`           | `via-<number>%`     | `{ viaPos: <number> }`      | v4: fully dynamic, no static scale, accept any integer bare |
-| **Via Position Arbitrary**     | `... <decimal>%`          | `via-[<decimal>%]`  | `{ viaPos: <decimal> }`     |                                                             |
-| **Via Position Arbitrary**     | `... 300px`               | `via-[300px]`       | `{ viaPos: '300px' }`       |                                                             |
-| **Via Position CSS Variable**  | `... var(--via-pos)`      | `via-(--via-pos)`   | `{ viaPos: '--via-pos' }`   | **Sugar**: Auto-detects `--`.                               |
-| **To Position**                | `... <number>%`           | `to-<number>%`      | `{ toPos: <number> }`       | v4: fully dynamic, no static scale, accept any integer bare |
-| **To Position Arbitrary**      | `... <decimal>%`          | `to-[<decimal>%]`   | `{ toPos: <decimal> }`      |                                                             |
-| **To Position Arbitrary**      | `... 300px`               | `to-[300px]`        | `{ toPos: '300px' }`        |                                                             |
-| **To Position CSS Variable**   | `... var(--to-pos)`       | `to-(--to-pos)`     | `{ toPos: '--to-pos' }`     | **Sugar**: Auto-detects `--`.                               |
+| Concept                        | CSS Rule                  | Tailwind v4 Class          | `sz` Prop (Object Syntax)   | Note                                                        |
+| :----------------------------- | :------------------------ | :------------------------- | :-------------------------- | :---------------------------------------------------------- |
+| **From**                       | `--tw-gradient-from: ...` | `from-blue-500`            | `{ from: 'blue-500' }`      |                                                             |
+| **Via**                        | `--tw-gradient-via: ...`  | `via-blue-500`             | `{ via: 'blue-500' }`       |                                                             |
+| **To**                         | `--tw-gradient-to: ...`   | `to-blue-500`              | `{ to: 'blue-500' }`        |                                                             |
+| **From Position**              | `... <number>%`           | `from-<number>%`           | `{ fromPos: <number> }`     | v4: fully dynamic, no static scale, accept any integer bare |
+| **From Position Arbitrary**    | `... <decimal>%`          | `from-[<decimal>%]`        | `{ fromPos: <decimal> }`    |                                                             |
+| **From Position Arbitrary**    | `... 300px`               | `from-[300px]`             | `{ fromPos: '300px' }`      |                                                             |
+| **From Position CSS Variable** | `... var(--from-pos)`     | `from-(length:--from-pos)` | `{ fromPos: '--from-pos' }` | `length:` hint: `from-(--x)` is the stop colour.            |
+| **Via Position**               | `... <number>%`           | `via-<number>%`            | `{ viaPos: <number> }`      | v4: fully dynamic, no static scale, accept any integer bare |
+| **Via Position Arbitrary**     | `... <decimal>%`          | `via-[<decimal>%]`         | `{ viaPos: <decimal> }`     |                                                             |
+| **Via Position Arbitrary**     | `... 300px`               | `via-[300px]`              | `{ viaPos: '300px' }`       |                                                             |
+| **Via Position CSS Variable**  | `... var(--via-pos)`      | `via-(length:--via-pos)`   | `{ viaPos: '--via-pos' }`   | `length:` hint, as on `fromPos`.                            |
+| **To Position**                | `... <number>%`           | `to-<number>%`             | `{ toPos: <number> }`       | v4: fully dynamic, no static scale, accept any integer bare |
+| **To Position Arbitrary**      | `... <decimal>%`          | `to-[<decimal>%]`          | `{ toPos: <decimal> }`      |                                                             |
+| **To Position Arbitrary**      | `... 300px`               | `to-[300px]`               | `{ toPos: '300px' }`        |                                                             |
+| **To Position CSS Variable**   | `... var(--to-pos)`       | `to-(length:--to-pos)`     | `{ toPos: '--to-pos' }`     | `length:` hint, as on `fromPos`.                            |
 
 ## Background Position
 
-| Concept          | CSS Rule                               | Tailwind v4 Class      | `sz` Prop (Object Syntax)      | Note                          |
-| :--------------- | :------------------------------------- | :--------------------- | :----------------------------- | :---------------------------- |
-| **Top Left**     | `background-position: top left`        | `bg-top-left`          | `{ bgPos: 'top-left' }`        |                               |
-| **Top**          | `background-position: top`             | `bg-top`               | `{ bgPos: 'top' }`             |                               |
-| **Top Right**    | `background-position: top right`       | `bg-top-right`         | `{ bgPos: 'top-right' }`       |                               |
-| **Left**         | `background-position: left`            | `bg-left`              | `{ bgPos: 'left' }`            |                               |
-| **Center**       | `background-position: center`          | `bg-center`            | `{ bgPos: 'center' }`          |                               |
-| **Right**        | `background-position: right`           | `bg-right`             | `{ bgPos: 'right' }`           |                               |
-| **Bottom Left**  | `background-position: bottom left`     | `bg-bottom-left`       | `{ bgPos: 'bottom-left' }`     |                               |
-| **Bottom**       | `background-position: bottom`          | `bg-bottom`            | `{ bgPos: 'bottom' }`          |                               |
-| **Bottom Right** | `background-position: bottom right`    | `bg-bottom-right`      | `{ bgPos: 'bottom-right' }`    |                               |
-| **Arbitrary**    | `background-position: center top 1rem` | `bg-[center_top_1rem]` | `{ bgPos: 'center top 1rem' }` |                               |
-| **CSS Variable** | `background-position: var(--bg-pos)`   | `bg-(--bg-pos)`        | `{ bgPos: '--bg-pos' }`        | **Sugar**: Auto-detects `--`. |
+| Concept          | CSS Rule                               | Tailwind v4 Class             | `sz` Prop (Object Syntax)      | Note                                                                    |
+| :--------------- | :------------------------------------- | :---------------------------- | :----------------------------- | :---------------------------------------------------------------------- |
+| **Top Left**     | `background-position: top left`        | `bg-top-left`                 | `{ bgPos: 'top-left' }`        |                                                                         |
+| **Top**          | `background-position: top`             | `bg-top`                      | `{ bgPos: 'top' }`             |                                                                         |
+| **Top Right**    | `background-position: top right`       | `bg-top-right`                | `{ bgPos: 'top-right' }`       |                                                                         |
+| **Left**         | `background-position: left`            | `bg-left`                     | `{ bgPos: 'left' }`            |                                                                         |
+| **Center**       | `background-position: center`          | `bg-center`                   | `{ bgPos: 'center' }`          |                                                                         |
+| **Right**        | `background-position: right`           | `bg-right`                    | `{ bgPos: 'right' }`           |                                                                         |
+| **Bottom Left**  | `background-position: bottom left`     | `bg-bottom-left`              | `{ bgPos: 'bottom-left' }`     |                                                                         |
+| **Bottom**       | `background-position: bottom`          | `bg-bottom`                   | `{ bgPos: 'bottom' }`          |                                                                         |
+| **Bottom Right** | `background-position: bottom right`    | `bg-bottom-right`             | `{ bgPos: 'bottom-right' }`    |                                                                         |
+| **Arbitrary**    | `background-position: center top 1rem` | `bg-[center_top_1rem]`        | `{ bgPos: 'center top 1rem' }` |                                                                         |
+| **CSS Variable** | `background-position: var(--bg-pos)`   | `bg-(position:--bg-pos)`      | `{ bgPos: '--bg-pos' }`        | **Sugar**: Auto-detects `--`. `position:` hint: `bg-(--x)` is a colour. |
+| **`var()`**      | `background-position: var(--bg-pos)`   | `bg-[position:var(--bg-pos)]` | `{ bgPos: 'var(--bg-pos)' }`   | The hint goes in the bracket too: `bg-[var(--x)]` is a colour.          |
 
 ## Background Size
 
-| Concept          | CSS Rule                          | Tailwind v4 Class      | `sz` Prop (Object Syntax)  | Note                          |
-| :--------------- | :-------------------------------- | :--------------------- | :------------------------- | :---------------------------- |
-| **Auto**         | `background-size: auto`           | `bg-auto`              | `{ bgSize: 'auto' }`       |                               |
-| **Cover**        | `background-size: cover`          | `bg-cover`             | `{ bgSize: 'cover' }`      |                               |
-| **Contain**      | `background-size: contain`        | `bg-contain`           | `{ bgSize: 'contain' }`    |                               |
-| **Arbitrary**    | `background-size: auto 100px`     | `bg-size-[auto_100px]` | `{ bgSize: 'auto 100px' }` |                               |
-| **CSS Variable** | `background-size: var(--bg-size)` | `bg-size-(--bg-size)`  | `{ bgSize: '--bg-size' }`  | **Sugar**: Auto-detects `--`. |
+| Concept          | CSS Rule                          | Tailwind v4 Class        | `sz` Prop (Object Syntax)  | Note                                                      |
+| :--------------- | :-------------------------------- | :----------------------- | :------------------------- | :-------------------------------------------------------- |
+| **Auto**         | `background-size: auto`           | `bg-auto`                | `{ bgSize: 'auto' }`       |                                                           |
+| **Cover**        | `background-size: cover`          | `bg-cover`               | `{ bgSize: 'cover' }`      |                                                           |
+| **Contain**      | `background-size: contain`        | `bg-contain`             | `{ bgSize: 'contain' }`    |                                                           |
+| **Arbitrary**    | `background-size: auto 100px`     | `bg-[length:auto_100px]` | `{ bgSize: 'auto 100px' }` | `length:` hint: served on every v4 (`bg-size-*` is 4.1+). |
+| **CSS Variable** | `background-size: var(--bg-size)` | `bg-(length:--bg-size)`  | `{ bgSize: '--bg-size' }`  | **Sugar**: Auto-detects `--`.                             |
 
 ## Background Attachment
 

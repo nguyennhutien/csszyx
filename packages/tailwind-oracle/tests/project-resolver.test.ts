@@ -11,7 +11,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createEmittedClassOracle, type TailwindLoader } from '../src/emitted-class-oracle.js';
-import { expandAlias, projectResolver } from '../src/project-resolver.js';
+import { projectResolver } from '../src/project-resolver.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const repoRequire = createRequire(path.join(REPO, 'package.json'));
@@ -58,22 +58,6 @@ const repoTailwind: TailwindLoader = async () => {
             entry.__unstable__loadDesignSystem ?? entry.default?.__unstable__loadDesignSystem,
     };
 };
-
-describe('expandAlias', () => {
-    it('expands a prefix alias and keeps the rest of the specifier', () => {
-        expect(
-            expandAlias('@ui/theme.css', [
-                { find: '@ui/', replacement: '/p/src/ui/', exact: false },
-            ]),
-        ).toBe('/p/src/ui/theme.css');
-    });
-
-    it('expands an exact alias only for the exact specifier', () => {
-        const aliases = [{ find: 'theme', replacement: '/p/theme.css', exact: true }];
-        expect(expandAlias('theme', aliases)).toBe('/p/theme.css');
-        expect(expandAlias('theme/dark.css', aliases)).toBeNull();
-    });
-});
 
 describe('projectResolver', () => {
     it('answers null for a project that carries no Tailwind integration', async () => {
@@ -136,12 +120,16 @@ describe('projectResolver — integrations it cannot use', () => {
 });
 
 describe('the oracle without a project resolver', () => {
-    it('still reads a sibling file and loads a plugin through the loaders every host has', async () => {
+    it('still reads a sibling, a path and a package file and loads a plugin through the loaders every host has', async () => {
         const root = isolatedProject({
             'theme.css': '@theme { --color-no-resolver: #111111; }',
+            'more.css': '@theme { --color-no-resolver-path: #222222; }',
+            'node_modules/@fixture/plain/tokens.css':
+                '@theme { --color-no-resolver-pkg: #333333; }',
             'plugin.mjs':
                 "export default function plugin({ addUtilities }) { addUtilities({ '.no-resolver-plugin': { color: 'red' } }); }\n",
-            'app.css': '@import "tailwindcss";\n@import "theme.css";\n@plugin "./plugin.mjs";',
+            'app.css':
+                '@import "tailwindcss";\n@import "theme.css";\n@import "./more.css";\n@import "@fixture/plain/tokens.css";\n@plugin "./plugin.mjs";',
         });
         const oracle = await createEmittedClassOracle(
             {
@@ -153,8 +141,14 @@ describe('the oracle without a project resolver', () => {
         );
 
         if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
-        expect(oracle.findDead(['bg-no-resolver', 'no-resolver-plugin', 'zz-probe'])).toEqual([
-            'zz-probe',
-        ]);
+        expect(
+            oracle.findDead([
+                'bg-no-resolver',
+                'bg-no-resolver-path',
+                'bg-no-resolver-pkg',
+                'no-resolver-plugin',
+                'zz-probe',
+            ]),
+        ).toEqual(['zz-probe']);
     });
 });

@@ -188,6 +188,21 @@ export function readTableSource(filePath) {
         },
 
         /**
+         * The keys of an object-shaped table whose value is one expression,
+         * in source order: `{ bg: Category.COLOR, p: Category.SPACING }` read
+         * with `Category.COLOR` gives `['bg']`.
+         *
+         * @param name - The declared name.
+         * @param expression - The value's source text, such as an enum member.
+         * @returns The keys holding that value.
+         */
+        objectKeysWhere(name, expression) {
+            return objectProperties(name)
+                .filter(property => property.initializer.getText(sourceFile) === expression)
+                .map(property => keyText(name, property.name));
+        },
+
+        /**
          * `new Set([...])` as an array of its members, in source order.
          *
          * @param name - The declared name.
@@ -203,6 +218,21 @@ export function readTableSource(filePath) {
                 throw new Error(`${name} in ${label} must be new Set([...])`);
             }
             return initializer.arguments[0].elements.map(element => stringText(name, element));
+        },
+
+        /**
+         * A constant holding one string or number literal, as its value.
+         *
+         * A generated table carries its format number and column letters as
+         * constants beside the rows; the reader needs their values, not text.
+         *
+         * @param name - The declared name.
+         * @returns The literal's value.
+         */
+        literal(name) {
+            const initializer = initializerOf(name);
+            if (ts.isNumericLiteral(initializer)) return Number(initializer.text);
+            return stringText(name, initializer);
         },
 
         /**

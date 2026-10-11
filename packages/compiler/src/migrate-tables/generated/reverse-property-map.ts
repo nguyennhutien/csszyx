@@ -77,7 +77,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'drop-shadow': 'dropShadow', // chosen from: dropShadow, dropShadowColor
     duration: 'duration',
     ease: 'ease',
-    end: 'insetE',
+    end: 'insetE', // chosen from: end, insetE
     'field-sizing': 'fieldSizing',
     fill: 'fill',
     filter: 'filter',
@@ -106,9 +106,9 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     inset: 'inset',
     'inset-be': 'insetBe',
     'inset-bs': 'insetBs',
-    'inset-e': 'insetE', // chosen from: end, insetE
+    'inset-e': 'insetE',
     'inset-ring': 'insetRing', // chosen from: insetRing, insetRingColor
-    'inset-s': 'insetS', // chosen from: start, insetS
+    'inset-s': 'insetS',
     'inset-shadow': 'insetShadow', // chosen from: insetShadow, insetShadowColor
     'inset-x': 'insetX',
     'inset-y': 'insetY',
@@ -250,7 +250,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     snap: 'snapType', // chosen from: snapAlign, snapStop, snapType
     'space-x': 'spaceX',
     'space-y': 'spaceY',
-    start: 'insetS',
+    start: 'insetS', // chosen from: start, insetS
     stroke: 'stroke', // chosen from: stroke, strokeWidth
     tab: 'tabSize',
     table: 'tableLayout',

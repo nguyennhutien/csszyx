@@ -25,7 +25,8 @@ afterAll(() => {
  * @returns The directory.
  */
 function dir(files: Record<string, string>): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-role-'));
+    // The real path: macOS hands out `/var/…`, which the loader reads as `/private/var/…`.
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-role-')));
     made.push(root);
     for (const [name, content] of Object.entries(files)) {
         fs.writeFileSync(path.join(root, name), content);

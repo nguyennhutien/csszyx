@@ -37,8 +37,8 @@ import {
     readTextFiles,
     type ScanSource,
     STYLESHEET_COMPILE_CONCURRENCY,
-    type StylesheetAlias,
     type StylesheetFacts,
+    type StylesheetImportCandidates,
     type TailwindLoader,
 } from '@csszyx/tailwind-oracle';
 import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
@@ -54,7 +54,13 @@ export type StyleEntryRole =
     /** Generates no utilities: a theme, a partial, or plain CSS. */
     | 'not-root'
     /** Could not be compiled, and no root that did compile imports it. */
-    | 'failed';
+    | 'failed'
+    /**
+     * Imports a target that is not a path and that this lane's Tailwind
+     * cannot resolve. A build that loads it stops on that import by itself;
+     * one that does not load it builds, so the model reads nothing from it.
+     */
+    | 'unresolved';
 
 /** One stylesheet the build handed over, and what the model made of it. */
 export interface StyleEntry {
@@ -66,6 +72,8 @@ export interface StyleEntry {
     facts?: StylesheetFacts;
     /** Why it could not be compiled, for a failed entry. */
     failure?: { kind: OracleSkipKind; reason: string; reachedTailwind?: boolean };
+    /** The target it could not resolve, as written, for an unresolved entry. */
+    unresolvedImport?: string;
     /**
      * Why a compiled root cannot tell Tailwind's own classes from the
      * project's. Every class then keeps its place in a merge.
@@ -242,6 +250,50 @@ export function styleModelWarning(
         '[csszyx] these stylesheets did not compile and never reached Tailwind, so csszyx read the prefix without them:',
         ...skipped,
         `  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in ${setting}.`,
+    ].join('\n');
+}
+
+/**
+ * The stylesheets and targets an unresolved warning already named in this
+ * process, as `file\0specifier`: a dev server and a watch read the
+ * stylesheets again on every edit, and the line would repeat each time.
+ */
+const unresolvedImportsNamed = new Set<string>();
+
+/**
+ * What the build says, without stopping, about stylesheets it left out of the
+ * model because an import in them does not resolve on this lane.
+ *
+ * Not an error, because the build fails on that import only if it loads the
+ * stylesheet, and stopping a build Tailwind accepts would be csszyx's own
+ * failure. Not quiet either: when the build does load it, the prefix and the
+ * merge read nothing from it. Each stylesheet and target is named once per
+ * process.
+ *
+ * @param model - The opened style model.
+ * @param root - Project root, so the message names files the way the author does.
+ * @param setting - What the help calls the setting that names the stylesheets.
+ * @returns The message, or null when there is nothing new to say.
+ */
+export function unresolvedImportWarning(
+    model: ProjectStyleModel,
+    root: string,
+    setting: string = TAILWIND_STYLESHEET_OPTION,
+): string | null {
+    const lines: string[] = [];
+    for (const { file, role, unresolvedImport } of model.entries) {
+        if (role !== 'unresolved') continue;
+        const named = `${file}\0${unresolvedImport}`;
+        if (unresolvedImportsNamed.has(named)) continue;
+        unresolvedImportsNamed.add(named);
+        lines.push(
+            `[csszyx] ${relativeName(root, file)} imports \`${unresolvedImport}\`, which this build's Tailwind cannot resolve, so csszyx left the stylesheet out of the prefix and the merge model.`,
+        );
+    }
+    if (lines.length === 0) return null;
+    return [
+        ...lines,
+        `  help: a build that loads one of them stops on that import; import the file by a relative path (only a Vite build follows an alias, through \`resolve.alias\`). If the build does not load it, list the stylesheets it does load in ${setting}.`,
     ].join('\n');
 }
 
@@ -425,14 +477,15 @@ type ClassifiedStylesheet =
     /** With the classes its rules select on, which a merge must keep. */
     | { role: 'not-root'; hooks: StylesheetHooks }
     | { role: 'failed'; failure: NonNullable<StyleEntry['failure']>; hooks: StylesheetHooks }
+    | { role: 'unresolved'; unresolvedImport: string; hooks: StylesheetHooks }
     | { role: 'root'; css: string; imports: readonly string[]; scanSources: ScanSource[] };
 
 /** How to reach the project's Tailwind: where to resolve from, and with what. */
 interface CompileContext {
     /** Project directory whose `package.json` anchors resolution. */
     resolveFrom: string;
-    /** The bundler's aliases, tsconfig paths included. */
-    aliases: readonly StylesheetAlias[];
+    /** The lane's own resolver for an `@import` that is not a path, when it has one. */
+    importCandidates: StylesheetImportCandidates | undefined;
     /** Resolver override, for tests; the project's own Tailwind otherwise. */
     loadTailwind: TailwindLoader | undefined;
 }
@@ -495,10 +548,15 @@ async function classifyStylesheet(
             resolveFrom: context.resolveFrom,
             css,
             cssBase: path.dirname(file),
-            aliases: context.aliases,
+            importCandidates: context.importCandidates,
         },
         context.loadTailwind,
     );
+    if (!role.ok && role.unresolvedImport !== undefined) {
+        // Its rules select on the element all the same if the app does load
+        // it, which keeps a class in a merge rather than drop one.
+        return { role: 'unresolved', unresolvedImport: role.unresolvedImport, hooks: hooksOf(css) };
+    }
     if (!role.ok) {
         return {
             role: 'failed',
@@ -573,6 +631,13 @@ async function classifyStylesheets(
                 classified.entries.push({ file, role: 'failed', failure: stylesheet.failure }) - 1;
             classified.failed.push(index);
             addHooks(classified.hooks, stylesheet.hooks);
+        } else if (stylesheet.role === 'unresolved') {
+            classified.entries.push({
+                file,
+                role: 'unresolved',
+                unresolvedImport: stylesheet.unresolvedImport,
+            });
+            addHooks(classified.hooks, stylesheet.hooks);
         } else {
             classified.entries.push({ file, role: 'not-root' });
             addHooks(classified.hooks, stylesheet.hooks);
@@ -599,7 +664,7 @@ async function compileRoot(
             resolveFrom: context.resolveFrom,
             css,
             cssBase: path.dirname(file),
-            aliases: context.aliases,
+            importCandidates: context.importCandidates,
         },
         context.loadTailwind,
     );
@@ -650,10 +715,12 @@ async function compileRoot(
 /** How to open the style model beyond the stylesheets it compiles. */
 export interface OpenStyleModelOptions {
     /**
-     * The bundler's aliases, tsconfig paths included, so an `@import` written
-     * the way the app's own code imports resolves.
+     * The lane's own resolver for an `@import` that is not a path: Vite's, on
+     * the Vite lane, which is the only integration whose Tailwind follows an
+     * alias. Left out, an `@import` resolves as Tailwind's `compile()` does,
+     * and an alias fails here exactly as it fails that build.
      */
-    aliases?: readonly StylesheetAlias[];
+    importCandidates?: StylesheetImportCandidates;
     /**
      * Stylesheets read only for the classes their rules select on: the ones a
      * named `tailwindStylesheet` list leaves out, which a component or page may
@@ -710,7 +777,7 @@ export async function openProjectStyleModel(
 ): Promise<ProjectStyleModel> {
     const context: CompileContext = {
         resolveFrom,
-        aliases: options.aliases ?? [],
+        importCandidates: options.importCandidates,
         loadTailwind: options.loadTailwind,
     };
     const { entries, roots, failed, importedByRoots, hooks } = await classifyStylesheets(

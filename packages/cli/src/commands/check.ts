@@ -42,8 +42,10 @@ import type { SzDiagnosticLevel } from '@csszyx/types';
 import {
     type DiagnosticPolicy,
     diagnosticConfigProblemsMessage,
+    hoistedSignUtility,
     isAtLeastLevel,
     loadDiagnosticPolicy,
+    unsignedClass,
 } from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
 import {
@@ -238,7 +240,7 @@ function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
 }
 
 /** Every design system this project compiles, with why any were skipped. */
-interface OpenedOracles {
+export interface OpenedOracles {
     oracles: Array<Extract<EmittedClassOracle, { ok: true }>>;
     /** One reason per stylesheet that produced no oracle. */
     skipped: string[];
@@ -251,6 +253,21 @@ interface OpenedOracles {
 }
 
 /**
+ * A bare `@import` target read as the file next door, before Tailwind's own
+ * resolver takes it as a package. The check does not know which bundler
+ * builds the project, and Vite's resolver reads `@import "theme.css"` this way
+ * where `@tailwindcss/postcss` fails, so a stylesheet one lane builds is not
+ * reported as broken. No alias is followed: the check reads no bundler config.
+ *
+ * @param specifier - The target as written.
+ * @param fromDir - The importing stylesheet's folder.
+ * @returns The one path to try.
+ */
+function siblingFirst(specifier: string, fromDir: string): string[] {
+    return [path.resolve(fromDir, specifier)];
+}
+
+/**
  * Compile every Tailwind entry the project has, once.
  *
  * Several passes need the project's own design system, and compiling it per
@@ -260,7 +277,7 @@ interface OpenedOracles {
  * @param cwd - Project root.
  * @returns The compiled design systems and the reasons any were skipped.
  */
-async function openOracles(cwd: string): Promise<OpenedOracles> {
+export async function openOracles(cwd: string): Promise<OpenedOracles> {
     const entries = await findTailwindCssEntries(cwd);
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
     const skipped: string[] = [];
@@ -273,6 +290,7 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
             resolveFrom: cwd,
             css: await readFile(entry, 'utf8'),
             cssBase: path.dirname(entry),
+            importCandidates: siblingFirst,
         }),
     );
     for (const [index, entry] of entries.entries()) {
@@ -353,7 +371,7 @@ function reportDeadClasses(
     opened: OpenedOracles,
     origins: Map<string, string>,
     allow: readonly string[],
-    wants: (rule: CheckRule) => boolean,
+    wants: RuleSelection,
     disagreement: string | null,
     failOn: SzDiagnosticLevel,
 ): boolean {
@@ -409,6 +427,20 @@ function reportDeadClasses(
     const found = [...origins].filter(([token]) => deadPerOracle.every(dead => dead.has(token)));
     const accepted = found.filter(([token]) => vouched.has(token));
     const dead = found.filter(([token]) => !vouched.has(token));
+    // A dead class with a hoisted sign is `unsigned-value` only when the class
+    // without it is served, by the same consensus: `-p-medium` is dead
+    // unsigned too, and "drop the sign" would be wrong advice.
+    const unsignedForms = [
+        ...new Set(dead.map(([token]) => unsignedClass(token)).filter(form => form !== null)),
+    ];
+    const unsignedDeadPerOracle = oracles.map(oracle => new Set(oracle.findDead(unsignedForms)));
+    const unsignedServed = new Set(
+        unsignedForms.filter(form => !unsignedDeadPerOracle.every(deadSet => deadSet.has(form))),
+    );
+    const signed = (token: string): boolean => {
+        const form = unsignedClass(token);
+        return form !== null && unsignedServed.has(form);
+    };
     // The opacity verdict follows the dead-class consensus rule for the same
     // reason: one stylesheet serving the modifier is enough for it to be real,
     // and erring the other way would report working classes.
@@ -427,7 +459,8 @@ function reportDeadClasses(
             value: brokenPerOracle[0].get(token) as string,
         }));
     printDeadClassReport(out, {
-        dead,
+        dead: dead.filter(([token]) => !signed(token)),
+        unsigned: dead.filter(([token]) => signed(token)),
         broken,
         acceptedCount: accepted.length,
         emittedCount: origins.size,
@@ -446,12 +479,15 @@ interface BrokenOpacityFinding {
 
 /** What the dead-class scan concluded, ready to print. */
 interface DeadClassReport {
+    /** The dead classes said as `dead-class`. */
     dead: ReadonlyArray<readonly [string, string]>;
+    /** The dead classes with a hoisted sign whose unsigned form is served. */
+    unsigned: ReadonlyArray<readonly [string, string]>;
     broken: readonly BrokenOpacityFinding[];
     acceptedCount: number;
     emittedCount: number;
-    /** Whether the run reports findings of this rule. */
-    wants: (rule: CheckRule) => boolean;
+    /** Whether the run reports findings of a rule and kind. */
+    wants: RuleSelection;
     /** The quietest level that fails the run. */
     failOn: SzDiagnosticLevel;
 }
@@ -498,6 +534,53 @@ function levelTag(level: SzDiagnosticLevel): string {
 }
 
 /**
+ * Print the dead classes whose utility carries a hoisted sign: the project's
+ * Tailwind serves no negative form of it (`{ p: -2 }` → `-p-2`), and serves
+ * the class without the sign. Reported by
+ * the dead-class pass under the kind `unsigned-value`, so a level or a
+ * `--rule` for either id reaches it, and never also as `dead-class`.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param unsigned - The dead classes with a hoisted sign, with their origin.
+ * @param wants - The run's rule selection.
+ * @param failOn - The quietest level that fails the run.
+ */
+function printUnsignedValues(
+    out: Reporter,
+    unsigned: ReadonlyArray<readonly [string, string]>,
+    wants: RuleSelection,
+    failOn: SzDiagnosticLevel,
+): void {
+    if (!wants('dead-class', 'unsigned-value')) return;
+    const shown = unsigned
+        .map(([token, origin]) => ({
+            token,
+            origin,
+            level: out.levelOf({ rule: 'dead-class', kind: 'unsigned-value', file: origin }),
+        }))
+        .filter(entry => entry.level !== 'off');
+    if (shown.length === 0) return;
+    out.warn("\nNegative values this project's Tailwind does not serve:");
+    for (const { token, origin, level } of shown) {
+        out.push({
+            rule: 'dead-class',
+            kind: 'unsigned-value',
+            file: origin,
+            message: `"${token}" is emitted, and this project's Tailwind serves no negative "${hoistedSignUtility(token)}": drop the sign, or define it with @utility.`,
+        });
+        out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
+    }
+    const { mark, below } = summaryMark(
+        shown.map(entry => entry.level),
+        failOn,
+    );
+    out.warn(
+        `\n${mark} ${shown.length} emitted class(es) carry a sign this project's Tailwind serves no negative utility for: ` +
+            `drop the sign, or define the negative with Tailwind's @utility.${belowNote(below, failOn)}`,
+    );
+}
+
+/**
  * Print what the dead-class scan found.
  *
  * Split from the scan so each side stays readable on its own: the scan decides
@@ -507,12 +590,12 @@ function levelTag(level: SzDiagnosticLevel): string {
  * @param report - What the scan concluded.
  */
 function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
-    const { dead, broken, acceptedCount, emittedCount, wants, failOn } = report;
+    const { dead, unsigned, broken, acceptedCount, emittedCount, wants, failOn } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
 
-    if (dead.length === 0 && broken.length === 0) {
+    if (dead.length === 0 && unsigned.length === 0 && broken.length === 0) {
         out.success(
             `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
@@ -521,8 +604,11 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
 
     // Judged on every class before narrowing, so a run narrowed to one rule
     // never prints "every class produces CSS" over a finding it left out. A
-    // finding the config sets `off` is not reported at all.
-    const shownDead = wants('dead-class')
+    // finding the config sets `off` is not reported at all. A dead class whose
+    // utility carries a hoisted sign, served without it, is said once, as
+    // `unsigned-value`.
+    printUnsignedValues(out, unsigned, wants, failOn);
+    const shownDead = wants('dead-class', 'dead-class')
         ? dead
               .map(([token, origin]) => ({
                   token,
@@ -531,7 +617,7 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
               }))
               .filter(entry => entry.level !== 'off')
         : [];
-    const shownBroken = wants('broken-opacity')
+    const shownBroken = wants('broken-opacity', 'broken-opacity')
         ? broken
               .map(entry => ({
                   ...entry,
@@ -1222,7 +1308,10 @@ function runDeadClassPass(
 ): void {
     const { wants, disagreement } = pass;
     const wantsRule = (rule: CheckRule) => wants(rule, rule);
-    const deadClassPass = wantsRule('dead-class') || wantsRule('broken-opacity');
+    const deadClassPass =
+        wantsRule('dead-class') ||
+        wantsRule('broken-opacity') ||
+        wants('dead-class', 'unsigned-value');
     const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
     if (!deadClassPass) return;
     if (disagreementLeftOut) {
@@ -1232,15 +1321,7 @@ function runDeadClassPass(
         return;
     }
     if (
-        reportDeadClasses(
-            out,
-            opened,
-            classOrigins,
-            pass.allow,
-            wantsRule,
-            disagreement,
-            pass.failOn,
-        )
+        reportDeadClasses(out, opened, classOrigins, pass.allow, wants, disagreement, pass.failOn)
     ) {
         process.exitCode = 1;
     }

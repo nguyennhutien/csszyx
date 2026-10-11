@@ -77,7 +77,7 @@ Use the `bgImg` object syntax for gradients:
   { sz: "{ bgPos: 'right' }", tw: "bg-right" },
   { sz: "{ bgPos: 'top-left' }", tw: "bg-top-left" },
   { sz: "{ bgPos: 'center top 1rem' }", tw: "bg-[center_top_1rem]" },
-  { sz: "{ bgPos: '--bg-pos' }", tw: "bg-(--bg-pos)" },
+  { sz: "{ bgPos: '--bg-pos' }", tw: "bg-(position:--bg-pos)" },
 ]} />
 
 ## Background Size
@@ -86,8 +86,8 @@ Use the `bgImg` object syntax for gradients:
   { sz: "{ bgSize: 'cover' }", tw: "bg-cover" },
   { sz: "{ bgSize: 'contain' }", tw: "bg-contain" },
   { sz: "{ bgSize: 'auto' }", tw: "bg-auto" },
-  { sz: "{ bgSize: 'auto 100px' }", tw: "bg-size-[auto_100px]" },
-  { sz: "{ bgSize: '--bg-size' }", tw: "bg-size-(--bg-size)" },
+  { sz: "{ bgSize: 'auto 100px' }", tw: "bg-[length:auto_100px]" },
+  { sz: "{ bgSize: '--bg-size' }", tw: "bg-(length:--bg-size)" },
 ]} />
 
 ## Background Repeat

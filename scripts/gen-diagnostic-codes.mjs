@@ -36,7 +36,12 @@ export const DIAGNOSTIC_CODES = [
     ['removed-key', 'A key that was removed or replaced, with what to write instead.'],
     ['numeric-key', 'A numeric key, the mark of an array or spread passed as an sz object.'],
     ['closed-enum-value', 'A value a closed-enum key does not take.'],
+    [
+        'slash-opacity-string',
+        'A colour key given its opacity in a string, which emits nothing; the object form takes it.',
+    ],
     ['off-scale-value', "A spacing value off Tailwind's quarter-step scale."],
+    ['unsigned-value', 'A negative value on a key Tailwind serves no negative utility for.'],
     ['numeric-font-weight', 'A font weight written as a numeric string.'],
     ['per-side-border-style', 'A border style on one side, which Tailwind cannot express.'],
     ['property-object', 'An object on a key that names a property, not a variant.'],

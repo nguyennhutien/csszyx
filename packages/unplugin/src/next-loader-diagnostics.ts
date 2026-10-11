@@ -14,7 +14,9 @@
  *
  * The loader cannot import `csszyx.config.ts`; it reads the policy
  * `csszyx next prebuild` or `next watch` resolved into
- * `.csszyx/diagnostic-policy.json`, and the built-in levels without one.
+ * `.csszyx/diagnostic-policy.json`, and the built-in levels without one. Once
+ * the config or a module it imports changed since that file was written, it
+ * loads the config itself, in a child process, as jest does.
  *
  * @module
  */
@@ -22,9 +24,15 @@ import { createHash } from 'node:crypto';
 import { statSync } from 'node:fs';
 import path from 'node:path';
 
-import { diagnosticPolicyStatePath, readDiagnosticPolicyState } from './csszyx-config-file.js';
+import { diagnosticPolicyStatePath } from './csszyx-config-file.js';
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
+import {
+    type DiagnosticPolicyInput,
+    diagnosticPolicyInputsCurrent,
+    diagnosticPolicyWatchFiles,
+} from './diagnostic-policy-inputs.js';
+import { syncLaneDiagnosticPolicy } from './sync-lane-policy.js';
 import {
     type DiagnosticIssue,
     resolveQuietMode,
@@ -50,6 +58,8 @@ export interface NextLoaderDiagnosticsInput {
     env: Record<string, string | undefined>;
     /** Turbopack's loader warning channel, when the runner offers one. */
     emitWarning?: (warning: Error | string) => void;
+    /** Turbopack's loader file dependency, when the runner offers one. */
+    addDependency?: (file: string) => void;
 }
 
 /** The console fallback's dedupe record and cap, for the life of the loader process. */
@@ -58,19 +68,28 @@ const consoleLimiter = createDiagnosticLimiter();
 /** A loader has no build end to print the capped counts at. */
 const capFlush = createCapFlush(consoleLimiter);
 
-/** The policy read per root, kept while its state file is unchanged. */
-const policies = new Map<string, { stamp: number; policy: DiagnosticPolicy }>();
+/**
+ * The policy resolved per root, kept while its state file and the files it
+ * was resolved from are unchanged.
+ */
+const policies = new Map<
+    string,
+    { stamp: number; inputs: DiagnosticPolicyInput[]; policy: DiagnosticPolicy }
+>();
 
 /**
  * The policy a Next command resolved for a project.
  *
- * Read again only when the state file's modification time moves, so a module
- * pays one `stat` for it.
+ * Resolved again only when the state file's modification time moves, one of
+ * the files the policy came from changes, or a config is created, deleted or
+ * renamed, so a module pays one `stat` for the state file, one per config
+ * input and one per name the config can have.
  *
  * @param root - The project root.
- * @returns The policy; the built-in levels when no command wrote one.
+ * @returns The policy — the built-in levels when no command wrote one — and
+ *          the files it was resolved from.
  */
-function policyFor(root: string): DiagnosticPolicy {
+function policyFor(root: string): { policy: DiagnosticPolicy; inputs: DiagnosticPolicyInput[] } {
     let stamp = -1;
     try {
         stamp = statSync(diagnosticPolicyStatePath(root)).mtimeMs;
@@ -78,10 +97,17 @@ function policyFor(root: string): DiagnosticPolicy {
         // No state file: the built-in levels, cached under the same stamp.
     }
     const known = policies.get(root);
-    if (known?.stamp === stamp) return known.policy;
-    const policy = readDiagnosticPolicyState(root);
-    policies.set(root, { stamp, policy });
-    return policy;
+    // Current, not only unchanged: a config created since a policy resolved
+    // with none changes no input it lists.
+    if (known?.stamp === stamp && diagnosticPolicyInputsCurrent(root, known.inputs)) {
+        return known;
+    }
+    const resolved = syncLaneDiagnosticPolicy(root, {
+        lane: 'the Turbopack loader',
+        loadWithoutState: false,
+    });
+    policies.set(root, { stamp, ...resolved });
+    return resolved;
 }
 
 /**
@@ -109,6 +135,18 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
         createHash('sha256').update(input.source).digest('hex'),
     );
     if (input.diagnostics.length === 0) return;
+    const resolved = root === undefined ? undefined : policyFor(root);
+    // Turbopack keeps a module's issues until the loader runs it again, so a
+    // module with findings depends on where its levels come from: the file a
+    // Next command rewrites on a config edit, and — for a session without
+    // `next watch` — the config and each module it imports. A clean module
+    // says nothing at any level and depends on none of them.
+    if (root !== undefined && resolved !== undefined && input.addDependency !== undefined) {
+        input.addDependency(diagnosticPolicyStatePath(root));
+        for (const file of diagnosticPolicyWatchFiles(root, resolved.inputs)) {
+            input.addDependency(file);
+        }
+    }
     const quiet = resolveQuietMode(input.env.CSSZYX_QUIET_SZ_WARNINGS === '1');
     // A dev server lists `info` findings; a build holds them. Next sets
     // NODE_ENV to its mode, so the mode answers the plugin's NODE_ENV question.
@@ -119,7 +157,7 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
         file,
         quiet,
         holdInfo: shouldHoldAdvisories(quiet, input.mode === 'development', input.mode),
-        policy: root === undefined ? undefined : policyFor(root),
+        policy: resolved?.policy,
         limiter,
     });
     const lines = [

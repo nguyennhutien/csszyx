@@ -12,6 +12,15 @@
  * is what ADR 0024 withdrew; they are `custom-class`/`unknown-class`, off unless
  * a project opts in.
  *
+ * A dead class whose utility carries the sign `sz` hoisted in front of it
+ * (`{ p: -2 }` → `-p-2`) is reported once, as `unsigned-value`, instead: the
+ * project's Tailwind serves no negative form of that utility, and the advice
+ * differs. Only when the class without its sign (variants kept, `hover:p-2`)
+ * is served: `-p-medium` is dead unsigned too, so "drop the sign" would be
+ * wrong advice, and it is a plain `dead-class`. Both are the project's answer,
+ * never a table (ADR 0012, PROJECT-RULES §4): a project that defines
+ * `@utility -p-*` serves `-p-2`, and nothing is said.
+ *
  * No new CSS read: the question goes to the style model every lane already
  * opened (`css-reading-entry-points.test.ts`).
  *
@@ -43,38 +52,161 @@ export interface DeadClassSite {
  */
 export interface DeadClassFinding extends DeadClassSite {
     className: string;
+    /**
+     * `unsigned-value` when the class's utility carries a hoisted sign and
+     * the class without it is served, with the utility it negates; absent for
+     * every other dead class.
+     */
+    unsigned?: string;
     /** Every later file that emits the class, in path order. */
     others?: readonly DeadClassSite[];
+}
+
+/** Where the engine placed one emitted class: the key it was lowered from. */
+export interface EmittedClassSite {
+    /** The line of the key, 1-based. */
+    line: number;
+    /** The column of the key, 1-based. */
+    column: number;
+    /** The `sz` key the class was lowered from. */
+    key: string;
+}
+
+/** What a transform result says about where its classes were written. */
+export interface EmittedClassPlacement {
+    /** The first pass's merge groups; absent from an older cache entry. */
+    readonly mergeGroups?: readonly SzMergeGroup[];
+    /** The first pass's one-class objects; absent from an older engine or cache entry. */
+    readonly singleClassGroups?: readonly SzMergeGroup[];
+}
+
+/**
+ * Whether one position is written before another.
+ *
+ * @param left - A position.
+ * @param right - Another.
+ * @returns `true` when `left` comes strictly first in the source.
+ */
+function writtenBefore(left: SourcePosition, right: SourcePosition): boolean {
+    return left.line < right.line || (left.line === right.line && left.column < right.column);
+}
+
+/**
+ * Each class one transform emitted that the engine placed at its key.
+ *
+ * Every lane reads class positions through this one function. The engine
+ * places a class only in a first pass: an object a merge reads (two classes
+ * or more) in `mergeGroups`, a one-class object in `singleClassGroups`. A
+ * class several objects emit is placed at the key written first in the
+ * source (line, then column), whichever list holds it; on the same position
+ * the first one read wins, `mergeGroups` before `singleClassGroups`.
+ *
+ * @param result - The first pass's result.
+ * @returns Class to site, for the classes the engine placed.
+ */
+export function emittedClassSites(result: EmittedClassPlacement): Map<string, EmittedClassSite> {
+    const placed = new Map<string, EmittedClassSite>();
+    for (const group of [...(result.mergeGroups ?? []), ...(result.singleClassGroups ?? [])]) {
+        for (const [index, className] of group.classes.entries()) {
+            const { line, column } = group.positions[index] as SourcePosition;
+            const held = placed.get(className);
+            if (held !== undefined && !writtenBefore({ line, column }, held)) continue;
+            placed.set(className, { line, column, key: group.keys[index] as string });
+        }
+    }
+    return placed;
 }
 
 /**
  * Where one file emits each of its classes.
  *
- * The engine places a class at its key only in a first pass, and only for an
- * object a merge reads (two classes or more); any other class is named by its
- * file alone. A class two objects emit is placed at the first.
- *
  * @param file - The file, project-relative.
  * @param classes - The classes the file's `sz` lowered to.
- * @param groups - The first pass's merge groups; absent from an older cache entry.
+ * @param result - The first pass's result, for {@link emittedClassSites}.
  * @returns Class to site.
  */
 export function szClassSites(
     file: string,
     classes: Iterable<string>,
-    groups: readonly SzMergeGroup[] = [],
+    result: EmittedClassPlacement,
 ): Map<string, DeadClassSite> {
-    const placed = new Map<string, DeadClassSite>();
-    for (const group of groups) {
-        for (const [index, className] of group.classes.entries()) {
-            if (placed.has(className)) continue;
-            const { line, column } = group.positions[index] as SourcePosition;
-            placed.set(className, { file, line, column, key: group.keys[index] as string });
-        }
-    }
+    const placed = emittedClassSites(result);
     const sites = new Map<string, DeadClassSite>();
-    for (const className of classes) sites.set(className, placed.get(className) ?? { file });
+    for (const className of classes) sites.set(className, { file, ...placed.get(className) });
     return sites;
+}
+
+/**
+ * Where a class's variants end: just past the last `:` outside brackets and
+ * parentheses, or 0 when it has none.
+ *
+ * @param className - The class, as emitted.
+ * @returns The index its utility starts at.
+ */
+function utilityStart(className: string): number {
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < className.length; index++) {
+        const char = className[index];
+        if (char === '[' || char === '(') depth++;
+        else if ((char === ']' || char === ')') && depth > 0) depth--;
+        else if (char === ':' && depth === 0) start = index + 1;
+    }
+    return start;
+}
+
+/**
+ * A class split at the sign `sz` hoists in front of its utility, the way
+ * Tailwind spells a negative: after every variant and the prefix (`hover:`,
+ * `data-[state=open]:`, `tw:`), and after a leading `!`, `-<utility>`. A sign
+ * inside a bracket (`mt-[-10px]`) is the value's own and not hoisted.
+ *
+ * @param className - The class, as emitted.
+ * @returns What comes before the sign (variants, prefix, `!`) and the utility
+ *          after it, or null when the class carries no hoisted sign.
+ */
+function splitHoistedSign(className: string): { head: string; utility: string } | null {
+    let start = utilityStart(className);
+    if (className[start] === '!') start++;
+    if (!/^-[a-z]/i.test(className.slice(start))) return null;
+    return { head: className.slice(0, start), utility: className.slice(start + 1) };
+}
+
+/**
+ * The utility a class negates with the sign `sz` hoists in front of it
+ * ({@link splitHoistedSign}).
+ *
+ * @param className - The class, as emitted.
+ * @returns The utility without its sign (`p-2` for `hover:-p-2`), or null when
+ *          the class carries no hoisted sign.
+ */
+export function hoistedSignUtility(className: string): string | null {
+    return splitHoistedSign(className)?.utility ?? null;
+}
+
+/**
+ * The class with its hoisted sign dropped and everything else kept: the class
+ * `unsigned-value` tells the user to write instead (`hover:!p-2` for
+ * `hover:!-p-2`). Whether the project serves it is asked, never assumed: a
+ * class dead unsigned too (`-p-medium`) is a `dead-class`, and "drop the sign"
+ * would be wrong advice.
+ *
+ * @param className - The class, as emitted.
+ * @returns The class without its sign, or null when it carries no hoisted sign.
+ */
+export function unsignedClass(className: string): string | null {
+    const split = splitHoistedSign(className);
+    return split === null ? null : split.head + split.utility;
+}
+
+/**
+ * The id a dead class is reported under.
+ *
+ * @param finding - The dead class.
+ * @returns `unsigned-value` for a hoisted sign, `dead-class` otherwise.
+ */
+function findingId(finding: DeadClassFinding): 'dead-class' | 'unsigned-value' {
+    return finding.unsigned === undefined ? 'dead-class' : 'unsigned-value';
 }
 
 /**
@@ -88,7 +220,9 @@ const verdicts = new WeakMap<object, Map<string, boolean>>();
  *
  * Dead means dead under every root the model compiled, as `check` decides.
  * Each class is asked once per model: a model is one design system, and a
- * stylesheet edit opens a new one.
+ * stylesheet edit opens a new one. A dead class with a hoisted sign brings
+ * one more question, its {@link unsignedClass}: `unsigned` is set only when
+ * that one is served.
  *
  * @param model - The project's style model.
  * @param origins - Each emitted class, and the file that emits it or every
@@ -106,19 +240,29 @@ export function findDeadSzClasses(
         verdicts.set(model, known);
     }
     const classes = sortStrings(origins.keys());
-    const asked = classes.filter(className => !known.has(className));
-    if (asked.length > 0) {
+    const ask = (questions: readonly string[]): void => {
+        const asked = [...new Set(questions)].filter(className => !known.has(className));
+        if (asked.length === 0) return;
         const dead = new Set(model.unserved(asked));
         for (const className of asked) known.set(className, dead.has(className));
-    }
-    return classes
-        .filter(className => known.get(className) === true)
-        .map(className => {
-            const origin = origins.get(className) as string | readonly DeadClassSite[];
-            if (typeof origin === 'string') return { className, file: origin };
-            const [first, ...others] = origin as readonly DeadClassSite[];
-            return others.length === 0 ? { className, ...first } : { className, ...first, others };
-        });
+    };
+    ask(classes);
+    const deadClasses = classes.filter(className => known.get(className) === true);
+    // A dead signed class is `unsigned-value` only when its unsigned form is
+    // served: the second question, asked of the same design system.
+    ask(deadClasses.map(unsignedClass).filter(className => className !== null));
+    return deadClasses.map(className => {
+        const origin = origins.get(className) as string | readonly DeadClassSite[];
+        const unsignedForm = unsignedClass(className);
+        const unsigned =
+            unsignedForm !== null && known.get(unsignedForm) === false
+                ? hoistedSignUtility(className)
+                : null;
+        const found = unsigned === null ? { className } : { className, unsigned };
+        if (typeof origin === 'string') return { ...found, file: origin };
+        const [first, ...others] = origin as readonly DeadClassSite[];
+        return others.length === 0 ? { ...found, ...first } : { ...found, ...first, others };
+    });
 }
 
 /**
@@ -140,6 +284,43 @@ export function deadClassMessage(
         `[csszyx] ${where}: \`${className}\`${from} is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n` +
         "  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one."
     );
+}
+
+/**
+ * The line a build prints for one dead class whose utility carries a hoisted
+ * sign the project's Tailwind serves no negative form of.
+ *
+ * @param className - The class, as emitted.
+ * @param utility - The utility it negates, without the sign.
+ * @param file - The file that emits it.
+ * @param site - The line, column and key, when the engine recorded them.
+ * @returns The warning, `[csszyx]`-prefixed.
+ */
+export function unsignedValueMessage(
+    className: string,
+    utility: string,
+    file: string,
+    site: Omit<DeadClassSite, 'file'> = {},
+): string {
+    const where = [file, site.line, site.column].filter(part => part !== undefined).join(':');
+    const from = site.key === undefined ? '' : ` (sz key \`${site.key}\`)`;
+    return (
+        `[csszyx] ${where}: \`${className}\`${from} is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative \`${utility}\`; drop the sign, or define it with @utility (unsigned-value).\n` +
+        '  help: `csszyx check --rule unsigned-value` lists every one.'
+    );
+}
+
+/**
+ * The line a build prints for one finding, under its id.
+ *
+ * @param finding - The dead class.
+ * @param site - Where it is named.
+ * @returns The warning.
+ */
+function findingMessage(finding: DeadClassFinding, site: DeadClassSite): string {
+    return finding.unsigned === undefined
+        ? deadClassMessage(finding.className, site.file, site)
+        : unsignedValueMessage(finding.className, finding.unsigned, site.file, site);
 }
 
 /** How a lane reports dead classes. */
@@ -170,8 +351,9 @@ function firstListedSite(
     input: DeadClassReportInput,
 ): { site: DeadClassSite | null; heldAtSomeSite: boolean } {
     let heldAtSomeSite = false;
+    const kind = findingId(finding);
     for (const site of [finding, ...(finding.others ?? [])]) {
-        const level = input.policy.levelOf({ rule: 'dead-class', file: site.file });
+        const level = input.policy.levelOf({ rule: 'dead-class', kind, file: site.file });
         const channel = channelOfLevel(level, input.quiet, input.holdInfo);
         if (channel === 'list') return { site, heldAtSomeSite };
         if (channel === 'held') heldAtSomeSite = true;
@@ -181,6 +363,11 @@ function firstListedSite(
 
 /**
  * The lines to print for a lane's dead classes, at the levels the policy sets.
+ *
+ * A class whose utility carries a hoisted sign is said under
+ * `unsigned-value` (`rule: 'dead-class'`, `kind: 'unsigned-value'`), so a
+ * level for either id reaches it, the kind's winning; every other one under
+ * `dead-class`. Each class is said once, under one id.
  *
  * `allow.classes` leaves a class out, as `check --allow` does. The level is
  * resolved per file: a class is named at the first file, in path order, whose
@@ -200,7 +387,10 @@ export function reportDeadSzClasses(
 ): { lines: string[]; held: number } {
     const lines: string[] = [];
     let held = 0;
-    const present: LimitedFinding[] = [];
+    const present = {
+        'dead-class': [] as LimitedFinding[],
+        'unsigned-value': [] as LimitedFinding[],
+    };
     for (const finding of findings) {
         if (input.policy.allowsClass(finding.className)) continue;
         const { site, heldAtSomeSite } = firstListedSite(finding, input);
@@ -208,18 +398,18 @@ export function reportDeadSzClasses(
             if (heldAtSomeSite) held++;
             continue;
         }
+        const id = findingId(finding);
         const limited = {
-            id: 'dead-class',
+            id,
             file: site.file,
             line: site.line,
             column: site.column,
             key: finding.className,
         };
-        present.push(limited);
-        if (input.limiter.admit(limited)) {
-            lines.push(deadClassMessage(finding.className, site.file, site));
-        }
+        present[id].push(limited);
+        if (input.limiter.admit(limited)) lines.push(findingMessage(finding, site));
     }
-    input.limiter.retain('dead-class', present);
+    input.limiter.retain('dead-class', present['dead-class']);
+    input.limiter.retain('unsigned-value', present['unsigned-value']);
     return { lines, held };
 }

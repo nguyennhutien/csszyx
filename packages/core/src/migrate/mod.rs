@@ -24,8 +24,9 @@ mod stylesheet_order;
 mod sz_codegen;
 mod value;
 mod variant_parser;
+mod verdict;
 
-pub use class_parser::parse_class;
+pub use class_parser::{parse_class, parse_class_judged};
 pub use dynamic::{is_clsx_like_name, PatternResult, CLSX_LIKE_NAMES};
 pub use html::{transform_html_source, HtmlTransformOptions, InjectRuntime};
 pub use json::{migrate_class_name, migrate_parse_class};
@@ -34,5 +35,7 @@ pub use source::{transform_source, TransformOptions, TransformResult, TransformS
 pub use sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
 pub use value::{Extra, ParsedClass, SzObject, SzValue};
 pub use variant_parser::{
-    class_name_to_sz_object, extract_variants, map_variant, tokenize, Conversion,
+    class_name_to_sz_object, class_name_to_sz_object_with, extract_variants, map_variant, tokenize,
+    Conversion, Lookup,
 };
+pub use verdict::{lowers_back_to, Judge, ServedAnswers, TableVerdict, TableVerdicts};

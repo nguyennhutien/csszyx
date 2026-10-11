@@ -7,10 +7,9 @@
  */
 
 import {
-    hasSlashOpacity,
-    isValidColorString,
+    __resetStringColorOpacityWarnings,
+    isDroppedSlashOpacity,
     warnStringColorOpacity,
-    warnUnrecognizedColor,
 } from './color-validation.js';
 import type { SzDiagnosticIssue, SzMergeGroup, SzMergeOverride } from './engine-spans.js';
 import {
@@ -21,6 +20,7 @@ import {
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
@@ -329,11 +329,13 @@ export const PROPERTY_MAP: Record<string, string> = {
     right: 'right',
     bottom: 'bottom',
     left: 'left',
-    // TW v4.2: start/end now emit inset-s-*/inset-e-* (same CSS, deprecated old class names)
-    start: 'inset-s',
-    end: 'inset-e',
-    insetS: 'inset-s',
-    insetE: 'inset-e',
+    // `start-*` / `end-*`, not `inset-s-*` / `inset-e-*`: the latter exist from
+    // Tailwind 4.2 only, the former are served with the same CSS on every v4
+    // (ADR 0023, one release serves 4.0 → latest).
+    start: 'start',
+    end: 'end',
+    insetS: 'start',
+    insetE: 'end',
     insetBs: 'inset-bs',
     insetBe: 'inset-be',
 
@@ -554,14 +556,75 @@ export const PROPERTY_MAP: Record<string, string> = {
 };
 
 // ============================================================================
-// CSS_VAR_TYPE_HINTS: Type hints for ambiguous properties when using CSS vars
-// Tailwind v4: `font-(family-name:--var)` disambiguates from `font-(--var)`
+// CSS_VAR_TYPE_HINTS: the type a variable value takes in front, per sz key
 // ============================================================================
+/**
+ * The data type each key's variable value is written with.
+ *
+ * Tailwind infers no type from a custom property, so `X-(--v)` and
+ * `X-[var(--v)]` go to the prefix's default utility: `bg-(--v)` is a
+ * background colour, `border-(--v)` a border colour, `shadow-(--v)` the
+ * shadow itself. A key that shares its prefix with that default and sets
+ * another property puts its type in front (`bg-(position:--v)`). Each entry
+ * was measured on Tailwind 4.0.0, 4.0.17, 4.1.0, 4.1.18, 4.2.0, 4.2.4, 4.3.0
+ * and 4.3.3 to set the key's property on every one that has the utility, so
+ * the spelling does not depend on the project's Tailwind (PROJECT-RULES §4).
+ *
+ * One table for both lanes: `pnpm gen:rust-tables` renders it for the engine.
+ */
 const CSS_VAR_TYPE_HINTS: Record<string, string> = {
+    // `font-(--v)` is a weight on every v4, so `weight` needs no hint.
     fontFamily: 'family-name',
-    weight: 'weight',
     text: 'length',
+    bgPos: 'position',
+    bgSize: 'length',
+    bgImg: 'image',
+    border: 'length',
+    borderT: 'length',
+    borderR: 'length',
+    borderB: 'length',
+    borderL: 'length',
+    borderX: 'length',
+    borderY: 'length',
+    borderS: 'length',
+    borderE: 'length',
+    borderBs: 'length',
+    borderBe: 'length',
+    outline: 'length',
+    ring: 'length',
+    insetRing: 'length',
+    ringOffset: 'length',
+    decorationThickness: 'length',
+    strokeWidth: 'length',
+    fromPos: 'length',
+    viaPos: 'length',
+    toPos: 'length',
+    shadowColor: 'color',
+    insetShadowColor: 'color',
+    textShadowColor: 'color',
+    dropShadowColor: 'color',
 };
+
+/**
+ * A variable value on a key that takes a type hint, spelled with it.
+ *
+ * A bare `--v` and the shorthand `(--v)` become `(hint:--v)`; a `var(…)`
+ * becomes `[hint:var(…)]`. A key without a hint, or any other value, is
+ * left to the key's own lowering. Mirrors `typed_variable_value` in the
+ * engine.
+ *
+ * @param rawKey - The sz key.
+ * @param value - The value, without a trailing `!`.
+ * @returns The utility suffix, or null.
+ */
+function typedVariableValue(rawKey: string, value: string): string | null {
+    const hint = CSS_VAR_TYPE_HINTS[rawKey];
+    if (hint === undefined) return null;
+    if (value.startsWith('--') && !value.includes('(')) return `(${hint}:${value})`;
+    if (/^\(--[^()]*\)$/.test(value)) return `(${hint}:${value.slice(1, -1)})`;
+    if (value.startsWith('var(')) return `[${hint}:${normalizeArbitraryValue(value)}]`;
+    return null;
+}
 
 // ============================================================================
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
@@ -1265,8 +1328,14 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 };
 
 // ============================================================================
-// NEGATIVE_ALLOWED: Properties that support negative values
+// NEGATIVE_ALLOWED: Prefixes that take a sign on some value
 // ============================================================================
+// Read by migrate (`-mt-4` → `{ mt: -4 }`) and the editor tooling, not by the
+// lowering: that hoists every sign, and whether the project's Tailwind serves
+// the negative is the build-time oracle's verdict (ADR 0012, 0022). `tracking` takes a sign on a theme token or
+// an arbitrary value only (`-tracking-tight`) and `mask` on a linear angle
+// (`-mask-linear-45`), so the table's number column leaves both out; a test in
+// `@csszyx/tailwind-oracle` keeps the two consistent.
 export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'm',
     'mt',
@@ -1286,9 +1355,9 @@ export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'inset',
     'inset-x',
     'inset-y',
-    // TW v4.2: start/end now map to inset-s/inset-e
-    'inset-s',
-    'inset-e',
+    // `start`/`end`: the logical inline insets, the spelling every v4 serves.
+    'start',
+    'end',
     'inset-bs',
     'inset-be',
     'z',
@@ -1413,6 +1482,21 @@ function warnDeadSpacingStep(key: string, value: number): void {
             '(quarter steps only), so the class generates no CSS. Use a quarter step ' +
             `(1.25, 1.5, 1.75) or a unit value ("${value}rem").`,
     );
+}
+
+/**
+ * A key's row in the generated capability table: `''` for a known key with no
+ * column, `undefined` for a key `PROPERTY_MAP` does not know. The table is a
+ * spelling convention, measured on the Tailwind this repo pins and gated across
+ * Tailwind versions in this repo's CI; it never decides whether a class is
+ * served (ADR 0012, 0022). Read by type, so
+ * an inherited name (`constructor`) is no key.
+ * @param rawKey - The sz key as written.
+ * @returns The column letters Tailwind serves for the key.
+ */
+function capabilityRow(rawKey: string): string | undefined {
+    if (typeof PROPERTY_MAP[rawKey] !== 'string') return undefined;
+    return SZ_CAPABILITIES[rawKey] ?? '';
 }
 
 /** Per-side border keys: the sides Tailwind can size and colour one at a time. */
@@ -2771,15 +2855,19 @@ function collectMinMaxVariants(
     }
 }
 
-/** Validates and diagnoses one string-valued color property. */
-function validateColorPropertyString(key: string, value: string): boolean {
-    if (hasSlashOpacity(value)) {
-        warnStringColorOpacity(key, value);
-        return false;
-    }
-    if (isValidColorString(value)) return true;
-    warnUnrecognizedColor(key, value);
-    return false;
+/**
+ * Drops a colour-key string with slash opacity, the one colour rule the
+ * lowering applies, and says so. Any other string is written as the engine
+ * writes it: whether its class is served is the build's verdict (ADR 0022).
+ *
+ * @param key - The sz key.
+ * @param value - The value, without a trailing `!`.
+ * @returns True when the value was dropped.
+ */
+function dropSlashOpacityString(key: string, value: string): boolean {
+    if (!isDroppedSlashOpacity(key, value)) return false;
+    warnStringColorOpacity(key, value, szWarnLocation);
+    return true;
 }
 
 /** Collects direct, named, and arbitrary container-query variants. */
@@ -3341,10 +3429,10 @@ function collectDecorationProperty(
     if (key === 'divideStyle') utility = `divide-${value}`;
     else if (key === 'decorationStyle' || key === 'textDecorationStyle') {
         utility = `decoration-${value}`;
-    } else if (key === 'decorationColor' || key === 'textDecorationColor') {
-        utility = `decoration-${value}`;
     } else if (key === 'decorationThickness' || key === 'textDecorationThickness') {
-        utility = formatDecorationThickness(value);
+        // The important modifier belongs to the class, as on every other key.
+        const { value: thickness, important } = handleImportant(value);
+        utility = formatDecorationThickness(thickness) + (important ? '!' : '');
     } else if (key === 'fontStretch') utility = formatFontStretch(value);
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -3353,10 +3441,12 @@ function collectDecorationProperty(
 
 /** Formats text-decoration thickness. */
 function formatDecorationThickness(value: string): string {
+    const typed = typedVariableValue('decorationThickness', value);
+    if (typed) return `decoration-${typed}`;
     if (needsArbitraryBrackets(value)) {
         return `decoration-[${normalizeArbitraryValue(value)}]`;
     }
-    return value.startsWith('--') ? `decoration-(${value})` : `decoration-${value}`;
+    return `decoration-${value}`;
 }
 
 /** Formats font-stretch keywords, variables, and percentages. */
@@ -3389,14 +3479,17 @@ function collectEffectStringProperty(
 ): boolean {
     let utility: string | null = null;
     if (key === 'shadowColor') {
-        utility = formatShadowFamilyColor('shadow', value);
+        utility = formatShadowFamilyColor(key, 'shadow', value);
     } else if (key === 'insetShadowColor') {
-        utility = formatShadowFamilyColor('inset-shadow', value);
+        utility = formatShadowFamilyColor(key, 'inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
-        utility = formatArbitraryEffect(key, value);
+        // The important modifier belongs to the class, not inside the bracket
+        // (`scale-[1.5]!`, never `scale-[1.5!]`, which Tailwind does not serve).
+        const important = handleImportant(value);
+        utility = formatArbitraryEffect(key, important.value) + (important.important ? '!' : '');
     } else if (key === 'textShadow') utility = formatTextShadow(value);
     else if (key === 'textShadowColor') {
-        utility = formatShadowFamilyColor('text-shadow', value);
+        utility = formatShadowFamilyColor(key, 'text-shadow', value);
     } else if (isGradientPositionKey(key)) {
         utility = formatGradientPosition(key, value);
     }
@@ -3407,11 +3500,11 @@ function collectEffectStringProperty(
 
 /**
  * Formats a shadow-family color utility. A bare `X-(--c)` would set the shadow
- * VALUE, not its color; the `color:` hint keeps the var on the family's
- * `--tw-*-shadow-color` slot.
+ * VALUE, not its color; the `color:` hint from `CSS_VAR_TYPE_HINTS` keeps the
+ * var on the family's `--tw-*-shadow-color` slot.
  */
-function formatShadowFamilyColor(base: string, value: string): string {
-    return value.startsWith('--') ? `${base}-(color:${value})` : `${base}-${value}`;
+function formatShadowFamilyColor(key: string, base: string, value: string): string {
+    return `${base}-${typedVariableValue(key, value) ?? value}`;
 }
 
 /** Formats string-valued filters and scale without numeric coercion. */
@@ -3426,6 +3519,7 @@ function formatArbitraryEffect(key: string, value: string): string {
 function formatTextShadow(value: string): string {
     if (value === 'none') return 'text-shadow-none';
     if (value === '') return 'text-shadow';
+    if (bracketsCssWideKeyword('textShadow', 'text-shadow', value)) return `text-shadow-[${value}]`;
     return needsArbitraryBrackets(value)
         ? `text-shadow-[${normalizeArbitraryValue(value)}]`
         : `text-shadow-${value}`;
@@ -3434,7 +3528,8 @@ function formatTextShadow(value: string): string {
 /** Formats a string-valued gradient stop position. */
 function formatGradientPosition(key: string, value: string): string {
     const property = key.replace('Pos', '');
-    if (value.startsWith('--')) return `${property}-(${value})`;
+    const typed = typedVariableValue(key, value);
+    if (typed) return `${property}-${typed}`;
     return /^\d+%$/.test(value) ? `${property}-${value}` : `${property}-[${value}]`;
 }
 
@@ -3442,6 +3537,8 @@ function formatGradientPosition(key: string, value: string): string {
 function formatBackgroundImage(rawValue: string): string {
     const value = rawValue.trim();
     if (value === 'none') return 'bg-none';
+    const typed = typedVariableValue('bgImg', value);
+    if (typed) return `bg-${typed}`;
     const normalized = value.startsWith('-') ? value.slice(1) : value;
     // Any CSS function other than url() is an arbitrary image value, so it goes
     // in brackets verbatim. This covers every gradient function — they open
@@ -3458,7 +3555,6 @@ function formatBackgroundImage(rawValue: string): string {
             : normalized;
         return value.startsWith('-') ? `-bg-${mapped}` : `bg-${mapped}`;
     }
-    if (value.startsWith('--')) return `bg-(image:${value})`;
     if (value.startsWith('url(')) return `bg-[${value}]`;
     return `bg-[url(${value})]`;
 }
@@ -3495,13 +3591,20 @@ const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
     'bottom-right',
 ]);
 
-/** Collects background position/size/repeat and simple mask utilities. */
+/**
+ * Collects background position/size/repeat and simple mask utilities.
+ *
+ * The important modifier is split off before any formatter reads the value,
+ * as the engine's `format_static_class` does for every key: a formatter that
+ * compares keywords would otherwise miss `repeat!` and bracket `50%!`.
+ */
 function collectBackgroundMaskProperty(
     key: string,
-    value: string,
+    rawValue: string,
     prefix: string,
     classes: string[],
 ): boolean {
+    const { value, important } = handleImportant(rawValue);
     let utility: string | null = null;
     if (key === 'bgPos') utility = formatBackgroundPosition(value);
     else if (key === 'bgSize') utility = formatBackgroundSize(value);
@@ -3518,23 +3621,31 @@ function collectBackgroundMaskProperty(
     else if (key === 'maskClip') utility = formatMaskClip(value);
     else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
     if (utility === null) return false;
-    classes.push(`${prefix}${utility}`);
+    classes.push(`${prefix}${utility}${important ? '!' : ''}`);
     return true;
 }
 
-/** Formats a background-position value. */
+/**
+ * Formats a background-position value. `bg-(--x)` is a background colour,
+ * so a custom property takes the `position:` hint every Tailwind v4 serves.
+ */
 function formatBackgroundPosition(value: string): string {
-    if (value.startsWith('--')) return `bg-(${value})`;
+    const typed = typedVariableValue('bgPos', value);
+    if (typed) return `bg-${typed}`;
     return value.includes('_') || needsArbitraryBrackets(value)
         ? `bg-[${normalizeArbitraryValue(value)}]`
         : `bg-${value}`;
 }
 
-/** Formats a background-size value. */
+/**
+ * Formats a background-size value. The `length:` hint inside `bg-[…]` /
+ * `bg-(…)` is served on every Tailwind v4; `bg-size-*` exists from 4.1 only.
+ */
 function formatBackgroundSize(value: string): string {
     if (value === 'auto' || value === 'cover' || value === 'contain') return `bg-${value}`;
-    if (value.startsWith('--')) return `bg-size-(${value})`;
-    return `bg-size-[${normalizeArbitraryValue(value)}]`;
+    const typed = typedVariableValue('bgSize', value);
+    if (typed) return `bg-${typed}`;
+    return `bg-[length:${normalizeArbitraryValue(value)}]`;
 }
 
 /** Formats a background-repeat value. */
@@ -3598,7 +3709,8 @@ const MASK_SLOT_MEMBERS: Readonly<Record<string, readonly string[]>> = {
 /** Legal members of one linear edge object (`{ b: { from, to } }`). */
 const MASK_EDGE_MEMBERS: readonly string[] = ['from', 'to'];
 
-// Dev-only de-dup, browser included — same reasoning as warnedMaskLayerValues.
+// Dev-only de-dup, browser included: mask values most often resolve at runtime
+// via `_sz` in a prop-API component, where `window` is defined.
 const warnedMaskSlotMembers = new Set<string>();
 
 /**
@@ -3775,22 +3887,23 @@ const MASK_LAYER_KEY_BY_FAMILY: Readonly<Record<string, string>> = {
     conic: 'maskConic',
 };
 
-// Dev-only de-dup, browser included: like the alignment props above, mask
-// values most often resolve at runtime via `_sz` in a prop-API component,
-// where `window` is defined — so the migration warning must fire there too.
+/** Layer values already warned about, so a re-render cannot spam. */
 const warnedMaskLayerValues = new Set<string>();
 
 /**
  * Warn that a `mask` layer value moved, naming the key that replaced it.
- * Fires in browser dev as well (unlike szNodeWarningsUnmuted warnings): the
- * consequence is a silently dropped mask, which is exactly the migration
- * mistake a first-time user makes inside a runtime-resolved sz object.
  *
- * @param value - The raw `mask` value.
+ * Nothing is emitted for the value, so this is missing output (ADR 0011): it
+ * prints in every mode and in the browser, once per value, and only
+ * `CSSZYX_QUIET_SZ_WARNINGS` mutes it. Mask values most often resolve at
+ * runtime via `_sz` in a prop-API component, which is where a first-time
+ * user's migration mistake shows up. The engines render the same text with
+ * the code `moved-value`.
+ *
+ * @param value - The `mask` value, without a trailing `!`.
  */
 function warnMaskLayerValue(value: string): void {
-    if (process.env.NODE_ENV === 'production') return;
-    if (warnedMaskLayerValues.has(value)) return;
+    if (szWarningsQuiet() || warnedMaskLayerValues.has(value)) return;
     warnedMaskLayerValues.add(value);
     const bare = value.startsWith('-') ? value.slice(1) : value;
     const family = /^(linear|radial|conic)/.exec(bare)?.[1] as string;
@@ -3811,16 +3924,7 @@ function formatMaskClip(value: string): string {
     return value === 'no-clip' ? 'mask-no-clip' : `mask-clip-${value}`;
 }
 
-const BORDER_COLOR_SIDES: Record<string, string> = {
-    borderTColor: 't',
-    borderRColor: 'r',
-    borderBColor: 'b',
-    borderLColor: 'l',
-    borderXColor: 'x',
-    borderYColor: 'y',
-};
-
-/** Collects content, border-color, transition, and drop-shadow utilities. */
+/** Collects content, transition, and drop-shadow utilities. */
 function collectContentBorderProperty(
     key: string,
     value: string,
@@ -3830,10 +3934,9 @@ function collectContentBorderProperty(
     let utility: string | null = null;
     if (key === 'alignContent') utility = `content-${value}`;
     else if (key === 'content') utility = formatContentValue(value);
-    else if (BORDER_COLOR_SIDES[key]) utility = `border-${BORDER_COLOR_SIDES[key]}-${value}`;
     else if (key === 'transitionBehavior') utility = `transition-${value}`;
     else if (key === 'dropShadowColor') {
-        utility = value.startsWith('--') ? `drop-shadow-(color:${value})` : `drop-shadow-${value}`;
+        utility = formatShadowFamilyColor(key, 'drop-shadow', value);
     }
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -3904,7 +4007,9 @@ function isComplexUtilityValue(value: string): boolean {
 /** Formats a perspective utility. */
 function formatPerspective(value: string): string {
     if (STANDARD_PERSPECTIVE.has(value)) return `perspective-${value}`;
-    if (bracketsCssWideKeyword('perspective', value)) return `perspective-[${value}]`;
+    if (bracketsCssWideKeyword('perspective', 'perspective', value)) {
+        return `perspective-[${value}]`;
+    }
     if (value.startsWith('--')) return `perspective-(${value})`;
     return needsArbitraryBrackets(value)
         ? `perspective-[${normalizeArbitraryValue(value)}]`
@@ -4012,14 +4117,13 @@ function buildGenericStringClass(
     const importantValue = handleImportant(value);
     const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
     // The minus belongs on the UTILITY, after any variant prefix:
-    // hover:-translate-x-full, never -hover:translate-x-full. The Rust engine
-    // always placed it correctly; putting it before `prefix` here emitted a
-    // selector Tailwind never generates (field-reported as silently dead
-    // drawer transitions).
-    const className =
-        finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)
-            ? `${prefix}-${key}-${finalValue.substring(1)}`
-            : `${prefix}${key}-${finalValue}`;
+    // hover:-translate-x-full, never -hover:translate-x-full (a selector
+    // Tailwind never generates). Hoisted on every key, as the engine does:
+    // `-X-v` is Tailwind's spelling on every v4, and whether the project's
+    // Tailwind serves it is the build-time oracle's verdict, not the runtime's.
+    const className = finalValue.startsWith('-')
+        ? `${prefix}-${key}-${finalValue.substring(1)}`
+        : `${prefix}${key}-${finalValue}`;
     return importantValue.important ? `${className}!` : className;
 }
 
@@ -4035,106 +4139,6 @@ export const CSS_WIDE_KEYWORDS: Set<string> = new Set([
     'unset',
     'revert',
     'revert-layer',
-]);
-
-/**
- * The prefixes whose arbitrary form sets the one property the key controls,
- * so a CSS-wide keyword can take it (`p-[inherit]`). Elsewhere the bracket
- * would set another property sharing the prefix (`bg-[inherit]` is a colour,
- * not a position), so the keyword is left as written and the build reports it
- * as a class with no CSS. Measured against Tailwind 4.3; a test re-checks it.
- */
-export const CSS_WIDE_BRACKET_PREFIXES: Set<string> = new Set([
-    'p',
-    'px',
-    'py',
-    'pt',
-    'pr',
-    'pb',
-    'pl',
-    'ps',
-    'pe',
-    'pbs',
-    'pbe',
-    'm',
-    'mx',
-    'my',
-    'mt',
-    'mr',
-    'mb',
-    'ml',
-    'ms',
-    'me',
-    'mbs',
-    'mbe',
-    'w',
-    'h',
-    'size',
-    'min-w',
-    'max-w',
-    'min-h',
-    'max-h',
-    'block',
-    'inline',
-    'min-block',
-    'max-block',
-    'min-inline',
-    'max-inline',
-    'inset',
-    'inset-x',
-    'inset-y',
-    'top',
-    'right',
-    'bottom',
-    'left',
-    'inset-s',
-    'inset-e',
-    'inset-bs',
-    'inset-be',
-    'gap',
-    'gap-x',
-    'gap-y',
-    'z',
-    'order',
-    'basis',
-    'grow',
-    'shrink',
-    'opacity',
-    'aspect',
-    'columns',
-    'indent',
-    'leading',
-    'tracking',
-    'scroll-m',
-    'scroll-mx',
-    'scroll-my',
-    'scroll-mt',
-    'scroll-mr',
-    'scroll-mb',
-    'scroll-ml',
-    'scroll-ms',
-    'scroll-me',
-    'scroll-mbs',
-    'scroll-mbe',
-    'scroll-p',
-    'scroll-px',
-    'scroll-py',
-    'scroll-pt',
-    'scroll-pr',
-    'scroll-pb',
-    'scroll-pl',
-    'scroll-ps',
-    'scroll-pe',
-    'scroll-pbs',
-    'scroll-pbe',
-    'space-x',
-    'space-y',
-    'perspective',
-    'rotate',
-    'scale',
-    'hue-rotate',
-    'line-clamp',
-    'tab',
 ]);
 
 /**
@@ -4185,18 +4189,26 @@ export const CSS_WIDE_KEYWORD_UTILITIES: Set<string> = new Set([
 ]);
 
 /**
- * Whether a CSS-wide keyword on this prefix needs the arbitrary form.
+ * Whether a CSS-wide keyword on this key needs the arbitrary form.
  *
+ * Elsewhere the bracket would set another property sharing the prefix
+ * (`bg-[inherit]` is a colour, not a position) or an invalid value
+ * (`blur(inherit)`), so the keyword is left as written and the build reports
+ * it as a class with no CSS. Which keys take it is the `w` column of the
+ * generated capability table: a spelling convention from the Tailwind this
+ * repo pins, gated across Tailwind versions in this repo's CI.
+ *
+ * @param rawKey - The sz key as written.
  * @param prefix - The utility prefix (`p`, `perspective`).
  * @param value - The value written.
  * @returns True when the value is a CSS-wide keyword Tailwind does not serve
  *          by name here and the bracket sets the key's own property.
  */
-function bracketsCssWideKeyword(prefix: string, value: string): boolean {
+function bracketsCssWideKeyword(rawKey: string, prefix: string, value: string): boolean {
     return (
         CSS_WIDE_KEYWORDS.has(value) &&
         !CSS_WIDE_KEYWORD_UTILITIES.has(`${prefix}-${value}`) &&
-        CSS_WIDE_BRACKET_PREFIXES.has(prefix)
+        capabilityRow(rawKey)?.includes(SZ_CAP_CSS_WIDE_BRACKET) === true
     );
 }
 
@@ -4209,10 +4221,11 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     // `font-features-normal` styles nothing while `font-features-[normal]`
     // compiles.
     if (rawKey === 'fontFeatures' && value === 'normal') return '[normal]';
-    if (bracketsCssWideKeyword(key, value)) return `[${value}]`;
+    if (bracketsCssWideKeyword(rawKey, key, value)) return `[${value}]`;
+    const typed = typedVariableValue(rawKey, value);
+    if (typed) return typed;
     if (isArbitraryFunctionValue(value)) return `[${normalizeArbitraryValue(value)}]`;
-    const variable = normalizeCustomPropertyValue(rawKey, value);
-    if (variable) return variable;
+    if (value.startsWith('--')) return `(${value})`;
     if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
     const ratio = normalizeRatioValue(rawKey, key, value);
     if (ratio) return ratio;
@@ -4225,13 +4238,6 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
 /** Whether Tailwind needs a function-like value in arbitrary brackets. */
 function isArbitraryFunctionValue(value: string): boolean {
     return isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('));
-}
-
-/** Normalize a bare CSS custom property with its optional Tailwind type hint. */
-function normalizeCustomPropertyValue(rawKey: string, value: string): string | null {
-    if (!value.startsWith('--')) return null;
-    const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
-    return typeHint ? `(${typeHint}:${value})` : `(${value})`;
 }
 
 /** Normalize fraction and aspect-ratio strings without widening other props. */
@@ -4320,11 +4326,13 @@ function finalizeTransformResult(
     return { className: outputClasses.join(' ') };
 }
 
-/** Formats a numeric utility, hoisting the sign for negative-capable keys. */
+/**
+ * Formats a numeric utility with the sign on the utility, on every key, as the
+ * engine does: `-p-2` is Tailwind's spelling on every v4, and whether the
+ * project's Tailwind serves it is the build-time oracle's verdict.
+ */
 function formatNumericUtility(key: string, value: number): string {
-    return value < 0 && NEGATIVE_ALLOWED.has(key)
-        ? `-${key}-${Math.abs(value)}`
-        : `${key}-${value}`;
+    return value < 0 ? `-${key}-${Math.abs(value)}` : `${key}-${value}`;
 }
 
 /**
@@ -4533,6 +4541,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedOpacityTokens.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();
+    __resetStringColorOpacityWarnings();
     _warnedOwnedKeyVariants.clear();
     warnedRemovedSugar.clear();
     _warnedUnknownSzProperties.clear();
@@ -4689,12 +4698,7 @@ function collectUnresolvedStringProperty(
         classes.push(`${prefix}${rawKey}/${value}`);
         return true;
     }
-    if (
-        PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR &&
-        !validateColorPropertyString(rawKey, value.replace(/!$/, ''))
-    ) {
-        return true;
-    }
+    if (dropSlashOpacityString(rawKey, value.replace(/!$/, ''))) return true;
     const snapClass = SNAP_DIRECT_MAP[rawKey]?.[value];
     if (snapClass) {
         classes.push(`${prefix}${snapClass}`);
@@ -4796,7 +4800,9 @@ function collectResolvedStringProperty(
     if (collectContentBorderProperty(rawKey, value, prefix, classes)) return true;
     if (collectTransformStringProperty(rawKey, value, prefix, classes)) return true;
     if (rawKey === 'bgImg') {
-        classes.push(`${prefix}${formatBackgroundImage(value)}`);
+        // The important modifier belongs to the class, as on every other key.
+        const { value: image, important } = handleImportant(value);
+        classes.push(`${prefix}${formatBackgroundImage(image)}${important ? '!' : ''}`);
         return true;
     }
     return collectBackgroundMaskProperty(rawKey, value, prefix, classes);
@@ -4998,6 +5004,17 @@ export interface SourceTransformResult {
      * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
     mergeGroups?: SzMergeGroup[];
+    /**
+     * Each static object of one class, from a pass without a merge table, in
+     * the shape of {@link mergeGroups}. A merge reads nothing here — one class
+     * merges with nothing — so these are kept apart from `mergeGroups`; they
+     * say where the key behind the class is written, which is what a dead
+     * class is reported at. Absent from a result an older engine or cache
+     * entry produced.
+     *
+     * @internal Read by the bundler plugin; not a stable shape.
+     */
+    singleClassGroups?: SzMergeGroup[];
     /**
      * Each static class name and the static `sz` classes beside it, from a pass
      * without a merge table: the class name loses what the `sz` classes cover.

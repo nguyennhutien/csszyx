@@ -62,8 +62,16 @@ import type {
 } from '@csszyx/types';
 import { Minimatch } from 'minimatch';
 
-/** Bumped when a reader of the policy state file would have to change. */
-export const DIAGNOSTIC_POLICY_FORMAT = 1;
+/**
+ * The format of the policy state file this version writes. Bumped only when
+ * a reader of the file would have to change; a field an old reader can pass
+ * over is not a new format. 2: the file lists the files the config load read
+ * (`inputs`), which a reader compares before it trusts the levels.
+ *
+ * The readers keep their own number (`DIAGNOSTIC_POLICY_READ_FORMAT` in
+ * `csszyx-config-file.ts`), and a test holds the two equal within a release.
+ */
+export const DIAGNOSTIC_POLICY_FORMAT = 2;
 
 /** Every level, quietest first. */
 export const SZ_DIAGNOSTIC_LEVELS: readonly SzDiagnosticLevel[] = ['off', 'info', 'warn', 'error'];
@@ -665,6 +673,6 @@ export function diagnosticConfigProblemsMessage(
     return (
         `[csszyx] ${file} has ${problems.length} problem(s):\n${lines.join('\n')}\n${outcome}\n` +
         '  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; ' +
-        'a dev server or `csszyx next watch` reads the file again only when restarted.'
+        'a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.'
     );
 }

@@ -2,7 +2,7 @@
  * Tests for Tailwind CSS v4.2.0 new utility props.
  * Covers: logical padding/margin block-direction, block/inline sizing,
  * logical insets, block-direction borders, scroll block-direction,
- * fontFeatures, new color names, and the start/end emit change.
+ * fontFeatures, new color names, and the logical insets.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -116,14 +116,16 @@ describe('blockSize / inlineSize families', () => {
 // ============================================================================
 
 describe('insetS / insetE / insetBs / insetBe', () => {
-    it('should emit inset-s-* for insetS', () => {
+    // `start-*` / `end-*`: served on every v4; `inset-s-*` / `inset-e-*` are
+    // the 4.2+ names for the same CSS (ADR 0023).
+    it('should emit start-* for insetS', () => {
         const result = transform({ insetS: 4 });
-        expect(result.className).toBe('inset-s-4');
+        expect(result.className).toBe('start-4');
     });
 
-    it('should emit inset-e-* for insetE', () => {
+    it('should emit end-* for insetE', () => {
         const result = transform({ insetE: 0 });
-        expect(result.className).toBe('inset-e-0');
+        expect(result.className).toBe('end-0');
     });
 
     it('should emit inset-bs-* for insetBs', () => {
@@ -144,28 +146,28 @@ describe('insetS / insetE / insetBs / insetBe', () => {
 });
 
 // ============================================================================
-// start / end — deprecated class rename (inset-s-* / inset-e-*)
+// start / end — the spelling every Tailwind v4 serves
 // ============================================================================
 
-describe('start / end emit inset-s-* / inset-e-* (TW v4.2 deprecation)', () => {
-    it('should emit inset-s-* for start prop (same CSS, new class name)', () => {
+describe('start / end emit start-* / end-* (served on every v4)', () => {
+    it('should emit start-* for start prop', () => {
         const result = transform({ start: 4 });
-        expect(result.className).toBe('inset-s-4');
+        expect(result.className).toBe('start-4');
     });
 
-    it('should emit inset-e-* for end prop (same CSS, new class name)', () => {
+    it('should emit end-* for end prop', () => {
         const result = transform({ end: 0 });
-        expect(result.className).toBe('inset-e-0');
+        expect(result.className).toBe('end-0');
     });
 
-    it('should emit inset-s-auto for start: auto', () => {
+    it('should emit start-auto for start: auto', () => {
         const result = transform({ start: 'auto' });
-        expect(result.className).toBe('inset-s-auto');
+        expect(result.className).toBe('start-auto');
     });
 
     it('should work in hover variant', () => {
         const result = transform({ hover: { start: 4 } });
-        expect(result.className).toBe('hover:inset-s-4');
+        expect(result.className).toBe('hover:start-4');
     });
 });
 

@@ -69,11 +69,10 @@ export const AMBIGUOUS_PREFIX_CHOICE: Record<string, string> = {
     // `transform-none`); `transformStyle` owns `transform-style-*` instead.
     transform: 'transform',
 
-    // Logical inset shorthands. `start`/`end` are the classes Tailwind emits,
-    // and they are listed in EXTRA_REVERSE_PREFIXES; these are the `inset-`
-    // spellings of the same thing.
-    'inset-s': 'insetS',
-    'inset-e': 'insetE',
+    // Logical inline insets: `start`/`end` are written by `start`/`end` and by
+    // `insetS`/`insetE` alike; migrate reads them back as the `inset*` keys.
+    start: 'insetS',
+    end: 'insetE',
 };
 
 /**
@@ -84,13 +83,13 @@ export const AMBIGUOUS_PREFIX_CHOICE: Record<string, string> = {
  * needs its own reason, which is why they are written out rather than derived.
  */
 export const EXTRA_REVERSE_PREFIXES: Record<string, string> = {
-    // `bgSize` lowers to the bare `bg-` prefix, so the inversion files it under
-    // `bg`. Tailwind still spells the class `bg-size-*` in its arbitrary form.
+    // `bgSize` lowers to `bg-[length:…]` (every v4); Tailwind 4.1+ also spells
+    // it `bg-size-*`, which markup written for those versions carries.
     'bg-size': 'bgSize',
-    // `insetS`/`insetE` lower to `inset-s`/`inset-e`, but Tailwind's bare
-    // logical inset classes are `start-*` and `end-*`.
-    start: 'insetS',
-    end: 'insetE',
+    // `insetS`/`insetE` lower to `start-*`/`end-*` (every v4); Tailwind 4.2+
+    // also spells them `inset-s-*`/`inset-e-*`.
+    'inset-s': 'insetS',
+    'inset-e': 'insetE',
     // A plugin utility with no compiler-side property entry.
     prose: 'prose',
 };

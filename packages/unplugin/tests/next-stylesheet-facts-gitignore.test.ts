@@ -74,6 +74,27 @@ describe('the stylesheet facts a Next command writes', () => {
         ]);
     }, 60_000);
 
+    it('leave out, and name, a stylesheet with an aliased import Next’s Tailwind cannot follow', async () => {
+        // `@tailwindcss/postcss` 4.3.3 resolves `@/…` as a package: a build
+        // that loads the stylesheet stops at "Can't resolve
+        // '@/generated/theme.css'", tsconfig `paths` or not. One that does not
+        // load it builds, so the facts leave it out and say so.
+        const { root, cacheDir } = app({
+            '.gitignore': 'generated/\n',
+            'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@/*': ['./*'] } } }),
+            'app/globals.css': PREFIXED,
+            'app/legacy.css': `${PREFIXED}@import "@/generated/theme.css";\n`,
+            'generated/theme.css': '@theme { --color-brand: #123456; }\n',
+        });
+
+        const { record, warning } = await writeNextStylesheetFacts({ root, cacheDir });
+
+        expect(record.facts?.prefix).toBe('tw');
+        expect(warning).toContain(
+            "[csszyx] app/legacy.css imports `@/generated/theme.css`, which this build's Tailwind cannot resolve",
+        );
+    }, 60_000);
+
     it('read as stale once a .gitignore changes what the walk finds', async () => {
         const { root, cacheDir } = app({
             '.gitignore': 'out/\n',

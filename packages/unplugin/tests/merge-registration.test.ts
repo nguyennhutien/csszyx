@@ -80,16 +80,42 @@ describe('the runtime registration the Next lane writes', () => {
         const written = writeMergeRegistration({
             root,
             model,
-            classes: ['break-bogus', 'p-4'],
+            classes: ['break-bogus', 'p-4', 'data-[state=open]:-p-3'],
             classOrigins: new Map([
-                ['break-bogus', join(root, 'app/page.tsx')],
-                ['p-4', join(root, 'app/page.tsx')],
+                [
+                    'break-bogus',
+                    [
+                        {
+                            sourcePath: join(root, 'app/page.tsx'),
+                            line: 2,
+                            column: 9,
+                            key: 'break',
+                        },
+                        { sourcePath: join(root, 'app/z.tsx') },
+                    ],
+                ],
+                ['p-4', [{ sourcePath: join(root, 'app/page.tsx') }]],
+                ['data-[state=open]:-p-3', [{ sourcePath: join(root, 'app/page.tsx') }]],
             ]),
             authoredClasses: ['tab-items-wrapper'],
             mergeLiterals: [],
         });
 
-        expect(written.dead).toEqual([{ className: 'break-bogus', file: 'app/page.tsx' }]);
+        // Every site, in path order, as the Vite lane hands them: a level an
+        // override sets per file decides which one the line names.
+        expect(written.dead).toEqual([
+            {
+                className: 'break-bogus',
+                file: 'app/page.tsx',
+                line: 2,
+                column: 9,
+                key: 'break',
+                others: [{ file: 'app/z.tsx' }],
+            },
+            // Padding has no negative in this project's Tailwind: said under
+            // `unsigned-value`, the same report the Vite lane reads.
+            { className: 'data-[state=open]:-p-3', unsigned: 'p-3', file: 'app/page.tsx' },
+        ]);
         expect(
             writeMergeRegistration({
                 root,

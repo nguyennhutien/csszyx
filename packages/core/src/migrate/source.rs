@@ -29,7 +29,8 @@ use super::line_endings::{detect_line_ending, with_line_ending};
 use super::normalize::{normalize_sz_expression, static_key};
 use super::sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
 use super::value::{is_js_whitespace, SzObject};
-use super::variant_parser::{class_name_to_sz_object, tokenize};
+use super::variant_parser::{class_name_to_sz_object_with, tokenize, Lookup};
+use super::verdict::{Judge, ServedAnswers, TableVerdict, TableVerdicts};
 
 /// Options for the source transformation.
 #[derive(Clone, Copy, Debug, Default)]
@@ -41,6 +42,9 @@ pub struct TransformOptions<'a> {
     /// The migration-resolution map, which answers for a class before the
     /// parser is asked.
     pub custom_map: Option<&'a SzObject>,
+    /// What the project's Tailwind answered for classes one of migrate's
+    /// tables would otherwise decide.
+    pub served: Option<&'a ServedAnswers>,
 }
 
 /// What the transformation did to one file.
@@ -74,6 +78,10 @@ pub struct TransformStats {
     /// Legacy sz keys rewritten; absent when the file was never parsed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sz_keys_normalized: Option<u32>,
+    /// Classes one of migrate's tables decided because the project's
+    /// Tailwind had not been asked about them, with the table's verdict.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub table_verdicts: Vec<TableVerdict>,
 }
 
 /// One edit: the bytes `start..end` replaced by `text`.
@@ -114,10 +122,15 @@ pub fn transform_source(
         return result;
     }
 
+    let asked = TableVerdicts::default();
     let mut visitor = Migration {
         source,
         file_path,
         options,
+        lookup: Lookup {
+            custom_map: options.custom_map,
+            judge: Judge::new(options.served, Some(&asked)),
+        },
         replacements: Vec::new(),
         warnings: Vec::new(),
         classes_unrecognized: Vec::new(),
@@ -158,13 +171,16 @@ pub fn transform_source(
         }
     }
 
+    let changed = !visitor.replacements.is_empty();
     let mut stats = visitor.stats;
     stats.classes_unrecognized = visitor.classes_unrecognized;
     stats.sz_keys_normalized = Some(stats.sz_keys_normalized.unwrap_or(0));
+    let warnings = visitor.warnings;
+    stats.table_verdicts = asked.into_sorted();
     TransformResult {
         code: output,
-        changed: !visitor.replacements.is_empty(),
-        warnings: visitor.warnings,
+        changed,
+        warnings,
         stats,
         potentially_unused_imports,
     }
@@ -250,6 +266,8 @@ struct Migration<'s, 'o> {
     source: &'s str,
     file_path: &'s str,
     options: &'o TransformOptions<'o>,
+    /// The resolution map and the judge every class conversion consults.
+    lookup: Lookup<'o>,
     replacements: Vec<Replacement>,
     warnings: Vec<String>,
     classes_unrecognized: Vec<String>,
@@ -463,9 +481,7 @@ impl<'a> Migration<'_, '_> {
     }
 
     fn apply_static_class_migration(&mut self, value: &str, range: (usize, usize)) {
-        let Some((replacement, unrecognized)) =
-            process_static_string(value, self.options.custom_map)
-        else {
+        let Some((replacement, unrecognized)) = process_static_string(value, self.lookup) else {
             self.stats.class_names_skipped += 1;
             return;
         };
@@ -512,25 +528,25 @@ impl<'a> Migration<'_, '_> {
     }
 
     fn dynamic_pattern_result(&self, expression: &JSXExpression<'a>) -> Option<PatternResult> {
-        let custom_map = self.options.custom_map;
+        let lookup = self.lookup;
         let source = self.source;
         match expression {
             JSXExpression::TemplateLiteral(template) => {
-                Some(handle_template_literal(template, source, custom_map))
+                Some(handle_template_literal(template, source, lookup))
             }
             JSXExpression::CallExpression(call) => match &call.callee {
                 Expression::Identifier(callee) if is_clsx_like_name(&callee.name) => {
-                    Some(handle_clsx_call(call, source, custom_map))
+                    Some(handle_clsx_call(call, source, lookup))
                 }
                 _ => None,
             },
             JSXExpression::ConditionalExpression(conditional) => {
-                Some(handle_ternary(conditional, source, custom_map))
+                Some(handle_ternary(conditional, source, lookup))
             }
             JSXExpression::LogicalExpression(logical)
                 if logical.operator == LogicalOperator::And =>
             {
-                Some(handle_logical_and(logical, source, custom_map))
+                Some(handle_logical_and(logical, source, lookup))
             }
             _ => None,
         }
@@ -540,9 +556,9 @@ impl<'a> Migration<'_, '_> {
     /// map in play, the classes the map decides join the existing sz object.
     /// See the TypeScript for the full rationale.
     fn merge_into_sibling_sz(&mut self, attribute: &JSXAttribute<'a>) -> bool {
-        let Some(custom_map) = self.options.custom_map else {
+        if self.lookup.custom_map.is_none() {
             return false;
-        };
+        }
         let Some(JSXAttributeValue::StringLiteral(literal)) = &attribute.value else {
             return false;
         };
@@ -566,7 +582,7 @@ impl<'a> Migration<'_, '_> {
         let range = span_range(attribute.span);
 
         let trimmed = literal.value.trim_matches(is_js_whitespace);
-        let converted = class_name_to_sz_object(trimmed, Some(custom_map));
+        let converted = class_name_to_sz_object_with(trimmed, self.lookup);
         let mut remaining = converted.keep_in_class_name.clone();
         remaining.extend(converted.unrecognized.iter().cloned());
         let class_name_changed = remaining.join(" ") != tokenize(trimmed).join(" ");
@@ -673,15 +689,12 @@ fn static_sz(object: &ObjectExpression<'_>) -> SiblingSz {
 
 /// A static className as the attribute text that replaces it: `sz={{ … }}`,
 /// preceded by the classes that stay in className when there are any.
-fn process_static_string(
-    class_name: &str,
-    custom_map: Option<&SzObject>,
-) -> Option<(String, Vec<String>)> {
+fn process_static_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String, Vec<String>)> {
     let trimmed = class_name.trim_matches(is_js_whitespace);
     if trimmed.is_empty() {
         return None;
     }
-    let converted = class_name_to_sz_object(trimmed, custom_map);
+    let converted = class_name_to_sz_object_with(trimmed, lookup);
     if converted.sz_object.is_empty() {
         return None;
     }
@@ -703,8 +716,8 @@ mod tests {
 
     #[test]
     fn a_blank_class_string_is_nothing_to_migrate() {
-        assert_eq!(process_static_string("", None), None);
-        assert_eq!(process_static_string(" \u{00A0} ", None), None);
-        assert_eq!(process_static_string("mystery", None), None);
+        assert_eq!(process_static_string("", Lookup::default()), None);
+        assert_eq!(process_static_string(" \u{00A0} ", Lookup::default()), None);
+        assert_eq!(process_static_string("mystery", Lookup::default()), None);
     }
 }

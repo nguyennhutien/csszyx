@@ -25,12 +25,20 @@ import {
     type TransformRustFile,
 } from './transform-rust.js';
 
+/** One merge group as the wasm JSON spells it. */
+interface WasmMergeGroup {
+    keys: string[];
+    key_starts: number[];
+    classes: string[];
+}
+
 /** The raw serde shape `transform_batch_json` returns, snake_case per field. */
 interface WasmResultJson {
     code: string;
     classes: string[];
     raw_class_names: string[];
-    merge_groups: Array<{ keys: string[]; key_starts: number[]; classes: string[] }>;
+    merge_groups: WasmMergeGroup[];
+    single_class_groups: WasmMergeGroup[];
     merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
     diagnostics: string[];
     issues: Array<{ code: string; start: number }>;
@@ -197,6 +205,20 @@ export function transformWasmBatch(
 }
 
 /**
+ * One group in the spelling the shared span locator reads.
+ *
+ * @param group - A group as the wasm JSON spells it.
+ * @returns The same group, camel-cased.
+ */
+function rawGroup(group: WasmMergeGroup): {
+    keys: string[];
+    keyStarts: number[];
+    classes: string[];
+} {
+    return { keys: group.keys, keyStarts: group.key_starts, classes: group.classes };
+}
+
+/**
  * Convert the serde result shape into the compiler result shape.
  *
  * The napi lane gets this conversion from napi-derive (camelCase fields);
@@ -209,11 +231,8 @@ export function transformWasmBatch(
 function fromWasmResult(result: WasmResultJson, source: string): SourceTransformResult {
     const spans = locateEngineSpans(source, {
         issues: result.issues,
-        mergeGroups: result.merge_groups.map(({ keys, key_starts, classes }) => ({
-            keys,
-            keyStarts: key_starts,
-            classes,
-        })),
+        mergeGroups: result.merge_groups.map(rawGroup),
+        singleClassGroups: result.single_class_groups.map(rawGroup),
         mergeOverrides: result.merge_overrides,
     });
     return {
@@ -233,6 +252,7 @@ function fromWasmResult(result: WasmResultJson, source: string): SourceTransform
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
         mergeGroups: spans.mergeGroups,
+        singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
         diagnostics: result.diagnostics,
         issues: spans.issues,

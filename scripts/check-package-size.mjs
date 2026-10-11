@@ -148,14 +148,39 @@ export const SIZE_BUDGETS = [
         // key's own property, the utilities Tailwind names) and the added
         // negative-capable and fraction-taking keys ship with the runtime
         // lowering, so the browser carries them. Budget the usual ~300 above.
-        maxGzipBytes: 16_750,
+        //
+        // Raised from 16,750 on 2026-10-10, measured 16,759: the per-key
+        // capability table generated from Tailwind (159 rows; a row for every
+        // key, empty ones included, measured ~400 more and was not taken)
+        // replaces the CSS-wide prefix list, and a sign Tailwind does not
+        // serve now warns in development (the text folds out of production).
+        //
+        // Lowered from 17,050 on 2026-10-10, measured 16,687: the runtime no
+        // longer judges a sign from the baked table (ADR 0022) — the lookup
+        // and its development warning are gone, and the table only spells.
+        //
+        // Raised from 16,990 on 2026-10-10, measured 17,056 (+369 over
+        // 16,687): the runtime writes every colour string the engines write
+        // instead of judging it (ADR 0022), the per-key variable type hints
+        // are one table for both lanes and cover the width, position and
+        // shadow-colour keys (`border-(length:--w)`, `bg-[position:var(--x)]`),
+        // and a gradient layer on `mask` warns in production, as the engines
+        // now report it (`moved-value`); the side and decoration colour keys
+        // take the generic lowering instead of a copy of it. Budget the usual
+        // ~300 above.
+        maxGzipBytes: 17_360,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
         // ~300 above the measurement.
         entryBudgets: {
-            // 15,646 after the CSS-wide keyword tables, 2026-10-09.
-            './browser': 15_950,
+            // 15,646 after the CSS-wide keyword tables, 2026-10-09; 15,989
+            // after the capability table, 2026-10-10 (+343, see the union);
+            // 15,920 once the runtime stopped judging a sign (ADR 0022), the
+            // same day, so lowered from 16,300; 16,297 with the variable type
+            // hints, the unjudged colour strings and the production mask
+            // warning (+377, see the union), so raised from 16,220.
+            './browser': 16_600,
             './sz-limits': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
@@ -174,6 +199,12 @@ export const SIZE_BUDGETS = [
             'warn: [csszyx] ',
             // A removed key (`fontVariant`, `maskFrom`), named with its note.
             'warn: [csszyx] ',
+            // A colour key's slash-opacity string (`bg: 'red-500/50'`), which
+            // emits nothing; the build reports it as `slash-opacity-string`.
+            'warn: [csszyx] ',
+            // A gradient layer on `mask` (`mask: 'linear-45'`), which emits
+            // nothing; the build reports it as `moved-value`.
+            'warn: [csszyx] mask: ',
             // A dynamic value the runtime helpers cannot lower, so the style
             // is dropped: a non-boolean on a boolean-only key (`./bool-class`)
             // and an unresolvable spacing value (`./spacing-var`).
@@ -227,7 +258,57 @@ export const SIZE_BUDGETS = [
         // are placed where the importing module names it, as its top-level
         // keys are (561,293, un-optimized, same build). The budget keeps
         // ~300 bytes of headroom, as the JS budgets do.
-        maxGzipBytes: 561_600,
+        //
+        // Raised from 561,600 on 2026-10-10: a variant key with a runtime
+        // value goes to `_szPart` with its keys rebuilt around it and reports
+        // `fallback-missing-css` at the key, instead of a css variable that
+        // styled nothing, and a mask slot's members are no longer walked as sz
+        // keys (2,603 gzip bytes); a one-class object is placed at its key in
+        // a list of its own beside the merge groups (1,399). 561,293 at the
+        // branch base, 565,295 after, un-optimized, gzip -9 of the nodejs
+        // parser build, same machine.
+        //
+        // Raised from 565,600 on 2026-10-10: the per-key capability table
+        // generated from Tailwind (159 rows, binary-searched — a `match` over
+        // the same keys cost 417 bytes more), the CSS-wide column replacing
+        // the prefix list, `decoration` values reaching the generic lowering,
+        // and the `unsigned-value` diagnostic (its collector and message,
+        // ~900 of the total) cost 1,720 gzip bytes here: 565,270 on the same
+        // tree without them, 566,990 with them, un-optimized, gzip -9 of the
+        // nodejs parser build.
+        //
+        // Raised from 567,300 on 2026-10-10: an sz array element with a
+        // runtime variant value splits as a lone object does and reports the
+        // key, a guarded element reports it too, and a key no table claims
+        // (a project breakpoint or `@custom-variant`) defers like a built-in
+        // variant: 566,992 on the same tree without them, 567,792 with them
+        // (split 713, guarded report 81, project variants 6), un-optimized,
+        // gzip -9 of the nodejs parser build. `#[inline(never)]` on the two
+        // part builders saved 2 and was not taken.
+        //
+        // Lowered from 568,100 on 2026-10-10, measured 567,527: the
+        // `unsigned-value` verdict left the engine (its collector, its
+        // message and their plumbing) for the build-time oracle, which reads
+        // the project's own Tailwind (ADR 0012, 0022); a generated
+        // colour-key match and the kebab-case variant segment came in.
+        // Un-optimized, gzip -9 of the nodejs parser build, the working tree
+        // of `fix/0.18.0-lowering-parity` with the other slices in flight.
+        //
+        // Raised from 567,830 on 2026-10-10, measured 568,891 (+1,364 over
+        // 567,527): a colour key's slash-opacity string, which the lowering
+        // drops, is reported as `slash-opacity-string` (its collector, its
+        // message and the code), and a runtime value takes its key's type hint
+        // (`bg-(position:…)`, `shadow-(color:…)`). Un-optimized, gzip -9 of the
+        // nodejs parser build, same working tree.
+        //
+        // Raised from 569,190 on 2026-10-10, measured 569,814 (+923 over
+        // 568,891): a gradient layer on `mask`, which the lowering drops, is
+        // reported as `moved-value` (its collector and message), and a
+        // variable on a key whose prefix reads it as another type takes the
+        // key's hint in every spelling (`(--x)`, `var(--x)`), from one
+        // generated table. Un-optimized, gzip -9 of the nodejs parser build,
+        // same working tree.
+        maxGzipBytes: 570_110,
     },
 ];
 

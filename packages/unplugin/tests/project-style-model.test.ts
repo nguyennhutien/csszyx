@@ -15,9 +15,16 @@ import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { resolveConfig } from 'vite';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { openProjectStyleModel } from '../src/project-style-model.js';
+import {
+    openProjectStyleModel,
+    styleModelError,
+    styleModelWarning,
+    unresolvedImportWarning,
+} from '../src/project-style-model.js';
+import { viteStylesheetResolver } from '../src/vite-stylesheet-candidates.js';
 
 /** Repository root, whose `package.json` resolves `tailwindcss`. */
 const REPO = path.resolve(import.meta.dirname, '../../..');
@@ -46,20 +53,67 @@ function writeStylesheets(files: Record<string, string>): string[] {
 }
 
 describe('openProjectStyleModel', () => {
-    it('follows a bundler alias to the stylesheet that sets the prefix', async () => {
+    it('follows a Vite alias, extension left out, to the stylesheet that sets the prefix', async () => {
         const [app, tokens] = writeStylesheets({
-            'app.css': '@import "@ds/tailwind.css";\n',
+            'app.css': '@import "@ds/tailwind";\n',
             'tailwind.css': '@import "tailwindcss" prefix(tw);\n',
         });
-        const alias = {
-            find: '@ds/',
-            replacement: `${path.dirname(tokens as string)}/`,
-            exact: false,
-        };
+        const config = await resolveConfig(
+            {
+                root: REPO,
+                configFile: false,
+                logLevel: 'silent',
+                resolve: { alias: [{ find: '@ds', replacement: path.dirname(tokens as string) }] },
+            },
+            'build',
+        );
+        // Asked of Vite's own resolver, which the compile awaits.
+        const importCandidates = viteStylesheetResolver(config, 'vite').candidates;
 
-        const model = await openProjectStyleModel(REPO, [app as string], { aliases: [alias] });
+        const model = await openProjectStyleModel(REPO, [app as string], { importCandidates });
 
         expect(model.facts).toEqual({ prefix: 'tw', important: false });
+    });
+
+    it('leaves out a stylesheet whose alias Tailwind’s own compile cannot follow', async () => {
+        // `@tailwindcss/postcss` 4.3.3, which every lane but Vite runs, resolves
+        // `@ds/…` as a package: a build that loads this stylesheet stops on
+        // it, and one that does not load it must not be stopped here.
+        const [app] = writeStylesheets({
+            'app.css': '@import "tailwindcss";\n@import "@ds/tailwind";\n',
+            'tailwind.css': '@import "tailwindcss" prefix(tw);\n',
+        });
+
+        const model = await openProjectStyleModel(REPO, [app as string]);
+
+        expect(model.entries).toEqual([
+            { file: app, role: 'unresolved', unresolvedImport: '@ds/tailwind' },
+        ]);
+        expect(model.facts).toBeNull();
+        expect(styleModelError(model, REPO)).toBeNull();
+        expect(styleModelWarning(model, REPO)).toBeNull();
+    });
+
+    it('names the stylesheet and the import it could not resolve, once per process', async () => {
+        const [app, other] = writeStylesheets({
+            'app.css': '@import "tailwindcss";\n@import "@ds/once";\n',
+            'other.css': '@import "@ds/other";\n',
+        });
+        const model = await openProjectStyleModel(REPO, [app as string, other as string]);
+        const root = path.dirname(app as string);
+
+        const first = unresolvedImportWarning(model, root);
+
+        expect(first).toBe(
+            [
+                "[csszyx] app.css imports `@ds/once`, which this build's Tailwind cannot resolve, so csszyx left the stylesheet out of the prefix and the merge model.",
+                "[csszyx] other.css imports `@ds/other`, which this build's Tailwind cannot resolve, so csszyx left the stylesheet out of the prefix and the merge model.",
+                '  help: a build that loads one of them stops on that import; import the file by a relative path (only a Vite build follows an alias, through `resolve.alias`). If the build does not load it, list the stylesheets it does load in the csszyx `tailwindStylesheet` option.',
+            ].join('\n'),
+        );
+        // The same stylesheet read again, as a dev server does after an edit.
+        const again = await openProjectStyleModel(REPO, [app as string, other as string]);
+        expect(unresolvedImportWarning(again, root)).toBeNull();
     });
 
     it('lists the stylesheets its roots import', async () => {

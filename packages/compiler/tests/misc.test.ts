@@ -133,8 +133,9 @@ describe('misc utilities — svg stroke width', () => {
         expect(t({ strokeWidth: '0.5rem' })).toBe('stroke-[0.5rem]');
     });
 
-    it('{ strokeWidth: "--w" } → stroke-(--w) (css variable)', () => {
-        expect(t({ strokeWidth: '--w' })).toBe('stroke-(--w)');
+    it('{ strokeWidth: "--w" } → stroke-(length:--w) (css variable)', () => {
+        // `stroke-(--w)` is the stroke colour.
+        expect(t({ strokeWidth: '--w' })).toBe('stroke-(length:--w)');
     });
 });
 

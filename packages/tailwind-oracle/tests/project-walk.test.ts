@@ -1,11 +1,18 @@
 /**
  * The shared project walk and the two skip sets its callers choose between.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import fs, {
+    mkdirSync,
+    mkdtempSync,
+    realpathSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
     DEPENDENCY_OUTPUT_DIRS,
@@ -19,6 +26,7 @@ import {
 const roots: string[] = [];
 
 afterEach(() => {
+    vi.restoreAllMocks();
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -123,5 +131,44 @@ describe('walkProject', () => {
 
     it('reads nothing under a root that does not exist', () => {
         expect(walked(join(tmpdir(), 'csszyx-no-such-root'), { skipDirs: new Set() })).toEqual([]);
+    });
+});
+
+/**
+ * Stand in for `fs.realpathSync` as it answers on a case-insensitive
+ * filesystem (macOS, Windows): the JavaScript realpath keeps the spelling it
+ * was given or read from a link, while `realpathSync.native` asks the
+ * filesystem and gets the folder's own spelling back.
+ *
+ * @param spelled - The answer to give, per path asked about; any other path
+ *        gets the native answer.
+ */
+function caseKeepingRealpath(spelled: Record<string, string>): void {
+    const native = fs.realpathSync.native;
+    const keepCase = Object.assign(
+        (target: fs.PathLike) => spelled[String(target)] ?? native(target),
+        { native },
+    );
+    vi.spyOn(fs, 'realpathSync').mockImplementation(keepCase as typeof fs.realpathSync);
+}
+
+describe('walkProject on a case-insensitive filesystem', () => {
+    // A link spelled `../SRC` for `src` names a folder the walk is already
+    // inside; compared as spelled, it was entered once more.
+    it('stops at a link to a folder it is inside, spelled in another case', () => {
+        const root = project({ 'src/x.tsx': '' });
+        symlinkSync('../src', join(root, 'src/up'));
+        caseKeepingRealpath({ [join(root, 'src/up')]: join(root, 'SRC') });
+        expect(walked(root, { skipDirs: new Set() })).toEqual(['src/x.tsx']);
+    });
+
+    it('stops at a link back to a root given in another case', () => {
+        const top = project({ 'app/x.tsx': '' });
+        // Linux cannot spell `app` as `APP`; a link stands in for it. On a
+        // case-insensitive filesystem `APP` already is `app`.
+        if (!fs.existsSync(join(top, 'APP'))) symlinkSync('app', join(top, 'APP'));
+        symlinkSync('../app', join(top, 'app/up'));
+        caseKeepingRealpath({ [join(top, 'app')]: join(top, 'APP') });
+        expect(walked(join(top, 'app'), { skipDirs: new Set() })).toEqual(['x.tsx']);
     });
 });

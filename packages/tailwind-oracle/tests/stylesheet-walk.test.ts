@@ -2,13 +2,12 @@
  * The stylesheet walk: what `.gitignore` leaves out, and the imports that bring
  * a gitignored stylesheet back.
  */
-import {
+import fs, {
     existsSync,
     mkdirSync,
     mkdtempSync,
     realpathSync,
     rmSync,
-    symlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -224,6 +223,111 @@ describe('an import the walk does not follow', () => {
     });
 });
 
+describe('an import the build’s own resolver expands', () => {
+    // `@tailwindcss/vite` resolves every `@import` through Vite's resolver
+    // first, so a `resolve.alias` reaches the file Tailwind reads (measured on
+    // Vite 8.3.1). The lane hands the walk the paths its resolver tries.
+    const ALIASED: Record<string, string> = {
+        '.gitignore': 'src/gen/\n',
+        'src/app.css':
+            '@import "@/gen/theme.css";\n@import "@/gen/plain";\n@import "@/gen/notcss.tw";\n',
+        'src/gen/theme.css': '@theme { --color-a: red; }\n',
+        'src/gen/plain.css': '@theme { --color-b: red; }\n',
+        'src/gen/notcss.tw': '@theme { --color-c: red; }\n',
+    };
+
+    /**
+     * The stylesheets a walk finds with an `@` alias for `src`.
+     *
+     * @param root - The folder walked.
+     * @param asked - Where each specifier the walk asks about is recorded.
+     * @returns Relative posix paths, sorted.
+     */
+    function aliased(root: string, asked: string[] = []): string[] {
+        return walkProjectStylesheets([root], {
+            importCandidates: (specifier, fromDir) => {
+                asked.push(`${specifier} from ${relative(root, fromDir) || '.'}`);
+                return specifier.startsWith('@/') ? [join(root, 'src', specifier.slice(2))] : [];
+            },
+        })
+            .files.map(file => relative(root, file).split(sep).join('/'))
+            .sort();
+    }
+
+    it('follows an aliased import to a stylesheet, with `.css` added', () => {
+        // Which answers count is the lane's: `@tailwindcss/vite` keeps a
+        // `.css` one only, Vite's inlining in front of `@tailwindcss/postcss`
+        // any. This lane answers `notcss.tw`, so it is read.
+        expect(aliased(tree(ALIASED))).toEqual([
+            'src/app.css',
+            'src/gen/notcss.tw',
+            'src/gen/plain.css',
+            'src/gen/theme.css',
+        ]);
+    });
+
+    it('follows none without the lane’s resolver', () => {
+        expect(stylesheets(tree(ALIASED))).toEqual(['src/app.css']);
+    });
+
+    it('asks only about a specifier that is not a path', () => {
+        const root = tree({
+            'app.css': '@import "./a.css";\n@import "/abs.css";\n@import "pkg";\n',
+            'a.css': '',
+        });
+        const asked: string[] = [];
+        aliased(root, asked);
+        expect(asked).toEqual(['pkg from .']);
+    });
+
+    it('keeps out a target outside every base or under a skipped folder', () => {
+        const outside = tree({ 'theme.css': '@theme { --color-o: red; }\n' });
+        const root = tree({
+            'app.css': '@import "@/x";\n@import "@/y";\n',
+            'node_modules/y.css': '',
+        });
+        const files = walkProjectStylesheets([root], {
+            importCandidates: specifier =>
+                specifier === '@/x' ? [join(outside, 'theme')] : [join(root, 'node_modules', 'y')],
+        }).files;
+        expect(files.map(file => relative(root, file))).toEqual(['app.css']);
+    });
+
+    it('takes the first candidate that names a file', () => {
+        const root = tree({
+            'app.css': '@import "@/t";\n',
+            'b/t.css': '',
+            'c/t.css': '',
+        });
+        const files = walkProjectStylesheets([root], {
+            importCandidates: () => [
+                join(root, 'a', 't'),
+                join(root, 'b', 't'),
+                join(root, 'c', 't'),
+            ],
+        }).files;
+        expect(files.map(file => relative(root, file).split(sep).join('/')).sort()).toEqual([
+            'app.css',
+            'b/t.css',
+            'c/t.css',
+        ]);
+        // Both `b/t.css` and `c/t.css` are walked as files of the base; with
+        // `b/` gitignored only the first candidate comes back through the import.
+        writeFileSync(join(root, '.gitignore'), 'b/\nc/\n');
+        const again = walkProjectStylesheets([root], {
+            importCandidates: () => [
+                join(root, 'a', 't'),
+                join(root, 'b', 't'),
+                join(root, 'c', 't'),
+            ],
+        }).files;
+        expect(again.map(file => relative(root, file).split(sep).join('/'))).toEqual([
+            'app.css',
+            'b/t.css',
+        ]);
+    });
+});
+
 describe('a .gitignore that is not a file', () => {
     it('is no layer: a folder of that name ignores nothing', () => {
         const root = tree({
@@ -243,12 +347,20 @@ describe('a .gitignore that is not a file', () => {
 
 describe('a stylesheet that cannot be read', () => {
     it('is listed with no text, and the walk goes on', () => {
-        const root = tree({ 'src/app.css': '.a {}\n' });
-        symlinkSync(join(root, 'missing.css'), join(root, 'src', 'broken.css'));
+        const root = tree({ 'src/app.css': '.a {}\n', 'src/locked.css': '.b {}\n' });
+        const locked = join(root, 'src', 'locked.css');
+        const read = fs.readFileSync;
+        // A file the process may not read; `chmod` does not stop root, which
+        // runs the container's tests.
+        vi.spyOn(fs, 'readFileSync').mockImplementation(((file: string, ...rest: unknown[]) => {
+            if (file === locked) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+            return (read as (...args: unknown[]) => unknown)(file, ...rest);
+        }) as typeof fs.readFileSync);
         const walked = walkProjectStylesheets([root]);
+        vi.restoreAllMocks();
         expect(walked.files.map(file => relative(root, file)).sort()).toEqual([
             join('src', 'app.css'),
-            join('src', 'broken.css'),
+            join('src', 'locked.css'),
         ]);
         expect([...walked.texts.keys()]).toEqual([join(root, 'src', 'app.css')]);
     });

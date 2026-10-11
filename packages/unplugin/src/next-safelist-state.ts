@@ -16,6 +16,67 @@ export type { AtomicWriteOptions } from './atomic-write.js';
 export { atomicRenameWithRetry, atomicWriteFileSync } from './atomic-write.js';
 
 const DEFAULT_STALE_LOCK_MS = 30_000;
+
+/**
+ * The format of a shard this version writes.
+ *
+ * Bumped only for a change an older reader cannot pass over: 0.17.2 deletes
+ * every shard whose number is not its own, so a bump for a field it would
+ * only ignore made a 0.17 session beside this one drop this one's classes.
+ * The fields added since (`authoredClasses`, `mergeLiterals`, `classSites`)
+ * are optional under format 1; a shard written without them is read without
+ * them and replaced at the next write for its source.
+ */
+export const NEXT_SAFELIST_SHARD_FORMAT = 1;
+
+/**
+ * The format of a shard this version reads. The reader's own number: a test
+ * holds it equal to {@link NEXT_SAFELIST_SHARD_FORMAT} within a release, and a
+ * shard of another number is left on disk unread, with a line naming the
+ * command that writes it again.
+ */
+export const NEXT_SAFELIST_SHARD_READ_FORMAT = 1;
+
+/** Each shard already said to be of a format this version does not read. */
+const unreadShards = new Set<string>();
+
+/**
+ * Say, once per shard and format, that a shard is left out of the safelist.
+ *
+ * @param rootDir - The project root, which the line names the shard from.
+ * @param filePath - The shard.
+ * @param format - Its number.
+ */
+function warnUnreadShard(rootDir: string, filePath: string, format: number): void {
+    const key = `${filePath}\0${format}`;
+    if (unreadShards.has(key)) return;
+    unreadShards.add(key);
+    const named = path.relative(rootDir, filePath).split(path.sep).join('/');
+    console.warn(
+        `[csszyx] ${named} is a safelist shard in format ${format}, and this version reads format ${NEXT_SAFELIST_SHARD_READ_FORMAT}: its classes are left out of the safelist.\n` +
+            '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes every shard again.',
+    );
+}
+
+/** Where a source writes one emitted class: the `sz` key it was lowered from. */
+export interface NextShardClassSite {
+    className: string;
+    /** The line of the key, 1-based. */
+    line: number;
+    /** The column of the key, 1-based. */
+    column: number;
+    /** The `sz` key. */
+    key: string;
+}
+
+/** One source that emits a class, at its key when the engine placed it there. */
+export interface NextClassOrigin {
+    /** Absolute path of the source. */
+    sourcePath: string;
+    line?: number;
+    column?: number;
+    key?: string;
+}
 // proper-lockfile floors `stale` to 2s and uses it to drive its (non
 // single-winner) internal recovery. A far-future value disables that recovery
 // so its `mkdir` is a pure mutex; recoverStaleAdvisoryLock owns staleness.
@@ -30,6 +91,8 @@ export interface NextSafelistShardInput {
     authoredClasses?: readonly string[];
     /** String literals written inside `szcn(...)` calls of the source. */
     mergeLiterals?: readonly string[];
+    /** Where the source writes each class the engine placed, by class. */
+    classSites?: readonly NextShardClassSite[];
     cacheKey?: string;
     timestamp?: number;
     pid?: number;
@@ -54,10 +117,11 @@ export interface NextSafelistMaterializeResult {
     /** Every string written inside a `szcn(...)` call across the project, sorted. */
     mergeLiterals: string[];
     /**
-     * Each class lowering emitted and the first source, in path order, that
-     * emits it — the file a `dead-class` finding names.
+     * Each class lowering emitted and every source, in path order, that emits
+     * it, at its key when the engine placed it there — what a `dead-class`
+     * finding names.
      */
-    classOrigins: Map<string, string>;
+    classOrigins: Map<string, NextClassOrigin[]>;
     classCount: number;
     sourceCount: number;
     tombstonedSourceCount: number;
@@ -122,7 +186,7 @@ interface SnapshotFile {
  *
  */
 interface ShardFile {
-    version: 1;
+    version: typeof NEXT_SAFELIST_SHARD_FORMAT;
     cacheKey: string;
     sourcePath: string;
     sourceHash: string;
@@ -130,6 +194,8 @@ interface ShardFile {
     /** Absent in shards written before the merge table read them. */
     authoredClasses?: string[];
     mergeLiterals?: string[];
+    /** Absent in shards written before the dead-class report placed classes. */
+    classSites?: NextShardClassSite[];
     timestamp: number;
     pid: number;
 }
@@ -206,7 +272,7 @@ export function materializeNextSafelist(
     const recordsBySource = new Map<string, ShardRecord>();
     let tombstonedSourceCount = 0;
 
-    for (const record of readShardRecords(paths.shardsDir)) {
+    for (const record of readShardRecords(paths.shardsDir, paths.rootDir)) {
         if (!fs.existsSync(record.data.sourcePath)) {
             fs.rmSync(record.filePath, { force: true });
             tombstonedSourceCount++;
@@ -219,17 +285,14 @@ export function materializeNextSafelist(
         }
     }
 
-    const sortedSources = [...recordsBySource.values()]
-        .map(({ data }) => [data.sourcePath, sortStrings(new Set(data.classes))] as const)
-        .sort(([left], [right]) => left.localeCompare(right));
+    const records = [...recordsBySource.values()]
+        .map(({ data }) => data)
+        .sort((left, right) => left.sourcePath.localeCompare(right.sourcePath));
+    const sortedSources = records.map(
+        data => [data.sourcePath, sortStrings(new Set(data.classes))] as const,
+    );
     const classNames = sortStrings(new Set(sortedSources.flatMap(([, classSet]) => classSet)));
-    const classOrigins = new Map<string, string>();
-    for (const [sourcePath, classSet] of sortedSources) {
-        for (const className of classSet) {
-            if (!classOrigins.has(className)) classOrigins.set(className, sourcePath);
-        }
-    }
-    const records = [...recordsBySource.values()].map(({ data }) => data);
+    const classOrigins = collectClassOrigins(records);
     const authoredClasses = sortStrings(
         new Set(records.flatMap(data => data.authoredClasses ?? [])),
     );
@@ -380,14 +443,75 @@ function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean 
     try {
         const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<ShardFile>;
         return (
-            parsed.version === 1 &&
+            parsed.version === shard.version &&
             parsed.sourcePath === shard.sourcePath &&
             parsed.sourceHash === shard.sourceHash &&
-            sameClasses(parsed.classes, shard.classes)
+            sameClasses(parsed.classes, shard.classes) &&
+            // The optional fields too: one an older version wrote without
+            // them is replaced, so they arrive under the same format.
+            sameOptionalFields(parsed, shard)
         );
     } catch {
         return false;
     }
+}
+
+/**
+ * Whether two shards carry the same optional fields, in the form written.
+ *
+ * @param left - The shard on disk.
+ * @param right - The shard about to be written.
+ * @returns True when each optional field is absent from both or the same.
+ */
+function sameOptionalFields(left: Partial<ShardFile>, right: ShardFile): boolean {
+    return (['authoredClasses', 'mergeLiterals', 'classSites'] as const).every(
+        field => JSON.stringify(left[field]) === JSON.stringify(right[field]),
+    );
+}
+
+/**
+ * Every source of each class, in path order, at the key each writes it.
+ *
+ * @param records - The kept shards, in path order.
+ * @returns Class to origins.
+ */
+function collectClassOrigins(records: readonly ShardFile[]): Map<string, NextClassOrigin[]> {
+    const origins = new Map<string, NextClassOrigin[]>();
+    for (const { sourcePath, classes, classSites } of records) {
+        const placed = new Map((classSites ?? []).map(site => [site.className, site]));
+        for (const className of classes) {
+            const site = placed.get(className);
+            const origin: NextClassOrigin =
+                site === undefined
+                    ? { sourcePath }
+                    : { sourcePath, line: site.line, column: site.column, key: site.key };
+            const list = origins.get(className);
+            if (list === undefined) origins.set(className, [origin]);
+            else list.push(origin);
+        }
+    }
+    return origins;
+}
+
+/**
+ * Whether a value read from a shard is a list of sites of the shape written.
+ *
+ * @param value - The parsed `classSites` field.
+ * @returns True for an array of well-formed sites.
+ */
+function isClassSiteList(value: unknown): value is NextShardClassSite[] {
+    return (
+        Array.isArray(value) &&
+        value.every(
+            site =>
+                typeof site === 'object' &&
+                site !== null &&
+                typeof site.className === 'string' &&
+                Number.isFinite(site.line) &&
+                Number.isFinite(site.column) &&
+                typeof site.key === 'string',
+        )
+    );
 }
 
 /**
@@ -422,7 +546,7 @@ function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
         createHash('sha256').update(sourcePath).update('\0').update(input.sourceHash).digest('hex');
 
     return {
-        version: 1,
+        version: NEXT_SAFELIST_SHARD_FORMAT,
         cacheKey,
         sourcePath,
         sourceHash: input.sourceHash,
@@ -433,6 +557,7 @@ function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
         ...(input.mergeLiterals === undefined
             ? {}
             : { mergeLiterals: sortStrings(new Set(input.mergeLiterals)) }),
+        ...(input.classSites === undefined ? {} : { classSites: [...input.classSites] }),
         timestamp:
             input.timestamp !== undefined && Number.isFinite(input.timestamp)
                 ? input.timestamp
@@ -442,10 +567,16 @@ function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
 }
 
 /**
+ * Every shard of the format this version reads.
+ *
+ * A file that does not parse, or is not a shard, is removed. A shard of
+ * another format is kept: a session of another version may be the one that
+ * wrote it, and removing it would take that session's classes too.
  *
  * @param shardsDir
+ * @param rootDir - The project root, which a line about a shard names it from.
  */
-function readShardRecords(shardsDir: string): ShardRecord[] {
+function readShardRecords(shardsDir: string, rootDir: string): ShardRecord[] {
     let entries: fs.Dirent[];
     try {
         entries = fs.readdirSync(shardsDir, { withFileTypes: true });
@@ -461,6 +592,11 @@ function readShardRecords(shardsDir: string): ShardRecord[] {
         const filePath = path.join(shardsDir, entry.name);
         try {
             const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<ShardFile>;
+            const format = (parsed as { version?: unknown } | null)?.version;
+            if (typeof format === 'number' && format !== NEXT_SAFELIST_SHARD_READ_FORMAT) {
+                warnUnreadShard(rootDir, filePath, format);
+                continue;
+            }
             const record = normalizeShardRecord(filePath, parsed);
             if (record) {
                 records.push(record);
@@ -481,7 +617,7 @@ function readShardRecords(shardsDir: string): ShardRecord[] {
  */
 function normalizeShardRecord(filePath: string, data: Partial<ShardFile>): ShardRecord | null {
     if (
-        data.version !== 1 ||
+        data.version !== NEXT_SAFELIST_SHARD_READ_FORMAT ||
         typeof data.cacheKey !== 'string' ||
         typeof data.sourcePath !== 'string' ||
         typeof data.sourceHash !== 'string' ||
@@ -505,6 +641,7 @@ function normalizeShardRecord(filePath: string, data: Partial<ShardFile>): Shard
                 ? { authoredClasses: data.authoredClasses }
                 : {}),
             ...(Array.isArray(data.mergeLiterals) ? { mergeLiterals: data.mergeLiterals } : {}),
+            ...(isClassSiteList(data.classSites) ? { classSites: data.classSites } : {}),
             timestamp: data.timestamp,
             pid: data.pid,
         }),

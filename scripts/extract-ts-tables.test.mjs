@@ -42,6 +42,21 @@ test('unwraps a type-locked literal', () => {
     assert.deepEqual(open('t.ts', source).objectKeys('VOCAB'), ['border', 'ring']);
 });
 
+test('reads the keys of an object table that hold one value', () => {
+    const source = [
+        'const CATEGORY = {',
+        '    p: Kind.SPACING,',
+        '    bg: Kind.COLOR, // Kind.SPACING in a comment is not a value',
+        "    'scrollbar-thumb': Kind.COLOR,",
+        '};',
+    ].join('\n');
+
+    assert.deepEqual(open('t.ts', source).objectKeysWhere('CATEGORY', 'Kind.COLOR'), [
+        'bg',
+        'scrollbar-thumb',
+    ]);
+});
+
 test('ignores quoted words outside the table', () => {
     // A regex over the declaration's text range read the prose too, so a
     // sentence naming a key added a member nobody declared.
@@ -73,6 +88,14 @@ test('reads a grouped key map out of a TSX component', () => {
         layout: ['display'],
         typography: ['text', 'textAlign'],
     });
+});
+
+test('reads a constant as its value', () => {
+    const tables = open('t.ts', "export const FORMAT = 1;\nexport const LETTER = 'n' as const;");
+
+    assert.equal(tables.literal('FORMAT'), 1);
+    assert.equal(tables.literal('LETTER'), 'n');
+    assert.throws(() => open('t.ts', 'const X = [1];').literal('X'), /expected a string literal/);
 });
 
 test('names the table it cannot find rather than returning nothing', () => {

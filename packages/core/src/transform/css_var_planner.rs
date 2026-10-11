@@ -662,6 +662,7 @@ mod tests {
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
             dynamic_group_conflicts: Vec::new(),
+            deferred_variant_keys: Vec::new(),
         };
 
         let planned = apply_scoped_css_variable_names(&ir);

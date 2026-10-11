@@ -55,13 +55,13 @@ import {
     stripCustomUtilities,
     withoutRegisteredClasses,
 } from './origin-oracle.js';
+import { type ProjectResolver, projectResolver } from './project-resolver.js';
 import {
-    expandAlias,
-    type ProjectResolver,
-    projectResolver,
-    type StylesheetAlias,
-} from './project-resolver.js';
-import { walkProjectStylesheets } from './project-walk.js';
+    isPathSpecifier,
+    laneStylesheet,
+    type StylesheetImportCandidates,
+    walkProjectStylesheets,
+} from './project-walk.js';
 import type { KeywordOracle } from './sibling-keyword.js';
 import type { CollisionOracle } from './theme-collision.js';
 
@@ -129,10 +129,12 @@ export interface OracleOptions {
     /** Directory the stylesheet lives in, for its relative imports. */
     cssBase: string;
     /**
-     * The bundler's aliases, tsconfig paths included, applied to `@import`
-     * specifiers before anything else resolves them.
+     * The build's own resolver for an `@import` target that is not a path, on
+     * the lane that has one (Vite), asked before Tailwind's own. Without it an
+     * `@import` resolves only as Tailwind's `compile()` resolves it, which is
+     * what every other integration does: an alias there fails the build.
      */
-    aliases?: readonly StylesheetAlias[];
+    importCandidates?: StylesheetImportCandidates;
 }
 
 /**
@@ -246,6 +248,13 @@ export interface OracleSkip {
      * prefix. Absent where no compile ran.
      */
     reachedTailwind?: boolean;
+    /**
+     * For a stylesheet that did not compile because a target that is not a
+     * path (`@/gen/theme.css`, a package) resolved to nothing on this lane:
+     * that target, as written. The build fails on it only if it loads the
+     * stylesheet, which a path the author wrote does not leave open.
+     */
+    unresolvedImport?: string;
 }
 
 /**
@@ -353,25 +362,27 @@ export const defaultTailwindLoader: TailwindLoader = async resolveFrom => {
 };
 
 /**
- * Map one `@import` specifier onto a file on disk.
+ * Map one `@import` specifier onto a file on disk, the way the lane's
+ * Tailwind integration does.
  *
- * Three kinds arrive here and only the first two used to be handled. A design
- * system that ships its tokens as a package subpath — `@import
- * "@acme/ui/sz-theme"` against an exports map — is the ordinary shape for a
- * monorepo, and both Vite and Tailwind resolve it through node. Reading it as a
- * path relative to the stylesheet produces a directory that cannot exist, the
- * compile throws, and the dead-class pass degrades to a skip. Since a skip is
- * reported rather than failed, such a project keeps "passing" a check that has
- * never once run.
+ * Every integration resolves through `@tailwindcss/node` 4.3.3: the CSS
+ * resolver (`.css` added, `style` condition and field, a folder through its
+ * index, a bare target as a package), after the bundler's own resolver when
+ * the integration hands one over. Only `@tailwindcss/vite` does, so a Vite
+ * alias resolves there and fails the build everywhere else. Resolving any
+ * wider here would read a theme the built CSS never has, and the merge model
+ * would group classes the build does not serve; resolving narrower skips a
+ * stylesheet the build compiles. Each shape was measured against a real
+ * `vite build` and a `@tailwindcss/postcss` run.
  *
- * `loadModule` below already resolves `@plugin` specifiers this way; this is
- * the same rule applied to the stylesheet loader.
+ * A project with no integration to borrow from keeps the loaders every host
+ * has: a path, a sibling file, then node.
  *
  * @param id - Import specifier as written.
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
- * @param context - The aliases and the project resolver this compile uses.
+ * @param context - The lane's resolver and the project resolver this compile uses.
  * @returns Absolute path to the stylesheet.
  */
 function resolveStylesheetPath(
@@ -387,29 +398,24 @@ function resolveStylesheetPath(
     if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) {
         return tailwindPackageStylesheet(id, tailwindRoot);
     }
-    const aliased = expandAlias(id, context.aliases);
-    if (aliased !== null) return aliased;
-    if (id.startsWith('.') || path.isAbsolute(id)) return path.resolve(base, id);
-    if (context.resolver !== null) {
-        try {
-            return context.resolver.resolveStylesheet(id, base);
-        } catch {
-            // Fall through to the resolution every host has, which names the
-            // specifier when it fails too.
-        }
+    const isPath = isPathSpecifier(id);
+    if (!isPath && context.candidates !== undefined) {
+        const file = laneStylesheet(id, base, context.candidates);
+        if (file !== null) return file;
     }
+    if (context.resolver !== null) return context.resolver.resolveStylesheet(id, base);
+    if (isPath) return path.resolve(base, id);
     // A bare specifier is ambiguous: CSS reads `@import "theme.css"` as a
     // sibling file, node reads it as a package. Prefer the file when one is
-    // actually there, so stylesheets that relied on the old behaviour keep
-    // resolving, and fall through to node resolution otherwise.
+    // actually there, and fall through to node resolution otherwise.
     const sibling = path.resolve(base, id);
     if (existsSync(sibling)) return sibling;
     return createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
 }
 
-/** What resolution needs beyond the specifier: the aliases and the project's resolver. */
+/** What resolution needs beyond the specifier: the lane's resolver and the project's. */
 interface StylesheetResolution {
-    aliases: readonly StylesheetAlias[];
+    candidates: StylesheetImportCandidates | undefined;
     resolver: ProjectResolver | null;
 }
 
@@ -420,7 +426,7 @@ interface StylesheetResolution {
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
- * @param context - The aliases and the project resolver this compile uses.
+ * @param context - The lane's resolver and the project resolver this compile uses.
  * @returns The stylesheet Tailwind expects back.
  */
 async function loadStylesheet(
@@ -430,7 +436,16 @@ async function loadStylesheet(
     resolveFrom: string,
     context: StylesheetResolution,
 ): Promise<LoadedStylesheet> {
-    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom, context);
+    const { candidates } = context;
+    // A lane whose resolver is asynchronous answers this target now, and the
+    // answer is read as given: a later read could meet a newer one.
+    const laneAnswer =
+        candidates?.load !== undefined && !isPathSpecifier(id)
+            ? await candidates.load(id, base)
+            : undefined;
+    const resolution =
+        laneAnswer === undefined ? context : { ...context, candidates: () => laneAnswer };
+    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom, resolution);
     return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
 }
 
@@ -446,7 +461,7 @@ async function loadStylesheet(
  * @param id - Specifier as written in `@plugin`.
  * @param base - Directory the importing stylesheet lives in.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
- * @param context - The aliases and the project resolver this compile uses.
+ * @param context - The lane's resolver and the project resolver this compile uses.
  * @returns The module Tailwind expects back.
  */
 async function loadModule(
@@ -622,11 +637,14 @@ export async function readStylesheetRole(
         options: LoadDesignSystemOptions,
     ) => Promise<{ features: number } & Partial<CompiledSources>>;
     const context: StylesheetResolution = {
-        aliases: options.aliases ?? [],
+        candidates: options.importCandidates,
         resolver: await projectResolver(options.resolveFrom),
     };
     const imports: string[] = [];
     let reachedTailwind = false;
+    // The error each target that is not a path rejected with: the compile
+    // rejects with the first error of all its imports, as thrown.
+    const unresolved = new Map<unknown, string>();
     try {
         const compiled = await compile(options.css, {
             base: options.cssBase,
@@ -634,14 +652,21 @@ export async function readStylesheetRole(
                 // Noted on the request, not after the read: Tailwind asks for
                 // every import at once, and a failing sibling rejects the
                 // compile while this read is still pending.
-                if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) reachedTailwind = true;
-                const loaded = await loadStylesheet(
-                    id,
-                    base,
-                    tailwind.root,
-                    options.resolveFrom,
-                    context,
-                );
+                const ofTailwind = id === 'tailwindcss' || id.startsWith('tailwindcss/');
+                if (ofTailwind) reachedTailwind = true;
+                let loaded: LoadedStylesheet;
+                try {
+                    loaded = await loadStylesheet(
+                        id,
+                        base,
+                        tailwind.root,
+                        options.resolveFrom,
+                        context,
+                    );
+                } catch (error) {
+                    if (!ofTailwind && !isPathSpecifier(id)) unresolved.set(error, id);
+                    throw error;
+                }
                 imports.push(loaded.path);
                 return loaded;
             },
@@ -665,6 +690,7 @@ export async function readStylesheetRole(
                 `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
             ),
             reachedTailwind,
+            ...(unresolved.has(error) ? { unresolvedImport: unresolved.get(error) } : {}),
         };
     }
 }
@@ -767,7 +793,7 @@ export async function createEmittedClassOracle(
     ) => Promise<DesignSystem>;
 
     const context: StylesheetResolution = {
-        aliases: options.aliases ?? [],
+        candidates: options.importCandidates,
         resolver: await projectResolver(options.resolveFrom),
     };
     // What the first compile read beyond Tailwind's own stylesheets: the

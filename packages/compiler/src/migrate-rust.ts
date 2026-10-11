@@ -58,6 +58,13 @@ export interface MigrateRustOptions {
      * given this one is used as is.
      */
     customMapJson?: string;
+    /**
+     * What the project's Tailwind answered for utilities a migrate table would
+     * otherwise decide, keyed as {@link MigrateRustTableVerdict.class}: `true`
+     * when it serves the class. A class with no answer is left to the table and
+     * reported in `stats.tableVerdicts`.
+     */
+    served?: ReadonlyMap<string, boolean>;
 }
 
 /** Options for migrating an HTML source. */
@@ -72,6 +79,16 @@ export interface MigrateRustHtmlOptions {
     cdnUrl?: string;
     /** The script path for `local`. */
     localPath?: string;
+    /** The project's answers, as for {@link MigrateRustOptions.served}. */
+    served?: ReadonlyMap<string, boolean>;
+}
+
+/** A class a migrate table decided because the project's Tailwind was not asked. */
+export interface MigrateRustTableVerdict {
+    /** The utility, with its sign, without variants or `!`. */
+    class: string;
+    /** Whether the table took the class as served. */
+    served: boolean;
 }
 
 /** The counts of one migrated file. */
@@ -82,6 +99,8 @@ export interface MigrateRustStats {
     classesUnrecognized: string[];
     /** Legacy sz keys rewritten; absent when the file was never parsed. */
     szKeysNormalized?: number;
+    /** Classes a table decided unasked, with its verdict; absent when there were none. */
+    tableVerdicts?: MigrateRustTableVerdict[];
 }
 
 /** What migrate did to one file, in the shape the TypeScript transformer returns. */
@@ -209,6 +228,7 @@ export function migrateRustBatch(
                 customMapJson:
                     options.customMapJson ??
                     (options.customMap ? JSON.stringify(options.customMap) : undefined),
+                ...servedLists(options.served),
             },
         ).map(readResult),
     );
@@ -234,9 +254,29 @@ export function migrateRustHtml(
                 injectRuntime: options.injectRuntime || undefined,
                 cdnUrl: options.cdnUrl,
                 localPath: options.localPath,
+                ...servedLists(options.served),
             }),
         ),
     );
+}
+
+/**
+ * The project's answers as the two lists the binding takes.
+ *
+ * @param served - Answers by class, or none.
+ * @returns The served and unserved classes; empty when there are no answers.
+ */
+function servedLists(served: ReadonlyMap<string, boolean> | undefined): {
+    servedClasses?: string[];
+    unservedClasses?: string[];
+} {
+    if (served === undefined) return {};
+    const servedClasses: string[] = [];
+    const unservedClasses: string[] = [];
+    for (const [className, answer] of served) {
+        (answer ? servedClasses : unservedClasses).push(className);
+    }
+    return { servedClasses, unservedClasses };
 }
 
 /**
@@ -270,7 +310,10 @@ function guarded<T>(call: () => T): T {
  * @returns The same result with `szKeysNormalized` omitted when absent.
  */
 function readResult(result: NativeMigrateResult): MigrateRustResult {
-    const { szKeysNormalized, ...counts } = result.stats;
+    const { szKeysNormalized, tableVerdicts, ...rest } = result.stats;
+    // A file no table decided anything in carries no field, as before it
+    // existed, so a caller comparing whole results is not handed an empty list.
+    const counts = tableVerdicts?.length ? { ...rest, tableVerdicts } : rest;
     return {
         code: result.code,
         changed: result.changed,

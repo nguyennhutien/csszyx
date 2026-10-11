@@ -131,18 +131,18 @@ describe('borders — border width', () => {
         expect(t({ border: '3px' })).toBe('border-[3px]');
     });
 
-    it('{ border: "--w" } → border-(--w) (css variable)', () => {
-        expect(t({ border: '--w' })).toBe('border-(--w)');
+    it('{ border: "--w" } → border-(length:--w) (css variable)', () => {
+        // `border-(--w)` is the border COLOUR: Tailwind infers no type from a
+        // variable and gives it to the prefix's default utility.
+        expect(t({ border: '--w' })).toBe('border-(length:--w)');
     });
 
-    it('{ border: "var(--w)" } → border-[var(--w)] (written out, not shorthand)', () => {
-        // The two spellings of the same variable take different routes on
-        // purpose: a bare `--w` becomes Tailwind's variable shorthand, while
-        // one already written as `var(...)` is passed through as an arbitrary
-        // value. Both emit the same CSS, so nothing here fails loudly if the
-        // second one starts collapsing into the first — which is why the
-        // boundary is pinned rather than left to the shorthand case alone.
-        expect(t({ border: 'var(--w)' })).toBe('border-[var(--w)]');
+    it('{ border: "var(--w)" } → border-[length:var(--w)] (written out, not shorthand)', () => {
+        // The two spellings of the same variable take different routes: a bare
+        // `--w` becomes Tailwind's variable shorthand, one already written as
+        // `var(...)` an arbitrary value. Both need the `length:` hint, since
+        // `border-[var(--w)]` is the colour too.
+        expect(t({ border: 'var(--w)' })).toBe('border-[length:var(--w)]');
     });
 });
 
@@ -297,8 +297,8 @@ describe('borders — outline width', () => {
         expect(t({ outline: '3px' })).toBe('outline-[3px]');
     });
 
-    it('{ outline: "--w" } → outline-(--w) (css variable)', () => {
-        expect(t({ outline: '--w' })).toBe('outline-(--w)');
+    it('{ outline: "--w" } → outline-(length:--w) (css variable)', () => {
+        expect(t({ outline: '--w' })).toBe('outline-(length:--w)');
     });
 });
 

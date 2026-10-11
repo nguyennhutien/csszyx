@@ -714,9 +714,10 @@
             },
             {
                 "class": "border-spacing-red-500",
-                "sz": {
-                    "borderColor": "spacing-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "border-spacing-red-500"
+                ]
             },
             {
                 "class": "border-spacing-[3px]",
@@ -4181,9 +4182,10 @@
             },
             {
                 "class": "scroll-m-red-500",
-                "sz": {
-                    "scroll": "m-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-m-red-500"
+                ]
             },
             {
                 "class": "scroll-m-[3px]",
@@ -4201,9 +4203,10 @@
             },
             {
                 "class": "scroll-mb-red-500",
-                "sz": {
-                    "scroll": "mb-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-mb-red-500"
+                ]
             },
             {
                 "class": "scroll-mb-[3px]",
@@ -4261,9 +4264,10 @@
             },
             {
                 "class": "scroll-me-red-500",
-                "sz": {
-                    "scroll": "me-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-me-red-500"
+                ]
             },
             {
                 "class": "scroll-me-[3px]",
@@ -4281,9 +4285,10 @@
             },
             {
                 "class": "scroll-ml-red-500",
-                "sz": {
-                    "scroll": "ml-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-ml-red-500"
+                ]
             },
             {
                 "class": "scroll-ml-[3px]",
@@ -4301,9 +4306,10 @@
             },
             {
                 "class": "scroll-mr-red-500",
-                "sz": {
-                    "scroll": "mr-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-mr-red-500"
+                ]
             },
             {
                 "class": "scroll-mr-[3px]",
@@ -4321,9 +4327,10 @@
             },
             {
                 "class": "scroll-ms-red-500",
-                "sz": {
-                    "scroll": "ms-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-ms-red-500"
+                ]
             },
             {
                 "class": "scroll-ms-[3px]",
@@ -4341,9 +4348,10 @@
             },
             {
                 "class": "scroll-mt-red-500",
-                "sz": {
-                    "scroll": "mt-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-mt-red-500"
+                ]
             },
             {
                 "class": "scroll-mt-[3px]",
@@ -4361,9 +4369,10 @@
             },
             {
                 "class": "scroll-mx-red-500",
-                "sz": {
-                    "scroll": "mx-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-mx-red-500"
+                ]
             },
             {
                 "class": "scroll-mx-[3px]",
@@ -4381,9 +4390,10 @@
             },
             {
                 "class": "scroll-my-red-500",
-                "sz": {
-                    "scroll": "my-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-my-red-500"
+                ]
             },
             {
                 "class": "scroll-my-[3px]",
@@ -4401,9 +4411,10 @@
             },
             {
                 "class": "scroll-p-red-500",
-                "sz": {
-                    "scroll": "p-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-p-red-500"
+                ]
             },
             {
                 "class": "scroll-p-[3px]",
@@ -4421,9 +4432,10 @@
             },
             {
                 "class": "scroll-pb-red-500",
-                "sz": {
-                    "scroll": "pb-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-pb-red-500"
+                ]
             },
             {
                 "class": "scroll-pb-[3px]",
@@ -4481,9 +4493,10 @@
             },
             {
                 "class": "scroll-pe-red-500",
-                "sz": {
-                    "scroll": "pe-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-pe-red-500"
+                ]
             },
             {
                 "class": "scroll-pe-[3px]",
@@ -4501,9 +4514,10 @@
             },
             {
                 "class": "scroll-pl-red-500",
-                "sz": {
-                    "scroll": "pl-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-pl-red-500"
+                ]
             },
             {
                 "class": "scroll-pl-[3px]",
@@ -4521,9 +4535,10 @@
             },
             {
                 "class": "scroll-pr-red-500",
-                "sz": {
-                    "scroll": "pr-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-pr-red-500"
+                ]
             },
             {
                 "class": "scroll-pr-[3px]",
@@ -4541,9 +4556,10 @@
             },
             {
                 "class": "scroll-ps-red-500",
-                "sz": {
-                    "scroll": "ps-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-ps-red-500"
+                ]
             },
             {
                 "class": "scroll-ps-[3px]",
@@ -4561,9 +4577,10 @@
             },
             {
                 "class": "scroll-pt-red-500",
-                "sz": {
-                    "scroll": "pt-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-pt-red-500"
+                ]
             },
             {
                 "class": "scroll-pt-[3px]",
@@ -4581,9 +4598,10 @@
             },
             {
                 "class": "scroll-px-red-500",
-                "sz": {
-                    "scroll": "px-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-px-red-500"
+                ]
             },
             {
                 "class": "scroll-px-[3px]",
@@ -4601,9 +4619,10 @@
             },
             {
                 "class": "scroll-py-red-500",
-                "sz": {
-                    "scroll": "py-red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scroll-py-red-500"
+                ]
             },
             {
                 "class": "scroll-py-[3px]",

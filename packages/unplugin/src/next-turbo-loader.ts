@@ -250,6 +250,7 @@ export function runNextTurboLoader(
         mode: context.manifestExpectation.mode,
         env: options.env ?? process.env,
         emitWarning: loaderContext.emitWarning?.bind(loaderContext),
+        addDependency: loaderContext.addDependency?.bind(loaderContext),
     });
     const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
     // szcn theme groups. The other lanes import a virtual module the plugin

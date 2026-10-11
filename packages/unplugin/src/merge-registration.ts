@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import path from 'node:path';
 import type { EngineMergeTable } from '@csszyx/compiler';
 import { styleBlockHooks } from '@csszyx/tailwind-oracle';
-import { type DeadClassFinding, findDeadSzClasses } from './dead-class.js';
+import { type DeadClassFinding, type DeadClassSite, findDeadSzClasses } from './dead-class.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     createMergeSignatureTable,
@@ -32,6 +32,7 @@ import {
     tableOverrideRemovesFrom,
     tableRemovesFrom,
 } from './merge-signature.js';
+import type { NextClassOrigin } from './next-safelist-state.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
@@ -107,11 +108,11 @@ export interface MergeRegistrationInput {
     /** Classes lowering emitted across the project. */
     classes: Iterable<string>;
     /**
-     * Each emitted class and the absolute path of the first source that emits
-     * it. Given, the emitted classes the design system serves nothing for are
-     * returned as `dead-class` findings.
+     * Each emitted class and every source, in path order, that emits it, at
+     * its key when the engine placed it there. Given, the emitted classes the
+     * design system serves nothing for are returned as `dead-class` findings.
      */
-    classOrigins?: ReadonlyMap<string, string>;
+    classOrigins?: ReadonlyMap<string, readonly NextClassOrigin[]>;
     /** Class names written in `className` attributes across the project. */
     authoredClasses: Iterable<string>;
     /** String literals written inside `szcn(...)` calls across the project. */
@@ -394,9 +395,15 @@ function settle(input: MergeRegistrationInput): {
             : unservedAuthoredClasses(authored, classes => model.unserved(classes), facts.prefix);
     // The `sz`-emitted classes only, named by project-relative file; the
     // `className` vocabulary above is the app's own and is not a finding.
-    const origins = new Map<string, string>();
-    for (const [className, file] of input.classOrigins ?? []) {
-        origins.set(className, path.relative(input.root, file).split(path.sep).join('/'));
+    const origins = new Map<string, DeadClassSite[]>();
+    for (const [className, sites] of input.classOrigins ?? []) {
+        origins.set(
+            className,
+            sites.map(({ sourcePath, ...site }) => ({
+                file: path.relative(input.root, sourcePath).split(path.sep).join('/'),
+                ...site,
+            })),
+        );
     }
     return { unserved, table, dead: findDeadSzClasses(model, origins) };
 }

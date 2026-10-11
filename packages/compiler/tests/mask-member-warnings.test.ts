@@ -52,11 +52,14 @@ describe('mask slot member warnings', () => {
         expect(String(warn.mock.calls[0]?.[0])).not.toContain(' at ');
     });
 
-    it('suppresses slot and migration warnings in production', () => {
+    it('suppresses the slot warning in production, not the moved layer', () => {
+        // A layer on `mask` emits nothing, which is missing output (ADR 0011),
+        // so it prints in every mode, as the engines report it.
         vi.stubEnv('NODE_ENV', 'production');
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         transform({ maskLinear: { typo: 1 }, mask: 'linear-45' });
-        expect(warn).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('gradient layers moved to');
     });
     it.each(ENGINES)('%s warns for a top-level typo inside maskLinear', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;";
@@ -101,6 +104,40 @@ describe('mask slot member warnings', () => {
             message.includes('unknown field'),
         );
         expect(warnings).toEqual([]);
+    });
+
+    // The documented mask-layer rows (`docs/specs/snippets/effects.md`) and
+    // what migrate writes for `mask-linear-45`. A slot member is geometry, so
+    // the generic key walk must not read `angle` / `at` / `shape` as an sz key
+    // either: `unknown-key` is an error by default, and `csszyx check` failed
+    // on the documented syntax while the class was emitted.
+    const documentedMaskForms: ReadonlyArray<readonly [string, string]> = [
+        ['{ maskLinear: { angle: 45 } }', 'mask-linear-45'],
+        ['{ maskLinear: { angle: -45 } }', '-mask-linear-45'],
+        ["{ maskLinear: { angle: '--a' } }", 'mask-linear-(--a)'],
+        ["{ maskRadial: { at: 'center' } }", 'mask-radial-at-center'],
+        ["{ maskRadial: { shape: 'circle' } }", 'mask-circle'],
+        ["{ maskRadial: { size: 'closest-side' } }", 'mask-radial-closest-side'],
+        ['{ maskConic: { angle: 90 } }', 'mask-conic-90'],
+        ['{ md: { maskLinear: { angle: 45 } } }', 'md:mask-linear-45'],
+    ];
+
+    it.each(
+        ENGINES.flatMap(([lane, engine]) =>
+            documentedMaskForms.map(([sz, expected]) => [lane, sz, expected, engine] as const),
+        ),
+    )('%s emits %s with no diagnostic', (_lane, sz, expected, engine) => {
+        const tsx = `export const A = () => <div sz={${sz}} />;`;
+        const run = captureWarnings(engine, tsx);
+        expect(run.className).toBe(expected);
+        expect(run.warnings).toEqual([]);
+        expect(run.result.issues ?? []).toEqual([]);
+    });
+
+    it.each(ENGINES)('%s reports an unknown slot member once, as a field', (_lane, engine) => {
+        const tsx = 'export const A = () => <div sz={{ maskRadial: { angle: 45 } }} />;';
+        const codes = (captureWarnings(engine, tsx).result.issues ?? []).map(issue => issue.code);
+        expect(codes).toEqual(['unknown-field']);
     });
 });
 

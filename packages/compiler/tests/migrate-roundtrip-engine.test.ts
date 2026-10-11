@@ -16,10 +16,12 @@ import { expectParity } from './engine-parity-harness.js';
  * Migrate one class and lower the result on both artifacts.
  *
  * @param className - One Tailwind utility class.
+ * @param lowered - The class the lowering writes back, when it spells the
+ *   utility another way every Tailwind v4 serves (`inset-s-4` → `start-4`).
  */
-function expectRoundTrip(className: string): void {
+function expectRoundTrip(className: string, lowered = className): void {
     const { szObject } = migrateRustClassName(className);
-    expectParity(JSON.stringify(szObject), className);
+    expectParity(JSON.stringify(szObject), lowered);
 }
 
 /** Every logical size key, by its Tailwind prefix. */
@@ -32,8 +34,20 @@ const LOGICAL_SIZE_PREFIXES = [
     'max-inline',
 ] as const;
 
-/** Every logical inset side that takes a fraction. */
-const LOGICAL_INSET_PREFIXES = ['inset-s', 'inset-e', 'inset-bs', 'inset-be'] as const;
+/**
+ * Every logical inset side that takes a fraction, and the prefix the lowering
+ * writes for it: `inset-s-*` / `inset-e-*` are Tailwind 4.2+'s names for
+ * `start-*` / `end-*`, which every v4 serves, so migrate reads either and the
+ * lowering writes the one every v4 serves.
+ */
+const LOGICAL_INSET_PREFIXES = [
+    ['inset-s', 'start'],
+    ['inset-e', 'end'],
+    ['start', 'start'],
+    ['end', 'end'],
+    ['inset-bs', 'inset-bs'],
+    ['inset-be', 'inset-be'],
+] as const;
 
 /** Every align-content keyword Tailwind 4.3 serves on `content-*`. */
 const ALIGN_CONTENT_KEYWORDS = [
@@ -79,9 +93,9 @@ describe('migrate → lower reproduces the original class', () => {
         });
     });
 
-    describe.each(LOGICAL_INSET_PREFIXES)('%s', prefix => {
+    describe.each(LOGICAL_INSET_PREFIXES)('%s', (prefix, written) => {
         it.each(['1/2', '1/4', '4'])(`${prefix}-%s`, value => {
-            expectRoundTrip(`${prefix}-${value}`);
+            expectRoundTrip(`${prefix}-${value}`, `${written}-${value}`);
         });
     });
 

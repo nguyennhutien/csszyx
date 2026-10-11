@@ -47,16 +47,19 @@ function kebab(key) {
 /**
  * The class the engine would emit for a runtime value on this key.
  *
- * Mirrors `dynamic_css_var_from_property`, including its fallback of using the
- * raw key when no prefix is mapped — a shape that is itself part of what makes
- * some of these keys hostile.
+ * Mirrors `dynamic_css_var_from_property` and `dynamic_css_var_class`,
+ * including the fallback of using the raw key when no prefix is mapped — a
+ * shape that is itself part of what makes some of these keys hostile — and the
+ * type hint `CSS_VAR_TYPE_HINTS` gives the variable (`bg-(position:--v)`).
  *
  * @param key - The sz key.
  * @param prefixes - Key to Tailwind prefix map.
- * @returns The `<prefix>-(--_sz-<kebab>)` class.
+ * @param hints - Key to the type its variable is written with.
+ * @returns The `<prefix>-([hint:]--_sz-<kebab>)` class.
  */
-export function varClassFor(key, prefixes) {
-    return `${prefixes[key] ?? key}-(--_sz-${kebab(key)})`;
+export function varClassFor(key, prefixes, hints = {}) {
+    const hint = hints[key] ? `${hints[key]}:` : '';
+    return `${prefixes[key] ?? key}-(${hint}--_sz-${kebab(key)})`;
 }
 
 /**
@@ -105,6 +108,7 @@ async function main() {
     // what the engine runs.
     const core = readTableSource(`${ROOT}packages/compiler/src/transform-core.ts`);
     const prefixes = Object.fromEntries(core.stringObject('PROPERTY_MAP'));
+    const hints = Object.fromEntries(core.stringObject('CSS_VAR_TYPE_HINTS'));
     // A boolean-only key never reaches the css-var lane — its runtime value
     // goes through `__szBoolClass` — so it is hostile in the same sense and
     // already handled. Listing it again would drop a class that works.
@@ -124,11 +128,19 @@ async function main() {
         key => staticClasses[key].length > 0 && !alreadyRouted.has(key),
     );
     const properties = await propertiesByClass([
+        ...keys.map(key => varClassFor(key, prefixes, hints)),
         ...keys.map(key => varClassFor(key, prefixes)),
         ...keys.flatMap(key => staticClasses[key]),
     ]);
 
+    // Two answers per key. `derived`: the class the engine writes, type hint
+    // included, sets another property or none — the list must hold the key.
+    // `untyped`: the bare `-(--var)` form does — the list may hold it. A key
+    // a hint rescues (`bgPos`) need not be listed; one whose values are mostly
+    // theme keywords (`text: 'lg'`) stays listed by choice, since a variable
+    // holding `lg` is no font size.
     const derived = new Set();
+    const untyped = new Set();
     for (const key of keys) {
         const intended = new Set(
             staticClasses[key].flatMap(one => [...(properties.get(one) ?? [])]),
@@ -136,10 +148,10 @@ async function main() {
         // A key whose own documented class Tailwind does not know is out of
         // scope: this gate compares two forms, and cannot with only one.
         if (intended.size === 0) continue;
-        const fromVar = properties.get(varClassFor(key, prefixes));
-        if (fromVar === undefined || ![...fromVar].some(property => intended.has(property))) {
-            derived.add(key);
-        }
+        const setsAnother = fromVar =>
+            fromVar === undefined || ![...fromVar].some(property => intended.has(property));
+        if (setsAnother(properties.get(varClassFor(key, prefixes, hints)))) derived.add(key);
+        if (setsAnother(properties.get(varClassFor(key, prefixes)))) untyped.add(key);
     }
 
     const documented = new Set(
@@ -150,7 +162,7 @@ async function main() {
         ).flat(),
     );
     const missing = [...derived].filter(key => !declared.has(key)).sort();
-    const stale = [...declared].filter(key => !derived.has(key)).sort();
+    const stale = [...declared].filter(key => !untyped.has(key)).sort();
     const undocumented = [...declared].filter(key => !documented.has(key)).sort();
     const overdocumented = [...documented].filter(key => !declared.has(key)).sort();
     if (

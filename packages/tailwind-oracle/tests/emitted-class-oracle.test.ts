@@ -11,10 +11,12 @@ import {
     designSystemEntry,
     findTailwindCssEntries,
     findTailwindCssEntry,
+    readStylesheetRole,
     type TailwindLoader,
     type TailwindModule,
     tailwindEntriesAmong,
 } from '../src/emitted-class-oracle.js';
+import type { StylesheetImportCandidates } from '../src/project-walk.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 
@@ -274,11 +276,10 @@ describe('createEmittedClassOracle — imports that name a package', () => {
         expect(oracle.findDead(['bg-fixture-brand', 'zz-probe'])).toEqual(['zz-probe']);
     });
 
-    it('prefers a sibling file over node resolution for a bare specifier', async () => {
-        // CSS reads `@import "tokens.css"` as the file next door; node reads the
-        // same string as a package. Stylesheets written before this distinction
-        // mattered rely on the file winning, so the sibling is preferred when
-        // one is actually there.
+    it('takes a sibling file for a bare specifier on a lane whose resolver reads one first', async () => {
+        // Vite's resolver reads `@import "tokens.css"` as the file next door
+        // (`preferRelative`); Tailwind's own reads it as a package. The lane's
+        // resolver is asked first, so the file wins where that lane builds.
         const root = fs.mkdtempSync(path.join(REPO, '.tmp-oracle-sibling-'));
         created.push(root);
         fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'proj' }));
@@ -295,6 +296,7 @@ describe('createEmittedClassOracle — imports that name a package', () => {
             resolveFrom: root,
             css: await readFile(path.join(root, 'app.css'), 'utf8'),
             cssBase: root,
+            importCandidates: (specifier, fromDir) => [path.resolve(fromDir, specifier)],
         });
 
         if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
@@ -921,20 +923,182 @@ describe('createEmittedClassOracle — resolving the way Tailwind does', () => {
         expect(oracle.findDead(['bg-style-only', 'zz-probe'])).toEqual(['zz-probe']);
     });
 
-    it('resolves an import through an alias the bundler declares', async () => {
-        const root = project({
-            'src/ui/theme.css': '@theme { --color-aliased: #203040; }',
-            'app.css': '@import "tailwindcss";\n@import "@ui/theme.css";',
-        });
-        const oracle = await createEmittedClassOracle({
+    /**
+     * The oracle over a project's `app.css`, ready or skipped.
+     *
+     * @param root - The project.
+     * @param importCandidates - The lane's own resolver, when it has one.
+     * @returns The oracle.
+     */
+    async function oracleOf(root: string, importCandidates?: StylesheetImportCandidates) {
+        return createEmittedClassOracle({
             resolveFrom: root,
             css: await readFile(path.join(root, 'app.css'), 'utf8'),
             cssBase: root,
-            aliases: [{ find: '@ui/', replacement: `${root}/src/ui/`, exact: false }],
+            importCandidates,
         });
+    }
+
+    /**
+     * An `@` alias for `src`, the way the Vite lane hands one over.
+     *
+     * @param root - The project.
+     * @returns The lane's resolver.
+     */
+    const atAlias = (root: string) => (specifier: string, fromDir: string) =>
+        specifier.startsWith('@/')
+            ? [path.join(root, 'src', specifier.slice(2))]
+            : [path.resolve(fromDir, specifier)];
+
+    // Measured with `@tailwindcss/vite` 4.3.3 on Vite 8.3.1: Vite's answer is
+    // taken when it ends in `.css`, with `.css` added to an extensionless path.
+    it('follows the lane’s own resolver to an extensionless target, `.css` added', async () => {
+        const root = project({
+            'src/gen/tokens.css': '@theme { --color-aliased: #203040; }',
+            'app.css': '@import "tailwindcss";\n@import "@/gen/tokens";',
+        });
+        const oracle = await oracleOf(root, atAlias(root));
 
         if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
         expect(oracle.findDead(['bg-aliased', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('reads the lane’s answer whatever its extension', async () => {
+        // Which answers count is the lane's: `@tailwindcss/vite` keeps a
+        // `.css` one only and the Vite lane drops the rest before it answers,
+        // while Vite's inlining in front of `@tailwindcss/postcss` reads any.
+        const root = project({
+            'src/gen/tokens.tw': '@theme { --color-aliased: #203040; }',
+            'app.css': '@import "tailwindcss";\n@import "@/gen/tokens.tw";',
+        });
+        const oracle = await oracleOf(root, atAlias(root));
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-aliased', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('awaits a lane whose resolver answers asynchronously, and reads its answer', async () => {
+        const root = project({
+            'src/gen/tokens.css': '@theme { --color-aliased: #203040; }',
+            'app.css': '@import "tailwindcss";\n@import "@/gen/tokens";',
+        });
+        const loaded: string[] = [];
+        // The synchronous answer is none: only the awaited one names the file.
+        const lane = Object.assign(() => [], {
+            load: async (specifier: string, fromDir: string) => {
+                loaded.push(specifier);
+                return atAlias(root)(specifier, fromDir);
+            },
+        });
+        const oracle = await oracleOf(root, lane);
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-aliased', 'zz-probe'])).toEqual(['zz-probe']);
+        // Asked for each target that is not a path, `tailwindcss` included;
+        // never for a path.
+        expect(loaded).toContain('@/gen/tokens');
+        expect(loaded.every(specifier => !specifier.startsWith('.'))).toBe(true);
+    });
+
+    it('fails, as the Vite build does, when the lane names no file', async () => {
+        const root = project({
+            'app.css': '@import "tailwindcss";\n@import "@/gen/missing";',
+        });
+        const oracle = await oracleOf(root, atAlias(root));
+
+        expect(oracle).toMatchObject({ ok: false, kind: 'stylesheet' });
+    });
+
+    it('falls back to Tailwind’s own resolver for a package the lane has no path for', async () => {
+        const root = project({
+            'node_modules/@fixture/lane-pkg/package.json': JSON.stringify({
+                name: '@fixture/lane-pkg',
+                exports: { './theme': { style: './theme.css' } },
+            }),
+            'node_modules/@fixture/lane-pkg/theme.css': '@theme { --color-lane-pkg: #102030; }',
+            'app.css': '@import "tailwindcss";\n@import "@fixture/lane-pkg/theme";',
+        });
+        const oracle = await oracleOf(root, atAlias(root));
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-lane-pkg', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    // Measured with `@tailwindcss/postcss` 4.3.3, the integration Next.js,
+    // webpack and Turbopack run: no alias, no tsconfig `paths`, and a bare
+    // target is a package, so each of these fails the build.
+    it.each([
+        ['an alias tsconfig declares', '@/gen/theme.css'],
+        ['a bare target that names a sibling file', 'gen/theme.css'],
+    ])('fails without a lane resolver on %s, as Tailwind’s compile does', async (_name, target) => {
+        const root = project({
+            'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@/*': ['./*'] } } }),
+            'gen/theme.css': '@theme { --color-aliased: #203040; }',
+            'app.css': `@import "tailwindcss";\n@import "${target}";`,
+        });
+        const oracle = await oracleOf(root);
+
+        expect(oracle).toMatchObject({ ok: false, kind: 'stylesheet' });
+    });
+
+    /**
+     * What the role compile of a project's `app.css` says.
+     *
+     * @param root - The project.
+     * @param importCandidates - The lane's own resolver, when it has one.
+     * @returns The role, or the skip.
+     */
+    async function roleOf(
+        root: string,
+        importCandidates?: (specifier: string, fromDir: string) => readonly string[],
+    ) {
+        return readStylesheetRole({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+            importCandidates,
+        });
+    }
+
+    it.each([
+        ['an alias the lane does not follow', '@/gen/theme.css', undefined],
+        ['an alias the lane names no file for', '@/gen/missing.css', 'lane'],
+        ['a package that is not installed', '@fixture/not-installed', undefined],
+    ] as const)('names %s as the import it could not resolve', async (_name, target, lane) => {
+        const root = project({
+            'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@/*': ['./*'] } } }),
+            'gen/theme.css': '@theme { --color-aliased: #203040; }',
+            'theme.css': `@import "${target}";`,
+            'app.css': '@import "tailwindcss";\n@import "./theme.css";',
+        });
+        const role = await roleOf(root, lane === undefined ? undefined : atAlias(root));
+
+        expect(role).toMatchObject({ ok: false, kind: 'stylesheet', unresolvedImport: target });
+    });
+
+    it('names no unresolved import when a path does not resolve', async () => {
+        // A path is the author's own and resolves the same on every lane: the
+        // build stops on it, so the model has to as well.
+        const root = project({ 'app.css': '@import "tailwindcss";\n@import "./gone.css";' });
+        const role = await roleOf(root);
+
+        expect(role).toMatchObject({ ok: false, kind: 'stylesheet' });
+        expect(role).not.toHaveProperty('unresolvedImport');
+    });
+
+    it.each([
+        ['an extensionless relative path', './gen/theme'],
+        ['a folder, through its index.css', './gen'],
+    ])('resolves %s the way Tailwind’s compile does', async (_name, target) => {
+        const root = project({
+            'gen/theme.css': '@theme { --color-relative: #203040; }',
+            'gen/index.css': '@theme { --color-relative: #203040; }',
+            'app.css': `@import "tailwindcss";\n@import "${target}";`,
+        });
+        const oracle = await oracleOf(root);
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-relative', 'zz-probe'])).toEqual(['zz-probe']);
     });
 
     it('loads a TypeScript plugin whose own imports leave out the extension, in plain Node', async () => {

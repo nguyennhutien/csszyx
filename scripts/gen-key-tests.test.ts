@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { classTokens, parseSzProp, szObjectLiterals } from './gen-key-tests.mjs';
+import { classTokens, hasVariantColon, parseSzProp, szObjectLiterals } from './gen-key-tests.mjs';
 
 describe('key-test generator parsing', () => {
     it('splits only top-level commas in class cells', () => {
@@ -29,5 +29,19 @@ describe('key-test generator parsing', () => {
             '{ hover: { p: 2 } }',
             '{ m: 4 }',
         ]);
+    });
+
+    it('reads a colon inside brackets or parens as part of the value', () => {
+        for (const cls of [
+            'bg-[length:8px]',
+            'bg-(position:--x)',
+            'shadow-(color:--v)',
+            '[--brand:navy]',
+        ]) {
+            assert.equal(hasVariantColon(cls), false, cls);
+        }
+        for (const cls of ['hover:p-2', 'md:bg-[length:8px]', '[&>li]:p-1', 'group-hover/x:p-1']) {
+            assert.equal(hasVariantColon(cls), true, cls);
+        }
     });
 });

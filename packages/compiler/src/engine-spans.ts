@@ -261,6 +261,8 @@ interface RawMergeOverride {
 export interface RawEngineSpans {
     issues: ReadonlyArray<RawIssue>;
     mergeGroups: ReadonlyArray<RawMergeGroup>;
+    /** Absent from a native binding that predates it. */
+    singleClassGroups?: ReadonlyArray<RawMergeGroup>;
     mergeOverrides: ReadonlyArray<RawMergeOverride>;
 }
 
@@ -268,6 +270,7 @@ export interface RawEngineSpans {
 export interface LocatedEngineSpans {
     issues: SzDiagnosticIssue[];
     mergeGroups: SzMergeGroup[];
+    singleClassGroups: SzMergeGroup[];
     mergeOverrides: SzMergeOverride[];
 }
 
@@ -283,6 +286,7 @@ export function locateEngineSpans(source: string, raw: RawEngineSpans): LocatedE
     return {
         issues: raw.issues.map(issue => locateIssue(issue, locate)),
         mergeGroups: raw.mergeGroups.map(group => locateGroup(group, locate)),
+        singleClassGroups: (raw.singleClassGroups ?? []).map(group => locateGroup(group, locate)),
         mergeOverrides: raw.mergeOverrides.map(pair => locateOverride(pair, locate)),
     };
 }
@@ -328,7 +332,22 @@ export type PartialLocatedEngineSpans = Partial<LocatedEngineSpans>;
 export interface StoredEngineSpans {
     issues?: Array<RawIssue | SzDiagnosticIssue>;
     mergeGroups?: Array<RawMergeGroup | SzMergeGroup>;
+    singleClassGroups?: Array<RawMergeGroup | SzMergeGroup>;
     mergeOverrides?: Array<RawMergeOverride | SzMergeOverride>;
+}
+
+/**
+ * A group in the form a store keeps.
+ *
+ * @param group - A group as a result carries it.
+ * @returns Its offsets in place of the positions this module made, or the
+ *          group unchanged when one of them was built elsewhere.
+ */
+function storeGroup(group: SzMergeGroup): RawMergeGroup | SzMergeGroup {
+    const keyStarts = group.positions.map(position => LocatedSpan.startOf(position));
+    return keyStarts.every(start => start !== undefined)
+        ? { keys: group.keys, keyStarts: keyStarts as number[], classes: group.classes }
+        : group;
 }
 
 /**
@@ -345,13 +364,9 @@ export function storeEngineSpans(spans: PartialLocatedEngineSpans): StoredEngine
             return start === undefined ? issue : { code: issue.code, start };
         });
     }
-    if (spans.mergeGroups) {
-        stored.mergeGroups = spans.mergeGroups.map(group => {
-            const keyStarts = group.positions.map(position => LocatedSpan.startOf(position));
-            return keyStarts.every(start => start !== undefined)
-                ? { keys: group.keys, keyStarts, classes: group.classes }
-                : group;
-        });
+    if (spans.mergeGroups) stored.mergeGroups = spans.mergeGroups.map(storeGroup);
+    if (spans.singleClassGroups) {
+        stored.singleClassGroups = spans.singleClassGroups.map(storeGroup);
     }
     if (spans.mergeOverrides) {
         stored.mergeOverrides = spans.mergeOverrides.map(pair => {
@@ -380,10 +395,11 @@ export function restoreEngineSpans(
             'start' in issue ? locateIssue(issue, locate) : issue,
         );
     }
-    if (stored.mergeGroups) {
-        restored.mergeGroups = stored.mergeGroups.map(group =>
-            'keyStarts' in group ? locateGroup(group, locate) : group,
-        );
+    const restoreGroup = (group: RawMergeGroup | SzMergeGroup): SzMergeGroup =>
+        'keyStarts' in group ? locateGroup(group, locate) : group;
+    if (stored.mergeGroups) restored.mergeGroups = stored.mergeGroups.map(restoreGroup);
+    if (stored.singleClassGroups) {
+        restored.singleClassGroups = stored.singleClassGroups.map(restoreGroup);
     }
     if (stored.mergeOverrides) {
         restored.mergeOverrides = stored.mergeOverrides.map(pair =>

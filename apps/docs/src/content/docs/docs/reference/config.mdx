@@ -132,7 +132,7 @@ export default defineConfig({
 
 | Field | Meaning |
 | --- | --- |
-| `preset` | The starting levels. `recommended` (the default) makes every finding an `error` except notes about a choice the author made or output that is still complete — `class-precedence`, `duplicate-sz`, `merge-covered-key`, `merge-covered-class`, `fallback-nudge` and `mangle-vars-hoist-skipped` are `info`, and `merge-classifier-unavailable` is `warn`. `atomic` raises the notes to `warn`, for an app reviewing every site where csszyx changed what was written. |
+| `preset` | The starting levels. `recommended` (the default) makes every finding an `error`, a value csszyx drops such as `slash-opacity-string` or a gradient layer on `mask` (`moved-value`) included, except notes about a choice the author made or output that is still complete — `class-precedence`, `duplicate-sz`, `merge-covered-key`, `merge-covered-class`, `fallback-nudge` and `mangle-vars-hoist-skipped` are `info`, and `merge-classifier-unavailable` is `warn`. `atomic` raises the notes to `warn`, for an app reviewing every site where csszyx changed what was written. |
 | `rules` | A level per id: `off`, `info`, `warn` or `error`. An id is a pass of `csszyx check` (`sz-diagnostic`, `dead-class`, `broken-opacity`, `sibling-keyword`, `theme-collision`, `merge-covered-key`, `merge-covered-class`) or a kind (`unknown-key`, `class-precedence`, `prefix-disagreement` and the rest of the [kinds `check --json` reports](/docs/reference/warnings/#running-it-as-a-git-hook)). A pass id sets every kind under it; a kind id beats its pass. |
 | `allow` | Names to leave out of every report: `classes` that produce no CSS on purpose (as `check --allow`), theme `tokens` that shadow a utility on purpose (as `check --allow-token`). A filter on the report only — the class is still emitted. |
 | `overrides` | Levels for some files, applied after `rules` and in order. `files` takes globs relative to the project root: `./src/**` reads as `src/**`, `.` as the whole project, a backslash as `/`, and a plain path such as `src/legacy` covers that path and everything under it. An absolute glob (`/src`, `C:/app`) or one with a `..` segment can match no file, so it is reported like an unknown id. |
@@ -175,10 +175,43 @@ from `csszyx`, or delete it. Passing `diagnostics` to the plugin itself is refus
 same way as any unknown option: it would apply to one bundler and drift from the
 gate.
 
-The file is read once, when the dev server, the watch or the build starts. After
-editing it, restart `vite`, `next dev` or `csszyx next watch`; under Turbopack
-the levels reach the loader through `.csszyx/diagnostic-policy.json`, which
-`csszyx next prebuild` and `csszyx next watch` write.
+A build reads the file when it starts. A Vite dev server reads it again each
+time it, or a module it imports by a relative path, is saved, created or
+deleted: it prints the file's problems again, compiles every module and reloads
+the page, so every finding is listed at its new level. A watch build — webpack,
+`rollup -w`, `vite build --watch`, an esbuild context — reads it on the rebuild
+the save starts, and compiles again every module that printed a finding, so
+each one is printed at its new level. Under `vite build --watch` a config
+created during the session is read at the next rebuild something else starts:
+Vite 8's Rolldown watcher does not follow a file that does not exist yet. Under
+Turbopack the levels reach the loader through `.csszyx/diagnostic-policy.json`,
+which `csszyx next prebuild` writes, and `csszyx next watch` writes again on
+every save of the config or a module it imports; a module that printed a
+finding runs through the loader again when that file, the config or such a
+module changes.
+
+A session reads an edited module the config imports as it is now, not as it
+first loaded it. Node keeps an imported module for the life of the process, so
+a reload after such an edit loads the config in a short-lived Node process
+(about 40–60 ms); a reload after an edit to the config alone stays in process.
+That process starts with the flags this one was started with that decide how
+modules load — `--import`, `--loader`, `--require`, `--conditions` and the
+`--experimental-*` switches — so a config that loads through a loader such as
+`tsx` registered that way loads there too; a debugger, test-runner, watch or
+`--eval` flag stays behind. The classes the merge removed are listed again
+when the edit gives `merge-covered-key` or `merge-covered-class` another level.
+
+Deleting a module the config imports is an edit too: the reload loads the
+config again and prints why it could not, and the recommended levels apply
+until the module is back. A relative import of a file that does not exist yet
+is followed as well — creating the file is read like a save — under the name
+written, or, for a specifier written without an extension, under each name the
+lookup would try (`./levels`, `./levels.ts`, … `./levels/index.mjs`). An
+editor that saves by replacing the file is read once per save. Only an import
+written as a string is followed: a computed one, such as
+`` import(`./levels/${name}.mjs`) `` or `import('./' + name)`, cannot be read
+without running the config, so an edit to the module it loads is read only
+when the session restarts. Write such an import with a string specifier.
 
 Node loads the file itself — Node 22.18 or 24.11 and later strip TypeScript
 types natively, so nothing else is installed. Outside a `"type": "module"`

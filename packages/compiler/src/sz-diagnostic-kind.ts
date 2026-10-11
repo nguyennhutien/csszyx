@@ -42,7 +42,9 @@ export type SzDiagnosticKindId = SzDiagnosticCode | 'other';
  * engine message, so the order only decides where a lookup stops.
  *
  * Only the kinds the runtime channel shares wording with are matched; a
- * diagnostic only the engine renders always arrives with its code. A runtime
+ * diagnostic only the engine or the build-time oracle renders always arrives
+ * with its code (`unsigned-value` is the oracle's, the runtime never judges a
+ * class — ADR 0022). A runtime
  * fallback and a mangleVars note are left to their codes, and still count as
  * advisory below.
  */
@@ -58,6 +60,7 @@ const KINDS: ReadonlyArray<
     ],
     ['numeric-key', false, { startsWith: 'sz received a numeric key "' }],
     ['closed-enum-value', false, { startsWith: '"', includes: ' value. The class "' }],
+    ['slash-opacity-string', false, { includes: ' — string slash opacity is not supported' }],
     ['off-scale-value', false, { includes: " is not on Tailwind's spacing scale" }],
     ['numeric-font-weight', false, { includes: 'Tailwind spells a numeric font weight' }],
     ['per-side-border-style', false, { includes: 'Tailwind has no per-side border style' }],
@@ -68,6 +71,11 @@ const KINDS: ReadonlyArray<
     ],
     ['non-variant-object', false, { includes: 'is not a variant, but it holds an object' }],
     ['unknown-field', false, { includes: ': unknown field "' }],
+    [
+        'moved-value',
+        false,
+        { pattern: /^(?:"[^"]+" moved to \{ |mask: '[^']*'.* — gradient layers moved to ")/ },
+    ],
     ['runtime-value', false, { includes: ' cannot take a runtime value at ' }],
     ['unresolvable-spread', false, { startsWith: 'unresolvable sz spread at ' }],
     ['style-override', false, { startsWith: 'possible style override at ' }],

@@ -23,14 +23,14 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
-    lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
-    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
-    DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
-    SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, SpreadSplitClassIr,
-    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
-    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsDiagnosticIr, SzsSlotEntryIr, TextSpan,
-    TransformFile, TransformTimings, UnsupportedRecoveryIr,
+    lower::{dynamic_css_var_class, is_removed_sz_key, is_variant_key, lower_static_sz_object},
+    ClassAttributeIr, DeferredVariantKeyIr, DroppedKeyReason, DroppedSzKeyIr,
+    DuplicateSzAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr,
+    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr,
+    SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
+    SpreadSplitClassIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue,
+    StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsDiagnosticIr,
+    SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -772,6 +772,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         // Set only by the runtime-fallback branch below; every statically
         // handled shape leaves it `None` so the engine emits nothing for it.
         let mut runtime_fallback_diagnostic = None;
+        let mut array_deferrals = ArrayElementDeferrals::default();
         let (
             object,
             value_span,
@@ -844,32 +845,84 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Vec::new(),
                         Vec::new(),
                     )
-                } else if let Some((
-                    object,
-                    value_span,
-                    dynamic_css_vars,
-                    ternaries,
-                    dropped_dynamic_keys,
-                    group_conflicts,
-                )) = partial_object_from_jsx_expression(&container.expression, ctx)
+                } else if let Some((mut partial, value_span)) =
+                    partial_object_from_jsx_expression(&container.expression, ctx)
                 {
-                    self.ir.dynamic_group_conflicts.extend(group_conflicts);
-                    (
-                        object,
-                        value_span,
-                        None,
-                        false,
-                        ternaries,
-                        Vec::new(),
-                        false,
-                        false,
-                        Vec::new(),
-                        dynamic_css_vars,
-                        dropped_dynamic_keys,
-                    )
+                    self.ir
+                        .dynamic_group_conflicts
+                        .append(&mut partial.group_conflicts);
+                    if partial.deferred_variants.is_empty() {
+                        (
+                            partial.object,
+                            value_span,
+                            None,
+                            false,
+                            partial.ternaries,
+                            Vec::new(),
+                            false,
+                            false,
+                            Vec::new(),
+                            partial.dynamic_css_vars,
+                            partial.dropped_dynamic_keys,
+                        )
+                    } else {
+                        self.ir
+                            .deferred_variant_keys
+                            .extend(deferred_variant_key_irs(&partial.deferred_variants));
+                        if partial.ternaries.is_empty() && partial.dynamic_css_vars.is_empty() {
+                            // `{ m: 1, hover: x }` composes as `[{ m: 1 }, { hover: x }]`
+                            // would: the rest compiles, the variant goes to `_szPart`.
+                            (
+                                StaticSzObject::empty(),
+                                value_span,
+                                None,
+                                false,
+                                Vec::new(),
+                                deferred_variant_array_parts(
+                                    partial.object,
+                                    partial.deferred_variants,
+                                    &mut self.ir.omitted_sz_objects,
+                                ),
+                                false,
+                                false,
+                                Vec::new(),
+                                Vec::new(),
+                                partial.dropped_dynamic_keys,
+                            )
+                        } else {
+                            // A css variable or a conditional class beside it
+                            // has no place in an szcn composition: the object
+                            // stays one runtime value, as an unresolvable
+                            // spread leaves it, and the deferred key alone
+                            // reports it. The runtime lowers every key of it.
+                            (
+                                StaticSzObject::empty(),
+                                runtime_fallback_span_from_jsx_expression(&container.expression)?,
+                                None,
+                                false,
+                                Vec::new(),
+                                Vec::new(),
+                                true,
+                                false,
+                                candidate_classes_from_jsx_expression(&container.expression, ctx),
+                                Vec::new(),
+                                Vec::new(),
+                            )
+                        }
+                    }
                 } else if let Some((mut array_parts, value_span)) =
-                    static_array_parts_from_jsx_expression(&container.expression, ctx)
+                    static_array_parts_from_jsx_expression(
+                        &container.expression,
+                        ctx,
+                        &mut array_deferrals,
+                    )
                 {
+                    self.ir
+                        .deferred_variant_keys
+                        .append(&mut array_deferrals.keys);
+                    self.ir
+                        .omitted_sz_objects
+                        .append(&mut array_deferrals.omitted);
                     // Empty guarded branches previously emitted nothing. Keep that
                     // decision while retaining their source for key diagnostics.
                     array_parts.retain_mut(|part| {
@@ -900,8 +953,21 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
-                    runtime_fallback_diagnostic =
-                        classify_runtime_fallback(&container.expression, self.imported_names);
+                    let deferred_before = self.ir.deferred_variant_keys.len();
+                    if let Some(expression) = container.expression.as_expression() {
+                        collect_branch_deferred_variant_keys(
+                            expression,
+                            ctx,
+                            &mut self.ir.deferred_variant_keys,
+                        );
+                    }
+                    // A branch key nothing collects is the stronger report, and
+                    // it stands for the conditional: the nudge would say the
+                    // classes were collected best-effort, never true of that key.
+                    if self.ir.deferred_variant_keys.len() == deferred_before {
+                        runtime_fallback_diagnostic =
+                            classify_runtime_fallback(&container.expression, self.imported_names);
+                    }
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -2525,6 +2591,7 @@ fn array_parts_of_sz_attributes(
                     classes: Vec::new(),
                     ternary: Some(ternary),
                     dynamic_span: None,
+                    dynamic_key_path: Vec::new(),
                     dynamic_provable: false,
                     candidates: Vec::new(),
                     dynamic_object_literal: false,
@@ -2542,6 +2609,7 @@ fn array_parts_of_sz_attributes(
                 classes: Vec::new(),
                 ternary: None,
                 dynamic_span: Some(attribute.value_span),
+                dynamic_key_path: Vec::new(),
                 dynamic_provable: false,
                 candidates: attribute.candidate_classes.clone(),
                 dynamic_object_literal: false,
@@ -2555,26 +2623,36 @@ fn array_parts_of_sz_attributes(
     array_parts
 }
 
+/// What classifying an sz array's elements leaves for its attribute: the
+/// variant keys an element deferred to the runtime, and the static rests of
+/// split elements that lowered to no class, kept for the key diagnostics.
+#[derive(Default)]
+struct ArrayElementDeferrals {
+    keys: Vec<DeferredVariantKeyIr>,
+    omitted: Vec<StaticSzObject>,
+}
+
 fn static_array_parts_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
+    deferrals: &mut ArrayElementDeferrals,
 ) -> Option<(Vec<StaticArrayPartIr>, TextSpan)> {
     match expression {
         JSXExpression::ArrayExpression(array) => {
-            static_array_parts_from_array_expression(array, ctx)
+            static_array_parts_from_array_expression(array, ctx, deferrals)
                 .map(|parts| (parts, text_span(array.span)))
         }
         JSXExpression::ParenthesizedExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         JSXExpression::TSAsExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         JSXExpression::TSSatisfiesExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         JSXExpression::TSNonNullExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         _ => None,
     }
@@ -2583,21 +2661,24 @@ fn static_array_parts_from_jsx_expression(
 fn static_array_parts_from_expression(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
+    deferrals: &mut ArrayElementDeferrals,
 ) -> Option<(Vec<StaticArrayPartIr>, TextSpan)> {
     match expression {
-        Expression::ArrayExpression(array) => static_array_parts_from_array_expression(array, ctx)
-            .map(|parts| (parts, text_span(array.span))),
+        Expression::ArrayExpression(array) => {
+            static_array_parts_from_array_expression(array, ctx, deferrals)
+                .map(|parts| (parts, text_span(array.span)))
+        }
         Expression::ParenthesizedExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         Expression::TSAsExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         Expression::TSSatisfiesExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         Expression::TSNonNullExpression(value) => {
-            static_array_parts_from_expression(&value.expression, ctx)
+            static_array_parts_from_expression(&value.expression, ctx, deferrals)
         }
         _ => None,
     }
@@ -2615,6 +2696,7 @@ fn static_array_parts_from_expression(
 fn static_array_parts_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
+    deferrals: &mut ArrayElementDeferrals,
 ) -> Option<Vec<StaticArrayPartIr>> {
     let mut parts = Vec::new();
 
@@ -2624,24 +2706,30 @@ fn static_array_parts_from_array_expression(
         }
         // A spread element keeps the whole array a runtime value.
         let expression = element.as_expression()?;
-        if let Some(part) = static_array_part_from_expression(expression, ctx) {
-            parts.push(part);
-        }
+        push_array_element_parts(expression, ctx, deferrals, &mut parts);
     }
 
     Some(parts)
 }
 
-fn static_array_part_from_expression(
+/// Push the parts one sz array element contributes, in order.
+///
+/// One part for every element but an object literal with variant keys only
+/// the runtime can lower, which splits as a lone `sz` object does: the rest
+/// compiles, each key goes to `_szPart`, and the keys are reported.
+fn push_array_element_parts(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<StaticArrayPartIr> {
+    deferrals: &mut ArrayElementDeferrals,
+    parts: &mut Vec<StaticArrayPartIr>,
+) {
     let unwrapped = unwrap_expression(expression);
     if is_falsy_style_literal(unwrapped) {
-        return None;
+        return;
     }
     if let Expression::StringLiteral(value) = unwrapped {
-        return Some(static_array_part(split_class_tokens(&value.value), None));
+        parts.push(static_array_part(split_class_tokens(&value.value), None));
+        return;
     }
     let logical = match unwrapped {
         Expression::LogicalExpression(logical) if logical.operator.is_and() => Some(logical),
@@ -2659,41 +2747,35 @@ fn static_array_part_from_expression(
         // An element that lowers to no class is dropped by the attribute pass,
         // which also keeps a guarded object's properties for the diagnostics.
         // Dropping it here as well would hide the half that has properties.
-        return Some(classes.map_or_else(
+        parts.push(classes.map_or_else(
             // Dynamic right side: the whole guarded element resolves at runtime
-            // through `_szPart`.
-            || dynamic_array_part(expression, unwrapped, ctx),
+            // through `_szPart`, and a variant key in it is never collected.
+            || {
+                collect_branch_deferred_variant_keys(right, ctx, &mut deferrals.keys);
+                dynamic_array_part(expression, unwrapped, ctx)
+            },
             |classes| {
                 let mut part = static_array_part(classes, Some(text_span(logical.left.span())));
                 part.resolved_objects = resolved_objects;
                 part
             },
         ));
+        return;
     }
-    let conditional_part = match unwrapped {
-        Expression::ConditionalExpression(conditional) => {
-            static_array_ternary_from_conditional(conditional, ctx)
+    if let Expression::ConditionalExpression(conditional) = unwrapped {
+        if let Some(ternary) = static_array_ternary_from_conditional(conditional, ctx) {
+            parts.push(StaticArrayPartIr {
+                ternary: Some(ternary),
+                ..static_array_part(Vec::new(), None)
+            });
+            return;
         }
-        _ => None,
-    }
-    .map(|ternary| StaticArrayPartIr {
-        condition_span: None,
-        classes: Vec::new(),
-        ternary: Some(ternary),
-        dynamic_span: None,
-        dynamic_provable: false,
-        candidates: Vec::new(),
-        dynamic_object_literal: false,
-        group_conflicts: Vec::new(),
-        resolved_objects: Vec::new(),
-    });
-    if conditional_part.is_some() {
-        return conditional_part;
     }
     if let Some(object) = array_element_static_object(unwrapped, ctx) {
         let mut part = static_array_part(lower_static_sz_object(&object), None);
         part.resolved_objects.push(object);
-        return Some(part);
+        parts.push(part);
+        return;
     }
     let partial = match unwrapped {
         Expression::ObjectExpression(object) => {
@@ -2701,28 +2783,100 @@ fn static_array_part_from_expression(
         }
         _ => None,
     };
-    if let Some(mut partial) = partial
-        .filter(|partial| partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1)
-    {
-        // Array parts keep the single-ternary contract of StaticArrayPartIr;
-        // multi-ternary parts stay on their existing runtime lane.
-        return Some(StaticArrayPartIr {
-            condition_span: None,
-            classes: lower_static_sz_object(&partial.object),
-            ternary: Some(partial.ternaries.remove(0)),
-            dynamic_span: None,
-            dynamic_provable: false,
-            candidates: Vec::new(),
-            dynamic_object_literal: false,
-            group_conflicts: std::mem::take(&mut partial.group_conflicts),
-            resolved_objects: vec![partial.object],
-        });
+    if let Some(mut partial) = partial {
+        if !partial.deferred_variants.is_empty() {
+            deferrals
+                .keys
+                .extend(deferred_variant_key_irs(&partial.deferred_variants));
+            if partial.dynamic_css_vars.is_empty()
+                && partial.ternaries.is_empty()
+                && partial.dropped_dynamic_keys.is_empty()
+            {
+                parts.extend(deferred_variant_array_parts(
+                    partial.object,
+                    partial.deferred_variants,
+                    &mut deferrals.omitted,
+                ));
+                return;
+            }
+            // Anything else beside the key keeps the element whole, as it
+            // keeps a lone object whole; the key's report stands for it.
+            parts.push(StaticArrayPartIr {
+                dynamic_object_literal: false,
+                ..dynamic_array_part(expression, unwrapped, ctx)
+            });
+            return;
+        }
+        if partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1 {
+            // Array parts keep the single-ternary contract of StaticArrayPartIr;
+            // multi-ternary parts stay on their existing runtime lane.
+            parts.push(StaticArrayPartIr {
+                classes: lower_static_sz_object(&partial.object),
+                ternary: Some(partial.ternaries.remove(0)),
+                group_conflicts: std::mem::take(&mut partial.group_conflicts),
+                resolved_objects: vec![partial.object],
+                ..static_array_part(Vec::new(), None)
+            });
+            return;
+        }
     }
     // Safelist best-effort: static object literals reachable inside the
     // dynamic expression (ternary branches, etc.) still get their CSS.
     // An object literal that lands here carried a runtime value, so the
     // whole element defers to `_szPart` — flagged for a build diagnostic.
-    Some(dynamic_array_part(expression, unwrapped, ctx))
+    // A variant key in a branch is not among those classes, so it is reported.
+    if matches!(
+        unwrapped,
+        Expression::ConditionalExpression(_) | Expression::LogicalExpression(_)
+    ) {
+        collect_branch_deferred_variant_keys(unwrapped, ctx, &mut deferrals.keys);
+    }
+    parts.push(dynamic_array_part(expression, unwrapped, ctx));
+}
+
+/// Report the variant keys that the object literals in the value positions of
+/// a runtime expression hand to the runtime.
+///
+/// `c ? { hover: x } : { p: 2 }` goes to the runtime whole. Its static branch
+/// is collected best-effort; the classes of `hover` are not, as for a lone
+/// `{ hover: x }`. Walks the branches of a conditional and the operands a
+/// logical expression can yield — both for `||` and `??`, only the right for
+/// `&&`, whose left is the condition — through parentheses and type wrappers.
+/// An object holding nothing deferred, or one the partial reader refuses (a
+/// spread), adds nothing.
+fn collect_branch_deferred_variant_keys(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+    out: &mut Vec<DeferredVariantKeyIr>,
+) {
+    match unwrap_expression(expression) {
+        Expression::ConditionalExpression(conditional) => {
+            collect_branch_deferred_variant_keys(&conditional.consequent, ctx, out);
+            collect_branch_deferred_variant_keys(&conditional.alternate, ctx, out);
+        }
+        Expression::LogicalExpression(logical) => {
+            if !logical.operator.is_and() {
+                collect_branch_deferred_variant_keys(&logical.left, ctx, out);
+            }
+            collect_branch_deferred_variant_keys(&logical.right, ctx, out);
+        }
+        Expression::ObjectExpression(object) => {
+            if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
+                out.extend(deferred_variant_key_irs(&partial.deferred_variants));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The deferred variant keys of an object, as the IR reports them.
+fn deferred_variant_key_irs(
+    deferred: &[DeferredVariant],
+) -> impl Iterator<Item = DeferredVariantKeyIr> + '_ {
+    deferred.iter().map(|variant| DeferredVariantKeyIr {
+        path: variant.path.join("."),
+        start: variant.start,
+    })
 }
 
 const fn static_array_part(
@@ -2734,12 +2888,42 @@ const fn static_array_part(
         classes,
         ternary: None,
         dynamic_span: None,
+        dynamic_key_path: Vec::new(),
         dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
         group_conflicts: Vec::new(),
         resolved_objects: Vec::new(),
     }
+}
+
+/// The parts of an `sz` object with variant keys only the runtime can lower.
+///
+/// The rest of the object is one static part, as if it were the first element
+/// of an sz array, and each deferred key a dynamic part after it. A rest that
+/// lowers to no class keeps its properties for the key diagnostics.
+fn deferred_variant_array_parts(
+    object: StaticSzObject,
+    deferred: Vec<DeferredVariant>,
+    omitted: &mut Vec<StaticSzObject>,
+) -> Vec<StaticArrayPartIr> {
+    let mut parts = Vec::with_capacity(deferred.len() + 1);
+    let classes = lower_static_sz_object(&object);
+    if classes.is_empty() {
+        if !object.is_empty() {
+            omitted.push(object);
+        }
+    } else {
+        let mut part = static_array_part(classes, None);
+        part.resolved_objects.push(object);
+        parts.push(part);
+    }
+    parts.extend(deferred.into_iter().map(|variant| StaticArrayPartIr {
+        dynamic_span: Some(variant.expression_span),
+        dynamic_key_path: variant.path,
+        ..static_array_part(Vec::new(), None)
+    }));
+    parts
 }
 
 /// Preserve one unresolved array element for runtime lowering and safelisting.
@@ -2756,6 +2940,7 @@ fn dynamic_array_part(
         classes: Vec::new(),
         ternary: None,
         dynamic_span: Some(text_span(expression.span())),
+        dynamic_key_path: Vec::new(),
         // Same safety vocabulary as the szr proof: a provably string-or-falsy
         // element never needs the object lowering at runtime.
         dynamic_provable: is_provably_non_object_argument(expression),
@@ -4219,6 +4404,25 @@ struct PartialSzObject {
     /// Family keys with a runtime value beside the other side of their family,
     /// at this level and every nested one.
     group_conflicts: Vec<DynamicGroupConflictIr>,
+    /// Variant keys holding a value only the runtime knows, at this level and
+    /// every nested one, in source order.
+    deferred_variants: Vec<DeferredVariant>,
+}
+
+/// A variant key whose value only the runtime knows.
+///
+/// The build cannot lower it: `hover: x` holds an sz object or a class string
+/// it never sees, and the css-variable lane that serves a property key would
+/// put that object in a CSS variable behind a utility Tailwind has no rule for.
+/// The rewrite hands it to `_szPart` with its variant keys rebuilt around it.
+#[derive(Debug, Clone)]
+struct DeferredVariant {
+    /// Variant keys from the object's top level down to this one.
+    path: Vec<String>,
+    /// Offset of the property holding the value.
+    start: u32,
+    /// Span of the value expression, parentheses and assertions unwrapped.
+    expression_span: TextSpan,
 }
 
 impl PartialSzObject {
@@ -4232,18 +4436,12 @@ impl PartialSzObject {
             ternaries: Vec::new(),
             dropped_dynamic_keys: Vec::new(),
             group_conflicts: Vec::new(),
+            deferred_variants: Vec::new(),
         }
     }
 }
 
-type PartialObjectResult = (
-    StaticSzObject,
-    TextSpan,
-    Vec<DynamicCssVarIr>,
-    Vec<StaticTernaryIr>,
-    Vec<DroppedSzKeyIr>,
-    Vec<DynamicGroupConflictIr>,
-);
+type PartialObjectResult = (PartialSzObject, TextSpan);
 
 fn partial_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
@@ -4252,14 +4450,7 @@ fn partial_object_from_jsx_expression(
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            Some((
-                partial.object,
-                text_span(object.span),
-                partial.dynamic_css_vars,
-                partial.ternaries,
-                partial.dropped_dynamic_keys,
-                partial.group_conflicts,
-            ))
+            Some((partial, text_span(object.span)))
         }
         JSXExpression::TSAsExpression(value) => {
             partial_object_from_expression(&value.expression, ctx)
@@ -4284,14 +4475,7 @@ fn partial_object_from_expression(
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            Some((
-                partial.object,
-                text_span(object.span),
-                partial.dynamic_css_vars,
-                partial.ternaries,
-                partial.dropped_dynamic_keys,
-                partial.group_conflicts,
-            ))
+            Some((partial, text_span(object.span)))
         }
         Expression::ParenthesizedExpression(value) => {
             partial_object_from_expression(&value.expression, ctx)
@@ -4497,14 +4681,7 @@ fn partial_object_from_object_expression(
                     continue;
                 }
 
-                // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
-                // emit `calc(${pad} …)` like the removed JavaScript lanes, not `calc(${(pad)} …)`
-                // — redundant parens broke rust==oxc byte parity.
-                partial.dynamic_css_vars.push(dynamic_css_var_from_property(
-                    &key,
-                    text_span(unwrap_expression(&property.value).span()),
-                    variant_prefix,
-                ));
+                push_runtime_value(&mut partial, key, property, variant_prefix, variant_keys);
             }
             ObjectPropertyKind::SpreadProperty(spread) => {
                 partial
@@ -4525,6 +4702,42 @@ fn partial_object_from_object_expression(
     // no CSS for them and the styling silently never applied (field-reported).
     record_dynamic_group_conflicts(&mut partial, &dynamic_family_keys);
     Some(partial)
+}
+
+/// Give a runtime value its lane: a css variable for a property key, the
+/// runtime for a variant key.
+///
+/// A variant holds sz, not a CSS value, so no css variable can carry it: the
+/// key goes to `_szPart` with its path, and the rest of the object still
+/// compiles.
+fn push_runtime_value(
+    partial: &mut PartialSzObject,
+    key: String,
+    property: &ObjectProperty<'_>,
+    variant_prefix: Option<&str>,
+    variant_keys: &[VariantKey],
+) {
+    // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must emit
+    // `calc(${pad} …)` like the removed JavaScript lanes, not `calc(${(pad)} …)`
+    // — redundant parens broke rust==oxc byte parity.
+    let expression_span = text_span(unwrap_expression(&property.value).span());
+    if is_variant_key(&key) {
+        partial.deferred_variants.push(DeferredVariant {
+            path: variant_keys
+                .iter()
+                .map(|variant| variant.name.clone())
+                .chain(std::iter::once(key))
+                .collect(),
+            start: property.span.start,
+            expression_span,
+        });
+        return;
+    }
+    partial.dynamic_css_vars.push(dynamic_css_var_from_property(
+        &key,
+        expression_span,
+        variant_prefix,
+    ));
 }
 
 /// Note a key of a stand-alone keyword family whose value only the runtime
@@ -4640,6 +4853,7 @@ fn collect_nested_partial_property(
         .dropped_dynamic_keys
         .extend(nested.dropped_dynamic_keys);
     partial.group_conflicts.extend(nested.group_conflicts);
+    partial.deferred_variants.extend(nested.deferred_variants);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -4834,7 +5048,9 @@ fn nullable_conditional_class_from_property(
             // conditional. Decline the whole shape so the caller lowers the
             // conditional itself as the helper's argument: `undefined` there
             // resolves to no class, which is what this branch encodes anyway.
-            if super::generated::tables::is_boolean_only_dynamic(key) {
+            // A variant has no css-var form either: the whole conditional
+            // goes to the runtime with its key.
+            if super::generated::tables::is_boolean_only_dynamic(key) || is_variant_key(key) {
                 return None;
             }
             let mut prop =
@@ -5120,7 +5336,9 @@ fn dynamic_css_var_from_property(
 }
 
 fn variant_prefix_string(current: Option<&str>, key: &str) -> String {
-    let variant = super::generated::tables::variant_prefix(key).unwrap_or(key);
+    // Spelled as the static lowering spells it, so `{ tabletLarge: { p: x } }`
+    // names the same `tablet-large:` variant the runtime writes.
+    let variant = super::lower::object_variant_segment(key);
     current.map_or_else(
         || variant.to_string(),
         |prefix| format!("{prefix}:{variant}"),
@@ -7643,7 +7861,7 @@ export const C = ({ styles }) => <div sz={styles} />;
 
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.raw_class_names, ["block"]);
-        assert_eq!(lowered.classes, ["inset-s-4", "inline-block"]);
+        assert_eq!(lowered.classes, ["start-4", "inline-block"]);
     }
 
     #[test]

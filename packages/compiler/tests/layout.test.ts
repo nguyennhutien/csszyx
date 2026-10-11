@@ -277,20 +277,20 @@ describe('layout — top / right / bottom / left (placement)', () => {
         expect(t({ insetY: -4 })).toBe('-inset-y-4');
     });
 
-    it('{ start: 4 } → inset-s-4', () => {
-        expect(t({ start: 4 })).toBe('inset-s-4');
+    it('{ start: 4 } → start-4', () => {
+        expect(t({ start: 4 })).toBe('start-4');
     });
 
-    it('{ insetS: 4 } → inset-s-4', () => {
-        expect(t({ insetS: 4 })).toBe('inset-s-4');
+    it('{ insetS: 4 } → start-4', () => {
+        expect(t({ insetS: 4 })).toBe('start-4');
     });
 
-    it('{ end: 4 } → inset-e-4', () => {
-        expect(t({ end: 4 })).toBe('inset-e-4');
+    it('{ end: 4 } → end-4', () => {
+        expect(t({ end: 4 })).toBe('end-4');
     });
 
-    it('{ insetE: 4 } → inset-e-4', () => {
-        expect(t({ insetE: 4 })).toBe('inset-e-4');
+    it('{ insetE: 4 } → end-4', () => {
+        expect(t({ insetE: 4 })).toBe('end-4');
     });
 
     it('{ top: 4 } → top-4', () => {

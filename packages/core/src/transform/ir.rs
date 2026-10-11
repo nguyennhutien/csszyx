@@ -104,6 +104,21 @@ pub struct SourceIr {
     /// settle them at build time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_group_conflicts: Vec<DynamicGroupConflictIr>,
+    /// Variant keys of an `sz` object whose value only the runtime knows, in
+    /// source order. Each one is handed to `_szPart` at runtime while the rest
+    /// of its object compiles, so its classes are never collected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deferred_variant_keys: Vec<DeferredVariantKeyIr>,
+}
+
+/// A variant key of an `sz` object whose value only the runtime knows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeferredVariantKeyIr {
+    /// The sz keys from the object's top level down to this one, dot-joined
+    /// (`md.hover`), as the diagnostic names it.
+    pub path: String,
+    /// Offset of the property that holds the runtime value.
+    pub start: u32,
 }
 
 /// A key of a stand-alone keyword family that takes a runtime value beside a
@@ -192,6 +207,7 @@ impl SourceIr {
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
             dynamic_group_conflicts: Vec::new(),
+            deferred_variant_keys: Vec::new(),
         }
     }
 
@@ -666,6 +682,12 @@ pub struct StaticArrayPartIr {
     /// Source span of a dynamic item's expression; absent for static items.
     #[serde(default)]
     pub dynamic_span: Option<TextSpan>,
+    /// Variant keys the dynamic expression sits under, outermost first. A
+    /// variant key of an `sz` object with a runtime value becomes a dynamic
+    /// item of its own, and the rewrite rebuilds the keys around the
+    /// expression (`_szPart({ md: { hover: x } })`). Empty for an array element.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_key_path: Vec<String>,
     /// Whether the dynamic expression is provably a string or falsy at
     /// runtime (szr-proof vocabulary). Serde default false — a stale IR can
     /// only lose the optimization, never claim safety it did not prove.
@@ -993,6 +1015,7 @@ mod tests {
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
             dynamic_group_conflicts: Vec::new(),
+            deferred_variant_keys: Vec::new(),
         };
 
         assert!(!ir.is_noop());

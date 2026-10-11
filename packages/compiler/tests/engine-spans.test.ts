@@ -94,6 +94,7 @@ describe('locateEngineSpans', () => {
         const located = locateEngineSpans(source, {
             issues: [{ code: 'unknown-key', start: 2 }],
             mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
+            singleClassGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-2'] }],
             mergeOverrides: [{ start: 2, base: ['a'], over: ['b'] }],
         });
 
@@ -109,6 +110,9 @@ describe('locateEngineSpans', () => {
                     ],
                     classes: ['m-1', 'p-4'],
                 },
+            ],
+            singleClassGroups: [
+                { keys: ['m'], positions: [{ line: 2, column: 1 }], classes: ['m-2'] },
             ],
             mergeOverrides: [{ line: 2, column: 1, base: ['a'], over: ['b'] }],
         });
@@ -185,6 +189,7 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
     const raw = {
         issues: [{ code: 'unknown-key', start: 2 }],
         mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
+        singleClassGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-2'] }],
         mergeOverrides: [{ start: 2, base: ['a'], over: ['b'] }],
     };
 
@@ -214,6 +219,9 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
         const plain = {
             issues: [{ code: 'unknown-key' as const, line: 2, column: 1 }],
             mergeGroups: [{ keys: ['p'], positions: [{ line: 1, column: 1 }], classes: ['p-4'] }],
+            singleClassGroups: [
+                { keys: ['m'], positions: [{ line: 2, column: 1 }], classes: ['m-2'] },
+            ],
             mergeOverrides: [{ line: 2, column: 1, base: ['a'], over: ['b'] }],
         };
 
@@ -221,5 +229,11 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
         expect(restoreEngineSpans('x\ny', plain)).toEqual(plain);
         expect(storeEngineSpans({})).toEqual({});
         expect(restoreEngineSpans('x\ny', {})).toEqual({});
+    });
+
+    it('reads a binding that predates one-class groups as having none', () => {
+        const { singleClassGroups, ...older } = raw;
+        expect(singleClassGroups).toHaveLength(1);
+        expect(locateEngineSpans('x\ny', older).singleClassGroups).toEqual([]);
     });
 });

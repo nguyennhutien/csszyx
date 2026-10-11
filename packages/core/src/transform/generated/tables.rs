@@ -129,10 +129,10 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "right" => Some("right"),
         "bottom" => Some("bottom"),
         "left" => Some("left"),
-        "start" => Some("inset-s"),
-        "end" => Some("inset-e"),
-        "insetS" => Some("inset-s"),
-        "insetE" => Some("inset-e"),
+        "start" => Some("start"),
+        "end" => Some("end"),
+        "insetS" => Some("start"),
+        "insetE" => Some("end"),
         "insetBs" => Some("inset-bs"),
         "insetBe" => Some("inset-be"),
         "visibility" => Some("visibility"),
@@ -466,6 +466,44 @@ pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
     }
 }
 
+/// The data type a key's variable value is written with, in front of it
+/// (`bg-(position:--v)`): Tailwind gives an untyped variable to the prefix's
+/// default utility. Mirrors `CSS_VAR_TYPE_HINTS`.
+pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
+    match key {
+        "fontFamily" => Some("family-name"),
+        "text" => Some("length"),
+        "bgPos" => Some("position"),
+        "bgSize" => Some("length"),
+        "bgImg" => Some("image"),
+        "border" => Some("length"),
+        "borderT" => Some("length"),
+        "borderR" => Some("length"),
+        "borderB" => Some("length"),
+        "borderL" => Some("length"),
+        "borderX" => Some("length"),
+        "borderY" => Some("length"),
+        "borderS" => Some("length"),
+        "borderE" => Some("length"),
+        "borderBs" => Some("length"),
+        "borderBe" => Some("length"),
+        "outline" => Some("length"),
+        "ring" => Some("length"),
+        "insetRing" => Some("length"),
+        "ringOffset" => Some("length"),
+        "decorationThickness" => Some("length"),
+        "strokeWidth" => Some("length"),
+        "fromPos" => Some("length"),
+        "viaPos" => Some("length"),
+        "toPos" => Some("length"),
+        "shadowColor" => Some("color"),
+        "insetShadowColor" => Some("color"),
+        "textShadowColor" => Some("color"),
+        "dropShadowColor" => Some("color"),
+        _ => None,
+    }
+}
+
 /// Migration note for a removed sz key whose replacement needs a sentence.
 pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
     match key {
@@ -655,101 +693,267 @@ pub(crate) fn is_css_wide_keyword_utility(class: &str) -> bool {
     )
 }
 
-/// Whether a CSS-wide keyword may take the arbitrary form on this prefix.
-/// Mirrors `CSS_WIDE_BRACKET_PREFIXES`.
-pub(crate) fn is_css_wide_bracket_prefix(prefix: &str) -> bool {
+/// Properties that take a native Tailwind fraction (`w-1/2`, `basis-1/3`)
+/// instead of brackets. Mirrors `FRACTION_SUPPORTED_PROPS`.
+pub(crate) fn is_fraction_supported_prop(key: &str) -> bool {
     matches!(
-        prefix,
-        "p" | "px"
-            | "py"
-            | "pt"
-            | "pr"
-            | "pb"
-            | "pl"
-            | "ps"
-            | "pe"
-            | "pbs"
-            | "pbe"
-            | "m"
-            | "mx"
-            | "my"
-            | "mt"
-            | "mr"
-            | "mb"
-            | "ml"
-            | "ms"
-            | "me"
-            | "mbs"
-            | "mbe"
-            | "w"
-            | "h"
-            | "size"
+        key,
+        "w" | "width"
             | "min-w"
+            | "minW"
+            | "minWidth"
             | "max-w"
+            | "maxW"
+            | "maxWidth"
+            | "h"
+            | "height"
             | "min-h"
+            | "minH"
+            | "minHeight"
             | "max-h"
-            | "block"
-            | "inline"
-            | "min-block"
-            | "max-block"
-            | "min-inline"
-            | "max-inline"
+            | "maxH"
+            | "maxHeight"
+            | "size"
+            | "blockSize"
+            | "minBlockSize"
+            | "maxBlockSize"
+            | "inlineSize"
+            | "minInlineSize"
+            | "maxInlineSize"
+            | "basis"
+            | "flexBasis"
+            | "flex"
             | "inset"
             | "inset-x"
+            | "insetX"
             | "inset-y"
+            | "insetY"
             | "top"
             | "right"
             | "bottom"
             | "left"
-            | "inset-s"
-            | "inset-e"
-            | "inset-bs"
-            | "inset-be"
-            | "gap"
-            | "gap-x"
-            | "gap-y"
-            | "z"
-            | "order"
-            | "basis"
-            | "grow"
-            | "shrink"
-            | "opacity"
+            | "start"
+            | "end"
+            | "insetS"
+            | "insetE"
+            | "insetBs"
+            | "insetBe"
+            | "translate"
+            | "translate-x"
+            | "translateX"
+            | "translate-y"
+            | "translateY"
             | "aspect"
-            | "columns"
-            | "indent"
-            | "leading"
-            | "tracking"
-            | "scroll-m"
-            | "scroll-mx"
-            | "scroll-my"
-            | "scroll-mt"
-            | "scroll-mr"
-            | "scroll-mb"
-            | "scroll-ml"
-            | "scroll-ms"
-            | "scroll-me"
-            | "scroll-mbs"
-            | "scroll-mbe"
-            | "scroll-p"
-            | "scroll-px"
-            | "scroll-py"
-            | "scroll-pt"
-            | "scroll-pr"
-            | "scroll-pb"
-            | "scroll-pl"
-            | "scroll-ps"
-            | "scroll-pe"
-            | "scroll-pbs"
-            | "scroll-pbe"
-            | "space-x"
-            | "space-y"
-            | "perspective"
-            | "rotate"
-            | "scale"
-            | "hue-rotate"
-            | "line-clamp"
-            | "tab"
     )
+}
+
+/// Keys whose value is a colour alone (`bg`, `color`, `fill`). Mirrors the
+/// `PropertyCategory.COLOR` entries of `PROPERTY_CATEGORY_MAP`.
+pub(crate) fn is_color_property(key: &str) -> bool {
+    matches!(
+        key,
+        "bg" | "color"
+            | "borderColor"
+            | "divideColor"
+            | "outlineColor"
+            | "ringColor"
+            | "ringOffsetColor"
+            | "shadowColor"
+            | "textShadowColor"
+            | "decorationColor"
+            | "accent"
+            | "caret"
+            | "fill"
+            | "stroke"
+            | "from"
+            | "via"
+            | "to"
+            | "dropShadowColor"
+            | "scrollbarThumb"
+            | "scrollbarTrack"
+    )
+}
+
+/// A bit of [`sz_capabilities`]. Mirrors `SZ_CAP_SIGN_NUMBER`.
+pub(crate) const SZ_CAP_SIGN_NUMBER: u8 = 1;
+/// A bit of [`sz_capabilities`]. Mirrors `SZ_CAP_SIGN_FRACTION`.
+pub(crate) const SZ_CAP_SIGN_FRACTION: u8 = 2;
+/// A bit of [`sz_capabilities`]. Mirrors `SZ_CAP_CSS_WIDE_BRACKET`.
+pub(crate) const SZ_CAP_CSS_WIDE_BRACKET: u8 = 4;
+
+/// The rows of `SZ_CAPABILITIES` that have a column, sorted by key bytes for
+/// [`sz_capabilities`]'s binary search. A sorted slice costs the wasm
+/// artifact ~400 gzip bytes less than a `match` over the same keys.
+pub(crate) static SZ_CAPABILITY_ROWS: [(&str, u8); 159] = [
+    ("accent", 4),
+    ("align", 4),
+    ("animate", 4),
+    ("aspect", 4),
+    ("autoCols", 4),
+    ("autoRows", 4),
+    ("backdropFilter", 4),
+    ("backdropHueRotate", 1),
+    ("basis", 4),
+    ("blockSize", 4),
+    ("bottom", 7),
+    ("caret", 4),
+    ("col", 5),
+    ("colEnd", 5),
+    ("colStart", 5),
+    ("columns", 4),
+    ("cursor", 4),
+    ("delay", 4),
+    ("divideColor", 4),
+    ("duration", 4),
+    ("ease", 4),
+    ("end", 7),
+    ("fill", 4),
+    ("filter", 4),
+    ("flex", 4),
+    ("fontFeatures", 4),
+    ("fontStretch", 4),
+    ("gap", 4),
+    ("gapX", 4),
+    ("gapY", 4),
+    ("gridCols", 4),
+    ("gridRows", 4),
+    ("grow", 4),
+    ("h", 4),
+    ("hueRotate", 1),
+    ("indent", 5),
+    ("inlineSize", 4),
+    ("inset", 7),
+    ("insetBe", 7),
+    ("insetBs", 7),
+    ("insetE", 7),
+    ("insetS", 7),
+    ("insetX", 7),
+    ("insetY", 7),
+    ("leading", 4),
+    ("left", 7),
+    ("lineClamp", 4),
+    ("list", 4),
+    ("listImg", 4),
+    ("m", 5),
+    ("maskPos", 4),
+    ("maskSize", 4),
+    ("maxBlockSize", 4),
+    ("maxH", 4),
+    ("maxInlineSize", 4),
+    ("maxW", 4),
+    ("mb", 5),
+    ("mbe", 5),
+    ("mbs", 5),
+    ("me", 5),
+    ("minBlockSize", 4),
+    ("minH", 4),
+    ("minInlineSize", 4),
+    ("minW", 4),
+    ("ml", 5),
+    ("mr", 5),
+    ("ms", 5),
+    ("mt", 5),
+    ("mx", 5),
+    ("my", 5),
+    ("objectPos", 4),
+    ("opacity", 4),
+    ("order", 5),
+    ("origin", 4),
+    ("outlineOffset", 5),
+    ("p", 4),
+    ("pb", 4),
+    ("pbe", 4),
+    ("pbs", 4),
+    ("pe", 4),
+    ("perspective", 4),
+    ("perspectiveOrigin", 4),
+    ("pl", 4),
+    ("pr", 4),
+    ("ps", 4),
+    ("pt", 4),
+    ("px", 4),
+    ("py", 4),
+    ("right", 7),
+    ("rotate", 5),
+    ("rotateX", 1),
+    ("rotateY", 1),
+    ("rotateZ", 1),
+    ("rounded", 4),
+    ("roundedB", 4),
+    ("roundedBl", 4),
+    ("roundedBr", 4),
+    ("roundedE", 4),
+    ("roundedEe", 4),
+    ("roundedEs", 4),
+    ("roundedL", 4),
+    ("roundedR", 4),
+    ("roundedS", 4),
+    ("roundedSe", 4),
+    ("roundedSs", 4),
+    ("roundedT", 4),
+    ("roundedTl", 4),
+    ("roundedTr", 4),
+    ("row", 5),
+    ("rowEnd", 5),
+    ("rowStart", 5),
+    ("scale", 5),
+    ("scaleX", 1),
+    ("scaleY", 1),
+    ("scaleZ", 1),
+    ("scrollM", 5),
+    ("scrollMb", 5),
+    ("scrollMbe", 5),
+    ("scrollMbs", 5),
+    ("scrollMe", 5),
+    ("scrollMl", 5),
+    ("scrollMr", 5),
+    ("scrollMs", 5),
+    ("scrollMt", 5),
+    ("scrollMx", 5),
+    ("scrollMy", 5),
+    ("scrollP", 4),
+    ("scrollPb", 4),
+    ("scrollPbe", 4),
+    ("scrollPbs", 4),
+    ("scrollPe", 4),
+    ("scrollPl", 4),
+    ("scrollPr", 4),
+    ("scrollPs", 4),
+    ("scrollPt", 4),
+    ("scrollPx", 4),
+    ("scrollPy", 4),
+    ("shrink", 4),
+    ("size", 4),
+    ("skewX", 1),
+    ("skewY", 1),
+    ("spaceX", 1),
+    ("spaceY", 1),
+    ("start", 7),
+    ("tabSize", 4),
+    ("textShadow", 4),
+    ("top", 7),
+    ("tracking", 4),
+    ("transform", 4),
+    ("transition", 4),
+    ("translate", 3),
+    ("translateX", 3),
+    ("translateY", 3),
+    ("translateZ", 1),
+    ("underlineOffset", 5),
+    ("w", 4),
+    ("willChange", 4),
+    ("z", 5),
+    ("zoom", 4),
+];
+
+/// How both lanes spell an sz key, as `SZ_CAP_*` bits. Mirrors
+/// `SZ_CAPABILITIES`, which `gen-sz-capabilities.mjs` measured against the
+/// Tailwind this repo pins: a spelling convention, not a verdict about a
+/// project's Tailwind (PROJECT-RULES §4). A key with no column, or unknown, is `0`.
+pub(crate) fn sz_capabilities(key: &str) -> u8 {
+    SZ_CAPABILITY_ROWS
+        .binary_search_by(|(row, _)| row.as_bytes().cmp(key.as_bytes()))
+        .map_or(0, |index| SZ_CAPABILITY_ROWS[index].1)
 }
 
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/

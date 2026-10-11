@@ -142,6 +142,10 @@ const SPACING_PROPS: Record<string, string[]> = {
     inset: ['inset'],
     'inset-x': ['inset-inline'],
     'inset-y': ['inset-block'],
+    // `start`/`end` are what the lowering writes (served on every v4);
+    // `inset-s`/`inset-e` are Tailwind 4.2+'s names for the same CSS.
+    start: ['inset-inline-start'],
+    end: ['inset-inline-end'],
     'inset-s': ['inset-inline-start'],
     'inset-e': ['inset-inline-end'],
     // Flex

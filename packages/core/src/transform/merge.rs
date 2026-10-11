@@ -65,8 +65,13 @@ pub struct MergeOverride {
 /// What a pass without a table would merge, for the plugin to check.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MergeLists {
-    /// Each static object's classes, merged later over earlier.
+    /// Each static object's classes, merged later over earlier: objects of two
+    /// classes or more.
     pub groups: Vec<MergeGroup>,
+    /// Each static object of one class, which merges with nothing: kept apart
+    /// from `groups` so a merge reads what it always read, and recorded so the
+    /// class still has a key and an offset to be reported at.
+    pub single_class_groups: Vec<MergeGroup>,
     /// Each static class name beside a static `sz`.
     pub overrides: Vec<MergeOverride>,
 }
@@ -159,6 +164,7 @@ impl MergeGroupScope {
             .unwrap_or_default();
         MergeLists {
             groups: first_of_each(lists.groups),
+            single_class_groups: first_of_each(lists.single_class_groups),
             overrides: first_of_each(lists.overrides),
         }
     }
@@ -284,14 +290,19 @@ pub(crate) fn collecting() -> bool {
 }
 
 /// Record one object's classes for the plugin to check, when a pass is
-/// collecting them. One class merges with nothing, so it is left out.
+/// collecting them.
+///
+/// A one-class object merges with nothing, so it goes to its own list: a
+/// merge reads only `groups`, and the one-class list is where the class's key
+/// and offset travel, so a dead class the build reports is named at its key.
 pub(crate) fn record_group(group: MergeGroup) {
-    if group.classes.len() < 2 {
-        return;
-    }
     MERGE_GROUPS.with(|lists| {
         if let Some(lists) = lists.borrow_mut().as_mut() {
-            lists.groups.push(group);
+            if group.classes.len() < 2 {
+                lists.single_class_groups.push(group);
+            } else {
+                lists.groups.push(group);
+            }
         }
     });
 }
@@ -436,13 +447,17 @@ mod tests {
     }
 
     #[test]
-    fn a_pass_without_a_table_collects_each_list_of_two_or_more_once() {
+    fn a_pass_without_a_table_collects_each_list_once_and_one_class_lists_apart() {
         let groups = MergeGroupScope::enter(true);
         assert!(collecting());
         record_group(group(&["pb-2", "p-4"]));
         record_group(group(&["m-2"]));
         record_group(group(&["pb-2", "p-4"]));
-        assert_eq!(groups.finish().groups, [group(&["pb-2", "p-4"])]);
+        record_group(group(&["m-2"]));
+        let lists = groups.finish();
+        assert_eq!(lists.groups, [group(&["pb-2", "p-4"])]);
+        // A one-class object is kept apart, once.
+        assert_eq!(lists.single_class_groups, [group(&["m-2"])]);
         // Finished: nothing collects any more.
         let after = MergeGroupScope::enter(false);
         assert!(!collecting());

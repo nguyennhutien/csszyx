@@ -12,7 +12,8 @@ use super::line_endings::{detect_line_ending, with_line_ending};
 use super::source::{TransformResult, TransformStats};
 use super::sz_codegen::sz_html_value;
 use super::value::is_js_whitespace;
-use super::variant_parser::class_name_to_sz_object;
+use super::variant_parser::{class_name_to_sz_object_with, Lookup};
+use super::verdict::{Judge, ServedAnswers, TableVerdicts};
 
 /// Where the runtime script comes from, when it is injected at all.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -54,6 +55,11 @@ pub struct HtmlTransformOptions {
     pub cdn_url: Option<String>,
     /// The script path for `InjectRuntime::Local`.
     pub local_path: Option<String>,
+    /// What the project's Tailwind answered for classes one of migrate's
+    /// tables would otherwise decide. Handed in by the caller, never read
+    /// from the options JSON.
+    #[serde(skip)]
+    pub served: Option<ServedAnswers>,
 }
 
 impl Default for HtmlTransformOptions {
@@ -64,6 +70,7 @@ impl Default for HtmlTransformOptions {
             inject_runtime: InjectRuntime::Off,
             cdn_url: None,
             local_path: None,
+            served: None,
         }
     }
 }
@@ -78,6 +85,7 @@ const FOUC_MARKER: &str = "csszyx: hide [sz]";
 
 struct HtmlState<'a> {
     eol: &'static str,
+    lookup: Lookup<'a>,
     braces: bool,
     transformed: u32,
     skipped: u32,
@@ -91,8 +99,13 @@ struct HtmlState<'a> {
 #[must_use]
 pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> TransformResult {
     let eol = detect_line_ending(source);
+    let asked = TableVerdicts::default();
     let mut state = HtmlState {
         eol,
+        lookup: Lookup {
+            custom_map: None,
+            judge: Judge::new(options.served.as_ref(), Some(&asked)),
+        },
         braces: options.braces,
         transformed: 0,
         skipped: 0,
@@ -122,16 +135,20 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
         }
     }
 
+    let changed = state.changed;
+    let (transformed, skipped, unrecognized) =
+        (state.transformed, state.skipped, state.unrecognized);
     TransformResult {
         code: output,
-        changed: state.changed,
+        changed,
         warnings: Vec::new(),
         stats: TransformStats {
-            class_names_transformed: state.transformed,
-            class_names_skipped: state.skipped,
+            class_names_transformed: transformed,
+            class_names_skipped: skipped,
             class_names_skipped_component: 0,
-            classes_unrecognized: state.unrecognized,
+            classes_unrecognized: unrecognized,
             sz_keys_normalized: None,
+            table_verdicts: asked.into_sorted(),
         },
         potentially_unused_imports: Vec::new(),
     }
@@ -192,7 +209,7 @@ fn process_class_attribute(
         return matched.to_string();
     }
 
-    let converted = class_name_to_sz_object(trimmed, None);
+    let converted = class_name_to_sz_object_with(trimmed, state.lookup);
     if converted.sz_object.is_empty() {
         state.skipped += 1;
         state.unrecognized.extend(converted.unrecognized);

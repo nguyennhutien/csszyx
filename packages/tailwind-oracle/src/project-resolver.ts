@@ -19,16 +19,6 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-/** One bundler or tsconfig alias: a literal prefix, or an exact specifier. */
-export interface StylesheetAlias {
-    /** Literal prefix, or the whole specifier when {@link exact}. */
-    find: string;
-    /** Absolute path the prefix expands to. */
-    replacement: string;
-    /** Whether the specifier must equal `find` rather than begin with it. */
-    exact: boolean;
-}
-
 /** A plugin or config module handed back to Tailwind's loader. */
 export interface ProjectModule {
     path: string;
@@ -54,24 +44,6 @@ const INTEGRATIONS = [
 
 /** Resolvers by project directory: resolving `@tailwindcss/node` walks the tree. */
 const cache = new Map<string, Promise<ProjectResolver | null>>();
-
-/**
- * Apply the first alias whose `find` matches the specifier.
- *
- * @param id - Import specifier as written.
- * @param aliases - The bundler's aliases, tsconfig paths included.
- * @returns The expanded path, or null when no alias matches.
- */
-export function expandAlias(id: string, aliases: readonly StylesheetAlias[]): string | null {
-    for (const alias of aliases) {
-        if (alias.exact ? id === alias.find : id.startsWith(alias.find)) {
-            return alias.exact
-                ? alias.replacement
-                : alias.replacement + id.slice(alias.find.length);
-        }
-    }
-    return null;
-}
 
 /**
  * The path `@tailwindcss/node` resolves to from the project, directly or
@@ -134,8 +106,10 @@ async function createProjectResolver(resolveFrom: string): Promise<ProjectResolv
             extensions: ['.css'],
             mainFields: ['style'],
             conditionNames: ['style'],
-            // CSS reads `@import "theme.css"` as the file next door before a package.
-            preferRelative: true,
+            // No `preferRelative`: `@tailwindcss/node` 4.3.3 sets none, so a
+            // bare `@import "theme.css"` is a package there and fails the
+            // build; only Vite's resolver, asked first on that lane, reads it
+            // as the file next door.
         });
         return {
             resolveStylesheet(id, base) {

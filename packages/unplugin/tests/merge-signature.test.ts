@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { horizontalProperty, mergeSignatureFromCss } from '../src/merge-signature.js';
+import {
+    candidateDeclarationsFromCss,
+    horizontalProperty,
+    mergeSignatureFromCss,
+} from '../src/merge-signature.js';
 
 describe('custom-property identity', () => {
     it.each(['ltr', 'rtl'] as const)('preserves opaque names in %s text', direction => {
@@ -27,6 +31,34 @@ describe('custom-property identity', () => {
                 }
             }
         }
+    });
+});
+
+describe('candidateDeclarationsFromCss', () => {
+    it('reads the values a candidate writes, where the signature reads properties', () => {
+        // The capability generator asks what value a class sets, not only which
+        // property: `blur-[inherit]` and `blur-4` set the same `filter`.
+        const css = [
+            '.blur-x { --tw-blur: blur(inherit); filter: var(--tw-blur,) !important; }',
+            '@property --tw-blur { syntax: "*"; inherits: false; }',
+            '@keyframes spin { to { transform: rotate(360deg); } }',
+            '.other { color: red; }',
+        ].join('\n');
+
+        expect(candidateDeclarationsFromCss('blur-x', css)).toEqual([
+            {
+                context: '[[["selector","&"]],false]',
+                property: '--tw-blur',
+                value: 'blur(inherit)',
+            },
+            { context: '[[["selector","&"]],true]', property: 'filter', value: 'var(--tw-blur,)' },
+        ]);
+    });
+
+    it('answers what the signature answers when there is nothing to read', () => {
+        expect(candidateDeclarationsFromCss('a', null)).toBeNull();
+        expect(candidateDeclarationsFromCss('a', '.b { color: red; }')).toEqual([]);
+        expect(candidateDeclarationsFromCss('a', '.a { color: red')).toBeNull();
     });
 });
 

@@ -17,8 +17,10 @@ import {
     DIAGNOSTIC_POLICY_STATE_FILE,
     type DiagnosticLimiter,
     type DiagnosticPolicy,
+    type DiagnosticPolicyInput,
     diagnosticConfigProblemsMessage,
-    loadDiagnosticPolicy,
+    diagnosticPolicyInputs,
+    loadCurrentDiagnosticPolicy,
     reportDeadSzClasses,
     resolveQuietMode,
     shouldHoldAdvisories,
@@ -27,22 +29,33 @@ import {
 } from '@csszyx/unplugin/diagnostics';
 
 /**
- * Load the project's config and write its policy for the loader.
+ * Load the project's config and write its policy for the loader, with the
+ * files the load read: the loader and jest load the config themselves once
+ * one of them changed.
+ *
+ * Loaded so that every module the config imports is read as it is now
+ * (`loadCurrentDiagnosticPolicy`): `next watch` loads it again in its own
+ * process, where Node still holds each module as first imported, and a
+ * policy file whose inputs are new and whose levels are not would be
+ * trusted by every lane that reads it.
  *
  * @param root - The project root.
- * @returns The policy, for the command's own reports, and the warnings to
- *          print: the config's problems, and a failed write.
+ * @returns The policy, for the command's own reports, the files it was read
+ *          from, and the warnings to print: the config's problems, and a
+ *          failed write.
  */
 export async function writeNextDiagnosticPolicy(
     root: string,
-): Promise<{ policy: DiagnosticPolicy; warnings: string[] }> {
-    const loaded = await loadDiagnosticPolicy(root);
+): Promise<{ policy: DiagnosticPolicy; inputs: DiagnosticPolicyInput[]; warnings: string[] }> {
+    // Before the load, so an edit made while it runs reads as a change.
+    const inputs = diagnosticPolicyInputs(root);
+    const loaded = await loadCurrentDiagnosticPolicy(root, inputs);
     const warnings: string[] = [];
     if (loaded.file !== null && loaded.problems.length > 0) {
         warnings.push(diagnosticConfigProblemsMessage(path.basename(loaded.file), loaded.problems));
     }
     try {
-        writeDiagnosticPolicyState(root, loaded.policy);
+        writeDiagnosticPolicyState(root, loaded.policy, inputs);
     } catch (error) {
         // Node's fs throws `Error`s, and nothing else runs in between.
         warnings.push(
@@ -51,7 +64,7 @@ export async function writeNextDiagnosticPolicy(
                 'loader reports every diagnostic at its default level.',
         );
     }
-    return { policy: loaded.policy, warnings };
+    return { policy: loaded.policy, inputs, warnings };
 }
 
 /**

@@ -83,7 +83,7 @@ pub(crate) fn reverse_property_key(prefix: &str) -> Option<&'static str> {
         "drop-shadow" => Some("dropShadow"), // chosen from: dropShadow, dropShadowColor
         "duration" => Some("duration"),
         "ease" => Some("ease"),
-        "end" => Some("insetE"),
+        "end" => Some("insetE"), // chosen from: end, insetE
         "field-sizing" => Some("fieldSizing"),
         "fill" => Some("fill"),
         "filter" => Some("filter"),
@@ -112,9 +112,9 @@ pub(crate) fn reverse_property_key(prefix: &str) -> Option<&'static str> {
         "inset" => Some("inset"),
         "inset-be" => Some("insetBe"),
         "inset-bs" => Some("insetBs"),
-        "inset-e" => Some("insetE"),       // chosen from: end, insetE
+        "inset-e" => Some("insetE"),
         "inset-ring" => Some("insetRing"), // chosen from: insetRing, insetRingColor
-        "inset-s" => Some("insetS"),       // chosen from: start, insetS
+        "inset-s" => Some("insetS"),
         "inset-shadow" => Some("insetShadow"), // chosen from: insetShadow, insetShadowColor
         "inset-x" => Some("insetX"),
         "inset-y" => Some("insetY"),
@@ -256,7 +256,7 @@ pub(crate) fn reverse_property_key(prefix: &str) -> Option<&'static str> {
         "snap" => Some("snapType"), // chosen from: snapAlign, snapStop, snapType
         "space-x" => Some("spaceX"),
         "space-y" => Some("spaceY"),
-        "start" => Some("insetS"),
+        "start" => Some("insetS"),  // chosen from: start, insetS
         "stroke" => Some("stroke"), // chosen from: stroke, strokeWidth
         "tab" => Some("tabSize"),
         "table" => Some("tableLayout"),
@@ -558,4 +558,4 @@ pub(crate) const REVERSE_PROPERTY_MAP: &[(&str, &str)] = &[
 
 /// Prefixes that come from EXTRA_REVERSE_PREFIXES rather than from inverting
 /// PROPERTY_MAP: Tailwind class roots whose sz key lowers under another prefix.
-pub(crate) const EXTRA_REVERSE_PREFIXES: &[&str] = &["bg-size", "end", "prose", "start"];
+pub(crate) const EXTRA_REVERSE_PREFIXES: &[&str] = &["bg-size", "inset-e", "inset-s", "prose"];

@@ -21,8 +21,12 @@ pub enum DiagnosticCode {
     NumericKey,
     /// A value a closed-enum key does not take.
     ClosedEnumValue,
+    /// A colour key given its opacity in a string, which emits nothing; the object form takes it.
+    SlashOpacityString,
     /// A spacing value off Tailwind's quarter-step scale.
     OffScaleValue,
+    /// A negative value on a key Tailwind serves no negative utility for.
+    UnsignedValue,
     /// A font weight written as a numeric string.
     NumericFontWeight,
     /// A border style on one side, which Tailwind cannot express.
@@ -83,7 +87,9 @@ impl DiagnosticCode {
             Self::RemovedKey => "removed-key",
             Self::NumericKey => "numeric-key",
             Self::ClosedEnumValue => "closed-enum-value",
+            Self::SlashOpacityString => "slash-opacity-string",
             Self::OffScaleValue => "off-scale-value",
+            Self::UnsignedValue => "unsigned-value",
             Self::NumericFontWeight => "numeric-font-weight",
             Self::PerSideBorderStyle => "per-side-border-style",
             Self::PropertyObject => "property-object",
@@ -113,13 +119,15 @@ impl DiagnosticCode {
 }
 
 /// Every code, in list order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 30] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
     DiagnosticCode::NumericKey,
     DiagnosticCode::ClosedEnumValue,
+    DiagnosticCode::SlashOpacityString,
     DiagnosticCode::OffScaleValue,
+    DiagnosticCode::UnsignedValue,
     DiagnosticCode::NumericFontWeight,
     DiagnosticCode::PerSideBorderStyle,
     DiagnosticCode::PropertyObject,

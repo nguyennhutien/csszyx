@@ -139,6 +139,7 @@ pub(super) fn transform_file_with_options(
     // A file that emitted nothing, over the AST budget for one, merges nothing.
     if !result.classes.is_empty() {
         result.merge_groups = lists.groups;
+        result.single_class_groups = lists.single_class_groups;
         result.merge_overrides = lists.overrides;
         if !removed.is_empty() {
             let mut reported: std::collections::HashSet<String> =
@@ -229,6 +230,7 @@ fn transform_fast_static_ir_with_options(
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         merge_groups: Vec::new(),
+        single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
         diagnostics,
         issues,
@@ -329,6 +331,7 @@ fn transform_static_classes_with_options(
     let mut lines: Option<LineIndex> = None;
     diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
     diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
+    diagnostics.extend(deferred_variant_diagnostics(file, &parsed.ir, &mut lines));
     diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
@@ -473,6 +476,7 @@ fn transform_static_classes_with_options(
         classes,
         raw_class_names,
         merge_groups: Vec::new(),
+        single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
         diagnostics,
         issues,
@@ -635,6 +639,38 @@ fn site_fallback_diagnostics(
                     kind,
                     &fallback.detail,
                     &fallback.path,
+                ),
+            )
+        })
+        .collect()
+}
+
+/// Build-log diagnostics for variant keys left to the runtime.
+///
+/// `sz={{ m: 1, hover: x }}`: the build cannot see what `x` holds, so the key
+/// goes to `_szPart` and nothing collects its classes — the `sz={s}` failure
+/// for one key, in the same wording, at the key.
+fn deferred_variant_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    lines: &mut Option<LineIndex>,
+) -> Diagnostics {
+    use super::generated::sz_fallback_matrix::{
+        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
+    };
+
+    ir.deferred_variant_keys
+        .iter()
+        .map(|deferred| {
+            let (line, column) = babel_line_column(&file.source, lines, deferred.start);
+            let reason = sz_fallback_reason(SzFallbackKind::Variant, &deferred.path, "");
+            let suggestion = sz_fallback_suggestion(SzFallbackKind::Variant);
+            (
+                DiagnosticCode::FallbackMissingCss,
+                deferred.start,
+                format!(
+                    "sz fallback at {line}:{column}: {reason}.
+  Suggestion: {suggestion}"
                 ),
             )
         })
@@ -926,8 +962,10 @@ struct KeyValueFindings {
     property_objects: Vec<(String, String, u32)>,
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
+    slash_opacities: Vec<(String, String, u32)>,
     mask_members: Vec<(String, String, String, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
+    mask_layers: Vec<(String, &'static str, u32)>,
     globals_before_groups: Vec<(String, String, &'static str, u32)>,
     runtime_aliases: Vec<(String, u32)>,
 }
@@ -943,8 +981,10 @@ impl KeyValueFindings {
         self.property_objects.clear();
         self.unknown_variants.clear();
         self.dead_enums.clear();
+        self.slash_opacities.clear();
         self.mask_members.clear();
         self.moved_values.clear();
+        self.mask_layers.clear();
         self.globals_before_groups.clear();
         self.runtime_aliases.clear();
     }
@@ -985,7 +1025,9 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_property_object_values(object, &mut found.property_objects);
         super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
+        super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
         super::lower::collect_moved_values(object, &mut found.moved_values);
+        super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
         super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
     }
@@ -1002,6 +1044,8 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.mask_members, 8, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.moved_values, 9, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.globals_before_groups, 10, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.slash_opacities, 11, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -1032,8 +1076,10 @@ fn push_group_key_value_diagnostics<'a>(
     push_property_object_diagnostics(file, &found.property_objects, location, lines, out);
     push_owned_key_variant_diagnostics(file, &found.unknown_variants, location, lines, out);
     push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
+    push_slash_opacity_diagnostics(file, &found.slash_opacities, location, lines, out);
     push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
     push_moved_value_diagnostics(file, &found.moved_values, location, lines, out);
+    push_mask_layer_diagnostics(file, &found.mask_layers, location, lines, out);
     push_global_before_group_diagnostics(file, &found.globals_before_groups, location, lines, out);
     push_runtime_alias_diagnostics(file, &found.runtime_aliases, location, lines, out);
 }
@@ -1128,6 +1174,25 @@ fn push_moved_value_diagnostics(
         };
         out.push_issue(DiagnosticCode::MovedValue, *offset, format!(
             "[csszyx] \"{key}: {value}\" moved to {{ {replacing_key}: {replacement} }} at {location}:{line}. Run `csszyx migrate` to rewrite it."
+        ));
+    }
+}
+
+/// A `mask` value naming a gradient layer, which moved to its own key.
+/// Mirrors `warnMaskLayerValue` in the TypeScript core byte for byte.
+fn push_mask_layer_diagnostics(
+    file: &TransformFile,
+    found: &[(String, &'static str, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Diagnostics,
+) {
+    for (value, key, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push_issue(DiagnosticCode::MovedValue, *offset, format!(
+            "[csszyx] mask: '{value}' at {location}:{line} — gradient layers moved to \"{key}\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable."
         ));
     }
 }
@@ -1456,6 +1521,29 @@ fn push_dead_enum_diagnostics(
     }
 }
 
+/// Report a colour key whose slash-opacity string the lowering dropped.
+///
+/// Wording matches the runtime channel's `warnStringColorOpacity`, so the same
+/// value reads the same in a build log and in a browser console.
+fn push_slash_opacity_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Diagnostics,
+) {
+    for (key, value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // The collector found a slash, so the split cannot miss.
+        let (color, opacity) = value.split_once('/').unwrap_or_default();
+        out.push_issue(DiagnosticCode::SlashOpacityString, *offset, format!(
+            "[csszyx] \"{key}: '{value}'\" at {location}:{line} — string slash opacity is not supported, and nothing is emitted for it. Use object form: {{ color: '{color}', op: {opacity} }}."
+        ));
+    }
+}
+
 /// The group key and value whose class a stand-alone key's stray value emits:
 /// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
 /// Mirrors `siblingGroupOf` in the TypeScript core.
@@ -1582,6 +1670,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         classes: Vec::new(),
         raw_class_names: Vec::new(),
         merge_groups: Vec::new(),
+        single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
         diagnostics: Vec::new(),
         issues: Vec::new(),
@@ -2661,6 +2750,90 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_names_a_slash_opacity_string_on_a_colour_key() {
+        // A colour key takes its opacity in the object form, so the lowering
+        // drops the string. A drop with nothing said is missing output; the
+        // runtime channel has always named it, and the build now does too.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: [
+                "export const A = () => <div sz={{ bg: 'red-500/50!', p: 2,",
+                "  hover: { from: 'blue-500/20' }, text: 'red-500/50', fill: '1/2',",
+                "  ring: { color: 'red-500', op: 50 }, data: { x: { bg: 'red-500/5' } } }} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert_eq!(
+            result.diagnostics,
+            [
+                "[csszyx] \"bg: 'red-500/50'\" at /repo/src/App.tsx:1 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 50 }.",
+                "[csszyx] \"from: 'blue-500/20'\" at /repo/src/App.tsx:2 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'blue-500', op: 20 }.",
+                "[csszyx] \"bg: 'red-500/5'\" at /repo/src/App.tsx:3 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 5 }.",
+            ]
+        );
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>(),
+            [crate::transform::DiagnosticCode::SlashOpacityString; 3]
+        );
+        assert!(!result.code.contains("red-500/50!"), "{}", result.code);
+    }
+
+    #[test]
+    fn static_engine_names_a_gradient_layer_written_on_mask() {
+        // The layers moved to maskLinear / maskRadial / maskConic, so the
+        // lowering emits nothing for one on `mask`. A drop with nothing said is
+        // missing output; the runtime channel names it with this text.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: [
+                "export const A = () => <div sz={{ mask: 'linear-45!', p: 2,",
+                "  hover: { mask: 'radial' }, maskLinear: { from: '20%' } }} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert_eq!(
+            result.diagnostics,
+            [
+                "[csszyx] mask: 'linear-45' at /repo/src/App.tsx:1 — gradient layers moved to \"maskLinear\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.",
+                "[csszyx] mask: 'radial' at /repo/src/App.tsx:2 — gradient layers moved to \"maskRadial\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.",
+            ]
+        );
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>(),
+            [crate::transform::DiagnosticCode::MovedValue; 2]
+        );
+    }
+
+    #[test]
+    fn a_runtime_value_takes_the_type_hint_its_key_takes() {
+        // `bg-(--v)` is a background colour and `shadow-(--v)` the shadow
+        // itself, so the hoisted variable carries the hint a static `--x` does.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ x }) => <div sz={{ bgPos: x, shadowColor: x, p: x }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(
+            result.code.contains(
+                "bg-(position:--_sz-bg-pos) shadow-(color:--_sz-shadow-color) p-(--_sz-p)"
+            ),
+            "{}",
+            result.code
+        );
+    }
+
+    #[test]
     fn static_engine_reads_the_important_modifier_on_a_closed_enum() {
         // `flex!` is a legal value with a legal class suffix. The lowering
         // splits the bang off before its lookup; the collector must too, or
@@ -2863,12 +3036,12 @@ mod tests {
 
         assert_eq!(
             result.code,
-            "export const App = () => <div className=\"inset-s-4 hover:bg-red-500\" />;"
+            "export const App = () => <div className=\"start-4 hover:bg-red-500\" />;"
         );
         assert!(result.metadata.transformed);
         assert_eq!(result.metadata.producer, TransformProducer::Rust);
         assert_eq!(result.parser_path, ParserPath::Static);
-        assert_eq!(result.classes, ["inset-s-4", "hover:bg-red-500"]);
+        assert_eq!(result.classes, ["start-4", "hover:bg-red-500"]);
         assert!(result.metadata.timings.total_ns > 0);
         assert!(result.metadata.timings.parse_ns > 0);
         assert!(result.metadata.timings.scope_ns > 0);
@@ -5143,7 +5316,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 30] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 31] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5167,6 +5340,11 @@ mod tests {
             (
                 DiagnosticCode::ClosedEnumValue,
                 "<div sz={{ display: 'bogus' }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::SlashOpacityString,
+                "<div sz={{ bg: 'red-500/50' }} />".into(),
                 TransformOptions::default(),
             ),
             (
@@ -5305,9 +5483,15 @@ mod tests {
                 },
             ),
         ];
+        // `unsigned-value` is the build-time oracle's verdict, read from the
+        // project's Tailwind (ADR 0012, 0022); the engine never renders it.
         assert_eq!(
             cases.iter().map(|(code, ..)| *code).collect::<Vec<_>>(),
             DIAGNOSTIC_CODES
+                .iter()
+                .copied()
+                .filter(|code| *code != DiagnosticCode::UnsignedValue)
+                .collect::<Vec<_>>()
         );
         for (code, jsx, options) in cases {
             let source =
@@ -5348,5 +5532,287 @@ mod tests {
                 start: u32::try_from(source.find("xyzzy").expect("the key")).expect("small"),
             }]
         );
+    }
+
+    /// A sign goes onto the utility on every key, in Tailwind's spelling, and
+    /// the engine says nothing about whether Tailwind serves it: that verdict
+    /// is the build-time oracle's, read from the project's own Tailwind.
+    #[test]
+    fn a_sign_is_hoisted_without_a_verdict() {
+        let source = "export const A = () => <div sz={{ p: -2, w: '-1/2', mt: '-1/2', colSpan: -2, hover: { p: -1 } }} />;";
+        let result = transform_file(&TransformFile {
+            filename: "/repo/src/A.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(
+            result
+                .code
+                .contains("className=\"-p-2 -w-1/2 -mt-1/2 -col-span-2 hover:-p-1\""),
+            "{}",
+            result.code
+        );
+        assert_eq!(result.diagnostics, Vec::<String>::new());
+        assert!(result.issues.is_empty());
+    }
+
+    /// An array the attribute wraps twice — a parenthesised `satisfies`, a
+    /// non-null assertion or a second pair of parentheses — composes as the
+    /// bare array does, instead of going to the runtime whole.
+    #[test]
+    fn an_array_wrapped_twice_composes_like_the_bare_array() {
+        for source in [
+            "const A = ({ c }) => <div sz={((['p-1', c && { m: 1 }]))} />;",
+            "const A = ({ c }) => <div sz={(['p-1', c && { m: 1 }] satisfies X)} />;",
+            "const A = ({ c }) => <div sz={(['p-1', c && { m: 1 }]!)} />;",
+        ] {
+            let result = run_variant_source(source);
+            assert!(
+                result
+                    .code
+                    .contains(r#"className={_szcn("p-1", c && "m-1")}"#),
+                "{source}\n{}",
+                result.code
+            );
+            assert!(result.issues.is_empty(), "{source}: {:?}", result.issues);
+        }
+    }
+
+    /// An element holding one conditional lowers both branches statically and
+    /// still reports its keys; one that also holds a runtime value goes to the
+    /// runtime whole, conditional and all.
+    #[test]
+    fn an_array_element_with_one_conditional_lowers_only_when_nothing_else_is_runtime() {
+        let result = run_variant_source(
+            "const A = ({ c }) => <div sz={['p-1', { workBreak: 'all', m: c ? 1 : 2 }]} />;",
+        );
+        assert!(
+            result.code.contains(r#"c ? "m-1" : "m-2""#),
+            "{}",
+            result.code
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == crate::transform::DiagnosticCode::UnknownKey),
+            "{:?}",
+            result.issues
+        );
+
+        let result = run_variant_source(
+            "const A = ({ c, x }) => <div sz={['p-1', { m: c ? 1 : 2, w: x }]} />;",
+        );
+        assert!(
+            result
+                .code
+                .contains(r#"_szcn("p-1", _szPart({ m: c ? 1 : 2, w: x }))"#),
+            "{}",
+            result.code
+        );
+    }
+
+    /// A colour key inside a variant is a slash-opacity string like one at
+    /// the top; the `color` member of a colour object is a value and is not.
+    #[test]
+    fn a_slash_opacity_string_is_found_under_a_variant_but_not_in_a_colour_object() {
+        let slash = |source: &str| {
+            run_variant_source(source)
+                .issues
+                .iter()
+                .filter(|issue| issue.code == crate::transform::DiagnosticCode::SlashOpacityString)
+                .count()
+        };
+        assert_eq!(
+            slash("const A = () => <div sz={{ hover: { color: 'red-500/50' } }} />;"),
+            1
+        );
+        assert_eq!(
+            slash("const A = () => <div sz={{ bg: { color: 'red-500/50', op: 50 } }} />;"),
+            0
+        );
+    }
+
+    /// One source through the parser lane with default options.
+    fn run_variant_source(source: &str) -> super::TransformResult {
+        transform_static_classes_with_options(
+            &TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+            TransformOptions::default(),
+        )
+    }
+
+    /// Each source compiles to the expected fragment and reports its deferred
+    /// key as `fallback-missing-css`, with no nudge beside it.
+    fn assert_deferred_and_reported(cases: &[(&str, &str)]) {
+        for (source, expected) in cases {
+            let result = run_variant_source(source);
+            assert!(result.code.contains(expected), "{source}\n{}", result.code);
+            let deferred = result
+                .issues
+                .iter()
+                .filter(|issue| issue.code == crate::transform::DiagnosticCode::FallbackMissingCss)
+                .count();
+            assert!(deferred >= 1, "{source}: {:?}", result.issues);
+            // The key's report replaces the element nudge, whose "classes are
+            // still safelisted" is untrue of the deferred key.
+            assert!(
+                !result
+                    .issues
+                    .iter()
+                    .any(|issue| issue.code == crate::transform::DiagnosticCode::FallbackNudge),
+                "{source}: {:?}",
+                result.issues
+            );
+        }
+    }
+
+    /// An object in a branch of a runtime conditional or logical value, in an
+    /// element and as the whole attribute: the static branch is collected
+    /// best-effort, the deferred key never is, so the key is reported.
+    #[test]
+    fn a_variant_key_in_a_runtime_branch_is_reported() {
+        assert_deferred_and_reported(&[
+            (
+                "const A = ({ c, x }) => <div sz={[c ? { hover: x } : { p: 2 }]} />;",
+                "className={_szcn(_szPart(c ? { hover: x } : { p: 2 }))}",
+            ),
+            (
+                "const A = ({ s, x }) => <div sz={[s ?? { hover: x }]} />;",
+                "className={_szcn(_szPart(s ?? { hover: x }))}",
+            ),
+            (
+                "const A = ({ c, s, x }) => <div sz={c ? s : { m: 1, hover: x }} />;",
+                "className={_sz(c ? s : { m: 1, hover: x })}",
+            ),
+            (
+                "const A = ({ c, x }) => <div sz={({ hover: x }) || c} />;",
+                "className={_sz(({ hover: x }) || c)}",
+            ),
+        ]);
+        // No deferred key in any branch: the conditional keeps its nudge.
+        let result = run_variant_source("const A = ({ c, y }) => <div sz={c ? { p: y } : s} />;");
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>(),
+            [crate::transform::DiagnosticCode::FallbackNudge]
+        );
+    }
+
+    /// A variant key holding a value only the runtime knows goes to `_szPart`
+    /// with its keys rebuilt around it; the rest still compiles, and the key
+    /// reports `fallback-missing-css` where it is written.
+    #[test]
+    fn a_runtime_value_under_a_variant_key_is_deferred_and_reported() {
+        let run = run_variant_source;
+        let cases = [
+            (
+                "const A = ({ x }) => <div sz={{ m: 1, hover: x }} />;",
+                "className={_szcn(\"m-1\", _szPart({ hover: x }))}",
+            ),
+            (
+                "const A = ({ c, x }) => <div sz={{ md: { hover: c ? x : null } }} />;",
+                "className={_szcn(_szPart({ md: { hover: c ? x : null } }))}",
+            ),
+            (
+                "const A = ({ x }) => <div sz={{ '[&>li]': x, '@md2': x }} />;",
+                "className={_szcn(_szPart({ \"[&>li]\": x }), _szPart({ \"@md2\": x }))}",
+            ),
+            (
+                "const A = ({ x }) => <div sz={{ maskRadial: { angle: 4 }, hover: x }} />;",
+                "className={_szcn(_szPart({ hover: x }))}",
+            ),
+            (
+                "const A = ({ x, y }) => <div sz={{ m: 1, p: y, hover: x }} />;",
+                "className={_sz({ m: 1, p: y, hover: x })}",
+            ),
+            // A key no table claims is the project's own variant namespace
+            // (`--breakpoint-tablet`, `@custom-variant`): the runtime lowers it.
+            (
+                "const A = ({ x }) => <div sz={{ m: 1, tablet: x }} />;",
+                "className={_szcn(\"m-1\", _szPart({ tablet: x }))}",
+            ),
+            (
+                "const A = ({ c, x }) => <div sz={{ md: { 'desktop-sm': c ? x : null } }} />;",
+                "className={_szcn(_szPart({ md: { \"desktop-sm\": c ? x : null } }))}",
+            ),
+            // An array element splits the way a lone object does.
+            (
+                "const A = ({ x }) => <div sz={['p-2', { m: 1, hover: x }]} />;",
+                "className={_szcn(\"p-2\", \"m-1\", _szPart({ hover: x }))}",
+            ),
+            (
+                "const A = ({ x }) => <div sz={[{ hover: x }, { p: 2 }]} />;",
+                "className={_szcn(_szPart({ hover: x }), \"p-2\")}",
+            ),
+            (
+                "const A = ({ x, y }) => <div sz={[{ m: 1, p: y, hover: x }]} />;",
+                "className={_szcn(_szPart({ m: 1, p: y, hover: x }))}",
+            ),
+            (
+                "const A = ({ c, x }) => <div sz={[c && { m: 1, hover: x }]} />;",
+                "className={_szcn(_szPart(c && { m: 1, hover: x }))}",
+            ),
+        ];
+        assert_deferred_and_reported(&cases);
+
+        let source = "const A = ({ x }) => <div sz={{ m: 1,\n  md: { hover: x } }} />;";
+        let result = run(source);
+        assert_eq!(
+            result.issues,
+            [crate::transform::Issue {
+                code: crate::transform::DiagnosticCode::FallbackMissingCss,
+                start: u32::try_from(source.find("hover").expect("the key")).expect("small"),
+            }]
+        );
+        assert!(
+            result.diagnostics[0].starts_with(
+                "sz fallback at 2:9: key `md.hover` holds a value only known at runtime and no sz property claims it"
+            ),
+            "{:?}",
+            result.diagnostics
+        );
+        // An unknown slot member beside it is still reported from the rest.
+        let result =
+            run("const A = ({ x }) => <div sz={{ maskRadial: { angle: 4 }, hover: x }} />;");
+        assert!(result
+            .issues
+            .iter()
+            .any(|issue| issue.code == crate::transform::DiagnosticCode::UnknownField));
+    }
+
+    /// A property key keeps its css-variable lane even where a variant shares
+    /// its stem, and a two-branch conditional under a variant still compiles.
+    #[test]
+    fn variant_deferral_leaves_property_keys_and_two_branch_conditionals() {
+        for (source, expected) in [
+            ("const A = ({ x }) => <div sz={{ p: x }} />;", "p-(--_sz-p)"),
+            (
+                "const A = ({ x }) => <div sz={{ '--brand': x }} />;",
+                "[--brand:var(--_sz---brand)]",
+            ),
+            (
+                "const A = ({ c }) => <div sz={{ hover: c ? { p: 4 } : { p: 1 } }} />;",
+                "c ? \"hover:p-4\" : \"hover:p-1\"",
+            ),
+        ] {
+            let result = transform_static_classes_with_options(
+                &TransformFile {
+                    filename: "/repo/src/App.tsx".to_string(),
+                    source: source.to_string(),
+                },
+                0,
+                std::time::Instant::now(),
+                TransformOptions::default(),
+            );
+            assert!(result.code.contains(expected), "{}", result.code);
+            assert!(result.issues.is_empty(), "{:?}", result.issues);
+        }
     }
 }

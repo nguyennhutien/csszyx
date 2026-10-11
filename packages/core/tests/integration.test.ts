@@ -117,12 +117,17 @@ describe('@csszyx/core Integration', () => {
             expect(transform_sz({ my: -2.5 })).toBe('-my-2.5');
         });
 
-        it('should suppress string slash opacity (use { color, op } object form)', () => {
-            // String slash opacity is not supported — TypeScript compiler warns + suppresses,
-            // Rust suppresses at WASM level. Neither path should emit a class.
+        it('should suppress string slash opacity on a colour key (use { color, op } object form)', () => {
+            // A colour key takes its opacity in the object form — the TypeScript
+            // core warns + suppresses, Rust suppresses at WASM level.
             expect(transform_sz({ bg: 'red-500/50' })).toBe('');
-            expect(transform_sz({ text: 'blue-600/75' })).toBe('');
             expect(transform_sz({ bg: 'brand-500/20' })).toBe('');
+        });
+
+        it('should write a slash opacity string on a key that is not only a colour', () => {
+            // `text-*` also takes a colour, and Tailwind serves its `/opacity`
+            // modifier on every v4; both lanes write the class.
+            expect(transform_sz({ text: 'blue-600/75' })).toBe('text-blue-600/75');
         });
 
         it('should pass through valid color strings without slash', () => {

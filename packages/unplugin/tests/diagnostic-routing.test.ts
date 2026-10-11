@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
     deadClassMessage,
+    emittedClassSites,
     findDeadSzClasses,
     reportDeadSzClasses,
     szClassSites,
@@ -303,6 +304,20 @@ describe('dedupe and the cap', () => {
             capOverflowMessage('dead-class', 1),
             capOverflowMessage('other', 1),
         ]);
+    });
+
+    it('forgets every finding listed or held once reset, as a config edit needs', () => {
+        // An edited config gives findings new levels; a site listed at the old
+        // one is said again at the new one, and nothing held before is counted.
+        const limiter = createDiagnosticLimiter(1);
+        limiter.version('f', 'v1');
+        expect(limiter.admit({ id: 'a', file: 'f', line: 1, key: '1' })).toBe(true);
+        expect(limiter.admit({ id: 'a', file: 'f', line: 2, key: '2' })).toBe(false);
+        limiter.reset();
+        expect(limiter.counting).toBe(false);
+        expect(limiter.flush()).toEqual([]);
+        limiter.version('f', 'v1');
+        expect(limiter.admit({ id: 'a', file: 'f', line: 1, key: '1' })).toBe(true);
     });
 
     it('lists a capped finding again once the cap opens, since it was never shown', () => {
@@ -642,14 +657,12 @@ describe('where a file emits each class', () => {
             classes,
             positions: keys.map((_, index) => ({ line, column: index + 1 })),
         });
-        const sites = szClassSites(
-            'src/A.tsx',
-            ['break-bogus', 'p-4', 'only-one'],
-            [
+        const sites = szClassSites('src/A.tsx', ['break-bogus', 'p-4', 'only-one'], {
+            mergeGroups: [
                 group(['break', 'p'], ['break-bogus', 'p-4'], 2),
                 group(['break'], ['break-bogus'], 9),
             ],
-        );
+        });
         expect([...sites]).toEqual([
             ['break-bogus', { file: 'src/A.tsx', line: 2, column: 1, key: 'break' }],
             ['p-4', { file: 'src/A.tsx', line: 2, column: 2, key: 'p' }],
@@ -657,8 +670,69 @@ describe('where a file emits each class', () => {
         ]);
     });
 
+    it('places a one-class object through singleClassGroups', () => {
+        const sites = szClassSites('src/A.tsx', ['justify-safe-center', 'p-4'], {
+            mergeGroups: [
+                {
+                    keys: ['p', 'm'],
+                    classes: ['p-4', 'm-2'],
+                    positions: [
+                        { line: 3, column: 5 },
+                        { line: 3, column: 9 },
+                    ],
+                },
+            ],
+            singleClassGroups: [
+                {
+                    keys: ['justify'],
+                    classes: ['justify-safe-center'],
+                    positions: [{ line: 7, column: 4 }],
+                },
+            ],
+        });
+        expect([...sites]).toEqual([
+            ['justify-safe-center', { file: 'src/A.tsx', line: 7, column: 4, key: 'justify' }],
+            ['p-4', { file: 'src/A.tsx', line: 3, column: 5, key: 'p' }],
+        ]);
+    });
+
+    it('places a class both lists hold at the earlier key in the source', () => {
+        const single = (line: number, column: number) => ({
+            keys: ['p'],
+            classes: ['p-4'],
+            positions: [{ line, column }],
+        });
+        const merged = {
+            keys: ['p', 'm'],
+            classes: ['p-4', 'm-2'],
+            positions: [
+                { line: 5, column: 3 },
+                { line: 5, column: 9 },
+            ],
+        };
+        // A one-class object written before the merged one wins …
+        expect(
+            emittedClassSites({ mergeGroups: [merged], singleClassGroups: [single(2, 8)] }).get(
+                'p-4',
+            ),
+        ).toEqual({ line: 2, column: 8, key: 'p' });
+        // … on the same line too, by column …
+        expect(
+            emittedClassSites({ mergeGroups: [merged], singleClassGroups: [single(5, 1)] }).get(
+                'p-4',
+            ),
+        ).toEqual({ line: 5, column: 1, key: 'p' });
+        // … and one written after it does not.
+        expect(
+            emittedClassSites({
+                mergeGroups: [merged],
+                singleClassGroups: [single(5, 20), single(9, 1)],
+            }).get('p-4'),
+        ).toEqual({ line: 5, column: 3, key: 'p' });
+    });
+
     it('names the file alone for a result an older cache entry wrote without groups', () => {
-        expect([...szClassSites('src/A.tsx', ['p-4'], undefined)]).toEqual([
+        expect([...szClassSites('src/A.tsx', ['p-4'], {})]).toEqual([
             ['p-4', { file: 'src/A.tsx' }],
         ]);
     });

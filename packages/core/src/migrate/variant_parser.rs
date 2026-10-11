@@ -10,9 +10,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::class_parser::{find_top_level_slash, parse_class};
+use super::class_parser::{find_top_level_slash, parse_class_judged};
 use super::class_rules::wrapped;
 use super::value::{is_js_whitespace, SzObject, SzValue};
+use super::verdict::Judge;
 use crate::transform::generated::migrate_tables::reverse_variant;
 use crate::transform::generated::tables::{global_keyword_for_group, global_keyword_groups};
 
@@ -220,9 +221,9 @@ impl ParsedToken {
     }
 }
 
-fn parse_class_token(token: &str) -> Option<ParsedToken> {
+fn parse_class_token(token: &str, judge: Judge<'_>) -> Option<ParsedToken> {
     let (variants, base_class) = extract_variants(token);
-    let parsed = parse_class(base_class)?;
+    let parsed = parse_class_judged(base_class, judge)?;
     Some(ParsedToken {
         key_path: variants.into_iter().flat_map(map_variant).collect(),
         prop: parsed.prop,
@@ -255,16 +256,45 @@ struct Grouped {
     token: String,
 }
 
+/// What a conversion consults besides the classes: the resolution map, and
+/// who answers where one of migrate's tables would decide.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Lookup<'a> {
+    /// The migration-resolution map, which answers for a token before the
+    /// parser is asked.
+    pub custom_map: Option<&'a SzObject>,
+    /// The project's Tailwind, where it was asked.
+    pub judge: Judge<'a>,
+}
+
+impl<'a> Lookup<'a> {
+    /// The resolution map alone, with every table question left to the table.
+    #[must_use]
+    pub fn map(custom_map: Option<&'a SzObject>) -> Self {
+        Self {
+            custom_map,
+            judge: Judge::default(),
+        }
+    }
+}
+
 /// Convert a whole `className` into one merged sz object, with the tokens
 /// that stay in `className` and the ones the resolution map keeps there.
 #[must_use]
 pub fn class_name_to_sz_object(class_name: &str, custom_map: Option<&SzObject>) -> Conversion {
+    class_name_to_sz_object_with(class_name, Lookup::map(custom_map))
+}
+
+/// [`class_name_to_sz_object`], with the project's Tailwind answering where a
+/// table would.
+#[must_use]
+pub fn class_name_to_sz_object_with(class_name: &str, lookup: Lookup<'_>) -> Conversion {
     let mut state = State::default();
     for token in tokenize(class_name) {
-        if apply_custom_map_token(token, custom_map, &mut state) {
+        if apply_custom_map_token(token, lookup, &mut state) {
             continue;
         }
-        apply_parsed_token(token, &mut state);
+        apply_parsed_token(token, lookup.judge, &mut state);
     }
     keep_standalone_conflicts_as_written(&mut state);
     state.conversion
@@ -329,7 +359,11 @@ const OBJECT_PROTOTYPE_KEYS: &[&str] = &[
 ];
 
 /// The action a map holds for a token, if it holds one.
-fn resolve_custom_map_entry(token: &str, custom_map: &SzObject) -> Option<Action> {
+fn resolve_custom_map_entry(
+    token: &str,
+    custom_map: &SzObject,
+    judge: Judge<'_>,
+) -> Option<Action> {
     let Some(value) = custom_map.get(token) else {
         // `__proto__` is an object — `Object.prototype` — with nothing
         // enumerable to merge; the other inherited names are functions.
@@ -346,7 +380,7 @@ fn resolve_custom_map_entry(token: &str, custom_map: &SzObject) -> Option<Action
             TODO_KEEP => Action::Keep,
             TODO_REMOVE => Action::Remove,
             TODO_PENDING => Action::Unresolved,
-            tailwind => resolve_custom_map_string(tailwind),
+            tailwind => resolve_custom_map_string(tailwind, judge),
         },
         _ => Action::Unresolved,
     })
@@ -354,8 +388,14 @@ fn resolve_custom_map_entry(token: &str, custom_map: &SzObject) -> Option<Action
 
 /// A Tailwind class string in the map converts on its own, without the map,
 /// and counts only if something in it converted.
-fn resolve_custom_map_string(tailwind: &str) -> Action {
-    let inner = class_name_to_sz_object(tailwind, None);
+fn resolve_custom_map_string(tailwind: &str, judge: Judge<'_>) -> Action {
+    let inner = class_name_to_sz_object_with(
+        tailwind,
+        Lookup {
+            custom_map: None,
+            judge,
+        },
+    );
     if inner.sz_object.is_empty() {
         return Action::Unresolved;
     }
@@ -363,8 +403,11 @@ fn resolve_custom_map_string(tailwind: &str) -> Action {
 }
 
 /// Apply the map's answer for a token; `false` when the map has none.
-fn apply_custom_map_token(token: &str, custom_map: Option<&SzObject>, state: &mut State) -> bool {
-    let Some(action) = custom_map.and_then(|map| resolve_custom_map_entry(token, map)) else {
+fn apply_custom_map_token(token: &str, lookup: Lookup<'_>, state: &mut State) -> bool {
+    let Some(action) = lookup
+        .custom_map
+        .and_then(|map| resolve_custom_map_entry(token, map, lookup.judge))
+    else {
         return false;
     };
     match action {
@@ -388,8 +431,8 @@ fn apply_custom_map_token(token: &str, custom_map: Option<&SzObject>, state: &mu
 
 /// Parse one token and place it, unless it fights an earlier token over a
 /// CSS property in the same scope, in which case both stay in `className`.
-fn apply_parsed_token(token: &str, state: &mut State) {
-    let Some(parsed) = parse_class_token(token) else {
+fn apply_parsed_token(token: &str, judge: Judge<'_>, state: &mut State) {
+    let Some(parsed) = parse_class_token(token, judge) else {
         state.conversion.unrecognized.push(token.to_string());
         return;
     };

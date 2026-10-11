@@ -83,8 +83,8 @@ describe('a fraction on a logical size or inset key', () => {
         ['inlineSize', 'inline-1/2'],
         ['minInlineSize', 'min-inline-1/2'],
         ['maxInlineSize', 'max-inline-1/2'],
-        ['insetS', 'inset-s-1/2'],
-        ['insetE', 'inset-e-1/2'],
+        ['insetS', 'start-1/2'],
+        ['insetE', 'end-1/2'],
         ['insetBs', 'inset-bs-1/2'],
         ['insetBe', 'inset-be-1/2'],
     ] as const;

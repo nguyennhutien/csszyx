@@ -11,6 +11,7 @@ import {
     createDiagnosticPolicy,
     deadClassMessage,
     suppressedAdvisoryMessage,
+    unsignedValueMessage,
 } from '@csszyx/unplugin/diagnostics';
 import { describe, expect, it } from 'vitest';
 
@@ -47,5 +48,17 @@ describe('nextDeadClassLines', () => {
         expect(nextDeadClassLines(DEAD, policy, createDiagnosticLimiter(), true, {})).toEqual([
             deadClassMessage('break-bogus', 'app/page.tsx'),
         ]);
+    });
+
+    it('says a dead class with a hoisted sign once, as unsigned-value', () => {
+        expect(
+            nextDeadClassLines(
+                [{ className: 'hover:-p-2', unsigned: 'p-2', file: 'app/page.tsx' }],
+                createDiagnosticPolicy(),
+                createDiagnosticLimiter(),
+                false,
+                {},
+            ),
+        ).toEqual([unsignedValueMessage('hover:-p-2', 'p-2', 'app/page.tsx')]);
     });
 });

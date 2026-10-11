@@ -50,10 +50,10 @@ pub use contract::{
 };
 pub use generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
 pub use ir::{
-    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
-    DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr, IrError, JsxOpeningElementIr,
-    RecoveryAttributeIr, RewriteScope, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr,
-    SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
+    ClassAttributeIr, DeferredVariantKeyIr, DroppedKeyReason, DroppedSzKeyIr,
+    DuplicateSzAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr,
+    IrError, JsxOpeningElementIr, RecoveryAttributeIr, RewriteScope, RuntimeFallbackDiagnosticIr,
+    RuntimeFallbackKindIr, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
     SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, SpreadSplitClassIr, StaticArrayPartIr,
     StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryArmIr, StaticTernaryIr,
     StyleAttributeIr, SzAttributeIr, SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr,

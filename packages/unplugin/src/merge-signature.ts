@@ -327,6 +327,40 @@ function declarationContext(declaration: Declaration, candidate: string): string
 }
 
 /**
+ * Visit every declaration that belongs to one candidate in the CSS Tailwind
+ * emitted for it, with the context it sits in. `@property` and keyframes
+ * declarations, and rules that do not select the candidate, are not visited.
+ *
+ * One walk for every question asked of a class's CSS — which properties it
+ * sets ({@link mergeSignatureFromCss}) and to what ({@link
+ * candidateDeclarationsFromCss}) — so no second reader of Tailwind's output
+ * grows beside this one (ADR 0026 §5).
+ *
+ * @param candidate - Candidate class name.
+ * @param css - CSS Tailwind emitted.
+ * @param visit - Called per declaration with its encoded context.
+ * @returns False when postcss or its selector parser cannot read the CSS.
+ */
+function walkCandidateDeclarations(
+    candidate: string,
+    css: string,
+    visit: (declaration: Declaration, context: string) => void,
+): boolean {
+    try {
+        postcss.parse(css).walkDecls(declaration => {
+            const context = declarationContext(declaration, candidate);
+            if (context !== null) visit(declaration, context);
+        });
+        return true;
+    } catch {
+        // CSS Tailwind emits that postcss or its selector parser cannot read,
+        // `group-[/x]:p-4` among them. No answer is the answer whenever the
+        // CSS cannot be read: a merge keeps both classes.
+        return false;
+    }
+}
+
+/**
  * Derive a deterministic merge signature from one candidate's emitted CSS.
  *
  * @param candidate - Candidate class name.
@@ -341,23 +375,13 @@ export function mergeSignatureFromCss(
     const propertiesByContext = new Map<string, Set<string>>();
     let important = false;
 
-    try {
-        postcss.parse(css).walkDecls(declaration => {
-            const context = declarationContext(declaration, candidate);
-            if (context === null) return;
-            const properties = propertiesByContext.get(context) ?? new Set<string>();
-            for (const property of expandCssProperty(declaration.prop)) properties.add(property);
-            propertiesByContext.set(context, properties);
-            if (declaration.important) important = true;
-        });
-    } catch {
-        // CSS Tailwind emits that postcss or its selector parser cannot read,
-        // `group-[/x]:p-4` among them. No signature is the answer the merge
-        // gives whenever it cannot prove: both classes stay.
-        return null;
-    }
-
-    if (propertiesByContext.size === 0) return null;
+    const read = walkCandidateDeclarations(candidate, css, (declaration, context) => {
+        const properties = propertiesByContext.get(context) ?? new Set<string>();
+        for (const property of expandCssProperty(declaration.prop)) properties.add(property);
+        propertiesByContext.set(context, properties);
+        if (declaration.important) important = true;
+    });
+    if (!read || propertiesByContext.size === 0) return null;
     const rules = [...propertiesByContext].map(([context, properties]) => ({
         context,
         properties: [...properties].sort(compareStrings),
@@ -367,6 +391,40 @@ export function mergeSignatureFromCss(
         rules,
         important,
     };
+}
+
+/** One declaration a candidate's CSS sets, as Tailwind wrote it. */
+export interface CandidateDeclaration {
+    /** The selector and at-rule context, encoded as in {@link MergeSignature}. */
+    context: string;
+    /** The property as written: a shorthand stays a shorthand. */
+    property: string;
+    /** The value as written, `!important` left out (the context carries it). */
+    value: string;
+}
+
+/**
+ * The declarations one candidate's emitted CSS sets, in source order.
+ *
+ * The signature answers which properties a class sets; this answers what it
+ * sets them to, from the same walk. csszyx's capability generator asks it
+ * whether `cursor-[inherit]` sets `cursor` to `inherit` rather than wrapping
+ * the keyword in an expression (`blur-[inherit]` writes `blur(inherit)`).
+ *
+ * @param candidate - Candidate class name.
+ * @param css - CSS Tailwind emitted, or null when it emits nothing.
+ * @returns The declarations, or null when there is no CSS or it cannot be read.
+ */
+export function candidateDeclarationsFromCss(
+    candidate: string,
+    css: string | null,
+): CandidateDeclaration[] | null {
+    if (css === null) return null;
+    const found: CandidateDeclaration[] = [];
+    const read = walkCandidateDeclarations(candidate, css, (declaration, context) => {
+        found.push({ context, property: declaration.prop, value: declaration.value });
+    });
+    return read ? found : null;
 }
 
 /** Each signature's resolved sides, kept as long as the signature is. */

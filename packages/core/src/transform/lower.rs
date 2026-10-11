@@ -8,8 +8,9 @@ use std::borrow::Cow;
 
 use super::{
     generated::tables::{
-        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar,
-        is_special_variant, key_migration_note, key_suggestion, property_prefix, variant_prefix,
+        boolean_class, css_var_type_hint, is_aria_state, is_known_variant,
+        is_removed_boolean_sugar, is_special_variant, key_migration_note, key_suggestion,
+        property_prefix, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
 };
@@ -125,8 +126,12 @@ pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
     if prop.key.starts_with("--") {
         return with_class_prefix(format!("{variant}[{}:var({})]", prop.key, prop.var_name));
     }
+    // The hoisted variable takes the type hint a static `--x` value takes:
+    // without it Tailwind reads `bg-(--v)` as a colour and `shadow-(--v)` as
+    // the shadow itself.
+    let hint = css_var_type_hint(&prop.key).map_or_else(String::new, |hint| format!("{hint}:"));
     with_class_prefix(format!(
-        "{variant}{}-({})",
+        "{variant}{}-({hint}{})",
         prop.class_prefix, prop.var_name
     ))
 }
@@ -240,8 +245,9 @@ fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
     lower_object_into_marked(object, "", &mut classes, &mut |index, len| {
         marks.push((index, len));
     });
-    // One class merges with nothing, so it is not recorded.
-    if classes.len() < 2 {
+    // A one-class object merges with nothing but is recorded all the same:
+    // the group is where its key and offset travel to a dead-class report.
+    if classes.is_empty() {
         return finish_lowered_classes(classes);
     }
     // Each class belongs to the last property that started at or before it.
@@ -331,8 +337,8 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 /// Collect the keys of unrecognized sz properties (likely typos) as
 /// `(key, byte_offset)` pairs. Walks nested SIMPLE-variant objects the same way
 /// the lowering does, but does NOT descend into parametric variants
-/// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, or
-/// color-with-opacity objects — their members are parameters/values, not sz
+/// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, the
+/// mask slots, or color-with-opacity objects — their members are parameters/values, not sz
 /// properties, so checking them would falsely warn (matches the JavaScript walk it replaced).
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
@@ -372,7 +378,11 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             if matches!(
                 property.key.as_str(),
                 "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
-            ) {
+            ) || mask_slot_members(&property.key).is_some()
+            {
+                // A mask slot's members are geometry with their own closed
+                // check (`collect_unknown_mask_slot_members`); walking them
+                // here read `angle` / `at` / `shape` as unknown sz keys.
                 continue;
             }
             if property_prefix(&property.key).is_some()
@@ -768,13 +778,47 @@ pub(crate) fn collect_dead_enum_values(
     }
 }
 
+/// Collect colour keys holding a slash-opacity string, which emit nothing.
+///
+/// A colour key takes its opacity in the object form (`{ color, op }`), so the
+/// lowering drops `bg: 'red-500/50'`; a drop with nothing said is missing
+/// output (ADR 0011), and the runtime channel names the same value. The
+/// important modifier is split off first, as `format_static_class` does.
+/// Descends through variants and parametric variants like the lowering, and
+/// skips a colour object, whose `color` member is a value rather than a key.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_slash_opacity_strings(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                let base = value.strip_suffix('!').unwrap_or(value);
+                if is_dropped_slash_opacity(&property.key, base) {
+                    out.push((property.key.clone(), base.to_string(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested)
+                if !(property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()) =>
+            {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_slash_opacity_strings(object, out);
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Legal members of one mask slot, minus the linear sides.
 ///
 /// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
 /// second field so the side vocabulary is named once in this file rather than
 /// re-spelled per use. Mirrors the TypeScript `MASK_SLOT_MEMBERS` table;
 /// anything else emits nothing at lowering.
-#[cfg(feature = "native-engine")]
+#[cfg(any(feature = "native-engine", test))]
 fn mask_slot_members(slot: &str) -> Option<(&'static [&'static str], bool)> {
     match slot {
         "maskLinear" => Some((&["angle", "from", "to"], true)),
@@ -1246,10 +1290,10 @@ fn lower_object_into_marked(
                     _ => {}
                 }
 
-                let variant = variant_prefix(&property.key).unwrap_or(&property.key);
-                let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
+                let variant = object_variant_segment(&property.key);
+                let mut next_prefix = String::with_capacity(prefix.len() + variant.len() + 1);
                 next_prefix.push_str(prefix);
-                next_prefix.push_str(variant);
+                next_prefix.push_str(&variant);
                 next_prefix.push(':');
                 lower_object_into(nested, &next_prefix, classes);
             }
@@ -1427,10 +1471,53 @@ fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
     None
 }
 
+/// Whether a key names a variant whatever its value holds — an sz object, a
+/// class string, a conditional of them — so a value only the runtime knows
+/// still lowers under the key's prefix at runtime.
+///
+/// A property key is never one, even where a variant shares its name: its
+/// runtime value takes the css-variable lane. The parametric stems are
+/// variants by name alone, since their members are parameters.
+///
+/// A key no table claims is one too. The variant namespace is open — a
+/// project names its own with `@custom-variant` and `--breakpoint-*` in
+/// `@theme`, which this engine never reads — so `tablet` is a variant to the
+/// runtime lowering whenever its value is an object, and the key's own
+/// `@utility` class otherwise. Either way the runtime decides, and a css
+/// variable behind `tablet-(--_sz-tablet)` would hold the object.
+#[cfg(feature = "native-engine")]
+pub(crate) fn is_variant_key(key: &str) -> bool {
+    property_prefix(key).is_none()
+        && (variant_string_prefix(key).is_some()
+            || key.starts_with('@')
+            || matches!(
+                key,
+                "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+            )
+            || !is_known_sz_key(key))
+}
+
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
 /// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
 fn get_variant_prefix(key: &str) -> Cow<'static, str> {
     variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
+}
+
+/// The variant segment a key holding an object chains onto with `:`.
+///
+/// An arbitrary variant loses its whitespace (`[& > li]` → `[&>li]`), a
+/// container query key is kept as written, and any other key is its
+/// `VARIANT_MAP` entry or its kebab-case — so a project variant written in
+/// camelCase (`tabletLarge`) is spelled `tablet-large:`, as the runtime
+/// lowering spells it. Mirrors `collectNestedVariant` in the TypeScript core.
+pub(crate) fn object_variant_segment(key: &str) -> Cow<'_, str> {
+    if key.starts_with('[') && key.ends_with(']') {
+        return Cow::Owned(key.chars().filter(|c| !c.is_whitespace()).collect());
+    }
+    if key.starts_with('@') {
+        return variant_prefix(key).map_or(Cow::Borrowed(key), Cow::Borrowed);
+    }
+    get_variant_prefix(key)
 }
 
 /// Lowers the `aria` variant: `{ aria: { checked: {...} } }` → `aria-checked:…`
@@ -1751,14 +1838,17 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     _ => return None,
                 });
             }
+            // A line keyword is its own utility; any other value (a colour,
+            // `wavy`, a thickness, `inherit`) is a `decoration-*` value and
+            // takes the generic lowering below, as in the TypeScript core.
             if key == "decoration" {
-                return Some(match value.as_str() {
-                    "none" => format!("{prefix}no-underline"),
+                match value.as_str() {
+                    "none" => return Some(format!("{prefix}no-underline")),
                     "underline" | "overline" | "line-through" | "no-underline" => {
-                        format!("{prefix}{value}")
+                        return Some(format!("{prefix}{value}"));
                     }
-                    _ => return None,
-                });
+                    _ => {}
+                }
             }
             // listStyleType: standard keywords stay bare (list-disc), CSS vars use
             // the paren form, everything else is arbitrary (list-[upper-roman]).
@@ -1880,13 +1970,16 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Gradient color-stop positions reuse the from/via/to prefix. CSS vars
             // use the paren form, bare integer percents stay bare, the rest bracket.
             if let Some(grad) = gradient_stop_prefix(key) {
-                return Some(if value.starts_with("--") {
-                    format!("{prefix}{grad}-({value})")
-                } else if is_integer_percent(value) {
-                    format!("{prefix}{grad}-{value}")
-                } else {
-                    format!("{prefix}{grad}-[{value}]")
-                });
+                return Some(typed_variable_value(key, value).map_or_else(
+                    || {
+                        if is_integer_percent(value) {
+                            format!("{prefix}{grad}-{value}")
+                        } else {
+                            format!("{prefix}{grad}-[{value}]")
+                        }
+                    },
+                    |typed| format!("{prefix}{grad}-{typed}"),
+                ));
             }
             // font-stretch: named keywords keep the font-stretch- prefix,
             // integer percents stay bare (font-stretch-50%), decimals bracket.
@@ -1967,30 +2060,47 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // friendly properties keep them native (w-1/2, basis-1/3); the rest
             // wrap them as arbitrary (p-[1/2]). Mirrors the JavaScript transform it replaced.
             if is_bare_fraction(value) {
-                return Some(if is_fraction_supported_prop(key) {
-                    format!("{prefix}{class_key}-{value}")
-                } else {
-                    format!("{prefix}{class_key}-[{value}]")
-                });
+                return Some(
+                    if super::generated::tables::is_fraction_supported_prop(key) {
+                        format!("{prefix}{class_key}-{value}")
+                    } else {
+                        format!("{prefix}{class_key}-[{value}]")
+                    },
+                );
             }
 
             // A CSS-wide keyword is valid CSS on every property, but Tailwind
             // serves it by name on only a few prefixes (`text-inherit`). On a
-            // prefix whose arbitrary form sets the key's own property it takes
-            // the bracket (`p-[inherit]`); elsewhere the bracket would set a
-            // different property, so the class is left for the build to report.
-            // Mirrors `normalizeGenericStringValue` in the TypeScript core.
+            // key whose arbitrary form sets its own property it takes the
+            // bracket (`p-[inherit]`); elsewhere the bracket would set a
+            // different property or an invalid value, so the class is left for
+            // the build to report. The capability table says which keys take
+            // it: a spelling convention from the Tailwind this repo pins, gated
+            // across Tailwind versions in this repo's CI, never a verdict on
+            // whether a class is served. Mirrors `normalizeGenericStringValue`
+            // in the TypeScript core.
             if super::generated::tables::is_css_wide_keyword(value)
                 && !super::generated::tables::is_css_wide_keyword_utility(&format!(
                     "{class_key}-{value}"
                 ))
-                && super::generated::tables::is_css_wide_bracket_prefix(&class_key)
+                && super::generated::tables::sz_capabilities(key)
+                    & super::generated::tables::SZ_CAP_CSS_WIDE_BRACKET
+                    != 0
             {
                 return Some(format!("{prefix}{class_key}-[{value}]"));
             }
 
-            if has_slash_opacity(value) {
+            // A colour key takes its opacity in the object form
+            // (`{ bg: { color: 'red-500', op: 50 } }`), as in the TypeScript
+            // core. Any other key writes the class as given: `text-red-500/50`
+            // is the colour utility Tailwind serves on every v4, and whether a
+            // project serves `p-red-500/50` is the build-time oracle's verdict.
+            if is_dropped_slash_opacity(key, value) {
                 return None;
+            }
+
+            if let Some(typed) = typed_variable_value(key, value) {
+                return Some(format!("{prefix}{class_key}-{typed}"));
             }
 
             if is_tailwind_build_function(value) {
@@ -2008,10 +2118,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
 
             if value.starts_with("--") {
-                return Some(css_var_type_hint(key).map_or_else(
-                    || format!("{prefix}{class_key}-({value})"),
-                    |type_hint| format!("{prefix}{class_key}-({type_hint}:{value})"),
-                ));
+                return Some(format!("{prefix}{class_key}-({value})"));
             }
 
             // Bracket the whole value (sign included) when it needs arbitrary
@@ -2103,17 +2210,29 @@ pub(crate) fn format_font_stretch(value: &str) -> String {
     }
 }
 
-fn css_var_type_hint(key: &str) -> Option<&'static str> {
-    match key {
-        "fontFamily" => Some("family-name"),
-        "weight" => Some("weight"),
-        "text" => Some("length"),
-        // Shadow-family color keys: a bare `shadow-(--c)` is parsed by
-        // Tailwind as the shadow VALUE (`--tw-shadow: var(--c)`), so the var
-        // needs the `color:` hint to land on `--tw-*-shadow-color`.
-        "shadowColor" | "insetShadowColor" | "textShadowColor" | "dropShadowColor" => Some("color"),
-        _ => None,
+/// A variable value on a key that takes a type hint, spelled with it.
+///
+/// Tailwind infers no type from a custom property, so `bg-(--v)` and
+/// `bg-[var(--v)]` are background colours and `border-(--v)` a border colour.
+/// A bare `--v` and the shorthand `(--v)` become `(hint:--v)`, a `var(…)`
+/// becomes `[hint:var(…)]`; a key without a hint, or any other value, is left
+/// to the key's own lowering. The hints are the generated `CSS_VAR_TYPE_HINTS`.
+/// Mirrors `typedVariableValue` in the TypeScript core.
+fn typed_variable_value(key: &str, value: &str) -> Option<String> {
+    let hint = css_var_type_hint(key)?;
+    if value.starts_with("--") && !value.contains('(') {
+        return Some(format!("({hint}:{value})"));
     }
+    if let Some(name) = value
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+        .filter(|name| name.starts_with("--") && !name.contains(['(', ')']))
+    {
+        return Some(format!("({hint}:{name})"));
+    }
+    value
+        .starts_with("var(")
+        .then(|| format!("[{hint}:{}]", normalize_arbitrary_value(value)))
 }
 
 /// Sides of the linear mask slot; each writes its own `--tw-mask-<side>`.
@@ -2266,19 +2385,60 @@ fn build_mask_slot_classes(slot_key: &str, object: &StaticSzObject) -> Vec<Strin
 /// Whether a `mask` value names a gradient LAYER rather than an image. Mirrors
 /// the TypeScript `isMaskLayerValue`.
 fn is_mask_layer_value(value: &str) -> bool {
+    mask_layer_key(value).is_some()
+}
+
+/// The key a `mask` gradient-layer value moved to (`linear-45` →
+/// `maskLinear`), or `None` for a mask image.
+fn mask_layer_key(value: &str) -> Option<&'static str> {
     // A CSS function is an arbitrary mask-image, not a layer name:
     // `linear-gradient(…)` shares the `linear-` opening but compiles to
     // `mask-[linear-gradient(…)]` and must keep working.
     if value.contains('(') {
-        return false;
+        return None;
     }
     let bare = value.strip_prefix('-').unwrap_or(value);
-    for family in ["linear", "radial", "conic"] {
-        if bare == family || bare.starts_with(&format!("{family}-")) {
-            return true;
+    [
+        ("linear", "maskLinear"),
+        ("radial", "maskRadial"),
+        ("conic", "maskConic"),
+    ]
+    .into_iter()
+    .find(|(family, _)| {
+        bare.strip_prefix(family)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+    })
+    .map(|(_, key)| key)
+}
+
+/// Collect `mask` values that name a gradient layer, as the value (without a
+/// trailing `!`), the key the layer moved to, and the offset.
+///
+/// The lowering emits nothing for one, so the drop is missing output (ADR
+/// 0011) and the runtime channel names the same value. Descends like
+/// [`collect_moved_values`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_mask_layer_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, &'static str, u32)>,
+) {
+    let settled = settle_global_keywords(object).skipped;
+    for (index, property) in object.properties.iter().enumerate() {
+        match &property.value {
+            StaticSzValue::String(value) if property.key == "mask" && !settled.contains(&index) => {
+                let base = value.strip_suffix('!').unwrap_or(value);
+                if let Some(key) = mask_layer_key(base) {
+                    out.push((base.to_string(), key, property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_mask_layer_values(object, out);
+                });
+            }
+            _ => {}
         }
     }
-    false
 }
 
 /// Bare `mask-<keyword>` positions; anything else is an arbitrary position.
@@ -2452,6 +2612,9 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
     if value == "none" {
         return format!("{prefix}bg-none");
     }
+    if let Some(typed) = typed_variable_value("bgImg", value) {
+        return format!("{prefix}bg-{typed}");
+    }
 
     let normalized = value.strip_prefix('-').unwrap_or(value);
     if normalized.starts_with("repeating-") {
@@ -2476,20 +2639,22 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
         }
         return format!("{prefix}bg-{mapped}");
     }
-    if value.starts_with("--") {
-        return format!("{prefix}bg-(image:{value})");
-    }
     if value.starts_with("url(") {
         return format!("{prefix}bg-[{value}]");
     }
     format!("{prefix}bg-[url({value})]")
 }
 
+/// A background-size class. The `length:` hint inside `bg-[…]` / `bg-(…)` is
+/// served on every Tailwind v4; `bg-size-*` exists from 4.1 only. Mirrors
+/// `formatBackgroundSize` in the TypeScript core.
 fn format_bg_size(value: &str, prefix: &str) -> String {
     match value {
         "auto" | "cover" | "contain" => format!("{prefix}bg-{value}"),
-        value if value.starts_with("--") => format!("{prefix}bg-size-({value})"),
-        value => format!("{prefix}bg-size-[{}]", normalize_arbitrary_value(value)),
+        value => typed_variable_value("bgSize", value).map_or_else(
+            || format!("{prefix}bg-[length:{}]", normalize_arbitrary_value(value)),
+            |typed| format!("{prefix}bg-{typed}"),
+        ),
     }
 }
 
@@ -2552,6 +2717,17 @@ const CSS_UNITS: &[&str] = &[
     "px", "rem", "em", "%", "vh", "vw", "ch", "dvh", "dvw", "svh", "svw", "lvh", "lvw", "cqw",
     "cqh", "deg", "rad", "turn", "grad", "ms", "s", "fr",
 ];
+
+/// Whether the lowering drops this colour-key string for its slash opacity.
+///
+/// One predicate for the drop and for [`collect_slash_opacity_strings`], so the
+/// diagnostic names exactly the values that emit nothing. A bare fraction is a
+/// sizing value and lowers before the drop is reached.
+fn is_dropped_slash_opacity(key: &str, value: &str) -> bool {
+    super::generated::tables::is_color_property(key)
+        && !is_bare_fraction(value)
+        && has_slash_opacity(value)
+}
 
 fn has_slash_opacity(value: &str) -> bool {
     // Suppress a color/opacity slash (red-500/50, white/50) — the object form
@@ -2627,60 +2803,6 @@ fn is_bare_fraction(value: &str) -> bool {
         }
         _ => false,
     }
-}
-
-/// Properties that accept native Tailwind fractions (w-1/2, basis-1/3) instead
-/// of arbitrary brackets. Mirrors `FRACTION_SUPPORTED_PROPS` in the JavaScript path it replaced.
-fn is_fraction_supported_prop(key: &str) -> bool {
-    matches!(
-        key,
-        "w" | "width"
-            | "min-w"
-            | "minW"
-            | "minWidth"
-            | "max-w"
-            | "maxW"
-            | "maxWidth"
-            | "h"
-            | "height"
-            | "min-h"
-            | "minH"
-            | "minHeight"
-            | "max-h"
-            | "maxH"
-            | "maxHeight"
-            | "size"
-            | "blockSize"
-            | "minBlockSize"
-            | "maxBlockSize"
-            | "inlineSize"
-            | "minInlineSize"
-            | "maxInlineSize"
-            | "basis"
-            | "flexBasis"
-            | "flex"
-            | "inset"
-            | "inset-x"
-            | "insetX"
-            | "inset-y"
-            | "insetY"
-            | "top"
-            | "right"
-            | "bottom"
-            | "left"
-            | "start"
-            | "end"
-            | "insetS"
-            | "insetE"
-            | "insetBs"
-            | "insetBe"
-            | "translate"
-            | "translate-x"
-            | "translateX"
-            | "translate-y"
-            | "translateY"
-            | "aspect"
-    )
 }
 
 fn needs_brackets(value: &str) -> bool {
@@ -2815,6 +2937,8 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
     #[cfg(feature = "native-engine")]
+    use super::collect_mask_layer_values;
+    #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
@@ -2838,6 +2962,30 @@ mod tests {
 
     fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
         StaticSzValue::Object(StaticSzObject { properties })
+    }
+
+    /// A CSS-wide keyword takes the bracket only on a key the table marks:
+    /// `cursor` is marked, `bg` is not, so `bg-revert` is left as written for
+    /// the build to judge.
+    #[test]
+    fn a_css_wide_keyword_takes_the_bracket_only_where_the_table_says() {
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property("bg", StaticSzValue::String("revert".to_string())),
+                property("cursor", StaticSzValue::String("revert".to_string())),
+            ],
+        });
+        assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// Only a key written wholly in brackets is an arbitrary variant that
+    /// loses its whitespace; a named variant with a bracketed argument is
+    /// spelled as any other key.
+    #[test]
+    fn only_a_wholly_bracketed_key_is_an_arbitrary_variant() {
+        assert_eq!(super::object_variant_segment("[& > li]"), "[&>li]");
+        assert_eq!(super::object_variant_segment("has-[a b]"), "has-[a b]");
+        assert_eq!(super::object_variant_segment("[a b"), "[a b");
     }
 
     /// The AST path hands the settlement one property per key, and the fast
@@ -3058,6 +3206,27 @@ mod tests {
     /// same guard — it is recognised by its own lookup — so a build that walked
     /// only that list descended into it and reported its members as classes
     /// that style nothing. Both halves of the guard have to hold on their own.
+    #[test]
+    fn collect_unknown_sz_keys_does_not_descend_mask_slots() {
+        let slot = |key: &str, member: &str| {
+            property(
+                key,
+                object(vec![property(member, StaticSzValue::Number(45.0))]),
+            )
+        };
+        let object = StaticSzObject {
+            properties: vec![
+                slot("maskLinear", "angle"),
+                slot("maskConic", "angle"),
+                slot("maskRadial", "at"),
+                property("md", object(vec![slot("maskRadial", "shape")])),
+            ],
+        };
+        let mut out = Vec::new();
+        collect_unknown_sz_keys(&object, &mut out);
+        assert!(out.is_empty(), "slot members are not sz keys: {out:?}");
+    }
+
     /// A dead enum value is reported wherever it sits, not only at the top.
     ///
     /// `display` and its three siblings emit the value as a bare class, so a
@@ -3340,12 +3509,21 @@ mod tests {
     #[test]
     fn the_keyword_bracket_list_is_closed() {
         use super::super::generated::tables::{
-            is_css_wide_bracket_prefix, is_css_wide_keyword, is_css_wide_keyword_utility,
+            is_css_wide_keyword, is_css_wide_keyword_utility, sz_capabilities, SZ_CAPABILITY_ROWS,
+            SZ_CAP_CSS_WIDE_BRACKET,
         };
-        assert!(is_css_wide_bracket_prefix("p"));
-        assert!(is_css_wide_bracket_prefix("tab"));
-        assert!(!is_css_wide_bracket_prefix("bg"));
-        assert!(!is_css_wide_bracket_prefix("no-such-prefix"));
+        assert_ne!(sz_capabilities("p") & SZ_CAP_CSS_WIDE_BRACKET, 0);
+        assert_ne!(sz_capabilities("cursor") & SZ_CAP_CSS_WIDE_BRACKET, 0);
+        assert_eq!(sz_capabilities("bg") & SZ_CAP_CSS_WIDE_BRACKET, 0);
+        assert_eq!(sz_capabilities("no-such-key"), 0);
+        // The lookup is a binary search: a row out of byte order would read
+        // as a key with no column, silently.
+        assert!(SZ_CAPABILITY_ROWS
+            .windows(2)
+            .all(|pair| pair[0].0.as_bytes() < pair[1].0.as_bytes()));
+        assert!(SZ_CAPABILITY_ROWS
+            .iter()
+            .all(|(key, bits)| sz_capabilities(key) == *bits));
         assert!(is_css_wide_keyword("revert-layer"));
         assert!(!is_css_wide_keyword("auto"));
         assert!(is_css_wide_keyword_utility("text-inherit"));
@@ -3378,7 +3556,7 @@ mod tests {
 
         assert_eq!(
             lower_static_sz_object(&object),
-            ["inset-s-4", "inline-block", "bg-[url(/hero.png)]"]
+            ["start-4", "inline-block", "bg-[url(/hero.png)]"]
         );
     }
 
@@ -3904,7 +4082,7 @@ mod tests {
             [
                 "[animation-delay:150ms]",
                 "[animation-delay:2s]",
-                "from-(--stop)",
+                "from-(length:--stop)",
                 "via-50%",
                 "to-[12.5%]",
                 "bg-none",
@@ -3920,8 +4098,11 @@ mod tests {
                 "content-['hello']",
                 "no-underline",
                 "font-(family-name:--font)",
-                "font-(weight:--weight)",
+                "font-(--weight)",
                 "text-(length:--size)",
+                // Not a line keyword, so a `decoration-*` value, as in the
+                // TypeScript core; the build reports it as a class with no CSS.
+                "decoration-invalid",
                 "diagonal-fractions",
                 "stacked-fractions",
             ]
@@ -4281,7 +4462,7 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&object),
             [
-                "before:bg-size-[24px_24px]",
+                "before:bg-[length:24px_24px]",
                 "before:bg-no-repeat",
                 "before:content-['']"
             ]
@@ -4512,6 +4693,177 @@ mod tests {
         assert_eq!(lower_static_sz_object(&object), ["break-word"]);
     }
 
+    /// A key holding an object is spelled as the runtime spells it: a
+    /// project variant in camelCase becomes kebab-case, an arbitrary variant
+    /// loses its spaces, a container query keeps its own name.
+    #[test]
+    fn spells_an_object_key_variant_as_the_runtime_does() {
+        let nested = |key: &str| {
+            property(
+                key,
+                StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property("p", StaticSzValue::Number(1.0))],
+                }),
+            )
+        };
+        let object = StaticSzObject {
+            properties: vec![
+                nested("tabletLarge"),
+                nested("hover"),
+                nested("[& > li]"),
+                nested("@maxSm"),
+                nested("@fooBar"),
+                nested("desktop-sm"),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "tablet-large:p-1",
+                "hover:p-1",
+                "[&>li]:p-1",
+                "@max-sm:p-1",
+                "@fooBar:p-1",
+                "desktop-sm:p-1",
+            ]
+        );
+    }
+
+    /// Slash opacity is dropped on a colour key only; elsewhere the class is
+    /// written as given, the colour utility Tailwind serves on every v4.
+    #[test]
+    fn keeps_a_slash_opacity_string_off_the_colour_keys() {
+        let string = |key: &str, value: &str| property(key, StaticSzValue::String(value.into()));
+        let object = StaticSzObject {
+            properties: vec![
+                string("bg", "red-500/50"),
+                string("fill", "red-500/50"),
+                string("text", "red-500/50"),
+                string("decoration", "red-500/50"),
+                string("p", "red-500/50"),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["text-red-500/50", "decoration-red-500/50", "p-red-500/50"]
+        );
+    }
+
+    /// Tailwind gives an untyped variable to the prefix's default utility, so
+    /// a key that sets another property writes its type in front, in every
+    /// spelling of a variable; a key whose prefix default is its own type, or
+    /// a value that is not a lone variable, is left alone.
+    #[test]
+    fn spells_a_variable_with_the_type_its_key_takes() {
+        let string = |key: &str, value: &str| property(key, StaticSzValue::String(value.into()));
+        let object = StaticSzObject {
+            properties: vec![
+                string("bgPos", "var(--x, 50% 50%)"),
+                string("bgSize", "(--x)"),
+                string("bgImg", "var(--x)"),
+                string("border", "--x"),
+                string("borderT", "(--x)"),
+                string("fromPos", "--x"),
+                string("shadowColor", "var(--x)!"),
+                string("bg", "var(--x)"),
+                string("p", "(--x)"),
+                string("text", "(--x)y"),
+                string("text", "(--x(1))"),
+                string("text", "(a--x)"),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "bg-[position:var(--x,_50%_50%)]",
+                "bg-(length:--x)",
+                "bg-[image:var(--x)]",
+                "border-(length:--x)",
+                "border-t-(length:--x)",
+                "from-(length:--x)",
+                "shadow-[color:var(--x)]!",
+                "bg-[var(--x)]",
+                "p-(--x)",
+                "text-(--x)y",
+                "text-(--x(1))",
+                "text-(a--x)",
+            ]
+        );
+    }
+
+    /// A gradient layer on `mask` emits nothing and is collected, bang removed,
+    /// under every variant and parametric variant, as the lowering reaches it.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_gradient_layers_written_on_mask() {
+        let string = |key: &str, value: &str| property(key, StaticSzValue::String(value.into()));
+        let object = StaticSzObject {
+            properties: vec![
+                string("mask", "linear-45!"),
+                string("mask", "url(/m.png)"),
+                string("maskSize", "linear"),
+                property(
+                    "hover",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![string("mask", "-radial")],
+                    }),
+                ),
+                property(
+                    "data",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property(
+                            "state=open",
+                            StaticSzValue::Object(StaticSzObject {
+                                properties: vec![string("mask", "conic-from-10")],
+                            }),
+                        )],
+                    }),
+                ),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_mask_layer_values(&object, &mut found);
+        assert_eq!(
+            found
+                .iter()
+                .map(|(value, key, _)| (value.as_str(), *key))
+                .collect::<Vec<_>>(),
+            [
+                ("linear-45", "maskLinear"),
+                ("-radial", "maskRadial"),
+                ("conic-from-10", "maskConic"),
+            ]
+        );
+        assert_eq!(super::mask_layer_key("linearish"), None);
+    }
+
+    /// Background size uses the `length:` hint every Tailwind v4 serves.
+    #[test]
+    fn spells_background_size_with_the_length_hint() {
+        let string = |value: &str| property("bgSize", StaticSzValue::String(value.into()));
+        let object = StaticSzObject {
+            properties: vec![string("cover"), string("8px 8px"), string("--x")],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["bg-cover", "bg-[length:8px_8px]", "bg-(length:--x)"]
+        );
+    }
+
+    /// `bg-(--x)` is a background colour, so a custom property on `bgPos`
+    /// takes the `position:` hint every Tailwind v4 serves.
+    #[test]
+    fn spells_a_background_position_variable_with_the_position_hint() {
+        let string = |value: &str| property("bgPos", StaticSzValue::String(value.into()));
+        let object = StaticSzObject {
+            properties: vec![string("center"), string("--x"), string("--y!")],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["bg-center", "bg-(position:--x)", "bg-(position:--y)!"]
+        );
+    }
+
     #[test]
     fn lowers_bare_fractions_native_or_arbitrary() {
         let supported = StaticSzObject {
@@ -4573,6 +4925,33 @@ mod tests {
             variant_string_prefix("data-open").as_deref(),
             Some("data-open")
         );
+    }
+
+    /// A variant key takes the runtime for a value only the runtime knows; a
+    /// property key, or an unknown one, keeps its own lane.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn is_variant_key_names_variants_by_table_shape_or_stem() {
+        for key in [
+            "hover",
+            "md",
+            "dark",
+            "[&>li]",
+            "@md",
+            "data",
+            "group",
+            "supports",
+            // The project's own namespace: no table claims these.
+            "tablet",
+            "desktop-sm",
+            "1280",
+            "xyzzy",
+        ] {
+            assert!(super::is_variant_key(key), "{key}");
+        }
+        for key in ["p", "bg", "maskLinear", "--brand", "container", "truncate"] {
+            assert!(!super::is_variant_key(key), "{key}");
+        }
     }
 
     #[test]
@@ -4731,11 +5110,12 @@ mod tests {
             spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
             dynamic_group_conflicts: Vec::new(),
+            deferred_variant_keys: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);
 
-        assert_eq!(lowered.classes, ["inset-s-4"]);
+        assert_eq!(lowered.classes, ["start-4"]);
         assert_eq!(lowered.raw_class_names, ["block"]);
     }
 

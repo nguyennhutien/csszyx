@@ -1,7 +1,7 @@
 import { ASTBudgetExceededError } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
-import { vitePlugin } from '../src/unplugin.js';
+import { unplugin, vitePlugin } from '../src/unplugin.js';
 
 describe('csszyx plugin include/exclude filters', () => {
     function hugeSzSource(): string {
@@ -30,5 +30,33 @@ describe('csszyx plugin include/exclude filters', () => {
 
         expect(prePlugin.transformInclude('/project/src/App.tsx')).toBe(true);
         expect(prePlugin.transformInclude('/project/src/generated/icons.tsx')).toBe(false);
+    });
+
+    it('leaves a module it neither styles nor lowers alone when the hook is driven by hand', () => {
+        // `unplugin.raw` hands the handler over without `transformInclude` in
+        // front of it, so the handler itself must refuse such a module.
+        const prePlugin = [
+            unplugin.raw({}, {
+                framework: 'rollup',
+            } as never),
+        ]
+            .flat()
+            .find(plugin => plugin.name === 'csszyx:pre') as unknown as {
+            transform(this: unknown, code: string, id: string): unknown;
+        };
+        const ctx = { warn() {}, error() {}, addWatchFile() {} };
+        const plain = 'export const A = () => <div className="p-1">x</div>;';
+        const sz = 'export const A = () => <div sz={{ p: 1 }}>x</div>;';
+
+        // A module it does transform hands its classes on.
+        expect(prePlugin.transform.call(ctx, plain, '/project/src/App.tsx')).toEqual({
+            code: plain,
+            map: null,
+        });
+        // Neither a stylesheet nor a source, nor a dependency, whatever it holds.
+        for (const id of ['/project/src/notes.txt', '/project/node_modules/pkg/index.tsx']) {
+            expect(prePlugin.transform.call(ctx, plain, id)).toBeNull();
+            expect(prePlugin.transform.call(ctx, sz, id)).toBeNull();
+        }
     });
 });

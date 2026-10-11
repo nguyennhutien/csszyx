@@ -146,7 +146,11 @@ describe('csszyx next-prebuild command', () => {
         const root = tailwindApp('@import "tailwindcss";\n');
         writeFileSync(
             join(root, 'csszyx.config.mjs'),
-            "export default { diagnostics: { rules: { 'dead-class': 'warn', 'dead-clas': 'off' } } };",
+            "import rules from './csszyx.levels.mjs';\nexport default { diagnostics: { rules } };",
+        );
+        writeFileSync(
+            join(root, 'csszyx.levels.mjs'),
+            "export default { 'dead-class': 'warn', 'dead-clas': 'off' };",
         );
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -162,9 +166,18 @@ describe('csszyx next-prebuild command', () => {
             ).toBe(0);
             const state = JSON.parse(
                 readFileSync(join(root, '.csszyx/diagnostic-policy.json'), 'utf8'),
-            ) as { format: number; config: { rules: Record<string, string> } };
-            expect(state.format).toBe(1);
+            ) as {
+                format: number;
+                config: { rules: Record<string, string> };
+                inputs: Array<{ file: string; size: number }>;
+            };
+            expect(state.format).toBe(2);
             expect(state.config.rules).toEqual({ 'dead-class': 'warn' });
+            // The files the load read, so jest and the loader see an edit to either.
+            expect(state.inputs.map(input => input.file)).toEqual([
+                'csszyx.config.mjs',
+                'csszyx.levels.mjs',
+            ]);
             expect(warnSpy.mock.calls.flat().join('\n')).toContain('did you mean `dead-class`?');
         } finally {
             logSpy.mockRestore();
@@ -201,13 +214,19 @@ describe('csszyx next-prebuild command', () => {
             }
         }
 
-        it('names each one with the file that emits it, and still succeeds', async () => {
+        it('names each one with the file, line, column and key that emit it, and still succeeds', async () => {
             const lines = await deadLines();
+            const column = (key: string): number =>
+                "export default () => <div sz={{ break: 'bogus', justify: 'safe-center', p: 4 }} />;".indexOf(
+                    key,
+                ) + 1;
             expect(lines).toHaveLength(2);
             expect(lines[0]).toContain(
-                '[csszyx] app/page.tsx: `break-bogus` is emitted by an sz prop',
+                `[csszyx] app/page.tsx:1:${column('break')}: \`break-bogus\` (sz key \`break\`) is emitted by an sz prop`,
             );
-            expect(lines[1]).toContain('`justify-safe-center`');
+            expect(lines[1]).toContain(
+                `app/page.tsx:1:${column('justify')}: \`justify-safe-center\` (sz key \`justify\`)`,
+            );
         }, 60_000);
 
         it('says nothing when the config sets dead-class to off', async () => {

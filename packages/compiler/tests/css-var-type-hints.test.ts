@@ -24,10 +24,6 @@ describe('CSS Variable Type Hints', () => {
             expect(t({ fontFamily: '--custom-font' })).toBe('font-(family-name:--custom-font)');
         });
 
-        it('weight: "--my-weight" → font-(weight:--my-weight)', () => {
-            expect(t({ weight: '--my-weight' })).toBe('font-(weight:--my-weight)');
-        });
-
         it('text: "--my-text-size" → text-(length:--my-text-size)', () => {
             expect(t({ text: '--my-text-size' })).toBe('text-(length:--my-text-size)');
         });
@@ -44,6 +40,10 @@ describe('CSS Variable Type Hints', () => {
 
         it('borderColor: "--my-border" → border-(--my-border)', () => {
             expect(t({ borderColor: '--my-border' })).toBe('border-(--my-border)');
+        });
+
+        it('weight: "--my-weight" → font-(--my-weight), a weight on every v4', () => {
+            expect(t({ weight: '--my-weight' })).toBe('font-(--my-weight)');
         });
 
         it('p: "--spacing" → p-(--spacing)', () => {
