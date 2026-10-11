@@ -1,30 +1,28 @@
 /**
- * Rust extracted corpus measurement.
+ * Extracted corpus — native artifact vs wasm artifact.
  *
  * This scans existing compiler tests for simple source snippets containing
- * `sz` / `szRecover`, then compares the native Rust engine against the current
- * the JavaScript pipeline baseline. It is the Rust-side equivalent of the Phase D extracted
- * corpus and gives the default-flip decision a broader regression signal than
- * the curated parity fixtures alone.
+ * `sz` / `szRecover`, then runs each through both artifacts of the Rust engine
+ * (`transformRust` and `transformWasm`). It gives a broader regression signal
+ * than the curated fixtures in `transform-rust-parity.test.ts`.
  */
 
 import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { extractCorpusSnippets } from './extracted-corpus.js';
-import { compareRustVsOxc, type RustParityComparison } from './transform-rust-harness.js';
+import { compareNativeVsWasm, type RustParityComparison } from './transform-rust-harness.js';
 
 type RustCorpusCategory =
     | 'parity'
-    | 'rust-ahead'
     | 'code-divergence'
     | 'class-divergence'
     | 'metadata-divergence'
-    | 'rust-unavailable';
+    | 'native-unavailable';
 
 // ZERO-DIVERGENCE POLICY: every divergence budget below is 0 and stays 0. A
 // nonzero count is never an acceptable expectation — a field report proved that
-// an "expected: 2" here was a shipped CRITICAL bug (the oxc static path deleting
+// an "expected: 2" here was a shipped CRITICAL bug (a since-removed TS lane deleting
 // className expressions) sitting in plain sight for releases. If a change makes
 // a category nonzero, either fix the divergence or list the snippet INDIVIDUALLY
 // in KNOWN_DIVERGENT_SNIPPETS with a reason and a tracking pointer — counts hide
@@ -35,14 +33,13 @@ const KNOWN_DIVERGENT_SNIPPETS: ReadonlyArray<{ id: string; reason: string }> = 
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
     parity: 175 - KNOWN_DIVERGENT_SNIPPETS.length,
-    'rust-ahead': 0,
     'code-divergence': KNOWN_DIVERGENT_SNIPPETS.length,
     'class-divergence': 0,
     'metadata-divergence': 0,
-    'rust-unavailable': 0,
+    'native-unavailable': 0,
 };
 
-describe('Rust native engine — extracted compiler corpus', () => {
+describe('Rust engine — extracted compiler corpus, native vs wasm', () => {
     beforeAll(() => {
         loadNativeBinding(getNativePackageName());
     });
@@ -54,12 +51,12 @@ describe('Rust native engine — extracted compiler corpus', () => {
         expect(snippets).toHaveLength(175);
     });
 
-    it('matches the current Rust-vs-oxc category summary', () => {
+    it('matches the native-vs-wasm category summary', () => {
         expect(summary.counts).toEqual(EXPECTED_SUMMARY);
     });
 
     it('prints extracted Rust corpus summary', () => {
-        console.log(`\n  Rust extracted corpus (${snippets.length} snippets)`);
+        console.log(`\n  Native-vs-wasm extracted corpus (${snippets.length} snippets)`);
         console.log(`  ${formatSummary(summary.counts)}\n`);
 
         for (const [category, examples] of Object.entries(summary.examples)) {
@@ -72,7 +69,7 @@ describe('Rust native engine — extracted compiler corpus', () => {
             }
         }
 
-        expect(summary.counts.parity + summary.counts['rust-ahead']).toBeGreaterThan(0);
+        expect(summary.counts.parity).toBeGreaterThan(0);
     });
 });
 
@@ -84,7 +81,10 @@ function summarise(snippets: readonly ExtractedSnippet[]): {
     const examples = emptyCategoryMap<string[]>([]);
 
     for (const snippet of snippets) {
-        const comparison = compareRustVsOxc(snippet.source, `${snippet.file}-${snippet.index}.tsx`);
+        const comparison = compareNativeVsWasm(
+            snippet.source,
+            `${snippet.file}-${snippet.index}.tsx`,
+        );
         const category = categorise(comparison);
         counts[category]++;
         if (examples[category].length < 5) {
@@ -102,11 +102,10 @@ function summarise(snippets: readonly ExtractedSnippet[]): {
 function emptyCategoryMap<T>(value: T): Record<RustCorpusCategory, T> {
     return {
         parity: cloneValue(value),
-        'rust-ahead': cloneValue(value),
         'code-divergence': cloneValue(value),
         'class-divergence': cloneValue(value),
         'metadata-divergence': cloneValue(value),
-        'rust-unavailable': cloneValue(value),
+        'native-unavailable': cloneValue(value),
     };
 }
 
@@ -116,23 +115,15 @@ function cloneValue<T>(value: T): T {
 
 function categorise(comparison: RustParityComparison): RustCorpusCategory {
     if (comparison.rustIsUnavailable) {
-        return 'rust-unavailable';
+        return 'native-unavailable';
     }
     if (!comparison.classesEqual) {
-        if (comparison.rust && isSuperset([...comparison.rust.classes], comparison.oxc.classes)) {
-            return 'rust-ahead';
-        }
         return 'class-divergence';
     }
-    if (!comparison.transformedEqual) {
+    if (!comparison.transformedEqual || !comparison.cssVariableMapEqual) {
         return 'metadata-divergence';
     }
     return comparison.codeEqual ? 'parity' : 'code-divergence';
-}
-
-function isSuperset(a: readonly string[], b: readonly string[]): boolean {
-    const seen = new Set(a);
-    return b.every(item => seen.has(item));
 }
 
 function formatSummary(counts: Record<RustCorpusCategory, number>): string {
