@@ -83,7 +83,9 @@ async function watchThroughEdit(
     };
     await new Promise<void>((resolve, reject) => {
         let guard: NodeJS.Timeout | undefined;
+        let again: NodeJS.Timeout | undefined;
         const finish = () => {
+            clearInterval(again);
             clearTimeout(guard);
             watching.close(() => compiler.close(() => resolve()));
         };
@@ -96,6 +98,11 @@ async function watchThroughEdit(
             if (builds.length === 0) {
                 builds.push(errors);
                 writeFileSync(edited, content, 'utf8');
+                // The first build can end before the watcher polls, and on a
+                // loaded runner the edit lands in that gap and is never seen.
+                // Writing the same content again until a rebuild knows of it
+                // stands in for a person, who edits seconds later.
+                again = setInterval(() => writeFileSync(edited, content, 'utf8'), 1_000);
                 // A stylesheet the build does not depend on never rebuilds;
                 // stop waiting rather than hang until the test times out.
                 guard = setTimeout(finish, 15_000);
