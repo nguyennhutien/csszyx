@@ -66,6 +66,10 @@ export const DIAGNOSTIC_CODES = [
     ['unsupported-dynamic-sz', 'An sz attribute whose value the engine cannot read.'],
     ['ast-budget', 'A file over the AST budget, left unchanged.'],
     ['mangle-vars-hoist-skipped', 'A CSS variable mangleVars could not hoist to a component.'],
+    [
+        'color-slash-opacity',
+        'A colour object with a slash opacity in `color`; the object takes it in `op`.',
+    ],
 ];
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

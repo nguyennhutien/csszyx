@@ -325,6 +325,140 @@ describe('the slash opacity diagnostic', () => {
     });
 });
 
+describe.each(LANES)('a slash opacity in a colour object — %s', (_name, lower) => {
+    // A colour object takes its opacity in `op`, the one spelling (user
+    // decision). A slash in `color` still writes a class Tailwind serves, and
+    // the lanes point at `op`; with both, `op` is the opacity, so
+    // `{ color: 'red-500/50', op: 20 }` no longer writes `bg-red-500/50/50`.
+    it.each([
+        [{ bg: { color: 'red-500/50' } }, 'bg-red-500/50'],
+        [{ bg: { color: 'red-500/50', op: 20 } }, 'bg-red-500/20'],
+        [{ hover: { bg: { color: 'red-500/50', op: 20 } } }, 'hover:bg-red-500/20'],
+        [{ borderColor: { color: 'blue-600/75', op: 20 } }, 'border-blue-600/20'],
+    ])('%j writes %s and points at op', (sz, className) => {
+        const result = lower(sz);
+
+        expect(result.className).toBe(className);
+        expect(result.kinds).toEqual(['color-slash-opacity']);
+    });
+
+    it('reports nothing for the object form', () => {
+        const result = lower({ bg: { color: 'red-500', op: 20 } });
+
+        expect(result.className).toBe('bg-red-500/20');
+        expect(result.kinds).toEqual([]);
+    });
+
+    // The important modifier ends the class: `bg-red-500!/20` is a class no
+    // Tailwind serves, `bg-red-500/20!` is the important one.
+    it.each([
+        [{ bg: { color: 'red-500!', op: 20 } }, 'bg-red-500/20!', []],
+        [{ bg: { color: 'red-500/50!' } }, 'bg-red-500/50!', ['color-slash-opacity']],
+        [{ bg: { color: 'red-500/50!', op: 20 } }, 'bg-red-500/20!', ['color-slash-opacity']],
+    ])('%j keeps the important modifier at the end: %s', (sz, className, kinds) => {
+        const result = lower(sz);
+
+        expect(result.className).toBe(className);
+        expect(result.kinds).toEqual(kinds);
+    });
+
+    // Only a plain opacity after the slash is one `op` can take; anything else
+    // is written as given and judged by the project's Tailwind at build.
+    it.each([
+        [{ bg: { color: 'red-500/' } }, 'bg-red-500/'],
+        [{ bg: { color: 'red-500/50/30' } }, 'bg-red-500/50/30'],
+    ])('%j is not an opacity op can take, and is written as given', (sz, className) => {
+        const result = lower(sz);
+
+        expect(result.className).toBe(className);
+        expect(result.kinds).toEqual([]);
+    });
+});
+
+describe('the colour-object slash opacity diagnostic', () => {
+    const withOp =
+        `[csszyx] "bg: { color: 'red-500/50', op: 20 }" at /p/src/Spelling.jsx:1 — a colour ` +
+        "object takes its opacity in op, not in color. Write { color: 'red-500', op: 20 }.";
+    const withoutOp =
+        `[csszyx] "bg: { color: 'red-500/50' }" at /p/src/Spelling.jsx:1 — a colour object ` +
+        "takes its opacity in op, not in color. Write { color: 'red-500', op: 50 }.";
+
+    it.each(ENGINES)('%s renders the runtime text', (_name, engine) => {
+        const run = captureWarnings(
+            engine,
+            "export const A = () => <p sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
+            '/p/src/Spelling.jsx',
+        );
+
+        expect(run.className).toBe('bg-red-500/20');
+        expect(run.warnings).toEqual([withOp]);
+    });
+
+    it.each(ENGINES)('%s names the opacity it read from color', (_name, engine) => {
+        const run = captureWarnings(
+            engine,
+            "export const A = () => <p sz={{ bg: { color: 'red-500/50' } }} />;",
+            '/p/src/Spelling.jsx',
+        );
+
+        expect(run.className).toBe('bg-red-500/50');
+        expect(run.warnings).toEqual([withoutOp]);
+    });
+
+    it.each(ENGINES)(
+        '%s names the important modifier and a string op as written',
+        (_name, engine) => {
+            const run = captureWarnings(
+                engine,
+                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
+                '/p/src/Spelling.jsx',
+            );
+
+            expect(run.warnings).toEqual([
+                `[csszyx] "bg: { color: 'red-500/50!', op: '20' }" at /p/src/Spelling.jsx:1 — a ` +
+                    "colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+            ]);
+        },
+    );
+
+    it('the runtime says the same for a string op, and nothing in production', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('/p/src/Spelling.jsx:1');
+        try {
+            transform({ bg: { color: 'red-500/50!', op: '20' } });
+            vi.stubEnv('NODE_ENV', 'production');
+            transform({ bg: { color: 'blue-500/50' } });
+
+            expect(warn.mock.calls).toEqual([
+                [
+                    `[csszyx] "bg: { color: 'red-500/50!', op: '20' }" at /p/src/Spelling.jsx:1 — a ` +
+                        "colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+                ],
+            ]);
+        } finally {
+            vi.unstubAllEnvs();
+            setSzWarnLocation(undefined);
+            warn.mockRestore();
+        }
+    });
+
+    it('the runtime prints the same text once', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('/p/src/Spelling.jsx:1');
+        try {
+            expect(transform({ bg: { color: 'red-500/50', op: 20 } }).className).toBe(
+                'bg-red-500/20',
+            );
+            transform({ bg: { color: 'red-500/50', op: 20 } });
+
+            expect(warn.mock.calls).toEqual([[withOp]]);
+        } finally {
+            setSzWarnLocation(undefined);
+            warn.mockRestore();
+        }
+    });
+});
+
 describe.each(LANES)('a colour string the runtime does not judge — %s', (_name, lower) => {
     // Whether the project's Tailwind serves a colour class is its verdict at
     // build (ADR 0022), so the runtime writes what the engines write and the

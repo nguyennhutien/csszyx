@@ -308,7 +308,13 @@ export const SIZE_BUDGETS = [
         // key's hint in every spelling (`(--x)`, `var(--x)`), from one
         // generated table. Un-optimized, gzip -9 of the nodejs parser build,
         // same working tree.
-        maxGzipBytes: 570_110,
+        //
+        // Raised from 570,110 on 2026-10-11, measured 571,447: a slash opacity
+        // in a colour object's `color` is reported as `color-slash-opacity`
+        // (its collector, message and code), and the colour object keeps its
+        // important modifier at the end of the class. Un-optimized, gzip -9 of
+        // the nodejs parser build, same working tree.
+        maxGzipBytes: 571_750,
     },
 ];
 

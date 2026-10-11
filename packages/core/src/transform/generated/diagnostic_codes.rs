@@ -75,6 +75,8 @@ pub enum DiagnosticCode {
     AstBudget,
     /// A CSS variable mangleVars could not hoist to a component.
     MangleVarsHoistSkipped,
+    /// A colour object with a slash opacity in `color`; the object takes it in `op`.
+    ColorSlashOpacity,
 }
 
 impl DiagnosticCode {
@@ -114,12 +116,13 @@ impl DiagnosticCode {
             Self::UnsupportedDynamicSz => "unsupported-dynamic-sz",
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
+            Self::ColorSlashOpacity => "color-slash-opacity",
         }
     }
 }
 
 /// Every code, in list order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 33] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -152,4 +155,5 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::UnsupportedDynamicSz,
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
+    DiagnosticCode::ColorSlashOpacity,
 ];

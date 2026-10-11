@@ -68,6 +68,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `string slash opacity is not supported` | the build, `csszyx check` | you |
+| [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `takes its opacity in op, not in color` | the build, `csszyx check` | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -854,6 +855,22 @@ production too:
 
 **Tooling.** `csszyx check` lists it under the kind `slash-opacity-string` and
 exits 1.
+
+The object form is the one spelling for an opacity, so a slash inside it is
+reported too, under the kind `color-slash-opacity`, an `error` under
+`recommended`: `csszyx check` exits 1 on a `{ color: "red-500/50" }` that 0.17
+passed. Its class is still written. When both are given, `op` is the opacity:
+`{ color: "red-500/50", op: 20 }` wrote `bg-red-500/50/50`, which no Tailwind
+serves, and now writes `bg-red-500/20`. The important modifier now ends the
+class, so `{ color: "red-500!", op: 20 }` writes `bg-red-500/20!` instead of
+the dead `bg-red-500!/20`.
+
+```tsx
+// before
+<div sz={{ bg: { color: "red-500/50" } }} />
+// after
+<div sz={{ bg: { color: "red-500", op: 50 } }} />
+```
 
 ## Some classes take the spelling every Tailwind v4 serves
 

@@ -31,6 +31,8 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
     'numeric-key': "export const A = () => <div sz={{ 0: 'x' }} />;",
     'closed-enum-value': "export const A = () => <div sz={{ display: 'bogus' }} />;",
     'slash-opacity-string': "export const A = () => <div sz={{ bg: 'red-500/50' }} />;",
+    'color-slash-opacity':
+        "export const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
     'off-scale-value': 'export const A = () => <div sz={{ p: 1.3 }} />;',
     'numeric-font-weight': "export const A = () => <div sz={{ weight: '700' }} />;",
     'per-side-border-style':

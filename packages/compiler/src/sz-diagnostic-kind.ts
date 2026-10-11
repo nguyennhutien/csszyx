@@ -61,6 +61,7 @@ const KINDS: ReadonlyArray<
     ['numeric-key', false, { startsWith: 'sz received a numeric key "' }],
     ['closed-enum-value', false, { startsWith: '"', includes: ' value. The class "' }],
     ['slash-opacity-string', false, { includes: ' — string slash opacity is not supported' }],
+    ['color-slash-opacity', false, { includes: ' — a colour object takes its opacity in op' }],
     ['off-scale-value', false, { includes: " is not on Tailwind's spacing scale" }],
     ['numeric-font-weight', false, { includes: 'Tailwind spells a numeric font weight' }],
     ['per-side-border-style', false, { includes: 'Tailwind has no per-side border style' }],
