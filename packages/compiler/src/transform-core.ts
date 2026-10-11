@@ -2676,8 +2676,11 @@ function buildLinearGradientClass(direction: string | number): string {
     return `bg-linear-[${normalizeArbitraryValue(direction)}]`;
 }
 
+/** A gradient's direction or position as written: absent, an angle, or a token. */
+type GradientDirection = string | number | undefined;
+
 /** Builds a radial background-gradient utility. */
-function buildRadialGradientClass(direction: string | number | undefined): string {
+function buildRadialGradientClass(direction: GradientDirection): string {
     if (direction === undefined || direction === null) return 'bg-radial';
     if (typeof direction !== 'string') return '';
     return direction.startsWith('--')
@@ -2686,7 +2689,7 @@ function buildRadialGradientClass(direction: string | number | undefined): strin
 }
 
 /** Builds a conic background-gradient utility. */
-function buildConicGradientClass(direction: string | number | undefined): string {
+function buildConicGradientClass(direction: GradientDirection): string {
     if (direction === undefined || direction === null) return 'bg-conic';
     if (typeof direction === 'number') {
         return direction < 0 ? `-bg-conic-${Math.abs(direction)}` : `bg-conic-${direction}`;
