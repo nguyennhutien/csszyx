@@ -1,7 +1,7 @@
 // szv STANDALONE fixture — this file uses NO `sz=` JSX prop anywhere. It declares
 // szv catalogs and resolves them via `szr` only. The build prescan qualifies the
 // file by its `szv(` token (0.10.4+) AND collects its catalog even though the
-// oxc/Rust engines report transformed=false for a no-`sz=` file (the fix in this
+// native and wasm artifacts report transformed=false for a no-`sz=` file (the fix in this
 // change) — so the catalog, incl. the arbitrary [Npx] values and the large
 // off-scale enum numbers below, is safelisted and Tailwind generates the CSS.
 // IMPORTANT: do not write any of these class names as literal text/comments —
