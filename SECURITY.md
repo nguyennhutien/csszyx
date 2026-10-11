@@ -107,9 +107,9 @@ that backs each claim:
   risks are therefore (a) crafted source escaping the build sandbox (file
   or command access), (b) injection/XSS through a runtime helper, and
   (c) a vulnerable dependency.
-- **(a) Build-time isolation.** The native and JS engines parse with oxc
-  and operate on the AST; they do not `eval` source or shell out on
-  untrusted input. Path handling in the native loader is covered by
+- **(a) Build-time isolation.** Both artifacts of the engine (native and
+  wasm) parse with the `oxc` crates and operate on the AST; they do not
+  `eval` source or shell out on untrusted input. Path handling in the native loader is covered by
   `native-resolution-security` tests, and a parser fuzz target
   (`parser_panic_fuzz`) guards against panics on malformed input.
 - **(b) Output safety.** Class-name and CSS generation is deterministic and
