@@ -266,6 +266,15 @@ node scripts/check-changed-complexity.mjs
 echo "[verify-like-ci] Duplication on changed lines (mirrors Sonar)..."
 node scripts/check-changed-duplication.mjs
 
+# Every rule of the Sonar profile a local plugin implements, on the changed
+# files, reported only where the base revision did not already have it. The
+# rule list is scripts/sonar-profile-rules.json, rewritten by
+# `node scripts/check-sonar-rule-drift.mjs --write-profile` when the profile
+# changes; rules with no local implementation still arrive on the PR only.
+echo "[verify-like-ci] Sonar profile rules on changed files (mirrors Sonar)..."
+node --test scripts/check-changed-sonar.test.mjs
+node scripts/check-changed-sonar.mjs
+
 # Runs after the build on purpose: the gate measures built dist output, and a
 # missing dist fails it rather than passing it.
 echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."

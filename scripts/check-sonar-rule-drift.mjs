@@ -24,9 +24,13 @@
 // the API is slow, and a report nobody can reproduce offline is worse than one
 // run by hand when the quality profile changes.
 //
-// Usage: node scripts/check-sonar-rule-drift.mjs [--json] [--language=<lang>]
+// `--write-profile` also writes `scripts/sonar-profile-rules.json`: every rule
+// of the profile a local rule implements, which `check-changed-sonar.mjs` runs
+// on the lines a change touches. Re-run it when the Sonar profile changes.
+//
+// Usage: node scripts/check-sonar-rule-drift.mjs [--json] [--write-profile] [--language=<lang>]
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** The organisation and project this repository reports to. */
@@ -168,7 +172,7 @@ async function activeRules(organization, project, language) {
     }
     const rules = await fetch(
         `${SONAR_HOST}/api/rules/search?organization=${organization}` +
-            `&activation=true&qprofile=${profile.key}&ps=500&f=name`,
+            `&activation=true&qprofile=${profile.key}&ps=500&f=name,scope`,
     ).then(response => response.json());
     return { profile, rules: rules.rules ?? [], total: rules.total ?? 0 };
 }
@@ -209,6 +213,29 @@ async function enabledLocalRules(file) {
     ]);
 }
 
+/** Where `--write-profile` writes the rules the changed-line gate runs. */
+export const PROFILE_RULES_FILE = 'scripts/sonar-profile-rules.json';
+
+/**
+ * The profile rules a local rule implements, in the shape the changed-line gate
+ * reads: the Sonar key and the eslint rule name, sorted by key.
+ *
+ * @param buckets - What {@link bucketRules} returned.
+ * @param foreignByRspec - Rules another plugin covers, named as eslint knows them.
+ * @returns Rules covered or available locally, each named as eslint knows it.
+ */
+export function profileRuleList(buckets, foreignByRspec = FOREIGN_RULES) {
+    const foreign = new Set(foreignByRspec.values());
+    return [...buckets.covered, ...buckets.availableOff]
+        .map(rule => ({
+            key: rule.key,
+            rule: foreign.has(rule.local) ? rule.local : `sonarjs/${rule.local}`,
+            // MAIN, TEST or ALL: which of Sonar's two file sets the rule reads.
+            scope: rule.scope ?? 'ALL',
+        }))
+        .sort((left, right) => left.key.localeCompare(right.key));
+}
+
 /**
  * Print the drift, or emit it as JSON.
  *
@@ -217,7 +244,7 @@ async function enabledLocalRules(file) {
  * @param options.json - Whether to print machine-readable output.
  * @returns Process exit code.
  */
-async function main({ language, json }) {
+async function main({ language, json, writeProfile }) {
     const properties = readSonarProperties('sonar-project.properties');
     const organization = properties['sonar.organization'];
     const project = properties['sonar.projectKey'];
@@ -227,6 +254,15 @@ async function main({ language, json }) {
         enabledLocalRules('packages/unplugin/src/unplugin.ts'),
     ]);
     const buckets = bucketRules(rules, localByRspec, enabled, FOREIGN_RULES);
+
+    if (writeProfile) {
+        const list = profileRuleList(buckets);
+        writeFileSync(
+            PROFILE_RULES_FILE,
+            `${JSON.stringify({ format: 1, profile: profile.name, language, rules: list }, null, 4)}\n`,
+        );
+        console.log(`[sonar-drift] wrote ${list.length} rules to ${PROFILE_RULES_FILE}`);
+    }
 
     if (json) {
         console.log(JSON.stringify({ profile: profile.name, total, ...buckets }, null, 2));
@@ -269,6 +305,7 @@ if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1])))
     main({
         language: languageFlag === undefined ? 'ts' : languageFlag.slice('--language='.length),
         json: args.includes('--json'),
+        writeProfile: args.includes('--write-profile'),
     })
         .then(code => process.exit(code))
         .catch(error => {

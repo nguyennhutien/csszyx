@@ -1,0 +1,1092 @@
+{
+    "format": 1,
+    "profile": "Sonar way comprehensive",
+    "language": "ts",
+    "rules": [
+        {
+            "key": "typescript:S101",
+            "rule": "sonarjs/class-name",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1119",
+            "rule": "sonarjs/no-labels",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1121",
+            "rule": "sonarjs/no-nested-assignment",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1125",
+            "rule": "sonarjs/no-redundant-boolean",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1128",
+            "rule": "sonarjs/unused-import",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1134",
+            "rule": "sonarjs/fixme-tag",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1135",
+            "rule": "sonarjs/todo-tag",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1219",
+            "rule": "sonarjs/no-case-label-in-switch",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1226",
+            "rule": "sonarjs/no-parameter-reassignment",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1244",
+            "rule": "sonarjs/no-floating-point-equality",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1264",
+            "rule": "sonarjs/prefer-while",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S128",
+            "rule": "sonarjs/no-fallthrough",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1301",
+            "rule": "sonarjs/no-small-switch",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1313",
+            "rule": "sonarjs/no-hardcoded-ip",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1439",
+            "rule": "sonarjs/label-position",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1444",
+            "rule": "sonarjs/public-static-readonly",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1472",
+            "rule": "sonarjs/call-argument-line",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1479",
+            "rule": "sonarjs/max-switch-cases",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1515",
+            "rule": "sonarjs/function-inside-loop",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1523",
+            "rule": "sonarjs/code-eval",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1529",
+            "rule": "sonarjs/bitwise-operators",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1533",
+            "rule": "sonarjs/no-primitive-wrappers",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1607",
+            "rule": "sonarjs/no-skipped-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S1764",
+            "rule": "sonarjs/no-identical-expressions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1848",
+            "rule": "sonarjs/constructor-for-side-effects",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1854",
+            "rule": "sonarjs/no-dead-store",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1862",
+            "rule": "sonarjs/no-identical-conditions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1871",
+            "rule": "sonarjs/no-duplicated-branches",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1874",
+            "rule": "sonarjs/deprecation",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1940",
+            "rule": "sonarjs/no-inverted-boolean-check",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1994",
+            "rule": "sonarjs/misplaced-loop-counter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2004",
+            "rule": "sonarjs/no-nested-functions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2068",
+            "rule": "sonarjs/no-hardcoded-passwords",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2077",
+            "rule": "sonarjs/sql-queries",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2092",
+            "rule": "sonarjs/insecure-cookie",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2123",
+            "rule": "sonarjs/no-useless-increment",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2137",
+            "rule": "sonarjs/no-globals-shadowing",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2187",
+            "rule": "sonarjs/no-empty-test-file",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S2201",
+            "rule": "sonarjs/no-ignored-return",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2234",
+            "rule": "sonarjs/arguments-order",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2245",
+            "rule": "sonarjs/pseudo-random",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2251",
+            "rule": "sonarjs/for-loop-increment-sign",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2301",
+            "rule": "sonarjs/no-selector-parameter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2310",
+            "rule": "sonarjs/updated-loop-counter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2392",
+            "rule": "sonarjs/block-scoped-var",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2486",
+            "rule": "sonarjs/no-ignored-exceptions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2589",
+            "rule": "sonarjs/no-gratuitous-expressions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2598",
+            "rule": "sonarjs/file-uploads",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2612",
+            "rule": "sonarjs/file-permissions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2639",
+            "rule": "sonarjs/no-empty-character-class",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2681",
+            "rule": "sonarjs/no-unenclosed-multiline-block",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2692",
+            "rule": "sonarjs/index-of-compare-to-positive-number",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2699",
+            "rule": "sonarjs/assertions-in-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S2737",
+            "rule": "sonarjs/no-useless-catch",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2755",
+            "rule": "sonarjs/xml-parser-xxe",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2757",
+            "rule": "sonarjs/non-existent-operator",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2819",
+            "rule": "sonarjs/post-message",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2870",
+            "rule": "sonarjs/no-array-delete",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2871",
+            "rule": "sonarjs/no-alphabetical-sort",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2925",
+            "rule": "sonarjs/no-fixed-wait-in-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S2970",
+            "rule": "sonarjs/no-incomplete-assertions",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S2990",
+            "rule": "sonarjs/no-global-this",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S2999",
+            "rule": "sonarjs/new-operator-misuse",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3001",
+            "rule": "sonarjs/no-delete-var",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3330",
+            "rule": "sonarjs/cookie-no-httponly",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3358",
+            "rule": "sonarjs/no-nested-conditional",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3415",
+            "rule": "sonarjs/inverted-assertion-arguments",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S3516",
+            "rule": "sonarjs/no-invariant-returns",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3531",
+            "rule": "sonarjs/generator-without-yield",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3579",
+            "rule": "sonarjs/no-associative-arrays",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3616",
+            "rule": "sonarjs/comma-or-logical-or-case",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3626",
+            "rule": "sonarjs/no-redundant-jump",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3699",
+            "rule": "sonarjs/no-use-of-empty-return-value",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3735",
+            "rule": "sonarjs/void-use",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3776",
+            "rule": "sonarjs/cognitive-complexity",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3923",
+            "rule": "sonarjs/no-all-duplicated-branches",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3972",
+            "rule": "sonarjs/no-same-line-conditional",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3981",
+            "rule": "sonarjs/no-collection-size-mischeck",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S3984",
+            "rule": "sonarjs/no-unthrown-error",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4030",
+            "rule": "sonarjs/no-unused-collection",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4036",
+            "rule": "sonarjs/no-os-command-from-path",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4043",
+            "rule": "sonarjs/no-misleading-array-reverse",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4143",
+            "rule": "sonarjs/no-element-overwrite",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4144",
+            "rule": "sonarjs/no-identical-functions",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4158",
+            "rule": "sonarjs/no-empty-collection",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4165",
+            "rule": "sonarjs/no-redundant-assignments",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4322",
+            "rule": "sonarjs/prefer-type-guard",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4323",
+            "rule": "sonarjs/use-type-alias",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4335",
+            "rule": "sonarjs/no-useless-intersection",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4423",
+            "rule": "sonarjs/weak-ssl",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4426",
+            "rule": "sonarjs/no-weak-keys",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4502",
+            "rule": "sonarjs/csrf",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4507",
+            "rule": "sonarjs/production-debug",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4524",
+            "rule": "sonarjs/prefer-default-last",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4619",
+            "rule": "sonarjs/no-in-misuse",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4621",
+            "rule": "sonarjs/no-duplicate-in-composite",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4623",
+            "rule": "sonarjs/no-undefined-argument",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4624",
+            "rule": "sonarjs/no-nested-template-literals",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4634",
+            "rule": "sonarjs/prefer-promise-shorthand",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4782",
+            "rule": "sonarjs/no-redundant-optional",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4790",
+            "rule": "sonarjs/hashing",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4822",
+            "rule": "sonarjs/no-try-promise",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4830",
+            "rule": "sonarjs/unverified-certificate",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5122",
+            "rule": "sonarjs/cors",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5148",
+            "rule": "sonarjs/link-with-target-blank",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5247",
+            "rule": "sonarjs/disabled-auto-escaping",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5256",
+            "rule": "sonarjs/table-header",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5257",
+            "rule": "sonarjs/no-table-as-layout",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5264",
+            "rule": "sonarjs/object-alt-content",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5332",
+            "rule": "sonarjs/no-clear-text-protocols",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5443",
+            "rule": "sonarjs/publicly-writable-directories",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5527",
+            "rule": "sonarjs/unverified-hostname",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5542",
+            "rule": "sonarjs/encryption-secure-mode",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5547",
+            "rule": "sonarjs/no-weak-cipher",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5659",
+            "rule": "sonarjs/insecure-jwt-token",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5689",
+            "rule": "sonarjs/x-powered-by",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5693",
+            "rule": "sonarjs/content-length",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5725",
+            "rule": "sonarjs/disabled-resource-integrity",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5728",
+            "rule": "sonarjs/content-security-policy",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5734",
+            "rule": "sonarjs/no-mime-sniff",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5736",
+            "rule": "sonarjs/no-referrer-policy",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5739",
+            "rule": "sonarjs/strict-transport-security",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5842",
+            "rule": "sonarjs/empty-string-repetition",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5843",
+            "rule": "sonarjs/regex-complexity",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5845",
+            "rule": "sonarjs/no-incompatible-assertion-types",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S5850",
+            "rule": "sonarjs/anchor-precedence",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5852",
+            "rule": "sonarjs/slow-regex",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5856",
+            "rule": "sonarjs/no-invalid-regexp",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5860",
+            "rule": "sonarjs/unused-named-groups",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5863",
+            "rule": "sonarjs/no-same-argument-assert",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S5868",
+            "rule": "sonarjs/no-misleading-character-class",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5869",
+            "rule": "sonarjs/duplicates-in-character-class",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5876",
+            "rule": "sonarjs/session-regeneration",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S5906",
+            "rule": "sonarjs/prefer-specific-assertions",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S5958",
+            "rule": "sonarjs/test-check-exception",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S5973",
+            "rule": "sonarjs/stable-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S5976",
+            "rule": "sonarjs/parameterized-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S6019",
+            "rule": "sonarjs/no-empty-after-reluctant",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6035",
+            "rule": "sonarjs/single-character-alternation",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6079",
+            "rule": "sonarjs/no-code-after-done",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S6080",
+            "rule": "sonarjs/disabled-timeout",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S6092",
+            "rule": "sonarjs/chai-determinate-assertion",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S6249",
+            "rule": "sonarjs/aws-s3-bucket-insecure-http",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6252",
+            "rule": "sonarjs/aws-s3-bucket-versioning",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6265",
+            "rule": "sonarjs/aws-s3-bucket-granted-access",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6268",
+            "rule": "sonarjs/no-angular-bypass-sanitization",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6270",
+            "rule": "sonarjs/aws-iam-public-access",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6275",
+            "rule": "sonarjs/aws-ec2-unencrypted-ebs-volume",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6281",
+            "rule": "sonarjs/aws-s3-bucket-public-access",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6302",
+            "rule": "sonarjs/aws-iam-all-privileges",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6303",
+            "rule": "sonarjs/aws-rds-unencrypted-databases",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6308",
+            "rule": "sonarjs/aws-opensearchservice-domain",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6317",
+            "rule": "sonarjs/aws-iam-privilege-escalation",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6319",
+            "rule": "sonarjs/aws-sagemaker-unencrypted-notebook",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6321",
+            "rule": "sonarjs/aws-restricted-ip-admin-access",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6323",
+            "rule": "sonarjs/no-empty-alternatives",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6324",
+            "rule": "sonarjs/no-control-regex",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6326",
+            "rule": "sonarjs/no-regex-spaces",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6327",
+            "rule": "sonarjs/aws-sns-unencrypted-topics",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6328",
+            "rule": "sonarjs/existing-groups",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6329",
+            "rule": "sonarjs/aws-ec2-rds-dms-public",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6330",
+            "rule": "sonarjs/aws-sqs-unencrypted-queue",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6331",
+            "rule": "sonarjs/no-empty-group",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6332",
+            "rule": "sonarjs/aws-efs-unencrypted",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6333",
+            "rule": "sonarjs/aws-apigateway-public-api",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6351",
+            "rule": "sonarjs/stateful-regex",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6353",
+            "rule": "sonarjs/concise-regex",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6397",
+            "rule": "sonarjs/single-char-in-character-classes",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6418",
+            "rule": "sonarjs/no-hardcoded-secrets",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6426",
+            "rule": "sonarjs/no-exclusive-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S6437",
+            "rule": "sonarjs/hardcoded-secret-signatures",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6439",
+            "rule": "sonarjs/jsx-no-leaked-render",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6442",
+            "rule": "sonarjs/no-hook-setter-in-body",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6443",
+            "rule": "sonarjs/no-useless-react-setstate",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6486",
+            "rule": "sonarjs/no-uniq-key",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6564",
+            "rule": "sonarjs/redundant-type-aliases",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6582",
+            "rule": "@typescript-eslint/prefer-optional-chain",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6594",
+            "rule": "sonarjs/prefer-regexp-exec",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6627",
+            "rule": "sonarjs/no-internal-api-use",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6759",
+            "rule": "sonarjs/prefer-read-only-props",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6958",
+            "rule": "sonarjs/no-literal-call",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6959",
+            "rule": "sonarjs/reduce-initial-value",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7059",
+            "rule": "sonarjs/no-async-constructor",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7503",
+            "rule": "require-await",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7639",
+            "rule": "sonarjs/review-blockchain-mnemonic",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7778",
+            "rule": "unicorn/prefer-single-call",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7780",
+            "rule": "unicorn/prefer-string-raw",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7790",
+            "rule": "sonarjs/dynamically-constructed-templates",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8441",
+            "rule": "sonarjs/no-session-cookies-on-static-assets",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8479",
+            "rule": "sonarjs/dompurify-unsafe-config",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8754",
+            "rule": "sonarjs/no-duplicate-test-title",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8780",
+            "rule": "sonarjs/async-test-assertions",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8781",
+            "rule": "sonarjs/no-empty-test-title",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8782",
+            "rule": "sonarjs/hooks-before-test-cases",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8783",
+            "rule": "sonarjs/no-forced-browser-interaction",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8784",
+            "rule": "sonarjs/assertions-in-test-cases",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8785",
+            "rule": "sonarjs/synchronous-suite-callback",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S888",
+            "rule": "sonarjs/no-equals-in-for-termination",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8907",
+            "rule": "sonarjs/prefer-native-lodash-alternative",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8927",
+            "rule": "sonarjs/no-default-utility-imports",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8932",
+            "rule": "sonarjs/memoize-cache-key",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S8959",
+            "rule": "sonarjs/no-debug-commands-in-ui-tests",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8967",
+            "rule": "sonarjs/no-interpolation-in-inline-snapshots",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8968",
+            "rule": "sonarjs/explicit-test-skip",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S8998",
+            "rule": "sonarjs/no-empty-parameterized-test-dataset",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9027",
+            "rule": "sonarjs/testing-library-query-assertion",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9072",
+            "rule": "sonarjs/synchronous-exception-assertions",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9078",
+            "rule": "sonarjs/no-duplicate-parameterized-test-case",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9114",
+            "rule": "sonarjs/no-debounce-throttle-in-render",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9145",
+            "rule": "sonarjs/no-vue-class-component",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9150",
+            "rule": "sonarjs/no-vue-mixins",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9153",
+            "rule": "sonarjs/testing-library-prefer-query-by-disappearance",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9162",
+            "rule": "sonarjs/prefer-cypress-should",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9163",
+            "rule": "sonarjs/no-mutate-reactive-state-in-updated-hook",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9169",
+            "rule": "sonarjs/vitest-mock-at-module-scope",
+            "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9382",
+            "rule": "no-await-in-loop",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9383",
+            "rule": "@typescript-eslint/no-floating-promises",
+            "scope": "MAIN"
+        }
+    ]
+}

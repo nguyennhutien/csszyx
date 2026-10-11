@@ -6,7 +6,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-import { bucketRules, isEnabled, readSonarProperties, rspecId } from './check-sonar-rule-drift.mjs';
+import {
+    bucketRules,
+    isEnabled,
+    profileRuleList,
+    readSonarProperties,
+    rspecId,
+} from './check-sonar-rule-drift.mjs';
 
 describe('rspec identifiers', () => {
     it('reads the id out of a documentation link', () => {
@@ -161,5 +167,23 @@ describe('sonar properties', () => {
         writeFileSync(file, 'sonar.exclusions=**/a=b/**\n');
 
         assert.equal(readSonarProperties(file)['sonar.exclusions'], '**/a=b/**');
+    });
+});
+
+describe('the profile list the changed-line gate reads', () => {
+    it('names a sonarjs rule with its prefix, a foreign one as written, and keeps the scope', () => {
+        const buckets = {
+            covered: [{ key: 'typescript:S7503', local: 'require-await', scope: 'MAIN' }],
+            availableOff: [
+                { key: 'typescript:S4323', local: 'use-type-alias', scope: 'MAIN' },
+                { key: 'typescript:S5976', local: 'parameterized-tests' },
+            ],
+            noLocal: [{ key: 'typescript:S9999', local: null }],
+        };
+        assert.deepEqual(profileRuleList(buckets, new Map([['S7503', 'require-await']])), [
+            { key: 'typescript:S4323', rule: 'sonarjs/use-type-alias', scope: 'MAIN' },
+            { key: 'typescript:S5976', rule: 'sonarjs/parameterized-tests', scope: 'ALL' },
+            { key: 'typescript:S7503', rule: 'require-await', scope: 'MAIN' },
+        ]);
     });
 });
