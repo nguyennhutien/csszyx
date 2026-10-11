@@ -1,6 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * Benchmarks the Phase E transform cache and Babel-vs-oxc parser paths.
+ * Benchmarks the Phase E transform cache and the engine's artifact paths:
+ * `transformSource` (native when the addon loads, else wasm), `transformWasm`
+ * (wasm artifact) and `transformRust` (native artifact).
  *
  * Usage:
  *   pnpm bench:transform-cache
@@ -171,13 +173,13 @@ writeFileSync(
     'utf8',
 );
 writeFileSync(
-    resolve(REPO_ROOT, options.outDir, 'phase-e-babel-vs-oxc-bench.md'),
+    resolve(REPO_ROOT, options.outDir, 'phase-e-engine-artifacts-bench.md'),
     renderParserReport(parserReport, rustTimingReport, rustStaticFastTimingReport),
     'utf8',
 );
 
 console.log(`Wrote ${join(options.outDir, 'phase-e-transform-cache-bench.md')}`);
-console.log(`Wrote ${join(options.outDir, 'phase-e-babel-vs-oxc-bench.md')}`);
+console.log(`Wrote ${join(options.outDir, 'phase-e-engine-artifacts-bench.md')}`);
 
 // Dispersion on stdout, so a reader can tell a real change from noise without
 // opening the report. A CV above ~5 % means the median is not a number to
@@ -264,7 +266,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
 
         stats.push(
             measureCase(
-                `cache/${size}/no-cache-oxc-transform`,
+                `cache/${size}/no-cache-wasm-transform`,
                 size,
                 opts,
                 () => {
@@ -272,7 +274,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                         transformWasm(file.source, file.filename);
                     }
                 },
-                'Baseline: transform every sz file with oxc and do no cache I/O.',
+                'Baseline: transform every sz file with the wasm artifact and do no cache I/O.',
             ),
         );
 
@@ -379,7 +381,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
 
         stats.push(
             measureCase(
-                `cache/${size}/no-sz-oxc-fast-path`,
+                `cache/${size}/no-sz-wasm-fast-path`,
                 size,
                 opts,
                 () => {
@@ -396,7 +398,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
 }
 
 /**
- * Run Babel-vs-oxc benchmark cases.
+ * Run engine artifact benchmark cases.
  *
  * @param opts CLI options.
  * @returns benchmark stats.
@@ -410,7 +412,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
         const files = repeated.slice(0, size);
         stats.push(
             measureCase(
-                `parser/${size}/babel-transformSource`,
+                `parser/${size}/auto-transformSource`,
                 size,
                 opts,
                 () => {
@@ -418,12 +420,12 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                         transformSource(file.source, file.filename);
                     }
                 },
-                'Babel compatibility path via transformSource().',
+                'Engine selection via transformSource(): native when the addon loads, else wasm.',
             ),
         );
         stats.push(
             measureCase(
-                `parser/${size}/oxc-transformWasm`,
+                `parser/${size}/wasm-transformWasm`,
                 size,
                 opts,
                 () => {
@@ -431,7 +433,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                         transformWasm(file.source, file.filename);
                     }
                 },
-                'Default oxc-parser + magic-string path.',
+                'Wasm artifact of the Rust engine via transformWasm().',
             ),
         );
         if (NATIVE_RUST_AVAILABLE) {
@@ -489,7 +491,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
     const hmrFiles = createHmrFiles(opts.hmrEdits);
     stats.push(
         measureCase(
-            'parser/hmr/oxc-transformWasm',
+            'parser/hmr/wasm-transformWasm',
             opts.hmrEdits,
             opts,
             () => {
@@ -497,7 +499,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     transformWasm(file.source, file.filename);
                 }
             },
-            'HMR-shaped baseline: one edited file per transform call through the JavaScript pipeline.',
+            'HMR-shaped baseline: one edited file per transformWasm call through the wasm artifact.',
         ),
     );
     if (NATIVE_RUST_AVAILABLE) {
@@ -550,24 +552,24 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
     for (const fixture of fixtureSet) {
         stats.push(
             measureCase(
-                `parser/fixture/${fixture.name}/babel`,
+                `parser/fixture/${fixture.name}/auto`,
                 1,
                 opts,
                 () => {
                     transformSource(fixture.source, `/bench/${fixture.name}.tsx`);
                 },
-                'Single-fixture Babel path timing.',
+                'Single-fixture transformSource() timing (native when present, else wasm).',
             ),
         );
         stats.push(
             measureCase(
-                `parser/fixture/${fixture.name}/oxc`,
+                `parser/fixture/${fixture.name}/wasm`,
                 1,
                 opts,
                 () => {
                     transformWasm(fixture.source, `/bench/${fixture.name}.tsx`);
                 },
-                'Single-fixture the JavaScript path it replaced timing.',
+                'Single-fixture wasm artifact timing.',
             ),
         );
         if (NATIVE_RUST_AVAILABLE) {
@@ -914,8 +916,8 @@ function cacheInput(filename: string, source: string): TransformCacheKeyInput {
     return {
         pluginVersion: PLUGIN_VERSION,
         compilerVersion: COMPILER_VERSION,
-        parserMode: 'oxc',
-        producer: 'oxc',
+        parserMode: 'wasm',
+        producer: 'wasm',
         filename,
         source,
     };
@@ -941,17 +943,17 @@ function renderCacheReport(stats: BenchStats[]): string {
     const rows = stats.map(stat => tableRow(stat)).join('\n');
     const speedups = options.sizes
         .map(size => {
-            const baseline = findStat(stats, `cache/${size}/no-cache-oxc-transform`);
+            const baseline = findStat(stats, `cache/${size}/no-cache-wasm-transform`);
             const warm = findStat(stats, `cache/${size}/warm-read-hit`);
             const memory = findStat(stats, `cache/${size}/l1-memory-hit`);
             const cold = findStat(stats, `cache/${size}/cold-transform-and-write`);
             return `- ${size} sz files: warm cache is ${formatComparison(
                 baseline.medianMs,
                 warm.medianMs,
-            )} than no-cache oxc; L1 memory is ${formatComparison(
+            )} than no-cache wasm; L1 memory is ${formatComparison(
                 baseline.medianMs,
                 memory.medianMs,
-            )} than no-cache oxc; cold write is ${formatRatio(
+            )} than no-cache wasm; cold write is ${formatRatio(
                 cold.medianMs / baseline.medianMs,
             )}x the no-cache baseline.`;
         })
@@ -981,7 +983,7 @@ ${rows}
 
 ## Interpretation
 
-- Warm cache should beat no-cache oxc by enough margin to justify disk serialization.
+- Warm cache should beat no-cache wasm by enough margin to justify disk serialization.
 - Cold cache may be slightly slower than no-cache because it transforms and writes JSON.
 - If no-sz gate timing is non-trivial, optimize the gate before adding cache work to no-sz paths.
 - The L1 row measures the in-process Map layer now used before disk reads.
@@ -989,7 +991,7 @@ ${rows}
 }
 
 /**
- * Render Babel-vs-oxc markdown report.
+ * Render engine artifact markdown report.
  *
  * @param stats benchmark stats
  * @param rustTiming Rust native timing stats.
@@ -1004,24 +1006,24 @@ function renderParserReport(
     const rows = stats.map(stat => tableRow(stat)).join('\n');
     const speedups = options.sizes
         .map(size => {
-            const babel = findStat(stats, `parser/${size}/babel-transformSource`);
-            const oxc = findStat(stats, `parser/${size}/oxc-transformWasm`);
+            const auto = findStat(stats, `parser/${size}/auto-transformSource`);
+            const wasm = findStat(stats, `parser/${size}/wasm-transformWasm`);
             const rust = findStat(stats, `parser/${size}/rust-transformRust`);
             const rustBatch = findStat(stats, `parser/${size}/rust-transformRustBatch`);
-            const oxcRatio = `oxc is ${formatRatio(babel.medianMs / oxc.medianMs)}x faster than Babel`;
+            const autoClause = `transformSource (${NATIVE_RUST_AVAILABLE ? 'native' : 'wasm'}) is ${formatRatio(wasm.medianMs / auto.medianMs)}x vs wasm`;
             const rustClause =
                 rust.status === 'measured'
-                    ? `rust is ${formatRatio(babel.medianMs / rust.medianMs)}x faster than Babel and ${formatRatio(oxc.medianMs / rust.medianMs)}x faster than the JavaScript pipeline`
+                    ? `rust is ${formatRatio(wasm.medianMs / rust.medianMs)}x faster than wasm`
                     : `${rust.name} is ${rust.status}`;
             const rustBatchClause =
                 rustBatch.status === 'measured'
-                    ? `rust batch is ${formatRatio(rust.medianMs / rustBatch.medianMs)}x vs per-file Rust and ${formatRatio(oxc.medianMs / rustBatch.medianMs)}x vs the JavaScript pipeline`
+                    ? `rust batch is ${formatRatio(rust.medianMs / rustBatch.medianMs)}x vs per-file Rust and ${formatRatio(wasm.medianMs / rustBatch.medianMs)}x vs wasm`
                     : `${rustBatch.name} is ${rustBatch.status}`;
-            return `- ${size} mixed fixtures: ${oxcRatio} by median batch time; ${rustClause}; ${rustBatchClause}.`;
+            return `- ${size} mixed fixtures: ${autoClause} by median batch time; ${rustClause}; ${rustBatchClause}.`;
         })
         .join('\n');
 
-    return `# Phase E Babel vs OXC Benchmark
+    return `# Phase E Engine Artifacts Benchmark
 
 Generated: ${startedAt.toISOString()}
 
@@ -1123,7 +1125,7 @@ Parser paths: ${staticParserPathSummary || 'none'}.
  * @returns markdown bullet list
  */
 function renderHmrSummary(stats: BenchStats[]): string {
-    const oxc = findStat(stats, 'parser/hmr/oxc-transformWasm');
+    const wasm = findStat(stats, 'parser/hmr/wasm-transformWasm');
     const rust = findStat(stats, 'parser/hmr/rust-transformRust');
     const rustBatch = findStat(stats, 'parser/hmr/rust-transformRustBatch1');
     if (rust.status !== 'measured' || rustBatch.status !== 'measured') {
@@ -1131,11 +1133,11 @@ function renderHmrSummary(stats: BenchStats[]): string {
     }
     return [
         `- HMR-shaped ${options.hmrEdits} edits: rust is ${formatRatio(
-            oxc.medianMs / rust.medianMs,
-        )}x faster than the JavaScript pipeline.`,
+            wasm.medianMs / rust.medianMs,
+        )}x faster than wasm.`,
         `- HMR-shaped ${options.hmrEdits} edits: rust batch-of-one is ${formatRatio(
-            oxc.medianMs / rustBatch.medianMs,
-        )}x faster than the JavaScript pipeline and ${formatRatio(
+            wasm.medianMs / rustBatch.medianMs,
+        )}x faster than wasm and ${formatRatio(
             rust.medianMs / rustBatch.medianMs,
         )}x vs per-file Rust.`,
     ].join('\n');

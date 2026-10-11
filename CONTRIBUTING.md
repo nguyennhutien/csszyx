@@ -139,7 +139,7 @@ pnpm lint                     # same, auto-fix where possible
 pnpm test                     # vitest + turbo orchestration
 pnpm test:e2e                 # Playwright
 pnpm type-check               # tsc -b across workspace project references
-pnpm bench:transform-cache    # cold/warm transform-cache report; Babel-vs-oxc cost
+pnpm bench:transform-cache    # cold/warm transform-cache report; native vs wasm cost
 ```
 
 Formatting is owned by Biome (including CSS as of v0.8.0); ESLint stays
