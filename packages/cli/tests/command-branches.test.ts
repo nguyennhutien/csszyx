@@ -2,8 +2,7 @@
  * Branch coverage for the smaller command and helper modules: the non-json /
  * silent / default-output paths, byte formatting, the doctor checksum-missing
  * branch, check's pattern + no-sz skip, scan-collisions' unclosed-span handling,
- * and pure helpers (isColorValue, sz-codegen null/array, flattenColors DEFAULT,
- * explain null literal).
+ * and pure helpers (isColorValue, sz-codegen null/array, flattenColors DEFAULT).
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,7 +13,6 @@ import { isColorValue } from '../../compiler/src/migrate-tables/reverse-map.js';
 import { audit } from '../src/commands/audit.js';
 import { check } from '../src/commands/check.js';
 import { doctor } from '../src/commands/doctor.js';
-import { explainSz } from '../src/commands/explain.js';
 import { generateTypes } from '../src/commands/generate-types.js';
 import { nextPrebuild } from '../src/commands/next-prebuild.js';
 import { scanCollisions } from '../src/commands/scan-collisions.js';
@@ -208,10 +206,6 @@ describe('pure helper branches', () => {
             'brand',
             'brand-500',
         ]);
-    });
-
-    it('explainSz resolves a null literal value', () => {
-        expect(explainSz('{ p: null }')).toBeTypeOf('string');
     });
 
     it('generateTypeDeclarations tolerates a theme with no colors', () => {

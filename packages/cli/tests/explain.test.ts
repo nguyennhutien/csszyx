@@ -1,75 +1,77 @@
 /**
- * `csszyx explain` resolves an sz object literal to its compiled className,
- * so a developer can verify what csszyx emits without a build.
+ * `csszyx explain` prints what the build emits for an sz object, so a
+ * developer can verify it without a build. What the build emits is pinned per
+ * engine artifact in explain-engine.test.ts; this file pins what the command
+ * prints for each kind of answer.
  */
-import { describe, expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 
-import { ExplainParseError, explainSz } from '../src/commands/explain.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-describe('explainSz', () => {
-    it('resolves a single property', () => {
-        expect(explainSz('{ p: 4 }')).toBe('p-4');
-    });
-
-    it('resolves multiple properties in order', () => {
-        const out = explainSz("{ p: 4, bg: 'blue-500' }");
-        expect(out.split(' ')).toContain('p-4');
-        expect(out.split(' ')).toContain('bg-blue-500');
-    });
-
-    it('resolves a nested variant', () => {
-        expect(explainSz("{ hover: { bg: 'blue-500' } }")).toBe('hover:bg-blue-500');
-    });
-
-    it('resolves a negative value', () => {
-        expect(explainSz('{ mt: -4 }')).toBe('-mt-4');
-    });
-
-    it('rejects a dynamic spread (cannot be explained statically)', () => {
-        expect(() => explainSz('{ ...props }')).toThrow(ExplainParseError);
-    });
-
-    it('rejects a non-object argument', () => {
-        expect(() => explainSz('someVar')).toThrow(ExplainParseError);
-    });
-});
+import { explain } from '../src/commands/explain.js';
 
 /**
- * The messages are the command's whole point: someone runs it on a literal
- * precisely because they cannot tell why it is not producing classes. These
- * pin the wording so a parser change cannot quietly reduce every rejection to
- * "could not explain sz".
+ * Collect every printed line, colour codes removed.
+ * @returns The lines printed so far, in order.
  */
-describe('explainSz rejection messages', () => {
-    it('names a spread', () => {
-        expect(() => explainSz('{ ...props }')).toThrow(/spread is dynamic/);
+function capture(): string[] {
+    const lines: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...parts: unknown[]) => {
+        lines.push(stripVTControlCharacters(parts.join(' ')));
+    });
+    return lines;
+}
+
+afterEach(() => {
+    process.exitCode = undefined;
+    vi.restoreAllMocks();
+});
+
+describe('explain', () => {
+    it('prints the className alone for a plain object', () => {
+        const lines = capture();
+        explain("{ hover: { bg: 'blue-500' } }");
+        expect(lines).toEqual(['hover:bg-blue-500']);
+        expect(process.exitCode).toBeUndefined();
     });
 
-    it('names a computed key', () => {
-        expect(() => explainSz('{ [key]: 4 }')).toThrow(/computed key is dynamic/);
+    it('prints (no classes) for an object that yields none', () => {
+        const lines = capture();
+        explain('{}');
+        expect(lines).toEqual(['(no classes)']);
     });
 
-    it('names an object method', () => {
-        expect(() => explainSz('{ go() {} }')).toThrow(/object method is dynamic/);
+    it('names the style variable a class reads at runtime', () => {
+        const lines = capture();
+        explain('{ p: `4` }');
+        expect(lines[0]).toBe('p-(--_sz-p)');
+        expect(lines[1]).toMatch(/--_sz-p is set through the style attribute at runtime/);
+        expect(lines).toHaveLength(2);
     });
 
-    it('names an interpolated template', () => {
-        expect(() => explainSz('{ p: `a${b}` }')).toThrow(/template literal with interpolation/);
+    it("prints the engine's diagnostics after the className", () => {
+        const lines = capture();
+        explain('{ foo: 4 }');
+        expect(lines[0]).toBe('foo-4');
+        expect(lines[1]).toMatch(/Unknown property "foo"/);
+        expect(process.exitCode).toBeUndefined();
     });
 
-    it('names the dynamic node type of a value', () => {
-        expect(() => explainSz('{ p: size }')).toThrow(/"Identifier" is dynamic/);
+    it('fails, naming the runtime fallback and its reason, for an object the build leaves to `_sz()`', () => {
+        const lines = capture();
+        explain('{ ...props }');
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toMatch(/^✗ Could not explain sz: the build emits no classes for it/);
+        expect(lines[0]).toMatch(/unresolvable sz spread/);
+        expect(process.exitCode).toBe(1);
     });
 
-    it('separates a syntax error from a dynamic value', () => {
-        expect(() => explainSz('{ p:')).toThrow(/could not be parsed/);
-    });
-
-    it('says when the argument is not an object literal', () => {
-        expect(() => explainSz('someVar')).toThrow(/not an object literal/);
-    });
-
-    it('still resolves an uninterpolated template', () => {
-        expect(explainSz('{ content: `x` }')).toBe('content-[x]');
+    it('fails on a syntax error', () => {
+        const lines = capture();
+        explain('{ p:');
+        expect(lines).toEqual([
+            '✗ Could not explain sz: could not be parsed as a JavaScript expression',
+        ]);
+        expect(process.exitCode).toBe(1);
     });
 });

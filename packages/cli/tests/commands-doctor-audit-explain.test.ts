@@ -1,7 +1,8 @@
 /**
- * The diagnostic commands (doctor, audit, explain, generate-types) and the
- * Tailwind config scanner — command modules that only ran through the binary,
- * which subprocess tests can't measure.
+ * The diagnostic commands (doctor, audit, generate-types) and the Tailwind
+ * config scanner — command modules that only ran through the binary, which
+ * subprocess tests can't measure. `explain` has its own files:
+ * explain.test.ts and explain-engine.test.ts.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { audit } from '../src/commands/audit.js';
 import { doctor } from '../src/commands/doctor.js';
-import { explain, explainSz } from '../src/commands/explain.js';
 import { generateTypes } from '../src/commands/generate-types.js';
 import {
     extractScreenKeys,
@@ -131,33 +131,6 @@ describe('doctor', () => {
     });
 });
 
-describe('explain', () => {
-    it('compiles an sz object literal to its className', () => {
-        expect(explainSz("{ p: 4, bg: 'blue-500' }")).toContain('p-4');
-    });
-
-    it('rejects unparseable input and non-object expressions', () => {
-        expect(() => explainSz('{{{{')).toThrow(/could not be parsed/);
-        expect(() => explainSz('42')).toThrow(/not an object literal/);
-    });
-
-    it('prints the className, or (no classes) for an empty object', () => {
-        const { logs } = captureLogs();
-        explain('{ p: 4 }');
-        explain('{}');
-        expect(logs[0]).toContain('p-4');
-        expect(logs[1]).toBe('(no classes)');
-        expect(process.exitCode).toBeUndefined();
-    });
-
-    it('sets a failing exit code on bad input', () => {
-        captureLogs();
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        explain('not an object');
-        expect(process.exitCode).toBe(1);
-    });
-});
-
 describe('audit', () => {
     it('emits machine-readable stats in json mode', async () => {
         const { logs } = captureLogs();
@@ -255,39 +228,6 @@ describe('scanTailwindConfig', () => {
         const broken = join(cwd, 'tailwind.config.mjs');
         writeFileSync(broken, 'export default {{{');
         await expect(scanTailwindConfig(broken)).rejects.toThrow(/Failed to load/);
-    });
-});
-
-describe('explainSz literal space', () => {
-    it('resolves nested objects, arrays, negatives, booleans and template strings', () => {
-        expect(
-            explainSz("{ hover: { m: -2 }, list: [1, 'a'], on: true, t: `x`, 'q k': 1 }"),
-        ).toBeTypeOf('string');
-    });
-
-    it('names each dynamic construct it refuses', () => {
-        expect(() => explainSz('{ p: x }')).toThrow(/dynamic/);
-        expect(() => explainSz('{ p: `a${x}` }')).toThrow(/interpolation/);
-        expect(() => explainSz('{ p: [...xs] }')).toThrow(/spread/);
-        expect(() => explainSz('{ ...rest }')).toThrow(/spread/);
-        expect(() => explainSz('{ [k]: 1 }')).toThrow(/computed/);
-        expect(() => explainSz('{ p: !x }')).toThrow(/unary|dynamic/);
-    });
-
-    it('accepts what csszyx itself accepts, rather than a stricter reading', () => {
-        // These two were refused while the command carried its own parser,
-        // which made it stricter than the compiler: the Vue and Svelte
-        // adapters resolve both through the shared reader, so csszyx does
-        // compile them and a command whose job is to show what csszyx emits
-        // has nothing to refuse. A numeric key is a string key in JS, and an
-        // array hole reads as a hole rather than stopping the whole literal.
-        //
-        // The numeric key now reaches the compiler, which answers with its
-        // own diagnostic about numeric keys and emits nothing. That is the
-        // gain: the reason a person reads is csszyx's, not a second parser's
-        // guess at what csszyx would have said.
-        expect(explainSz('{ 4: 1 }')).toBe('');
-        expect(() => explainSz('{ p: [1, , 2] }')).not.toThrow();
     });
 });
 
