@@ -236,11 +236,14 @@ data). The warning appears in the Vite/webpack dev-server output, not at runtime
 An import is resolved when the compiler can follow the name to a **literal
 object in the module that declares it**. What decides is that last hop, not the
 import syntax — so the shape of the *export* is what to look at when a style
-does not fold.
+does not fold. The literal qualifies exactly when it would compile written in
+the importing file: it may read a `const` of its own module, spread one, or
+read a member of one, as a local literal can.
 
 | Provider module | Importer | Resolution |
 |---|---|---|
 | `export const x = { ... }` | `import { x } from './styles'` | Build time ✅ |
+| `const S = 4` + `export const x = { p: S }` | `import { x } from './styles'` | Build time ✅ |
 | `const x = { ... }` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
 | `export const x = { ... }` | `import * as S from './styles'`, `sz={S.x}` | Build time ✅ |
 | `export default { ... }` | `import x from './styles'` | Build time ✅ |

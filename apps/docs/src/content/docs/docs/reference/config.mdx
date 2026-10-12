@@ -601,8 +601,13 @@ as declared once and never written to, whichever way this setting is set.
 **What it covers:** a direct `sz={binding}` from a named import, including a
 renamed one (`import { cardSz as card }`), a namespace member (`import * as S`,
 then `sz={S.cardSz}`), and a default import when the module writes the literal
-in the default slot (`export default { … }`). The value must be a fully static
-object literal **in the module the importer names**.
+in the default slot (`export default { … }`). The value must be an object
+literal **in the module the importer names**, and it qualifies exactly when the
+same literal would compile written in the importing file: it may read a `const`
+its own module declares (`{ p: SPACE }`), spread one (`{ ...base, p: 4 }`) or
+read a member of one (`{ p: SIZES.md }`). A value that module itself imports is
+not followed, so an object built from another module's export keeps the
+runtime path.
 
 A re-export is followed rather than refused: a barrel
 (`export { cardSz } from './base'`) is read as a link to the module that
