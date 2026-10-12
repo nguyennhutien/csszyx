@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { scanGlobalVarUsages } from '../src/global-var-diagnostics.js';
+import { GLOBAL_VAR_SCANNERS, scanOneFile } from './engine-parity-harness.js';
 
 /**
  * Complementary branch-coverage suite for the out-of-band global-variable
@@ -10,43 +10,74 @@ import { scanGlobalVarUsages } from '../src/global-var-diagnostics.js';
  * tokens, namespaced attributes, numeric object keys, dynamic className
  * expressions) and asserts the concrete diagnostics produced.
  */
-describe('scanGlobalVarUsages — branch coverage', () => {
-    it('throws when the parser reports errors on token-bearing source', () => {
-        // Contains `--` and `var(` so the early-out is skipped and the parser runs.
-        expect(() => scanGlobalVarUsages('const = var(--broken)', '/repo/src/bad.ts')).toThrow(
-            /oxc-parser errors/,
-        );
-    });
+describe.each(GLOBAL_VAR_SCANNERS)(
+    'scanGlobalVarUsages — branch coverage on the %s artifact',
+    (_name, scan) => {
+        const scanGlobalVarUsages = scanOneFile(scan);
 
-    it('does not report sz strings whether the sz prop is top-level or nested in another attribute', () => {
-        const source = `
+        it('reports a file the parser rejects as one parse-error record at the first error', () => {
+            // Contains `--` and `var(` so the early-out is skipped and the parser
+            // runs. The file cannot be checked for any token, so the token filter
+            // does not hide the record.
+            expect(
+                scanGlobalVarUsages('const = var(--broken);\nconst = 1;', '/repo/src/bad.ts', {
+                    tokens: ['--brand'],
+                }),
+            ).toEqual([
+                {
+                    kind: 'parse-error',
+                    name: '',
+                    location: { filePath: '/repo/src/bad.ts', line: 1, column: 7 },
+                    message:
+                        'the file could not be parsed (Unexpected token), so its global custom-property usages cannot be checked.',
+                },
+            ]);
+        });
+
+        it('reads JSX in a plain .js file, as the transform does', () => {
+            const source = "const A = () => <div style={{ '--brand-js': 1 }} />;";
+
+            expect(
+                scanGlobalVarUsages(source, '/repo/src/App.js').map(usage => [
+                    usage.kind,
+                    usage.name,
+                ]),
+            ).toEqual([['jsx-style-key', '--brand-js']]);
+        });
+
+        it('does not parse a file without custom-property syntax, even a broken one', () => {
+            expect(scanGlobalVarUsages('const = ;', '/repo/src/bad.ts')).toEqual([]);
+        });
+
+        it('does not report sz strings whether the sz prop is top-level or nested in another attribute', () => {
+            const source = `
 const A = () => (
   <div sz={{ bg: '--top-level' }}>
     <Wrap icon={<span sz={{ bg: '--nested-in-attr' }} />} />
   </div>
 );
 `;
-        // The nested <span sz> attribute has a JSXAttribute ancestor (icon),
-        // exercising the ancestor-walk guard; neither sz value is reported.
-        expect(scanGlobalVarUsages(source, '/repo/src/App.tsx')).toEqual([]);
-    });
+            // The nested <span sz> attribute has a JSXAttribute ancestor (icon),
+            // exercising the ancestor-walk guard; neither sz value is reported.
+            expect(scanGlobalVarUsages(source, '/repo/src/App.tsx')).toEqual([]);
+        });
 
-    it('ignores destructuring and uninitialized declarators when resolving const strings', () => {
-        const source = `
+        it('ignores destructuring and uninitialized declarators when resolving const strings', () => {
+            const source = `
 const { a } = obj;
 let later;
 const token = '--brand-resolved';
 document.documentElement.style.setProperty(token, color);
 `;
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
 
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['style-set-property', '--brand-resolved'],
-        ]);
-    });
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['style-set-property', '--brand-resolved'],
+            ]);
+        });
 
-    it('handles plain calls, non-style methods, computed/argument-less/dynamic style methods', () => {
-        const source = `
+        it('handles plain calls, non-style methods, computed/argument-less/dynamic style methods', () => {
+            const source = `
 const known = '--brand-known';
 plainCall('--not-a-method');
 el.classList.add('--not-style-method');
@@ -56,18 +87,18 @@ el.style.setProperty(unknownVar, color);
 el.style.setProperty(\`--brand-template\`, color);
 el.style.setProperty(known, color);
 `;
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
 
-        // Only the computed-member call and the const-resolved call are real
-        // out-of-band setProperty usages.
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['style-set-property', '--brand-computed'],
-            ['style-set-property', '--brand-known'],
-        ]);
-    });
+            // Only the computed-member call and the const-resolved call are real
+            // out-of-band setProperty usages.
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['style-set-property', '--brand-computed'],
+                ['style-set-property', '--brand-known'],
+            ]);
+        });
 
-    it('skips non-object and string-literal JSX style attributes', () => {
-        const source = `
+        it('skips non-object and string-literal JSX style attributes', () => {
+            const source = `
 const A = ({ dynamicStyle }) => (
   <>
     <div style={dynamicStyle} />
@@ -76,35 +107,35 @@ const A = ({ dynamicStyle }) => (
   </>
 );
 `;
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx');
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx');
 
-        // Only the object-literal style with a real `--` string key reports.
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['jsx-style-key', '--brand-key'],
-        ]);
-    });
+            // Only the object-literal style with a real `--` string key reports.
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['jsx-style-key', '--brand-key'],
+            ]);
+        });
 
-    it('returns empty for source containing no custom-property syntax at all', () => {
-        expect(scanGlobalVarUsages('const plain = compute(1, 2);', '/repo/src/plain.ts')).toEqual(
-            [],
-        );
-    });
+        it('returns empty for source containing no custom-property syntax at all', () => {
+            expect(
+                scanGlobalVarUsages('const plain = compute(1, 2);', '/repo/src/plain.ts'),
+            ).toEqual([]);
+        });
 
-    it('classifies getPropertyValue and removeProperty style-method kinds', () => {
-        const source = `
+        it('classifies getPropertyValue and removeProperty style-method kinds', () => {
+            const source = `
 element.style.getPropertyValue('--brand-get');
 element.style.removeProperty('--brand-remove');
 `;
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/theme.ts');
 
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['style-get-property', '--brand-get'],
-            ['style-remove-property', '--brand-remove'],
-        ]);
-    });
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['style-get-property', '--brand-get'],
+                ['style-remove-property', '--brand-remove'],
+            ]);
+        });
 
-    it('reports spread style objects, computed keys, and quoted className expressions', () => {
-        const source = `
+        it('reports spread style objects, computed keys, and quoted className expressions', () => {
+            const source = `
 const brandKey = '--brand-computed-key';
 const A = ({ color, base }) => (
   <>
@@ -113,17 +144,17 @@ const A = ({ color, base }) => (
   </>
 );
 `;
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx');
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx');
 
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['jsx-style-key', '--brand-computed-key'],
-            ['jsx-style-key', '--brand-literal'],
-            ['class-string-var-reference', '--brand-quoted'],
-        ]);
-    });
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['jsx-style-key', '--brand-computed-key'],
+                ['jsx-style-key', '--brand-literal'],
+                ['class-string-var-reference', '--brand-quoted'],
+            ]);
+        });
 
-    it('handles filtered tokens, namespaced attributes, boolean/dynamic/template classNames', () => {
-        const source = `
+        it('handles filtered tokens, namespaced attributes, boolean/dynamic/template classNames', () => {
+            const source = `
 const A = ({ cls }) => (
   <>
     <a xlink:href="var(--namespaced)" className="bg-[var(--filtered-out)]" />
@@ -133,14 +164,15 @@ const A = ({ cls }) => (
   </>
 );
 `;
-        // The candidate filter drops --filtered-out; the namespaced attribute has
-        // no plain identifier name; boolean/dynamic classNames yield no strings.
-        const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx', {
-            tokens: ['--template-token'],
-        });
+            // The candidate filter drops --filtered-out; the namespaced attribute has
+            // no plain identifier name; boolean/dynamic classNames yield no strings.
+            const diagnostics = scanGlobalVarUsages(source, '/repo/src/App.tsx', {
+                tokens: ['--template-token'],
+            });
 
-        expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
-            ['class-string-var-reference', '--template-token'],
-        ]);
-    });
-});
+            expect(diagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name])).toEqual([
+                ['class-string-var-reference', '--template-token'],
+            ]);
+        });
+    },
+);

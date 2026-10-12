@@ -31,9 +31,11 @@ export {
     storeEngineSpans,
 } from './engine-spans.js';
 export {
+    type GlobalVarSourceFile,
     type GlobalVarUsageDiagnostic,
     type GlobalVarUsageKind,
     type GlobalVarUsageLocation,
+    type GlobalVarUsageQuery,
     type ScanGlobalVarUsagesOptions,
     scanGlobalVarUsages,
 } from './global-var-diagnostics.js';
@@ -118,6 +120,7 @@ export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     RustTransformUnavailableError,
+    scanGlobalVarUsagesRust,
     scanModuleLinksRust,
     type TransformRustFile,
     transformRust,
@@ -126,6 +129,7 @@ export {
 export { transformSource } from './transform-select.js';
 export {
     isWasmTransformAvailable,
+    scanGlobalVarUsagesWasm,
     scanModuleLinksWasm,
     transformWasm,
     transformWasmBatch,

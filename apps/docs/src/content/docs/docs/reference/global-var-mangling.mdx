@@ -60,8 +60,10 @@ table, validates emitted CSS defines the same tokens, then rewrites matching CSS
 `var(--token)` references through the validated aliases.
 
 Builds fail closed when a token is missing from emitted CSS, when unsafe
-out-of-band JS usage is detected, or when CSS validation produces a different
-alias plan than source transforms used.
+out-of-band JS usage is detected, when a source file cannot be parsed (its
+usages cannot be checked, so the error names the file and its first syntax
+error), or when CSS validation produces a different alias plan than source
+transforms used.
 
 Runtime fallback `sz={expr}` shapes are not aliased. They remain
 correct because alias mode keeps the original custom properties defined, but

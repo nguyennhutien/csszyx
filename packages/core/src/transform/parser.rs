@@ -173,21 +173,7 @@ pub fn parse_source_shell_with_registries(
         visitor.ast_budget_exceeded
     };
 
-    // oxc 0.140 folds warnings into `diagnostics`; only error-severity entries
-    // are parse failures, matching the old `errors` field.
-    // Each error at its first label, the place oxc points at.
-    let errors: Vec<(u32, String)> = parsed
-        .diagnostics
-        .errors()
-        .map(|error| {
-            let start = error.labels.first().map_or(0, |label| {
-                // The label's own offset: one oxc already counts in bytes.
-                let offset: u32 = label.offset();
-                offset
-            });
-            (start, error.to_string())
-        })
-        .collect();
+    let errors = parse_errors(&parsed);
     let mut diagnostics = Diagnostics::default();
     if !errors.is_empty() || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
@@ -221,11 +207,31 @@ pub fn parse_source_shell_with_registries(
     }
 }
 
+/// Every parse failure of one parse, each at its first label (the place oxc
+/// points at, in bytes) with its message.
+///
+/// oxc 0.140 folds warnings into `diagnostics`; only error-severity entries
+/// are parse failures, matching the old `errors` field.
+pub fn parse_errors(parsed: &oxc_parser::ParserReturn<'_>) -> Vec<(u32, String)> {
+    parsed
+        .diagnostics
+        .errors()
+        .map(|error| {
+            let start = error.labels.first().map_or(0, |label| {
+                // The label's own offset: one oxc already counts in bytes.
+                let offset: u32 = label.offset();
+                offset
+            });
+            (start, error.to_string())
+        })
+        .collect()
+}
+
 fn elapsed_ns(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
-fn source_type_for_path(filename: &str) -> SourceType {
+pub fn source_type_for_path(filename: &str) -> SourceType {
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     // React-17-era codebases routinely keep JSX in plain `.js` files (Babel and
     // swc accept that by default). oxc maps `.js` to a JSX-less grammar, so the

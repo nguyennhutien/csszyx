@@ -21,6 +21,15 @@ pub struct NativeTransformFile {
     pub source: String,
 }
 
+impl From<NativeTransformFile> for TransformFile {
+    fn from(file: NativeTransformFile) -> Self {
+        Self {
+            filename: file.filename,
+            source: file.source,
+        }
+    }
+}
+
 /// One name a module re-exports, as JavaScript receives it.
 #[cfg(feature = "native-engine")]
 #[derive(Debug)]
@@ -70,13 +79,7 @@ pub fn scan_module_links_native(
     files: Vec<NativeTransformFile>,
     query: Option<NativeModuleLinksQuery>,
 ) -> Vec<NativeModuleLinks> {
-    let files: Vec<TransformFile> = files
-        .into_iter()
-        .map(|file| TransformFile {
-            filename: file.filename,
-            source: file.source,
-        })
-        .collect();
+    let files: Vec<TransformFile> = files.into_iter().map(TransformFile::from).collect();
     let query = crate::transform::module_links::ModuleLinksQuery {
         registry_entries: query
             .and_then(|query| query.registry_entries)
@@ -99,6 +102,78 @@ pub fn scan_module_links_native(
                     specifier: forward.specifier,
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+/// Where one global custom-property usage is, as JavaScript receives it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarUsageLocation {
+    /// The filename the file was handed in with.
+    pub file_path: String,
+    /// 1-based line.
+    pub line: u32,
+    /// 1-based column, in UTF-16 code units.
+    pub column: u32,
+}
+
+/// One global custom-property usage csszyx does not rewrite, or the one
+/// record of a file that did not parse, as JavaScript receives it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarUsage {
+    /// What the record reports, e.g. `style-set-property` or `parse-error`.
+    pub kind: String,
+    /// The custom property, leading `--` included; empty for a parse error.
+    pub name: String,
+    /// Where it is.
+    pub location: NativeGlobalVarUsageLocation,
+    /// What a build error prints for it.
+    pub message: String,
+}
+
+/// Which usages a global custom-property scan reports, as JavaScript passes it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeGlobalVarUsageQuery {
+    /// Report only these custom properties; every one when absent.
+    pub tokens: Option<Vec<String>>,
+}
+
+/// Reads the global custom-property usages csszyx does not rewrite, one list
+/// per file in input order.
+#[cfg(feature = "native-engine")]
+#[napi(js_name = "scanGlobalVarUsages")]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn scan_global_var_usages_native(
+    files: Vec<NativeTransformFile>,
+    query: Option<NativeGlobalVarUsageQuery>,
+) -> Vec<Vec<NativeGlobalVarUsage>> {
+    let files: Vec<TransformFile> = files.into_iter().map(TransformFile::from).collect();
+    let query = crate::transform::global_var_usages::GlobalVarUsageQuery {
+        tokens: query.and_then(|query| query.tokens),
+    };
+    crate::transform::global_var_usages::scan_global_var_usages(&files, &query)
+        .into_iter()
+        .map(|usages| {
+            usages
+                .into_iter()
+                .map(|usage| NativeGlobalVarUsage {
+                    kind: usage.kind.as_str().to_owned(),
+                    name: usage.name,
+                    location: NativeGlobalVarUsageLocation {
+                        file_path: usage.location.file_path,
+                        line: usage.location.line,
+                        column: usage.location.column,
+                    },
+                    message: usage.message,
+                })
+                .collect()
         })
         .collect()
 }
@@ -314,10 +389,7 @@ pub fn transform_batch_native(
 ) -> napi::Result<Vec<NativeTransformResult>> {
     let files = files
         .into_iter()
-        .map(|file| TransformFile {
-            filename: file.filename,
-            source: file.source,
-        })
+        .map(TransformFile::from)
         .collect::<Vec<_>>();
 
     let options = options.unwrap_or_default();

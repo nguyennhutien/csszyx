@@ -322,7 +322,15 @@ export const SIZE_BUDGETS = [
         // 3,465 gzip bytes as this script measures them: 571,348 at the
         // branch base, 574,813 after, un-optimized nodejs parser build, same
         // machine.
-        maxGzipBytes: 575_100,
+        //
+        // Raised from 575,100 on 2026-10-12: the global-var usage scan moved
+        // from the compiler's second parse into the engine, and costs 10,323
+        // gzip bytes as this script measures them: 574,813 at the branch base,
+        // 585,136 after, un-optimized nodejs parser build, same machine. About
+        // 7,200 of that is the scan's own oxc AST walker (each `Visit` impl
+        // carries a full copy); the scan already reads constants in the same
+        // walk to keep it to one.
+        maxGzipBytes: 585_500,
     },
 ];
 

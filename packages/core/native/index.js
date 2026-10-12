@@ -13,13 +13,14 @@ const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the s
 // fallback that is not there and the install help would send a reader to
 // reinstall a package they already have.
 const MIGRATE_NOTE = 'note: migrate runs on the native engine only; there is no wasm lane for it';
-const MIGRATE_HELP =
-    'update @csszyx/core and its platform package together, to a version that carries migrate';
+const UPDATE_TOGETHER =
+    'update @csszyx/core and its platform package together, to a version that carries ';
+const MIGRATE_HELP = `${UPDATE_TOGETHER}migrate`;
 const INSTALL_HELP =
     'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
 const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
-const LINKS_HELP =
-    'update @csszyx/core and its platform package together, to a version that carries scanModuleLinks';
+const LINKS_HELP = `${UPDATE_TOGETHER}scanModuleLinks`;
+const GLOBAL_VAR_HELP = `${UPDATE_TOGETHER}scanGlobalVarUsages`;
 const RESULT_HELP = 'update @csszyx/core and its platform package together, to the same version';
 
 /** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
@@ -205,6 +206,22 @@ export function scanModuleLinks(files, query) {
         scan(files, query),
         result => query?.registryEntries !== true || typeof result.registryEntriesJson === 'string',
     );
+}
+
+/**
+ * Reads the global custom-property usages csszyx does not rewrite.
+ *
+ * @param {Array<{filename: string, source: string}>} files - Modules to read.
+ * @param {{tokens?: string[]}} [query] - Which custom properties to report; every one when absent.
+ * @returns {Array<Array<{kind: string, name: string, location: {filePath: string, line: number, column: number}, message: string}>>} One list per module.
+ */
+export function scanGlobalVarUsages(files, query) {
+    return laterExport(
+        'scanGlobalVarUsages',
+        'the global-var usage scan',
+        GLOBAL_VAR_HELP,
+        NOTE,
+    )(files, query);
 }
 
 export function migrateBatch(files, options) {

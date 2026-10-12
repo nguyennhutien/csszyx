@@ -40,6 +40,34 @@ export interface NativeModuleLinks {
     registryEntriesJson: string;
 }
 
+/** Where one global custom-property usage is. */
+export interface NativeGlobalVarUsageLocation {
+    /** The filename the module was handed in with. */
+    filePath: string;
+    /** 1-based line. */
+    line: number;
+    /** 1-based column, in UTF-16 code units. */
+    column: number;
+}
+
+/** One global custom-property usage csszyx does not rewrite, or a parse failure. */
+export interface NativeGlobalVarUsage {
+    /** What the record reports, e.g. `style-set-property` or `parse-error`. */
+    kind: string;
+    /** The custom property, leading `--` included; empty for a parse error. */
+    name: string;
+    /** Where it is. */
+    location: NativeGlobalVarUsageLocation;
+    /** What a build error prints for it. */
+    message: string;
+}
+
+/** Which usages a global custom-property scan reports. */
+export interface NativeGlobalVarUsageQuery {
+    /** Report only these custom properties; every one when absent. */
+    tokens?: string[];
+}
+
 /** Which optional answers a module-link scan computes. */
 export interface NativeModuleLinksQuery {
     /** Read the values each module exports for the cross-module registry. */
@@ -318,6 +346,15 @@ export interface NativeBinding {
     ): NativeModuleLinks[];
 
     /**
+     * Reads the global custom-property usages csszyx does not rewrite.
+     * Absent on platform packages that predate the global-var usage scan.
+     */
+    scanGlobalVarUsages?(
+        files: NativeTransformFile[],
+        query?: NativeGlobalVarUsageQuery,
+    ): NativeGlobalVarUsage[][];
+
+    /**
      * Transforms source files with the native Rust core.
      *
      * @param files Source files to transform.
@@ -420,3 +457,16 @@ export function scanModuleLinks(
     files: NativeTransformFile[],
     query?: NativeModuleLinksQuery,
 ): NativeModuleLinks[];
+
+/**
+ * Reads the global custom-property usages csszyx does not rewrite.
+ *
+ * @param files Modules to read.
+ * @param query Which custom properties to report; every one when absent.
+ * @returns One list per module, in input order.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates the scan.
+ */
+export function scanGlobalVarUsages(
+    files: NativeTransformFile[],
+    query?: NativeGlobalVarUsageQuery,
+): NativeGlobalVarUsage[][];

@@ -1,5 +1,5 @@
 // A binding new enough to carry the migrate entry points and the module-link
-// scan. `native-binding.cjs` deliberately carries neither, so the pair covers
+// and global-var usage scans. `native-binding.cjs` deliberately carries none, so the pair covers
 // both sides of each version check.
 exports.transformBatch = files =>
     files.map(() => ({ code: '', classes: [], issues: [], mergeGroups: [] }));
@@ -10,3 +10,5 @@ exports.migrateClassName = (className, customMapJson) =>
 exports.migrateParseClass = className =>
     JSON.stringify({ called: 'migrateParseClass', className });
 exports.scanModuleLinks = files => files.map(file => ({ called: 'scanModuleLinks', filename: file.filename }));
+exports.scanGlobalVarUsages = (files, query) =>
+    files.map(file => [{ called: 'scanGlobalVarUsages', filename: file.filename, query }]);

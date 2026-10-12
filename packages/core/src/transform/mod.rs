@@ -17,6 +17,8 @@ pub(crate) mod fast_path;
 pub(crate) mod generated;
 #[cfg(feature = "native-engine")]
 pub(crate) mod global_var_aliases;
+#[cfg(feature = "native-engine")]
+pub mod global_var_usages;
 mod ir;
 pub mod lower;
 pub mod merge;

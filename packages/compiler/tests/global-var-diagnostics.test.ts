@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { scanGlobalVarUsages } from '../src/global-var-diagnostics.js';
+import { GLOBAL_VAR_SCANNERS, scanOneFile } from './engine-parity-harness.js';
 
-describe('scanGlobalVarUsages', () => {
+describe.each(GLOBAL_VAR_SCANNERS)('scanGlobalVarUsages on the %s artifact', (_name, scan) => {
+    const scanGlobalVarUsages = scanOneFile(scan);
+
     it('detects DOM style custom-property method calls', () => {
         const source = `
 const token = '--brand-primary';

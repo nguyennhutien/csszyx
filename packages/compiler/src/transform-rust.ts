@@ -1,11 +1,17 @@
 import {
     CsszyxNativeUnavailableError,
     type NativeTransformResult,
+    scanGlobalVarUsages,
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
 
 import { locateEngineSpans } from './engine-spans.js';
+import type {
+    GlobalVarSourceFile,
+    GlobalVarUsageDiagnostic,
+    GlobalVarUsageQuery,
+} from './global-var-diagnostics.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import type {
     CssVariableMangleValue,
@@ -195,6 +201,29 @@ export function scanModuleLinksRust(
         forwards,
         registryEntries: query.registryEntries === true ? JSON.parse(registryEntriesJson) : [],
     }));
+}
+
+/**
+ * Read global custom-property usages through the native addon.
+ *
+ * @param files - Modules to read.
+ * @param query - Which custom properties to report.
+ * @returns One list per module, in input order.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
+ */
+export function scanGlobalVarUsagesRust(
+    files: readonly GlobalVarSourceFile[],
+    query: GlobalVarUsageQuery = {},
+): GlobalVarUsageDiagnostic[][] {
+    try {
+        // The engine names each kind from the closed set the type lists.
+        return scanGlobalVarUsages(
+            files.map(({ filename, source }) => ({ filename, source })),
+            query,
+        ) as GlobalVarUsageDiagnostic[][];
+    } catch (err) {
+        throw asRustUnavailable(err);
+    }
 }
 
 /**
