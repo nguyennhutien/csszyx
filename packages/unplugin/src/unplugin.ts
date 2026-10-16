@@ -164,6 +164,7 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
+import { assertRuntimeMatchesPlugin } from './runtime-version.js';
 import { renderSafelistFile } from './safelist-format.js';
 import {
     appendTailwindSourceDirective,
@@ -7446,6 +7447,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns Nothing once the style model is open.
              */
             async buildStart() {
+                assertRuntimeMatchesPlugin({ root: state.rootDir, pluginVersion: PLUGIN_VERSION });
                 await openStyleModelAtBuildStart();
             },
 
@@ -7702,6 +7704,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // watch mode — `rollup -w` here, and vite build --watch
                     // through the same rollup context.
                     activeFramework = 'rollup';
+                    assertRuntimeMatchesPlugin({
+                        root: state.rootDir,
+                        pluginVersion: PLUGIN_VERSION,
+                    });
                     await openStyleModelAtBuildStart();
                 },
             },

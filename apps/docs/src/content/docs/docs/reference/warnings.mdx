@@ -2108,6 +2108,24 @@ setting that skips the check. Install `@csszyx/core` at the compiler's version;
 report the same version, the engine and the compiler were built from different
 checkouts of csszyx itself: rebuild the engine.
 
+### The plugin and the runtime come from different releases
+
+```text
+[csszyx] runtime-version-skew: @csszyx/unplugin {pluginVersion} found @csszyx/runtime {runtimeVersion} at {runtimeDir}
+help: install @csszyx/runtime@{pluginVersion}; the build and the runtime lower sz objects with rules from the same release
+```
+
+The build lowers every static `sz` object, and `@csszyx/runtime` lowers the rest
+in the browser — `szr`, `szv`, objects built at run time — and merges classes
+with the table the build wrote. Each side carries its own copy of the rules, so a
+runtime from another release writes other classes for the same object, and
+neither output says so. The plugin reads the `@csszyx/runtime` your project
+root resolves when the build starts (on Turbopack, in `csszyx next prebuild` and
+in the loader) and stops when its version differs. A package that pins its own
+copy of the runtime is not compared. Install the runtime at the plugin's
+version; with pnpm, `pnpm why @csszyx/runtime` shows which package pulled in the
+other copy.
+
 <Aside type="tip" title="Still stuck?">
 Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a
 file, a line, and a key. If a class is emitted but styles nothing, the same

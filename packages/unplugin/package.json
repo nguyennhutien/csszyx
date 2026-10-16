@@ -163,7 +163,7 @@
     "unplugin": "^3.4.0"
   },
   "peerDependencies": {
-    "@csszyx/runtime": "workspace:^",
+    "@csszyx/runtime": "workspace:*",
     "esbuild": "*",
     "rollup": "*",
     "tailwindcss": ">=3.4.19 <5",

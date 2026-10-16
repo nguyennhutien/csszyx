@@ -14,9 +14,11 @@ changes rename `sz` keys or change an API shape, and the type checker,
 
 ## Upgrade in this order
 
-1. Install 0.18 for `csszyx` and every `@csszyx/*` package at once. A plugin and
-   an engine from different releases cannot read each other's merge table, and
-   the build then keeps every class and tells you to align the versions.
+1. Install 0.18 for `csszyx` and every `@csszyx/*` package at once. The build
+   stops on a runtime or an engine from another release, with
+   [`runtime-version-skew`](#the-build-stops-when-csszyxruntime-is-from-another-release)
+   or [`engine-version-skew`](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases),
+   each naming the version to install.
 2. If `csszyx init` wrote a `csszyx.config.ts` or `csszyx.config.js` for you,
    replace it with the
    [0.18 template](#csszyxconfig-sets-how-loudly-each-finding-is-reported).
@@ -63,6 +65,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-four-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find module '@csszyx/core/native'` | `tsc`, the bundler, the first engine call | you |
+| [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
 | [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
@@ -643,6 +646,29 @@ An engine from another release stops the first engine call with
 which names both versions and what to install. A lockfile can keep an older
 `@csszyx/core-<platform>` package beside a current `@csszyx/core`; the message
 names that package too.
+
+## The build stops when @csszyx/runtime is from another release
+
+`@csszyx/unplugin` used to accept any `@csszyx/runtime` of the same major. The
+build and the runtime each carry the rules that lower an `sz` object: the build
+lowers the static ones, the runtime lowers `szr`, `szv` and objects built at run
+time, and merges classes with the table the build wrote. A runtime from another
+release wrote other classes for the same object, and nothing said so.
+
+The plugin now requires `@csszyx/runtime` at exactly its own version, and stops
+when the build starts (on Turbopack, in `csszyx next prebuild` and in the
+loader) if your project resolves another one:
+
+```text
+[csszyx] runtime-version-skew: @csszyx/unplugin 0.18.0 found @csszyx/runtime 0.17.2 at /app/node_modules/@csszyx/runtime
+help: install @csszyx/runtime@0.18.0; the build and the runtime lower sz objects with rules from the same release
+```
+
+**You are affected** when your lockfile holds `@csszyx/runtime` at another
+version than `@csszyx/unplugin`, which installing both at once in
+[step 1](#upgrade-in-this-order) avoids. A package that depends on its own copy
+of the runtime shows up with `pnpm why @csszyx/runtime` or
+`npm ls @csszyx/runtime`.
 
 ## require of the Vue and Svelte adapters returns the exports
 
