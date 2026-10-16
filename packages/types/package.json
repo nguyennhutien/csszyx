@@ -82,6 +82,18 @@
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "react": ">=17.0.0",
+    "solid-js": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
     "@types/node": "^22.20.1",

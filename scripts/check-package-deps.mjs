@@ -50,22 +50,8 @@ export const EXPECTED_UNIMPORTED = {
  * dependency, with the reason.
  */
 export const EXPECTED_UNDECLARED = {
-    '@csszyx/svelte-adapter': {
-        vite: 'type-only: `vitePlugin` declares a `vite` Plugin return type',
-    },
     '@csszyx/types': {
         '@csszyx/compiler': 'type-only: the declarations re-export the sz types from the compiler',
-        react: 'type-only: `jsx.d.ts` augments the `react` module',
-        'solid-js': 'type-only: `jsx-solid.d.ts` augments the `solid-js` module',
-    },
-    '@csszyx/unplugin': {
-        esbuild: 'type-only: `esbuildPlugin` declares an esbuild `Plugin` return type',
-        rollup: 'type-only: `rollupPlugin` declares a rollup plugin return type',
-        tailwindcss:
-            "resolved from the user's project root (`createRequire(resolveFrom)`), not from the plugin",
-    },
-    '@csszyx/vue-adapter': {
-        vite: 'type-only: `vitePlugin` declares a `vite` Plugin return type',
     },
 };
 
