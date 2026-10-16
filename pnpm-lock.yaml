@@ -416,6 +416,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@csszyx/unplugin':
         specifier: workspace:*
         version: link:../unplugin
