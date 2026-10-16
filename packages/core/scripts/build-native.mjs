@@ -133,10 +133,15 @@ function readArgValue(name) {
  * make oxc fail its rustc-version check, so native builds intentionally defer
  * to the repo config.
  *
+ * Symbols are for debugging a build, not for running one: darwin and
+ * linux-gnu binaries shipped `.symtab`/`.strtab`, 0.44-0.51 MB per platform
+ * package. Stripped here rather than in the release profile, which the wasm
+ * build shares and must not strip (see the root `Cargo.toml`).
+ *
  * @returns {NodeJS.ProcessEnv} Child process environment.
  */
 function nativeBuildEnv() {
-  const env = { ...process.env };
+  const env = { ...process.env, CARGO_PROFILE_RELEASE_STRIP: "symbols" };
   delete env.RUSTUP_TOOLCHAIN;
   return env;
 }

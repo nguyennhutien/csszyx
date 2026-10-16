@@ -47,3 +47,7 @@ too_many_arguments = "allow"
 opt-level = 3
 lto = true
 codegen-units = 1
+# No `strip` here: it also strips the wasm build, and that drops the
+# `target_features` section wasm-opt reads to learn which instructions the
+# module may use, so `wasm-opt -O` refused it. The native build strips its
+# own binaries (packages/core/scripts/build-native.mjs).
