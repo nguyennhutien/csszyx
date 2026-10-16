@@ -83,12 +83,22 @@ describe.each(LINK_SCANNERS)('the %s artifact', (_name, scan) => {
         ]);
 
         expect(result).toEqual([
-            { cssImports: ['./a.css'], forwards: [] },
-            { cssImports: [], forwards: [] },
+            { cssImports: ['./a.css'], forwards: [], registryEntries: [] },
+            { cssImports: [], forwards: [], registryEntries: [] },
             {
                 cssImports: [],
                 forwards: [{ exportName: 'c', importedName: 'c', specifier: './c' }],
+                registryEntries: [],
             },
+        ]);
+    });
+
+    it('reads registry entries only when the query asks', () => {
+        // A stylesheet or forward scan does not pay for the evaluation.
+        const files = [{ filename: '/p/s.ts', source: 'export const card = { p: 4 };' }];
+        expect(scan(files)[0]?.registryEntries).toEqual([]);
+        expect(scan(files, { registryEntries: true })[0]?.registryEntries).toEqual([
+            { kind: 'sz-object', exportName: 'card', value: { p: 4 } },
         ]);
     });
 });

@@ -22,6 +22,9 @@ vi.mock('@csszyx/core/native', () => ({
     scanModuleLinks: () => {
         throw engineFailure;
     },
+    scanGlobalVarUsages: () => {
+        throw engineFailure;
+    },
 }));
 
 describe('the Rust lane and a native failure that is not a missing addon', () => {
@@ -33,6 +36,14 @@ describe('the Rust lane and a native failure that is not a missing addon', () =>
         const { scanModuleLinksRust } = await import('../src/transform-rust.js');
 
         expect(() => scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
+            engineFailure,
+        );
+    });
+
+    it('rethrows it from the global-var usage scan unchanged', async () => {
+        const { scanGlobalVarUsagesRust } = await import('../src/transform-rust.js');
+
+        expect(() => scanGlobalVarUsagesRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
             engineFailure,
         );
     });

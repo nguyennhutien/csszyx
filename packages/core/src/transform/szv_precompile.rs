@@ -1,8 +1,8 @@
 //! szv per-key precompile: canonical-overlap detection, table compilation,
 //! the static pick, JSON serialization and reference accounting, over the
-//! engine's IR types. The qualification half is shared with the TypeScript
-//! cross-module extractor (`qualifyStaticSzvConfig` in `szv-precompile.ts`);
-//! the rest lives only here. The native and wasm artifacts emit the same code.
+//! engine's IR types. The qualification half also decides what the
+//! cross-module registry records for an imported factory. The native and
+//! wasm artifacts emit the same code.
 
 #![allow(clippy::redundant_pub_crate)]
 

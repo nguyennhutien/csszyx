@@ -1,5 +1,5 @@
 /**
- * The module-link scan on the native binding.
+ * The module-link and global-var usage scans on the native binding.
  *
  * Its own file for the reason `native-migrate.test.ts` gives: the entry point
  * resolves the binding itself, so a fixture has to stand in for the platform
@@ -52,5 +52,45 @@ describe('@csszyx/core/native scanModuleLinks', () => {
             );
             expect(error.packageName).toBe(packageName.current);
         }
+    });
+});
+
+describe('@csszyx/core/native scanGlobalVarUsages', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('forwards the files and the query to the binding', async () => {
+        packageName.current = fixture('native-binding-migrate.cjs');
+        const { scanGlobalVarUsages } = await import('../native/index.js');
+
+        expect(
+            scanGlobalVarUsages([{ filename: '/p/a.ts', source: '' }], { tokens: ['--x'] }),
+        ).toEqual([
+            [{ called: 'scanGlobalVarUsages', filename: '/p/a.ts', query: { tokens: ['--x'] } }],
+        ]);
+    });
+
+    it('names the missing export, and keeps the wasm note, when the binding predates the scan', async () => {
+        packageName.current = fixture('native-binding.cjs');
+        const { scanGlobalVarUsages, CsszyxNativeUnavailableError } = await import(
+            '../native/index.js'
+        );
+
+        let caught: unknown;
+        try {
+            scanGlobalVarUsages([]);
+        } catch (err) {
+            caught = err;
+        }
+        expect(caught).toBeInstanceOf(CsszyxNativeUnavailableError);
+        const message = (caught as Error).message;
+        expect(message).toContain('predates the global-var usage scan');
+        expect(message).toContain(
+            'update @csszyx/core and its platform package together, to a version that carries scanGlobalVarUsages',
+        );
+        expect(message).toContain(
+            'the wasm engine ships inside @csszyx/core and produces the same output',
+        );
     });
 });

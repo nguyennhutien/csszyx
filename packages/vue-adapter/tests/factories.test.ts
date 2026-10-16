@@ -5,7 +5,13 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { mergeClassAttributes, preprocess, transformTemplate, vitePlugin } from '../src/index.js';
+import {
+    extractTemplate,
+    mergeClassAttributes,
+    preprocess,
+    transformTemplate,
+    vitePlugin,
+} from '../src/index.js';
 
 type TransformFn = (code: string, id: string) => { code: string } | null;
 const runTransform = (code: string, id: string, options = {}): { code: string } | null =>
@@ -51,30 +57,48 @@ describe('vitePlugin()', () => {
 });
 
 describe('transformTemplate branches', () => {
-    it('extracts numbers, negatives, booleans, strings, arrays and nested objects', () => {
+    it('lowers numbers, negatives, strings and nested variants', () => {
         const result = transformTemplate(
-            `<div :sz="{ p: 4, m: -2, on: true, name: 'x', list: [1, -3], nested: { q: 5 } }" />`,
+            `<div :sz="{ p: 4, m: -2, bg: 'red-500', hover: { p: 5 } }" />`,
         );
-        expect(result.count).toBe(1);
-        expect(result.code).not.toContain(':sz=');
+        expect(result.code).toBe('<div class="p-4 -m-2 bg-red-500 hover:p-5" />');
+        expect(result.diagnostics).toEqual([]);
     });
 
-    it('leaves an unparseable sz object in place and warns under debug', () => {
+    it('reports an unparseable sz object as an error without debug', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const result = transformTemplate('<div :sz="{ not valid js }" />', { debug: true });
+        const result = transformTemplate('<div :sz="{ not valid js }" />');
         expect(result.code).toContain(':sz=');
-        expect(warn).toHaveBeenCalled();
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
+        expect(warn).not.toHaveBeenCalled();
         warn.mockRestore();
     });
 });
 
 describe('transformTemplate and extract edges', () => {
-    it('ignores a non-object sz value (array)', () => {
-        expect(transformTemplate('<div :sz="[1, 2]" />').count).toBe(0);
+    it('reports an array of numbers as an error', () => {
+        const result = transformTemplate('<div :sz="[1, 2]" />');
+        expect(result.count).toBe(0);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 
-    it('ignores an unterminated sz object', () => {
-        expect(transformTemplate('<div :sz="{ p: 4 " />').count).toBe(0);
+    it('reports an unterminated sz object as an error', () => {
+        const result = transformTemplate('<div :sz="{ p: 4 " />');
+        expect(result.count).toBe(0);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
+    });
+
+    it('ignores a value whose quote closes after the template ends', () => {
+        // The quoted value holds the `</template>`, as Vue reads it, so the
+        // root template never closes.
+        expect(extractTemplate('<template><div :sz="{ p: 4 }</template>"')).toBeNull();
+        const result = preprocess('<template><div :sz="{ p: 4 }</template>"');
+        expect(result).toEqual({
+            code: '<template><div :sz="{ p: 4 }</template>"',
+            transformed: false,
+            count: 0,
+            diagnostics: [],
+        });
     });
 
     it('merges a transformed sz into an existing class attribute', () => {
@@ -136,16 +160,21 @@ describe('mergeClassAttributes', () => {
     });
 });
 
-describe('value extraction rejections', () => {
-    it('handles template-literal strings and rejects interpolated ones', () => {
-        expect(transformTemplate('<div :sz="{ name: `plain` }" />').count).toBe(1);
-        expect(transformTemplate('<div :sz="{ name: `has ${x}` }" />').count).toBe(0);
+describe('values only the runtime knows', () => {
+    it('lowers a plain template string and refuses an interpolated one', () => {
+        expect(transformTemplate('<div :sz="{ bg: `red-500` }" />').code).toBe(
+            '<div class="bg-red-500" />',
+        );
+        expect(transformTemplate('<div :sz="{ bg: `has ${x}` }" />').count).toBe(0);
     });
 
-    it('rejects spreads, computed keys, and call values', () => {
-        expect(transformTemplate('<div :sz="{ ...rest }" />').count).toBe(0);
-        expect(transformTemplate('<div :sz="{ [k]: 1 }" />').count).toBe(0);
-        expect(transformTemplate('<div :sz="{ p: fn() }" />').count).toBe(0);
-        expect(transformTemplate('<div :sz="{ 4: 1 }" />').count).toBe(1);
+    it.each(['{ ...rest }', '{ [k]: 1 }', '{ p: fn() }'])('refuses %s with an error', value => {
+        const result = transformTemplate(`<div :sz="${value}" />`);
+        expect(result.count).toBe(0);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
+    });
+
+    it('lowers a spread of a literal object', () => {
+        expect(transformTemplate('<div :sz="{ ...{ p: 4 } }" />').code).toBe('<div class="p-4" />');
     });
 });

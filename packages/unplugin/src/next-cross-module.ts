@@ -24,7 +24,9 @@ import {
     type CrossModuleRegistryEntry,
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
+    RustTransformUnavailableError,
     type TransformSourceCodeOptions,
+    WasmTransformUnavailableError,
 } from '@csszyx/compiler';
 import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 
@@ -247,10 +249,19 @@ function readProviderModule(provider: string, cache: Map<string, ProviderModule>
             entries: extractCrossModuleRegistryEntries(text, provider),
             forwards: extractCrossModuleForwards(text, provider),
         };
-    } catch {
+    } catch (error) {
         // A provider that cannot be read costs the optimization for its
         // importers. Letting it throw would fail the build of a file whose own
-        // source is fine, which is a worse trade for a build-time nicety.
+        // source is fine, which is a worse trade for a build-time nicety. An
+        // engine that cannot answer is not that: it would turn the
+        // optimization off for every provider with nothing said, so its
+        // error, which names the packages to fix, goes through.
+        if (
+            error instanceof RustTransformUnavailableError ||
+            error instanceof WasmTransformUnavailableError
+        ) {
+            throw error;
+        }
     }
     cache.set(provider, module);
     return module;

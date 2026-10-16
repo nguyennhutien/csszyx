@@ -3,7 +3,8 @@ import { scanModuleLinksWasm } from './transform-wasm.js';
 
 /**
  * What a module links to, read by the engine's own parser: the stylesheets it
- * imports and the names it re-exports from other modules.
+ * imports, the names it re-exports from other modules, and, when asked, the
+ * values it exports for the cross-module registry.
  */
 
 /** One name a module exports without declaring it. */
@@ -16,12 +17,34 @@ export interface ModuleForward {
     specifier: string;
 }
 
+/**
+ * What one recorded export IS, because the two are not interchangeable.
+ *
+ * `szv-config` is a variant TABLE the consumer compiles and then picks from.
+ * `sz-object` is a VALUE the consumer lowers exactly as it would the same
+ * literal written locally. Carrying them untagged would leave every reader —
+ * including the native decoder — guessing which machinery applies.
+ */
+export type CrossModuleExportKind = 'szv-config' | 'sz-object';
+
+/** One exported value an importing module may compile against. */
+export interface CrossModuleRegistryEntry {
+    /** What the value is, and therefore how a consumer must treat it. */
+    kind: CrossModuleExportKind;
+    /** The exported binding name; `default` for the default slot. */
+    exportName: string;
+    /** Statically evaluated payload: an szv config, or the sz object itself. */
+    value: Record<string, unknown>;
+}
+
 /** The links one module carries. */
 export interface ModuleLinks {
     /** Stylesheet specifiers, query suffix kept, in source order, each once. */
     cssImports: string[];
     /** Re-exported names, declaration order preserved. */
     forwards: ModuleForward[];
+    /** Exported registry values, declaration order kept; empty unless asked for. */
+    registryEntries: CrossModuleRegistryEntry[];
 }
 
 /** One module handed to the scan. */
@@ -32,12 +55,28 @@ export interface ModuleLinksFile {
     source: string;
 }
 
+/** Which optional answers a scan computes. */
+export interface ModuleLinksQuery {
+    /**
+     * Read the values each module exports for the cross-module registry.
+     * Off by default: it costs a scope walk per module, and only the registry
+     * pass reads the answer.
+     */
+    registryEntries?: boolean;
+}
+
 /**
  * Read module links through whichever engine artifact this host can run.
  *
  * @param files - Modules to read.
+ * @param query - Which optional answers to compute.
  * @returns One answer per module, in input order.
  */
-export function scanModuleLinks(files: readonly ModuleLinksFile[]): ModuleLinks[] {
-    return isRustTransformAvailable() ? scanModuleLinksRust(files) : scanModuleLinksWasm(files);
+export function scanModuleLinks(
+    files: readonly ModuleLinksFile[],
+    query: ModuleLinksQuery = {},
+): ModuleLinks[] {
+    return isRustTransformAvailable()
+        ? scanModuleLinksRust(files, query)
+        : scanModuleLinksWasm(files, query);
 }

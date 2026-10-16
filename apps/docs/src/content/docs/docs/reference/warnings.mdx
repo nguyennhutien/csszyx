@@ -2024,10 +2024,26 @@ only. See [TypeScript Autocomplete](/docs/typescript-plugin/) and
 
 ## Framework adapters
 
-The Svelte and Vue adapters print a parse failure only when `debug` is enabled:
+A Vue or Svelte template has no csszyx runtime, so the adapters write a class
+only for an `sz` value the engine resolves completely at build time. Any other
+value is an error, its attribute is left as written, and the build stops. Both
+messages start with the file and the position of the value in it:
 
-- `[csszyx/svelte] Failed to parse sz object: {source}`
-- `[csszyx/vue] Failed to parse sz object: {source}`
+| Message | When |
+| --- | --- |
+| ``[csszyx] {file}:{line}:{col}: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it`` | a name, a prop, a conditional, a call, an array value, or a template string with `${}` |
+| ``[csszyx] {file}:{line}:{col}: this sz value could not be parsed as a JavaScript expression`` | a syntax error in the value |
+
+The first is followed by `help: write the value as a literal, e.g. { p: 4 }, or
+bind class or style yourself for a value that changes at runtime`, and both by
+`note: the attribute is left as written; no class is generated for it`. The
+engine's warnings for a value that did lower, such as an unknown key, are
+reported at the same kind of position as warnings.
+
+The Vite plugins and `@csszyx/unplugin` fail the build on an error and pass
+warnings to the bundler. The Svelte preprocessor throws with every error of the
+file and prints warnings. `preprocess()` from either adapter reports nothing
+itself: it returns them in `result.diagnostics`.
 
 ## One engine, two artifacts
 

@@ -7,32 +7,91 @@
  *   csszyx explain "{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }"
  *   → p-4 bg-blue-500 hover:bg-blue-700
  *
- * The literal is read by `explainStaticObjectLiteral`, the same function the
- * Vue and Svelte adapters use, so what counts as "static" here is what counts
- * as static everywhere else. This command previously carried its own walker
- * over a second parser, which meant two definitions of dynamic that could
- * disagree — and a 4 MB parser in the CLI for one expression.
+ * The literal is placed on one element of a synthesized module and lowered by
+ * the engine the build runs, so the answer is the build's answer: the class it
+ * writes, the style variable it sets at runtime, the diagnostics it reports, or
+ * the `_sz()` call it leaves when it cannot resolve the object. This command
+ * used to read the literal with a TypeScript walker and lower it with the
+ * runtime transform, a second definition of static that disagreed with the
+ * build on shapes as plain as `{ p: +4 }` and `{ p: [4] }`.
  *
- * No eval is used: the literal is read from a syntax tree, never executed.
+ * No eval is used: the engine reads the literal as source, never executes it.
  */
 
-import { explainStaticObjectLiteral, transform } from '@csszyx/compiler';
+import { type SourceTransformResult, transformSource } from '@csszyx/compiler';
+import { findEmittedClassName } from '@csszyx/compiler/internal';
 
-import { printError } from '../utils/terminal-ui.js';
+import { printError, printInfo, printWarn } from '../utils/terminal-ui.js';
 
-/** Thrown when the argument is not a statically-resolvable sz object literal. */
+/** Thrown when the argument is not an sz object the build resolves to classes. */
 export class ExplainParseError extends Error {}
 
+/** One engine artifact, or the selection a build makes between them. */
+export type ExplainEngine = (source: string, filename?: string) => SourceTransformResult;
+
+/** What the build does with one sz object. */
+export interface SzExplanation {
+    /** The className the build writes; empty when the object yields no class. */
+    className: string;
+    /** Custom properties the build sets through `style`, whose values are read at runtime. */
+    runtimeValues: string[];
+    /** The engine's diagnostics for the object, without the synthesized location. */
+    diagnostics: string[];
+}
+
+/** Name of the synthesized module; it appears in nothing the user reads. */
+const FILENAME = 'sz.tsx';
+const PREFIX = 'export const A = () => <div sz={';
+const SUFFIX = '} />;\n';
+
+/** A position inside the synthesized module {@link FILENAME}, meaningless to the user. */
+const SYNTHESIZED_LOCATION = / at (?:sz\.tsx:|\d+:)\d+/g;
+
 /**
- * Resolve an sz object literal string to the Tailwind className it compiles to.
- * @param input - The sz object literal source, e.g. "{ p: 4, bg: 'blue-500' }".
- * @returns The compiled className string.
+ * Drop the synthesized module's location from an engine message.
+ * @param message - One engine diagnostic.
+ * @returns The message without positions into the synthesized module.
  */
-export function explainSz(input: string): string {
-    const parsed = explainStaticObjectLiteral(input);
-    if (!('value' in parsed)) throw new ExplainParseError(parsed.reason);
-    const result = transform(parsed.value);
-    return typeof result === 'string' ? result : result.className;
+function withoutLocation(message: string): string {
+    return message.replace(SYNTHESIZED_LOCATION, '');
+}
+
+/**
+ * Read the className attribute the engine wrote on the synthesized element.
+ * @param code - The engine's output for the synthesized module.
+ * @returns The static className, `''` for none, or null when the build left
+ *          the object to the runtime.
+ */
+function emittedClassName(code: string): string | null {
+    return findEmittedClassName(code)?.className ?? null;
+}
+
+/**
+ * Resolve an sz object literal to what the build emits for it.
+ * @param input - The sz object literal source, e.g. "{ p: 4, bg: 'blue-500' }".
+ * @param engine - The engine artifact to lower with; the build's own choice by default.
+ * @returns The className, runtime style variables and diagnostics.
+ * @throws {ExplainParseError} when the input does not parse, is more than one
+ *         expression, or is left to the runtime `_sz()` helper.
+ */
+export function explainSz(input: string, engine: ExplainEngine = transformSource): SzExplanation {
+    const result = engine(`${PREFIX}${input}${SUFFIX}`, FILENAME);
+    if (result.issues?.some(issue => issue.code === 'parse-error')) {
+        throw new ExplainParseError('could not be parsed as a JavaScript expression');
+    }
+    const diagnostics = result.diagnostics.map(withoutLocation);
+    if (result.code.match(/ (?:className|sz)=[{"]/g)?.length !== 1) {
+        throw new ExplainParseError('the input is not one sz expression');
+    }
+    const className = emittedClassName(result.code);
+    if (className === null) {
+        const reason = diagnostics.length > 0 ? `: ${diagnostics.join('\n')}` : '';
+        throw new ExplainParseError(
+            `the build emits no classes for it; it is resolved at runtime by \`_sz()\`${reason}`,
+        );
+    }
+    const runtimeValues = [...result.code.matchAll(/"(--_sz-[\w-]+)":/g)].map(match => match[1]);
+    return { className, runtimeValues, diagnostics };
 }
 
 /**
@@ -40,14 +99,18 @@ export function explainSz(input: string): string {
  * @param sz - The sz object literal source string.
  */
 export function explain(sz: string): void {
-    let className: string;
+    let explained: SzExplanation;
     try {
-        className = explainSz(sz);
+        explained = explainSz(sz);
     } catch (error) {
         const reason = error instanceof ExplainParseError ? error.message : String(error);
         printError(`Could not explain sz: ${reason}`);
         process.exitCode = 1;
         return;
     }
-    console.log(className === '' ? '(no classes)' : className);
+    console.log(explained.className === '' ? '(no classes)' : explained.className);
+    for (const name of explained.runtimeValues) {
+        printInfo(`${name} is set through the style attribute at runtime; the class reads it.`);
+    }
+    for (const diagnostic of explained.diagnostics) printWarn(diagnostic);
 }

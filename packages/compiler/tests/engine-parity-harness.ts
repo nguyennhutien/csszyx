@@ -14,10 +14,16 @@
 import { expect } from 'vitest';
 
 import {
+    type GlobalVarSourceFile,
+    type GlobalVarUsageDiagnostic,
+    type GlobalVarUsageQuery,
     isRustTransformAvailable,
     type ModuleLinks,
     type ModuleLinksFile,
+    type ModuleLinksQuery,
     type SourceTransformResult,
+    scanGlobalVarUsagesRust,
+    scanGlobalVarUsagesWasm,
     scanModuleLinksRust,
     scanModuleLinksWasm,
     type TransformSourceCodeOptions,
@@ -100,13 +106,40 @@ export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
 ];
 
 /** One module-link scanner: the same question the transform table asks, for links. */
-export type LinkScanner = (files: readonly ModuleLinksFile[]) => ModuleLinks[];
+export type LinkScanner = (
+    files: readonly ModuleLinksFile[],
+    query?: ModuleLinksQuery,
+) => ModuleLinks[];
 
 /** Both artifacts' module-link scan; wasm alone only under {@link WASM_ONLY_ENV}. */
 export const LINK_SCANNERS: ReadonlyArray<readonly [string, LinkScanner]> = [
     ['wasm', scanModuleLinksWasm],
     ...(RUST_LANE ? ([['rust', scanModuleLinksRust]] as const) : []),
 ];
+
+/** One global-var usage scanner: the out-of-band usages of each file, batched. */
+export type GlobalVarScanner = (
+    files: readonly GlobalVarSourceFile[],
+    query?: GlobalVarUsageQuery,
+) => GlobalVarUsageDiagnostic[][];
+
+/** Both artifacts' global-var usage scan; wasm alone only under {@link WASM_ONLY_ENV}. */
+export const GLOBAL_VAR_SCANNERS: ReadonlyArray<readonly [string, GlobalVarScanner]> = [
+    ['wasm', scanGlobalVarUsagesWasm],
+    ...(RUST_LANE ? ([['rust', scanGlobalVarUsagesRust]] as const) : []),
+];
+
+/**
+ * Narrow a batch scanner to the public single-file call shape.
+ *
+ * @param scan - One artifact's batch scanner.
+ * @returns A scanner taking one source, as `scanGlobalVarUsages` does.
+ */
+export function scanOneFile(
+    scan: GlobalVarScanner,
+): (source: string, filename: string, query?: GlobalVarUsageQuery) => GlobalVarUsageDiagnostic[] {
+    return (source, filename, query) => scan([{ filename, source }], query).flat();
+}
 
 /**
  * Collapse whitespace runs so an emit can be substring-matched across engines.

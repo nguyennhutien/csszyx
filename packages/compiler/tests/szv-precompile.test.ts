@@ -15,12 +15,7 @@
  *    path would have produced for the same selection, to the byte.
  */
 import { describe, expect, it } from 'vitest';
-import {
-    collectCanonicalLeafPaths,
-    leafPathsConflict,
-    qualifyStaticSzvConfig,
-    szvConfigFreeOfOverlap,
-} from '../src/szv-precompile.js';
+
 import { ENGINES } from './engine-parity-harness.js';
 
 type Engine = (source: string, filename?: string) => { code?: string; usesSzvPick?: boolean };
@@ -388,70 +383,6 @@ describe('composition with the szr import rewrite', () => {
             const code = engine(source, '/p/t.tsx').code ?? source;
             expect(code, lane).not.toContain('@csszyx/runtime/core');
         }
-    });
-});
-
-describe('shared spec units', () => {
-    it('collects canonical leaf paths through nesting', () => {
-        // NUL-joined: a space can appear inside an arbitrary key, NUL cannot.
-        const out: string[] = [];
-        collectCanonicalLeafPaths({ md: { p: 4 }, bg: 'red-500' }, '', out);
-        expect(out).toEqual(['md\u0000p', 'bg']);
-    });
-
-    it('folds property-object children into one canonical fusion path', () => {
-        const out: string[] = [];
-        collectCanonicalLeafPaths({ bg: { color: 'red-500', op: 50 } }, '', out);
-        expect(out).toEqual(['bg']);
-    });
-
-    it('flags equal, prefix, and suffix conflicts only', () => {
-        expect(leafPathsConflict(['p'], ['p'])).toBe(true);
-        expect(leafPathsConflict(['md'], ['md\u0000p'])).toBe(true);
-        expect(leafPathsConflict(['md\u0000p'], ['md'])).toBe(true);
-        expect(leafPathsConflict(['md\u0000p'], ['md\u0000m'])).toBe(false);
-        expect(leafPathsConflict(['p'], ['md\u0000p'])).toBe(false);
-    });
-
-    it('same-dimension leaves never conflict with each other', () => {
-        expect(
-            szvConfigFreeOfOverlap({
-                variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } },
-            }),
-        ).toBe(true);
-    });
-
-    it('rejects overlap between separate dimensions and nested css declarations', () => {
-        expect(
-            szvConfigFreeOfOverlap({
-                variants: {
-                    pad: { sm: { p: 2 } },
-                    density: { compact: { p: 1 } },
-                },
-            }),
-        ).toBe(false);
-        expect(
-            qualifyStaticSzvConfig({ base: { css: { color: { nested: 'invalid' } } } }),
-        ).toBeNull();
-        expect(
-            qualifyStaticSzvConfig({
-                base: { css: { color: 'red', '--card-gap': '1rem' } },
-            }),
-        ).not.toBeNull();
-    });
-
-    it('qualification rejects unknown config keys and non-record shapes', () => {
-        expect(qualifyStaticSzvConfig({ variants: {}, compoundVariants: [] })).toBeNull();
-        expect(qualifyStaticSzvConfig({ variants: { pad: { sm: 'p-2' } } })).toBeNull();
-        expect(qualifyStaticSzvConfig({ defaultVariants: { pad: 2.5 } })).toBeNull();
-        expect(qualifyStaticSzvConfig({ base: 'p-2' })).toBeNull();
-        expect(qualifyStaticSzvConfig({ variants: 'bad' })).toBeNull();
-        expect(qualifyStaticSzvConfig({ defaultVariants: 'bad' })).toBeNull();
-        expect(qualifyStaticSzvConfig(null)).toBeNull();
-    });
-
-    it('keeps an empty variant branch as an empty compiled class', () => {
-        expect(qualifyStaticSzvConfig({ variants: { pad: { empty: {} } } })?.d.pad.empty).toBe('');
     });
 });
 

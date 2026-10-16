@@ -421,6 +421,33 @@ const App = () => <div style={{ '--brand-secondary': color }} />;
         ]);
     });
 
+    it('fails closed on a source file the engine cannot parse instead of throwing', () => {
+        const result = validateGlobalVarAliasInputs({
+            cssFiles: [
+                { filePath: '/repo/src/tokens.css', css: ':root { --brand-primary: red; }' },
+            ],
+            sourceFiles: [
+                { filePath: '/repo/src/broken.tsx', code: "const = '--brand-primary';" },
+                {
+                    filePath: '/repo/src/legacy.js',
+                    code: "const A = () => <div style={{ '--brand-primary': 1 }} />;",
+                },
+            ],
+            tokens: ['--brand-primary'],
+        });
+
+        expect(
+            result.usageDiagnostics.map(diagnostic => [
+                diagnostic.kind,
+                diagnostic.name,
+                diagnostic.location.filePath,
+            ]),
+        ).toEqual([
+            ['parse-error', '', '/repo/src/broken.tsx'],
+            ['jsx-style-key', '--brand-primary', '/repo/src/legacy.js'],
+        ]);
+    });
+
     it('does not scan source files when CSS planning fails', () => {
         const result = validateGlobalVarAliasInputs({
             cssFiles: [{ filePath: '/repo/src/tokens.css', css: ':root { ---gz: red; }' }],

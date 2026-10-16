@@ -103,6 +103,16 @@
         "types": "./dist/migrate-rust.d.cts",
         "default": "./dist/migrate-rust.cjs"
       }
+    },
+    "./internal": {
+      "import": {
+        "types": "./dist/internal.d.mts",
+        "default": "./dist/internal.mjs"
+      },
+      "require": {
+        "types": "./dist/internal.d.cts",
+        "default": "./dist/internal.cjs"
+      }
     }
   },
   "files": [
@@ -117,12 +127,12 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/core": "workspace:*",
-    "oxc-parser": "0.150.0"
+    "@csszyx/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
     "csstype": "^3.2.3",
+    "oxc-parser": "0.150.0",
     "tsdown": "0.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"

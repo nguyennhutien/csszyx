@@ -38,9 +38,13 @@
     "@csszyx/compiler": "workspace:*"
   },
   "peerDependencies": {
+    "vite": ">=5.0.0",
     "vue": "^3.0.0"
   },
   "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    },
     "vue": {
       "optional": true
     }

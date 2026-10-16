@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { parseStaticObjectLiteral } from '../src/static-object-parser.js';
+import { scanModuleLinks } from '../src/module-links.js';
 import { transform } from '../src/transform-core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,7 +65,9 @@ function extractRows(content: string): DocRow[] {
 }
 
 /**
- * Parse a sz display string into a real sz object.
+ * Parse a sz display string into a real sz object, with the engine's own
+ * reader of an exported static object, so no second evaluator decides what a
+ * row holds.
  * The MDX string uses \" for inner double quotes — unescape before parsing.
  * e.g. "{ content: '\"\"' }" → { content: '""' }
  * @param raw - Raw escaped sz string from MDX (e.g. `{ p: 4 }`)
@@ -73,9 +75,13 @@ function extractRows(content: string): DocRow[] {
  */
 function parseSz(raw: string): Parameters<typeof transform>[0] {
     const unescaped = raw.replace(/\\"/g, '"');
-    const parsed = parseStaticObjectLiteral(unescaped);
-    if (!parsed) throw new Error(`Documentation sz row is not a static object: ${raw}`);
-    return parsed;
+    const [links] = scanModuleLinks(
+        [{ filename: 'row.ts', source: `export const row = ${unescaped};` }],
+        { registryEntries: true },
+    );
+    const [entry] = links.registryEntries;
+    if (!entry) throw new Error(`Documentation sz row is not a static object: ${raw}`);
+    return entry.value as Parameters<typeof transform>[0];
 }
 
 for (const filename of MDX_FILES) {

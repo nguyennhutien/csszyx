@@ -1,56 +1,13 @@
 /**
  * Targets the specific branches the existing suites don't reach: the
- * value-extraction edge cases in extractValue/extractObjectNode, the
- * <template> boundary-character scan in extractTemplate, the sz-attribute-
- * at-offset-0 case in findVueSzAttribute, and the malformed-tag paths in
- * mergeClassAttributes.
+ * <template> boundary-character scan in extractTemplate, the
+ * sz-attribute-at-offset-0 case in findVueSzAttribute, the reference decoding
+ * of attribute values, and the malformed-tag paths in mergeClassAttributes.
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-    extractTemplate,
-    mergeClassAttributes,
-    parseObjectLiteral,
-    transformTemplate,
-} from '../src/index.js';
-
-describe('extractValue edge branches', () => {
-    it('rejects a unary plus (only unary minus on a numeric literal is supported)', () => {
-        const result = transformTemplate('<div :sz="{ p: +4 }" />');
-        expect(result.count).toBe(0);
-        expect(result.code).toContain(':sz=');
-    });
-
-    it('treats an array hole as null instead of failing the whole array', () => {
-        const result = transformTemplate('<div :sz="{ p: 4, list: [1, , 3] }" />');
-        expect(result.count).toBe(1);
-        expect(result.code).toContain('p-4');
-    });
-
-    it('rejects the whole object when an array element is unsupported', () => {
-        const result = transformTemplate('<div :sz="{ p: 4, list: [1, fn()] }" />');
-        expect(result.count).toBe(0);
-        expect(result.code).toContain(':sz=');
-    });
-});
-
-describe('extractObjectNode key branches', () => {
-    it('accepts a quoted string key as an alternative to an identifier key', () => {
-        expect(parseObjectLiteral(`{ 'p': 4 }`)).toEqual({ p: 4 });
-    });
-
-    it('rejects a key that is neither an identifier nor a string/number literal', () => {
-        // A BigInt property key parses as a Literal whose value is neither
-        // a string nor a number, falling through every supported case.
-        expect(parseObjectLiteral('{ 1n: 4 }')).toBeNull();
-    });
-});
-
-describe('parseObjectLiteral defensive catch branch', () => {
-    it('returns null instead of throwing when given a non-string value', () => {
-        expect(parseObjectLiteral(null as unknown as string)).toBeNull();
-    });
-});
+import { decodeCharacterReferences } from '../src/character-references.js';
+import { extractTemplate, mergeClassAttributes, transformTemplate } from '../src/index.js';
 
 describe('extractTemplate boundary scanning', () => {
     it('returns null for an empty source without ever entering the scan loop', () => {
@@ -76,7 +33,36 @@ describe('extractTemplate boundary scanning', () => {
 describe('findVueSzAttribute at offset 0', () => {
     it('matches an unprefixed sz attribute starting at the very beginning of the string', () => {
         const result = transformTemplate('sz="{ p: 4 }"');
-        expect(result).toEqual({ code: 'class="p-4"', count: 1, transformed: true });
+        expect(result).toEqual({
+            code: 'class="p-4"',
+            count: 1,
+            transformed: true,
+            diagnostics: [],
+        });
+    });
+});
+
+describe('decodeCharacterReferences', () => {
+    it('returns a value without references as it is, with no offsets', () => {
+        expect(decodeCharacterReferences('{ p: 4 }', 10)).toEqual({ source: '{ p: 4 }' });
+    });
+
+    it('decodes named, decimal and hexadecimal references and maps each unit', () => {
+        expect(decodeCharacterReferences('a&amp;&#65;&#x42;b', 10)).toEqual({
+            source: 'a&ABb',
+            offsets: [10, 11, 16, 21, 27],
+        });
+    });
+
+    it('maps both units of an astral code point to its reference', () => {
+        expect(decodeCharacterReferences('&#x1F600;', 0)).toEqual({
+            source: '\u{1F600}',
+            offsets: [0, 0],
+        });
+    });
+
+    it('leaves an unknown name and an out-of-range code point as written', () => {
+        expect(decodeCharacterReferences('&bogus;&#x110000;', 0).source).toBe('&bogus;&#x110000;');
     });
 });
 
@@ -91,5 +77,11 @@ describe('mergeClassAttributes malformed/non-element tags', () => {
         const result = mergeClassAttributes(input);
         expect(result).toContain(`:class="['foo', bar]"`);
         expect(result).toContain('</div>');
+    });
+
+    it('keeps a quote or a backslash in a merged class inside its string', () => {
+        expect(mergeClassAttributes(`<div class="a&#39;b\\c&#34;" :class="bar" />`)).toContain(
+            `:class="['a\\'b\\\\c&#34;', bar]"`,
+        );
     });
 });

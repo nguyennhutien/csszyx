@@ -31,9 +31,11 @@ export {
     storeEngineSpans,
 } from './engine-spans.js';
 export {
+    type GlobalVarSourceFile,
     type GlobalVarUsageDiagnostic,
     type GlobalVarUsageKind,
     type GlobalVarUsageLocation,
+    type GlobalVarUsageQuery,
     type ScanGlobalVarUsagesOptions,
     scanGlobalVarUsages,
 } from './global-var-diagnostics.js';
@@ -50,6 +52,7 @@ export {
     type ModuleForward,
     type ModuleLinks,
     type ModuleLinksFile,
+    type ModuleLinksQuery,
     scanModuleLinks,
 } from './module-links.js';
 // Export property type system (for CSS Variable Auto-Compile)
@@ -73,11 +76,6 @@ export {
 } from './recovery.js';
 export { sortStrings } from './sort.js';
 export { rewriteStartTags } from './start-tags.js';
-export {
-    explainStaticObjectLiteral,
-    parseStaticObjectLiteral,
-    type StaticObjectResult,
-} from './static-object-parser.js';
 export {
     isAdvisorySzDiagnostic,
     SZ_DIAGNOSTIC_KIND_IDS,
@@ -117,6 +115,7 @@ export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     RustTransformUnavailableError,
+    scanGlobalVarUsagesRust,
     scanModuleLinksRust,
     type TransformRustFile,
     transformRust,
@@ -125,6 +124,7 @@ export {
 export { transformSource } from './transform-select.js';
 export {
     isWasmTransformAvailable,
+    scanGlobalVarUsagesWasm,
     scanModuleLinksWasm,
     transformWasm,
     transformWasmBatch,

@@ -157,6 +157,12 @@ function Box({ className = '', children }) {
 <Box sz={{ p: 4, bg: 'blue-500' }} />   // → <Box className="p-4 bg-blue-500" /> → onto the div
 ```
 
+In a Vue or Svelte template `sz` on a component becomes a `class` attribute.
+Vue passes it to the component's root element; a Svelte component takes it as
+its `class` prop and puts it on an element, as a React component does with
+`className`. A template takes static `sz` values only: it has no runtime to
+resolve the rest.
+
 ## Design-system patterns
 
 Two rules keep a component library fast (build-time) and overridable.

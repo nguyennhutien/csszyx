@@ -127,10 +127,11 @@ export const SIZE_BUDGETS = [
         // Every other export ships to the browser: `./browser` for
         // `@csszyx/dynamic` and `@csszyx/runtime`, and the leaf modules the
         // runtime's `/lite`, `/core` and variant helpers import by subpath.
-        // Only `.` and `./migrate` stay out: build-time code that never
-        // leaves the dev machine. A new export is measured, and needs an
-        // entry budget, unless it is added here.
-        excludeSubpaths: ['.', './migrate'],
+        // Only `.`, `./internal` and `./migrate` stay out: build-time code
+        // that never leaves the dev machine (`./internal` is what the
+        // adapters, the CLI and the build plugin share). A new export is
+        // measured, and needs an entry budget, unless it is added here.
+        excludeSubpaths: ['.', './internal', './migrate'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so
@@ -314,7 +315,23 @@ export const SIZE_BUDGETS = [
         // (its collector, message and code), and the colour object keeps its
         // important modifier at the end of the class. Un-optimized, gzip -9 of
         // the nodejs parser build, same working tree.
-        maxGzipBytes: 571_750,
+        //
+        // Raised from 571,750 on 2026-10-12: the cross-module registry's
+        // exported values are read by the engine's own evaluators in the
+        // module-link scan (the export walk, the plain-object encoder and the
+        // query), replacing a narrower evaluator in the compiler, and cost
+        // 3,465 gzip bytes as this script measures them: 571,348 at the
+        // branch base, 574,813 after, un-optimized nodejs parser build, same
+        // machine.
+        //
+        // Raised from 575,100 on 2026-10-12: the global-var usage scan moved
+        // from the compiler's second parse into the engine, and costs 10,323
+        // gzip bytes as this script measures them: 574,813 at the branch base,
+        // 585,136 after, un-optimized nodejs parser build, same machine. About
+        // 7,200 of that is the scan's own oxc AST walker (each `Visit` impl
+        // carries a full copy); the scan already reads constants in the same
+        // walk to keep it to one.
+        maxGzipBytes: 585_500,
     },
 ];
 

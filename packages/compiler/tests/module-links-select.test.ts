@@ -21,6 +21,7 @@ vi.mock('../src/transform-wasm.js', () => ({
 }));
 
 const FILES = [{ filename: '/p/a.tsx', source: "import './a.css';" }];
+const QUERY = { registryEntries: true };
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -30,16 +31,20 @@ describe('scanModuleLinks artifact dispatch', () => {
     it('routes to the native addon when it is available', () => {
         vi.mocked(isRustTransformAvailable).mockReturnValue(true);
 
-        expect(scanModuleLinks(FILES)).toEqual([{ cssImports: ['from-rust.css'], forwards: [] }]);
-        expect(scanModuleLinksRust).toHaveBeenCalledWith(FILES);
+        expect(scanModuleLinks(FILES, QUERY)).toEqual([
+            { cssImports: ['from-rust.css'], forwards: [] },
+        ]);
+        expect(scanModuleLinksRust).toHaveBeenCalledWith(FILES, QUERY);
         expect(scanModuleLinksWasm).not.toHaveBeenCalled();
     });
 
     it('routes to the wasm build when the native addon cannot load', () => {
         vi.mocked(isRustTransformAvailable).mockReturnValue(false);
 
-        expect(scanModuleLinks(FILES)).toEqual([{ cssImports: ['from-wasm.css'], forwards: [] }]);
-        expect(scanModuleLinksWasm).toHaveBeenCalledWith(FILES);
+        expect(scanModuleLinks(FILES, QUERY)).toEqual([
+            { cssImports: ['from-wasm.css'], forwards: [] },
+        ]);
+        expect(scanModuleLinksWasm).toHaveBeenCalledWith(FILES, QUERY);
         expect(scanModuleLinksRust).not.toHaveBeenCalled();
     });
 });

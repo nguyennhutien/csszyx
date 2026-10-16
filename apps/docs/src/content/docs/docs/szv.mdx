@@ -167,8 +167,8 @@ The prescan discovers a file by a cheap text check: it scans any file containing
 `szv({…})` config (no JSX, no `sz=`) is still scanned and its variants extracted.
 
 Extraction is **lenient per key**, identically in all three parser engines. A
-value the compiler cannot read statically (a function call, a template string,
-an imported constant…) skips only that one key — sibling keys and every other
+value the compiler cannot read statically (a function call, a template string
+with a `${}` substitution, an imported constant…) skips only that one key — sibling keys and every other
 variant still reach the safelist. A finite conditional like
 `p: dense ? 2 : 4` contributes **both** branches (the runtime picks one, so
 both classes must exist). `null`/`undefined` mean "key unset". Same-file

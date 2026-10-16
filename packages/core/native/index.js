@@ -13,13 +13,14 @@ const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the s
 // fallback that is not there and the install help would send a reader to
 // reinstall a package they already have.
 const MIGRATE_NOTE = 'note: migrate runs on the native engine only; there is no wasm lane for it';
-const MIGRATE_HELP =
-    'update @csszyx/core and its platform package together, to a version that carries migrate';
+const UPDATE_TOGETHER =
+    'update @csszyx/core and its platform package together, to a version that carries ';
+const MIGRATE_HELP = `${UPDATE_TOGETHER}migrate`;
 const INSTALL_HELP =
     'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
 const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
-const LINKS_HELP =
-    'update @csszyx/core and its platform package together, to a version that carries scanModuleLinks';
+const LINKS_HELP = `${UPDATE_TOGETHER}scanModuleLinks`;
+const GLOBAL_VAR_HELP = `${UPDATE_TOGETHER}scanGlobalVarUsages`;
 const RESULT_HELP = 'update @csszyx/core and its platform package together, to the same version';
 
 /** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
@@ -122,24 +123,35 @@ function named(name, manifest) {
     }
 }
 
+/**
+ * Refuse a result an older platform package returned. Such a package still
+ * exports the function, so the loader's export check passes; only the result
+ * tells. Without this the caller fails on the first missing field, with an
+ * error that names neither package. One result is enough: every result has
+ * the same shape.
+ *
+ * @template T
+ * @param {T[]} results - What the binding returned.
+ * @param {(result: T) => boolean} current - Whether a result has this version's shape.
+ * @returns {T[]} The results.
+ */
+function currentResults(results, current) {
+    if (results.length === 0 || current(results[0])) return results;
+    // Versions when the manifests can be read, which a fixture's cannot.
+    const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
+    const core = named('@csszyx/core', '../package.json');
+    throw new CsszyxNativeUnavailableError(
+        `csszyx native package ${native} is older than ${core} and returns a result it cannot read`,
+        cachedPackageName,
+        RESULT_HELP,
+    );
+}
+
 export function transformBatch(_files, options) {
     const binding = loadNativeBinding();
-    const results = binding.transformBatch(_files, options);
-    // A platform package older than this one still exports transformBatch, so
-    // the loader's export check passes; only the result tells. Without this the
-    // caller fails on the first missing field, with a TypeError that names
-    // neither package. One result is enough: every result has the same shape.
-    if (results.length > 0 && !Array.isArray(results[0].issues)) {
-        // Versions when the manifests can be read, which a fixture's cannot.
-        const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
-        const core = named('@csszyx/core', '../package.json');
-        throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${native} is older than ${core} and returns a result it cannot read`,
-            cachedPackageName,
-            RESULT_HELP,
-        );
-    }
-    return results;
+    return currentResults(binding.transformBatch(_files, options), result =>
+        Array.isArray(result.issues),
+    );
 }
 
 /**
@@ -180,13 +192,36 @@ function laterExport(name, feature, help, note) {
 }
 
 /**
- * Reads the stylesheets each module imports and the names it re-exports.
+ * Reads the stylesheets each module imports, the names it re-exports and,
+ * when asked, the values it exports for the cross-module registry.
  *
  * @param {Array<{filename: string, source: string}>} files - Modules to read.
- * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>}>} One answer per module.
+ * @param {{registryEntries?: boolean}} [query] - Which optional answers to compute.
+ * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>, registryEntriesJson: string}>} One answer per module.
  */
-export function scanModuleLinks(files) {
-    return laterExport('scanModuleLinks', 'the module-link scan', LINKS_HELP, NOTE)(files);
+export function scanModuleLinks(files, query) {
+    const scan = laterExport('scanModuleLinks', 'the module-link scan', LINKS_HELP, NOTE);
+    // The 0.17 scan takes no query and answers without the registry entries.
+    return currentResults(
+        scan(files, query),
+        result => query?.registryEntries !== true || typeof result.registryEntriesJson === 'string',
+    );
+}
+
+/**
+ * Reads the global custom-property usages csszyx does not rewrite.
+ *
+ * @param {Array<{filename: string, source: string}>} files - Modules to read.
+ * @param {{tokens?: string[]}} [query] - Which custom properties to report; every one when absent.
+ * @returns {Array<Array<{kind: string, name: string, location: {filePath: string, line: number, column: number}, message: string}>>} One list per module.
+ */
+export function scanGlobalVarUsages(files, query) {
+    return laterExport(
+        'scanGlobalVarUsages',
+        'the global-var usage scan',
+        GLOBAL_VAR_HELP,
+        NOTE,
+    )(files, query);
 }
 
 export function migrateBatch(files, options) {

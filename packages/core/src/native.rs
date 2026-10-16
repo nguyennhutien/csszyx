@@ -21,6 +21,15 @@ pub struct NativeTransformFile {
     pub source: String,
 }
 
+impl From<NativeTransformFile> for TransformFile {
+    fn from(file: NativeTransformFile) -> Self {
+        Self {
+            filename: file.filename,
+            source: file.source,
+        }
+    }
+}
+
 /// One name a module re-exports, as JavaScript receives it.
 #[cfg(feature = "native-engine")]
 #[derive(Debug)]
@@ -43,23 +52,46 @@ pub struct NativeModuleLinks {
     pub css_imports: Vec<String>,
     /// Re-exported names, declaration order preserved.
     pub forwards: Vec<NativeModuleForward>,
+    /// The exported registry values as one JSON array; `[]` unless asked for.
+    ///
+    /// JSON rather than objects because the values are arbitrary nested sz
+    /// objects whose key order the importer reads, and the wasm build encodes
+    /// them with the same serializer.
+    pub registry_entries_json: String,
 }
 
-/// Reads the stylesheets each module imports and the names it re-exports.
+/// Which optional answers a scan computes, as JavaScript passes them.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeModuleLinksQuery {
+    /// Read the exported values the cross-module registry carries.
+    pub registry_entries: Option<bool>,
+}
+
+/// Reads the stylesheets each module imports, the names it re-exports and,
+/// when asked, the values it exports for the cross-module registry.
 #[cfg(feature = "native-engine")]
 #[napi(js_name = "scanModuleLinks")]
 #[must_use]
-pub fn scan_module_links_native(files: Vec<NativeTransformFile>) -> Vec<NativeModuleLinks> {
-    let files: Vec<TransformFile> = files
-        .into_iter()
-        .map(|file| TransformFile {
-            filename: file.filename,
-            source: file.source,
-        })
-        .collect();
-    crate::transform::module_links::scan_module_links(&files)
+#[allow(clippy::needless_pass_by_value)]
+pub fn scan_module_links_native(
+    files: Vec<NativeTransformFile>,
+    query: Option<NativeModuleLinksQuery>,
+) -> Vec<NativeModuleLinks> {
+    let files: Vec<TransformFile> = files.into_iter().map(TransformFile::from).collect();
+    let query = crate::transform::module_links::ModuleLinksQuery {
+        registry_entries: query
+            .and_then(|query| query.registry_entries)
+            .unwrap_or_default(),
+    };
+    crate::transform::module_links::scan_module_links(&files, query)
         .into_iter()
         .map(|links| NativeModuleLinks {
+            // Plain strings, numbers, booleans and objects with string keys:
+            // nothing in an entry can fail to encode.
+            registry_entries_json: serde_json::to_string(&links.registry_entries)
+                .unwrap_or_default(),
             css_imports: links.css_imports,
             forwards: links
                 .forwards
@@ -70,6 +102,78 @@ pub fn scan_module_links_native(files: Vec<NativeTransformFile>) -> Vec<NativeMo
                     specifier: forward.specifier,
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+/// Where one global custom-property usage is, as JavaScript receives it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarUsageLocation {
+    /// The filename the file was handed in with.
+    pub file_path: String,
+    /// 1-based line.
+    pub line: u32,
+    /// 1-based column, in UTF-16 code units.
+    pub column: u32,
+}
+
+/// One global custom-property usage csszyx does not rewrite, or the one
+/// record of a file that did not parse, as JavaScript receives it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarUsage {
+    /// What the record reports, e.g. `style-set-property` or `parse-error`.
+    pub kind: String,
+    /// The custom property, leading `--` included; empty for a parse error.
+    pub name: String,
+    /// Where it is.
+    pub location: NativeGlobalVarUsageLocation,
+    /// What a build error prints for it.
+    pub message: String,
+}
+
+/// Which usages a global custom-property scan reports, as JavaScript passes it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeGlobalVarUsageQuery {
+    /// Report only these custom properties; every one when absent.
+    pub tokens: Option<Vec<String>>,
+}
+
+/// Reads the global custom-property usages csszyx does not rewrite, one list
+/// per file in input order.
+#[cfg(feature = "native-engine")]
+#[napi(js_name = "scanGlobalVarUsages")]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn scan_global_var_usages_native(
+    files: Vec<NativeTransformFile>,
+    query: Option<NativeGlobalVarUsageQuery>,
+) -> Vec<Vec<NativeGlobalVarUsage>> {
+    let files: Vec<TransformFile> = files.into_iter().map(TransformFile::from).collect();
+    let query = crate::transform::global_var_usages::GlobalVarUsageQuery {
+        tokens: query.and_then(|query| query.tokens),
+    };
+    crate::transform::global_var_usages::scan_global_var_usages(&files, &query)
+        .into_iter()
+        .map(|usages| {
+            usages
+                .into_iter()
+                .map(|usage| NativeGlobalVarUsage {
+                    kind: usage.kind.as_str().to_owned(),
+                    name: usage.name,
+                    location: NativeGlobalVarUsageLocation {
+                        file_path: usage.location.file_path,
+                        line: usage.location.line,
+                        column: usage.location.column,
+                    },
+                    message: usage.message,
+                })
+                .collect()
         })
         .collect()
 }
@@ -285,10 +389,7 @@ pub fn transform_batch_native(
 ) -> napi::Result<Vec<NativeTransformResult>> {
     let files = files
         .into_iter()
-        .map(|file| TransformFile {
-            filename: file.filename,
-            source: file.source,
-        })
+        .map(TransformFile::from)
         .collect::<Vec<_>>();
 
     let options = options.unwrap_or_default();

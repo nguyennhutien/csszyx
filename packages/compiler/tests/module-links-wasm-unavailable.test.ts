@@ -1,5 +1,6 @@
 /**
- * The wasm module-link scan on an install whose wasm artifact cannot load.
+ * The wasm module-link and global-var usage scans on an install whose wasm
+ * artifact cannot load.
  *
  * `@csszyx/core` ships the artifact, so a working install never takes this
  * path; the loader is made to fail the way a missing file fails.
@@ -27,6 +28,16 @@ describe('the wasm module-link scan without its artifact', () => {
         );
         expect(() => scanModuleLinksWasm([{ filename: '/p/a.ts', source: '' }])).toThrow(
             "transformWasm: wasm engine unavailable - Cannot find module '@csszyx/core/parser-wasm'",
+        );
+    });
+
+    it('names the engine unavailable for the global-var usage scan too', async () => {
+        const { scanGlobalVarUsagesWasm, WasmTransformUnavailableError } = await import(
+            '../src/transform-wasm.js'
+        );
+
+        expect(() => scanGlobalVarUsagesWasm([{ filename: '/p/a.ts', source: '' }])).toThrow(
+            WasmTransformUnavailableError,
         );
     });
 });

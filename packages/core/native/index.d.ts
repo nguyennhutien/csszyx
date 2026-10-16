@@ -33,6 +33,45 @@ export interface NativeModuleLinks {
     cssImports: string[];
     /** Re-exported names, declaration order preserved. */
     forwards: NativeModuleForward[];
+    /**
+     * The exported registry values as one JSON array, `[]` unless the query
+     * asked for them: nested sz objects whose key order the importer reads.
+     */
+    registryEntriesJson: string;
+}
+
+/** Where one global custom-property usage is. */
+export interface NativeGlobalVarUsageLocation {
+    /** The filename the module was handed in with. */
+    filePath: string;
+    /** 1-based line. */
+    line: number;
+    /** 1-based column, in UTF-16 code units. */
+    column: number;
+}
+
+/** One global custom-property usage csszyx does not rewrite, or a parse failure. */
+export interface NativeGlobalVarUsage {
+    /** What the record reports, e.g. `style-set-property` or `parse-error`. */
+    kind: string;
+    /** The custom property, leading `--` included; empty for a parse error. */
+    name: string;
+    /** Where it is. */
+    location: NativeGlobalVarUsageLocation;
+    /** What a build error prints for it. */
+    message: string;
+}
+
+/** Which usages a global custom-property scan reports. */
+export interface NativeGlobalVarUsageQuery {
+    /** Report only these custom properties; every one when absent. */
+    tokens?: string[];
+}
+
+/** Which optional answers a module-link scan computes. */
+export interface NativeModuleLinksQuery {
+    /** Read the values each module exports for the cross-module registry. */
+    registryEntries?: boolean;
 }
 
 /** Options passed to the native transform. */
@@ -297,10 +336,23 @@ export interface NativeBinding {
     migrateParseClass?(className: string): string;
 
     /**
-     * Reads the stylesheets each module imports and the names it re-exports.
+     * Reads the stylesheets each module imports, the names it re-exports and,
+     * when asked, the values it exports for the cross-module registry.
      * Absent on platform packages that predate the module-link scan.
      */
-    scanModuleLinks?(files: NativeTransformFile[]): NativeModuleLinks[];
+    scanModuleLinks?(
+        files: NativeTransformFile[],
+        query?: NativeModuleLinksQuery,
+    ): NativeModuleLinks[];
+
+    /**
+     * Reads the global custom-property usages csszyx does not rewrite.
+     * Absent on platform packages that predate the global-var usage scan.
+     */
+    scanGlobalVarUsages?(
+        files: NativeTransformFile[],
+        query?: NativeGlobalVarUsageQuery,
+    ): NativeGlobalVarUsage[][];
 
     /**
      * Transforms source files with the native Rust core.
@@ -393,10 +445,28 @@ export function migrateClassName(className: string, customMapJson?: string): str
 export function migrateParseClass(className: string): string;
 
 /**
- * Reads the stylesheets each module imports and the names it re-exports.
+ * Reads the stylesheets each module imports, the names it re-exports and,
+ * when asked, the values it exports for the cross-module registry.
  *
  * @param files Modules to read.
+ * @param query Which optional answers to compute.
  * @returns One answer per module, in input order.
  * @throws CsszyxNativeUnavailableError when the platform package is missing or predates the scan.
  */
-export function scanModuleLinks(files: NativeTransformFile[]): NativeModuleLinks[];
+export function scanModuleLinks(
+    files: NativeTransformFile[],
+    query?: NativeModuleLinksQuery,
+): NativeModuleLinks[];
+
+/**
+ * Reads the global custom-property usages csszyx does not rewrite.
+ *
+ * @param files Modules to read.
+ * @param query Which custom properties to report; every one when absent.
+ * @returns One list per module, in input order.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates the scan.
+ */
+export function scanGlobalVarUsages(
+    files: NativeTransformFile[],
+    query?: NativeGlobalVarUsageQuery,
+): NativeGlobalVarUsage[][];

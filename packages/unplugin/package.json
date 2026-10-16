@@ -164,9 +164,21 @@
   },
   "peerDependencies": {
     "@csszyx/runtime": "workspace:^",
+    "esbuild": "*",
+    "rollup": "*",
+    "tailwindcss": ">=3.4.19 <5",
     "vite": ">=5.0.0"
   },
   "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    },
+    "rollup": {
+      "optional": true
+    },
+    "tailwindcss": {
+      "optional": true
+    },
     "vite": {
       "optional": true
     }

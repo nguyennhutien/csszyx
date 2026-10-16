@@ -214,7 +214,12 @@ describe('the default export, which is a slot rather than a name', () => {
 describe('what the registry refuses to carry', () => {
     it.each([
         ['a call result', 'export const a = build();'],
-        ['a value read from another binding', 'const S = 4;\nexport const a = { p: S };'],
+        // A binding the module writes to again holds no value the build can
+        // know; a const it only reads is recorded (`cross-module-local-threshold`).
+        [
+            'a value read from a reassigned binding',
+            'let S = 4;\nS = 8;\nexport const a = { p: S };',
+        ],
         ['a computed key', "const k = 'p';\nexport const a = { [k]: 4 };"],
         ['a spread of anything', 'export const a = { ...base, p: 4 };'],
         ['a non-object value', "export const a = 'p-4';"],

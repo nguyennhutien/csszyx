@@ -2,21 +2,30 @@
  * @csszyx/vue-adapter - Vue SFC preprocessor for csszyx.
  *
  * Transforms `sz` props in Vue SFC templates into Tailwind CSS class strings.
+ * A template has no csszyx runtime, so a value lowers only when the engine
+ * resolves all of it at build time; any other value is an error placed in the
+ * `.vue` file, and its attribute is left as written.
  *
  * @module @csszyx/vue-adapter
  */
 
+import { rewriteStartTags } from '@csszyx/compiler';
 import {
-    parseStaticObjectLiteral,
-    rewriteStartTags,
-    type SzObject,
-    transform,
-} from '@csszyx/compiler';
+    rewriteTemplateSz,
+    type TemplateSzAttribute,
+    type TemplateSzDiagnostic,
+    type TemplateSzOptions,
+    transformTemplateFile,
+} from '@csszyx/compiler/internal';
+import type { Plugin } from 'vite';
+
+import { decodeCharacterReferences } from './character-references.js';
+import { findRootTemplate } from './sfc-template.js';
 
 /**
  * Preprocessor options.
  */
-export interface VueAdapterOptions {
+export interface VueAdapterOptions extends TemplateSzOptions {
     /**
      * Enable verbose logging for debugging.
      */
@@ -39,19 +48,17 @@ export interface PreprocessResult {
      * Number of sz props transformed.
      */
     count: number;
+    /**
+     * Errors for values that got no class, and the engine's warnings, placed
+     * in the source. An error's attribute is left as written.
+     */
+    diagnostics: TemplateSzDiagnostic[];
 }
 
 /**
- * Parse a recursively static JavaScript object literal.
- * @param source - Object literal source.
- * @returns Parsed sz object, or null for dynamic/invalid syntax.
- */
-export function parseObjectLiteral(source: string): SzObject | null {
-    return parseStaticObjectLiteral(source);
-}
-
-/**
- * Extract the template section from a Vue SFC.
+ * Extract the root template section from a Vue SFC: up to the `</template>`
+ * that closes it, past any nested `<template>` and any `</template>` written
+ * in a comment, an attribute value, an interpolation or a `<script>` block.
  *
  * @param {string} source - Vue SFC source code
  * @returns {{ content: string; start: number; end: number } | null} Template info or null
@@ -61,44 +68,22 @@ export function extractTemplate(source: string): {
     start: number;
     end: number;
 } | null {
-    // indexOf-based scan avoids the polynomial backtracking that a
-    // <template(\s[^>]*)?>...</template> regex would suffer on inputs
-    // with repeated "<template " prefixes.
-    const lowered = source.toLowerCase();
-    let openStart = -1;
-    let openEnd = -1;
-    let i = 0;
-    while (i < lowered.length) {
-        const candidate = lowered.indexOf('<template', i);
-        if (candidate === -1) return null;
-        const after = lowered.charAt(candidate + '<template'.length);
-        if (after === '>' || after === ' ' || after === '\t' || after === '\n' || after === '\r') {
-            const tagClose = lowered.indexOf('>', candidate);
-            if (tagClose === -1) return null;
-            openStart = candidate;
-            openEnd = tagClose + 1;
-            break;
-        }
-        i = candidate + 1;
-    }
-    if (openStart === -1) return null;
-
-    const closeStart = lowered.indexOf('</template>', openEnd);
-    if (closeStart === -1) return null;
-
-    return {
-        content: source.slice(openEnd, closeStart),
-        start: openEnd,
-        end: closeStart,
-    };
+    const bounds = findRootTemplate(source);
+    return bounds && { content: source.slice(bounds.start, bounds.end), ...bounds };
 }
 
 /**
  * Transform sz props in a template string.
  *
  * Supports:
- * - Static: sz="{ p: 4 }" or sz='{ p: 4 }'
- * - Bound (Vue): :sz="{ p: 4 }" or v-bind:sz="{ p: 4 }"
+ * - Quoted: sz="{ p: 4 }" or sz='{ p: 4 }' (an object or an array)
+ * - Bound: :sz="{ p: 4 }" or v-bind:sz="{ p: 4 }"
+ *
+ * Either way the value must be static: a template has no csszyx runtime, so a
+ * value only known at runtime (`:sz="{ p: size }"`) is an error and the
+ * attribute is left as written.
+ *
+ * Diagnostics are placed in `template` itself.
  *
  * @param {string} template - Template string
  * @param {VueAdapterOptions} options - Options
@@ -108,46 +93,59 @@ export function transformTemplate(
     template: string,
     options: VueAdapterOptions = {},
 ): PreprocessResult {
-    let result = '';
-    let count = 0;
-    let cursor = 0;
+    return transformRegion(template, 0, template.length, options);
+}
 
-    while (cursor < template.length) {
-        const attribute = findVueSzAttribute(template, cursor);
-        if (!attribute) {
-            result += template.slice(cursor);
-            break;
-        }
-        result += template.slice(cursor, attribute.start);
-        const match = readQuotedSzAttribute(template, attribute.valueStart);
-        if (!match) {
-            result += template.slice(attribute.start, attribute.valueStart);
-            cursor = attribute.valueStart;
-            continue;
-        }
-
-        const szObj = parseObjectLiteral(match.objectSource);
-        if (!szObj) {
-            if (options.debug) {
-                console.warn(`[csszyx/vue] Failed to parse sz object: ${match.objectSource}`);
-            }
-            result += template.slice(attribute.start, match.end);
-        } else {
-            const className = transform(szObj).className;
-            count += 1;
-            if (options.debug) {
-                console.log(`[csszyx/vue] Transformed: ${match.objectSource} -> "${className}"`);
-            }
-            result += `class="${className}"`;
-        }
-        cursor = match.end;
+/**
+ * Lower the sz attributes between two offsets of a file, in one engine batch.
+ *
+ * @param file - The whole file; diagnostics are placed in it.
+ * @param from - Offset where the region starts.
+ * @param to - Offset where the region ends.
+ * @param options - Options.
+ * @returns The region's rewritten text, and the diagnostics.
+ */
+function transformRegion(
+    file: string,
+    from: number,
+    to: number,
+    options: VueAdapterOptions,
+): PreprocessResult {
+    const found = findSzAttributes(file, from, to);
+    const { code, count, classNames, diagnostics } = rewriteTemplateSz(
+        file,
+        { from, to },
+        found,
+        options,
+    );
+    if (options.debug) {
+        found.forEach((attribute, index) => {
+            console.log(
+                `[csszyx/vue] ${attribute.value.source} -> ${JSON.stringify(classNames[index])}`,
+            );
+        });
     }
+    return { code, transformed: count > 0, count, diagnostics };
+}
 
-    return {
-        code: result,
-        transformed: count > 0,
-        count,
-    };
+/**
+ * Collect the sz attributes between two offsets, in order.
+ *
+ * @param file - The whole file.
+ * @param from - Offset where scanning starts.
+ * @param to - Offset where scanning stops.
+ * @returns The attributes with a quoted value.
+ */
+function findSzAttributes(file: string, from: number, to: number): TemplateSzAttribute[] {
+    const found: TemplateSzAttribute[] = [];
+    let cursor = from;
+    for (;;) {
+        const attribute = findVueSzAttribute(file, cursor);
+        if (!attribute || attribute.start >= to) return found;
+        const match = readQuotedSzAttribute(file, attribute, to);
+        if (match) found.push(match);
+        cursor = match ? match.end : attribute.valueStart;
+    }
 }
 
 /**
@@ -156,14 +154,8 @@ export function transformTemplate(
 interface VueSzAttribute {
     start: number;
     valueStart: number;
-}
-
-/**
- * Parsed bounds and object source for a quoted Vue `sz` attribute.
- */
-interface QuotedSzAttribute {
-    end: number;
-    objectSource: string;
+    /** Whether the attribute is bound (`:sz` or `v-bind:sz`). */
+    bound: boolean;
 }
 
 /**
@@ -183,7 +175,7 @@ function findVueSzAttribute(template: string, from: number): VueSzAttribute | nu
             }
             const before = start === 0 ? '<' : template.charAt(start - 1);
             if (isAttributeBoundary(before)) {
-                return { start, valueStart: szStart + 3 };
+                return { start, valueStart: szStart + 3, bound: prefix !== '' };
             }
         }
         szStart = template.indexOf('sz=', szStart + 3);
@@ -192,26 +184,41 @@ function findVueSzAttribute(template: string, from: number): VueSzAttribute | nu
 }
 
 /**
- * Reads a quoted static object attribute without regular-expression backtracking.
+ * Reads a quoted attribute value without regular-expression backtracking.
+ *
+ * A bound value is any expression. A static `sz="..."` is a string to Vue, so
+ * it is read only when it is written as an object or an array; a plain string
+ * such as `sz="lg"` is some component's own prop and is left alone.
  *
  * @param template Vue template source.
- * @param valueStart Offset immediately after `sz=`.
- * @returns Parsed attribute, or null when unsupported or malformed.
+ * @param attribute The attribute's bounds.
+ * @param to Offset the value must close before.
+ * @returns The attribute, or null when unsupported or malformed.
  */
-function readQuotedSzAttribute(template: string, valueStart: number): QuotedSzAttribute | null {
+function readQuotedSzAttribute(
+    template: string,
+    attribute: VueSzAttribute,
+    to: number,
+): TemplateSzAttribute | null {
+    const { valueStart } = attribute;
     const quote = template.charAt(valueStart);
     if (quote !== '"' && quote !== "'") {
         return null;
     }
     const endQuote = template.indexOf(quote, valueStart + 1);
-    if (endQuote === -1) {
+    if (endQuote === -1 || endQuote >= to) {
         return null;
     }
-    const objectSource = template.slice(valueStart + 1, endQuote);
-    if (!objectSource.startsWith('{') || !objectSource.endsWith('}')) {
+    const written = template.slice(valueStart + 1, endQuote);
+    if (!attribute.bound && !/^\s*[{[]/.test(written)) {
         return null;
     }
-    return { end: endQuote + 1, objectSource };
+    const decoded = decodeCharacterReferences(written, valueStart + 1);
+    return {
+        start: attribute.start,
+        end: endQuote + 1,
+        value: { ...decoded, start: valueStart + 1 },
+    };
 }
 
 /**
@@ -222,6 +229,20 @@ function readQuotedSzAttribute(template: string, valueStart: number): QuotedSzAt
  */
 function isAttributeBoundary(char: string): boolean {
     return char === '<' || char === ' ' || char === '\t' || char === '\n' || char === '\r';
+}
+
+/**
+ * A class string as a JavaScript string literal inside a double-quoted Vue
+ * attribute.
+ *
+ * @param text - The class attribute's text, as written.
+ * @returns The literal, escaped for the attribute.
+ */
+function classLiteral(text: string): string {
+    const value = decodeCharacterReferences(text, 0).source;
+    const escaped = value.replace(/[\\']/g, String.raw`\$&`);
+    const literal = `'${escaped}'`;
+    return literal.replace(/[&"<]/g, char => `&#${char.codePointAt(0)};`);
 }
 
 /**
@@ -243,7 +264,7 @@ export function mergeClassAttributes(template: string): string {
             .replace(/(^|\s)class="[^"]*"/, '$1')
             .replace(/(^|\s)(?::class|v-bind:class)="[^"]*"/, '$1');
         const insertIdx = cleaned.indexOf(' ') + 1;
-        return `${cleaned.slice(0, insertIdx)}:class="['${staticMatch[1]}', ${dynamicMatch[1]}]" ${cleaned.slice(insertIdx)}`;
+        return `${cleaned.slice(0, insertIdx)}:class="[${classLiteral(staticMatch[1])}, ${dynamicMatch[1]}]" ${cleaned.slice(insertIdx)}`;
     });
 }
 
@@ -271,47 +292,35 @@ export function mergeClassAttributes(template: string): string {
  * ```
  */
 export function preprocess(source: string, options: VueAdapterOptions = {}): PreprocessResult {
-    // Extract template section
     const templateInfo = extractTemplate(source);
 
     if (!templateInfo) {
-        return {
-            code: source,
-            transformed: false,
-            count: 0,
-        };
+        return { code: source, transformed: false, count: 0, diagnostics: [] };
     }
 
-    // Transform sz props in template
-    const transformResult = transformTemplate(templateInfo.content, options);
+    const transformResult = transformRegion(source, templateInfo.start, templateInfo.end, options);
 
     if (!transformResult.transformed) {
-        return {
-            code: source,
-            transformed: false,
-            count: 0,
-        };
+        return { ...transformResult, code: source };
     }
 
     // Merge any duplicate class attributes
     const mergedContent = mergeClassAttributes(transformResult.code);
 
-    // Reconstruct the source with transformed template
-    const code =
-        source.slice(0, templateInfo.start) + mergedContent + source.slice(templateInfo.end);
-
     return {
-        code,
-        transformed: true,
-        count: transformResult.count,
+        ...transformResult,
+        code: source.slice(0, templateInfo.start) + mergedContent + source.slice(templateInfo.end),
     };
 }
 
 /**
  * Create a Vite plugin for Vue SFC preprocessing.
  *
+ * An `sz` value that needs the runtime fails the build with its file and
+ * position; the engine's warnings reach the bundler as warnings.
+ *
  * @param {VueAdapterOptions} options - Plugin options
- * @returns {object} Vite plugin
+ * @returns {Plugin} Vite plugin
  *
  * @example
  * ```typescript
@@ -328,40 +337,15 @@ export function preprocess(source: string, options: VueAdapterOptions = {}): Pre
  * });
  * ```
  */
-import type { Plugin } from 'vite';
-
-/**
- * Create a Vite plugin for Vue SFC preprocessing.
- *
- * @param {VueAdapterOptions} options - Plugin options
- * @returns {Plugin} Vite plugin
- */
 export function vitePlugin(options: VueAdapterOptions = {}): Plugin {
     return {
         name: 'csszyx-vue',
         enforce: 'pre' as const,
 
         transform(code: string, id: string) {
-            // Only process Vue SFC files
-            if (!id.endsWith('.vue')) {
-                return null;
-            }
-
-            // Skip if no sz props
-            if (!code.includes('sz=')) {
-                return null;
-            }
-
-            const result = preprocess(code, options);
-
-            if (!result.transformed) {
-                return null;
-            }
-
-            return {
-                code: result.code,
-                map: null, // Source-map generation is not implemented yet.
-            };
+            return transformTemplateFile(this, code, id, '.vue', (source, filename) =>
+                preprocess(source, { ...options, filename }),
+            );
         },
     };
 }

@@ -10,10 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-    extractCrossModuleRegistryEntries,
-    unwrapExpression,
-} from '../src/cross-module-extract.js';
+import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.js';
 
 /**
  * Extract, keeping only the plain-object entries.
@@ -51,11 +48,15 @@ describe('object keys the extractor refuses', () => {
     });
 });
 
-describe('values the extractor refuses', () => {
-    it('refuses a null literal — not a class-producing value', () => {
-        expect(szObjects('export const a = { p: null };')).toEqual({});
+describe('values the extractor skips', () => {
+    it('drops a null value, as the same literal written locally does', () => {
+        // `{ p: null }` beside `sz=` lowers to no class at all, so the export
+        // is a static object with nothing in it rather than a refusal.
+        expect(szObjects('export const a = { p: null, m: 2 };')).toEqual({ a: { m: 2 } });
     });
+});
 
+describe('values the extractor refuses', () => {
     it('refuses an array value', () => {
         expect(szObjects('export const a = { p: [4] };')).toEqual({});
     });
@@ -70,8 +71,11 @@ describe('negated values', () => {
         expect(szObjects('export const a = { m: -2 };')).toEqual({ a: { m: -2 } });
     });
 
-    it('refuses unary operators other than minus', () => {
-        expect(szObjects('export const a = { m: +2 };')).toEqual({});
+    it('records a unary plus on a number, which the local evaluator reads', () => {
+        expect(szObjects('export const a = { m: +2 };')).toEqual({ a: { m: 2 } });
+    });
+
+    it('refuses other unary operators', () => {
         expect(szObjects('export const a = { m: !0 };')).toEqual({});
     });
 
@@ -105,17 +109,5 @@ describe('declarators that are not factories or objects', () => {
                 '/p/styles.ts',
             ),
         ).toEqual([]);
-    });
-});
-
-describe('unwrapExpression', () => {
-    it('stops on a wrapper node that carries no inner expression', () => {
-        // No parse produces this shape — a TS wrapper always has an
-        // expression — but the walker runs on nodes cast from `unknown`, so
-        // the guard is what keeps a malformed node from looping forever.
-        const orphan = { type: 'ParenthesizedExpression' } as Parameters<
-            typeof unwrapExpression
-        >[0];
-        expect(unwrapExpression(orphan)).toBe(orphan);
     });
 });

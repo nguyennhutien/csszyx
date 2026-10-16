@@ -46,6 +46,9 @@ vi.mock('@csszyx/core/native', () => ({
     scanModuleLinks: () => {
         throw new FakeUnavailable();
     },
+    scanGlobalVarUsages: () => {
+        throw new FakeUnavailable();
+    },
 }));
 
 describe('the native transform on an install without it', () => {
@@ -115,5 +118,15 @@ describe('the native transform on an install without it', () => {
                 LOADER_LINES[2],
             ]);
         }
+    });
+
+    it('reports the global-var usage scan unavailable as the same error', async () => {
+        const { scanGlobalVarUsagesRust, RustTransformUnavailableError } = await import(
+            '../src/transform-rust.js'
+        );
+
+        expect(() => scanGlobalVarUsagesRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
+            RustTransformUnavailableError,
+        );
     });
 });

@@ -16,7 +16,12 @@
  */
 import { createRequire } from 'node:module';
 import { locateEngineSpans } from './engine-spans.js';
-import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
+import type {
+    GlobalVarSourceFile,
+    GlobalVarUsageDiagnostic,
+    GlobalVarUsageQuery,
+} from './global-var-diagnostics.js';
+import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
     aggregateCssVariableMap,
@@ -65,10 +70,11 @@ interface WasmResultJson {
     };
 }
 
-/** The two exports the lane consumes from `@csszyx/core/parser-wasm`. */
+/** The exports the lane consumes from `@csszyx/core/parser-wasm`. */
 interface ParserWasmModule {
     transform_batch_json(filesJson: string, optionsJson: string): string;
-    scan_module_links_json(filesJson: string): string;
+    scan_module_links_json(filesJson: string, queryJson: string): string;
+    scan_global_var_usages_json(filesJson: string, queryJson: string): string;
 }
 
 /**
@@ -126,12 +132,36 @@ function requireParserWasm(): ParserWasmModule {
  * Read module links through the wasm build of the engine.
  *
  * @param files - Modules to read.
+ * @param query - Which optional answers to compute.
  * @returns One answer per module, in input order.
  * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
  */
-export function scanModuleLinksWasm(files: readonly ModuleLinksFile[]): ModuleLinks[] {
+export function scanModuleLinksWasm(
+    files: readonly ModuleLinksFile[],
+    query: ModuleLinksQuery = {},
+): ModuleLinks[] {
     const filesJson = JSON.stringify(files.map(({ filename, source }) => ({ filename, source })));
-    return JSON.parse(requireParserWasm().scan_module_links_json(filesJson)) as ModuleLinks[];
+    return JSON.parse(
+        requireParserWasm().scan_module_links_json(filesJson, JSON.stringify(query)),
+    ) as ModuleLinks[];
+}
+
+/**
+ * Read global custom-property usages through the wasm build of the engine.
+ *
+ * @param files - Modules to read.
+ * @param query - Which custom properties to report.
+ * @returns One list per module, in input order.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function scanGlobalVarUsagesWasm(
+    files: readonly GlobalVarSourceFile[],
+    query: GlobalVarUsageQuery = {},
+): GlobalVarUsageDiagnostic[][] {
+    const filesJson = JSON.stringify(files.map(({ filename, source }) => ({ filename, source })));
+    return JSON.parse(
+        requireParserWasm().scan_global_var_usages_json(filesJson, JSON.stringify(query)),
+    ) as GlobalVarUsageDiagnostic[][];
 }
 
 /**

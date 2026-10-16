@@ -21,7 +21,6 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { qualifyStaticSzvConfig } from '../src/szv-precompile.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
@@ -76,6 +75,19 @@ describe.each(ENGINES)('a canonical boolean flag inside a branch (%s)', (_name, 
         ).toEqual([]);
     });
 
+    it('still refuses the same flag set by two co-occurring branches', () => {
+        // Deep merge replaces, so the object yields one value; concatenating
+        // per-branch classes would emit `sr-only` for a branch that turned it
+        // off. Equal canonical paths, so the detector bails — admitting the key
+        // must not cost that.
+        expect(
+            refusals(
+                engine,
+                '{ base: { srOnly: true }, variants: { reader: { off: { srOnly: false } } } }',
+            ),
+        ).toHaveLength(1);
+    });
+
     it('still refuses a SCALAR on the same key, which lowers to key-value', () => {
         const messages = refusals(
             engine,
@@ -83,29 +95,5 @@ describe.each(ENGINES)('a canonical boolean flag inside a branch (%s)', (_name, 
         );
         expect(messages).toHaveLength(1);
         expect(messages[0]).toContain('base.srOnly');
-    });
-});
-
-describe('the qualification unit', () => {
-    const qualifies = (config: unknown): boolean => qualifyStaticSzvConfig(config) !== null;
-
-    it('admits a boolean flag and refuses a scalar on the same key', () => {
-        expect(qualifies({ base: { srOnly: true }, variants: { p: { s: { p: 2 } } } })).toBe(true);
-        expect(qualifies({ base: { srOnly: 'weird' }, variants: { p: { s: { p: 2 } } } })).toBe(
-            false,
-        );
-    });
-
-    it('still catches the same flag set by two co-occurring branches', () => {
-        // Deep merge replaces, so the object yields one value; concatenating
-        // per-branch classes would emit `sr-only` for a branch that turned it
-        // off. Equal canonical paths, so the detector bails — admitting the key
-        // must not cost that.
-        expect(
-            qualifies({
-                base: { srOnly: true },
-                variants: { reader: { off: { srOnly: false } } },
-            }),
-        ).toBe(false);
     });
 });

@@ -88,7 +88,10 @@ document for a later step to read.
 ### `explain`
 
 Print the Tailwind className an sz object compiles to — quick one-off checks
-without a build.
+without a build. The object is lowered by the same engine as the build, so
+the answer is the build's: the className, any style variable a class reads
+at runtime, and the build's warnings. An object the build leaves to the
+runtime `_sz()` helper exits 1 with the reason.
 
 ```bash
 npx csszyx explain '{ p: 4, hover: { bg: "blue-500" } }'
