@@ -49,11 +49,7 @@ export const EXPECTED_UNIMPORTED = {
  * Imported packages left undeclared on purpose. Keyed by package name, then by
  * dependency, with the reason.
  */
-export const EXPECTED_UNDECLARED = {
-    '@csszyx/types': {
-        '@csszyx/compiler': 'type-only: the declarations re-export the sz types from the compiler',
-    },
-};
+export const EXPECTED_UNDECLARED = {};
 
 /** File extensions read as modules. Source maps and assets are skipped. */
 const MODULE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '.jsx', '.tsx']);

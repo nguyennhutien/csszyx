@@ -539,6 +539,9 @@ importers:
 
   packages/types:
     dependencies:
+      '@csszyx/compiler':
+        specifier: workspace:*
+        version: link:../compiler
       react:
         specifier: '>=17.0.0'
         version: 19.2.4
@@ -546,9 +549,6 @@ importers:
         specifier: '>=1.0.0'
         version: 1.9.15
     devDependencies:
-      '@csszyx/compiler':
-        specifier: workspace:*
-        version: link:../compiler
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
