@@ -178,7 +178,10 @@ jobs:
               - 'Cargo.lock'
               - 'packages/core/src/**'
               - 'packages/core/Cargo.toml'
-              - 'packages/core/Cargo.lock'
+              # Computes the engine's source digest, which the compiler build
+              # must reproduce in scripts/engine-digest.mjs; only the built
+              # packages test compares the two.
+              - 'packages/core/build.rs'
               - 'rust-toolchain.toml'
               - '.rustfmt.toml'
               - '.mise.toml'

@@ -310,10 +310,18 @@ export interface NativeMigrateResult {
     potentiallyUnusedImports: string[];
 }
 
-/**
- *
- */
+/** The engine's identity, which `@csszyx/compiler` checks before its first call. */
+export interface NativeEngineIdentity {
+    /** The version of `@csszyx/core` the binary ships as. */
+    version: string;
+    /** The digest of the source it was built from: 16 hex characters. */
+    digest: string;
+}
+
+/** The functions a platform package's binary exports. */
 export interface NativeBinding {
+    /** The engine's identity. Absent on platform packages before 0.18. */
+    engineIdentity?(): NativeEngineIdentity;
     /**
      * Migrates JSX/TSX sources with the native Rust core, one call for the
      * whole job. Absent on platform packages that predate migrate.
@@ -457,6 +465,15 @@ export function scanModuleLinks(
     files: NativeTransformFile[],
     query?: NativeModuleLinksQuery,
 ): NativeModuleLinks[];
+
+/**
+ * The engine's identity: the version of `@csszyx/core` the binary ships as and
+ * the digest of the source it was built from.
+ *
+ * @returns The identity, or null for a binary that predates it.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing.
+ */
+export function engineIdentity(): NativeEngineIdentity | null;
 
 /**
  * Reads the global custom-property usages csszyx does not rewrite.

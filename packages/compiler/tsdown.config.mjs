@@ -1,4 +1,12 @@
+import { readFileSync } from 'node:fs';
+
+import { engineDigest } from '../../scripts/engine-digest.mjs';
 import { base, defineBuild } from '../../tsdown.base.mjs';
+
+/** The engine this build is for: `src/engine-identity.ts` refuses any other. */
+const ENGINE_VERSION = JSON.parse(
+    readFileSync(new URL('../core/package.json', import.meta.url), 'utf8'),
+).version;
 
 export default defineBuild({
     ...base,
@@ -26,4 +34,8 @@ export default defineBuild({
     // most of 1.9 MB of `.d.ts`, which a React or Vue app with TypeScript
     // already installs once for `@types/react` or `@vue/runtime-dom`.
     deps: { neverBundle: ['csstype'] },
+    define: {
+        __CSSZYX_ENGINE_VERSION__: JSON.stringify(ENGINE_VERSION),
+        __CSSZYX_ENGINE_DIGEST__: JSON.stringify(engineDigest()),
+    },
 });

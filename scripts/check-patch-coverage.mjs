@@ -83,6 +83,13 @@ const UNMEASURED = [
     // that produces the report and cannot appear in it. They are exercised
     // through the built addon instead — see the compiler's migrate suites.
     /^packages\/core\/src\/native\.rs$/,
+    // A cargo build script runs as its own binary while the crate compiles,
+    // so the coverage run, which instruments the crate's tests, never loads
+    // it, and Codecov's Rust flag covers `src/**` only. The engine's build
+    // script computes the identity the engine reports; the digest parity
+    // build test (`scripts/build-tests/engine-digest.test.mjs`) checks it
+    // against the JavaScript digest instead.
+    /^packages\/[^/]+\/build\.rs$/,
     // Build output. It never mattered while `.js` was unmeasurable outright;
     // now that the shipped loader is measured, a committed `dist` would be
     // reported as source with no test.

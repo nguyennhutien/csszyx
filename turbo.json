@@ -23,6 +23,30 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
     },
+    // The engine is a cargo workspace member: cargo reads the ROOT Cargo.toml
+    // (release profile), Cargo.lock and rust-toolchain.toml, none of which is
+    // inside packages/core, so the default inputs never saw them. The engine's
+    // source digest covers Cargo.lock, and the compiler build bakes in the
+    // digest it expects; a lockfile change that rebuilt the compiler but
+    // replayed a cached engine left the two disagreeing, and every engine call
+    // threw engine-version-skew. KEEP outputs AND env IN SYNC WITH `build`.
+    "@csszyx/core#build": {
+      "dependsOn": ["^build"],
+      "outputs": [
+        "dist/**",
+        "lib/**",
+        "pkg/**",
+        "pkg-node/**",
+        "pkg-parser/**"
+      ],
+      "env": ["NODE_ENV"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml"
+      ]
+    },
     // Tests that read files OUTSIDE their own package need those paths declared
     // here. `inputs` is package-scoped, so a cross-package read is invisible to
     // the cache key: measured on the docs sync suite, a wrong value injected

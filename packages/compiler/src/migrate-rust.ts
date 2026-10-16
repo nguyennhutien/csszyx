@@ -22,6 +22,8 @@ import {
     type NativeMigrateResult,
 } from '@csszyx/core/native';
 
+import { checkNativeEngine } from './transform-rust.js';
+
 /**
  * One entry of the migration-resolution file.
  *
@@ -197,9 +199,11 @@ function unavailableDetail(
 export function isRustMigrateAvailable(): boolean {
     if (availability === undefined) {
         try {
-            migrateBatch([]);
+            guarded(() => migrateBatch([]));
             availability = true;
-        } catch {
+        } catch (error) {
+            // Only a missing addon is "unavailable"; another engine is an error.
+            if (!(error instanceof RustMigrateUnavailableError)) throw error;
             availability = false;
         }
     }
@@ -287,6 +291,7 @@ function servedLists(served: ReadonlyMap<string, boolean> | undefined): {
  */
 function guarded<T>(call: () => T): T {
     try {
+        checkNativeEngine();
         return call();
     } catch (error) {
         if (error instanceof CsszyxNativeUnavailableError) {

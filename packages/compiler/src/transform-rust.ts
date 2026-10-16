@@ -1,11 +1,14 @@
+import * as nativeModule from '@csszyx/core/native';
 import {
     CsszyxNativeUnavailableError,
+    getNativePackageName,
     type NativeTransformResult,
     scanGlobalVarUsages,
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
 
+import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
     GlobalVarSourceFile,
@@ -68,6 +71,37 @@ export function transformRust(
     return result;
 }
 
+/** Whether the native engine's identity has been checked; a pass is final. */
+let nativeIdentityChecked = false;
+
+/**
+ * Check, once per process, that the native engine is the one this compiler was
+ * built against. Every call into the native engine passes through here first.
+ *
+ * @internal Shared with the migrate wrapper; not a stable API.
+ *
+ * @throws {CsszyxNativeUnavailableError} when the native addon cannot load.
+ * @throws {EngineVersionSkewError} when it is another engine.
+ */
+export function checkNativeEngine(): void {
+    // Run from source, the compiler has no build to compare against.
+    if (nativeIdentityChecked || EXPECTED_ENGINE === null) return;
+    // Read through the namespace: `@csszyx/core` from before 0.18 has no
+    // `engineIdentity`, and a named import of it would fail when this module
+    // links, with a bare SyntaxError instead of the skew this check reports.
+    const { engineIdentity } = nativeModule as {
+        engineIdentity?: () => EngineIdentity | null;
+    };
+    const platformPackage = getNativePackageName();
+    assertEngineIdentity({
+        expected: EXPECTED_ENGINE,
+        reported: typeof engineIdentity === 'function' ? engineIdentity() : null,
+        artifact: `native (${platformPackage ?? 'no platform package'})`,
+        platformPackage,
+    });
+    nativeIdentityChecked = true;
+}
+
 /** Memoized result of the native-availability probe (loading the addon is a
  * one-time cost; the binary cannot appear or vanish mid-process). */
 let rustAvailability: boolean | undefined;
@@ -91,6 +125,7 @@ let rustAvailability: boolean | undefined;
 export function ensureRustTransformAvailable(): void {
     if (rustAvailability === true) return;
     try {
+        checkNativeEngine();
         transformBatch([{ filename: 'csszyx-probe.tsx', source: '' }]);
         rustAvailability = true;
     } catch (err) {
@@ -117,7 +152,10 @@ export function isRustTransformAvailable(): boolean {
         try {
             // Remembers a good answer itself.
             ensureRustTransformAvailable();
-        } catch {
+        } catch (error) {
+            // Only a missing addon is "unavailable". An engine from another
+            // release is an error to report, not a reason to fall back.
+            if (!(error instanceof RustTransformUnavailableError)) throw error;
             rustAvailability = false;
         }
     }
@@ -142,6 +180,7 @@ export function transformRustBatch(
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
     try {
+        checkNativeEngine();
         return transformBatch(
             files.map((file, index) => ({
                 filename: file.filename ?? `file-${index}.tsx`,
@@ -189,6 +228,7 @@ export function scanModuleLinksRust(
 ): ModuleLinks[] {
     let links: ReturnType<typeof scanModuleLinks>;
     try {
+        checkNativeEngine();
         links = scanModuleLinks(
             files.map(({ filename, source }) => ({ filename, source })),
             query,
@@ -217,6 +257,7 @@ export function scanGlobalVarUsagesRust(
 ): GlobalVarUsageDiagnostic[][] {
     try {
         // The engine names each kind from the closed set the type lists.
+        checkNativeEngine();
         return scanGlobalVarUsages(
             files.map(({ filename, source }) => ({ filename, source })),
             query,

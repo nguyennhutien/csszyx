@@ -103,3 +103,21 @@ describe('@csszyx/core/native scanModuleLinks', () => {
         expect(scanModuleLinks([], { registryEntries: true })).toEqual([]);
     });
 });
+
+describe('@csszyx/core/native engineIdentity', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('answers null for a binding that predates it', async () => {
+        packageName.current = fixture('native-binding.cjs');
+        const { engineIdentity } = await import('../native/index.js');
+        expect(engineIdentity()).toBeNull();
+    });
+
+    it("passes on the binding's identity", async () => {
+        packageName.current = fixture('native-binding-identity.cjs');
+        const { engineIdentity } = await import('../native/index.js');
+        expect(engineIdentity()).toEqual({ version: '0.18.0', digest: 'aaaaaaaaaaaaaaaa' });
+    });
+});

@@ -2080,6 +2080,40 @@ CSS variable where the engine reads it at build time (`const x = 4` then
 class for a computed key (`k-4`) where the engine emits none. The engine's
 answers were the intended ones; the pinned expectations moved with it.
 
+### The compiler and the engine come from different releases
+
+```text
+[csszyx] engine-version-skew: @csszyx/compiler {version} was built for engine source {digest} and found {engine}
+help: install @csszyx/core@{version}; it installs its platform package at the same version
+```
+
+The `help:` line names the fix for what answered:
+
+```text
+help: install @csszyx/core@{version}; {platformPackage} must be {version} too, so reinstall it if your lockfile holds another version
+help: rebuild the engine from this checkout with `pnpm --filter @csszyx/core {task}` after changing its source
+```
+
+The first is for the native engine of another release: a lockfile can keep an
+older platform package beside a current `@csszyx/core`. The second is for an
+engine at the compiler's version built from other source, which happens only
+in a checkout of csszyx itself; `{task}` is `native:build` for the native
+engine and `build` for wasm.
+
+`{engine}` names the artifact and what it reported, such as `the native
+(@csszyx/core-linux-x64-gnu) engine 0.17.2 (source 9b40c2d1e7a35f08)`, or says it
+comes from a release before 0.18 that does not report its version.
+
+`@csszyx/compiler` and the engine in `@csszyx/core` are released together but
+installed apart, so a lockfile or a cache can pair them across releases. An
+engine from another release ignores options it does not know and lowers with
+other tables, so the first call into either artifact checks the version and the
+digest of the engine's source, and the build stops on a mismatch. There is no
+setting that skips the check. Install `@csszyx/core` at the compiler's version;
+`@csszyx/unplugin`, `@csszyx/cli` and `csszyx` pin it for you. When both sides
+report the same version, the engine and the compiler were built from different
+checkouts of csszyx itself: rebuild the engine.
+
 <Aside type="tip" title="Still stuck?">
 Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a
 file, a line, and a key. If a class is emitted but styles nothing, the same

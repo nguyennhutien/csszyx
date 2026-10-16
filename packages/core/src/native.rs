@@ -377,6 +377,25 @@ pub struct NativeTransformResult {
     pub parser_path: String,
 }
 
+/// The engine's identity, which `@csszyx/compiler` checks before its first call.
+#[napi(object)]
+pub struct NativeEngineIdentity {
+    /// The version of `@csszyx/core` this binary ships as.
+    pub version: String,
+    /// The digest of the source it was built from.
+    pub digest: String,
+}
+
+/// The engine's identity: the version it ships as and the digest of its source.
+#[napi(js_name = "engineIdentity")]
+#[must_use]
+pub fn engine_identity_native() -> NativeEngineIdentity {
+    NativeEngineIdentity {
+        version: crate::version(),
+        digest: crate::engine_digest(),
+    }
+}
+
 /// Transforms a batch of files with the native Rust core.
 ///
 /// # Errors

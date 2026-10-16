@@ -331,7 +331,13 @@ export const SIZE_BUDGETS = [
         // 7,200 of that is the scan's own oxc AST walker (each `Visit` impl
         // carries a full copy); the scan already reads constants in the same
         // walk to keep it to one.
-        maxGzipBytes: 585_500,
+        //
+        // Raised from 585,500 on 2026-10-17: the engine reports its version
+        // and source digest, which the compiler checks before its first call,
+        // and refuses an option it does not know, which costs 362 gzip bytes:
+        // 585,425 at the branch base, 585,787 after, un-optimized nodejs
+        // parser build, same machine.
+        maxGzipBytes: 586_100,
     },
 ];
 
