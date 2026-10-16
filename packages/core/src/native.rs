@@ -43,13 +43,33 @@ pub struct NativeModuleLinks {
     pub css_imports: Vec<String>,
     /// Re-exported names, declaration order preserved.
     pub forwards: Vec<NativeModuleForward>,
+    /// The exported registry values as one JSON array; `[]` unless asked for.
+    ///
+    /// JSON rather than objects because the values are arbitrary nested sz
+    /// objects whose key order the importer reads, and the wasm build encodes
+    /// them with the same serializer.
+    pub registry_entries_json: String,
 }
 
-/// Reads the stylesheets each module imports and the names it re-exports.
+/// Which optional answers a scan computes, as JavaScript passes them.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeModuleLinksQuery {
+    /// Read the exported values the cross-module registry carries.
+    pub registry_entries: Option<bool>,
+}
+
+/// Reads the stylesheets each module imports, the names it re-exports and,
+/// when asked, the values it exports for the cross-module registry.
 #[cfg(feature = "native-engine")]
 #[napi(js_name = "scanModuleLinks")]
 #[must_use]
-pub fn scan_module_links_native(files: Vec<NativeTransformFile>) -> Vec<NativeModuleLinks> {
+#[allow(clippy::needless_pass_by_value)]
+pub fn scan_module_links_native(
+    files: Vec<NativeTransformFile>,
+    query: Option<NativeModuleLinksQuery>,
+) -> Vec<NativeModuleLinks> {
     let files: Vec<TransformFile> = files
         .into_iter()
         .map(|file| TransformFile {
@@ -57,9 +77,18 @@ pub fn scan_module_links_native(files: Vec<NativeTransformFile>) -> Vec<NativeMo
             source: file.source,
         })
         .collect();
-    crate::transform::module_links::scan_module_links(&files)
+    let query = crate::transform::module_links::ModuleLinksQuery {
+        registry_entries: query
+            .and_then(|query| query.registry_entries)
+            .unwrap_or_default(),
+    };
+    crate::transform::module_links::scan_module_links(&files, query)
         .into_iter()
         .map(|links| NativeModuleLinks {
+            // Plain strings, numbers, booleans and objects with string keys:
+            // nothing in an entry can fail to encode.
+            registry_entries_json: serde_json::to_string(&links.registry_entries)
+                .unwrap_or_default(),
             css_imports: links.css_imports,
             forwards: links
                 .forwards

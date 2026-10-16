@@ -314,7 +314,15 @@ export const SIZE_BUDGETS = [
         // (its collector, message and code), and the colour object keeps its
         // important modifier at the end of the class. Un-optimized, gzip -9 of
         // the nodejs parser build, same working tree.
-        maxGzipBytes: 571_750,
+        //
+        // Raised from 571,750 on 2026-10-12: the cross-module registry's
+        // exported values are read by the engine's own evaluators in the
+        // module-link scan (the export walk, the plain-object encoder and the
+        // query), replacing a narrower evaluator in the compiler, and cost
+        // 3,465 gzip bytes as this script measures them: 571,348 at the
+        // branch base, 574,813 after, un-optimized nodejs parser build, same
+        // machine.
+        maxGzipBytes: 575_100,
     },
 ];
 

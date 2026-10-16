@@ -1,0 +1,5 @@
+{
+  "name": "@csszyx/core-fixture-0.17.2",
+  "version": "0.17.2",
+  "main": "../native-binding-links.cjs"
+}

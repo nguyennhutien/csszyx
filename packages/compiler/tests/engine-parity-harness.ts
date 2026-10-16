@@ -17,6 +17,7 @@ import {
     isRustTransformAvailable,
     type ModuleLinks,
     type ModuleLinksFile,
+    type ModuleLinksQuery,
     type SourceTransformResult,
     scanModuleLinksRust,
     scanModuleLinksWasm,
@@ -100,7 +101,10 @@ export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
 ];
 
 /** One module-link scanner: the same question the transform table asks, for links. */
-export type LinkScanner = (files: readonly ModuleLinksFile[]) => ModuleLinks[];
+export type LinkScanner = (
+    files: readonly ModuleLinksFile[],
+    query?: ModuleLinksQuery,
+) => ModuleLinks[];
 
 /** Both artifacts' module-link scan; wasm alone only under {@link WASM_ONLY_ENV}. */
 export const LINK_SCANNERS: ReadonlyArray<readonly [string, LinkScanner]> = [

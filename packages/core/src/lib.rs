@@ -173,18 +173,23 @@ pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<Stri
     serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Module links across the WASM boundary: the stylesheets each module imports
-/// and the names it re-exports, one JSON array for the whole batch.
+/// Module links across the WASM boundary, one JSON array for the whole batch.
+///
+/// Each answer holds the stylesheets a module imports, the names it
+/// re-exports and, when `query_json` asks, the values it exports for the
+/// cross-module registry.
 ///
 /// # Errors
 ///
 /// Returns the decode or encode error message.
 #[cfg(feature = "native-engine")]
 #[wasm_bindgen]
-pub fn scan_module_links_json(files_json: &str) -> Result<String, JsValue> {
+pub fn scan_module_links_json(files_json: &str, query_json: &str) -> Result<String, JsValue> {
     let files: Vec<transform::TransformFile> =
         serde_json::from_str(files_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_json::to_string(&transform::module_links::scan_module_links(&files))
+    let query: transform::module_links::ModuleLinksQuery =
+        serde_json::from_str(query_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&transform::module_links::scan_module_links(&files, query))
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
@@ -198,9 +203,26 @@ mod tests {
         // The wasm lane reads module links through this export; the native
         // lane has its own binding, so nothing else runs this one.
         let files = r#"[{"filename":"/app/main.tsx","source":"import './app.css';\nexport { cardSz } from './styles';"}]"#;
-        let json = scan_module_links_json(files).expect("module links encode");
+        let json = scan_module_links_json(files, "{}").expect("module links encode");
         assert!(json.contains("./app.css"), "css import missing from {json}");
         assert!(json.contains("cardSz"), "forward missing from {json}");
+        assert!(json.contains(r#""registryEntries":[]"#), "{json}");
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn scan_module_links_reads_registry_entries_when_asked() {
+        // The value crosses as a plain object with its keys in source order,
+        // which is the shape the bundler's registry carries.
+        let files = r#"[{"filename":"/p/styles.ts","source":"const S = 4;\nexport const card = { z: 1, p: S };"}]"#;
+        let json = scan_module_links_json(files, r#"{"registryEntries":true}"#)
+            .expect("module links encode");
+        assert!(
+            json.contains(
+                r#""registryEntries":[{"kind":"sz-object","exportName":"card","value":{"z":1.0,"p":4.0}}]"#
+            ),
+            "{json}"
+        );
     }
 
     #[test]

@@ -33,6 +33,17 @@ export interface NativeModuleLinks {
     cssImports: string[];
     /** Re-exported names, declaration order preserved. */
     forwards: NativeModuleForward[];
+    /**
+     * The exported registry values as one JSON array, `[]` unless the query
+     * asked for them: nested sz objects whose key order the importer reads.
+     */
+    registryEntriesJson: string;
+}
+
+/** Which optional answers a module-link scan computes. */
+export interface NativeModuleLinksQuery {
+    /** Read the values each module exports for the cross-module registry. */
+    registryEntries?: boolean;
 }
 
 /** Options passed to the native transform. */
@@ -297,10 +308,14 @@ export interface NativeBinding {
     migrateParseClass?(className: string): string;
 
     /**
-     * Reads the stylesheets each module imports and the names it re-exports.
+     * Reads the stylesheets each module imports, the names it re-exports and,
+     * when asked, the values it exports for the cross-module registry.
      * Absent on platform packages that predate the module-link scan.
      */
-    scanModuleLinks?(files: NativeTransformFile[]): NativeModuleLinks[];
+    scanModuleLinks?(
+        files: NativeTransformFile[],
+        query?: NativeModuleLinksQuery,
+    ): NativeModuleLinks[];
 
     /**
      * Transforms source files with the native Rust core.
@@ -393,10 +408,15 @@ export function migrateClassName(className: string, customMapJson?: string): str
 export function migrateParseClass(className: string): string;
 
 /**
- * Reads the stylesheets each module imports and the names it re-exports.
+ * Reads the stylesheets each module imports, the names it re-exports and,
+ * when asked, the values it exports for the cross-module registry.
  *
  * @param files Modules to read.
+ * @param query Which optional answers to compute.
  * @returns One answer per module, in input order.
  * @throws CsszyxNativeUnavailableError when the platform package is missing or predates the scan.
  */
-export function scanModuleLinks(files: NativeTransformFile[]): NativeModuleLinks[];
+export function scanModuleLinks(
+    files: NativeTransformFile[],
+    query?: NativeModuleLinksQuery,
+): NativeModuleLinks[];

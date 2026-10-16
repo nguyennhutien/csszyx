@@ -1,8 +1,8 @@
 /**
- * Qualification spec for the szv per-key precompile, used by the cross-module
- * registry extractor (`cross-module-extract.ts`) so it records only configs the
- * engine will accept. The engine's own copy is `szv_precompile.rs`; the
- * cross-engine suite locks the verdicts.
+ * Qualification spec for the szv per-key precompile. No production code reads
+ * it any more: the cross-module registry is read by the engine, which decides
+ * qualification in `szv_precompile.rs`. Only the unit suites still read the
+ * verdicts from here.
  *
  * The compiler rewrites `szr(F(selection))` — `F` a file-local
  * `szv(<static config>)` factory — so every variant leaf is lowered to its

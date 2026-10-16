@@ -28,6 +28,8 @@ pub(crate) mod parser;
 #[cfg(feature = "native-engine")]
 pub(crate) mod recovery;
 #[cfg(feature = "native-engine")]
+pub mod registry_entries;
+#[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod rewrite;
 #[cfg(feature = "native-engine")]

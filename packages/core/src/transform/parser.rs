@@ -1411,42 +1411,14 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             let Some(init) = &declarator.init else {
                 continue;
             };
-            let Expression::CallExpression(call) = unwrap_expression(init) else {
-                continue;
-            };
-            let Expression::Identifier(callee) = &call.callee else {
-                continue;
-            };
-            if callee.name != "szv" || call.arguments.len() != 1 {
-                continue;
-            }
-            let Some(argument) = call.arguments[0].as_expression() else {
-                continue;
-            };
-            let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
-                self.record_szv_disqualified(&name, String::from("config"));
-                continue;
-            };
-            let config_object = match strict_literal_object_diagnosed(object, "") {
-                Ok(config_object) => config_object,
-                Err(path) => {
+            let config = match read_szv_factory(init) {
+                None => continue,
+                Some(Err(path)) => {
                     self.record_szv_disqualified(&name, path);
                     continue;
                 }
+                Some(Ok(qualified)) => qualified.config,
             };
-            let config = match super::szv_precompile::static_szv_config_from_object_diagnosed(
-                &config_object,
-            ) {
-                Ok(config) => config,
-                Err(path) => {
-                    self.record_szv_disqualified(&name, path);
-                    continue;
-                }
-            };
-            if let Some(path) = super::szv_precompile::overlap_disqualify_path(&config) {
-                self.record_szv_disqualified(&name, path);
-                continue;
-            }
             self.szv_candidates.push(SzvFactoryRecord {
                 name: name.to_string(),
                 statement_end: declaration.span.end,
@@ -3237,6 +3209,105 @@ fn strict_static_selection(
         selection.push((key, value));
     }
     Some(selection)
+}
+
+/// An `szv(<config>)` initializer whose config passed every precompile check.
+pub(super) struct QualifiedSzvFactory {
+    /// The config as written, literal values only.
+    pub(super) config_object: StaticSzObject,
+    /// The same config read into variant-table form.
+    pub(super) config: super::szv_precompile::StaticSzvConfig,
+}
+
+/// Read one initializer as an szv factory and run the precompile's checks.
+///
+/// `None` when the initializer is not `szv(<one argument>)` at all; `Err`
+/// names the first position that kept a factory from qualifying. The local
+/// precompile and the cross-module registry both ask this, so a config cannot
+/// qualify in one and not the other.
+fn read_szv_factory(init: &Expression<'_>) -> Option<Result<QualifiedSzvFactory, String>> {
+    let Expression::CallExpression(call) = unwrap_expression(init) else {
+        return None;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return None;
+    };
+    if callee.name != "szv" || call.arguments.len() != 1 {
+        return None;
+    }
+    let argument = call.arguments[0].as_expression()?;
+    let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
+        return Some(Err(String::from("config")));
+    };
+    Some(qualify_szv_config_object(object))
+}
+
+/// The literal, shape and overlap checks one szv config object must pass.
+fn qualify_szv_config_object(object: &ObjectExpression<'_>) -> Result<QualifiedSzvFactory, String> {
+    let config_object = strict_literal_object_diagnosed(object, "")?;
+    let config = super::szv_precompile::static_szv_config_from_object_diagnosed(&config_object)?;
+    if let Some(path) = super::szv_precompile::overlap_disqualify_path(&config) {
+        return Err(path);
+    }
+    Ok(QualifiedSzvFactory {
+        config_object,
+        config,
+    })
+}
+
+/// What one module-scope initializer offers a module that imports it.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum ExportedStaticValue {
+    /// An szv factory's config, which the importer compiles into a table.
+    SzvConfig(StaticSzObject),
+    /// A static sz object, which the importer lowers as if written locally.
+    SzObject(StaticSzObject),
+}
+
+/// Read an exported initializer with the readers this file's own code gets.
+///
+/// An szv factory goes through [`read_szv_factory`], the local precompile's
+/// reader. A plain object goes through [`static_object_from_object_expression`]
+/// with this file's scope, which is the evaluation `sz={binding}` runs on a
+/// local binding: a const it reads, a spread of a local object, a member of a
+/// local map all resolve exactly as they would beside the attribute. The
+/// cross-module threshold is therefore the local one by construction.
+///
+/// `is_const` gates the object kind only. A `let` export is a live binding the
+/// module may rebind after an importer was compiled against its first value;
+/// the factory kind has never been gated on it, and that is kept.
+pub(super) fn exported_static_value<'p>(
+    init: &'p Expression<'p>,
+    is_const: bool,
+    scope: &'p super::scope::DeclaratorScope,
+    program: &'p Program<'p>,
+) -> Option<ExportedStaticValue> {
+    if let Some(read) = read_szv_factory(init) {
+        return read
+            .ok()
+            .map(|qualified| ExportedStaticValue::SzvConfig(qualified.config_object));
+    }
+    if !is_const {
+        return None;
+    }
+    let Expression::ObjectExpression(object) = unwrap_expression(init) else {
+        return None;
+    };
+    // A provider's own imports are not resolved: the registry is read one
+    // module at a time, so an object built from another module's export has
+    // no value here, and refusing it keeps the importer on its runtime path.
+    let ctx = ResolveContext {
+        scope,
+        program,
+        imported_sz_objects: &[],
+        imported_namespaces: &[],
+    };
+    static_object_from_object_expression(object, ctx).map(ExportedStaticValue::SzObject)
+}
+
+/// Whether a binding name belongs to the runtime and so is never a factory.
+pub(super) fn is_reserved_szv_factory_name(name: &str) -> bool {
+    SZV_RESERVED_FACTORY_NAMES.contains(&name)
 }
 
 /// Evaluate an object expression under the literal-only vocabulary —

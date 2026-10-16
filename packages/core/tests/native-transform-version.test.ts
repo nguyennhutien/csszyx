@@ -71,3 +71,35 @@ describe('@csszyx/core/native transformBatch', () => {
         }
     });
 });
+
+describe('@csszyx/core/native scanModuleLinks', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('names both packages when the binding predates registry entries', async () => {
+        // The 0.17 scan ignores the query, so nothing but the result tells.
+        packageName.current = fixture('native-binding-0.17.2');
+        const { scanModuleLinks, CsszyxNativeUnavailableError } = await import(
+            '../native/index.js'
+        );
+        const { version } = await import('../package.json');
+        const files = [{ filename: '/p/a.ts', source: 'export const a = { p: 4 };' }];
+
+        expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
+            CsszyxNativeUnavailableError,
+        );
+        expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
+            `csszyx native package ${packageName.current} 0.17.2 is older than @csszyx/core ${version} and returns a result it cannot read`,
+        );
+    });
+
+    it('answers when the query asks nothing the binding predates', async () => {
+        packageName.current = fixture('native-binding-0.17.2');
+        const { scanModuleLinks } = await import('../native/index.js');
+        const files = [{ filename: '/p/a.ts', source: '' }];
+
+        expect(scanModuleLinks(files)).toEqual([{ cssImports: [], forwards: [] }]);
+        expect(scanModuleLinks([], { registryEntries: true })).toEqual([]);
+    });
+});

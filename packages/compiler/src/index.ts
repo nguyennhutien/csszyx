@@ -50,6 +50,7 @@ export {
     type ModuleForward,
     type ModuleLinks,
     type ModuleLinksFile,
+    type ModuleLinksQuery,
     scanModuleLinks,
 } from './module-links.js';
 // Export property type system (for CSS Variable Auto-Compile)

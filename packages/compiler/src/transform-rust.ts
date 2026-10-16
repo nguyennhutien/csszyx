@@ -6,7 +6,7 @@ import {
 } from '@csszyx/core/native';
 
 import { locateEngineSpans } from './engine-spans.js';
-import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
+import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import type {
     CssVariableMangleValue,
     GlobalVarAliasTableInput,
@@ -168,16 +168,33 @@ export function transformRustBatch(
 /**
  * Read module links through the native addon.
  *
+ * The registry entries cross as one JSON string per module, encoded by the same
+ * serializer the wasm build uses, and are decoded only when they were asked
+ * for.
+ *
  * @param files - Modules to read.
+ * @param query - Which optional answers to compute.
  * @returns One answer per module, in input order.
  * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
-export function scanModuleLinksRust(files: readonly ModuleLinksFile[]): ModuleLinks[] {
+export function scanModuleLinksRust(
+    files: readonly ModuleLinksFile[],
+    query: ModuleLinksQuery = {},
+): ModuleLinks[] {
+    let links: ReturnType<typeof scanModuleLinks>;
     try {
-        return scanModuleLinks(files.map(({ filename, source }) => ({ filename, source })));
+        links = scanModuleLinks(
+            files.map(({ filename, source }) => ({ filename, source })),
+            query,
+        );
     } catch (err) {
         throw asRustUnavailable(err);
     }
+    return links.map(({ cssImports, forwards, registryEntriesJson }) => ({
+        cssImports,
+        forwards,
+        registryEntries: query.registryEntries === true ? JSON.parse(registryEntriesJson) : [],
+    }));
 }
 
 /**

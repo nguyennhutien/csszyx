@@ -1,5 +1,6 @@
-//! What a module links to: the stylesheets it imports and the names it
-//! re-exports from other modules, read from the parser's module record.
+//! What a module links to: the stylesheets it imports, the names it
+//! re-exports from other modules, and, when asked, the values it exports for
+//! the cross-module registry. One parse answers all three.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,6 +15,7 @@ use oxc_syntax::module_record::{
 };
 use rayon::prelude::*;
 
+use super::registry_entries::{registry_entries, RegistryEntry};
 use super::TransformFile;
 
 /// One name a module exports without declaring it.
@@ -29,13 +31,27 @@ pub struct ModuleForward {
 }
 
 /// The links one module carries.
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModuleLinks {
     /// Stylesheet specifiers, query suffix kept, in source order, each once.
     pub css_imports: Vec<String>,
     /// Re-exported names, declaration order preserved.
     pub forwards: Vec<ModuleForward>,
+    /// Exported values for the cross-module registry; empty unless asked for.
+    pub registry_entries: Vec<RegistryEntry>,
+}
+
+/// Which optional answers a scan computes.
+///
+/// Registry entries cost a scope walk and an evaluation per export, and only
+/// the registry pass wants them, so a stylesheet or forward scan does not pay
+/// for them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ModuleLinksQuery {
+    /// Read the exported values the cross-module registry carries.
+    pub registry_entries: bool,
 }
 
 /// The provider name standing for a module's default slot.
@@ -55,16 +71,20 @@ const TYPE_WINDOW: usize = 48;
 /// because JavaScript escapes can hide any part of the extension. The worst
 /// case is an import-heavy file whose strings contain escapes, which is parsed
 /// once like a directly spelled stylesheet request.
-pub fn scan_module_links(files: &[TransformFile]) -> Vec<ModuleLinks> {
-    files.par_iter().map(links_of).collect()
+///
+/// Registry entries, when the query asks for them, come from the same parse,
+/// and only from a module whose text contains `export`.
+pub fn scan_module_links(files: &[TransformFile], query: ModuleLinksQuery) -> Vec<ModuleLinks> {
+    files.par_iter().map(|file| links_of(file, query)).collect()
 }
 
 /// Read the links of one file.
-fn links_of(file: &TransformFile) -> ModuleLinks {
+fn links_of(file: &TransformFile, query: ModuleLinksQuery) -> ModuleLinks {
     let source = file.source.as_str();
     let wants_css = may_request_stylesheet(source);
     let wants_forwards = has_export_clause(source);
-    if !wants_css && !wants_forwards {
+    let wants_entries = query.registry_entries && source.contains("export");
+    if !wants_css && !wants_forwards && !wants_entries {
         return ModuleLinks::default();
     }
     // The arena lives for this call only, so every file's parse is freed
@@ -81,6 +101,11 @@ fn links_of(file: &TransformFile) -> ModuleLinks {
         },
         forwards: if wants_forwards {
             forwards(record, source)
+        } else {
+            Vec::new()
+        },
+        registry_entries: if wants_entries {
+            registry_entries(&parsed.program)
         } else {
             Vec::new()
         },
@@ -404,7 +429,7 @@ mod tests {
             filename: filename.to_owned(),
             source: source.to_owned(),
         }];
-        scan_module_links(&files).remove(0)
+        scan_module_links(&files, ModuleLinksQuery::default()).remove(0)
     }
 
     fn forwards(source: &str) -> Vec<(String, String, String)> {
@@ -801,9 +826,58 @@ mod tests {
                 source: "import \"./c.css\";".to_owned(),
             },
         ];
-        let result = scan_module_links(&files);
+        let result = scan_module_links(&files, ModuleLinksQuery::default());
         assert_eq!(result[0].css_imports, ["./a.css"]);
         assert!(result[1].css_imports.is_empty());
         assert_eq!(result[2].css_imports, ["./c.css"]);
+    }
+
+    fn entry_names(source: &str, query: ModuleLinksQuery) -> Vec<String> {
+        let files = [TransformFile {
+            filename: "/p/styles.ts".to_owned(),
+            source: source.to_owned(),
+        }];
+        scan_module_links(&files, query)
+            .remove(0)
+            .registry_entries
+            .into_iter()
+            .map(|entry| entry.export_name)
+            .collect()
+    }
+
+    const ASK_ENTRIES: ModuleLinksQuery = ModuleLinksQuery {
+        registry_entries: true,
+    };
+
+    #[test]
+    fn registry_entries_are_read_only_when_asked() {
+        // A stylesheet or forward scan must not pay for the evaluation, and
+        // its answer must not change shape because a module exports values.
+        let source = "import './a.css';\nexport const card = { p: 4 };";
+        assert!(entry_names(source, ModuleLinksQuery::default()).is_empty());
+        assert_eq!(entry_names(source, ASK_ENTRIES), ["card"]);
+    }
+
+    #[test]
+    fn registry_entries_parse_a_module_with_no_other_link() {
+        // No `.css`, no `export {`: only the registry asks for this parse.
+        assert_eq!(
+            entry_names("export const card = { p: 4 };", ASK_ENTRIES),
+            ["card"]
+        );
+    }
+
+    #[test]
+    fn a_module_without_export_text_is_not_parsed_for_entries() {
+        assert!(entry_names("const card = { p: 4 };", ASK_ENTRIES).is_empty());
+    }
+
+    #[test]
+    fn the_query_decodes_with_absent_fields_off() {
+        let query: ModuleLinksQuery = serde_json::from_str("{}").expect("empty query decodes");
+        assert_eq!(query, ModuleLinksQuery::default());
+        let query: ModuleLinksQuery =
+            serde_json::from_str(r#"{"registryEntries":true}"#).expect("query decodes");
+        assert_eq!(query, ASK_ENTRIES);
     }
 }
