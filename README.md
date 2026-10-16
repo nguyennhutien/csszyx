@@ -83,7 +83,10 @@ Full walkthrough: <https://csszyx.com>
 
 > The Vue and Svelte adapters are **experimental early previews** — not
 > production-ready, and without detailed usage docs yet. They need real
-> projects to harden and finish. Want to help develop one? Open an issue at
+> projects to harden and finish. Their templates take static `sz` values only:
+> the runtime path React has is not available in a template today, so a value
+> only known at runtime stops the build (see each adapter's README). Want to
+> help develop one? Open an issue at
 > [csszyx/issues](https://github.com/nguyennhutien/csszyx/issues) or email
 > <hello@csszyx.com>.
 

@@ -1,9 +1,10 @@
 /**
  * Engine-artifact dispatch of `scanGlobalVarUsages`.
  *
- * The choice is availability only; both artifacts answer identically, which
- * the `global-var-diagnostics*` suites gate. A runner with the native addon
- * built never takes the wasm side, so both are forced here.
+ * The choice is the one `build.parser` makes for the transform; both artifacts
+ * answer identically, which the `global-var-diagnostics*` suites gate. A runner
+ * with the native addon built never takes the wasm side, so both are forced
+ * here.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,7 @@ vi.mock('../src/transform-rust.js', () => ({
 }));
 
 vi.mock('../src/transform-wasm.js', () => ({
+    isWasmTransformAvailable: vi.fn(() => true),
     scanGlobalVarUsagesWasm: vi.fn(() => [[usage('wasm')]]),
 }));
 
@@ -53,5 +55,23 @@ describe('scanGlobalVarUsages artifact dispatch', () => {
             {},
         );
         expect(scanGlobalVarUsagesRust).not.toHaveBeenCalled();
+    });
+
+    it('takes the wasm build a build pins, though the native addon loads', () => {
+        vi.mocked(isRustTransformAvailable).mockReturnValue(true);
+
+        expect(scanGlobalVarUsages('source', '/p/a.tsx', { parser: 'wasm' })).toEqual([
+            usage('wasm'),
+        ]);
+        expect(scanGlobalVarUsagesRust).not.toHaveBeenCalled();
+    });
+
+    it('keeps a pinned native addon, so its failure names the platform package', () => {
+        vi.mocked(isRustTransformAvailable).mockReturnValue(false);
+
+        expect(scanGlobalVarUsages('source', '/p/a.tsx', { parser: 'rust' })).toEqual([
+            usage('rust'),
+        ]);
+        expect(scanGlobalVarUsagesWasm).not.toHaveBeenCalled();
     });
 });

@@ -13,18 +13,30 @@ describe('Vue template transform', () => {
             code: '<div class="p-4" /><span class="m-2" /><i class="block" />',
             count: 3,
             transformed: true,
+            diagnostics: [],
         });
     });
 
-    it('preserves malformed, dynamic, and non-attribute sz text', () => {
-        const source =
-            '<div data-sz="{ p: 4 }" title="sz={ p: 4 }" :sz="dynamic" :sz="{ fn() }" />';
+    it('leaves sz text that is not an attribute alone', () => {
+        const source = '<div data-sz="{ p: 4 }" title="sz={ p: 4 }" />';
 
         expect(transformTemplate(source)).toEqual({
             code: source,
             count: 0,
             transformed: false,
+            diagnostics: [],
         });
+    });
+
+    it('keeps dynamic and malformed values as written, with an error each', () => {
+        const source = '<div :sz="dynamic" :sz="{ fn() }" />';
+        const result = transformTemplate(source);
+
+        expect(result.code).toBe(source);
+        expect(result.diagnostics.map(d => [d.severity, d.column])).toEqual([
+            ['error', 11],
+            ['error', 29],
+        ]);
     });
 
     it('handles repeated hostile template and attribute openings in linear time', () => {
@@ -32,7 +44,10 @@ describe('Vue template transform', () => {
         const startedAt = performance.now();
 
         expect(extractTemplate(source)).toBeNull();
-        expect(transformTemplate(source)).toEqual({ code: source, count: 0, transformed: false });
+        const result = transformTemplate(source);
+        expect(result.code).toBe(source);
+        expect(result.count).toBe(0);
+        expect(result.diagnostics.every(d => d.severity === 'error')).toBe(true);
         expect(performance.now() - startedAt).toBeLessThan(2_000);
     });
 });

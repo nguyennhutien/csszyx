@@ -64,6 +64,14 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
         expect(explained.className).toBe(buildClassName(engine, sz));
     });
 
+    it.each([
+        ['{ bg: \'url("a.png")\' }', 'bg-[url("a.png")]'],
+        ['{ fontFamily: \'"Inter"\' }', 'font-"Inter"'],
+        ['{ gridTemplateAreas: \'"a b"\' }', 'grid-template-areas-["a_b"]'],
+    ])('%s, whose class holds a double quote, compiles to the static class', (sz, className) => {
+        expect(explainSz(sz, engine).className).toBe(className);
+    });
+
     it('names the variable a style attribute sets at runtime', () => {
         expect(explainSz('{ p: size }', engine).runtimeValues).toEqual(['--_sz-p']);
         expect(explainSz('{ p: 4 }', engine).runtimeValues).toEqual([]);

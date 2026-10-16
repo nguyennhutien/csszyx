@@ -1,38 +1,12 @@
 /**
- * Coverage for the Svelte adapter's public API: object-literal parsing, class
- * attribute merging, the preprocess entry, and the preprocessor / vite plugin
- * factories. The existing suite covers transformMarkup; this fills the rest.
+ * Coverage for the Svelte adapter's public API: class attribute merging, the
+ * preprocess entry, and the preprocessor / vite plugin factories. The
+ * existing suite covers transformMarkup; this fills the rest.
  */
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
-import {
-    mergeClassAttributes,
-    parseObjectLiteral,
-    preprocess,
-    preprocessor,
-    vitePlugin,
-} from '../src/index.js';
-
-describe('parseObjectLiteral', () => {
-    it('parses a static object literal', () => {
-        expect(parseObjectLiteral('{ p: 4 }')).toEqual({ p: 4 });
-    });
-
-    it('parses nested objects', () => {
-        expect(parseObjectLiteral('{ hover: { bg: "red-500" } }')).toEqual({
-            hover: { bg: 'red-500' },
-        });
-    });
-
-    it('returns null for a non-object expression', () => {
-        expect(parseObjectLiteral('42')).toBeNull();
-    });
-
-    it('returns null for a syntax error', () => {
-        expect(parseObjectLiteral('{ p: }')).toBeNull();
-    });
-});
+import { mergeClassAttributes, preprocess, preprocessor, vitePlugin } from '../src/index.js';
 
 describe('mergeClassAttributes', () => {
     it('merges two class attributes on one element into one', () => {
@@ -115,7 +89,7 @@ describe('mergeClassAttributes', () => {
 describe('preprocess', () => {
     it('returns the source unchanged when there is no sz attribute', () => {
         const source = '<div class="p-4">no sz here</div>';
-        expect(preprocess(source)).toEqual({ code: source, map: undefined });
+        expect(preprocess(source)).toEqual({ code: source, map: undefined, diagnostics: [] });
     });
 
     it('transforms an sz attribute into classes', () => {

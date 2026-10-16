@@ -42,7 +42,10 @@ export function validateGlobalVarAliasInputs(
 
     const candidateTokens = plan.entries.map(entry => entry.original);
     const usageDiagnostics = (options.sourceFiles ?? []).flatMap(file =>
-        scanGlobalVarUsages(file.code, file.filePath, { tokens: candidateTokens }),
+        scanGlobalVarUsages(file.code, file.filePath, {
+            tokens: candidateTokens,
+            parser: options.parser,
+        }),
     );
 
     return { scans, plan, usageDiagnostics };
@@ -75,6 +78,7 @@ export function createGlobalVarAliasValidationOptions(
         aliasPrefix: input.aliasPrefix,
         reserved: input.reserved,
         cacheDir: input.cacheDir,
+        parser: input.parser,
     };
 }
 

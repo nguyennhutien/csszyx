@@ -13,10 +13,13 @@ describe('Svelte markup transform', () => {
         expect(result.code).toContain('class="m-2 hover:block"');
     });
 
-    it('preserves malformed and non-attribute sz text', () => {
+    it('preserves non-attribute sz text, and a dynamic value with an error', () => {
         const source = '<div data-sz="{{ p: 4 }}" sz={dynamic} title="sz={{ m: 2 }}" />';
+        const result = transformMarkup(source);
 
-        expect(transformMarkup(source)).toEqual({ code: source, count: 0 });
+        expect(result.code).toBe(source);
+        expect(result.count).toBe(0);
+        expect(result.diagnostics.map(d => [d.severity, d.column])).toEqual([['error', 31]]);
     });
 
     it('handles quoted braces inside bound objects', () => {

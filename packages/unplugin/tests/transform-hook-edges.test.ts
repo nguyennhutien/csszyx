@@ -21,6 +21,7 @@ type Ctx = { warn: (m: string) => void; error: (m: string) => void };
 
 interface Booted {
     root: string;
+    ctx: Ctx;
     transform: (code: string, id: string) => Promise<unknown>;
 }
 
@@ -47,6 +48,7 @@ async function boot(options = {}, files: Record<string, string> = {}): Promise<B
     await invoke('configResolved', { root, command: 'build' });
     return {
         root,
+        ctx,
         transform: (code: string, id: string) => invoke('transform', code, id),
     };
 }
@@ -79,6 +81,29 @@ describe('transform hook branch edges', () => {
         )) as { code: string } | null;
         expect(result).not.toBeNull();
         expect(result?.code).toContain('p-4');
+    });
+
+    it.each([
+        ['Vue SFC', '<template><div :sz="{ p: size }" /></template>', 'src/Comp.vue', '1:21'],
+        ['Svelte component', '<div sz={styles}></div>', 'src/Comp.svelte', '1:10'],
+    ])('stops the build on a %s sz value only the runtime knows', async (_n, code, file, at) => {
+        const { root, transform } = await boot();
+        const id = path.join(root, file);
+        await expect(transform(code, id)).rejects.toThrow(
+            `[csszyx] ${id}:${at}: this sz value is only known at runtime`,
+        );
+    });
+
+    it('passes a template sz warning to the bundler', async () => {
+        const { root, ctx, transform } = await boot();
+        const warnings: string[] = [];
+        ctx.warn = message => warnings.push(message);
+        const result = (await transform(
+            '<div sz={{ foo: 4 }}></div>',
+            path.join(root, 'src/Comp.svelte'),
+        )) as { code: string } | null;
+        expect(result?.code).toContain('class="foo-4"');
+        expect(warnings.some(w => w.includes('Unknown property "foo"'))).toBe(true);
     });
 
     it('injects a @source directive into a scoped tailwind entry once a class is discovered', async () => {

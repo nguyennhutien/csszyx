@@ -19,6 +19,7 @@
  */
 
 import { type SourceTransformResult, transformSource } from '@csszyx/compiler';
+import { findEmittedClassName } from '@csszyx/compiler/internal';
 
 import { printError, printInfo, printWarn } from '../utils/terminal-ui.js';
 
@@ -62,9 +63,7 @@ function withoutLocation(message: string): string {
  *          the object to the runtime.
  */
 function emittedClassName(code: string): string | null {
-    if (code.includes('className={undefined}')) return '';
-    const literal = /className="([^"]*)"/.exec(code);
-    return literal ? literal[1] : null;
+    return findEmittedClassName(code)?.className ?? null;
 }
 
 /**

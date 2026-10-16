@@ -266,10 +266,12 @@ A prefix on the import line needs no csszyx setting:
 
 csszyx reads it from the stylesheet and writes it before every class it emits,
 so `sz={{ p: 4, hover: { bg: 'red-500' } }}` becomes
-`tw:p-4 tw:hover:bg-red-500`. That holds on the bundler plugins, the Next.js
-Turbopack loader, `csszyx next prebuild`, the Jest transformer, `csszyx check`,
-and objects lowered at runtime in an app one of those builds. The CDN build
-(`csszyx/browser`) does not read a prefix yet.
+`tw:p-4 tw:hover:bg-red-500`. That holds on the bundler plugins (Vue and Svelte
+templates included), the Next.js Turbopack loader, `csszyx next prebuild`, the
+Jest transformer, `csszyx check`, and objects lowered at runtime in an app one of
+those builds. The Vue and Svelte adapters used on their own, without the csszyx
+bundler plugin, read no stylesheet: pass the prefix as their `classPrefix`
+option. The CDN build (`csszyx/browser`) does not read a prefix yet.
 
 The build stops when the stylesheets it finds set different prefixes, or when a
 stylesheet that imports Tailwind does not compile, because either way some of

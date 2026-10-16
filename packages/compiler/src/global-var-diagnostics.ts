@@ -1,4 +1,6 @@
-import { isRustTransformAvailable, scanGlobalVarUsagesRust } from './transform-rust.js';
+import { chooseEngine } from './engine-choice.js';
+import type { ParserMode } from './parser-mode.js';
+import { scanGlobalVarUsagesRust } from './transform-rust.js';
 import { scanGlobalVarUsagesWasm } from './transform-wasm.js';
 
 /**
@@ -39,6 +41,11 @@ export interface GlobalVarUsageDiagnostic {
 export interface ScanGlobalVarUsagesOptions {
     /** Candidate tokens to report. Undefined reports every concrete token. */
     tokens?: Iterable<string>;
+    /**
+     * The engine artifact, as `build.parser` names it; the transform's own
+     * choice when omitted.
+     */
+    parser?: ParserMode;
 }
 
 /** Which usages a batch scan reports, as it crosses into the engine. */
@@ -57,7 +64,7 @@ export interface GlobalVarSourceFile {
 
 /**
  * Scans JS/TS/JSX/TSX source for global custom-property usages csszyx does not
- * currently rewrite, through whichever engine artifact this host can run.
+ * currently rewrite, on the engine artifact `options.parser` picks.
  *
  * A file the engine cannot parse answers one `parse-error` record at its first
  * syntax error: none of its usages could be checked.
@@ -72,7 +79,8 @@ export function scanGlobalVarUsages(
     filename = 'file.tsx',
     options: ScanGlobalVarUsagesOptions = {},
 ): GlobalVarUsageDiagnostic[] {
-    const scan = isRustTransformAvailable() ? scanGlobalVarUsagesRust : scanGlobalVarUsagesWasm;
+    const scan =
+        chooseEngine(options.parser) === 'rust' ? scanGlobalVarUsagesRust : scanGlobalVarUsagesWasm;
     const query: GlobalVarUsageQuery =
         options.tokens === undefined ? {} : { tokens: [...options.tokens] };
     // One file in, one list out: flattening the batch answer is that list.

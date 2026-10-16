@@ -2,21 +2,30 @@
  * @csszyx/svelte-adapter - Svelte preprocessor for csszyx.
  *
  * Transforms `sz` props in Svelte templates into Tailwind CSS class strings.
+ * A template has no csszyx runtime, so a value lowers only when the engine
+ * resolves all of it at build time; any other value is an error placed in the
+ * `.svelte` file, and its attribute is left as written.
  *
  * @module @csszyx/svelte-adapter
  */
 
+import { rewriteStartTags } from '@csszyx/compiler';
 import {
-    parseStaticObjectLiteral,
-    rewriteStartTags,
-    type SzObject,
-    transform,
-} from '@csszyx/compiler';
+    reportTemplateSzDiagnostics,
+    rewriteTemplateSz,
+    type TemplateSzDiagnostic,
+    type TemplateSzOptions,
+    transformTemplateFile,
+} from '@csszyx/compiler/internal';
+import type { PreprocessorGroup } from 'svelte/compiler';
+import type { Plugin } from 'vite';
+
+import { findSzAttributes } from './attributes.js';
 
 /**
  * Preprocessor options.
  */
-export interface SvelteAdapterOptions {
+export interface SvelteAdapterOptions extends TemplateSzOptions {
     /**
      * Enable verbose logging for debugging.
      */
@@ -35,177 +44,46 @@ export interface PreprocessorResult {
      * Optional source map.
      */
     map?: object | null;
+    /**
+     * Errors for values that got no class, and the engine's warnings, placed
+     * in the source. An error's attribute is left as written.
+     */
+    diagnostics: TemplateSzDiagnostic[];
 }
 
 /**
- * Parse a recursively static JavaScript object literal.
- * @param source - Object literal source.
- * @returns Parsed sz object, or null for dynamic/invalid syntax.
- */
-export function parseObjectLiteral(source: string): SzObject | null {
-    return parseStaticObjectLiteral(source);
-}
-
-/**
- * Transform sz props in a Svelte template string.
+ * Transform sz props in a Svelte component's markup.
  *
  * Supports:
- * - Static: sz="{{ p: 4 }}" or sz="{ p: 4 }"
- * - Shorthand bind: sz={expression} (only static objects supported)
+ * - Bound: sz={expression} (any expression the engine resolves at build time)
+ * - Quoted: sz="{{ p: 4 }}" or sz="{ p: 4 }"
  *
- * @param {string} content - Template content
+ * `<script>` and `<style>` blocks are not read. Diagnostics are placed in
+ * `content` itself.
+ *
+ * @param {string} content - Component source
  * @param {SvelteAdapterOptions} options - Options
- * @returns {{ code: string; count: number }} Transformation result
+ * @returns The transformed source, the number of sz props transformed, and the diagnostics
  */
 export function transformMarkup(
     content: string,
     options: SvelteAdapterOptions = {},
-): { code: string; count: number } {
-    let result = '';
-    let count = 0;
-    let cursor = 0;
-
-    while (cursor < content.length) {
-        const attributeStart = findSzAttribute(content, cursor);
-        if (attributeStart === -1) {
-            result += content.slice(cursor);
-            break;
-        }
-
-        result += content.slice(cursor, attributeStart);
-        const match = readSzAttribute(content, attributeStart);
-        if (!match) {
-            result += content.slice(attributeStart, attributeStart + 3);
-            cursor = attributeStart + 3;
-            continue;
-        }
-
-        const szObj = parseObjectLiteral(match.objectSource);
-        if (!szObj) {
-            if (options.debug) {
-                console.warn(`[csszyx/svelte] Failed to parse sz object: ${match.objectSource}`);
-            }
-            result += content.slice(attributeStart, match.end);
-        } else {
-            const className = transform(szObj).className;
-            count += 1;
-            if (options.debug) {
-                console.log(`[csszyx/svelte] Transformed: ${match.objectSource} -> "${className}"`);
-            }
-            result += `class="${className}"`;
-        }
-        cursor = match.end;
+): { code: string; count: number; diagnostics: TemplateSzDiagnostic[] } {
+    const found = findSzAttributes(content);
+    const { code, count, classNames, diagnostics } = rewriteTemplateSz(
+        content,
+        { from: 0, to: content.length },
+        found,
+        options,
+    );
+    if (options.debug) {
+        found.forEach((attribute, index) => {
+            console.log(
+                `[csszyx/svelte] ${attribute.value.source} -> ${JSON.stringify(classNames[index])}`,
+            );
+        });
     }
-
-    return { code: result, count };
-}
-
-/**
- * Parsed bounds and object source for a static `sz` attribute.
- */
-interface SzAttributeMatch {
-    end: number;
-    objectSource: string;
-}
-
-/**
- * Finds the next standalone `sz=` attribute without regex backtracking.
- *
- * @param content Svelte markup source.
- * @param from Offset at which scanning begins.
- * @returns Attribute start offset, or -1 when absent.
- */
-function findSzAttribute(content: string, from: number): number {
-    let index = content.indexOf('sz=', from);
-    while (index !== -1) {
-        const before = index === 0 ? '<' : content.charAt(index - 1);
-        if (
-            before === '<' ||
-            before === ' ' ||
-            before === '\t' ||
-            before === '\n' ||
-            before === '\r'
-        ) {
-            return index;
-        }
-        index = content.indexOf('sz=', index + 3);
-    }
-    return -1;
-}
-
-/**
- * Reads a quoted or bound static object from an `sz=` attribute.
- *
- * @param content Svelte markup source.
- * @param start Offset of the `sz=` token.
- * @returns Parsed attribute bounds, or null when unsupported or malformed.
- */
-function readSzAttribute(content: string, start: number): SzAttributeMatch | null {
-    const valueStart = start + 3;
-    const opener = content.charAt(valueStart);
-    if (opener === '"' || opener === "'") {
-        const endQuote = content.indexOf(opener, valueStart + 1);
-        if (endQuote === -1) {
-            return null;
-        }
-        let objectSource = content.slice(valueStart + 1, endQuote);
-        if (objectSource.startsWith('{{') && objectSource.endsWith('}}')) {
-            objectSource = objectSource.slice(1, -1);
-        }
-        if (!objectSource.startsWith('{') || !objectSource.endsWith('}')) {
-            return null;
-        }
-        return { end: endQuote + 1, objectSource };
-    }
-
-    if (opener !== '{' || content.charAt(valueStart + 1) !== '{') {
-        return null;
-    }
-    const end = findBalancedBraceEnd(content, valueStart);
-    if (end === -1) {
-        return null;
-    }
-    return {
-        end: end + 1,
-        objectSource: content.slice(valueStart + 1, end),
-    };
-}
-
-/**
- * Finds the closing brace for a JavaScript expression in linear time.
- *
- * @param content Svelte markup source.
- * @param start Offset of the opening expression brace.
- * @returns Closing brace offset, or -1 when unbalanced.
- */
-function findBalancedBraceEnd(content: string, start: number): number {
-    let depth = 0;
-    let quote = '';
-    let escaped = false;
-    for (let index = start; index < content.length; index += 1) {
-        const char = content.charAt(index);
-        if (quote) {
-            if (escaped) {
-                escaped = false;
-            } else if (char === '\\') {
-                escaped = true;
-            } else if (char === quote) {
-                quote = '';
-            }
-            continue;
-        }
-        if (char === '"' || char === "'" || char === '`') {
-            quote = char;
-        } else if (char === '{') {
-            depth += 1;
-        } else if (char === '}') {
-            depth -= 1;
-            if (depth === 0) {
-                return index;
-            }
-        }
-    }
-    return -1;
+    return { code, count, diagnostics };
 }
 
 /**
@@ -306,10 +184,24 @@ export function mergeClassAttributes(content: string): string {
 }
 
 /**
+ * Where the preprocessor reports: warnings on the console, and every error at
+ * once as the exception Svelte reports for the file.
+ */
+const PREPROCESSOR_REPORTER = {
+    warn: (message: string): void => console.warn(message),
+    error: (message: string): never => {
+        throw new Error(message);
+    },
+};
+
+/**
  * Create a Svelte preprocessor for csszyx.
  *
+ * An `sz` value that needs the runtime makes the preprocessor throw, naming
+ * the file and position; the engine's warnings are printed.
+ *
  * @param {SvelteAdapterOptions} options - Preprocessor options
- * @returns {object} Svelte preprocessor
+ * @returns {PreprocessorGroup} Svelte preprocessor group
  *
  * @example
  * ```typescript
@@ -322,15 +214,6 @@ export function mergeClassAttributes(content: string): string {
  *     ],
  * };
  * ```
- */
-import type { PreprocessorGroup } from 'svelte/compiler';
-import type { Plugin } from 'vite';
-
-/**
- * Create a Svelte preprocessor for csszyx.
- *
- * @param {SvelteAdapterOptions} options - Preprocessor options
- * @returns {PreprocessorGroup} Svelte preprocessor group
  */
 export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGroup {
     return {
@@ -346,22 +229,14 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
                 console.log(`[csszyx/svelte] Processing: ${filename}`);
             }
 
-            // Transform sz props
-            const transformResult = transformMarkup(content, options);
-
-            if (transformResult.count === 0) {
+            const result = preprocess(content, { ...options, filename });
+            reportTemplateSzDiagnostics(PREPROCESSOR_REPORTER, result.diagnostics);
+            if (result.code === content) {
                 return;
             }
 
-            // Merge any duplicate class attributes
-            const mergedContent = mergeClassAttributes(transformResult.code);
-
-            if (options.debug) {
-                console.log(`[csszyx/svelte] Transformed ${transformResult.count} sz props`);
-            }
-
             return {
-                code: mergedContent,
+                code: result.code,
                 map: undefined, // Source-map generation is not implemented yet.
             };
         },
@@ -373,6 +248,8 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
  *
  * Note: In most cases, you should use the preprocessor directly in svelte.config.js.
  * This Vite plugin is provided for cases where you need to integrate at the Vite level.
+ * An `sz` value that needs the runtime fails the build with its file and
+ * position; the engine's warnings reach the bundler as warnings.
  *
  * @param {SvelteAdapterOptions} options - Plugin options
  * @returns {Plugin} Vite plugin
@@ -398,30 +275,9 @@ export function vitePlugin(options: SvelteAdapterOptions = {}): Plugin {
         enforce: 'pre' as const,
 
         transform(code: string, id: string) {
-            // Only process Svelte files
-            if (!id.endsWith('.svelte')) {
-                return null;
-            }
-
-            // Skip if no sz props
-            if (!code.includes('sz=')) {
-                return null;
-            }
-
-            // Transform sz props
-            const transformResult = transformMarkup(code, options);
-
-            if (transformResult.count === 0) {
-                return null;
-            }
-
-            // Merge any duplicate class attributes
-            const mergedContent = mergeClassAttributes(transformResult.code);
-
-            return {
-                code: mergedContent,
-                map: undefined, // Source-map generation is not implemented yet.
-            };
+            return transformTemplateFile(this, code, id, '.svelte', (source, filename) =>
+                preprocess(source, { ...options, filename }),
+            );
         },
     };
 }
@@ -437,17 +293,13 @@ export function preprocess(source: string, options: SvelteAdapterOptions = {}): 
     const transformResult = transformMarkup(source, options);
 
     if (transformResult.count === 0) {
-        return {
-            code: source,
-            map: undefined,
-        };
+        return { code: source, map: undefined, diagnostics: transformResult.diagnostics };
     }
 
-    const mergedContent = mergeClassAttributes(transformResult.code);
-
     return {
-        code: mergedContent,
+        code: mergeClassAttributes(transformResult.code),
         map: undefined,
+        diagnostics: transformResult.diagnostics,
     };
 }
 

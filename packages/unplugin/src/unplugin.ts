@@ -18,9 +18,10 @@ import {
     transformRustBatch,
     transformWasm,
 } from '@csszyx/compiler';
+import { reportTemplateSzDiagnostics, resolveParserMode } from '@csszyx/compiler/internal';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
-import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
+import { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
     createGitignoreQuery,
     createWalkRootRelative,
@@ -39,7 +40,7 @@ import {
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
 } from '@csszyx/types';
-import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
+import { preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
@@ -149,7 +150,6 @@ import {
     registerRuntimeClassPrefix,
     runtimeHelperGroupsFromUsage,
 } from './next-runtime-injection.js';
-import { resolveParserMode } from './parser-mode.js';
 import { samePath } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import { isReadableProviderFile } from './provider-file.js';
@@ -3682,6 +3682,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 aliasPrefix: globalVarAliasPrefix,
                 reserved: globalVarMangleConfig.reserved,
                 cacheDir: resolveGlobalVarValidationCacheDir(),
+                parser: parserMode,
             }),
         );
         assertNoGlobalVarAliasValidationErrors(result);
@@ -6819,15 +6820,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         warn: (message: string) => void,
         watch?: (file: string) => void,
     ): PreTransformOutput {
-        if (id.endsWith('.vue')) {
-            const result = vuePreprocess(code, options as VueAdapterOptions);
-            return { ...unchangedPreTransform(result.code), transformed: result.transformed };
-        }
-        if (id.endsWith('.svelte')) {
-            const result = sveltePreprocess(code, options as SvelteAdapterOptions);
-            return result
-                ? { ...unchangedPreTransform(result.code), transformed: true }
-                : unchangedPreTransform(code);
+        if (id.endsWith('.vue') || id.endsWith('.svelte')) {
+            // A template has no csszyx runtime: a value the engine cannot
+            // resolve at build time is an error, and the build stops on it.
+            const adapterOptions = {
+                filename: id,
+                parser: parserMode,
+                classPrefix: createCompilerOptions().classPrefix,
+            };
+            const result = id.endsWith('.vue')
+                ? vuePreprocess(code, adapterOptions)
+                : sveltePreprocess(code, adapterOptions);
+            reportTemplateSzDiagnostics(
+                {
+                    warn,
+                    error: message => {
+                        throw new Error(message);
+                    },
+                },
+                result.diagnostics,
+            );
+            return { ...unchangedPreTransform(result.code), transformed: result.code !== code };
         }
 
         const transformStarted = performance.now();

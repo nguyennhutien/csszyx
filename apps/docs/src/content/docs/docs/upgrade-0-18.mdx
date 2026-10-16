@@ -61,6 +61,8 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` errors](#csszyxcompiler-renames-one-error-and-drops-another) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
+| [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
+| [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
 | [A template string without `${}`](#a-template-string-without-a-substitution-is-static) | `` { p: `4` } `` emits `p-4` | your snapshots | nothing |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
@@ -86,6 +88,10 @@ styled nothing. 0.18 writes the prefix before every class:
 // 0.17 → className="p-4"
 // 0.18 → className="tw:p-4"
 ```
+
+Vue and Svelte templates get the same prefix through the csszyx bundler plugin.
+The adapters used on their own read no stylesheet; pass `classPrefix: 'tw'` to
+them.
 
 **You are affected** when a stylesheet your build reads sets `prefix(...)`, or when
 your project holds more than one stylesheet that imports Tailwind: a test fixture,
@@ -563,6 +569,76 @@ An ES module `import` is unchanged.
 
 **What you see.** A CommonJS config that calls the result as a function fails with
 a `TypeError` when it loads.
+
+## Vue and Svelte templates take static sz values only
+
+A Vue or Svelte template has no csszyx runtime: nothing in it runs `_sz()`,
+sets a `--_sz-*` style variable or picks a conditional's branch, the way the
+React build does. The adapters now lower `sz` with the build's engine, on the
+native or the wasm artifact `build.parser` picks, and write a class only for a
+value the engine resolves completely. In 0.17 they read the value with a
+second, narrower parser, left a value it refused as written without a word, and
+wrote `class=""` for an array value.
+
+These values are static and get their class:
+
+- strings, numbers (`-2` and `+4` included) and booleans;
+- nested variant objects, `{ hover: { bg: 'blue-700' } }`;
+- template strings without a `${}` substitution, `` { p: `4` } ``;
+- spreads of literal objects, `{ ...{ p: 4 }, m: 2 }`;
+- arrays of such objects, `[{ p: 4 }, { m: 2 }]`;
+- `null` and `undefined`, which leave the key unset.
+
+Every other value is an error, and the build stops on it: a name, even a
+`const` from `<script setup>` or the component's `<script>`, a prop, a
+conditional, a call, an array value such as `{ p: [4] }` and a template string
+with `${}`. The message names the file and the position in it:
+
+```text
+[csszyx] src/Card.vue:3:15: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it
+help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime
+note: the attribute is left as written; no class is generated for it
+```
+
+The other `sz` attributes of the file still get their classes, and the class
+the adapter writes is escaped for the attribute.
+
+**The edit.** Write the value as a literal, or bind `class` or `style` yourself
+for a value that changes at runtime:
+
+```vue
+<!-- before -->
+<div :sz="{ p: big ? 8 : 4, w: size }" />
+
+<!-- after -->
+<div :class="big ? 'p-8' : 'p-4'" :style="{ width: `${size}px` }" />
+```
+
+In Svelte, the same edit is `class={big ? 'p-8' : 'p-4'} style:width="{size}px"`.
+
+**On a component**, `sz` becomes a `class` attribute, as on an HTML tag, the way
+React turns it into a `className` prop. Vue passes that `class` to the
+component's root element; a Svelte component takes it as its `class` prop and
+puts it on an element. The same static-only rule applies there.
+
+**You are affected** when a component from a library has a prop of its own named
+`sz`, a size say. 0.17 left `<Avatar :sz="size" />` as written; 0.18 reads it as
+csszyx `sz` and stops the build. Pass the prop in a way the adapters do not read:
+
+```vue
+<!-- Vue -->
+<Avatar v-bind="{ sz: size }" />
+```
+
+```svelte
+<!-- Svelte -->
+<Avatar {...{ sz: size }} />
+```
+
+`parseObjectLiteral` is no longer exported from `@csszyx/vue-adapter` or
+`@csszyx/svelte-adapter`. `preprocess()` from either adapter returns the errors
+and warnings in `result.diagnostics`, each with its `line`, `column` and full
+`message`; pass `filename` in the options to put the file name in the message.
 
 ## A template string without a substitution is static
 

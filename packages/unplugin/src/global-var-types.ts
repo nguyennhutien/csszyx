@@ -1,4 +1,5 @@
 import type { GlobalVarUsageDiagnostic } from '@csszyx/compiler';
+import type { ParserMode } from '@csszyx/compiler/internal';
 
 /** Source location for one CSS custom-property occurrence. */
 export interface CssVarLocation {
@@ -172,6 +173,8 @@ export interface ValidateGlobalVarAliasInputsOptions {
     reserved?: string[];
     /** Optional global-var scan cache directory. */
     cacheDir?: string;
+    /** The engine artifact the build runs, as `build.parser` names it. */
+    parser?: ParserMode;
 }
 
 /** Input for building validation options from bundler output state. */
@@ -192,6 +195,8 @@ export interface CreateGlobalVarAliasValidationOptionsInput {
     reserved?: string[];
     /** Optional global-var scan cache directory. */
     cacheDir?: string;
+    /** The engine artifact the build runs, as `build.parser` names it. */
+    parser?: ParserMode;
 }
 
 /** Output from the global-variable scanner/planner/diagnostics integration. */
