@@ -55,13 +55,6 @@ export {
     type ModuleLinksQuery,
     scanModuleLinks,
 } from './module-links.js';
-export {
-    isParserMode,
-    type ParserMode,
-    type ResolveParserModeInput,
-    type ResolveParserModeResult,
-    resolveParserMode,
-} from './parser-mode.js';
 // Export property type system (for CSS Variable Auto-Compile)
 export {
     COLOR_PROPERTIES,
@@ -96,18 +89,6 @@ export {
 // Export the diagnostic classifiers so the bundler and the CLI route
 // diagnostics through the package that renders their wording.
 export { nearestName, suggestSzKey, szKeySuggestionFor } from './sz-key-suggestion.js';
-export {
-    reportTemplateSzDiagnostics,
-    rewriteTemplateSz,
-    type TemplateSzAttribute,
-    type TemplateSzDiagnostic,
-    type TemplateSzLowering,
-    type TemplateSzOptions,
-    type TemplateSzReporter,
-    type TemplateSzRewrite,
-    type TemplateSzValue,
-    transformTemplateFile,
-} from './template-sz.js';
 // Export transform-core constants needed by MCP and CLI
 export {
     BOOLEAN_SHORTHANDS,

@@ -41,6 +41,13 @@ describe('transformMarkup parser edges', () => {
     });
 
     it.each([
+        ['quoted', 'sz="{ p: 4 '],
+        ['bound', 'sz={ p: 4 '],
+    ])('ignores an unterminated %s value outside any tag', (_name, source) => {
+        expect(transformMarkup(source)).toEqual({ code: source, count: 0, diagnostics: [] });
+    });
+
+    it.each([
         ['double braces', '<div sz="{{ p: 4 }}" />'],
         ['single braces', `<div sz='{ p: 4 }' />`],
     ])('reads a quoted object in %s', (_name, source) => {

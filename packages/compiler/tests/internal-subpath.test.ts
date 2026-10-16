@@ -10,8 +10,13 @@ import * as root from '../src/index.js';
 import * as internal from '../src/internal.js';
 
 const INTERNAL_ONLY = [
+    'braceGroupEnd',
     'findEmittedClassName',
+    'isOpeningTag',
     'isParserMode',
+    'markupResume',
+    'rawTextEnd',
+    'readMarkup',
     'reportTemplateSzDiagnostics',
     'resolveParserMode',
     'rewriteTemplateSz',

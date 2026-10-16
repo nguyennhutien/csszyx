@@ -1,6 +1,6 @@
 /**
  * What the csszyx packages share with one another and nobody else: the Vue
- * and Svelte adapters lower template `sz` through it, and the
+ * and Svelte adapters read markup and lower template `sz` through it, and the
  * CLI and the build plugin read the engine's output and choose an artifact
  * with it. Its shape follows the adapters and may change in any release.
  *
@@ -9,6 +9,17 @@
  */
 
 export { type EmittedClassName, findEmittedClassName } from './emitted-class-name.js';
+export {
+    braceGroupEnd,
+    type ClosedMarkup,
+    isOpeningTag,
+    type Markup,
+    type MarkupSyntax,
+    type MarkupTag,
+    markupResume,
+    rawTextEnd,
+    readMarkup,
+} from './markup-tags.js';
 export {
     isParserMode,
     type ParserMode,
