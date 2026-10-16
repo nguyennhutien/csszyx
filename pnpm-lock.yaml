@@ -447,9 +447,6 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
-      '@csszyx/core':
-        specifier: workspace:*
-        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

@@ -4,7 +4,7 @@ export default defineBuild({
     ...base,
     entry: {
         // Main runtime; dependencies stay external (the consumer's bundler
-        // resolves @csszyx/compiler and @csszyx/core).
+        // resolves the browser-safe @csszyx/compiler subpaths it imports).
         index: 'src/index.ts',
         // Slim runtime.
         lite: 'src/lite.ts',
