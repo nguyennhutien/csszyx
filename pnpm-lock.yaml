@@ -191,9 +191,6 @@ importers:
       '@csszyx/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@csszyx/types':
-        specifier: workspace:*
-        version: link:../types
       '@csszyx/unplugin':
         specifier: workspace:*
         version: link:../unplugin
@@ -228,6 +225,9 @@ importers:
       '@csszyx/tailwind-oracle':
         specifier: workspace:*
         version: link:../tailwind-oracle
+      '@csszyx/types':
+        specifier: workspace:*
+        version: link:../types
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
