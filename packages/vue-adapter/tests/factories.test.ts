@@ -89,8 +89,9 @@ describe('transformTemplate and extract edges', () => {
     });
 
     it('ignores a value whose quote closes after the template ends', () => {
-        const template = extractTemplate('<template><div :sz="{ p: 4 }</template>"');
-        expect(template).not.toBeNull();
+        // The quoted value holds the `</template>`, as Vue reads it, so the
+        // root template never closes.
+        expect(extractTemplate('<template><div :sz="{ p: 4 }</template>"')).toBeNull();
         const result = preprocess('<template><div :sz="{ p: 4 }</template>"');
         expect(result).toEqual({
             code: '<template><div :sz="{ p: 4 }</template>"',

@@ -20,6 +20,7 @@ import {
 import type { Plugin } from 'vite';
 
 import { decodeCharacterReferences } from './character-references.js';
+import { findRootTemplate } from './sfc-template.js';
 
 /**
  * Preprocessor options.
@@ -55,7 +56,9 @@ export interface PreprocessResult {
 }
 
 /**
- * Extract the template section from a Vue SFC.
+ * Extract the root template section from a Vue SFC: up to the `</template>`
+ * that closes it, past any nested `<template>` and any `</template>` written
+ * in a comment, an attribute value, an interpolation or a `<script>` block.
  *
  * @param {string} source - Vue SFC source code
  * @returns {{ content: string; start: number; end: number } | null} Template info or null
@@ -65,36 +68,8 @@ export function extractTemplate(source: string): {
     start: number;
     end: number;
 } | null {
-    // indexOf-based scan avoids the polynomial backtracking that a
-    // <template(\s[^>]*)?>...</template> regex would suffer on inputs
-    // with repeated "<template " prefixes.
-    const lowered = source.toLowerCase();
-    let openStart = -1;
-    let openEnd = -1;
-    let i = 0;
-    while (i < lowered.length) {
-        const candidate = lowered.indexOf('<template', i);
-        if (candidate === -1) return null;
-        const after = lowered.charAt(candidate + '<template'.length);
-        if (after === '>' || after === ' ' || after === '\t' || after === '\n' || after === '\r') {
-            const tagClose = lowered.indexOf('>', candidate);
-            if (tagClose === -1) return null;
-            openStart = candidate;
-            openEnd = tagClose + 1;
-            break;
-        }
-        i = candidate + 1;
-    }
-    if (openStart === -1) return null;
-
-    const closeStart = lowered.indexOf('</template>', openEnd);
-    if (closeStart === -1) return null;
-
-    return {
-        content: source.slice(openEnd, closeStart),
-        start: openEnd,
-        end: closeStart,
-    };
+    const bounds = findRootTemplate(source);
+    return bounds && { content: source.slice(bounds.start, bounds.end), ...bounds };
 }
 
 /**
