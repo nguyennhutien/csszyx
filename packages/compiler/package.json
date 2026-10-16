@@ -128,11 +128,11 @@
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
+    "csstype": "^3.2.3",
     "magic-string": "^0.30.21"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
-    "csstype": "^3.2.3",
     "oxc-parser": "0.150.0",
     "tsdown": "0.23.0",
     "typescript": "^6.0.3",

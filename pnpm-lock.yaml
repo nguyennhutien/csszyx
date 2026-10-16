@@ -255,6 +255,9 @@ importers:
       '@csszyx/core':
         specifier: workspace:*
         version: link:../core
+      csstype:
+        specifier: ^3.2.3
+        version: 3.2.3
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21
@@ -262,9 +265,6 @@ importers:
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
-      csstype:
-        specifier: ^3.2.3
-        version: 3.2.3
       oxc-parser:
         specifier: 0.150.0
         version: 0.150.0

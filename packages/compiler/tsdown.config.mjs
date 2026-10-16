@@ -22,4 +22,8 @@ export default defineBuild({
     },
     format: ['esm', 'cjs'],
     platform: 'neutral',
+    // `csstype` is a dependency, imported by the declarations: inlined, it was
+    // most of 1.9 MB of `.d.ts`, which a React or Vue app with TypeScript
+    // already installs once for `@types/react` or `@vue/runtime-dom`.
+    deps: { neverBundle: ['csstype'] },
 });
