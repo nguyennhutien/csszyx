@@ -9,6 +9,7 @@
       "@csszyx/compiler": ["./packages/compiler/src"],
       "@csszyx/compiler/migrate": ["./packages/compiler/src/migrate-rust.ts"],
       "@csszyx/compiler/internal": ["./packages/compiler/src/internal.ts"],
+      "@csszyx/compiler/engine": ["./packages/compiler/src/engine.ts"],
       "@csszyx/compiler/browser": ["./packages/compiler/src/transform-core.ts"],
       "@csszyx/compiler/color-var": ["./packages/compiler/src/color-var.ts"],
       "@csszyx/types": ["./packages/types/src"],

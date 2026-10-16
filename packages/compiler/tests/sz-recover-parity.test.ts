@@ -17,7 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { transformSource, transformWasm } from '../src/index.js';
+import { transformSource, transformWasm } from '../src/engine.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 const NON_LITERAL =

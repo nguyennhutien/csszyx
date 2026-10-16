@@ -7,7 +7,7 @@ import {
     transformRust,
     transformRustBatch,
     transformWasm,
-} from '../src/index.js';
+} from '../src/engine.js';
 
 describe('isRustTransformAvailable — non-throwing native probe', () => {
     it('returns a boolean and never throws (the whole point vs ensureRustTransformAvailable)', () => {

@@ -188,6 +188,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/core':
+        specifier: workspace:*
+        version: link:../core
       '@csszyx/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -252,9 +255,6 @@ importers:
 
   packages/compiler:
     dependencies:
-      '@csszyx/core':
-        specifier: workspace:*
-        version: link:../core
       csstype:
         specifier: ^3.2.3
         version: 3.2.3
@@ -262,6 +262,9 @@ importers:
         specifier: ^0.30.21
         version: 0.30.21
     devDependencies:
+      '@csszyx/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
@@ -419,6 +422,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/core':
+        specifier: workspace:*
+        version: link:../core
       '@csszyx/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -478,6 +484,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -700,6 +709,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

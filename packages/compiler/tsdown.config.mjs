@@ -25,6 +25,8 @@ export default defineBuild({
         // runtime's `szv` merge, without the transform's property tables.
         'keyword-families': 'src/keyword-families.ts',
         'migrate-rust': 'src/migrate-rust.ts',
+        // Every function that calls the engine; the root never loads it.
+        engine: 'src/engine.ts',
         // What the adapters, the CLI and the build plugin share; not a stable API.
         internal: 'src/internal.ts',
     },

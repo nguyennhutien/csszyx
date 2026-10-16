@@ -1,5 +1,3 @@
-import { CsszyxCompiler } from './compiler.js';
-
 /**
  * Valid recovery modes for szRecover attribute.
  */
@@ -79,7 +77,42 @@ export function isValidRecoveryMode(value: unknown): value is RecoveryMode {
  * @returns {string} The generated token (Base62 format)
  */
 export function generateRecoveryToken(metadata: TokenMetadata): string {
-    return CsszyxCompiler.getInstance().generateRecoveryToken(metadata);
+    // A deterministic hash: the token only has to be stable for its input.
+    const key = `${metadata.component}:${metadata.filePath}:${metadata.line}:${metadata.column}:${metadata.mode}:${metadata.buildId}`;
+    let hash = 0;
+    for (const character of key) {
+        // A string iterator never yields an empty string, so there is a code point.
+        hash = foldRecoveryCodePoint(hash, character.codePointAt(0) as number);
+    }
+    return Math.abs(hash).toString(16).padStart(12, '0').slice(0, 12);
+}
+
+/**
+ * Fold one UTF-16 code unit into the signed-int32 recovery hash.
+ *
+ * @param hash Current signed-int32 hash.
+ * @param codeUnit UTF-16 code unit to append.
+ * @returns Updated signed-int32 hash.
+ */
+function foldRecoveryHash(hash: number, codeUnit: number): number {
+    return Math.imul(Math.imul(hash, 31) + codeUnit, 1);
+}
+
+/**
+ * Fold a Unicode code point as the one or two UTF-16 units the hash reads.
+ *
+ * @param hash Current signed-int32 hash.
+ * @param codePoint Unicode code point to append.
+ * @returns Updated signed-int32 hash.
+ */
+function foldRecoveryCodePoint(hash: number, codePoint: number): number {
+    if (codePoint <= 0xffff) {
+        return foldRecoveryHash(hash, codePoint);
+    }
+    const supplementary = codePoint - 0x10000;
+    const highSurrogate = Math.floor(supplementary / 0x400) + 0xd800;
+    const lowSurrogate = (supplementary % 0x400) + 0xdc00;
+    return foldRecoveryHash(foldRecoveryHash(hash, highSurrogate), lowSurrogate);
 }
 
 /**

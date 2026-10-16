@@ -1,4 +1,6 @@
-import { isRustTransformAvailable, scanModuleLinksRust } from './transform-rust.js';
+import { chooseEngine } from './engine-choice.js';
+import type { ParserMode } from './parser-mode.js';
+import { scanModuleLinksRust } from './transform-rust.js';
 import { scanModuleLinksWasm } from './transform-wasm.js';
 
 /**
@@ -66,17 +68,20 @@ export interface ModuleLinksQuery {
 }
 
 /**
- * Read module links through whichever engine artifact this host can run.
+ * Read module links on the engine artifact the build runs on.
  *
  * @param files - Modules to read.
  * @param query - Which optional answers to compute.
+ * @param parser - The artifact `build.parser` names, if any; `CSSZYX_PARSER`
+ *   overrides it, as it does for the transform.
  * @returns One answer per module, in input order.
  */
 export function scanModuleLinks(
     files: readonly ModuleLinksFile[],
     query: ModuleLinksQuery = {},
+    parser?: ParserMode,
 ): ModuleLinks[] {
-    return isRustTransformAvailable()
+    return chooseEngine(parser) === 'rust'
         ? scanModuleLinksRust(files, query)
         : scanModuleLinksWasm(files, query);
 }

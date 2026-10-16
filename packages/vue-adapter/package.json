@@ -35,7 +35,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/compiler": "workspace:*"
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/core": "workspace:*"
   },
   "peerDependencies": {
     "vite": ">=5.0.0",

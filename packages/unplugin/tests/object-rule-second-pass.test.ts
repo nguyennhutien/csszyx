@@ -9,14 +9,14 @@
  */
 import { join } from 'node:path';
 
-import * as compiler from '@csszyx/compiler';
+import * as compiler from '@csszyx/compiler/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
 import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         transformRust: vi.fn(actual.transformRust),

@@ -17,8 +17,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         transformRustBatch: () => {

@@ -11,7 +11,7 @@
  * runtime helpers survived, so the shape can be checked before it ships.
  */
 
-import { transformSource } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { z } from 'zod';
 
 export const compilePreviewSchema = z.object({

@@ -10,8 +10,8 @@ const compilerMock = vi.hoisted(() => ({
     transformRust: vi.fn(),
 }));
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         ensureRustTransformAvailable: vi.fn(),
@@ -125,7 +125,10 @@ describe('rust prescan batching', () => {
         compilerMock.transformRustBatch.mockImplementation(() => {
             throw new Error('batch unavailable');
         });
-        const real = await vi.importActual<typeof import('@csszyx/compiler')>('@csszyx/compiler');
+        const real =
+            await vi.importActual<typeof import('@csszyx/compiler/engine')>(
+                '@csszyx/compiler/engine',
+            );
         compilerMock.transformRust.mockImplementation(
             (source: string, filename: string, options: never) => {
                 if (filename === brokenPath) throw new Error('cannot read this file');

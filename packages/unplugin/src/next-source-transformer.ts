@@ -1,11 +1,10 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
+import type { SourceTransformResult, TransformSourceCodeOptions } from '@csszyx/compiler';
 import {
     ensureRustTransformAvailable,
-    type SourceTransformResult,
-    type TransformSourceCodeOptions,
     transformRust,
     transformWasm,
-} from '@csszyx/compiler';
+} from '@csszyx/compiler/engine';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,

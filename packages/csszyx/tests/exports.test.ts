@@ -36,6 +36,7 @@ describe('csszyx umbrella exports', () => {
         for (const name of [
             ...INJECTED_HELPERS,
             'transform',
+            'transformSource',
             'vitePlugin',
             'webpackPlugin',
         ] as const) {
@@ -62,7 +63,13 @@ describe('csszyx umbrella exports', () => {
         // `oxc-parser` or `node:fs`, and a bundler fails at RESOLVE — so one
         // re-export added back here breaks every client import of `csszyx`,
         // including the ones that never mention the compiler.
-        for (const name of ['transform', 'vitePlugin', 'webpackPlugin', 'encode']) {
+        for (const name of [
+            'transform',
+            'transformSource',
+            'vitePlugin',
+            'webpackPlugin',
+            'encode',
+        ]) {
             expect(Object.keys(browserEntry), name).not.toContain(name);
         }
     });

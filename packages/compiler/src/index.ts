@@ -1,9 +1,9 @@
 /**
  * @csszyx/compiler - TypeScript compiler package for csszyx.
  *
- * This package provides the core compilation functionality for csszyx,
- * including JSX transformation, recovery token generation, and manifest
- * creation.
+ * The `sz` types, the TypeScript lowering, the property and diagnostic
+ * tables, recovery tokens and manifests. Nothing here loads the engine:
+ * `@csszyx/compiler/engine` holds every function that calls it.
  *
  * @module @csszyx/compiler
  */
@@ -12,14 +12,6 @@ import { version as packageVersion } from '../package.json';
 
 // Export transform functionality
 export { AST_BUDGET } from './ast-budget.js';
-export { CsszyxCompiler } from './compiler.js';
-export {
-    type CrossModuleExportKind,
-    type CrossModuleForward,
-    type CrossModuleRegistryEntry,
-    extractCrossModuleForwards,
-    extractCrossModuleRegistryEntries,
-} from './cross-module-extract.js';
 export { SZ_DIAGNOSTIC_CODES, type SzDiagnosticCode } from './diagnostic-codes.generated.js';
 export {
     restoreEngineSpans,
@@ -30,14 +22,13 @@ export {
     type SzMergeOverride,
     storeEngineSpans,
 } from './engine-spans.js';
-export {
-    type GlobalVarSourceFile,
-    type GlobalVarUsageDiagnostic,
-    type GlobalVarUsageKind,
-    type GlobalVarUsageLocation,
-    type GlobalVarUsageQuery,
-    type ScanGlobalVarUsagesOptions,
-    scanGlobalVarUsages,
+export type {
+    GlobalVarSourceFile,
+    GlobalVarUsageDiagnostic,
+    GlobalVarUsageKind,
+    GlobalVarUsageLocation,
+    GlobalVarUsageQuery,
+    ScanGlobalVarUsagesOptions,
 } from './global-var-diagnostics.js';
 // Export manifest generation
 export {
@@ -48,12 +39,11 @@ export {
     type TokenData,
     validateManifest,
 } from './manifest.js';
-export {
-    type ModuleForward,
-    type ModuleLinks,
-    type ModuleLinksFile,
-    type ModuleLinksQuery,
-    scanModuleLinks,
+export type {
+    ModuleForward,
+    ModuleLinks,
+    ModuleLinksFile,
+    ModuleLinksQuery,
 } from './module-links.js';
 // Export property type system (for CSS Variable Auto-Compile)
 export {
@@ -110,25 +100,6 @@ export {
     type TransformSourceCodeOptions,
     transform,
 } from './transform-core.js';
-export {
-    ensureRustTransformAvailable,
-    isRustTransformAvailable,
-    RustTransformUnavailableError,
-    scanGlobalVarUsagesRust,
-    scanModuleLinksRust,
-    type TransformRustFile,
-    transformRust,
-    transformRustBatch,
-} from './transform-rust.js';
-export { transformSource } from './transform-select.js';
-export {
-    isWasmTransformAvailable,
-    scanGlobalVarUsagesWasm,
-    scanModuleLinksWasm,
-    transformWasm,
-    transformWasmBatch,
-    WasmTransformUnavailableError,
-} from './transform-wasm.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can

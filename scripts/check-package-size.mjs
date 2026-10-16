@@ -127,11 +127,12 @@ export const SIZE_BUDGETS = [
         // Every other export ships to the browser: `./browser` for
         // `@csszyx/dynamic` and `@csszyx/runtime`, and the leaf modules the
         // runtime's `/lite`, `/core` and variant helpers import by subpath.
-        // Only `.`, `./internal` and `./migrate` stay out: build-time code
-        // that never leaves the dev machine (`./internal` is what the
-        // adapters, the CLI and the build plugin share). A new export is
-        // measured, and needs an entry budget, unless it is added here.
-        excludeSubpaths: ['.', './internal', './migrate'],
+        // Only `.`, `./engine`, `./internal` and `./migrate` stay out:
+        // build-time code that never leaves the dev machine (`./engine` calls
+        // the engine; `./internal` is what the adapters, the CLI and the build
+        // plugin share). A new export is measured, and needs an entry budget,
+        // unless it is added here.
+        excludeSubpaths: ['.', './engine', './internal', './migrate'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so

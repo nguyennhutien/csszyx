@@ -219,7 +219,7 @@ describe('szr import rewrite, end to end', () => {
     it('a compiled szr-strings module bundles without the compiler', async () => {
         // The whole point of the split: compiler proves strings-only, rewrites
         // the import, and the resulting bundle drops ~13 KB gz of transform.
-        const { transformSource } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler/engine');
         const source =
             "import { szr } from '@csszyx/runtime';\n" +
             "export const cls = szr('p-4', true && 'm-2');\n";
@@ -231,7 +231,7 @@ describe('szr import rewrite, end to end', () => {
     });
 
     it('an szr-objects module keeps the barrel and stays object-capable', async () => {
-        const { transformSource } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler/engine');
         const source =
             "import { szr } from '@csszyx/runtime';\n" + 'export const cls = (cfg) => szr(cfg);\n';
         const compiled = transformSource(source, '/app/Card.tsx').code ?? source;
@@ -250,7 +250,7 @@ describe('szv precompile, end to end', () => {
         // probe appends the exact import the plugin injects — the BARREL form
         // (requiredRuntimeHelpers routes __szvPick there), not a hand-written
         // /core line the plugin never emits.
-        const { transformSource } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler/engine');
         // The single-clause import is the shape people actually write; the
         // compiler splits it, moving szr to the core entry on its own line.
         const source =

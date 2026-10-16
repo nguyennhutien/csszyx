@@ -6,18 +6,20 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
     type CssVariableMangleValue,
-    ensureRustTransformAvailable,
-    isRustTransformAvailable,
-    isWasmTransformAvailable,
     type SourceTransformResult,
     sortStrings,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
+} from '@csszyx/compiler';
+import {
+    ensureRustTransformAvailable,
+    isRustTransformAvailable,
+    isWasmTransformAvailable,
     transformRust,
     transformRustBatch,
     transformWasm,
-} from '@csszyx/compiler';
+} from '@csszyx/compiler/engine';
 import { reportTemplateSzDiagnostics, resolveParserMode } from '@csszyx/compiler/internal';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
@@ -3487,13 +3489,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // differs — with a one-time warning,
     // instead of hard-failing a build the user never asked to run on `rust`. An
     // EXPLICIT `rust` (env or config) keeps its loud-failure contract.
-    const { parser: parserMode, degraded: parserDegraded } = resolveParserMode({
+    //
+    // Resolved on first use, not when the factory runs: the module builds a
+    // default instance with no options when it is imported, and probing the
+    // native engine there threw a stale native binary's `engine-version-skew`
+    // before the config that picks the wasm build was read.
+    const parserInput: Parameters<typeof resolveParserMode>[0] = {
         configParser: options.build?.parser,
         envParser: process.env.CSSZYX_PARSER,
         defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
         isRustAvailable: isRustTransformAvailable,
         isWasmAvailable: isWasmTransformAvailable,
-    });
+    };
+    let parserChoice: ReturnType<typeof resolveParserMode> | undefined;
+    const activeParser = (): ReturnType<typeof resolveParserMode> =>
+        (parserChoice ??= resolveParserMode(parserInput));
     /**
      * Announce the engine actually in effect (and the native-binary degrade, if
      * any). Called from build-lifecycle hooks, NOT from the factory body: the
@@ -3504,6 +3514,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * Once per resolved mode per process.
      */
     function announceActiveParser(): void {
+        const { parser: parserMode, degraded: parserDegraded } = activeParser();
         if (parserDegraded && !_hasWarnedNativeFallback) {
             _hasWarnedNativeFallback = true;
             if (parserMode === 'wasm') {
@@ -3682,7 +3693,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 aliasPrefix: globalVarAliasPrefix,
                 reserved: globalVarMangleConfig.reserved,
                 cacheDir: resolveGlobalVarValidationCacheDir(),
-                parser: parserMode,
+                parser: activeParser().parser,
             }),
         );
         assertNoGlobalVarAliasValidationErrors(result);
@@ -3902,7 +3913,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             compilerOptions,
         );
 
-        if (parserMode === 'rust') {
+        if (activeParser().parser === 'rust') {
             ensureRustTransformAvailable();
         }
 
@@ -4275,7 +4286,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         effectiveFilename: string,
         compilerOptions: TransformSourceCodeOptions,
     ): { result: SourceTransformResult; cacheable: boolean } {
-        if (parserMode === 'rust') {
+        if (activeParser().parser === 'rust') {
             // Honour the documented contract: `rust` is opt-in and never
             // silently falls back to another lane. Any failure here surfaces
             // to the caller with the same compatibility error the compiler
@@ -4337,9 +4348,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
-            nativeIdentity: parserMode === 'rust' ? resolveNativeCacheIdentity() : undefined,
-            parserMode,
-            producer: parserMode,
+            nativeIdentity:
+                activeParser().parser === 'rust' ? resolveNativeCacheIdentity() : undefined,
+            parserMode: activeParser().parser,
+            producer: activeParser().parser,
             // The EFFECTIVE budget, not the raw override: prescan-lane results
             // (larger budget) must not be served to the transform hook, whose
             // smaller budget could not have produced them (and vice versa).
@@ -4379,7 +4391,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Transform results for files that compiled successfully.
      */
     function transformPrescanSources(files: PrescanSourceFile[]): PrescanTransformResult[] {
-        if (parserMode !== 'rust' || files.length <= 1) {
+        if (activeParser().parser !== 'rust' || files.length <= 1) {
             return transformPrescanSourcesIndividually(files);
         }
 
@@ -4819,18 +4831,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             szvCrossModuleForwards.delete(normalizePathSeparators(filePath));
             return;
         }
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
         // A re-export edited during a watch has to lose its stale link the same
         // way an edited value does: a barrel that starts pointing at a different
         // module would otherwise keep answering with the old one's value.
-        recordCrossModuleForwards(szvCrossModuleForwards, filePath, content);
+        recordCrossModuleForwards(szvCrossModuleForwards, filePath, content, activeParser().parser);
         // A provider edited during a watch has to lose its stale value the same
         // way an edited factory does. Re-reading the changed file for both kinds
         // costs one parse of one file; deciding whether it is still demanded
         // would cost the import graph, and a recorded export nothing imports
         // resolves for nobody anyway.
         if (importedStaticSzEnabled) {
-            recordSzObjectRegistryFile(szvCrossModuleRegistry, filePath, content);
+            recordSzObjectRegistryFile(
+                szvCrossModuleRegistry,
+                filePath,
+                content,
+                activeParser().parser,
+            );
             szObjectProvidersExamined.add(normalizePathSeparators(filePath));
             recordProvidersDemandedBy(filePath, content);
         }
@@ -4905,12 +4922,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         } catch {
             return;
         }
-        recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
+        recordSzObjectRegistryFile(
+            szvCrossModuleRegistry,
+            providerPath,
+            content,
+            activeParser().parser,
+        );
         // A provider reached only through demand may itself be a barrel, and it
         // is not necessarily inside the walked roots — an opted-in package's
         // entry point is the common case. Recording its links here means every
         // module the build reads at all contributes them.
-        recordCrossModuleForwards(szvCrossModuleForwards, providerPath, content);
+        recordCrossModuleForwards(
+            szvCrossModuleForwards,
+            providerPath,
+            content,
+            activeParser().parser,
+        );
     }
 
     /**
@@ -5015,7 +5042,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // precompiled, csszyx just turned the feature off for this build"
         // apart from a genuine authoring problem. A stale entry cannot
         // affect emitted code through that path.
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
     }
 
     /**
@@ -5184,7 +5211,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Recorded for every walked file, not only sz-authoring ones: a
             // barrel styles nothing itself, and it is exactly the module an
             // importer names.
-            recordCrossModuleForwards(szvCrossModuleForwards, filePath, content);
+            recordCrossModuleForwards(
+                szvCrossModuleForwards,
+                filePath,
+                content,
+                activeParser().parser,
+            );
             seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
@@ -5228,7 +5260,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - walkStarted,
         );
 
-        jsImportedCssFiles = stylesheetsImportedBy(cssImportingSources, specifierAliases);
+        jsImportedCssFiles = stylesheetsImportedBy(
+            cssImportingSources,
+            specifierAliases,
+            activeParser().parser,
+        );
         // The walk has now met every stylesheet the app reaches, and the prefix
         // they set must be known before the first file below is lowered.
         await openStyleModel();
@@ -6825,7 +6861,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // resolve at build time is an error, and the build stops on it.
             const adapterOptions = {
                 filename: id,
-                parser: parserMode,
+                parser: activeParser().parser,
                 classPrefix: createCompilerOptions().classPrefix,
             };
             const result = id.endsWith('.vue')

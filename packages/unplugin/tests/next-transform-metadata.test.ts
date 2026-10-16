@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { transformSource } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { describe, expect, it } from 'vitest';
 
 import {

@@ -14,7 +14,9 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import { type ModuleLinks, scanModuleLinks } from '@csszyx/compiler';
+import type { ModuleLinks } from '@csszyx/compiler';
+import { scanModuleLinks } from '@csszyx/compiler/engine';
+import type { ParserMode } from '@csszyx/compiler/internal';
 import { sortStrings } from './sort.js';
 import { aliasedSpecifierBases, type SpecifierAlias } from './specifier-aliases.js';
 
@@ -75,16 +77,20 @@ function resolveImportedStylesheet(
  *
  * @param sources - Modules the prescan read.
  * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @param parser - The engine artifact the build runs on, if configured.
  * @returns Absolute stylesheet paths, sorted, each once.
  */
 export function stylesheetsImportedBy(
     sources: readonly ScannedSource[],
     aliases: readonly SpecifierAlias[],
+    parser?: ParserMode,
 ): string[] {
     const importing = sources.filter(source => mayImportStylesheet(source.content));
     if (importing.length === 0) return [];
     const links = scanModuleLinks(
         importing.map(source => ({ filename: source.filePath, source: source.content })),
+        {},
+        parser,
     );
     const found = new Set<string>();
     importing.forEach((source, index) => {

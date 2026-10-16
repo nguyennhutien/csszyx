@@ -1,15 +1,13 @@
 /**
  * The one colour-string rule the lowering applies: slash opacity in a string.
  *
- * Used by both the TypeScript compiler (transform-core.ts) and the
- * WASM pre-validator (compiler.ts) to guarantee identical behavior
- * across all transformation code paths. Nothing here judges whether a colour
- * class is served; the project's Tailwind does, at build (ADR 0022).
+ * `transform-core.ts` applies it; the engine mirrors it in
+ * `is_dropped_slash_opacity`. Nothing here judges whether a colour class is
+ * served; the project's Tailwind does, at build (ADR 0022).
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { szWarningsQuiet } from './sz-dev-warnings.js';
-import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 /**
  * Whether a colour key drops this string for its slash opacity.
@@ -38,58 +36,6 @@ export function isDroppedSlashOpacity(key: string, value: string): boolean {
         !value.includes('(') &&
         !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)
     );
-}
-
-/**
- * Walks an sz object and strips the slash-opacity colour strings the
- * lowering drops, warning once for each (see {@link warnStringColorOpacity}).
- *
- * Returns a new object safe to pass to transform_sz (WASM path), which
- * cannot print the warning itself.
- *
- * @param sz - The sz prop object to sanitize.
- * @param _depth - The current recursion depth (for depth bounding).
- * @returns A new object with those strings removed.
- */
-export function stripInvalidColorStrings(
-    sz: Record<string, unknown>,
-    _depth = 0,
-): Record<string, unknown> {
-    if (_depth >= MAX_SZ_DEPTH) {
-        throw new SzDepthError();
-    }
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(sz)) {
-        const sanitized = sanitizeColorEntry(key, value, _depth);
-        if (sanitized.keep) result[key] = sanitized.value;
-    }
-    return result;
-}
-
-/**
- * Sanitize one key/value pair while preserving recursive variants.
- * @param key - Sz property or variant key.
- * @param value - Candidate value.
- * @param depth - Current recursion depth.
- * @returns Sanitized value and whether to retain it.
- */
-function sanitizeColorEntry(
-    key: string,
-    value: unknown,
-    depth: number,
-): { keep: boolean; value: unknown } {
-    if (isForbiddenSzKey(key)) return { keep: false, value };
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        return {
-            keep: true,
-            value: stripInvalidColorStrings(value as Record<string, unknown>, depth + 1),
-        };
-    }
-    if (typeof value !== 'string') return { keep: true, value };
-    const color = value.replace(/!$/, '');
-    if (!isDroppedSlashOpacity(key, color)) return { keep: true, value };
-    warnStringColorOpacity(key, color);
-    return { keep: false, value };
 }
 
 /** Slash-opacity values already warned about, so a re-render cannot spam. */

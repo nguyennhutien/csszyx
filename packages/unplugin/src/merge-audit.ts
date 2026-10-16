@@ -12,7 +12,8 @@
  */
 import path from 'node:path';
 
-import { type SourceTransformResult, transformSource } from '@csszyx/compiler';
+import type { SourceTransformResult } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import type { ContentScanner } from '@csszyx/tailwind-oracle';
 
 import { type MergeSignature, removedByMerge, removedByOverride } from './merge-signature.js';

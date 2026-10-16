@@ -18,8 +18,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 /** A warning with no `[csszyx]` prefix, emitted from inside the scan. */
 const FOREIGN = 'DeprecationWarning: something else entirely is unhappy';
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         transformSource: (...args: Parameters<typeof actual.transformSource>) => {

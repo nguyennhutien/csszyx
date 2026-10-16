@@ -19,8 +19,8 @@ import {
     type SzDiagnosticCode,
     szDiagnosticKindOf,
     szKeySuggestionFor,
-    transformSource,
 } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import {
     createEmittedClassOracle,
     DEPENDENCY_OUTPUT_DIRS,

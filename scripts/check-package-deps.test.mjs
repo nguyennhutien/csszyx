@@ -192,10 +192,13 @@ describe('checkAll', () => {
     });
 
     it('reports an allowlist entry naming a package that is not here', () => {
-        const { problems } = checkAll(root);
-        assert.ok(problems.slice(3).length > 0);
-        assert.ok(
-            problems.slice(3).every(problem => /^an allowlist names `@csszyx\//.test(problem)),
-        );
+        const { problems } = checkAll(root, {
+            unimported: { '@csszyx/gone': { a: 'reason' } },
+            undeclared: { '@csszyx/also-gone': { b: 'reason' } },
+        });
+        assert.deepEqual(problems.slice(3), [
+            'an allowlist names `@csszyx/gone`, which is not a published package here',
+            'an allowlist names `@csszyx/also-gone`, which is not a published package here',
+        ]);
     });
 });

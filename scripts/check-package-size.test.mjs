@@ -359,11 +359,11 @@ test('committed budgets cover the four user-shipped surfaces', () => {
         SIZE_BUDGETS.some(budget => budget.kind === 'file' && budget.target.includes('pkg-parser')),
         'the parser wasm artifact must stay under a byte ceiling',
     );
-    // The compiler leaves out only its build-time code, `.`, `./internal` and
-    // `./migrate`; everything else it exports ships to the browser,
-    // `./browser` first.
+    // The compiler leaves out only its build-time code, `.`, `./engine`,
+    // `./internal` and `./migrate`; everything else it exports ships to the
+    // browser, `./browser` first.
     const compiler = SIZE_BUDGETS.find(budget => budget.target === 'packages/compiler');
-    assert.deepEqual(compiler?.excludeSubpaths, ['.', './internal', './migrate']);
+    assert.deepEqual(compiler?.excludeSubpaths, ['.', './engine', './internal', './migrate']);
     assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
     // Every app bundle prices each entry on its own, no entry ceiling is

@@ -9,8 +9,8 @@ const compilerMock = vi.hoisted(() => ({
     transformRustBatch: vi.fn(),
 }));
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         ensureRustTransformAvailable: vi.fn(),

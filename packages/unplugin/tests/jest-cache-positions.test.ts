@@ -11,7 +11,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { VERSION as compilerVersion, transformSource } from '@csszyx/compiler';
+import { VERSION as compilerVersion } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { createTransformer } from '../src/jest-transform.js';

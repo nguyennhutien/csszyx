@@ -15,8 +15,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { check } from '../src/commands/check.js';
 
-vi.mock('@csszyx/compiler', async importActual => {
-    const actual = await importActual<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importActual => {
+    const actual = await importActual<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         transformSource: (source: string, file?: string, options?: unknown) => {

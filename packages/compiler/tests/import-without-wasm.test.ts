@@ -81,7 +81,7 @@ describe('the package entry, with the wasm core unresolvable', () => {
             ${POISON}
             const api = require(${JSON.stringify(path.join(PACKAGE, 'dist/index.cjs'))});
             process.stdout.write(
-                ['CsszyxCompiler', 'transform', 'generateRecoveryToken']
+                ['transform', 'generateRecoveryToken']
                     .filter(name => typeof api[name] === 'undefined')
                     .join(',') || 'all-present',
             );

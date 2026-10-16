@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { transformWasm } from '@csszyx/compiler';
+import { transformWasm } from '@csszyx/compiler/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { emittedClassSites } from '../src/dead-class.js';
 import {

@@ -13,7 +13,8 @@
  * the wasm build answer for different hosts, so the command has to agree with
  * whichever one a build would use.
  */
-import { type SourceTransformResult, transformRust, transformWasm } from '@csszyx/compiler';
+import type { SourceTransformResult } from '@csszyx/compiler';
+import { transformRust, transformWasm } from '@csszyx/compiler/engine';
 import { describe, expect, it } from 'vitest';
 
 import { ExplainParseError, explainSz } from '../src/commands/explain.js';

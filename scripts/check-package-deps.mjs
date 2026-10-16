@@ -17,7 +17,7 @@
 // - an import of an undeclared package fails (a phantom dependency), unless
 //   `EXPECTED_UNDECLARED` names it with the reason;
 // - a declared package no shipped file imports fails (an unused dependency),
-//   unless it supplies a required peer of another declared dependency, is a
+//   unless it supplies a peer of another declared dependency, is a
 //   platform binding of the package (`<name>-<platform>`, loaded by a computed
 //   name), or `EXPECTED_UNIMPORTED` names it with the reason.
 //
@@ -39,11 +39,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
  * Declared packages no shipped file imports, kept on purpose. Keyed by package
  * name, then by dependency, with the reason.
  */
-export const EXPECTED_UNIMPORTED = {
-    '@csszyx/vue-adapter': {
-        vue: 'optional peer stating the supported Vue major; the adapter reads SFC text and never loads vue',
-    },
-};
+export const EXPECTED_UNIMPORTED = {};
 
 /**
  * Imported packages left undeclared on purpose. Keyed by package name, then by
@@ -76,14 +72,19 @@ export function packageOf(specifier) {
 }
 
 /**
- * Every bare package one module's source imports: static and dynamic
- * `import`, `export … from`, `require()`, `require.resolve()`, `import()`
- * types and `/// <reference types>`.
+ * What one module loads: specifiers by literal, plus whether it loads anything
+ * by a computed name.
+ *
+ * `ts.preProcessFile` reads `import`, `export … from`, `require()` and
+ * `import()`. A module can also load through `require.resolve('…')`, a
+ * `createRequire` result under any name containing `require`
+ * (`requireFromHere('…')`) or a peer request object (`request: '…'`), so those
+ * literals count too. A name in a message string is not a load.
  *
  * @param {string} source - Module text.
- * @returns {Set<string>} Package names.
+ * @returns {{ specifiers: string[], computed: boolean }} What it loads.
  */
-export function importedPackages(source) {
+export function loadsOf(source) {
     const info = ts.preProcessFile(source, true, true);
     const specifiers = [...info.importedFiles, ...info.typeReferenceDirectives].map(
         ref => ref.fileName,
@@ -92,7 +93,32 @@ export function importedPackages(source) {
     for (const match of source.matchAll(/\brequire\.resolve\(\s*(['"])([^'"\n]+)\1/g)) {
         specifiers.push(match[2]);
     }
-    return new Set(specifiers.map(packageOf).filter(name => name !== null));
+    for (const match of source.matchAll(/\b\w*[rR]equire\w*\(\s*(['"])([^'"\n]+)\1/g)) {
+        specifiers.push(match[2]);
+    }
+    for (const match of source.matchAll(/\brequest:\s*(['"])([^'"\n]+)\1/g)) {
+        specifiers.push(match[2]);
+    }
+    const computed =
+        /\bcreateRequire\b/.test(source) ||
+        /\bimport\(\s*[^'"`\s)]/.test(source) ||
+        /\brequire\(\s*[^'"`\s)]/.test(source);
+    return { specifiers: [...new Set(specifiers)], computed };
+}
+
+/**
+ * Every bare package one module's source loads: what {@link loadsOf} reads,
+ * `/// <reference types>` included.
+ *
+ * @param {string} source - Module text.
+ * @returns {Set<string>} Package names.
+ */
+export function importedPackages(source) {
+    return new Set(
+        loadsOf(source)
+            .specifiers.map(packageOf)
+            .filter(name => name !== null),
+    );
 }
 
 /**
@@ -102,7 +128,7 @@ export function importedPackages(source) {
  * @param {string} pkg.name - Package name.
  * @param {Record<string, string>} pkg.declared - Declared name → field it is declared in.
  * @param {ReadonlyMap<string, readonly string[]>} pkg.imports - Imported package → files importing it.
- * @param {ReadonlySet<string>} [pkg.peersOfDeps] - Required peers of its declared dependencies.
+ * @param {ReadonlySet<string>} [pkg.peersOfDeps] - Peers of its declared dependencies.
  * @param {Record<string, string>} [pkg.unimported] - Its `EXPECTED_UNIMPORTED` entry.
  * @param {Record<string, string>} [pkg.undeclared] - Its `EXPECTED_UNDECLARED` entry.
  * @returns {string[]} One message per problem; empty when the package is clean.
@@ -167,20 +193,20 @@ function readManifest(file) {
 }
 
 /**
- * The non-optional peers of a package's declared dependencies, read from the
- * installed manifests next to it.
+ * The peers of a package's declared dependencies, read from the installed
+ * manifests next to it. An optional peer counts: declaring it is how a package
+ * supplies it, as a package calling `@csszyx/compiler/engine` supplies the
+ * compiler's optional `@csszyx/core`.
  *
  * @param {string} dir - Package root.
  * @param {Iterable<string>} deps - Its declared dependencies.
  * @returns {Set<string>} Peer names.
  */
-function requiredPeersOf(dir, deps) {
+function peersOf(dir, deps) {
     const peers = new Set();
     for (const dep of deps) {
         const manifest = readManifest(path.join(dir, 'node_modules', dep, 'package.json'));
-        for (const peer of Object.keys(manifest?.peerDependencies ?? {})) {
-            if (manifest.peerDependenciesMeta?.[peer]?.optional !== true) peers.add(peer);
-        }
+        for (const peer of Object.keys(manifest?.peerDependencies ?? {})) peers.add(peer);
     }
     return peers;
 }
@@ -207,7 +233,7 @@ export function readPackage(dir) {
             imports.set(dep, [...(imports.get(dep) ?? []), file]);
         }
     }
-    const peersOfDeps = requiredPeersOf(dir, Object.keys(manifest.dependencies ?? {}));
+    const peersOfDeps = peersOf(dir, Object.keys(manifest.dependencies ?? {}));
     return { name: manifest.name, declared, imports, peersOfDeps, files: files.length };
 }
 
@@ -215,9 +241,15 @@ export function readPackage(dir) {
  * Checks every published package under `packages/`.
  *
  * @param {string} [root] - Repository root.
+ * @param {object} [allowlists] - The allowlists to apply; the repository's by default.
+ * @param {Record<string, Record<string, string>>} [allowlists.unimported] - In place of `EXPECTED_UNIMPORTED`.
+ * @param {Record<string, Record<string, string>>} [allowlists.undeclared] - In place of `EXPECTED_UNDECLARED`.
  * @returns {{ problems: string[], checked: number }} What failed, and how many packages were read.
  */
-export function checkAll(root = ROOT) {
+export function checkAll(
+    root = ROOT,
+    { unimported = EXPECTED_UNIMPORTED, undeclared = EXPECTED_UNDECLARED } = {},
+) {
     const packagesDir = path.join(root, 'packages');
     const problems = [];
     const seen = new Set();
@@ -234,12 +266,12 @@ export function checkAll(root = ROOT) {
         problems.push(
             ...compare({
                 ...pkg,
-                unimported: EXPECTED_UNIMPORTED[pkg.name],
-                undeclared: EXPECTED_UNDECLARED[pkg.name],
+                unimported: unimported[pkg.name],
+                undeclared: undeclared[pkg.name],
             }),
         );
     }
-    for (const name of Object.keys({ ...EXPECTED_UNIMPORTED, ...EXPECTED_UNDECLARED })) {
+    for (const name of Object.keys({ ...unimported, ...undeclared })) {
         if (!seen.has(name))
             problems.push(`an allowlist names \`${name}\`, which is not a published package here`);
     }

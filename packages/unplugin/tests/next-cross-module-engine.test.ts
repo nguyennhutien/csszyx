@@ -15,8 +15,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const failure = vi.hoisted(() => ({ current: undefined as (() => Error) | undefined }));
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         extractCrossModuleRegistryEntries: (
@@ -28,9 +28,8 @@ vi.mock('@csszyx/compiler', async importOriginal => {
     };
 });
 
-const { RustTransformUnavailableError, WasmTransformUnavailableError } = await import(
-    '@csszyx/compiler'
-);
+const { EngineVersionSkewError, RustTransformUnavailableError, WasmTransformUnavailableError } =
+    await import('@csszyx/compiler/engine');
 const { clearNextAliasCache, resolveNextCrossModule } = await import('../src/next-cross-module.js');
 
 const roots: string[] = [];
@@ -63,7 +62,8 @@ describe('a provider the engine cannot read', () => {
     it.each([
         ['native', () => new RustTransformUnavailableError('older platform package')],
         ['wasm', () => new WasmTransformUnavailableError('no wasm')],
-    ])('passes the unavailable %s engine on', (_name, error) => {
+        ['skewed', () => new EngineVersionSkewError('[csszyx] engine-version-skew: stale')],
+    ])('passes the %s engine on', (_name, error) => {
         failure.current = error;
         expect(resolveStyles).toThrow(error().message);
     });

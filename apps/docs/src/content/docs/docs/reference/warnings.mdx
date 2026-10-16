@@ -1313,12 +1313,6 @@ These are informational and always print to stderr, once.
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
 
-One more engine report comes from the browser runtime rather than the build:
-`[csszyx] Failed to initialize WASM core, falling back to JavaScript transformer`,
-followed by the underlying error. The JavaScript transformer produces the same
-classes, so this costs speed only. Its success counterpart,
-`[csszyx] WASM Core initialized (v{version})`, prints through `console.info`.
-
 <Aside type="note" title="What a parser fallback costs">
 Parse speed, and nothing else. The build lane's two artifacts are one engine
 compiled two ways, so a fallback between them cannot change a class. The

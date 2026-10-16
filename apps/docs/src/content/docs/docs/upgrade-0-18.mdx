@@ -3,6 +3,8 @@ title: Upgrading to 0.18
 description: Every breaking change in csszyx 0.18, how to tell whether it reaches your project, and the edit that fixes it.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 From 0.18, csszyx reads the CSS your project's Tailwind compiles before it writes a
 class. Each class it emits carries the prefix your stylesheet sets. A class that a
 later class on the same element fully covers is removed. Every finding has a level
@@ -60,6 +62,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-four-exports) | an import that no longer resolves | `tsc`, the bundler | you |
+| [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find module '@csszyx/core/native'` | `tsc`, the bundler, the first engine call | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
 | [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
@@ -544,7 +547,7 @@ import { OxcRustNotImplementedError, ASTBudgetExceededError } from "@csszyx/comp
 if (err instanceof OxcRustNotImplementedError) { /* … */ }
 
 // after
-import { RustTransformUnavailableError } from "@csszyx/compiler";
+import { RustTransformUnavailableError } from "@csszyx/compiler/engine";
 if (err instanceof RustTransformUnavailableError) { /* … */ }
 const overBudget = result.issues?.some(issue => issue.code === "ast-budget");
 ```
@@ -561,7 +564,7 @@ import { parseStaticObjectLiteral } from "@csszyx/compiler";
 const object = parseStaticObjectLiteral("{ p: 4 }");
 
 // after
-import { transformSource } from "@csszyx/compiler";
+import { transformSource } from "@csszyx/compiler/engine";
 const { code } = transformSource("export const A = () => <div sz={{ p: 4 }} />;", "a.tsx");
 // code holds className="p-4"
 ```
@@ -569,6 +572,77 @@ const { code } = transformSource("export const A = () => <div sz={{ p: 4 }} />;"
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it. Code that compared
 `err.name` with `"OxcRustNotImplementedError"` no longer matches.
+
+## The engine moves to @csszyx/compiler/engine and is installed on its own
+
+Installing `@csszyx/runtime`, `@csszyx/dynamic` or `@csszyx/types` used to install
+the whole engine through `@csszyx/compiler`: a native binary for your platform and
+three WebAssembly builds, none of which runs in a browser. A project that installs
+only `@csszyx/runtime` drops from about 7.5 MB to 1 MB. The
+compiler's root no longer loads the engine, and `@csszyx/core` is an optional peer
+of the compiler instead of a dependency.
+
+Every function that calls the engine moved to `@csszyx/compiler/engine`, and the
+root no longer exports them: `transformSource`, `transformRust`,
+`transformRustBatch`, `transformWasm`, `transformWasmBatch`, `scanModuleLinks`,
+`scanModuleLinksRust`, `scanModuleLinksWasm`, `scanGlobalVarUsages`,
+`scanGlobalVarUsagesRust`, `scanGlobalVarUsagesWasm`,
+`extractCrossModuleRegistryEntries`, `extractCrossModuleForwards`,
+`ensureRustTransformAvailable`, `isRustTransformAvailable`,
+`isWasmTransformAvailable`, `RustTransformUnavailableError` and
+`WasmTransformUnavailableError`. Their types stay importable from the root.
+
+```ts
+// before
+import { transformSource } from "@csszyx/compiler";
+
+// after
+import { transformSource } from "@csszyx/compiler/engine";
+```
+
+**You are affected** when your own code calls those functions, or
+`@csszyx/compiler/migrate`, with only `@csszyx/compiler` installed. Add the engine
+at the compiler's version:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/core
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/core
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/core
+    ```
+  </TabItem>
+</Tabs>
+
+`@csszyx/unplugin`, `@csszyx/cli`, `@csszyx/mcp-server`, both adapters and
+`csszyx` already depend on it, so a build that goes through any of them changes
+nothing.
+
+`CsszyxCompiler` is gone. Its `init()` loaded a WebAssembly build nothing called,
+and its `transform()` and `generateRecoveryToken()` were the root's `transform`
+and `generateRecoveryToken`, which stay.
+
+**What you see.** An import of a moved name fails in `tsc` and in the bundler.
+Without `@csszyx/core` installed, importing `@csszyx/compiler/engine` or
+`@csszyx/compiler/migrate` fails before any of its exports can run:
+
+```text
+Cannot find package '@csszyx/core' imported from …/@csszyx/compiler/dist/transform-rust-….mjs
+```
+
+An engine from another release stops the first engine call with
+[`engine-version-skew`](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases),
+which names both versions and what to install. A lockfile can keep an older
+`@csszyx/core-<platform>` package beside a current `@csszyx/core`; the message
+names that package too.
 
 ## require of the Vue and Svelte adapters returns the exports
 

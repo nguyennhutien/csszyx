@@ -18,7 +18,8 @@
  * No eval is used: the engine reads the literal as source, never executes it.
  */
 
-import { type SourceTransformResult, transformSource } from '@csszyx/compiler';
+import type { SourceTransformResult } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { findEmittedClassName } from '@csszyx/compiler/internal';
 
 import { printError, printInfo, printWarn } from '../utils/terminal-ui.js';

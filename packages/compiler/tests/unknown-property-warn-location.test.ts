@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { transformRust, transformSource, transformWasm } from '../src/index.js';
+import { transformRust, transformSource, transformWasm } from '../src/engine.js';
 import {
     __resetSzWarnDedupForTests,
     isKnownSzPropertyKey,

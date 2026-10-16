@@ -15,6 +15,17 @@ TypeScript compiler package for CSSzyx - handles JSX transformation, recovery to
 pnpm add @csszyx/compiler
 ```
 
+The engine lives in `@csszyx/core`, an optional peer: the `sz` types, the
+TypeScript lowering and the tables need nothing else. To call the engine
+(`@csszyx/compiler/engine`, `@csszyx/compiler/migrate`) install it beside the
+compiler, at the same version:
+
+```bash
+pnpm add @csszyx/compiler @csszyx/core
+```
+
+`@csszyx/unplugin`, `@csszyx/cli` and `csszyx` install it for you.
+
 ## Usage
 
 ### Basic Transform
@@ -81,10 +92,18 @@ const manifest = builder.build();
 
 ### Transform
 
-Two layers — a pure object compile (`transform`) and the source-string
-transform of the ONE engine, reachable as `transformRust` (native addon),
-`transformWasm` (the same engine compiled to WebAssembly) or
-`transformSource` (picks whichever this host can run).
+Two layers — a pure object compile (`transform`, from `@csszyx/compiler`)
+and the source-string transform of the ONE engine, from
+`@csszyx/compiler/engine`: `transformRust` (native addon), `transformWasm`
+(the same engine compiled to WebAssembly) or `transformSource` (picks
+whichever this host can run).
+
+```typescript
+import { transformSource } from "@csszyx/compiler/engine";
+
+transformSource("export const A = () => <div sz={{ p: 4 }} />;", "a.tsx").code;
+// export const A = () => <div className="p-4" />;
+```
 
 #### `transform(szProp: SzObject, options?: TransformOptions): TransformResult`
 
@@ -115,7 +134,8 @@ callers migrate by renaming.
 
 The native addon via napi-rs. Fastest path. Requires the matching
 optional `@csszyx/core-*` platform package; a missing package surfaces
-`CsszyxNativeUnavailableError`.
+`RustTransformUnavailableError`. An engine from another release than the
+compiler throws `EngineVersionSkewError` (`engine-version-skew`).
 
 #### `transformWasm(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
 

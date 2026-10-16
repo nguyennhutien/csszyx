@@ -38,11 +38,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {
-    VERSION as compilerVersion,
-    type SourceTransformResult,
-    transformSource,
-} from '@csszyx/compiler';
+import { VERSION as compilerVersion, type SourceTransformResult } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';

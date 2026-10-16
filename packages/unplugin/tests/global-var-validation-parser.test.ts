@@ -5,12 +5,12 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@csszyx/compiler', async importOriginal => ({
-    ...(await importOriginal<typeof import('@csszyx/compiler')>()),
+vi.mock('@csszyx/compiler/engine', async importOriginal => ({
+    ...(await importOriginal<typeof import('@csszyx/compiler/engine')>()),
     scanGlobalVarUsages: vi.fn(() => []),
 }));
 
-const { scanGlobalVarUsages } = await import('@csszyx/compiler');
+const { scanGlobalVarUsages } = await import('@csszyx/compiler/engine');
 const { createGlobalVarAliasValidationOptions, validateGlobalVarAliasInputs } = await import(
     '../src/global-var-validation.js'
 );

@@ -22,8 +22,8 @@ import {
     SUGGESTION_MAP,
     type SzObject,
     transform,
-    transformSource,
 } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { MAX_SZ_DEPTH } from '@csszyx/compiler/sz-limits';
 import { z } from 'zod';
 

@@ -12,23 +12,24 @@
  * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */
 import { expect } from 'vitest';
-
 import {
-    type GlobalVarSourceFile,
-    type GlobalVarUsageDiagnostic,
-    type GlobalVarUsageQuery,
     isRustTransformAvailable,
-    type ModuleLinks,
-    type ModuleLinksFile,
-    type ModuleLinksQuery,
-    type SourceTransformResult,
     scanGlobalVarUsagesRust,
     scanGlobalVarUsagesWasm,
     scanModuleLinksRust,
     scanModuleLinksWasm,
-    type TransformSourceCodeOptions,
     transformRust,
     transformWasm,
+} from '../src/engine.js';
+import type {
+    GlobalVarSourceFile,
+    GlobalVarUsageDiagnostic,
+    GlobalVarUsageQuery,
+    ModuleLinks,
+    ModuleLinksFile,
+    ModuleLinksQuery,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
 } from '../src/index.js';
 
 /** The result surface parity assertions read, common to both artifacts. */
