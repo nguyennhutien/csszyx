@@ -143,12 +143,19 @@ describe('transformMarkup', () => {
 
     it('leaves a quoted sz string that is not an object alone', () => {
         const source = '<Icon sz="lg"></Icon>';
-        expect(transformMarkup(source)).toEqual({ code: source, count: 0, diagnostics: [] });
+        expect(transformMarkup(source)).toEqual({
+            code: source,
+            map: null,
+            count: 0,
+            diagnostics: [],
+        });
     });
 
-    it('stops at an unterminated script block', () => {
+    it('reports an unterminated script block as the one error of the file', () => {
         const source = '<script>let sz={ p: 4 }';
-        expect(transformMarkup(source)).toEqual({ code: source, count: 0, diagnostics: [] });
+        const result = transformMarkup(source);
+        expect(result.code).toBe(source);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 });
 

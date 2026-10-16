@@ -4160,8 +4160,11 @@ class becomes a `className` PROP — the component does NOT receive an sz object
 MUST forward `className` onto a real html tag, else the style is lost. Putting sz
 on a component is NOT enough; every style must reach an html tag.
 
-Vue and Svelte templates have no csszyx runtime: `sz` there takes static values
-only (literals, nested variant objects, template strings without `${}`, spreads
+Vue and Svelte templates are read with the frameworks' own parsers (Vue 3.5+,
+Svelte 5+), so `sz` is found only where the framework sees an attribute. In
+Svelte write `sz={{ p: 4 }}`; `sz="{ p: 4 }"` is not Svelte and fails the file.
+The class joins the element's static `class`. These templates have no csszyx
+runtime: `sz` there takes static values only (literals, nested variant objects, template strings without `${}`, spreads
 of literal objects, arrays of those). A name, prop, conditional or call is a
 build error at its file:line:col — bind `class`/`style` yourself for runtime
 values. On a template component `sz` becomes a `class` attribute, as on an html

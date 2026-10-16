@@ -170,6 +170,7 @@ describe('transformTemplate', () => {
             count: 0,
             transformed: false,
             diagnostics: [],
+            map: null,
         });
     });
 });

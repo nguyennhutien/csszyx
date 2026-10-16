@@ -5,13 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-    extractTemplate,
-    mergeClassAttributes,
-    preprocess,
-    transformTemplate,
-    vitePlugin,
-} from '../src/index.js';
+import { preprocess, transformTemplate, vitePlugin } from '../src/index.js';
 
 type TransformFn = (code: string, id: string) => { code: string } | null;
 const runTransform = (code: string, id: string, options = {}): { code: string } | null =>
@@ -88,24 +82,19 @@ describe('transformTemplate and extract edges', () => {
         expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 
-    it('ignores a value whose quote closes after the template ends', () => {
+    it('reports a value whose quote closes after the template ends', () => {
         // The quoted value holds the `</template>`, as Vue reads it, so the
-        // root template never closes.
-        expect(extractTemplate('<template><div :sz="{ p: 4 }</template>"')).toBeNull();
-        const result = preprocess('<template><div :sz="{ p: 4 }</template>"');
-        expect(result).toEqual({
-            code: '<template><div :sz="{ p: 4 }</template>"',
-            transformed: false,
-            count: 0,
-            diagnostics: [],
-        });
+        // root template never closes and Vue cannot parse the file.
+        const source = '<template><div :sz="{ p: 4 }</template>"';
+        const result = preprocess(source);
+        expect(result.code).toBe(source);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 
-    it('merges a transformed sz into an existing class attribute', () => {
-        const result = transformTemplate('<div class="foo" :sz="{ p: 4 }" />');
-        const merged = mergeClassAttributes(result.code);
-        expect(merged).toContain('foo');
-        expect(merged).toContain('p-4');
+    it('joins a transformed sz to an existing class attribute', () => {
+        expect(transformTemplate('<div class="foo" :sz="{ p: 4 }" />').code).toBe(
+            '<div class="foo p-4" />',
+        );
     });
 
     it('returns the source when the template tag is never closed', () => {
@@ -127,37 +116,14 @@ describe('transformTemplate and merge specifics', () => {
     });
 });
 
-describe('class merge via preprocess', () => {
-    it('merges a static class from sz with an existing dynamic :class', () => {
-        const result = preprocess('<template><div :class="dyn" :sz="{ p: 4 }" /></template>');
-        expect(result.transformed).toBe(true);
-        expect(result.code).toContain('dyn');
-        expect(result.code).toContain('p-4');
-    });
-});
-
-describe('mergeClassAttributes', () => {
-    it('merges a static class into the :class shorthand binding', () => {
-        expect(mergeClassAttributes('<div class="foo" :class="bar" />')).toContain(
-            `:class="['foo', bar]"`,
-        );
-    });
-
-    it('merges the v-bind:class long form too', () => {
-        expect(mergeClassAttributes('<div class="foo" v-bind:class="bar" />')).toContain(
-            `:class="['foo', bar]"`,
-        );
-    });
-
-    it('leaves tags with only one class form untouched', () => {
-        expect(mergeClassAttributes('<div :class="bar" />')).toBe('<div :class="bar" />');
-        expect(mergeClassAttributes('<div class="foo" />')).toBe('<div class="foo" />');
-    });
-
-    it('merges the class produced by an sz transform with an existing binding', () => {
-        const result = preprocess('<template><div :class="dyn" :sz="{ p: 4 }" /></template>');
-        expect(result.code).toContain(`:class="['p-4', dyn]"`);
-    });
+describe('class beside a bound class', () => {
+    it.each([':class', 'v-bind:class'])(
+        'writes its own class beside %s, which Vue joins',
+        bound => {
+            const result = preprocess(`<template><div ${bound}="dyn" :sz="{ p: 4 }" /></template>`);
+            expect(result.code).toBe(`<template><div ${bound}="dyn" class="p-4" /></template>`);
+        },
+    );
 });
 
 describe('values only the runtime knows', () => {

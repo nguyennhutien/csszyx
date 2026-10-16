@@ -7,6 +7,19 @@
 Svelte preprocessor for [csszyx](https://github.com/nguyennhutien/csszyx) —
 transforms `sz` props into Tailwind CSS classes inside `.svelte` files.
 
+## Requirements
+
+Svelte 5. The adapter reads each component with `svelte/compiler`, the parser
+your build uses, so an `sz` is read where Svelte sees an attribute and nowhere
+else: not in a comment, in text, in an `{@html}` string or in `<script>`. Write
+the value as an expression, `sz={{ p: 4 }}` or `sz="{{ p: 4 }}"`; the quoted
+`sz="{ p: 4 }"` is not Svelte, and Svelte rejects the file. A component Svelte
+cannot parse is one error, and nothing in it is lowered: run csszyx after the
+preprocessors that turn the file into Svelte.
+
+The class joins a quoted `class` on the same side of the element's spreads, or
+takes the attribute's place.
+
 ## Static `sz` values only
 
 A Svelte template has no csszyx runtime, so the adapter writes a class only for

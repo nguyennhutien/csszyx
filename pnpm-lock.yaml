@@ -255,6 +255,9 @@ importers:
       '@csszyx/core':
         specifier: workspace:*
         version: link:../core
+      magic-string:
+        specifier: ^0.30.21
+        version: 0.30.21
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

@@ -1,7 +1,7 @@
 /**
  * transformMarkup's reader branches: an unparseable object, a plain Svelte
- * expression (single brace), quotes/escapes that shield inner braces, an
- * unterminated attribute, and the quoted forms.
+ * expression (single brace), quotes/escapes that shield inner braces, markup
+ * Svelte cannot parse, and the quoted forms.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -28,34 +28,35 @@ describe('transformMarkup parser edges', () => {
         expect(result.code).not.toContain('sz={{');
     });
 
-    it('ignores an unterminated sz attribute', () => {
-        expect(transformMarkup('<div sz={{ p: 4 ')).toEqual({
-            code: '<div sz={{ p: 4 ',
-            count: 0,
-            diagnostics: [],
-        });
+    it.each([
+        ['an unterminated sz attribute', '<div sz={{ p: 4 '],
+        ['an unterminated quoted value', '<div sz="{{ p: 4 '],
+        ['an unterminated bound value outside any tag', 'sz={ p: 4 '],
+    ])('reports %s as the one error of the file', (_name, source) => {
+        const result = transformMarkup(source);
+        expect(result.code).toBe(source);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 
-    it('ignores an unterminated quoted value', () => {
-        expect(transformMarkup('<div sz="{ p: 4 ').count).toBe(0);
+    it('reads a quoted object in double braces', () => {
+        expect(transformMarkup('<div sz="{{ p: 4 }}" />').code).toBe('<div class="p-4" />');
     });
 
     it.each([
-        ['quoted', 'sz="{ p: 4 '],
-        ['bound', 'sz={ p: 4 '],
-    ])('ignores an unterminated %s value outside any tag', (_name, source) => {
-        expect(transformMarkup(source)).toEqual({ code: source, count: 0, diagnostics: [] });
+        ['double', '<div sz="{ p: 4 }" />'],
+        ['single', `<div sz='{ p: 4 }' />`],
+    ])('reports the %s-quoted single-brace shorthand Svelte cannot parse', (_name, source) => {
+        const result = transformMarkup(source);
+        expect(result.code).toBe(source);
+        expect(result.diagnostics).toHaveLength(1);
+        expect(result.diagnostics[0].message).toContain(
+            'write a quoted sz object as an expression',
+        );
     });
 
-    it.each([
-        ['double braces', '<div sz="{{ p: 4 }}" />'],
-        ['single braces', `<div sz='{ p: 4 }' />`],
-    ])('reads a quoted object in %s', (_name, source) => {
-        expect(transformMarkup(source).code).toBe('<div class="p-4" />');
-    });
-
-    it('reads an sz attribute at the very start of the source', () => {
-        expect(transformMarkup('sz={{ p: 4 }}').code).toBe('class="p-4"');
+    it('leaves sz written as text at the start of the source as written', () => {
+        const source = 'sz={{ p: 4 }}';
+        expect(transformMarkup(source)).toMatchObject({ code: source, count: 0, diagnostics: [] });
     });
 
     it('reads a component whose name starts like a script or style tag', () => {

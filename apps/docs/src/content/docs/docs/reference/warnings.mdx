@@ -2033,10 +2033,28 @@ messages start with the file and the position of the value in it:
 | --- | --- |
 | ``[csszyx] {file}:{line}:{col}: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it`` | a name, a prop, a conditional, a call, an array value, or a template string with `${}` |
 | ``[csszyx] {file}:{line}:{col}: this sz value could not be parsed as a JavaScript expression`` | a syntax error in the value |
+| ``[csszyx] {file}:{line}:{col}: Vue cannot parse this file, so no sz in it gets a class: {reason}`` | `vue/compiler-sfc` rejects the file, an element left open say |
+| ``[csszyx] {file}:{line}:{col}: Svelte cannot parse this file, so no sz in it gets a class: {reason}`` | `svelte/compiler` rejects the component: the quoted `sz="{ p: 4 }"`, TypeScript without `lang="ts"`, or markup another preprocessor has not turned into Svelte yet |
+| ``[csszyx] {file}:{line}:{col}: csszyx reads sz in an HTML template only, and this one is <template lang="{lang}">`` | a Vue template in another language, such as pug |
+| ``[csszyx] {file}:1:1: csszyx reads Svelte 5 markup, and svelte {version} resolves`` | the project installs Svelte 4 |
+| ``[csszyx] {adapter} reads templates with `{parser}`, which does not resolve from it help: install {package} in the project`` (the `help:` on its own line) | the project does not install `vue` or `svelte` |
 
 The first is followed by `help: write the value as a literal, e.g. { p: 4 }, or
 bind class or style yourself for a value that changes at runtime`, and both by
-`note: the attribute is left as written; no class is generated for it`. The
+`note: the attribute is left as written; no class is generated for it`. A file
+the framework's parser rejects is one error, and no `sz` in it is lowered; its
+`help:` line says what to change: write `sz={{ p: 4 }}`, or run csszyx after the
+preprocessors that turn the file into Svelte.
+
+An adapter loads its framework's parser from the project the first time a file
+needs it. When none resolves, the build stops on:
+
+```text
+[csszyx] @csszyx/vue-adapter reads templates with `vue/compiler-sfc`, which does not resolve from it
+help: install vue@3.5 in the project
+```
+
+The Svelte adapter names `svelte/compiler` and `svelte@5` the same way. The
 engine's warnings for a value that did lower, such as an unknown key, are
 reported at the same kind of position as warnings.
 

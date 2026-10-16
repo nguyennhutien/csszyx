@@ -127,7 +127,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/core": "workspace:*"
+    "@csszyx/core": "workspace:*",
+    "magic-string": "^0.30.21"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
