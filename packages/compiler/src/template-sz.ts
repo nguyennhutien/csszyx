@@ -351,5 +351,5 @@ export function transformTemplateFile(
  * @returns The text to write between the quotes.
  */
 function escapeTemplateAttribute(value: string): string {
-    return value.replace(/[&"'<>{}]/g, char => `&#${char.charCodeAt(0)};`);
+    return value.replace(/[&"'<>{}]/g, char => `&#${char.codePointAt(0)};`);
 }

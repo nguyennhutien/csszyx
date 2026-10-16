@@ -242,7 +242,7 @@ function classLiteral(text: string): string {
     const value = decodeCharacterReferences(text, 0).source;
     const escaped = value.replace(/[\\']/g, String.raw`\$&`);
     const literal = `'${escaped}'`;
-    return literal.replace(/[&"<]/g, char => `&#${char.charCodeAt(0)};`);
+    return literal.replace(/[&"<]/g, char => `&#${char.codePointAt(0)};`);
 }
 
 /**
