@@ -84,11 +84,6 @@ export {
 export { sortStrings } from './sort.js';
 export { rewriteStartTags } from './start-tags.js';
 export {
-    explainStaticObjectLiteral,
-    parseStaticObjectLiteral,
-    type StaticObjectResult,
-} from './static-object-parser.js';
-export {
     isAdvisorySzDiagnostic,
     SZ_DIAGNOSTIC_KIND_IDS,
     type SzDiagnosticKindId,

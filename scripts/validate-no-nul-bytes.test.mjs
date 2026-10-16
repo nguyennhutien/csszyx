@@ -12,7 +12,7 @@ import {
 } from './validate-no-nul-bytes.mjs';
 
 test('checks text formats and skips binary-capable extensions', () => {
-    assert.equal(isCheckedTextFile('packages/compiler/src/szv-precompile.ts'), true);
+    assert.equal(isCheckedTextFile('packages/compiler/src/template-sz.ts'), true);
     assert.equal(isCheckedTextFile('packages/core/src/transform/parser.rs'), true);
     assert.equal(isCheckedTextFile('docs/specs/snippets/effects.md'), true);
     assert.equal(isCheckedTextFile('assets/logo.png'), false);
