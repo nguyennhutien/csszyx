@@ -43,7 +43,7 @@ describe('explain', () => {
 
     it('names the style variable a class reads at runtime', () => {
         const lines = capture();
-        explain('{ p: `4` }');
+        explain('{ p: size }');
         expect(lines[0]).toBe('p-(--_sz-p)');
         expect(lines[1]).toMatch(/--_sz-p is set through the style attribute at runtime/);
         expect(lines).toHaveLength(2);

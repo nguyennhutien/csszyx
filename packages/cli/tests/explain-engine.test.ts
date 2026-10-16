@@ -2,12 +2,11 @@
  * `csszyx explain` answers with the build's engine, not a second reader.
  *
  * The command exists to show what csszyx emits for an sz object. It used to
- * read the literal with the adapters' TypeScript walker and lower it with the
- * TypeScript runtime transform, and that pair disagreed with the build on
- * shapes people write: a unary plus, an `undefined` value and a spread of a
- * literal were called dynamic while the build emitted `p-4`; a template string
- * printed `p-4` while the build sets the value through a style variable; an
- * array value was resolved while the build leaves the whole object to `_sz()`.
+ * read the literal with a TypeScript walker and lower it with the TypeScript
+ * runtime transform, and that pair disagreed with the build on shapes people
+ * write: a unary plus, an `undefined` value and a spread of a literal were
+ * called dynamic while the build emitted `p-4`; an array value was resolved
+ * while the build leaves the whole object to `_sz()`.
  *
  * Every expectation below is what the build writes into `className` for the
  * same object, and each runs on both engine artifacts: the native addon and
@@ -56,8 +55,8 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
         ['{ p: 4, m: null }', 'p-4'],
         ['{ ...{ p: 4 } }', 'p-4'],
         ["{ md: { p: 4 }, hover: { color: 'red-500' } }", 'md:p-4 hover:text-red-500'],
-        ['{ p: `4` }', 'p-(--_sz-p)'],
-        ['{ content: `x` }', 'content-(--_sz-content)'],
+        ['{ p: `4` }', 'p-4'],
+        ['{ content: `x` }', 'content-[x]'],
         ['{ p: size }', 'p-(--_sz-p)'],
     ])('%s compiles to what the build emits', (sz, className) => {
         const explained = explainSz(sz, engine);
@@ -66,7 +65,7 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
     });
 
     it('names the variable a style attribute sets at runtime', () => {
-        expect(explainSz('{ p: `4` }', engine).runtimeValues).toEqual(['--_sz-p']);
+        expect(explainSz('{ p: size }', engine).runtimeValues).toEqual(['--_sz-p']);
         expect(explainSz('{ p: 4 }', engine).runtimeValues).toEqual([]);
     });
 

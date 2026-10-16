@@ -11,7 +11,7 @@ use oxc_ast::{
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
         JSXSpreadAttribute, LogicalExpression, ObjectExpression, ObjectProperty,
         ObjectPropertyKind, Program, PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName,
-        UnaryOperator, VariableDeclaration,
+        TemplateLiteral, UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -2082,6 +2082,9 @@ fn lenient_catalog_values<'a>(
     }
     match unwrap_expression(expression) {
         Expression::StringLiteral(value) => vec![StaticSzValue::String(value.value.to_string())],
+        Expression::TemplateLiteral(template) => {
+            template_string_value(template).into_iter().collect()
+        }
         Expression::NumericLiteral(value) => vec![StaticSzValue::Number(value.value)],
         Expression::BooleanLiteral(value) => vec![StaticSzValue::Boolean(value.value)],
         // `null` means "key unset" and falls through to the catch-all skip,
@@ -2245,6 +2248,7 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
 fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {
         Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::TemplateLiteral(template) => template_string_value(template),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
         Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
         Expression::UnaryExpression(unary) => {
@@ -3371,6 +3375,9 @@ fn strict_literal_value_diagnosed(
 ) -> Result<StaticSzValue, String> {
     match unwrap_expression(expression) {
         Expression::StringLiteral(literal) => Ok(StaticSzValue::String(literal.value.to_string())),
+        Expression::TemplateLiteral(template) => {
+            template_string_value(template).ok_or_else(|| path.to_string())
+        }
         Expression::NumericLiteral(literal) => Ok(StaticSzValue::Number(literal.value)),
         Expression::BooleanLiteral(literal) => Ok(StaticSzValue::Boolean(literal.value)),
         Expression::UnaryExpression(unary) => {
@@ -5794,6 +5801,7 @@ fn static_value_from_expression(
 ) -> Option<StaticSzValue> {
     match expression {
         Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::TemplateLiteral(template) => template_string_value(template),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
         Expression::UnaryExpression(value) => static_value_from_unary_expression(value),
         Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
@@ -5885,6 +5893,15 @@ fn is_skippable_static_value(expression: &Expression<'_>) -> bool {
         Expression::TSNonNullExpression(value) => is_skippable_static_value(&value.expression),
         _ => false,
     }
+}
+
+/// The string a template literal without a substitution spells: ``{ p: `4` }``
+/// holds `'4'` before any code runs, so every sz value reader takes it as the
+/// quoted string. A template with a substitution is a runtime value.
+fn template_string_value(template: &TemplateLiteral<'_>) -> Option<StaticSzValue> {
+    template
+        .single_quasi()
+        .map(|text| StaticSzValue::String(text.to_string()))
 }
 
 fn static_value_from_unary_expression(

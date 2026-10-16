@@ -286,6 +286,7 @@ mod tests {
                 r#"{"p":4.0}"#,
             ),
             ("export const card = { p: +4 };", r#"{"p":4.0}"#),
+            ("export const card = { p: `4` };", r#"{"p":"4"}"#),
             ("export const card = { p: 4, m: null };", r#"{"p":4.0}"#),
             (
                 "const base = { m: 2 };\nexport const card = { ...base, p: 4 };",

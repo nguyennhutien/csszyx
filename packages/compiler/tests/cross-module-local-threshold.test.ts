@@ -90,6 +90,7 @@ const OBJECT_SHAPES: ReadonlyArray<readonly [string, string, string]> = [
     ['a plain literal', 'export const card = { p: 4 };', 'p-4'],
     ['a const reference', 'const S = 4;\nexport const card = { p: S };', 'p-4'],
     ['a unary plus', 'export const card = { p: +4 };', 'p-4'],
+    ['a template literal', 'export const card = { p: `4` };', 'p-4'],
     ['a null value', 'export const card = { p: 4, m: null };', 'p-4'],
     [
         'a spread of a local const',
