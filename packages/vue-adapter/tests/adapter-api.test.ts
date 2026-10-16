@@ -1,17 +1,11 @@
 /**
- * Coverage for the Vue adapter's public API: template extraction, class
- * merging, the preprocess entry, and the vite plugin factory. The existing
+ * Coverage for the Vue adapter's public API: template extraction, the
+ * preprocess entry, and the vite plugin factory. The existing
  * suite covers transformTemplate; this fills the rest.
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-    extractTemplate,
-    mergeClassAttributes,
-    preprocess,
-    transformTemplate,
-    vitePlugin,
-} from '../src/index.js';
+import { extractTemplate, preprocess, transformTemplate, vitePlugin } from '../src/index.js';
 
 describe('extractTemplate', () => {
     it('extracts the template block content', () => {
@@ -38,19 +32,8 @@ describe('transformTemplate', () => {
             count: 0,
             transformed: false,
             diagnostics: [],
+            map: null,
         });
-    });
-});
-
-describe('mergeClassAttributes', () => {
-    it('leaves an element with only a static class untouched', () => {
-        const input = '<div class="a" />';
-        expect(mergeClassAttributes(input)).toBe(input);
-    });
-
-    it('returns non-element text unchanged', () => {
-        const input = 'no tags here, just class="x" text';
-        expect(mergeClassAttributes(input)).toBe(input);
     });
 });
 

@@ -1,73 +1,36 @@
 /**
- * Coverage for the Svelte adapter's public API: class attribute merging, the
+ * Coverage for the Svelte adapter's public API: the class an sz joins, the
  * preprocess entry, and the preprocessor / vite plugin factories. The
  * existing suite covers transformMarkup; this fills the rest.
  */
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
-import { mergeClassAttributes, preprocess, preprocessor, vitePlugin } from '../src/index.js';
+import { preprocess, preprocessor, vitePlugin } from '../src/index.js';
 
-describe('mergeClassAttributes', () => {
-    it('merges two class attributes on one element into one', () => {
-        const out = mergeClassAttributes('<div class="a" class="b" />');
-        expect(out).toContain('class="a b"');
-        expect(out.match(/class="/g)).toHaveLength(1);
-    });
-
-    it('leaves a single class attribute untouched', () => {
-        const input = '<div class="a" />';
-        expect(mergeClassAttributes(input)).toBe(input);
-    });
-
-    it('merges only the class attributes on one side of a spread', () => {
-        expect(mergeClassAttributes('<div class="a" class="b" {...rest} class="c"></div>')).toBe(
-            '<div class="a b"  {...rest} class="c"></div>',
-        );
-        expect(mergeClassAttributes('<div {...rest} class="a" class="b"></div>')).toBe(
-            '<div {...rest} class="a b" ></div>',
-        );
-    });
-
+describe('the class an sz joins', () => {
     it.each([
-        ['an action', '<div class="a" use:tip={{...o, x: 1}} class="b"></div>'],
-        ['a call', '<div class="a" data-j={JSON.stringify({...o})} class="b"></div>'],
-        ['a spaced action', '<div class="a" use:tip={ {...{ x: 1 }} } class="b"></div>'],
-        ['a spaced value', '<div class="a" data-x={ {...rest} } class="b"></div>'],
-        ['a quoted value', '<div class="a" title="see { {...x} }" class="b"></div>'],
-        ['a brace in a string', '<div class="a" data-x={ f(`}`, {...o}) } class="b"></div>'],
-    ])('does not take an object spread inside %s for a spread attribute', (_name, tag) => {
-        const out = mergeClassAttributes(tag);
-        expect(out).toContain('class="a b"');
-        expect(out.match(/class="/g)).toHaveLength(1);
+        ['after it', '<div class="a" sz={{ p: 4 }}></div>', '<div class="a p-4"></div>'],
+        ['before it', '<div sz={{ p: 4 }} class="a"></div>', '<div class="a p-4"></div>'],
+        [
+            'on its side of a spread',
+            '<div {...rest} class="a" sz={{ p: 4 }}></div>',
+            '<div {...rest} class="a p-4"></div>',
+        ],
+        [
+            'whose value holds a spread-like brace',
+            `<div class="{x ? '{...a}' : 'b'}" sz={{ p: 4 }}></div>`,
+            `<div class="{x ? '{...a}' : 'b'} p-4"></div>`,
+        ],
+        ['empty', '<div class="" sz={{ p: 4 }}></div>', '<div class="p-4"></div>'],
+    ])('is the quoted class %s', (_name, source, expected) => {
+        expect(preprocess(source).code).toBe(expected);
     });
 
-    it('takes a spread whose object holds braces as one spread', () => {
-        expect(
-            mergeClassAttributes('<div class="a" {...{ x: { y: 1 } }} class="b" class="c"></div>'),
-        ).toBe('<div class="a" {...{ x: { y: 1 } }} class="b c" ></div>');
-    });
-
-    it('reads a spread the tag scan cut short as part of its side', () => {
-        // The scan ends a tag at its first `>`, so a spread holding one is cut
-        // before its `}` and stays in the side it began on.
-        expect(mergeClassAttributes('<div class="a" class="b" {...(x > y ? p : q)} />')).toBe(
-            '<div class="a b"  {...(x > y ? p : q)} />',
-        );
-    });
-
-    it('reads a quoted value the tag scan cut short as part of its side', () => {
-        expect(mergeClassAttributes('<div {...r} class="a" class="b" title="x > y" />')).toBe(
-            '<div {...r} class="a b"  title="x > y" />',
-        );
-    });
-
-    it('leaves class attributes on either side of a spread for Svelte to refuse', () => {
-        const input = '<div class="card" {...rest} class="p-4"></div>';
-        expect(mergeClassAttributes(input)).toBe(input);
-        // Svelte stops the build here with its own message, naming the element.
-        expect(() => compile(input, { generate: 'server' })).toThrow(
-            /Attributes need to be unique/,
+    it('is none for a class written as one expression', () => {
+        // A class string cannot join `class={…}`; Svelte names the duplicate.
+        expect(preprocess('<div class={c} sz={{ p: 4 }}></div>').code).toBe(
+            '<div class={c} class="p-4"></div>',
         );
     });
 
@@ -79,17 +42,12 @@ describe('mergeClassAttributes', () => {
         expect(out).toContain('class="p-4"');
         expect(() => compile(out, { generate: 'server' })).toThrow(/Attributes need to be unique/);
     });
-
-    it('ignores text that is not an element tag', () => {
-        const input = 'plain text with class="x" not in a tag start';
-        expect(mergeClassAttributes(input)).toBe(input);
-    });
 });
 
 describe('preprocess', () => {
     it('returns the source unchanged when there is no sz attribute', () => {
         const source = '<div class="p-4">no sz here</div>';
-        expect(preprocess(source)).toEqual({ code: source, map: undefined, diagnostics: [] });
+        expect(preprocess(source)).toEqual({ code: source, map: null, diagnostics: [] });
     });
 
     it('transforms an sz attribute into classes', () => {

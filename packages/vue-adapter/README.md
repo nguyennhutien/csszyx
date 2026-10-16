@@ -8,6 +8,18 @@ Vue SFC preprocessor for [csszyx](https://github.com/nguyennhutien/csszyx) —
 transforms `sz` props into Tailwind CSS classes inside `.vue` single-file
 components.
 
+## Requirements
+
+Vue 3.5. The adapter reads each SFC with `vue/compiler-sfc`, the parser your
+build uses, so an `sz` is read where Vue sees an attribute in the root
+`<template>` and nowhere else: not in text, an interpolation, a comment, a
+custom block or under `v-pre`. A file Vue cannot parse, or a template in
+another language such as `lang="pug"`, is one error and nothing in it is
+lowered.
+
+The class joins the element's static `class`, or takes the attribute's place;
+Vue joins a bound `:class` to it at runtime.
+
 ## Static `sz` values only
 
 A Vue template has no csszyx runtime, so the adapter writes a class only for an

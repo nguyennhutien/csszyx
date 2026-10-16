@@ -75,7 +75,6 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
-export { rewriteStartTags } from './start-tags.js';
 export {
     isAdvisorySzDiagnostic,
     SZ_DIAGNOSTIC_KIND_IDS,

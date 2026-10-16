@@ -15,6 +15,8 @@
  * @module template-sz
  */
 
+import MagicString, { type SourceMap } from 'magic-string';
+
 import { findEmittedClassName } from './emitted-class-name.js';
 import { chooseEngine } from './engine-choice.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
@@ -105,32 +107,41 @@ export interface TemplateSzAttribute {
     end: number;
     /** Its value. */
     value: TemplateSzValue;
+    /**
+     * Where the value of a static `class` attribute on the same element lies,
+     * quotes excluded, when the class should join it: a second `class`
+     * attribute is an error in Vue and in Svelte. Omitted, the attribute is
+     * replaced by a `class` attribute of its own. `quoted` is false for
+     * `class=a`, which takes quotes once a space joins it.
+     */
+    classValue?: { start: number; end: number; quoted: boolean };
 }
 
-/** What {@link rewriteTemplateSz} answers for a region of a file. */
+/** What {@link rewriteTemplateSz} answers for a template file. */
 export interface TemplateSzRewrite extends TemplateSzLowering {
-    /** The region with each lowered attribute replaced by its `class`. */
+    /** The file with each lowered attribute replaced by its class. */
     code: string;
     /** How many attributes were replaced. */
     count: number;
+    /** The map from `code` back to the file; `null` when nothing changed. */
+    map: SourceMap | null;
 }
 
 /**
- * Lower the `sz` attributes in a region of a template file and write each one
- * that lowered as an escaped `class` attribute. An attribute whose value
- * needs the runtime is left as written, with an error in the diagnostics.
+ * Lower the `sz` attributes of a template file and write each one that
+ * lowered as escaped class text: into the element's static `class` value when
+ * the attribute names one, otherwise as a `class` attribute in its place. An
+ * attribute whose value needs the runtime is left as written, with an error
+ * in the diagnostics.
  *
  * @param file - The whole template file; diagnostics are placed in it.
- * @param region - The offsets the attributes lie between.
- * @param region.from - Where the region starts.
- * @param region.to - Where the region ends.
- * @param attributes - The attributes, in file order, inside the region.
+ * @param attributes - The attributes, in file order.
  * @param options - File name, engine artifact and class prefix.
- * @returns The region's new text, the class per attribute, and the diagnostics.
+ * @returns The new text and its source map, the class per attribute, and the
+ *   diagnostics.
  */
 export function rewriteTemplateSz(
     file: string,
-    region: { from: number; to: number },
     attributes: readonly TemplateSzAttribute[],
     options: TemplateSzOptions = {},
 ): TemplateSzRewrite {
@@ -139,18 +150,48 @@ export function rewriteTemplateSz(
         attributes.map(attribute => attribute.value),
         options,
     );
-    let code = '';
-    let last = region.from;
+    const edited = new MagicString(file);
     let count = 0;
     attributes.forEach((attribute, index) => {
         const className = lowering.classNames[index];
         if (className === null) return;
-        code += `${file.slice(last, attribute.start)}class="${escapeTemplateAttribute(className)}"`;
-        last = attribute.end;
         count += 1;
+        const escaped = escapeTemplateAttribute(className);
+        const { classValue } = attribute;
+        if (classValue === undefined) {
+            edited.overwrite(attribute.start, attribute.end, `class="${escaped}"`);
+            return;
+        }
+        edited.remove(spaceBefore(file, attribute.start), attribute.end);
+        if (escaped === '') return;
+        const joined = classValue.end > classValue.start ? ` ${escaped}` : escaped;
+        if (classValue.quoted) {
+            edited.appendLeft(classValue.end, joined);
+        } else {
+            edited.prependRight(classValue.start, '"');
+            edited.appendLeft(classValue.end, `${joined}"`);
+        }
     });
-    code += file.slice(last, region.to);
-    return { ...lowering, code, count };
+    if (count === 0) return { ...lowering, code: file, count, map: null };
+    const map = edited.generateMap({
+        source: options.filename,
+        includeContent: true,
+        hires: 'boundary',
+    });
+    return { ...lowering, code: edited.toString(), count, map };
+}
+
+/**
+ * Where the whitespace before an attribute starts.
+ *
+ * @param file - The template file.
+ * @param start - Offset of the attribute name.
+ * @returns The offset of the first whitespace character before it.
+ */
+function spaceBefore(file: string, start: number): number {
+    let from = start;
+    while (from > 0 && /\s/.test(file.charAt(from - 1))) from -= 1;
+    return from;
 }
 
 /**
@@ -266,12 +307,30 @@ function placer(
     let lineStarts: number[] | undefined;
     return (severity, offset, text) => {
         lineStarts ??= lineStartsOf(file);
-        let line = 0;
-        while (line + 1 < lineStarts.length && lineStarts[line + 1] <= offset) line += 1;
+        const line = lineIndexOf(lineStarts, offset);
         const column = offset - lineStarts[line] + 1;
         const where = [filename, line + 1, column].filter(part => part !== undefined).join(':');
         return { severity, message: `[csszyx] ${where}: ${text}`, line: line + 1, column };
     };
+}
+
+/**
+ * The line an offset falls on, by binary search: a file can carry thousands
+ * of diagnostics, and walking from the first line for each was quadratic.
+ *
+ * @param lineStarts - Where each line starts, ascending.
+ * @param offset - A UTF-16 offset.
+ * @returns The 0-based line.
+ */
+function lineIndexOf(lineStarts: readonly number[], offset: number): number {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+        const middle = (low + high + 1) >> 1;
+        if (lineStarts[middle] <= offset) low = middle;
+        else high = middle - 1;
+    }
+    return low;
 }
 
 /**
@@ -284,6 +343,31 @@ function lineStartsOf(text: string): number[] {
         starts.push(index + 1);
     }
     return starts;
+}
+
+/** Input to {@link placeTemplateDiagnostic}. */
+export interface PlaceTemplateDiagnosticInput {
+    /** The whole template file. */
+    file: string;
+    /** Its name, when known. */
+    filename?: string;
+    /** `error` when the file gets no class from it. */
+    severity: TemplateSzDiagnostic['severity'];
+    /** UTF-16 offset in the file. */
+    offset: number;
+    /** The message, without the `[csszyx] <file>:<line>:<column>:` head. */
+    text: string;
+}
+
+/**
+ * A diagnostic placed in a template file, for what an adapter reports itself:
+ * a file its framework's parser rejects, say.
+ *
+ * @param input - The file, the place and the text.
+ * @returns The diagnostic.
+ */
+export function placeTemplateDiagnostic(input: PlaceTemplateDiagnosticInput): TemplateSzDiagnostic {
+    return placer(input.file, input.filename)(input.severity, input.offset, input.text);
 }
 
 /** Where an adapter hands its diagnostics: a bundler plugin context, say. */
@@ -333,13 +417,24 @@ export function transformTemplateFile(
     preprocess: (
         source: string,
         filename: string,
-    ) => { code: string; diagnostics: TemplateSzDiagnostic[] },
-): { code: string; map: null } | null {
-    if (!id.endsWith(extension) || !code.includes('sz=')) return null;
+    ) => { code: string; map?: SourceMap | null; diagnostics: TemplateSzDiagnostic[] },
+): { code: string; map: SourceMap | null } | null {
+    if (!id.endsWith(extension) || !mayHoldSzAttribute(code)) return null;
     const result = preprocess(code, id);
     reportTemplateSzDiagnostics(reporter, result.diagnostics);
-    // Source-map generation is not implemented yet.
-    return result.code === code ? null : { code: result.code, map: null };
+    return result.code === code ? null : { code: result.code, map: result.map ?? null };
+}
+
+/**
+ * Whether a template file may hold an `sz` attribute: the cheap test that
+ * spares a file without one its parse. `sz = "…"` with spaces is an attribute
+ * too.
+ *
+ * @param source - The file.
+ * @returns Whether `sz` followed by optional whitespace and `=` occurs.
+ */
+export function mayHoldSzAttribute(source: string): boolean {
+    return /sz\s*=/.test(source);
 }
 
 /**

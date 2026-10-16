@@ -8,6 +8,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+    mayHoldSzAttribute,
+    placeTemplateDiagnostic,
     reportTemplateSzDiagnostics,
     rewriteTemplateSz,
     type TemplateSzAttribute,
@@ -37,24 +39,25 @@ function attributesOf(file: string): TemplateSzAttribute[] {
 
 describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
     const rewrite = (file: string, filename?: string) =>
-        rewriteTemplateSz(file, { from: 0, to: file.length }, attributesOf(file), {
+        rewriteTemplateSz(file, attributesOf(file), {
             filename,
             parser,
         });
 
     it('writes the class of every value the engine resolves, escaped', () => {
         const file = `<a sz={{ p: 4 }} />\n<b sz={{}} />\n<i sz={{ content: '"{x}' }} />`;
-        expect(rewrite(file)).toEqual({
+        expect(rewrite(file)).toMatchObject({
             code: '<a class="p-4" />\n<b class="" />\n<i class="content-[&#34;&#123;x&#125;]" />',
             count: 3,
             classNames: ['p-4', '', 'content-["{x}]'],
             diagnostics: [],
+            map: { version: 3 },
         });
     });
 
     it("writes the class under the project's Tailwind prefix", () => {
         const file = '<a sz={{ p: 4, hover: { m: 2 } }} />';
-        const result = rewriteTemplateSz(file, { from: 0, to: file.length }, attributesOf(file), {
+        const result = rewriteTemplateSz(file, attributesOf(file), {
             parser,
             classPrefix: 'tw',
         });
@@ -100,7 +103,6 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
         const file = '<a sz={{\n  foo: 4 }} />';
         const result = rewriteTemplateSz(
             file,
-            { from: 0, to: file.length },
             [{ start: 3, end: file.length - 3, value: { source: '{\n  foo: 4 }', start: 7 } }],
             { parser },
         );
@@ -116,19 +118,75 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
     it('maps a position through the offsets of a decoded value', () => {
         const result = rewriteTemplateSz(
             'xx{ p: size }',
-            { from: 0, to: 13 },
             [{ start: 0, end: 13, value: { source: '{ p: size }', start: 2, offsets: [9] } }],
             { parser },
         );
         expect(result.diagnostics[0].column).toBe(10);
     });
 
-    it('lowers nothing for a region with no attributes', () => {
-        expect(rewriteTemplateSz('<a />', { from: 0, to: 5 }, [], { parser })).toEqual({
+    it('joins a class to the static class value it names', () => {
+        const file = '<a class="x" sz={{ p: 4 }} />';
+        const [attribute] = attributesOf(file);
+        expect(
+            rewriteTemplateSz(
+                file,
+                [{ ...attribute, classValue: { start: 10, end: 11, quoted: true } }],
+                {
+                    parser,
+                },
+            ).code,
+        ).toBe('<a class="x p-4" />');
+    });
+
+    it('quotes an unquoted class value it joins', () => {
+        const file = '<a class=x sz={{ p: 4 }} />';
+        const [attribute] = attributesOf(file);
+        expect(
+            rewriteTemplateSz(
+                file,
+                [{ ...attribute, classValue: { start: 9, end: 10, quoted: false } }],
+                {
+                    parser,
+                },
+            ).code,
+        ).toBe('<a class="x p-4" />');
+    });
+
+    it('fills an empty class value and drops an sz with no class', () => {
+        const file = '<a class="" sz={{ p: 4 }} />\n<b class="y" sz={{}} />';
+        const [first, second] = attributesOf(file);
+        const y = file.indexOf('y"');
+        const result = rewriteTemplateSz(
+            file,
+            [
+                { ...first, classValue: { start: 10, end: 10, quoted: true } },
+                { ...second, classValue: { start: y, end: y + 1, quoted: true } },
+            ],
+            { parser },
+        );
+        expect(result.code).toBe('<a class="p-4" />\n<b class="y" />');
+    });
+
+    it('maps the rewritten file back to the template', () => {
+        const file = '<a sz={{ p: 4 }} />';
+        const result = rewriteTemplateSz(file, attributesOf(file), {
+            parser,
+            filename: 'A.svelte',
+        });
+        expect(result.map).toMatchObject({
+            version: 3,
+            sources: ['A.svelte'],
+            sourcesContent: [file],
+        });
+    });
+
+    it('lowers nothing for a file with no attributes', () => {
+        expect(rewriteTemplateSz('<a />', [], { parser })).toEqual({
             code: '<a />',
             count: 0,
             classNames: [],
             diagnostics: [],
+            map: null,
         });
     });
 });
@@ -136,9 +194,7 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
 describe('the engine artifact', () => {
     it('is the build default when none is named', () => {
         const file = '<a sz={{ p: 4 }} />';
-        expect(rewriteTemplateSz(file, { from: 0, to: file.length }, attributesOf(file)).code).toBe(
-            '<a class="p-4" />',
-        );
+        expect(rewriteTemplateSz(file, attributesOf(file)).code).toBe('<a class="p-4" />');
     });
 });
 
@@ -195,5 +251,43 @@ describe('reportTemplateSzDiagnostics', () => {
         const reporter = { warn: vi.fn(), error: vi.fn() as unknown as (m: string) => never };
         reportTemplateSzDiagnostics(reporter, []);
         expect(reporter.error).not.toHaveBeenCalled();
+    });
+});
+
+describe('the template-file helpers', () => {
+    it.each([
+        ['sz=', true],
+        ['sz = "{}"', true],
+        [':sz\n=', true],
+        ['size', false],
+        ['sz', false],
+    ])('tells whether %j may hold an sz attribute', (source, expected) => {
+        expect(mayHoldSzAttribute(source)).toBe(expected);
+    });
+
+    it.each([
+        [0, 1, 1],
+        [2, 2, 1],
+        [5, 3, 2],
+    ])('places offset %i on line %i, column %i', (offset, line, column) => {
+        const placed = placeTemplateDiagnostic({
+            file: 'a\nb\ncd',
+            severity: 'warning',
+            offset,
+            text: 'x',
+        });
+        expect([placed.line, placed.column]).toEqual([line, column]);
+    });
+
+    it('places a diagnostic of its own in the file', () => {
+        expect(
+            placeTemplateDiagnostic({
+                file: 'a\nbc',
+                filename: 'A.vue',
+                severity: 'error',
+                offset: 3,
+                text: 'no',
+            }),
+        ).toEqual({ severity: 'error', message: '[csszyx] A.vue:2:2: no', line: 2, column: 2 });
     });
 });

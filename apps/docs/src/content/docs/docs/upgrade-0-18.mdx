@@ -63,6 +63,8 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
 | [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
+| [Framework parsers](#the-adapters-read-templates-with-vues-and-sveltes-parsers) | `Svelte cannot parse this file` on `sz="{ p: 4 }"`; Vue 3.5 and Svelte 5 required | the build | you |
+| [`mergeClassAttributes` removed](#the-adapters-read-templates-with-vues-and-sveltes-parsers) | an import that no longer resolves | `tsc`, the bundler | you |
 | [A template string without `${}`](#a-template-string-without-a-substitution-is-static) | `` { p: `4` } `` emits `p-4` | your snapshots | nothing |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
@@ -656,6 +658,49 @@ csszyx `sz` and stops the build. Pass the prop in a way the adapters do not read
 `@csszyx/svelte-adapter`. `preprocess()` from either adapter returns the errors
 and warnings in `result.diagnostics`, each with its `line`, `column` and full
 `message`; pass `filename` in the options to put the file name in the message.
+
+## The adapters read templates with Vue's and Svelte's parsers
+
+`@csszyx/vue-adapter` now reads a `.vue` file with `vue/compiler-sfc`, and
+`@csszyx/svelte-adapter` reads a `.svelte` file with `svelte/compiler`. Both
+read the file the way your build does, so `sz=` written in page text, in a
+comment, in an interpolation, in an `{@html}` string or under `v-pre` stays text,
+and `sz = "{ p: 4 }"` with spaces around `=` is read. The adapters need the
+framework installed: Vue 3.5 or later, Svelte 5 or later. Svelte 4 is no longer
+read.
+
+The class joins the element's own `class` instead of standing beside it, which
+Vue and Svelte both reject as a duplicate attribute:
+
+```vue
+<div class="card" :sz="{ p: 4 }" />
+<!-- 0.17 → class="card" class="p-4" -->
+<!-- 0.18 → class="card p-4" -->
+```
+
+In Vue a bound `:class` is left alone and Vue joins it to the static class at
+runtime. In Svelte the class joins a quoted `class` on the same side of the
+element's spreads; `class={expr}` stays a separate attribute.
+
+**Svelte's quoted single-brace form is gone.** `sz="{ p: 4 }"` is not Svelte, and
+Svelte's parser rejects the file. Write the value as an expression:
+
+```svelte
+<!-- before -->
+<div sz="{ p: 4 }"></div>
+
+<!-- after -->
+<div sz={{ p: 4 }}></div>
+```
+
+**A file the framework cannot parse is one error.** The build stops on it with
+the parser's message and position, and no `sz` in that file is lowered. In
+Svelte, run csszyx after the preprocessors that turn the file into Svelte (pug,
+TypeScript without `lang="ts"`). A Vue `<template lang="pug">` holding `sz` is
+an error too: the adapter reads HTML templates only.
+
+`mergeClassAttributes` is no longer exported from either adapter; `preprocess()`
+joins the class itself. `preprocess()` now returns a source map in `result.map`.
 
 ## A template string without a substitution is static
 

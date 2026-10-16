@@ -93,45 +93,35 @@ describe('markup that never closes', () => {
         ['a script start tag', '<script lang="ts" '],
         ['a script block', '<script>a '],
         ['a script end tag', '<script>a</script x="'],
-    ])('reads nothing after %s', (_name, open) => {
-        const source = `${open}<i sz={{ m: 2 }}></i>`;
-        expect(transformMarkup(source)).toEqual({ code: source, count: 0, diagnostics: [] });
-    });
-
-    it('reads sz before the markup that never closes', () => {
-        expect(transformMarkup('<i sz={{ m: 2 }}></i>{a ').code).toBe('<i class="m-2"></i>{a ');
+    ])('reports %s as the one error of the file', (_name, open) => {
+        // Svelte cannot parse the file, and the build stops on it; nothing in
+        // it is lowered and the error says where.
+        const source = `<i sz={{ m: 2 }}></i>${open}<i sz={{ m: 2 }}></i>`;
+        const result = transformMarkup(source);
+        expect(result.code).toBe(source);
+        expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
     });
 });
 
 describe('scan cost', () => {
-    it('reads braces nested 100k deep', () => {
-        const nested = `${'{'.repeat(100_000)}${'}'.repeat(100_000)}`;
-        expect(transformMarkup(`${nested}<i sz={{ m: 2 }}></i>`).code).toBe(
-            `${nested}<i class="m-2"></i>`,
+    it('walks markup as deep as Svelte parses', () => {
+        // Svelte's parser runs out of stack near 1,000 levels and fails the
+        // compile there itself; the walk over its tree keeps its own stack.
+        const depth = 500;
+        const source = `${'<div>'.repeat(depth)}<i sz={{ m: 2 }}></i>${'</div>'.repeat(depth)}`;
+        const startedAt = performance.now();
+        expect(transformMarkup(source, { parser: 'wasm' }).code).toBe(
+            source.replace('sz={{ m: 2 }}', 'class="m-2"'),
         );
+        expect(performance.now() - startedAt).toBeLessThan(2_000);
     });
 
-    it.each([
-        ['comment openings', '<!--'],
-        ['brace openings', '{'],
-        ['string openings in an expression', "{'"],
-        ['unterminated attribute quotes', '<a b="'],
-        ['attribute expression openings', '<a b={'],
-        ['less-than signs', '<'],
-        ['look-alike tags', '<scriptx '],
-        ['script openings', '<script>'],
-        ['look-alike script end tags', '<script></scriptx'],
-        ['unterminated sz values', '<a sz={'],
-        ['closed expressions', "{'<script>'}"],
-        ['block comment openings', '{/*'],
-        ['line comment openings', '{a //'],
-        ['regex openings', '{a && /'],
-        ['template substitution openings', '{`${'],
-    ])('scans 100k %s in linear time', (_name, unit) => {
-        const source = unit.repeat(100_000);
-        const startedAt = performance.now();
-        transformMarkup(source);
-        transformMarkup(`<i sz={{ m: 2 }}></i>${source}`);
-        expect(performance.now() - startedAt).toBeLessThan(2_000);
+    it('reports every value only the runtime knows among many elements', () => {
+        // No time bound: 68 ms here is 2.1 s on a CI runner testing every
+        // package at once, and the cost is the engine batch's, not the reader's.
+        const source = '<b sz={{ p: size }}></b>'.repeat(2_500);
+        const result = transformMarkup(source, { parser: 'wasm' });
+        expect(result.code).toBe(source);
+        expect(result.diagnostics).toHaveLength(2_500);
     });
 });
