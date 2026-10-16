@@ -61,6 +61,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` errors](#csszyxcompiler-renames-one-error-and-drops-another) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
+| [A template string without `${}`](#a-template-string-without-a-substitution-is-static) | `` { p: `4` } `` emits `p-4` | your snapshots | nothing |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
 | [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
@@ -562,6 +563,21 @@ An ES module `import` is unchanged.
 
 **What you see.** A CommonJS config that calls the result as a function fails with
 a `TypeError` when it loads.
+
+## A template string without a substitution is static
+
+`` sz={{ p: `4` }} `` holds the string `'4'` before any code runs, and the build
+now lowers it like `sz={{ p: '4' }}`. It used to set the value through a style
+variable:
+
+```tsx
+<div sz={{ p: `4` }} />
+// 0.17 → className="p-(--_sz-p)" style={{ "--_sz-p": __szSpacingVar(`4`, "p") }}
+// 0.18 → className="p-4"
+```
+
+The same holds in an `szs` slot, an `szv` config, and an object another module
+imports. A template string with a `${}` substitution is unchanged.
 
 ## check --json no longer reports other for engine diagnostics
 
