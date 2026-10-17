@@ -1,0 +1,58 @@
+name: Release dry run
+
+# The release builds and tests its bytes only after a release PR merges, so a
+# broken step there is found by the release itself, halfway through. This runs
+# the same native build, binary loads and release-bytes action on a pull
+# request that changes them or the build settings they read, and stops before
+# anything is published.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-dry-run.yml
+      - .github/workflows/native-artifacts.yml
+      - .github/actions/release-bytes/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - packages/core/Cargo.toml
+      - packages/core/build.rs
+      - packages/core/package.json
+      - packages/core/scripts/**
+      - packages/core/native/**
+      - packages/core-*/package.json
+      - turbo.json
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    uses: ./.github/workflows/native-artifacts.yml
+
+  release-bytes:
+    name: Build and test the release bytes
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Build and test the release bytes
+        uses: ./.github/actions/release-bytes

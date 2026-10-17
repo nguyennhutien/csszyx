@@ -16,7 +16,7 @@ const corePackagePath = path.join(repoRoot, "packages/core/package.json");
 const workspacePath = path.join(repoRoot, "pnpm-workspace.yaml");
 const releaseWorkflowPath = path.join(
   repoRoot,
-  ".github/workflows/release.yml",
+  ".github/workflows/native-artifacts.yml",
 );
 const nativeTypesPath = path.join(repoRoot, "packages/core/native/index.d.ts");
 const nativeDocsPath = path.join(repoRoot, "packages/core/NATIVE-TRANSFORM.md");
@@ -232,12 +232,25 @@ function parseSupportedArchitectures(workspaceYaml) {
 }
 
 /**
- * Assert release.yml keeps one native build row for every platform package.
+ * Assert the native-artifacts workflow the release calls keeps one build row
+ * for every platform package, and loads every binary it builds: on the build
+ * runner (`loadable: true`), or in the `load` job.
  *
- * @param {string} workflow Release workflow contents.
+ * @param {string} workflow Native-artifacts workflow contents.
  */
 function assertReleaseMatrix(workflow) {
+  const loadJob = workflow.split("\n  load:\n")[1] ?? "";
   for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
+    const loadedOnBuildRunner = workflow.includes(
+      `platform: ${packageInfo.platformKey}\n            cross: false\n            loadable: true`,
+    );
+    if (!loadedOnBuildRunner) {
+      assertTextIncludes(
+        loadJob,
+        `platform: ${packageInfo.platformKey}\n`,
+        "release native load job",
+      );
+    }
     assertTextIncludes(
       workflow,
       `target: ${packageInfo.triple}\n            platform: ${packageInfo.platformKey}`,
