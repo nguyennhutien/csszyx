@@ -25,119 +25,52 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
     },
     "./vite": {
-      "import": {
-        "types": "./dist/vite.d.mts",
-        "default": "./dist/vite.mjs"
-      },
-      "require": {
-        "types": "./dist/vite.d.cts",
-        "default": "./dist/vite.cjs"
-      }
+      "types": "./dist/vite.d.mts",
+      "default": "./dist/vite.mjs"
     },
     "./webpack": {
-      "import": {
-        "types": "./dist/webpack.d.mts",
-        "default": "./dist/webpack.mjs"
-      },
-      "require": {
-        "types": "./dist/webpack.d.cts",
-        "default": "./dist/webpack.cjs"
-      }
+      "types": "./dist/webpack.d.mts",
+      "default": "./dist/webpack.mjs"
     },
     "./css-mangler": {
-      "import": {
-        "types": "./dist/css-mangler.d.mts",
-        "default": "./dist/css-mangler.mjs"
-      },
-      "require": {
-        "types": "./dist/css-mangler.d.cts",
-        "default": "./dist/css-mangler.cjs"
-      }
+      "types": "./dist/css-mangler.d.mts",
+      "default": "./dist/css-mangler.mjs"
     },
     "./next": {
-      "import": {
-        "types": "./dist/next-config.d.mts",
-        "default": "./dist/next-config.mjs"
-      },
-      "require": {
-        "types": "./dist/next-config.d.cts",
-        "default": "./dist/next-config.cjs"
-      }
+      "types": "./dist/next-config.d.mts",
+      "default": "./dist/next-config.mjs"
     },
     "./diagnostics": {
-      "import": {
-        "types": "./dist/diagnostics.d.mts",
-        "default": "./dist/diagnostics.mjs"
-      },
-      "require": {
-        "types": "./dist/diagnostics.d.cts",
-        "default": "./dist/diagnostics.cjs"
-      }
+      "types": "./dist/diagnostics.d.mts",
+      "default": "./dist/diagnostics.mjs"
     },
     "./next-turbo-loader": {
-      "import": {
-        "types": "./dist/next-turbo-loader.d.mts",
-        "default": "./dist/next-turbo-loader.mjs"
-      },
-      "require": {
-        "types": "./dist/next-turbo-loader.d.cts",
-        "default": "./dist/next-turbo-loader.cjs"
-      }
+      "types": "./dist/next-turbo-loader.d.mts",
+      "default": "./dist/next-turbo-loader.mjs"
     },
     "./next-prebuild": {
-      "import": {
-        "types": "./dist/next-prebuild.d.mts",
-        "default": "./dist/next-prebuild.mjs"
-      },
-      "require": {
-        "types": "./dist/next-prebuild.d.cts",
-        "default": "./dist/next-prebuild.cjs"
-      }
+      "types": "./dist/next-prebuild.d.mts",
+      "default": "./dist/next-prebuild.mjs"
     },
     "./next-watcher": {
-      "import": {
-        "types": "./dist/next-watcher.d.mts",
-        "default": "./dist/next-watcher.mjs"
-      },
-      "require": {
-        "types": "./dist/next-watcher.d.cts",
-        "default": "./dist/next-watcher.cjs"
-      }
+      "types": "./dist/next-watcher.d.mts",
+      "default": "./dist/next-watcher.mjs"
     },
     "./jest": {
-      "import": {
-        "types": "./dist/jest-transform.d.mts",
-        "default": "./dist/jest-transform.mjs"
-      },
-      "require": {
-        "types": "./dist/jest-transform.d.cts",
-        "default": "./dist/jest-transform.cjs"
-      }
+      "types": "./dist/jest-transform.d.mts",
+      "default": "./dist/jest-transform.mjs"
     },
     "./postcss": {
-      "import": {
-        "types": "./dist/postcss.d.mts",
-        "default": "./dist/postcss.mjs"
-      },
-      "require": {
-        "types": "./dist/postcss.d.cts",
-        "default": "./dist/postcss.cjs"
-      }
+      "types": "./dist/postcss.d.mts",
+      "default": "./dist/postcss.mjs"
     }
   },
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.mts",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "files": [
     "dist"
   ],

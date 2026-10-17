@@ -139,7 +139,8 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
 };
 csszyxPostcss.postcss = true;
 
-// The one export, so the CommonJS build is the function itself: Next loads a
-// PostCSS plugin with a bare `require()` and checks `.postcss === true` on
-// whatever comes back, never on a `.default` property.
 export default csszyxPostcss;
+// What `require()` of this ES module returns: Next loads a PostCSS plugin with
+// a bare `require()` and checks `.postcss === true` on whatever comes back,
+// never on a `.default` property.
+export { csszyxPostcss as 'module.exports' };

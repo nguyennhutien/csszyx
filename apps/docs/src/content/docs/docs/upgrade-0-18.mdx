@@ -64,9 +64,11 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-four-exports) | an import that no longer resolves | `tsc`, the bundler | you |
-| [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find module '@csszyx/core/native'` | `tsc`, the bundler, the first engine call | you |
+| [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find package '@csszyx/core'` | `tsc`, the bundler, the import of `@csszyx/compiler/engine` | you |
+| [Engine at the compiler's version](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `engine-version-skew` | the first engine call | you |
 | [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
 | [Core in Node only](#csszyxcore-runs-in-node-only-and-verifymanglemapintegrity-is-gone) | `verifyMangleMapIntegrity` not exported; `Could not resolve "@csszyx/core"` in a browser build | `tsc`, the bundler | you |
+| [ES modules only](#csszyxunplugin-and-csszyxcompiler-ship-es-modules-only) | `TS1471` or `TS1479` in a CommonJS TypeScript file | `tsc` | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
 | [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
@@ -719,6 +721,41 @@ resolve it:
 "." is not exported under the conditions ["module", "browser", "production", "import"] from package …/@csszyx/core          (Vite)
 ```
 
+## @csszyx/unplugin and @csszyx/compiler ship ES modules only
+
+Both packages shipped every entry twice, as an ES module and as CommonJS, and
+`instanceof` disagreed between the two copies of an error class. They now ship
+ES modules only, which takes 0.79&nbsp;MB off an install. Node 22.18 and later
+load an ES module with `require()` too, and for every entry `require()`
+returns the same exports the CommonJS build did, `default` included, so these
+keep working as they are:
+
+```js
+const csszyxWebpack = require("@csszyx/unplugin/webpack").default;
+const { csszyxTurbopack } = require("@csszyx/unplugin/next");
+const csszyx = require("@csszyx/unplugin/jest").createTransformer();
+```
+
+A PostCSS config that names `@csszyx/unplugin/postcss` still gets the plugin
+function. The compiler entries that `@csszyx/runtime` loads keep their
+CommonJS build, so a Jest suite that renders your components needs no change.
+
+**You are affected** when a TypeScript file compiled as CommonJS — a `.cts`
+file, or a `.ts` file in a package without `"type": "module"` — imports either
+package under `"module": "node16"`, or with TypeScript older than 5.8. A file that
+only imports `@csszyx/runtime` or `@csszyx/types` is not affected.
+
+**What you see.** `TS1471` for `import x = require(…)`, `TS1479` for an
+`import` statement:
+
+```text
+error TS1471: Module '@csszyx/unplugin/webpack' cannot be imported using this construct. The specifier only resolves to an ES module, which cannot be imported with 'require'. Use an ECMAScript import instead.
+error TS1479: The current file is a CommonJS module whose imports will produce 'require' calls; however, the referenced file is an ECMAScript module and cannot be imported with 'require'. Consider writing a dynamic 'import("@csszyx/unplugin")' call instead.
+```
+
+**The edit.** Set `"module"` to `"nodenext"` (TypeScript 5.8 or later) or
+`"node20"` (TypeScript 5.9 or later); both type-check `require()` of an ES module.
+
 ## require of the Vue and Svelte adapters returns the exports
 
 Under `require`, `@csszyx/vue-adapter` and `@csszyx/svelte-adapter` returned a bare
@@ -733,7 +770,9 @@ const { vitePlugin } = require("@csszyx/vue-adapter");
 // Svelte: const { preprocessor } = require("@csszyx/svelte-adapter");
 ```
 
-An ES module `import` is unchanged.
+An ES module `import` is unchanged. The CommonJS entry loads the compiler's ES
+modules with `require()`, so it needs Node 22.18, or 24.11 and later, which both
+packages' `engines` field now states.
 
 **What you see.** A CommonJS config that calls the result as a function fails with
 a `TypeError` when it loads.

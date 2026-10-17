@@ -33,16 +33,21 @@ const PACKAGE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
  */
 const WASM_ENTRY = '@csszyx/core';
 
-/** Prelude that makes the wasm entry unresolvable in the child. */
+/**
+ * Prelude that makes the wasm entry unresolvable in the child. A resolve hook
+ * rather than a patched `Module._load`: the entry is an ES module, whose static
+ * imports never reach `Module._load`, so that patch would let a static import
+ * of the engine through and pass.
+ */
 const POISON = `
-    const Module = require('node:module');
-    const load = Module._load;
-    Module._load = function (request, parent, isMain) {
-        if (request === ${JSON.stringify(WASM_ENTRY)}) {
-            throw new Error('poisoned: ' + request);
-        }
-        return load.call(this, request, parent, isMain);
-    };
+    require('node:module').registerHooks({
+        resolve(specifier, context, nextResolve) {
+            if (specifier === ${JSON.stringify(WASM_ENTRY)}) {
+                throw new Error('poisoned: ' + specifier);
+            }
+            return nextResolve(specifier, context);
+        },
+    });
 `;
 
 /**
@@ -68,9 +73,9 @@ function requireWithoutCore(specifier: string): string {
 
 describe('the package entry, with the wasm core unresolvable', () => {
     it('loads', () => {
-        // The built CJS entry is what a jest project resolves, so it is the
-        // artifact under test rather than the TypeScript source.
-        expect(() => requireWithoutCore('dist/index.cjs')).not.toThrow();
+        // The built entry is what a project loads, so it is the artifact under
+        // test rather than the TypeScript source.
+        expect(() => requireWithoutCore('dist/index.mjs')).not.toThrow();
     });
 
     it('still exports what it exported', () => {
@@ -79,7 +84,7 @@ describe('the package entry, with the wasm core unresolvable', () => {
         // child.
         const script = `
             ${POISON}
-            const api = require(${JSON.stringify(path.join(PACKAGE, 'dist/index.cjs'))});
+            const api = require(${JSON.stringify(path.join(PACKAGE, 'dist/index.mjs'))});
             process.stdout.write(
                 ['transform', 'generateRecoveryToken']
                     .filter(name => typeof api[name] === 'undefined')

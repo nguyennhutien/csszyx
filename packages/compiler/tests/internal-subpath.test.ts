@@ -30,7 +30,7 @@ describe('@csszyx/compiler/internal', () => {
     it('is a subpath of the published package', () => {
         const manifest = JSON.parse(
             readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-        ) as { exports: Record<string, { import: { default: string } }> };
-        expect(manifest.exports['./internal'].import.default).toBe('./dist/internal.mjs');
+        ) as { exports: Record<string, { default: string }> };
+        expect(manifest.exports['./internal'].default).toBe('./dist/internal.mjs');
     });
 });

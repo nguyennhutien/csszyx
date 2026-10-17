@@ -298,6 +298,18 @@ jobs:
         if: needs.detect-changes.outputs.szv_types == 'true' || needs.detect-changes.outputs.lock_code == 'true'
         run: pnpm check:szv-type-cost
 
+      # `@csszyx/unplugin` and `@csszyx/compiler` ship ES modules that a
+      # CommonJS config loads with `require()`. Node accepts that without a
+      # warning from the lowest version in their `engines`; the test pins this
+      # version to that range. Last in the job: it swaps the Node on PATH.
+      - name: Setup the lowest supported Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "22.18.0"
+
+      - name: require() of the ES-module packages on the lowest Node
+        run: node --test scripts/build-tests/require-esm.test.mjs
+
   test:
     name: Test
     needs: detect-changes

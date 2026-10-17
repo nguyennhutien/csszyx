@@ -20,29 +20,19 @@
     "url": "https://github.com/nguyennhutien/csszyx/issues"
   },
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
-      },
       "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+        "types": "./dist/index.d.cts"
+      },
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
     },
     "./engine": {
-      "import": {
-        "types": "./dist/engine.d.mts",
-        "default": "./dist/engine.mjs"
-      },
-      "require": {
-        "types": "./dist/engine.d.cts",
-        "default": "./dist/engine.cjs"
-      }
+      "types": "./dist/engine.d.mts",
+      "default": "./dist/engine.mjs"
     },
     "./browser": {
       "import": {
@@ -105,24 +95,12 @@
       }
     },
     "./migrate": {
-      "import": {
-        "types": "./dist/migrate-rust.d.mts",
-        "default": "./dist/migrate-rust.mjs"
-      },
-      "require": {
-        "types": "./dist/migrate-rust.d.cts",
-        "default": "./dist/migrate-rust.cjs"
-      }
+      "types": "./dist/migrate-rust.d.mts",
+      "default": "./dist/migrate-rust.mjs"
     },
     "./internal": {
-      "import": {
-        "types": "./dist/internal.d.mts",
-        "default": "./dist/internal.mjs"
-      },
-      "require": {
-        "types": "./dist/internal.d.cts",
-        "default": "./dist/internal.cjs"
-      }
+      "types": "./dist/internal.d.mts",
+      "default": "./dist/internal.mjs"
     }
   },
   "files": [
