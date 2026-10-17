@@ -39,11 +39,11 @@ const UNMEASURED = [
     /\.d\.ts$/,
     /(^|\/)scripts\//,
     // A `vitest bench` file. The coverage run's `include` is `packages/*/src`
-    // plus `packages/*/native`, so `bench/` is outside it by construction and
+    // plus `packages/*/native`, so `bench/` and `benchmarks/` are outside it by construction and
     // needs no matching `exclude` entry there — but this gate reads the diff,
     // not the include list, so without this a benchmark reports as changed
     // source that no report mentions.
-    /(^|\/)bench\//,
+    /(^|\/)bench(marks)?\//,
     /^packages\/e2e\//,
     /^packages\/vscode\/src\/extension\.ts$/,
     // Nothing instruments the docs site, so calling its changed lines

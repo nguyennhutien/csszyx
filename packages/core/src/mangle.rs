@@ -54,7 +54,7 @@ pub type MangleMap = HashMap<String, String>;
 /// let checksum = compute_mangle_checksum(js_map);
 /// ```
 // Native LLVM coverage cannot execute a JsValue boundary. This adapter is
-// exercised through pkg-node in tests/integration.test.ts.
+// exercised through pkg-parser in tests/integration.test.ts.
 // coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
@@ -156,7 +156,7 @@ pub fn verify_checksum_internal(map: &MangleMap, expected_checksum: &str) -> boo
 ///
 /// `true` if checksum matches, `false` otherwise
 // Native LLVM coverage cannot execute a JsValue boundary. This adapter is
-// exercised through pkg-node in tests/integration.test.ts.
+// exercised through pkg-parser in tests/integration.test.ts.
 // coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn verify_mangle_checksum(map: JsValue, expected_checksum: &str) -> Result<bool, JsValue> {
@@ -294,11 +294,11 @@ mod tests {
     /// drifting. The runtime asserts the SAME numbers against the WebAssembly
     /// build of this crate, so changing the form here turns this test red,
     /// updating it turns the runtime's copy red, and the runtime's copy only
-    /// goes green again once `pkg-node` has been rebuilt. Without that, a
+    /// goes green again once `pkg-parser` has been rebuilt. Without that, a
     /// change to this function and a stale WebAssembly artifact agree with each
     /// other and nothing notices.
     ///
-    /// Update deliberately, and rebuild `pkg-node` in the same change.
+    /// Update deliberately, and rebuild `pkg-parser` in the same change.
     #[test]
     fn the_canonical_form_is_frozen() {
         let cases: [(MangleMap, &str); 6] = [

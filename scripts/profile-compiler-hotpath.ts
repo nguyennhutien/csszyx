@@ -100,7 +100,7 @@ const IGNORE_DIRS = new Set([
     '.turbo',
     '.git',
     'pkg',
-    'pkg-node',
+    'pkg-parser',
     'target',
 ]);
 const DEFAULT_SOURCE_ROOTS = ['playground', 'apps/docs/src', 'packages'];

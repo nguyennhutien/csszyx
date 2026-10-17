@@ -17,7 +17,7 @@ afterEach(() => {
 describe('stripWasmPackGitignore', () => {
     it('removes the stub from every output directory that has one', () => {
         root = mkdtempSync(path.join(tmpdir(), 'csszyx-wasm-gi-'));
-        for (const dir of ['pkg', 'pkg-node', 'pkg-parser']) {
+        for (const dir of ['pkg', 'pkg-parser']) {
             mkdirSync(path.join(root, dir));
             writeFileSync(path.join(root, dir, '.gitignore'), '*\n');
             writeFileSync(path.join(root, dir, 'csszyx_core_bg.wasm'), 'x');
@@ -25,8 +25,8 @@ describe('stripWasmPackGitignore', () => {
 
         const removed = stripWasmPackGitignore(root);
 
-        expect(removed).toHaveLength(3);
-        for (const dir of ['pkg', 'pkg-node', 'pkg-parser']) {
+        expect(removed).toHaveLength(2);
+        for (const dir of ['pkg', 'pkg-parser']) {
             expect(existsSync(path.join(root, dir, '.gitignore'))).toBe(false);
             expect(existsSync(path.join(root, dir, 'csszyx_core_bg.wasm'))).toBe(true);
         }

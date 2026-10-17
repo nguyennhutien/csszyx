@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { bench, describe } from 'vitest';
-import { init, transform_sz, WasmCollisionDetector } from '../pkg-node/csszyx_core.js';
+import { init, transform_sz, WasmCollisionDetector } from '../pkg-parser/csszyx_core.js';
 
 /**
  * Pure JavaScript implementation of the transformer (from @csszyx/compiler).

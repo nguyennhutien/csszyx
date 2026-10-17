@@ -31,7 +31,6 @@ if (probe.status !== 0) {
 
 const targets = [
     path.join(pkgDir, 'pkg', 'csszyx_core_bg.wasm'),
-    path.join(pkgDir, 'pkg-node', 'csszyx_core_bg.wasm'),
     path.join(pkgDir, 'pkg-parser', 'csszyx_core_bg.wasm'),
 ];
 

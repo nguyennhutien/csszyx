@@ -17,7 +17,7 @@ crate-type = ["cdylib", "rlib"]
 # emit a `__wbindgen_init_externref_table` call that does
 # `WebAssembly.Table.grow(4)`, which Node 22's stricter V8 rejects with
 # `RangeError: WebAssembly.Table.grow(): failed to grow table by 4`
-# when Node tries to load pkg-node/csszyx_core.js — breaking the
+# when Node tries to load the nodejs-target wasm (pkg-parser/) — breaking the
 # @csszyx/playground-webpack-react build step in CI.
 [dependencies]
 wasm-bindgen = "=0.2.93"

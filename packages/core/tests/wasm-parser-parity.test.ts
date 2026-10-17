@@ -39,7 +39,7 @@ const wasmEntry = fileURLToPath(new URL('../pkg-parser/csszyx_core.js', import.m
 
 const MISSING =
     'pkg-parser wasm build is missing — run `pnpm --filter @csszyx/core build` ' +
-    '(the parser wasm is built alongside pkg/ and pkg-node/)';
+    '(the parser wasm is built alongside pkg/)';
 
 function loadParserWasm(): ParserWasm | null {
     if (!existsSync(wasmEntry)) return null;

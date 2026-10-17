@@ -5,13 +5,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        "dist/**",
-        "lib/**",
-        "pkg/**",
-        "pkg-node/**",
-        "pkg-parser/**"
-      ],
+      "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-parser/**"],
       "env": ["NODE_ENV"]
     },
     "dev": {
@@ -32,13 +26,7 @@
     // threw engine-version-skew. KEEP outputs AND env IN SYNC WITH `build`.
     "@csszyx/core#build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        "dist/**",
-        "lib/**",
-        "pkg/**",
-        "pkg-node/**",
-        "pkg-parser/**"
-      ],
+      "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-parser/**"],
       "env": ["NODE_ENV"],
       "inputs": [
         "$TURBO_DEFAULT$",

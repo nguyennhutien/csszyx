@@ -64,7 +64,7 @@ The current public exports remain stable:
 {
   ".": {
     "types": "./pkg/csszyx_core.d.ts",
-    "node": "./pkg-node/csszyx_core.js",
+    "node": "./pkg-parser/csszyx_core.js",
     "default": "./pkg/csszyx_core.js"
   }
 }

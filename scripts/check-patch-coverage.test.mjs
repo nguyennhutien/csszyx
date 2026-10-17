@@ -56,6 +56,7 @@ describe('patch coverage', () => {
         assert.ok(!isMeasurable('packages/core/scripts/build-native.mjs'));
         assert.ok(!isMeasurable('packages/core/build.rs'));
         assert.ok(!isMeasurable('packages/compiler/bench/lowering.bench.ts'));
+        assert.ok(!isMeasurable('packages/core/benchmarks/core.bench.ts'));
         assert.ok(!isMeasurable('packages/cli/src/index.d.ts'));
         assert.ok(!isMeasurable('docs/config/overview.md'));
         assert.ok(!isMeasurable('package.json'));
