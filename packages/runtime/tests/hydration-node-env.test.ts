@@ -21,7 +21,6 @@ import {
     loadMangleMapFromDOM,
     startHydration,
     verifyMangleChecksum,
-    verifyMangleMapIntegrity,
 } from '../src/hydration.js';
 
 describe('hydration guards without a DOM/window (SSR)', () => {
@@ -40,10 +39,6 @@ describe('hydration guards without a DOM/window (SSR)', () => {
 
     it('verifyMangleChecksum returns false', () => {
         expect(verifyMangleChecksum('anything')).toBe(false);
-    });
-
-    it('verifyMangleMapIntegrity returns false', () => {
-        expect(verifyMangleMapIntegrity()).toBe(false);
     });
 
     it('guardHydration returns true (nothing to guard without a DOM)', () => {

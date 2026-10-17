@@ -76,6 +76,18 @@ test.describe('production build under script-src self', () => {
         ).toBeUndefined();
     });
 
+    // The mangle checksum recomputed in the browser: Web Crypto, no
+    // WebAssembly, so `script-src 'self'` needs no `'wasm-unsafe-eval'`. The
+    // build mangles and ships the census, so this is the census path.
+    test('the page recomputes its mangle checksum and it matches', async ({ page }) => {
+        const observe = await observeCsp(page);
+        await page.goto('/?page=integrity');
+        await expect(page.getByTestId('integrity')).toHaveAttribute('data-state', 'verified');
+
+        const { violations } = await observe();
+        expect(violations).toEqual([]);
+    });
+
     test('runtime-resolved classes are mangled and still styled', async ({ page }) => {
         // `SzvStandalone` has no `sz=` at all: its classes come from
         // `szr(szv(...))` at render time, so they only match the mangled CSS if

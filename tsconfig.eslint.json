@@ -9,7 +9,6 @@
         "esModuleInterop": true,
         "noEmit": true,
         "paths": {
-            "@csszyx/core": ["./packages/core/pkg"],
             "@csszyx/compiler": ["./packages/compiler/src"],
             "@csszyx/types": ["./packages/types/src"],
             "@csszyx/runtime": ["./packages/runtime/src"],

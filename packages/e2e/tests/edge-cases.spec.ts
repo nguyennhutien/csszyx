@@ -103,7 +103,7 @@ test.describe('Edge Case Tests (Next.js)', () => {
         // The inert census: `application/json`, never evaluated, so a strict
         // script-src does not apply. This is what makes a mangled class
         // traceable back to its original name in a production page without a
-        // rebuild, and what `verifyMangleMapIntegrity()` reads from the DOM.
+        // rebuild, and what `verifyMangleChecksumAsync()` reads from the DOM.
         const census = (await page.evaluate(() =>
             JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__')?.textContent ?? 'null'),
         )) as Record<string, string> | null;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Ensure that the wasm-pack build artifacts (pkg/ + pkg-parser/) exist.
+// Ensure that the wasm-pack build artifacts (pkg-parser/) exist.
 //
-// Why: pkg/ and pkg-parser/ are gitignored. They live only in the npm tarball
+// Why: pkg-parser/ is gitignored. They live only in the npm tarball
 // (shipped via the `files` field) and on the local machine after build.
 // In the dev workflow Turbo's `^build` dependency chain regenerates them
 // when consumers run `pnpm build` / `pnpm test` at the workspace root, so a
@@ -30,9 +30,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
 
 const REQUIRED_FILES = [
-    'pkg/csszyx_core.js',
-    'pkg/csszyx_core.d.ts',
-    'pkg/csszyx_core_bg.wasm',
     'pkg-parser/csszyx_core.js',
     'pkg-parser/csszyx_core.d.ts',
     'pkg-parser/csszyx_core_bg.wasm',

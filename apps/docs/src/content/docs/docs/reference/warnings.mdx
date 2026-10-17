@@ -1453,11 +1453,12 @@ difference between them is the bug.
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] No checksum found in HTML` | The page claims no build. Every production build writes the attribute. |
 | `[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.` | |
-| `[csszyx] Mangle map failed schema validation; treating integrity as invalid.` | |
-| `[csszyx] WASM core not loaded — mangle map checksum is unverified (schema-validated only). This is detection, not authentication.` | Dev only. |
-| `[csszyx] Failed to verify mangle map:` / `Failed to parse mangle map:` | |
+| `Failed to parse mangle map:` | The census is not JSON; it is ignored. |
+| `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to {computed}, and the checksum it was built with is {expectedChecksum}` + `note: this detects a damaged or stale page, not an attacker; the checksum is not signed` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
+| `[csszyx] mangle-map-unavailable: this page carries the checksum {expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified` + `help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
+| `[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
+| `[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. crypto.subtle exists only in a secure context: serve the page over HTTPS, or from localhost. Nothing was verified.` | `verifyMangleChecksumAsync` answers `false`; `computeMangleChecksumAsync` throws it. Printed in production too. |
 | `[csszyx] Hydration aborted at {tag}:` + reason | |
 | `[csszyx] CSR recovery requires explicit szRecover directive` | Add `szRecover="csr"`. |
 | `[csszyx] szRecover="dev-only" is disabled in production` | By design. |

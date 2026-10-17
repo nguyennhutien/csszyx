@@ -833,25 +833,42 @@ function Box({ sz, ...rest }: BoxProps) {
 
 ## `verifyMangleChecksumAsync(expected, map?)` — Integrity Check
 
-When production mangling is on, csszyx embeds a mangle map plus a checksum so the
-runtime can detect a map that was altered or drifted out of sync.
-`verifyMangleChecksumAsync` **recomputes** the map's checksum with the Web Crypto
-API (`crypto.subtle`) and compares it to the expected value — no WASM core
-required, which makes it usable in edge/serverless runtimes.
+A production build stamps a checksum of its mangle map on `<html>`.
+`verifyMangleChecksumAsync` **recomputes** that checksum with the Web Crypto API
+(`crypto.subtle`) and compares it to the expected value. No WebAssembly is
+involved, so it runs under `script-src 'self'` and in edge runtimes.
 
 ```ts
 function verifyMangleChecksumAsync(
   expectedChecksum: string,
-  map?: MangleMap, // loaded + schema-validated from the DOM when omitted
-): Promise<boolean> // true only when the map is present and its checksum matches
+  map?: MangleMap, // read from the page when omitted
+): Promise<boolean> // true only when the checksum was recomputed and matches
 ```
 
-```ts
-import { verifyMangleChecksumAsync } from '@csszyx/runtime';
+Without a `map` it uses the first of these the page has:
 
-const ok = await verifyMangleChecksumAsync(expectedChecksum);
-if (!ok) {
-  // map missing, corrupted, or changed without updating the checksum
+| The build | The map it checks |
+| --- | --- |
+| mangles and ships the census (the default) | the census in the HTML |
+| mangles classes and sets `hydrationCensus: false` | the map the bundle installed for the runtime |
+| mangles nothing | the empty map, whose checksum the build stamped |
+
+Each of those is a configuration, so each verifies quietly. Every `false`
+prints why:
+
+| Message | Meaning |
+| --- | --- |
+| `[csszyx] mangle-checksum-mismatch: …` | the map does not hash to the expected checksum: a damaged page, or HTML and bundle from different builds |
+| `[csszyx] web-crypto-unavailable: …` | no `crypto.subtle`: the page is not a secure context (HTTPS or localhost), so nothing was verified |
+| `[csszyx] mangle-census-unreadable: …` | the page carries a census that is not a valid map, changed or cut short on the way; it is never read past to the bundle's map |
+| `[csszyx] mangle-map-unavailable: …` | the page has a checksum and no map: a build with `production.mangle` off, `production.mangleVars` on and `hydrationCensus: false` ships none, otherwise the bundle that registers it did not run |
+
+```ts
+import { readChecksumAttribute, verifyMangleChecksumAsync } from '@csszyx/runtime';
+
+const checksum = readChecksumAttribute(document.documentElement);
+if (checksum && !(await verifyMangleChecksumAsync(checksum))) {
+  // the console already says which of the three it was
 }
 ```
 

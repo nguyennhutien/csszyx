@@ -20,13 +20,12 @@
     "url": "https://github.com/nguyennhutien/csszyx/issues"
   },
   "type": "module",
-  "main": "./pkg/csszyx_core.js",
-  "types": "./pkg/csszyx_core.d.ts",
+  "main": "./pkg-parser/csszyx_core.js",
+  "types": "./pkg-parser/csszyx_core.d.ts",
   "exports": {
     ".": {
-      "types": "./pkg/csszyx_core.d.ts",
-      "node": "./pkg-parser/csszyx_core.js",
-      "default": "./pkg/csszyx_core.js"
+      "types": "./pkg-parser/csszyx_core.d.ts",
+      "node": "./pkg-parser/csszyx_core.js"
     },
     "./native": {
       "types": "./native/index.d.ts",
@@ -39,14 +38,13 @@
   },
   "files": [
     "native",
-    "pkg",
     "pkg-parser"
   ],
   "napi": {
     "binaryName": "csszyx-core"
   },
   "scripts": {
-    "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-parser -- --features native-engine && node scripts/strip-wasm-pack-gitignore.mjs && node scripts/run-wasm-opt.mjs",
+    "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target nodejs --out-dir pkg-parser -- --features native-engine && node scripts/strip-wasm-pack-gitignore.mjs && node scripts/run-wasm-opt.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "native:check": "node scripts/check-native.mjs",
@@ -55,7 +53,7 @@
     "native:packages": "node scripts/validate-native-packages.mjs",
     "native:unavailable:smoke": "node scripts/smoke-native-unavailable.mjs",
     "native:smoke": "node scripts/smoke-native.mjs",
-    "clean": "rm -rf pkg pkg-parser target",
+    "clean": "rm -rf pkg-parser target",
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"
   },
   "devDependencies": {

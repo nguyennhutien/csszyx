@@ -6915,7 +6915,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         // The census: inert `application/json`, never evaluated, so a strict
         // `script-src` does not apply to it. It is the payload
-        // `verifyMangleMapIntegrity()` reads from the DOM — which this lane
+        // `verifyMangleChecksumAsync()` reads from the DOM — which this lane
         // never carried, so hydration verification had nothing to read here —
         // and it is what makes a mangled class traceable back to its original
         // name in devtools without rebuilding.

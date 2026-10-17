@@ -3,7 +3,7 @@ import {
     encode,
     generate_token,
     transform_sz,
-} from '../pkg/csszyx_core.js';
+} from '../pkg-parser/csszyx_core.js';
 
 function runExamples(): void {
     // 1. Initialize WASM (already called automatically by wasm-bindgen start)

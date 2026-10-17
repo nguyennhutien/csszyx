@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
+import * as runtime from '@csszyx/runtime';
 import { sortStrings } from './sort.js';
 import { replaceEveryLiteral, unicodeEscape } from './string-escape.js';
 
@@ -245,37 +246,25 @@ export function transformIndexHtml(
 }
 
 /**
- * Creates the map payload used by hydration checksum verification.
+ * The map the hydration checksum covers. The runtime owns the shape, because
+ * it rebuilds the same map from the bundled registry on a page without a
+ * census, and the two must not drift.
+ */
+/**
+ * The runtime's hydration map, namespaced as the page's census holds it.
  *
- * Class-only builds return the historical class map unchanged. Builds with
- * variable mangling prefix both namespaces so class names and CSS custom
- * property names cannot collide inside the checksum input.
+ * Read through the namespace rather than a named import: a `@csszyx/runtime`
+ * from before 0.18 does not export it, and a named import would fail when the
+ * plugin loads, with a bare SyntaxError, before the build-start check can say
+ * which runtime is installed and which one to install.
  *
- * @param classMap Original class name to mangled class token.
- * @param varMap Original CSS custom property to mangled property names.
- * @returns Mangle map payload for script/attribute injection.
+ * @param args - The class map and the CSS variable map.
+ * @returns The map the checksum covers.
  */
 export function createHydrationMangleMap(
-    classMap: Record<string, string>,
-    varMap: Record<string, CssVariableMangleValue> = {},
-): Record<string, string> {
-    if (Object.keys(varMap).length === 0) {
-        return classMap;
-    }
-    const payload: Record<string, string> = {};
-    for (const [key, value] of Object.entries(classMap)) {
-        payload[`class:${key}`] = value;
-    }
-    for (const [key, value] of Object.entries(varMap)) {
-        if (Array.isArray(value)) {
-            for (const mangled of value) {
-                payload[`var:${key}:${mangled}`] = mangled;
-            }
-        } else {
-            payload[`var:${key}`] = value;
-        }
-    }
-    return payload;
+    ...args: Parameters<typeof runtime.createHydrationMangleMap>
+): ReturnType<typeof runtime.createHydrationMangleMap> {
+    return runtime.createHydrationMangleMap(...args);
 }
 
 /**

@@ -4,11 +4,11 @@
 // wasm-pack's built-in wasm-opt pass is disabled via Cargo.toml metadata to
 // avoid a flaky auto-download of binaryen from GitHub Releases. This script
 // re-introduces the size pass as a build-script post-step so that turbo's
-// cache captures the OPTIMIZED pkg/ output (running wasm-opt outside the
+// cache captures the OPTIMIZED pkg-parser/ output (running wasm-opt outside the
 // cached build step would be overwritten on the next turbo cache hit).
 //
 // Environments:
-//   - Release workflow installs binaryen via apt → wasm-opt runs, pkg/ ships
+//   - Release workflow installs binaryen via apt → wasm-opt runs, pkg-parser/ ships
 //     fully optimized to npm.
 //   - CI/dev environments typically have no binaryen → script skips with a
 //     visible log line. This is fine: size optimization is only required for
@@ -30,7 +30,6 @@ if (probe.status !== 0) {
 }
 
 const targets = [
-    path.join(pkgDir, 'pkg', 'csszyx_core_bg.wasm'),
     path.join(pkgDir, 'pkg-parser', 'csszyx_core_bg.wasm'),
 ];
 

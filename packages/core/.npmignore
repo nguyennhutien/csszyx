@@ -1,6 +1,5 @@
 # Whitelist build artifacts
-!pkg/
-!pkg-node/
+!pkg-parser/
 
 # Ignore source
 src/

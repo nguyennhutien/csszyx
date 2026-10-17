@@ -65,7 +65,7 @@ jobs:
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # Tests import built artifacts (`@csszyx/compiler/browser`, the WASM
-      # `pkg-node`, `cli/dist`, …); without the workspace build ~86 suites fail
+      # `pkg-parser`, `cli/dist`, …); without the workspace build ~86 suites fail
       # to import and coverage collapses (~36%). turbo caches this.
       - name: Build workspace
         run: pnpm build

@@ -73,11 +73,17 @@ export const SIZE_BUDGETS = [
         // `splitBoxSz` gained the box roles of nine special keys, the
         // `content-<keyword>` alignment tokens, and `css` kept whole on the
         // fallback node. Budget set the usual ~300 above the measurement.
-        maxGzipBytes: 16_150,
+        //
+        // Raised from 16,150 on 2026-10-17, measured 16,152: the async
+        // mangle check finds its map on the page or in the bundle, says why
+        // every `false` happened, and fails a census the page carries but
+        // cannot read instead of reading past it to the bundle's map.
+        maxGzipBytes: 16_450,
         // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
-        // 8,144 / 1,082.
+        // 8,144 / 1,082. `.` raised from 15,700 on 2026-10-17, measured 15,721,
+        // for the same check.
         entryBudgets: {
-            '.': 15_700,
+            '.': 16_000,
             './lite': 750,
             './core': 1_650,
             './lowering': 750,
@@ -91,12 +97,15 @@ export const SIZE_BUDGETS = [
             // The mangle map and recovery manifest are integrity inputs.
             'error: Failed to parse mangle map:',
             'error: Failed to parse recovery manifest:',
-            'error: [csszyx] Failed to verify mangle map:',
             'error: [csszyx] Mangle map failed schema validation (not a plai',
-            'error: [csszyx] Mangle map failed schema validation; treating i',
-            'warn: [csszyx] No checksum found in HTML',
-            // "Web Crypto is unavailable", built before the call.
+            // `verifyMangleChecksumAsync` saying why it answered false:
+            // `web-crypto-unavailable`, built before the call, then
+            // `mangle-checksum-mismatch` / `mangle-map-unavailable`, chosen
+            // by the call, and `mangle-census-unreadable` for a census the
+            // page carries but cannot read.
             'warn: <expr>',
+            'warn: <expr>',
+            'warn: [csszyx] mangle-census-unreadable: the mangle census on ',
             // Hydration that aborted or fell back renders other than the
             // server did; `dev-only` recovery says it is off in production.
             'error: [csszyx] Hydration aborted at ',

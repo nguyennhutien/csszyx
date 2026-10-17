@@ -507,7 +507,7 @@ jobs:
           pnpm exec turbo run build --filter=@csszyx/compiler
           pnpm check:classify-coverage
 
-      # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
+      # Build the core WASM (pkg-parser) explicitly so the WASM-dependent unit
       # tests are deterministic regardless of turbo's build ordering. The
       # runtime parity gate (tests/wasm-runtime-parity.test.ts) replays the
       # parity corpus through the WASM transform_sz and compares to the TS

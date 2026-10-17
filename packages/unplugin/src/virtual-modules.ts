@@ -202,7 +202,7 @@ export const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
  * The inert hydration census, as one JSON string. Distinct from
  * {@link MANGLE_MAP_PLACEHOLDER}: the census namespaces class and variable
  * entries into a single payload (`class:` / `var:`) and is what
- * `verifyMangleMapIntegrity()` reads back from the DOM.
+ * `verifyMangleChecksumAsync()` reads back from the DOM.
  */
 export const CENSUS_PLACEHOLDER = '___CSSZYX_CENSUS___';
 export const VAR_MANGLE_MAP_PLACEHOLDER = '___CSSZYX_VAR_MANGLE_MAP___';

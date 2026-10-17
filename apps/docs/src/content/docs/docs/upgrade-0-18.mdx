@@ -66,6 +66,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-four-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find module '@csszyx/core/native'` | `tsc`, the bundler, the first engine call | you |
 | [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
+| [Core in Node only](#csszyxcore-runs-in-node-only-and-verifymanglemapintegrity-is-gone) | `verifyMangleMapIntegrity` not exported; `Could not resolve "@csszyx/core"` in a browser build | `tsc`, the bundler | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
 | [`parseObjectLiteral` removed](#vue-and-svelte-templates-take-static-sz-values-only) | an import that no longer resolves | `tsc`, the bundler | you |
@@ -669,6 +670,54 @@ version than `@csszyx/unplugin`, which installing both at once in
 [step 1](#upgrade-in-this-order) avoids. A package that depends on its own copy
 of the runtime shows up with `pnpm why @csszyx/runtime` or
 `npm ls @csszyx/runtime`.
+
+## @csszyx/core runs in Node only, and verifyMangleMapIntegrity is gone
+
+`@csszyx/core` used to ship a second WebAssembly build for bundlers and
+browsers. Its one browser use was a global you wired up yourself,
+`window.verify_mangle_checksum`, so that the synchronous
+`verifyMangleMapIntegrity()` could recompute the mangle checksum, at the price
+of `'wasm-unsafe-eval'` in your Content-Security-Policy. Without that global the
+function accepted the page after a shape check and said so only in
+development.
+
+That build and the function are removed. `@csszyx/core` resolves in Node only,
+and `verifyMangleMapIntegrity` is no longer exported from `@csszyx/runtime` or
+`csszyx`. `verifyMangleChecksumAsync` recomputes the checksum with Web Crypto,
+which plain `script-src 'self'` allows:
+
+```ts
+// before
+import { verifyMangleMapIntegrity } from "@csszyx/runtime";
+if (!verifyMangleMapIntegrity()) abort();
+
+// after
+import { readChecksumAttribute, verifyMangleChecksumAsync } from "@csszyx/runtime";
+const checksum = readChecksumAttribute(document.documentElement);
+if (checksum && !(await verifyMangleChecksumAsync(checksum))) abort();
+```
+
+It finds the map on its own: the census in the HTML, or, with
+`hydrationCensus: false` on a build that mangles classes, the map the bundle
+installed, or, when nothing is mangled, the empty map. Each verifies without a
+word. When it answers `false` it prints why — `mangle-checksum-mismatch`,
+`web-crypto-unavailable`, `mangle-census-unreadable` or `mangle-map-unavailable`
+— see the
+[runtime reference](/docs/reference/runtime/#verifymanglechecksumasyncexpected-map--integrity-check).
+Remove any `window.verify_mangle_checksum` wiring and the
+`'wasm-unsafe-eval'` you added for it.
+
+**You are affected** when your code imports `verifyMangleMapIntegrity`, or
+imports `@csszyx/core` in code that runs in a browser or an edge runtime.
+
+**What you see.** `tsc`: `Module '"@csszyx/runtime"' has no exported member
+'verifyMangleMapIntegrity'`. A browser build that imports the engine fails to
+resolve it:
+
+```text
+✘ [ERROR] Could not resolve "@csszyx/core"          (esbuild)
+"." is not exported under the conditions ["module", "browser", "production", "import"] from package …/@csszyx/core          (Vite)
+```
 
 ## require of the Vue and Svelte adapters returns the exports
 
