@@ -969,8 +969,8 @@ Engine (BUILD-TIME parse of JSX source only): ONE engine, two artifacts —
 WebAssembly, shipped inside `@csszyx/core`). Identical output by construction
 (same source, gate-pinned) — the artifact only affects build speed. The native
 binary ships as per-platform optional deps (`@csszyx/core-*`); if it's missing
-(unsupported arch, omitted optional deps, cross-platform frozen lockfile) the
-DEFAULT `rust` auto-degrades to `wasm` with a one-time warning — builds still
+(unsupported arch, omitted optional deps, a lockfile npm <= 11.2 wrote without
+the other platforms) the DEFAULT `rust` auto-degrades to `wasm` with a one-time warning — builds still
 succeed with identical classes. An EXPLICIT `parser:'rust'` (config or
 `CSSZYX_PARSER=rust`) hard-fails instead. Don't tell users a missing native
 binary breaks csszyx or changes classes; tell them to ignore the warning or set

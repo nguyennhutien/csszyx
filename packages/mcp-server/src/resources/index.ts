@@ -136,8 +136,8 @@ Without it: \`Property 'sz' does not exist on type 'DetailedHTMLProps<...>'\`.
 ## Troubleshooting
 - **"No prebuilt native binary" warning / \`native engine unavailable\`**: the
   default \`rust\` parser's native binary is missing (unsupported arch, optional
-  deps omitted, or a cross-platform frozen lockfile). It is NOT broken and classes
-  are UNCHANGED — there is ONE engine shipped in two builds, native and wasm, and
+  deps omitted, or a lockfile npm <= 11.2 wrote without the other platforms).
+  It is NOT broken and classes are UNCHANGED — there is ONE engine shipped in two builds, native and wasm, and
   they are parity-gated to emit identical output. csszyx auto-falls back to the
   wasm build and the build succeeds; only parse speed differs. Ignore the warning,
   or install the matching \`@csszyx/core-<platform>\` package, or set
