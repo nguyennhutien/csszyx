@@ -13,6 +13,8 @@
 //   - CI/dev environments typically have no binaryen → script skips with a
 //     visible log line. This is fine: size optimization is only required for
 //     the published npm artifact.
+//   - `CSSZYX_REQUIRE_WASM_OPT=1` (the release workflow) turns the skip into a
+//     failure, so the bytes the release tests are the bytes it publishes.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, renameSync } from 'node:fs';
@@ -23,6 +25,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
 
 const probe = spawnSync('wasm-opt', ['--version'], { stdio: 'ignore' });
+if (probe.status !== 0 && process.env.CSSZYX_REQUIRE_WASM_OPT === '1') {
+    console.error('[wasm-opt] binary not found on PATH, and CSSZYX_REQUIRE_WASM_OPT=1 requires it.');
+    process.exit(1);
+}
 if (probe.status !== 0) {
     console.log('[wasm-opt] binary not found on PATH — skipping size optimization.');
     console.log('[wasm-opt] Expected in CI/dev. Release workflow installs binaryen via apt.');

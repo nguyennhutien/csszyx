@@ -6,7 +6,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "lib/**", "pkg-parser/**"],
-      "env": ["NODE_ENV"]
+      "env": ["NODE_ENV", "CSSZYX_REQUIRE_WASM_OPT"]
     },
     "dev": {
       "cache": false,
@@ -24,10 +24,12 @@
     // digest it expects; a lockfile change that rebuilt the compiler but
     // replayed a cached engine left the two disagreeing, and every engine call
     // threw engine-version-skew. KEEP outputs AND env IN SYNC WITH `build`.
+    // `CSSZYX_REQUIRE_WASM_OPT` is in the key so the release, which sets it,
+    // never replays a wasm build that skipped the optimizer.
     "@csszyx/core#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "lib/**", "pkg-parser/**"],
-      "env": ["NODE_ENV"],
+      "env": ["NODE_ENV", "CSSZYX_REQUIRE_WASM_OPT"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/Cargo.toml",

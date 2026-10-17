@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 // Build, load, and clean the current host's native-engine addon.
+//
+// `--prebuilt` loads the addon already in the host's package and leaves it
+// there: the release workflow checks the exact binary it is about to publish.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
@@ -19,9 +22,10 @@ if (!packageDir || !nodePath) {
 }
 
 const generatedDtsPath = path.join(packageDir, "index.d.ts");
+const prebuilt = process.argv.includes("--prebuilt");
 
 try {
-  runBuild();
+  if (!prebuilt) runBuild();
   assertFile(nodePath);
 
   const native = await import(
@@ -39,8 +43,10 @@ try {
     `[native-engine-smoke] Loaded ${path.relative(repoRoot, nodePath)}`,
   );
 } finally {
-  rmSync(nodePath, { force: true });
-  rmSync(generatedDtsPath, { force: true });
+  if (!prebuilt) {
+    rmSync(nodePath, { force: true });
+    rmSync(generatedDtsPath, { force: true });
+  }
 }
 
 function runBuild() {

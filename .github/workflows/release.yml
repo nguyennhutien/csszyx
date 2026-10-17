@@ -183,6 +183,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             platform: linux-x64-gnu
             cross: false
+            loadable: true
           - runner: ubuntu-latest
             target: x86_64-unknown-linux-musl
             platform: linux-x64-musl
@@ -203,10 +204,12 @@ jobs:
             target: aarch64-apple-darwin
             platform: darwin-arm64
             cross: false
+            loadable: true
           - runner: windows-2025-vs2026
             target: x86_64-pc-windows-msvc
             platform: win32-x64-msvc
             cross: false
+            loadable: true
           - runner: windows-2025-vs2026
             target: aarch64-pc-windows-msvc
             platform: win32-arm64-msvc
@@ -276,6 +279,15 @@ jobs:
           cp \
             "packages/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node" \
             "native-artifacts/packages/core-${{ matrix.platform }}/"
+
+      # Load the binary this job built and run the engine smoke on it, where
+      # the runner can execute it: x64 Linux, arm64 macOS and x64 Windows. The
+      # x64 Linux binary also goes through the full engine suites in the
+      # publish job.
+      - name: Load the release binary
+        if: matrix.loadable
+        shell: bash
+        run: node packages/core/scripts/smoke-native-engine.mjs --prebuilt
 
       - name: Upload native package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -369,12 +381,26 @@ jobs:
         run: pnpm --filter @csszyx/core native:packages -- --require-binaries
 
       # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
-      # so the OPTIMIZED pkg/ is what turbo captures in its cache.
+      # so the OPTIMIZED pkg-parser/ is what turbo captures in its cache, and
+      # CSSZYX_REQUIRE_WASM_OPT fails the build where it would skip.
       - name: Build WASM core
         run: pnpm --filter @csszyx/core build
+        env:
+          CSSZYX_REQUIRE_WASM_OPT: "1"
 
       - name: Build all packages
         run: pnpm build
+        env:
+          CSSZYX_REQUIRE_WASM_OPT: "1"
+
+      # CI tests an unoptimized wasm and a native binary it built itself. These
+      # are the bytes going to npm: the wasm after wasm-opt, and the x64 Linux
+      # binary the build job uploaded. The parity suites refuse to run on wasm
+      # alone under CI, so a binary that fails to load fails here.
+      - name: Test the engine on the bytes being published
+        run: |
+          node packages/core/scripts/smoke-native-engine.mjs --prebuilt
+          pnpm --filter @csszyx/core --filter @csszyx/compiler test
 
       # Publish one package at a time in workspace dependency order. The
       # script verifies exact immutable versions before each publish, so a
