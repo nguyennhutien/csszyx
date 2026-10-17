@@ -17,13 +17,8 @@
  */
 
 // === Compiler ===
-export {
-    type SzObject,
-    serializeManifest,
-    transform,
-    transformSource,
-    validateSzRecover,
-} from '@csszyx/compiler';
+export { type SzObject, serializeManifest, transform, validateSzRecover } from '@csszyx/compiler';
+export { transformSource } from '@csszyx/compiler/engine';
 // === Core WASM ===
 export {
     compute_mangle_checksum,

@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { transformSource } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ensureUnservedRuntimeFile } from '../src/mangle-runtime-file.js';
 import { MERGE_REGISTRATION_FILE, writeMergeRegistration } from '../src/merge-registration.js';

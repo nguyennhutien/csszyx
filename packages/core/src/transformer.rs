@@ -40,7 +40,7 @@ pub enum PrimitiveValue {
 /// handled in one place). The serde boundary, not the lowering, dominates the
 /// runtime cost, so the conversion allocation is negligible.
 // Native LLVM coverage cannot execute a JsValue boundary. This adapter is
-// exercised through pkg-node by the integration and runtime-parity suites.
+// exercised through pkg-parser by the integration and runtime-parity suites.
 // coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn transform_sz(val: JsValue) -> Result<String, JsValue> {

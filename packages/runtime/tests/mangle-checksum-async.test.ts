@@ -99,8 +99,11 @@ describe('verifyMangleChecksumAsync', () => {
         expect(await verifyMangleChecksumAsync(good, tampered)).toBe(false);
     });
 
-    it('returns false when no map is available', async () => {
+    it('returns false, and says so, when no map is available', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         expect(await verifyMangleChecksumAsync('whatever')).toBe(false);
+        expect(warn.mock.calls[0]?.[0]).toMatch(/^\[csszyx\] mangle-map-unavailable:/);
+        warn.mockRestore();
     });
 });
 
@@ -134,7 +137,9 @@ describe('without Web Crypto, which is what an insecure context looks like', () 
 
         await expect(verifyMangleChecksumAsync('whatever', MAP)).resolves.toBe(false);
         expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0]?.[0]).toMatch(/secure context/i);
+        expect(warn.mock.calls[0]?.[0]).toMatch(
+            /^\[csszyx\] web-crypto-unavailable: .*secure context/i,
+        );
     });
 
     it('does not report a false match when the checksum would have been right', async () => {

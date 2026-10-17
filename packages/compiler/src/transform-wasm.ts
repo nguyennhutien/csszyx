@@ -15,6 +15,8 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+
+import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
     GlobalVarSourceFile,
@@ -72,6 +74,10 @@ interface WasmResultJson {
 
 /** The exports the lane consumes from `@csszyx/core/parser-wasm`. */
 interface ParserWasmModule {
+    /** The version of `@csszyx/core` this build ships as. */
+    version(): string;
+    /** The digest of the source it was built from; absent before 0.18. */
+    engine_digest?(): string;
     transform_batch_json(filesJson: string, optionsJson: string): string;
     scan_module_links_json(filesJson: string, queryJson: string): string;
     scan_global_var_usages_json(filesJson: string, queryJson: string): string;
@@ -90,6 +96,8 @@ export class WasmTransformUnavailableError extends Error {
     }
 }
 
+/** Whether the wasm engine's identity has been checked; a pass is final. */
+let wasmIdentityChecked = false;
 /** Memoized wasm module: loading instantiates the wasm once per process. */
 let wasmModule: ParserWasmModule | null | undefined;
 let wasmLoadError = '';
@@ -124,6 +132,14 @@ function requireParserWasm(): ParserWasmModule {
     if (!wasm) {
         // `loadParserWasm` records why whenever it has no module to return.
         throw new WasmTransformUnavailableError(wasmLoadError);
+    }
+    if (!wasmIdentityChecked && EXPECTED_ENGINE !== null) {
+        assertEngineIdentity({
+            expected: EXPECTED_ENGINE,
+            reported: wasmEngineIdentity(wasm),
+            artifact: 'wasm',
+        });
+        wasmIdentityChecked = true;
     }
     return wasm;
 }

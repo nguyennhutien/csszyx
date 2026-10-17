@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     __resetStringColorOpacityWarnings,
     isDroppedSlashOpacity,
-    stripInvalidColorStrings,
 } from '../src/color-validation.js';
 import { transform } from '../src/transform-core.js';
 
@@ -16,8 +15,8 @@ import { transform } from '../src/transform-core.js';
  * (ADR 0022), so nothing here judges a colour.
  *
  * Covers both code paths:
- *   1. isDroppedSlashOpacity (shared by the transform and WASM pre-validation)
- *   2. transform() end-to-end — JS path (transform-core.ts drops + warns)
+ *   1. isDroppedSlashOpacity (the rule itself)
+ *   2. transform() end-to-end (transform-core.ts drops + warns)
  */
 
 describe('isDroppedSlashOpacity', () => {
@@ -171,7 +170,7 @@ describe('transform() — color string validation (JS path)', () => {
     });
 });
 
-describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
+describe('CSSZYX_QUIET_SZ_WARNINGS and the slash-opacity warning', () => {
     let warn: ReturnType<typeof vi.spyOn>;
     const previous = process.env.CSSZYX_QUIET_SZ_WARNINGS;
 
@@ -189,28 +188,15 @@ describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
         }
     });
 
-    /**
-     * The env switch is documented as silencing the sz key and value warnings,
-     * and it does on the JS transform path. `stripInvalidColorStrings` runs
-     * instead when the WASM core is loaded, and it warns about the same values
-     * — so honouring the switch on only one of the two paths makes the
-     * documented behaviour depend on which engine happens to be active.
-     */
-    it('silences the slash-opacity warning', () => {
+    it('silences the warning and still drops the value', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
-        stripInvalidColorStrings({ color: 'blue-500/50' });
+        expect(transform({ color: 'blue-500/50' }).className).toBe('');
         expect(warn).not.toHaveBeenCalled();
     });
 
     it('still warns when the switch is unset', () => {
         delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
-        stripInvalidColorStrings({ color: 'blue-500/50' });
+        transform({ color: 'blue-500/50' });
         expect(warn).toHaveBeenCalledTimes(1);
-    });
-
-    it('keeps a value no rule drops, without a word', () => {
-        delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
-        expect(stripInvalidColorStrings({ color: '!!!' })).toEqual({ color: '!!!' });
-        expect(warn).not.toHaveBeenCalled();
     });
 });

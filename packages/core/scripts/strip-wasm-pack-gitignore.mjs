@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Remove the `.gitignore` stub wasm-pack writes into each output directory.
 //
-// wasm-pack drops a `.gitignore` containing `*` into `pkg/`, `pkg-node/` and
+// wasm-pack drops a `.gitignore` containing `*` into
 // `pkg-parser/`. Left in place it hides the artefacts from the publish step's
 // file list and from turbo's output hashing, so the build used to end with a
 // shell `rm -f` over the three paths. That was the one POSIX command in the
@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** The wasm-pack output directories the build produces. */
-export const OUTPUT_DIRS = ['pkg', 'pkg-node', 'pkg-parser'];
+export const OUTPUT_DIRS = ['pkg-parser'];
 
 /**
  * Delete the stub from every output directory that has one.

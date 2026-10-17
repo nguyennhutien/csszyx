@@ -1,0 +1,206 @@
+name: Native artifacts
+
+# Builds the eight `@csszyx/core-<platform>` binaries the release publishes,
+# then loads each one on a machine that can run it. Called by release.yml,
+# which publishes them, and by release-dry-run.yml, which only proves they
+# build and load.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build native package artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64-gnu
+            cross: false
+            loadable: true
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64-musl
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64-gnu
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            platform: linux-arm64-musl
+            cross: true
+          - runner: macos-14
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+            cross: false
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            cross: false
+            loadable: true
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64-msvc
+            cross: false
+            loadable: true
+          - runner: windows-2025-vs2026
+            target: aarch64-pc-windows-msvc
+            platform: win32-arm64-msvc
+            cross: false
+    runs-on: ${{ matrix.runner }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
+        with:
+          targets: ${{ matrix.target }}
+
+      # Cache cargo registry + target/ per platform. The native build compiles
+      # heavy crates (oxc, etc.) from scratch on every release otherwise; zig
+      # cross-compile keeps everything on the host runner (no Docker), so the
+      # cache applies to all 8 targets. Keyed per platform to avoid cross-target
+      # target/ thrash.
+      - name: Cache cargo (native build)
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.platform }}
+          # The dry run on pull requests reads the release's caches but does
+          # not write eight of its own, which would evict them.
+          save-if: ${{ github.event_name != 'pull_request' }}
+
+      - name: Install zig (cross-compile)
+        if: matrix.cross
+        shell: bash
+        # Direct install rather than mlugg/setup-zig@v2, whose action still ships
+        # a Node.js 20 entrypoint and trips the Node-20 deprecation annotation.
+        # All cross targets run on the ubuntu-latest (linux x86_64) runner.
+        run: |
+          set -euo pipefail
+          ZIG_VERSION=0.13.0
+          curl -fsSL --retry 5 --retry-connrefused \
+            "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
+            -o /tmp/zig.tar.xz
+          mkdir -p "$HOME/.zig"
+          tar -xJf /tmp/zig.tar.xz -C "$HOME/.zig" --strip-components=1
+          echo "$HOME/.zig" >> "$GITHUB_PATH"
+          "$HOME/.zig/zig" version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native package
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/node_modules/.bin:$PWD/packages/core/node_modules/.bin:$PATH"
+          cd packages/core
+          node scripts/build-native.mjs \
+            --release --clean --native-engine \
+            --target "${{ matrix.target }}" \
+            ${{ matrix.cross && '--cross-compile' || '' }}
+          cd ../..
+          mkdir -p "native-artifacts/packages/core-${{ matrix.platform }}"
+          cp \
+            "packages/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node" \
+            "native-artifacts/packages/core-${{ matrix.platform }}/"
+
+      # Load the binary this job built and run the engine smoke on it, where
+      # the runner can execute it: x64 Linux, arm64 macOS and x64 Windows. The
+      # x64 Linux binary also goes through the full engine suites in the
+      # publish job.
+      - name: Load the release binary
+        if: matrix.loadable
+        shell: bash
+        run: node packages/core/scripts/smoke-native-engine.mjs --prebuilt
+
+      - name: Upload native package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-${{ matrix.platform }}
+          path: native-artifacts/packages
+          if-no-files-found: error
+
+
+  # The build job loads the three binaries its own runner executes. The other
+  # five are cross-compiled, so each is loaded here on a machine that can run
+  # it: the Alpine image for musl, arm64 runners for arm64 Linux and Windows,
+  # and an x64 Node under Rosetta for x64 macOS.
+  load:
+    name: Load ${{ matrix.platform }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-x64-musl
+            alpine: true
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64-gnu
+            alpine: false
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64-musl
+            alpine: true
+          - runner: macos-14
+            platform: darwin-x64
+            alpine: false
+            node-arch: x64
+          - runner: windows-11-arm
+            platform: win32-arm64-msvc
+            alpine: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download the binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: native-${{ matrix.platform }}
+          path: native-artifacts
+
+      - name: Setup Node.js
+        if: ${{ !matrix.alpine }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "24"
+          architecture: ${{ matrix.node-arch }}
+
+      # The smoke imports nothing outside the repository, so it runs in the
+      # image without an install. The container gets the checkout and no token.
+      # The image is pinned by its multi-arch index digest (node:24-alpine on
+      # Alpine 3.24, 2026-10-14), so the x64 and arm64 runners pull the same
+      # release; bump it by digest, never by tag.
+      - name: Load the binary (Alpine)
+        if: matrix.alpine
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f \
+            node packages/core/scripts/smoke-native-engine.mjs \
+            --binary "native-artifacts/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node"
+
+      - name: Load the binary
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: |
+          node -p "process.platform + '-' + process.arch"
+          node packages/core/scripts/smoke-native-engine.mjs \
+            --binary "native-artifacts/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node"

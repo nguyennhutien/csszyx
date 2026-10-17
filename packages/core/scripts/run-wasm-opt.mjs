@@ -4,15 +4,17 @@
 // wasm-pack's built-in wasm-opt pass is disabled via Cargo.toml metadata to
 // avoid a flaky auto-download of binaryen from GitHub Releases. This script
 // re-introduces the size pass as a build-script post-step so that turbo's
-// cache captures the OPTIMIZED pkg/ output (running wasm-opt outside the
+// cache captures the OPTIMIZED pkg-parser/ output (running wasm-opt outside the
 // cached build step would be overwritten on the next turbo cache hit).
 //
 // Environments:
-//   - Release workflow installs binaryen via apt → wasm-opt runs, pkg/ ships
+//   - Release workflow installs binaryen via apt → wasm-opt runs, pkg-parser/ ships
 //     fully optimized to npm.
 //   - CI/dev environments typically have no binaryen → script skips with a
 //     visible log line. This is fine: size optimization is only required for
 //     the published npm artifact.
+//   - `CSSZYX_REQUIRE_WASM_OPT=1` (the release workflow) turns the skip into a
+//     failure, so the bytes the release tests are the bytes it publishes.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, renameSync } from 'node:fs';
@@ -23,6 +25,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
 
 const probe = spawnSync('wasm-opt', ['--version'], { stdio: 'ignore' });
+if (probe.status !== 0 && process.env.CSSZYX_REQUIRE_WASM_OPT === '1') {
+    console.error('[wasm-opt] binary not found on PATH, and CSSZYX_REQUIRE_WASM_OPT=1 requires it.');
+    process.exit(1);
+}
 if (probe.status !== 0) {
     console.log('[wasm-opt] binary not found on PATH — skipping size optimization.');
     console.log('[wasm-opt] Expected in CI/dev. Release workflow installs binaryen via apt.');
@@ -30,8 +36,6 @@ if (probe.status !== 0) {
 }
 
 const targets = [
-    path.join(pkgDir, 'pkg', 'csszyx_core_bg.wasm'),
-    path.join(pkgDir, 'pkg-node', 'csszyx_core_bg.wasm'),
     path.join(pkgDir, 'pkg-parser', 'csszyx_core_bg.wasm'),
 ];
 

@@ -23,7 +23,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { computeMangleChecksumAsync } from '../../runtime/src/hydration.js';
-import { compute_mangle_checksum } from '../pkg-node/csszyx_core.js';
+import { compute_mangle_checksum } from '../pkg-parser/csszyx_core.js';
 
 type MangleMapLike = Record<string, string>;
 
@@ -75,7 +75,7 @@ describe('the canonical form, frozen on both sides', () => {
     /**
      * The same numbers the Rust crate freezes in `the_canonical_form_is_frozen`.
      *
-     * This pair is what catches a stale `pkg-node`. Comparing the runtime with
+     * This pair is what catches a stale `pkg-parser`. Comparing the runtime with
      * the WebAssembly build alone cannot: change the core and skip the rebuild,
      * and a runtime written against the old form agrees with an artifact built
      * from it. Holding the numbers in the crate's own test — which runs from
@@ -103,7 +103,7 @@ describe('the canonical form, frozen on both sides', () => {
     });
 
     it.each(FROZEN)('the core derives the frozen checksum for %s', (_n, map, sum) => {
-        // Red here with the runtime green means pkg-node was not rebuilt.
+        // Red here with the runtime green means pkg-parser was not rebuilt.
         expect(compute_mangle_checksum(map)).toBe(sum);
     });
 });

@@ -16,6 +16,7 @@
  * its local candidates use.
  */
 import { type CrossModuleRegistryEntry, scanModuleLinks } from './module-links.js';
+import type { ParserMode } from './parser-mode.js';
 
 export type { CrossModuleExportKind, CrossModuleRegistryEntry } from './module-links.js';
 
@@ -48,13 +49,15 @@ export interface CrossModuleForward {
  *
  * @param source - Module source text.
  * @param filename - Module filename, for parser dialect detection.
+ * @param parser - The engine artifact `build.parser` names, if any.
  * @returns The exported values, declaration order preserved.
  */
 export function extractCrossModuleRegistryEntries(
     source: string,
     filename: string,
+    parser?: ParserMode,
 ): CrossModuleRegistryEntry[] {
-    return scanModuleLinks([{ filename, source }], { registryEntries: true }).flatMap(
+    return scanModuleLinks([{ filename, source }], { registryEntries: true }, parser).flatMap(
         links => links.registryEntries,
     );
 }
@@ -74,10 +77,15 @@ export function extractCrossModuleRegistryEntries(
  *
  * @param source - Module source text.
  * @param filename - Module filename, for parser dialect detection.
+ * @param parser - The engine artifact `build.parser` names, if any.
  * @returns The forwards, declaration order preserved.
  */
-export function extractCrossModuleForwards(source: string, filename: string): CrossModuleForward[] {
+export function extractCrossModuleForwards(
+    source: string,
+    filename: string,
+    parser?: ParserMode,
+): CrossModuleForward[] {
     // The engine reads the module record, frees its parse before it returns,
     // and skips the parse for a module with no `export {` clause.
-    return scanModuleLinks([{ filename, source }]).flatMap(links => links.forwards);
+    return scanModuleLinks([{ filename, source }], {}, parser).flatMap(links => links.forwards);
 }

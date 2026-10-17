@@ -72,9 +72,8 @@ the DOM as `sz="[object Object]"`.
 ## SSR mangle-map integrity
 
 The mangle map embedded in SSR HTML is validated (`isValidMangleMap`: plain
-string→string, no prototype keys, bounded size) before use. For real integrity
-verification without the WASM core, `verifyMangleChecksumAsync` recomputes the
-checksum via the Web Crypto API.
+string→string, no prototype keys, bounded size) before use. To verify it,
+`verifyMangleChecksumAsync` recomputes the checksum with the Web Crypto API.
 
 <Aside type="note">
 The checksum is **tamper-detection**, not authentication — it is unsigned, so it
@@ -82,20 +81,12 @@ catches accidental server/client drift, not an attacker who can rewrite the
 served HTML and recompute it.
 </Aside>
 
-### Do not add `'wasm-unsafe-eval'` for this
+### No `'wasm-unsafe-eval'`
 
-`verifyMangleMapIntegrity()` is synchronous, so the only way it can recompute a
-SHA-256 is through the Rust core's `verify_mangle_checksum` global. The runtime
-never instantiates that core itself, so the global exists only if you wired it
-up. When it is absent the map is schema-validated and accepted, and today that
-degraded state is reported only in development.
-
-Wiring the core up to close that gap would mean adding `'wasm-unsafe-eval'` to
-`script-src`, because a strict policy blocks WebAssembly instantiation without
-it. **Do not.** `verifyMangleChecksumAsync` derives the same checksum through
-the Web Crypto API, which is allowed under plain `script-src 'self'`, and it
-verifies rather than assumes. Widening a policy is the wrong price for a check
-that is explicitly tamper-detection.
+The check runs on Web Crypto, which plain `script-src 'self'` allows; no
+WebAssembly is involved, and `@csszyx/core` has no browser build to wire up.
+The e2e suite runs it on a production build under an enforced
+`script-src 'self'` policy.
 
 ```ts
 import { verifyMangleChecksumAsync } from '@csszyx/runtime';

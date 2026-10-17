@@ -1,14 +1,13 @@
 /**
- * The Web-Crypto checksum pair and the DOM integrity check — real
- * recomputation, unlike the sync attribute comparison the main suite covers.
+ * The Web-Crypto checksum pair, and where the async check finds the map on a
+ * page — real recomputation, unlike the sync attribute comparison the main
+ * suite covers.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-    computeMangleChecksumAsync,
-    verifyMangleChecksumAsync,
-    verifyMangleMapIntegrity,
-} from '../src/hydration.js';
+import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
+import { createHydrationMangleMap } from '../src/hydration-map.js';
+import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registry.js';
 
 const map = { 'p-4': 'a', 'bg-red-500': 'b' };
 
@@ -27,6 +26,12 @@ describe('computeMangleChecksumAsync', () => {
     });
 });
 
+describe('createHydrationMangleMap', () => {
+    it('hands a class-only build its class map unchanged', () => {
+        expect(createHydrationMangleMap(map)).toBe(map);
+    });
+});
+
 describe('verifyMangleChecksumAsync', () => {
     it('accepts the matching checksum and rejects a different one', async () => {
         const checksum = await computeMangleChecksumAsync(map);
@@ -35,13 +40,12 @@ describe('verifyMangleChecksumAsync', () => {
     });
 });
 
-describe('verifyMangleMapIntegrity', () => {
+describe('verifyMangleChecksumAsync, reading the map from the page', () => {
     /**
-     * Embed the checksum attribute plus a mangle-map script.
-     * @param content - Raw JSON for the script tag.
+     * Ship a census the way the build does.
+     * @param content - Raw JSON for the census tag.
      */
-    function embed(content: string): void {
-        document.documentElement.setAttribute('data-sz-checksum', 'sum');
+    function census(content: string): void {
         const script = document.createElement('script');
         script.id = '__CSSZYX_MANGLE_MAP__';
         script.type = 'application/json';
@@ -50,44 +54,75 @@ describe('verifyMangleMapIntegrity', () => {
     }
 
     afterEach(() => {
-        delete (window as unknown as Record<string, unknown>).verify_mangle_checksum;
+        clearMangleRegistry();
+        vi.restoreAllMocks();
     });
 
-    // A missing checksum attribute is still a failure: the page claims nothing
-    // about which build it came from. A missing census is not — the census
-    // follows mangling, and a build that renames nothing writes none, so there
-    // is no map in the document to weigh and nothing has gone wrong.
-    it('fails without the checksum attribute, and passes without the map script', () => {
+    it('verifies the census quietly', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(verifyMangleMapIntegrity()).toBe(false);
-        expect(warn).toHaveBeenCalled();
-        document.documentElement.setAttribute('data-sz-checksum', 'sum');
-        expect(verifyMangleMapIntegrity()).toBe(true);
+        census(JSON.stringify(map));
+        expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync(map))).toBe(true);
+        expect(warn).not.toHaveBeenCalled();
     });
 
-    it('accepts a schema-valid map without the WASM verifier — detection, fail-open', () => {
+    it('names both checksums when the census was altered', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        embed(JSON.stringify(map));
-        expect(verifyMangleMapIntegrity()).toBe(true);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('unverified'));
+        const built = await computeMangleChecksumAsync(map);
+        census(JSON.stringify({ ...map, 'p-4': 'z' }));
+        expect(await verifyMangleChecksumAsync(built)).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]?.[0]);
+        expect(message).toMatch(
+            /^\[csszyx\] mangle-checksum-mismatch: .* hashes to [0-9a-f]{16}, /,
+        );
+        expect(message).toContain(`the checksum it was built with is ${built}\n`);
     });
 
-    it('delegates to the WASM verifier when present', () => {
-        embed(JSON.stringify(map));
-        const win = window as unknown as Record<string, unknown>;
-        win.verify_mangle_checksum = () => false;
-        expect(verifyMangleMapIntegrity()).toBe(false);
-        win.verify_mangle_checksum = () => true;
-        expect(verifyMangleMapIntegrity()).toBe(true);
+    // `hydrationCensus: false` is a configuration, not a fault: the bundle
+    // still installs the map, so there is something to recompute and nothing
+    // to report.
+    it('verifies a build that ships no census against the map its bundle installed', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const varMangleMap = { '--brand': 'a', '--gap': ['b', 'c'] };
+        installMangleRuntime({ mangleMap: map, varMangleMap });
+        const built = await computeMangleChecksumAsync(createHydrationMangleMap(map, varMangleMap));
+        expect(await verifyMangleChecksumAsync(built)).toBe(true);
+        expect(warn).not.toHaveBeenCalled();
     });
 
-    it('rejects a schema-invalid or unparseable map', () => {
+    // A build that mangles nothing installs no registry and hashes the empty
+    // map; that is the map it has, so it verifies.
+    it('verifies a build that mangles nothing against the empty map', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync({}))).toBe(true);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('says nothing was verified when a page carries a checksum and no map', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync(map))).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]?.[0]).toMatch(
+            /^\[csszyx\] mangle-map-unavailable: .*nothing was verified\nhelp: /,
+        );
+    });
+
+    // A census the page carries but nothing can read was damaged on the way:
+    // that is what the check is for, so it fails, even when the bundle holds a
+    // map that would verify.
+    it.each([
+        ['fails its schema', '{"__proto__": "x"}'],
+        ['was cut short', '{"p-4": "a", "bg-red'],
+    ])('fails a census that %s instead of reading past it', async (_case, content) => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
-        embed('{"__proto__": "x"}');
-        expect(verifyMangleMapIntegrity()).toBe(false);
-        document.head.innerHTML = '';
-        embed('{ not json');
-        expect(verifyMangleMapIntegrity()).toBe(false);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        census(content);
+        installMangleRuntime({ mangleMap: map });
+        expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync(map))).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]?.[0]).toMatch(
+            /^\[csszyx\] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified$/,
+        );
     });
 });
 

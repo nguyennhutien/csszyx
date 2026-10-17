@@ -1,4 +1,4 @@
-import { transformSource } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { describe, expect, it } from 'vitest';
 
 import { mangleCodeClassesSync } from '../src/unplugin.js';

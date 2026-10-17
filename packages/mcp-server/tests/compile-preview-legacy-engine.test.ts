@@ -12,8 +12,8 @@ import { handleCompilePreview } from '../src/tools/compile-preview';
 /** The fields the mocked engine leaves out of its result. */
 const engine = vi.hoisted(() => ({ omits: ['mergeGroups', 'mergeOverrides'] }));
 
-vi.mock('@csszyx/compiler', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler')>();
+vi.mock('@csszyx/compiler/engine', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
         transformSource: (...args: Parameters<typeof actual.transformSource>) => {

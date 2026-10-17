@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { compute_mangle_checksum, init } from '../pkg-node/csszyx_core.js';
+import { compute_mangle_checksum, init } from '../pkg-parser/csszyx_core.js';
 
 /**
  * A simple, pure JavaScript implementation of a hashing-like operation

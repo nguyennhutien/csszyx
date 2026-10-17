@@ -262,7 +262,7 @@ describe('transform hook branch edges', () => {
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
             code: string;
         } | null;
-        // Data, not script: this is the payload `verifyMangleMapIntegrity()`
+        // Data, not script: this is the payload `verifyMangleChecksumAsync()`
         // reads from the DOM, and it is what makes a mangled class traceable
         // back to its original name in devtools without a rebuild. The vite
         // lane emits it from `transformIndexHtml`; this lane had neither.

@@ -17,7 +17,7 @@ afterEach(() => {
 describe('stripWasmPackGitignore', () => {
     it('removes the stub from every output directory that has one', () => {
         root = mkdtempSync(path.join(tmpdir(), 'csszyx-wasm-gi-'));
-        for (const dir of ['pkg', 'pkg-node', 'pkg-parser']) {
+        for (const dir of ['pkg-parser']) {
             mkdirSync(path.join(root, dir));
             writeFileSync(path.join(root, dir, '.gitignore'), '*\n');
             writeFileSync(path.join(root, dir, 'csszyx_core_bg.wasm'), 'x');
@@ -25,8 +25,8 @@ describe('stripWasmPackGitignore', () => {
 
         const removed = stripWasmPackGitignore(root);
 
-        expect(removed).toHaveLength(3);
-        for (const dir of ['pkg', 'pkg-node', 'pkg-parser']) {
+        expect(removed).toHaveLength(1);
+        for (const dir of ['pkg-parser']) {
             expect(existsSync(path.join(root, dir, '.gitignore'))).toBe(false);
             expect(existsSync(path.join(root, dir, 'csszyx_core_bg.wasm'))).toBe(true);
         }
@@ -35,7 +35,7 @@ describe('stripWasmPackGitignore', () => {
     it('is a no-op when a directory or its stub is already gone', () => {
         // `rm -f` never failed on a missing file; the replacement must not either.
         root = mkdtempSync(path.join(tmpdir(), 'csszyx-wasm-gi-'));
-        mkdirSync(path.join(root, 'pkg'));
+        mkdirSync(path.join(root, 'pkg-parser'));
 
         expect(stripWasmPackGitignore(root)).toEqual([]);
     });

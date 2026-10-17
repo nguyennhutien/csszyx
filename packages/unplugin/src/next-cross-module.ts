@@ -19,15 +19,16 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
+import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 import {
     type CrossModuleForward,
     type CrossModuleRegistryEntry,
+    EngineVersionSkewError,
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
     RustTransformUnavailableError,
-    type TransformSourceCodeOptions,
     WasmTransformUnavailableError,
-} from '@csszyx/compiler';
+} from '@csszyx/compiler/engine';
 import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 
 import {
@@ -255,10 +256,12 @@ function readProviderModule(provider: string, cache: Map<string, ProviderModule>
         // source is fine, which is a worse trade for a build-time nicety. An
         // engine that cannot answer is not that: it would turn the
         // optimization off for every provider with nothing said, so its
-        // error, which names the packages to fix, goes through.
+        // error, which names the packages to fix, goes through; so does an
+        // engine from another release.
         if (
             error instanceof RustTransformUnavailableError ||
-            error instanceof WasmTransformUnavailableError
+            error instanceof WasmTransformUnavailableError ||
+            error instanceof EngineVersionSkewError
         ) {
             throw error;
         }

@@ -6,6 +6,7 @@
  * the abort protocol when necessary to preserve SSR invariants.
  */
 
+import { createHydrationMangleMap } from './hydration-map.js';
 import { getMangleRegistry } from './mangle-registry.js';
 import { sortStrings } from './sort.js';
 import type { RecoveryManifest } from './verify.js';
@@ -176,6 +177,18 @@ export function isValidMangleMap(value: unknown): value is MangleMap {
 }
 
 /**
+ * The script element that carries the page's mangle census, if any.
+ *
+ * @returns The element, or null.
+ */
+function censusElement(): HTMLElement | null {
+    return (
+        document.getElementById('__CSSZYX_MANGLE_MAP__') ??
+        document.getElementById('__SZ_MANGLE_MAP__')
+    );
+}
+
+/**
  * Load and validate the mangle map embedded in the DOM by the SSR pipeline.
  *
  * @returns the validated mangle map, or `null` if absent or invalid.
@@ -185,9 +198,7 @@ export function loadMangleMapFromDOM(): MangleMap | null {
         return null;
     }
 
-    const scriptElement =
-        document.getElementById('__CSSZYX_MANGLE_MAP__') ??
-        document.getElementById('__SZ_MANGLE_MAP__');
+    const scriptElement = censusElement();
 
     if (!scriptElement) {
         return null;
@@ -294,7 +305,7 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 function webCryptoUnavailable(): string | null {
     if (typeof crypto === 'undefined' || crypto.subtle === undefined) {
         return (
-            '[csszyx] Web Crypto is unavailable, so the mangle checksum cannot be recomputed. ' +
+            '[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. ' +
             'crypto.subtle exists only in a secure context: serve the page over HTTPS, or ' +
             'from localhost. Nothing was verified.'
         );
@@ -368,11 +379,48 @@ export async function computeMangleChecksumAsync(map: MangleMap): Promise<string
 }
 
 /**
+ * The map the checksum was computed over, from wherever this page carries it.
+ *
+ * The census in the document comes first: it is what a reader decodes the
+ * page with, so it is what most needs checking. A build that ships no census
+ * (`hydrationCensus: false`) still installs the same map from inside its
+ * bundle, because the runtime needs it to rename classes. A build that
+ * mangles nothing installs no registry, and its checksum is that of the empty
+ * map, which is the map it has.
+ *
+ * @returns the map and whether it came from the page or stands in for none.
+ */
+function hydrationMapOfPage(): { map: MangleMap; found: boolean; unreadable?: true } {
+    const census = loadMangleMapFromDOM();
+    if (census) return { map: census, found: true };
+    // A census the page carries but nothing can read was damaged on the way,
+    // which is what the check exists to catch: never read past it.
+    if (typeof document !== 'undefined' && censusElement()) {
+        return { map: {}, found: false, unreadable: true };
+    }
+    const registry = getMangleRegistry();
+    if (registry) {
+        return {
+            map: createHydrationMangleMap(registry.mangleMap, registry.varMangleMap),
+            found: true,
+        };
+    }
+    return { map: {}, found: false };
+}
+
+/**
  * Verify a mangle map's integrity by RECOMPUTING its checksum (via Web Crypto)
- * and comparing it to the expected value — real verification that works without
- * the WASM core. Unlike the sync {@link verifyMangleChecksum} (a plain attribute
- * compare), this recomputes from the map, so it detects a map that was altered
- * without updating the checksum.
+ * and comparing it to the expected value. Unlike the sync
+ * {@link verifyMangleChecksum} (a plain attribute compare), this recomputes
+ * from the map, so it detects a map that was altered without updating the
+ * checksum.
+ *
+ * Without a `map` argument it reads the census in the document, or, on a
+ * build that ships none, the map the bundle installed; a build that mangles
+ * nothing is checked against the empty map. Each of those is a configuration,
+ * so each verifies quietly. Every `false` prints why: the map does not match,
+ * Web Crypto is unavailable, the page's census cannot be read, or the page
+ * carries a checksum and no map.
  *
  * Still tamper-DETECTION, not authentication: the checksum is unsigned, so an
  * attacker who can rewrite the served HTML can recompute it after editing the
@@ -380,18 +428,14 @@ export async function computeMangleChecksumAsync(map: MangleMap): Promise<string
  *
  * @param expectedChecksum - the checksum to match (e.g. from the manifest or the
  *        `data-sz-checksum` attribute).
- * @param map - the mangle map; loaded (and schema-validated) from the DOM when omitted.
- * @returns a promise resolving true when the map is present and its recomputed
- *          checksum matches.
+ * @param map - the mangle map; read from the page when omitted.
+ * @returns a promise resolving true only when the checksum was recomputed and
+ *          matches.
  */
 export async function verifyMangleChecksumAsync(
     expectedChecksum: string,
     map?: MangleMap,
 ): Promise<boolean> {
-    const target = map ?? loadMangleMapFromDOM();
-    if (!target) {
-        return false;
-    }
     // Fail closed, and say so. Answering `false` alone would read as a tampered
     // map; the caller needs to know the check never ran. Warned in production
     // too: a caller believing integrity was verified when it was not is exactly
@@ -401,83 +445,23 @@ export async function verifyMangleChecksumAsync(
         console.warn(unavailable);
         return false;
     }
-    return (await computeMangleChecksumAsync(target)) === expectedChecksum;
-}
-
-/**
- * Verifies mangle map integrity using the Rust core checksum verifier.
- *
- * Loads the mangle map from the DOM, validates its shape, and (when the WASM
- * core is present) verifies its checksum via `verify_mangle_checksum()`.
- *
- * IMPORTANT — this is tamper-DETECTION, not authentication. The checksum is an
- * unsigned SHA-256 truncation: it catches accidental server/client drift, but an
- * attacker who can rewrite the served HTML can recompute it after editing the
- * map. Treat it as an integrity (corruption) check, not a trust boundary.
- *
- * When the WASM verifier is absent (the common no-core deployment), the checksum
- * cannot be recomputed in this sync path, so verification degrades to a
- * schema-validated load and emits a dev warning rather than failing closed
- * (failing closed here would break every app not shipping the WASM core).
- *
- * @returns {boolean} True if the map is well-formed and (if verifiable) matches.
- */
-export function verifyMangleMapIntegrity(): boolean {
-    if (typeof document === 'undefined') {
+    const source = map ? { map, found: true } : hydrationMapOfPage();
+    if ('unreadable' in source) {
+        console.warn(
+            '[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified',
+        );
         return false;
     }
-
-    // Get checksum from HTML
-    const htmlElement = document.documentElement;
-    const checksum = readChecksumAttribute(htmlElement);
-
-    if (!checksum) {
-        console.warn('[csszyx] No checksum found in HTML');
-        return false;
-    }
-
-    // Load mangle map from script tag. Its absence is not a failed check: the
-    // census follows mangling, and a build that mangles can still be told not
-    // to ship it. There is no map in this document to weigh against the
-    // checksum, and saying so as a failure sent readers hunting corruption on a
-    // page with nothing wrong with it. What the checksum can still be weighed
-    // against is the bundle — see `verifyBundleMatchesDocument`.
-    const scriptElement = document.getElementById('__CSSZYX_MANGLE_MAP__');
-
-    if (!scriptElement) {
-        return true;
-    }
-
-    try {
-        const parsed: unknown = JSON.parse(scriptElement.textContent || '{}');
-        if (!isValidMangleMap(parsed)) {
-            console.error(
-                '[csszyx] Mangle map failed schema validation; treating integrity as invalid.',
-            );
-            return false;
-        }
-        const mangleMap = parsed;
-
-        // Verify using Rust core if available
-        if (typeof window !== 'undefined' && 'verify_mangle_checksum' in window) {
-            // @ts-expect-error - Rust WASM function
-            const isValid = window.verify_mangle_checksum(mangleMap, checksum);
-            return isValid;
-        }
-
-        // No WASM verifier: the checksum can't be recomputed in this sync path.
-        // The map is schema-valid; accept it but warn that integrity is unverified.
-        if (process.env.NODE_ENV !== 'production') {
-            console.warn(
-                '[csszyx] WASM core not loaded — mangle map checksum is unverified ' +
-                    '(schema-validated only). This is detection, not authentication.',
-            );
-        }
-        return true;
-    } catch (error) {
-        console.error('[csszyx] Failed to verify mangle map:', error);
-        return false;
-    }
+    const computed = await computeMangleChecksumAsync(source.map);
+    if (computed === expectedChecksum) return true;
+    console.warn(
+        source.found
+            ? `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to ${computed}, and the checksum it was built with is ${expectedChecksum}\n` +
+                  'note: this detects a damaged or stale page, not an attacker; the checksum is not signed'
+            : `[csszyx] mangle-map-unavailable: this page carries the checksum ${expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified\n` +
+                  'help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here',
+    );
+    return false;
 }
 
 /**

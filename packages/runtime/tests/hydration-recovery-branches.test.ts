@@ -1,11 +1,7 @@
 /**
  * Remaining hydration.ts branches not covered by hydration.test.ts /
  * hydration-checksum.test.ts:
- *  - loadMangleMapFromDOM / verifyMangleMapIntegrity with an empty (but
- *    present) mangle-map script tag, exercising the `textContent || '{}'`
- *    fallback.
- *  - verifyMangleMapIntegrity's unverified-schema-only acceptance in
- *    production (no console.warn).
+ *  - loadMangleMapFromDOM with an empty (but present) mangle-map script tag.
  *  - attemptCSRRecovery's `dev-only` mode rejected in production.
  *  - attemptCSRRecovery succeeding on an element that was never aborted
  *    (the abortedSubtrees.delete() no-op branch).
@@ -18,7 +14,6 @@ import {
     enableCSRRecovery,
     getAbortedSubtreeCount,
     loadMangleMapFromDOM,
-    verifyMangleMapIntegrity,
 } from '../src/hydration.js';
 
 afterEach(() => {
@@ -38,41 +33,6 @@ describe('loadMangleMapFromDOM with an empty script tag', () => {
         const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
         expect(loadMangleMapFromDOM()).toBeNull();
         expect(errorLog).toHaveBeenCalledWith('Failed to parse mangle map:', expect.anything());
-    });
-});
-
-describe('verifyMangleMapIntegrity with an empty script tag', () => {
-    it('treats empty content as {} (schema-valid) and accepts it, unverified', () => {
-        document.documentElement.setAttribute('data-sz-checksum', 'sum');
-        const script = document.createElement('script');
-        script.id = '__CSSZYX_MANGLE_MAP__';
-        script.type = 'application/json';
-        document.head.appendChild(script);
-
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(verifyMangleMapIntegrity()).toBe(true);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('unverified'));
-    });
-});
-
-describe('verifyMangleMapIntegrity is silent in production', () => {
-    const prevEnv = process.env.NODE_ENV;
-    afterEach(() => {
-        process.env.NODE_ENV = prevEnv;
-    });
-
-    it('accepts a schema-valid, unverifiable map without warning', () => {
-        process.env.NODE_ENV = 'production';
-        document.documentElement.setAttribute('data-sz-checksum', 'sum');
-        const script = document.createElement('script');
-        script.id = '__CSSZYX_MANGLE_MAP__';
-        script.type = 'application/json';
-        script.textContent = JSON.stringify({ 'p-4': 'a' });
-        document.head.appendChild(script);
-
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(verifyMangleMapIntegrity()).toBe(true);
-        expect(warn).not.toHaveBeenCalled();
     });
 });
 

@@ -7,7 +7,7 @@ import {
     transform_sz,
     verify_mangle_checksum,
     verify_token,
-} from '../pkg-node/csszyx_core.js';
+} from '../pkg-parser/csszyx_core.js';
 
 /**
  * Integration tests for @csszyx/core WASM module.

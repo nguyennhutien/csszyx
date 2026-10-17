@@ -209,6 +209,19 @@ export function scanModuleLinks(files, query) {
 }
 
 /**
+ * The engine's identity: the version of `@csszyx/core` the binary ships as and
+ * the digest of the source it was built from. `@csszyx/compiler` compares both
+ * with its own before the first call.
+ *
+ * @returns {{version: string, digest: string} | null} The identity, or null for
+ *   a binary that predates it, which is older than any compiler that asks.
+ */
+export function engineIdentity() {
+    const binding = loadNativeBinding();
+    return typeof binding.engineIdentity === 'function' ? binding.engineIdentity() : null;
+}
+
+/**
  * Reads the global custom-property usages csszyx does not rewrite.
  *
  * @param {Array<{filename: string, source: string}>} files - Modules to read.

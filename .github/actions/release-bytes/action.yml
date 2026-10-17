@@ -1,0 +1,92 @@
+name: Build and test the release bytes
+description: >-
+  Build the WebAssembly engine with wasm-opt, put the native binaries the build
+  jobs uploaded into their packages, build the workspace, and run the engine
+  suites on exactly those bytes. The release publishes what this leaves in the
+  tree; the dry run on pull requests stops here. Expects pnpm and Node.js set
+  up by the job.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Install wasm-pack
+      shell: bash
+      run: cargo install wasm-pack --locked --version 0.14.0 || true
+
+    # Pre-install wasm-bindgen-cli so the @csszyx/core build script
+    # (wasm-pack --mode no-install) can skip wasm-pack's own install step.
+    - name: Cache wasm-bindgen-cli
+      id: cache-wasm-bindgen
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      with:
+        path: ~/.cargo/bin/wasm-bindgen
+        key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+    - name: Install wasm-bindgen-cli
+      if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
+
+    - name: Install binaryen (for wasm-opt)
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y binaryen
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Validate native package metadata
+      shell: bash
+      run: pnpm --filter @csszyx/core native:packages
+
+    - name: Download native package artifacts
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      with:
+        path: packages
+        pattern: native-*
+        merge-multiple: true
+
+    - name: List downloaded native binaries
+      shell: bash
+      run: find packages/core-* -name '*.node' -type f 2>/dev/null || echo "No .node files found"
+
+    - name: Validate native package binaries
+      shell: bash
+      run: pnpm --filter @csszyx/core native:packages -- --require-binaries
+
+    # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
+    # so the OPTIMIZED pkg-parser/ is what turbo captures in its cache, and
+    # CSSZYX_REQUIRE_WASM_OPT fails the build where it would skip.
+    - name: Build WASM core
+      shell: bash
+      run: pnpm --filter @csszyx/core build
+      env:
+        CSSZYX_REQUIRE_WASM_OPT: "1"
+
+    - name: Build all packages
+      shell: bash
+      run: pnpm build
+      env:
+        CSSZYX_REQUIRE_WASM_OPT: "1"
+
+    # CI tests an unoptimized wasm and a native binary it built itself. These
+    # are the bytes going to npm: the wasm after wasm-opt, and the x64 Linux
+    # binary the build job uploaded. The parity suites refuse to run on wasm
+    # alone under CI, so a binary that fails to load fails here.
+    - name: Test the engine on the bytes being published
+      shell: bash
+      run: |
+        node packages/core/scripts/smoke-native-engine.mjs --prebuilt
+        pnpm --filter @csszyx/core --filter @csszyx/compiler test
+
+    # The suites above run the compiler from source, where it expects no
+    # particular engine. This compares the identity the built compiler carries
+    # with the one the built engines report, so a digest computed differently
+    # by build.rs and scripts/engine-digest.mjs cannot reach npm.
+    - name: The compiler expects the engine being published
+      shell: bash
+      run: node --test scripts/build-tests/engine-digest.test.mjs

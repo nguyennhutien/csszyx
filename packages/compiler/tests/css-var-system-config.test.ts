@@ -2,13 +2,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-
-import {
-    type SourceTransformResult,
-    type TransformSourceCodeOptions,
-    transformRust,
-    transformWasm,
-} from '../src/index.js';
+import { transformRust, transformWasm } from '../src/engine.js';
+import type { SourceTransformResult, TransformSourceCodeOptions } from '../src/index.js';
 
 import { ENGINES } from './engine-parity-harness.js';
 

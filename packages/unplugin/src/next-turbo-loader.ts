@@ -56,6 +56,7 @@ import {
 } from './next-transform-metadata.js';
 import { runNextWatcherCycle } from './next-watcher-cycle.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { assertRuntimeMatchesPlugin } from './runtime-version.js';
 import { ensureThemeGroupsFile, themeGroupsSpecifier } from './theme-groups-file.js';
 import { resolveTransformCacheDir } from './transform-cache.js';
 
@@ -151,6 +152,26 @@ function withNextObjectRule(
     }).result;
 }
 
+/** Project roots whose `@csszyx/runtime` this process has already checked. */
+const runtimeCheckedRoots = new Set<string>();
+
+/**
+ * Stop on a `@csszyx/runtime` from another release. `csszyx next prebuild` and
+ * `next watch` check it too, but a dev session can run the loader without
+ * either. Once per root and process: it reads the runtime's manifest from disk.
+ *
+ * @param root - The project root.
+ * @throws {RuntimeVersionSkewError} when the runtime is another release.
+ */
+function assertRuntimeOnce(root: string): void {
+    if (runtimeCheckedRoots.has(root)) return;
+    assertRuntimeMatchesPlugin({
+        root,
+        pluginVersion: readPackageVersion('../package.json', import.meta.url),
+    });
+    runtimeCheckedRoots.add(root);
+}
+
 /**
  * Run the csszyx Next Turbopack loader as a pure, synchronous operation.
  *
@@ -186,6 +207,7 @@ export function runNextTurboLoader(
         mode: options.mode ?? normalizeMode(loaderContext.mode),
     });
 
+    assertRuntimeOnce(context.root);
     assertProductionManifestReady(context, options);
 
     const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();

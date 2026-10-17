@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { transformWasm } from '../src/index.js';
+import { transformWasm } from '../src/engine.js';
 
 import { ENGINES } from './engine-parity-harness.js';
 

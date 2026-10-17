@@ -35,7 +35,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/compiler": "workspace:*"
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/core": "workspace:*"
   },
   "peerDependencies": {
     "vite": ">=5.0.0",
@@ -66,5 +67,8 @@
     "sfc",
     "preprocessor",
     "tailwind"
-  ]
+  ],
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0"
+  }
 }

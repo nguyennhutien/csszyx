@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { transform } from '../../compiler/src/transform-core.js';
-import { init, transform_sz } from '../pkg-node/csszyx_core.js';
+import { init, transform_sz } from '../pkg-parser/csszyx_core.js';
 
 interface ParityRecord {
     sz: string;

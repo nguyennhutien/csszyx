@@ -17,8 +17,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
-import { type SourceTransformResult, transformRust, transformWasm } from '../src/index.js';
+import { transformRust, transformWasm } from '../src/engine.js';
+import type { SourceTransformResult } from '../src/index.js';
 import { ENGINES, type ParityEngine, RUST_LANE } from './engine-parity-harness.js';
 
 const PRELUDE = `const BASE = { p: 2, m: 1 };

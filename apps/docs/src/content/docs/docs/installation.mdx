@@ -7,7 +7,7 @@ import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Install
 
-<Tabs>
+<Tabs syncKey="pkg">
   <TabItem label="npm">
     ```bash
     npm install csszyx
@@ -28,9 +28,12 @@ import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 The `csszyx` umbrella package includes the compiler, runtime, types, and
 build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
-or install with `pnpm add -D @csszyx/cli`. A Next.js project also adds
+or install it as a dev dependency. A Next.js project also adds
 `@csszyx/unplugin` directly, because its configs name that package (the
-Next.js steps below say where); `csszyx init` does this for you.
+Next.js steps below say where); `csszyx init` does this for you, and adds
+these packages to `dependencies`.
+[Where each package goes](#where-each-package-goes) says which ones a
+production install can leave out.
 
 For portable `sz` autocomplete through compatible TypeScript editor hosts,
 install the preview `@csszyx/ts-plugin` separately and follow the
@@ -44,15 +47,182 @@ managers (e.g. pnpm) a *transitive* dependency is not importable by name — and
 auto-installed peer stays under `.pnpm/`, not at the top level — so a production
 build fails with `Cannot resolve '@csszyx/runtime'`. **Add it explicitly:**
 
-```bash
-pnpm add @csszyx/runtime
-```
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/runtime
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/runtime
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/runtime
+    ```
+  </TabItem>
+</Tabs>
 
 `@csszyx/unplugin` lists it as a peer dependency so your package manager warns
 when it is missing, but you must add it to your own `package.json`. The
 `csszyxTurbopack()` helper does not alias it (a raw absolute Turbopack alias is
 treated as project-relative and breaks).
 :::
+
+## Where each package goes
+
+A production install only needs what the app loads while it runs. The engine,
+`@csszyx/core`, is a WebAssembly build plus one native binary for your
+platform, and only the build reads it. `csszyx`, `@csszyx/unplugin` and
+`@csszyx/cli` install it; `@csszyx/runtime` does not.
+
+| Package | Who loads it |
+| --- | --- |
+| `@csszyx/runtime` | Your app, while it runs: the build adds imports of it to your components |
+| `csszyx`, `@csszyx/unplugin` | The bundler, while it builds |
+| `@csszyx/cli` | `csszyx check`, `csszyx migrate`, `csszyx next prebuild` |
+| `@csszyx/types` | TypeScript |
+
+### A Vite app
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/runtime
+    npm install -D csszyx @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/runtime
+    pnpm add -D csszyx @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/runtime
+    yarn add -D csszyx @csszyx/types
+    ```
+  </TabItem>
+</Tabs>
+
+A browser build bundles everything it imports, so nothing csszyx installs is
+needed once it is built. With server-side rendering, Vite leaves dependencies
+external and the server loads them from `node_modules` while it runs, so keep
+`@csszyx/runtime` in `dependencies` and import `szv`, `szcn` and `szr` from it in
+code the server runs. On the server `csszyx` loads its Node entry, which loads
+the build plugin and the engine; in the browser it resolves to the same helpers
+`@csszyx/runtime` exports.
+
+### Next.js
+
+`next start` loads `next.config` when the server starts, so a package the config
+imports must be installed in production. The Turbopack setup imports
+`@csszyx/unplugin/next`. `csszyx` is only read while building, by the
+`defineConfig` import in `csszyx.config.ts`:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/runtime @csszyx/unplugin
+    npm install -D csszyx @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/runtime @csszyx/unplugin
+    pnpm add -D csszyx @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/runtime @csszyx/unplugin
+    yarn add -D csszyx @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+</Tabs>
+
+With `output: 'standalone'`, the server reads a copy of the config written at
+build time and gets the files it needs from the build's trace of
+`node_modules`, whichever list a package came from. A standalone build of an
+App Router app carries no csszyx package at all: the runtime is bundled into the
+server chunks. Every csszyx package can then be a `devDependency`:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install -D csszyx @csszyx/runtime @csszyx/unplugin @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add -D csszyx @csszyx/runtime @csszyx/unplugin @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add -D csszyx @csszyx/runtime @csszyx/unplugin @csszyx/cli @csszyx/types
+    ```
+  </TabItem>
+</Tabs>
+
+### Only the runtime
+
+A package that styles at run time with `szr` or `@csszyx/dynamic`, and runs no
+csszyx build, installs the runtime alone. The engine is an optional peer of
+`@csszyx/compiler`, which the runtime depends on, so it is not installed:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/runtime
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/runtime
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/runtime
+    ```
+  </TabItem>
+</Tabs>
+
+### Calling the engine yourself
+
+`transformSource` and the other functions that call the engine live in
+`@csszyx/compiler/engine`. Install the engine beside the compiler, at the same
+version:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm install @csszyx/compiler @csszyx/core
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @csszyx/compiler @csszyx/core
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @csszyx/compiler @csszyx/core
+    ```
+  </TabItem>
+</Tabs>
+
+```ts
+import { transformSource } from '@csszyx/compiler/engine';
+```
+
+Without `@csszyx/core`, the import fails with `Cannot find package '@csszyx/core'`.
+At another version, the first call stops with
+[`engine-version-skew`](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases).
 
 ## Setup by Platform
 
@@ -169,9 +339,23 @@ behaviour before relying on it.
    PnP) does not resolve either as a transitive dependency of `csszyx`.
    `csszyx init` installs both.
 
-   ```bash
-   pnpm add @csszyx/runtime @csszyx/unplugin
-   ```
+   <Tabs syncKey="pkg">
+     <TabItem label="npm">
+       ```bash
+       npm install @csszyx/runtime @csszyx/unplugin
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```bash
+       pnpm add @csszyx/runtime @csszyx/unplugin
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```bash
+       yarn add @csszyx/runtime @csszyx/unplugin
+       ```
+     </TabItem>
+   </Tabs>
 
 2. **Wire the loader with the `csszyxTurbopack()` helper.** It sets the `*.tsx`
    loader rule correctly (without `as`, which would otherwise self-match into
@@ -344,9 +528,23 @@ adds `@csszyx/types` + `@csszyx/runtime`). Do this manually for existing apps:
 
 1. Install the types so the reference resolves at the top level:
 
-   ```bash
-   pnpm add -D @csszyx/types
-   ```
+   <Tabs syncKey="pkg">
+     <TabItem label="npm">
+       ```bash
+       npm install -D @csszyx/types
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```bash
+       pnpm add -D @csszyx/types
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```bash
+       yarn add -D @csszyx/types
+       ```
+     </TabItem>
+   </Tabs>
 
 2. Add a `csszyx-env.d.ts` at your project root (kept in your `tsconfig.json`
    `include`):
@@ -434,9 +632,12 @@ it is just a prebuilt download. It can be absent in three situations:
 - **Optional dependencies were skipped** — installing with `--omit=optional` /
   `--no-optional`, or in a minimal/sandboxed CI or Docker image that strips
   optional deps, removes the binary even on a supported platform.
-- **A cross-platform lockfile** — a lockfile generated on one OS (say macOS) then
-  installed on another (say Linux CI) with `--frozen-lockfile` may not have the
-  other platform's optional entry resolved, so the binary is missing.
+- **A lockfile npm wrote without the other platforms** — npm 11.2.0 and
+  earlier, the 10.x that Node 22 ships included, can drop the other platforms'
+  binaries from `package-lock.json` when it rewrites the lockfile while
+  `node_modules` exists. A `npm ci` on another OS (say Linux CI, after a lockfile
+  written on macOS) then installs no binary. npm 11.3.0 fixed it; pnpm 11 and
+  yarn 4 do not do it.
 
 What happens, and what to do:
 
@@ -446,6 +647,32 @@ What happens, and what to do:
   only parse speed differs. To silence it, pin the wasm build (next bullet) or
   install the matching `@csszyx/core-<platform>` package / stop omitting optional
   deps.
+
+  To get the binary back, install without skipping optional packages, or, for
+  the npm lockfile case, write the lockfile again with npm 11.3.0 or later:
+
+  <Tabs syncKey="pkg">
+    <TabItem label="npm">
+      ```bash
+      npm install -g npm@latest
+      rm -rf node_modules package-lock.json
+      npm install
+      ```
+    </TabItem>
+    <TabItem label="pnpm">
+      ```bash
+      pnpm install
+      ```
+    </TabItem>
+    <TabItem label="yarn">
+      ```bash
+      yarn install
+      ```
+    </TabItem>
+  </Tabs>
+
+  0.17 could not fall back in these cases: its compiler also loaded a parser
+  package with its own native binding, and that one was missing too.
 - **You explicitly chose `rust`** (via config or env): this stays a **hard error**
   on purpose — an explicit choice is never silently swapped. Either install the
   native binary for your platform, or ask for the wasm build by name:
@@ -462,6 +689,38 @@ What happens, and what to do:
 
 `'rust'` and `'wasm'` are the only values. They are the same engine, so the
 choice is about how it loads, never about what it emits.
+
+**`engine-version-skew` or `runtime-version-skew` stops the build** — two
+csszyx packages in the install come from different releases. The engine must
+match `@csszyx/compiler`, and `@csszyx/runtime` must match `@csszyx/unplugin`,
+exactly; each message names both versions (see
+[the compiler and the engine](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases)
+and [the plugin and the runtime](/docs/reference/warnings/#the-plugin-and-the-runtime-come-from-different-releases)).
+List what is installed and what pulled it in, then install every csszyx package
+at one version:
+
+<Tabs syncKey="pkg">
+  <TabItem label="npm">
+    ```bash
+    npm ls @csszyx/core @csszyx/runtime
+    npm install csszyx@<version> @csszyx/runtime@<version>
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm why @csszyx/core @csszyx/runtime
+    pnpm add csszyx@<version> @csszyx/runtime@<version>
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn why @csszyx/runtime
+    yarn add csszyx@<version> @csszyx/runtime@<version>
+    ```
+  </TabItem>
+</Tabs>
+
+Name every csszyx package your `package.json` lists, at the same `<version>`.
 
 **TypeScript errors with `sz` prop** (`Property 'sz' does not exist on type
 'DetailedHTMLProps<...>'`) — the JSX augmentation is not loaded. Add

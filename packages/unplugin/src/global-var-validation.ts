@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import { scanGlobalVarUsages } from '@csszyx/compiler';
+import { scanGlobalVarUsages } from '@csszyx/compiler/engine';
 
 import {
     createGlobalVarScanCacheKey,

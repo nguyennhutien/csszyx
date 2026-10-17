@@ -1313,12 +1313,6 @@ These are informational and always print to stderr, once.
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
 
-One more engine report comes from the browser runtime rather than the build:
-`[csszyx] Failed to initialize WASM core, falling back to JavaScript transformer`,
-followed by the underlying error. The JavaScript transformer produces the same
-classes, so this costs speed only. Its success counterpart,
-`[csszyx] WASM Core initialized (v{version})`, prints through `console.info`.
-
 <Aside type="note" title="What a parser fallback costs">
 Parse speed, and nothing else. The build lane's two artifacts are one engine
 compiled two ways, so a fallback between them cannot change a class. The
@@ -1459,11 +1453,12 @@ difference between them is the bug.
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] No checksum found in HTML` | The page claims no build. Every production build writes the attribute. |
 | `[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.` | |
-| `[csszyx] Mangle map failed schema validation; treating integrity as invalid.` | |
-| `[csszyx] WASM core not loaded — mangle map checksum is unverified (schema-validated only). This is detection, not authentication.` | Dev only. |
-| `[csszyx] Failed to verify mangle map:` / `Failed to parse mangle map:` | |
+| `Failed to parse mangle map:` | The census is not JSON; it is ignored. |
+| `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to {computed}, and the checksum it was built with is {expectedChecksum}` + `note: this detects a damaged or stale page, not an attacker; the checksum is not signed` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
+| `[csszyx] mangle-map-unavailable: this page carries the checksum {expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified` + `help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
+| `[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
+| `[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. crypto.subtle exists only in a secure context: serve the page over HTTPS, or from localhost. Nothing was verified.` | `verifyMangleChecksumAsync` answers `false`; `computeMangleChecksumAsync` throws it. Printed in production too. |
 | `[csszyx] Hydration aborted at {tag}:` + reason | |
 | `[csszyx] CSR recovery requires explicit szRecover directive` | Add `szRecover="csr"`. |
 | `[csszyx] szRecover="dev-only" is disabled in production` | By design. |
@@ -2079,6 +2074,58 @@ CSS variable where the engine reads it at build time (`const x = 4` then
 `sz={{ p: x }}` now compiles to `p-4`), and Babel emitted an identifier-named
 class for a computed key (`k-4`) where the engine emits none. The engine's
 answers were the intended ones; the pinned expectations moved with it.
+
+### The compiler and the engine come from different releases
+
+```text
+[csszyx] engine-version-skew: @csszyx/compiler {version} was built for engine source {digest} and found {engine}
+help: install @csszyx/core@{version}; it installs its platform package at the same version
+```
+
+The `help:` line names the fix for what answered:
+
+```text
+help: install @csszyx/core@{version}; {platformPackage} must be {version} too, so reinstall it if your lockfile holds another version
+help: rebuild the engine from this checkout with `pnpm --filter @csszyx/core {task}` after changing its source
+```
+
+The first is for the native engine of another release: a lockfile can keep an
+older platform package beside a current `@csszyx/core`. The second is for an
+engine at the compiler's version built from other source, which happens only
+in a checkout of csszyx itself; `{task}` is `native:build` for the native
+engine and `build` for wasm.
+
+`{engine}` names the artifact and what it reported, such as `the native
+(@csszyx/core-linux-x64-gnu) engine 0.17.2 (source 9b40c2d1e7a35f08)`, or says it
+comes from a release before 0.18 that does not report its version.
+
+`@csszyx/compiler` and the engine in `@csszyx/core` are released together but
+installed apart, so a lockfile or a cache can pair them across releases. An
+engine from another release ignores options it does not know and lowers with
+other tables, so the first call into either artifact checks the version and the
+digest of the engine's source, and the build stops on a mismatch. There is no
+setting that skips the check. Install `@csszyx/core` at the compiler's version;
+`@csszyx/unplugin`, `@csszyx/cli` and `csszyx` pin it for you. When both sides
+report the same version, the engine and the compiler were built from different
+checkouts of csszyx itself: rebuild the engine.
+
+### The plugin and the runtime come from different releases
+
+```text
+[csszyx] runtime-version-skew: @csszyx/unplugin {pluginVersion} found @csszyx/runtime {runtimeVersion} at {runtimeDir}
+help: install @csszyx/runtime@{pluginVersion}; the build and the runtime lower sz objects with rules from the same release
+```
+
+The build lowers every static `sz` object, and `@csszyx/runtime` lowers the rest
+in the browser — `szr`, `szv`, objects built at run time — and merges classes
+with the table the build wrote. Each side carries its own copy of the rules, so a
+runtime from another release writes other classes for the same object, and
+neither output says so. The plugin reads the `@csszyx/runtime` your project
+root resolves when the build starts (on Turbopack, in `csszyx next prebuild` and
+in the loader) and stops when its version differs. A package that pins its own
+copy of the runtime is not compared. Install the runtime at the plugin's
+version; with pnpm, `pnpm why @csszyx/runtime` shows which package pulled in the
+other copy.
 
 <Aside type="tip" title="Still stuck?">
 Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a

@@ -10,7 +10,12 @@ pub struct TransformFile {
 }
 
 /// Options passed to the Rust transform core.
+///
+/// Unknown fields are refused: a compiler newer than the engine sends options
+/// the engine cannot honour, and ignoring them produced wrong output with no
+/// word (the 0.17 engine dropped `class_prefix`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct TransformOptions {
     /// Whether dynamic CSS custom properties should use tiered short names.
     pub mangle_vars: bool,
@@ -224,4 +229,21 @@ pub struct TransformResult {
     pub metadata: TransformMetadata,
     /// Native parser lane used for this file.
     pub parser_path: ParserPath,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TransformOptions;
+
+    #[test]
+    fn options_refuse_a_field_the_engine_does_not_know() {
+        let known =
+            r#"{"mangle_vars":false,"mangle_var_hoist_max_depth":null,"global_var_aliases":[]}"#;
+        assert!(serde_json::from_str::<TransformOptions>(known).is_ok());
+        let unknown = r#"{"mangle_vars":false,"mangle_var_hoist_max_depth":null,"global_var_aliases":[],"class_suffix":"x"}"#;
+        let error = serde_json::from_str::<TransformOptions>(unknown)
+            .expect_err("an unknown option is refused")
+            .to_string();
+        assert!(error.contains("unknown field `class_suffix`"), "{error}");
+    }
 }

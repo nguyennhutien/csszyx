@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { transformSource } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler/engine';
 import { describe, expect, it, vi } from 'vitest';
 
 import {

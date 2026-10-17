@@ -202,7 +202,7 @@ describe('runtime static-class scan with nested braces', () => {
     it('walks nested objects inside an _sz call to find static fragments', async () => {
         const { collectNextTransformMetadata } = await import('../src/next-transform-metadata');
         const source = 'const A = ({rest}) => <div sz={{ hover: { m: 2 }, gap: 1, ...rest }} />;';
-        const { transformSource } = await import('@csszyx/compiler');
+        const { transformSource } = await import('@csszyx/compiler/engine');
         const result = transformSource(source, '/repo/src/A.tsx');
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/A.tsx');
         expect(metadata.classes).toContain('gap-1');

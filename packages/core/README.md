@@ -7,8 +7,13 @@ The Rust core ships in two forms:
 - **Native N-API addon** (per-platform `@csszyx/core-*` optional packages) —
   the default source-transform engine the build plugin uses since v0.9. The
   boundary is documented in [NATIVE-TRANSFORM.md](./NATIVE-TRANSFORM.md).
-- **WebAssembly** — the WASM exports below run in Node.js, browsers, and edge
-  environments, and stay stable independently of the native engine.
+- **WebAssembly** — the same engine compiled to wasm for Node, used where no
+  native binary installs and for the exports below.
+
+`@csszyx/core` runs at build time, in Node. It has no browser or edge entry: a
+bundler building for the browser fails to resolve it. In the browser,
+`@csszyx/runtime` recomputes the mangle checksum with Web Crypto
+(`verifyMangleChecksumAsync`), with no WebAssembly and no CSP exception.
 
 ## Installation
 

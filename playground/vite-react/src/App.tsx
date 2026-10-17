@@ -5,6 +5,7 @@ import { VerificationComponent } from './Verification';
 import { SzvStandalone } from './SzvStandalone';
 import { SzvFromTs } from './SzvFromTs';
 import { SafelistHmrFixture } from './SafelistHmr';
+import { IntegrityFixture } from './IntegrityFixture';
 
 // Lazy-load DynamicForm so @csszyx/dynamic (and its deps) are NOT bundled into
 // the main chunk. This avoids a WASM pre-transform warning from Vite when the
@@ -71,6 +72,10 @@ function App() {
 
   if (page === 'recovery') {
     return <RecoveryFixture />;
+  }
+
+  if (page === 'integrity') {
+    return <IntegrityFixture />;
   }
 
   if (page === 'theme-groups') {

@@ -169,120 +169,16 @@ jobs:
           gh workflow run release-vscode.yml --ref main
 
   build-native-artifacts:
-    name: Build native package artifacts
     needs: release-please
     if: |
       needs.release-please.outputs.releases_created == 'true' ||
       (needs.release-please.outputs.recovered != '' && needs.release-please.outputs.recovered != '0') ||
       github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            platform: linux-x64-gnu
-            cross: false
-          - runner: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            platform: linux-x64-musl
-            cross: true
-          - runner: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            platform: linux-arm64-gnu
-            cross: true
-          - runner: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            platform: linux-arm64-musl
-            cross: true
-          - runner: macos-14
-            target: x86_64-apple-darwin
-            platform: darwin-x64
-            cross: false
-          - runner: macos-14
-            target: aarch64-apple-darwin
-            platform: darwin-arm64
-            cross: false
-          - runner: windows-2025-vs2026
-            target: x86_64-pc-windows-msvc
-            platform: win32-x64-msvc
-            cross: false
-          - runner: windows-2025-vs2026
-            target: aarch64-pc-windows-msvc
-            platform: win32-arm64-msvc
-            cross: false
-    runs-on: ${{ matrix.runner }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
-        with:
-          node-version: "24"
-          cache: "pnpm"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
-        with:
-          targets: ${{ matrix.target }}
-
-      # Cache cargo registry + target/ per platform. The native build compiles
-      # heavy crates (oxc, etc.) from scratch on every release otherwise; zig
-      # cross-compile keeps everything on the host runner (no Docker), so the
-      # cache applies to all 8 targets. Keyed per platform to avoid cross-target
-      # target/ thrash.
-      - name: Cache cargo (native build)
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ${{ matrix.platform }}
-
-      - name: Install zig (cross-compile)
-        if: matrix.cross
-        shell: bash
-        # Direct install rather than mlugg/setup-zig@v2, whose action still ships
-        # a Node.js 20 entrypoint and trips the Node-20 deprecation annotation.
-        # All cross targets run on the ubuntu-latest (linux x86_64) runner.
-        run: |
-          set -euo pipefail
-          ZIG_VERSION=0.13.0
-          curl -fsSL --retry 5 --retry-connrefused \
-            "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-            -o /tmp/zig.tar.xz
-          mkdir -p "$HOME/.zig"
-          tar -xJf /tmp/zig.tar.xz -C "$HOME/.zig" --strip-components=1
-          echo "$HOME/.zig" >> "$GITHUB_PATH"
-          "$HOME/.zig/zig" version
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build native package
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PATH="$PWD/node_modules/.bin:$PWD/packages/core/node_modules/.bin:$PATH"
-          cd packages/core
-          node scripts/build-native.mjs \
-            --release --clean --native-engine \
-            --target "${{ matrix.target }}" \
-            ${{ matrix.cross && '--cross-compile' || '' }}
-          cd ../..
-          mkdir -p "native-artifacts/packages/core-${{ matrix.platform }}"
-          cp \
-            "packages/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node" \
-            "native-artifacts/packages/core-${{ matrix.platform }}/"
-
-      - name: Upload native package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: native-${{ matrix.platform }}
-          path: native-artifacts/packages
-          if-no-files-found: error
+    # Builds the eight binaries and loads each one where a runner can run it;
+    # the same workflow runs on pull requests that touch the release path.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-artifacts.yml
 
   # Runs only when release-please created releases (i.e. the release PR was
   # just merged). Builds the workspace and publishes to npm. The Marketplace
@@ -326,55 +222,11 @@ jobs:
           cache: "pnpm"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --locked --version 0.14.0 || true
-
-      # Pre-install wasm-bindgen-cli so the @csszyx/core build script
-      # (wasm-pack --mode no-install) can skip wasm-pack's own install step.
-      - name: Cache wasm-bindgen-cli
-        id: cache-wasm-bindgen
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
-        with:
-          path: ~/.cargo/bin/wasm-bindgen
-          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
-      - name: Install wasm-bindgen-cli
-        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
-        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
-
-      - name: Install binaryen (for wasm-opt)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Validate native package metadata
-        run: pnpm --filter @csszyx/core native:packages
-
-      - name: Download native package artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: packages
-          pattern: native-*
-          merge-multiple: true
-
-      - name: List downloaded native binaries
-        run: find packages/core-* -name '*.node' -type f 2>/dev/null || echo "No .node files found"
-
-      - name: Validate native package binaries
-        run: pnpm --filter @csszyx/core native:packages -- --require-binaries
-
-      # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
-      # so the OPTIMIZED pkg/ is what turbo captures in its cache.
-      - name: Build WASM core
-        run: pnpm --filter @csszyx/core build
-
-      - name: Build all packages
-        run: pnpm build
+      # Build with wasm-opt, place the binaries the build jobs uploaded, and
+      # test those bytes. release-dry-run.yml runs the same action on pull
+      # requests.
+      - name: Build and test the release bytes
+        uses: ./.github/actions/release-bytes
 
       # Publish one package at a time in workspace dependency order. The
       # script verifies exact immutable versions before each publish, so a
@@ -389,6 +241,10 @@ jobs:
       - name: Publish to npm
         run: node .github/scripts/publish-workspace.mjs
         env:
+          # `@csszyx/core`'s prepublishOnly builds its wasm again; this keeps
+          # that build from skipping wasm-opt, so npm gets the bytes the step
+          # above tested.
+          CSSZYX_REQUIRE_WASM_OPT: "1"
           # Every public package demonstrated trusted publishing in the 0.14.0
           # release. Refuse a token fallback so a deleted or drifted npm trusted
           # publisher fails visibly instead of reviving long-lived credentials.

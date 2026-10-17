@@ -38,7 +38,6 @@ export {
     szcn,
     szr,
     szv,
-    verifyMangleMapIntegrity,
 } from '@csszyx/runtime';
 // === Runtime Lite (minimal bundle) ===
 export { _sz as _szLite } from '@csszyx/runtime/lite';

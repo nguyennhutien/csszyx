@@ -22,7 +22,8 @@ import {
     type CrossModuleRegistryEntry,
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
-} from '@csszyx/compiler';
+} from '@csszyx/compiler/engine';
+import type { ParserMode } from '@csszyx/compiler/internal';
 import { normalizePathSeparators } from './path-normalization.js';
 import { aliasedSpecifierBases, type SpecifierAlias } from './specifier-aliases.js';
 
@@ -86,14 +87,16 @@ export function mayExportSzvFactories(content: string): boolean {
  * @param registry - The registry to fill.
  * @param filePath - Absolute source path (any separator style).
  * @param content - Source text.
+ * @param parser - The engine artifact the build runs on, if configured.
  */
 export function recordSzvRegistryFile(
     registry: SzvCrossModuleRegistry,
     filePath: string,
     content: string,
+    parser?: ParserMode,
 ): void {
     const entries = mayExportSzvFactories(content)
-        ? extractCrossModuleRegistryEntries(content, filePath)
+        ? extractCrossModuleRegistryEntries(content, filePath, parser)
         : [];
     replaceEntriesOfKind(registry, filePath, 'szv-config', entries);
 }
@@ -109,17 +112,19 @@ export function recordSzvRegistryFile(
  * @param registry - The registry to fill.
  * @param filePath - Absolute source path (any separator style).
  * @param content - Source text.
+ * @param parser - The engine artifact the build runs on, if configured.
  */
 export function recordSzObjectRegistryFile(
     registry: SzvCrossModuleRegistry,
     filePath: string,
     content: string,
+    parser?: ParserMode,
 ): void {
     replaceEntriesOfKind(
         registry,
         filePath,
         'sz-object',
-        extractCrossModuleRegistryEntries(content, filePath),
+        extractCrossModuleRegistryEntries(content, filePath, parser),
     );
 }
 
@@ -206,14 +211,16 @@ const EMITTED_EXTENSION_SOURCES: ReadonlyArray<readonly [string, readonly string
  * @param index - The forward index to update.
  * @param filePath - Absolute source path (any separator style).
  * @param content - Source text.
+ * @param parser - The engine artifact the build runs on, if configured.
  */
 export function recordCrossModuleForwards(
     index: CrossModuleForwardIndex,
     filePath: string,
     content: string,
+    parser?: ParserMode,
 ): void {
     const key = normalizePathSeparators(filePath);
-    const forwards = extractCrossModuleForwards(content, filePath);
+    const forwards = extractCrossModuleForwards(content, filePath, parser);
     if (forwards.length === 0) index.delete(key);
     else index.set(key, forwards);
 }

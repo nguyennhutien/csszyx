@@ -12,13 +12,11 @@
  * missing build instead of passing on one artifact.
  */
 
-import {
-    type CssVariableMangleValue,
-    RustTransformUnavailableError,
-    type SourceTransformResult,
-    type TransformSourceCodeOptions,
-    transformRust,
-    transformWasm,
+import { RustTransformUnavailableError, transformRust, transformWasm } from '../src/engine.js';
+import type {
+    CssVariableMangleValue,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
 } from '../src/index.js';
 
 /**

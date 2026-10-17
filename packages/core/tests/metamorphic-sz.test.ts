@@ -21,7 +21,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SzObject } from '../../compiler/src/transform-core.js';
 import { deepMergeSzObjects, transform } from '../../compiler/src/transform-core.js';
-import { init, transform_sz } from '../pkg-node/csszyx_core.js';
+import { init, transform_sz } from '../pkg-parser/csszyx_core.js';
 import { createRng, generateSzObject, loadSzPool, type SzPool } from './helpers/sz-fuzz.js';
 import { PREFIX_DROP_KEY_SET } from './helpers/sz-known-defects.js';
 

@@ -19,7 +19,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SzObject } from '../../compiler/src/transform-core.js';
 import { transform } from '../../compiler/src/transform-core.js';
-import { init, transform_sz } from '../pkg-node/csszyx_core.js';
+import { init, transform_sz } from '../pkg-parser/csszyx_core.js';
 import {
     commitSeed,
     createRng,

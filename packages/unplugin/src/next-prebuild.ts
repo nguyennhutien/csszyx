@@ -14,6 +14,7 @@ import { NEXT_PREBUILD_LOCK_COMMAND, writeNextSafelistShard } from './next-safel
 import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
+import { assertRuntimeMatchesPlugin } from './runtime-version.js';
 
 // The CLI records the stylesheet facts before it calls the prebuild, through the
 // same entry it already imports the prebuild from.
@@ -133,6 +134,14 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         csszyxVersion,
         nativeVersion,
         mode: options.mode ?? 'production',
+    });
+
+    // Turbopack runs no plugin `buildStart`, so the prebuild is where a runtime
+    // from another release stops the build. The plugin's own manifest, not the
+    // caller's `csszyxVersion` identity, is the release the runtime must match.
+    assertRuntimeMatchesPlugin({
+        root: context.root,
+        pluginVersion: readPackageVersion('../package.json', import.meta.url),
     });
 
     // The safelist this run writes reaches Tailwind only through the PostCSS

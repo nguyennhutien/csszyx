@@ -124,14 +124,21 @@ pub fn init() {
     }));
 }
 
-/// Gets the version of csszyx-core.
+/// The version of `@csszyx/core` this engine ships as.
 ///
 /// # Returns
 ///
-/// Version string
+/// Version string, e.g. `0.18.0`
 #[wasm_bindgen]
 pub fn version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    env!("CSSZYX_ENGINE_VERSION").to_string()
+}
+
+/// The digest of the source this engine was built from: 16 hex characters,
+/// computed by `build.rs` as `scripts/engine-digest.mjs` computes it.
+#[wasm_bindgen]
+pub fn engine_digest() -> String {
+    env!("CSSZYX_ENGINE_DIGEST").to_string()
 }
 
 /// Whole-file source transform across the WASM boundary.
@@ -261,10 +268,21 @@ mod tests {
     }
 
     #[test]
-    fn test_version() {
+    fn version_is_the_package_version() {
         init();
-        let ver = version();
-        assert!(!ver.is_empty());
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../package.json")).expect("package.json");
+        assert_eq!(version(), manifest["version"].as_str().expect("a version"));
+        assert_ne!(version(), "0.0.0");
+    }
+
+    #[test]
+    fn engine_digest_is_16_hex_characters() {
+        let digest = engine_digest();
+        assert_eq!(digest.len(), 16);
+        assert!(digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()));
     }
 
     #[test]

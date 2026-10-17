@@ -354,7 +354,7 @@ function installVersion(root, version, integrity) {
  */
 async function loadEngines() {
     const { isRustTransformAvailable, transformRust, transformWasm } = await import(
-        '../packages/compiler/src/index.js'
+        '../packages/compiler/src/engine.js'
     );
     const engines = [];
     const missing = [];

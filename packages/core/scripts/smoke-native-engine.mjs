@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 // Build, load, and clean the current host's native-engine addon.
+//
+// `--prebuilt` loads the addon already in the host's package and leaves it
+// there: the release workflow checks the exact binary it is about to publish.
+// `--binary <file>` loads that file directly and leaves it there, for a
+// release binary on a machine whose package manager never linked its package
+// (a musl binary in an Alpine container, a cross-compiled one).
 
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -12,22 +19,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const coreDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(coreDir, "../..");
 
-const { platformKey, packageDir, nodePath } = getHostNativePackage(repoRoot);
-
-if (!packageDir || !nodePath) {
-  fail(`Unsupported native platform: ${platformKey}`);
+const binaryFlag = process.argv.indexOf("--binary");
+const binaryArg = binaryFlag === -1 ? undefined : process.argv[binaryFlag + 1];
+if (binaryFlag !== -1 && !binaryArg) {
+  fail("--binary takes the path of a .node file.");
 }
+const prebuilt = binaryArg !== undefined || process.argv.includes("--prebuilt");
 
-const generatedDtsPath = path.join(packageDir, "index.d.ts");
+const host = binaryArg === undefined ? getHostNativePackage(repoRoot) : null;
+if (host && (!host.packageDir || !host.nodePath)) {
+  fail(`Unsupported native platform: ${host.platformKey}`);
+}
+const nodePath = host ? host.nodePath : path.resolve(binaryArg);
+const generatedDtsPath = host ? path.join(host.packageDir, "index.d.ts") : null;
 
 try {
-  runBuild();
+  if (!prebuilt) runBuild();
   assertFile(nodePath);
 
-  const native = await import(
-    pathToFileURL(path.join(coreDir, "native", "index.js"))
-  );
-  const binding = native.loadNativeBinding();
+  const binding = host
+    ? (
+        await import(pathToFileURL(path.join(coreDir, "native", "index.js")))
+      ).loadNativeBinding()
+    : createRequire(import.meta.url)(nodePath);
 
   if (typeof binding?.transformBatch !== "function") {
     fail("Loaded native binding does not export transformBatch().");
@@ -39,8 +53,10 @@ try {
     `[native-engine-smoke] Loaded ${path.relative(repoRoot, nodePath)}`,
   );
 } finally {
-  rmSync(nodePath, { force: true });
-  rmSync(generatedDtsPath, { force: true });
+  if (!prebuilt) {
+    rmSync(nodePath, { force: true });
+    rmSync(generatedDtsPath, { force: true });
+  }
 }
 
 function runBuild() {
@@ -310,7 +326,7 @@ function assertNativeEngineTransform(binding) {
   if (
     recoveryToken.mode !== "csr" ||
     recoveryToken.component !== "div" ||
-    !recoveryToken.path.endsWith("fixtures/recover.tsx:1:27")
+    !recoveryToken.path.replaceAll("\\", "/").endsWith("fixtures/recover.tsx:1:27")
   ) {
     fail(`Unexpected recovery token data: ${JSON.stringify(recoveryToken)}`);
   }

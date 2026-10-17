@@ -39,11 +39,11 @@ const UNMEASURED = [
     /\.d\.ts$/,
     /(^|\/)scripts\//,
     // A `vitest bench` file. The coverage run's `include` is `packages/*/src`
-    // plus `packages/*/native`, so `bench/` is outside it by construction and
+    // plus `packages/*/native`, so `bench/` and `benchmarks/` are outside it by construction and
     // needs no matching `exclude` entry there — but this gate reads the diff,
     // not the include list, so without this a benchmark reports as changed
     // source that no report mentions.
-    /(^|\/)bench\//,
+    /(^|\/)bench(marks)?\//,
     /^packages\/e2e\//,
     /^packages\/vscode\/src\/extension\.ts$/,
     // Nothing instruments the docs site, so calling its changed lines
@@ -83,6 +83,13 @@ const UNMEASURED = [
     // that produces the report and cannot appear in it. They are exercised
     // through the built addon instead — see the compiler's migrate suites.
     /^packages\/core\/src\/native\.rs$/,
+    // A cargo build script runs as its own binary while the crate compiles,
+    // so the coverage run, which instruments the crate's tests, never loads
+    // it, and Codecov's Rust flag covers `src/**` only. The engine's build
+    // script computes the identity the engine reports; the digest parity
+    // build test (`scripts/build-tests/engine-digest.test.mjs`) checks it
+    // against the JavaScript digest instead.
+    /^packages\/[^/]+\/build\.rs$/,
     // Build output. It never mattered while `.js` was unmeasurable outright;
     // now that the shipped loader is measured, a committed `dist` would be
     // reported as source with no test.

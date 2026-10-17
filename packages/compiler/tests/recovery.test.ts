@@ -124,6 +124,28 @@ describe('generateRecoveryToken', () => {
 
         expect(token1).not.toBe(token2);
     });
+
+    it('hashes a character outside the BMP as its two UTF-16 units', () => {
+        // Tokens already shipped in built pages were hashed over UTF-16 code
+        // units; iterating by code point must not change them.
+        const metadata = {
+            mode: 'csr' as const,
+            component: 'Emoji😀Card',
+            filePath: '/app/𝒳.tsx',
+            line: 3,
+            column: 7,
+            buildId: 'b',
+        };
+        const key = `${metadata.component}:${metadata.filePath}:${metadata.line}:${metadata.column}:${metadata.mode}:${metadata.buildId}`;
+        let hash = 0;
+        for (let index = 0; index < key.length; index++) {
+            hash = Math.imul(Math.imul(hash, 31) + key.charCodeAt(index), 1);
+        }
+
+        expect(generateRecoveryToken(metadata)).toBe(
+            Math.abs(hash).toString(16).padStart(12, '0').slice(0, 12),
+        );
+    });
 });
 
 describe('createRecoveryToken', () => {
