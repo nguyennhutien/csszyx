@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-    SZ_DIAGNOSTIC_KIND_IDS,
+    SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
     szDiagnosticKindOf,
     szKeySuggestionFor,
@@ -49,7 +49,6 @@ import {
 } from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
 import {
-    CHECK_RULES,
     type CheckRule,
     createReporter,
     type Reporter,
@@ -1102,7 +1101,8 @@ const PREFIX_DISAGREEMENT = 'prefix-disagreement';
 function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | null {
     const include = options.rule ?? [];
     const exclude = options.ignoreRule ?? [];
-    const known = new Set<string>([...CHECK_RULES, ...SZ_DIAGNOSTIC_KIND_IDS, PREFIX_DISAGREEMENT]);
+    // Every pass and every kind the registry makes settable.
+    const known = new Set<string>(SZ_SETTABLE_DIAGNOSTIC_IDS);
     const unknown = [...include, ...exclude].filter(id => !known.has(id));
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');

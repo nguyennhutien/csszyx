@@ -5524,15 +5524,11 @@ mod tests {
                 TransformOptions::default(),
             ),
         ];
-        // `unsigned-value` is the build-time oracle's verdict, read from the
-        // project's Tailwind (ADR 0012, 0022); the engine never renders it.
+        // Every code the engine emits has a case; `unsigned-value`, the
+        // build-time oracle's verdict (ADR 0012, 0022), is not one of them.
         assert_eq!(
             cases.iter().map(|(code, ..)| *code).collect::<Vec<_>>(),
-            DIAGNOSTIC_CODES
-                .iter()
-                .copied()
-                .filter(|code| *code != DiagnosticCode::UnsignedValue)
-                .collect::<Vec<_>>()
+            DIAGNOSTIC_CODES.to_vec()
         );
         for (code, jsx, options) in cases {
             let source =

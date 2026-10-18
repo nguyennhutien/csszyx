@@ -12,7 +12,11 @@
  *
  * @module diagnostics
  */
-import type { SzDiagnosticCode } from '@csszyx/compiler';
+import type {
+    SzDiagnosticGroupId,
+    SzRemovedDiagnosticId,
+    SzSettableDiagnosticId,
+} from '@csszyx/compiler';
 
 /** How loudly one kind of finding is reported. */
 export type SzDiagnosticLevel = 'off' | 'info' | 'warn' | 'error';
@@ -30,30 +34,17 @@ export type SzDiagnosticPreset = 'recommended' | 'atomic';
  * A pass of `csszyx check`. Setting one sets every kind the pass reports;
  * `sz-diagnostic` covers every engine diagnostic.
  */
-export type SzDiagnosticPassId =
-    | 'sz-diagnostic'
-    | 'dead-class'
-    | 'broken-opacity'
-    | 'sibling-keyword'
-    | 'theme-collision'
-    | 'merge-covered-key'
-    | 'merge-covered-class';
+export type SzDiagnosticPassId = SzDiagnosticGroupId;
 
 /**
  * Every id a level can be set for: a pass, an engine diagnostic code, or a
- * finding a pass reports under its own kind.
+ * finding a pass reports under its own kind. Generated from the diagnostic
+ * registry.
  *
- * `other` is accepted so an existing config keeps loading; no diagnostic is
- * reported under it any more.
+ * An id a release shipped that is no longer reported (`other`) is accepted so
+ * an existing config keeps loading.
  */
-export type SzDiagnosticRuleId =
-    | SzDiagnosticPassId
-    | SzDiagnosticCode
-    | 'prefix-disagreement'
-    | 'custom-class'
-    | 'unknown-class'
-    | 'classname-expression-merge'
-    | 'other';
+export type SzDiagnosticRuleId = SzSettableDiagnosticId | SzRemovedDiagnosticId;
 
 /** Levels by id. */
 export type SzDiagnosticRules = Partial<Record<SzDiagnosticRuleId, SzDiagnosticLevel>>;

@@ -12,7 +12,18 @@ import { version as packageVersion } from '../package.json';
 
 // Export transform functionality
 export { AST_BUDGET } from './ast-budget.js';
-export { SZ_DIAGNOSTIC_CODES, type SzDiagnosticCode } from './diagnostic-codes.generated.js';
+export {
+    SZ_DIAGNOSTIC_CODES,
+    SZ_DIAGNOSTIC_DEFAULT_LEVELS,
+    SZ_DIAGNOSTIC_GROUP_IDS,
+    SZ_REMOVED_DIAGNOSTIC_IDS,
+    SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzDiagnosticCode,
+    type SzDiagnosticGroupId,
+    type SzDiagnosticId,
+    type SzRemovedDiagnosticId,
+    type SzSettableDiagnosticId,
+} from './diagnostic-codes.generated.js';
 export {
     restoreEngineSpans,
     type SourcePosition,

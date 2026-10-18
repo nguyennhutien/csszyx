@@ -39,3 +39,6 @@ fi
 pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
 pnpm turbo run build --filter=@csszyx/docs
+
+# Every message links to /e/<code>; fail the deploy before a code loses its page.
+node scripts/check-diagnostic-pages.mjs apps/docs/dist

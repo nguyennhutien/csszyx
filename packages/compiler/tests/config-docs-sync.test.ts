@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { SZ_DIAGNOSTIC_DEFAULT_LEVELS } from '../src/diagnostic-codes.generated.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '../../..');
 
@@ -91,5 +93,31 @@ describe('config docs sync', () => {
         expect(typesConfig).toContain(`* @default ${mangleDefault}`);
         expect(configDocs).toContain(`opt-in, default ${mangleDefault}`);
         expect(configDocs).toContain('It is **off by\ndefault**');
+    });
+
+    it('names in the preset row exactly the ids the registry does not default to error', () => {
+        // The registry is the source of the default levels; this row is the one
+        // place the docs list them by hand.
+        const configDocs = readFileSync(
+            join(REPO_ROOT, 'apps/docs/src/content/docs/docs/reference/config.mdx'),
+            'utf8',
+        );
+        const row = configDocs.split('\n').find(line => line.startsWith('| `preset` |')) ?? '';
+        // "… — `a`, `b` … are `info`, and `c` is `warn`. `atomic` …"
+        const [infoClause = '', rest = ''] = row
+            .slice(row.indexOf(' — '))
+            .split(' are `info`, and ');
+        const warnClause = rest.split(' is `warn`')[0] ?? '';
+        const ids = (clause: string): string[] =>
+            [...clause.matchAll(/`([a-z-]+)`/g)].map(match => match[1] as string).sort();
+        const recommended = (level: string): string[] =>
+            Object.entries(SZ_DIAGNOSTIC_DEFAULT_LEVELS)
+                .filter(([, [atRecommended]]) => atRecommended === level)
+                .map(([id]) => id)
+                .sort();
+
+        expect(ids(infoClause)).toEqual(recommended('info'));
+        expect(ids(warnClause)).toEqual(recommended('warn'));
+        expect(recommended('off')).toEqual([]);
     });
 });

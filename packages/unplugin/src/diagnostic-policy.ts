@@ -44,13 +44,17 @@
  *   {@link DiagnosticPolicy.toJSON}'s `config`.
  * - The build-time `dead-class` finding (`dead-class.ts`) uses
  *   `rule: 'dead-class'` and {@link DiagnosticPolicy.allowsClass}; the merge
- *   report uses `merge-covered-key`/`merge-covered-class`. The className
- *   vocabulary uses `custom-class` / `unknown-class`, both `off` under
- *   `recommended`.
+ *   report uses `merge-covered-key`/`merge-covered-class`.
  *
  * @module diagnostic-policy
  */
-import { nearestName, SZ_DIAGNOSTIC_CODES } from '@csszyx/compiler';
+import {
+    nearestName,
+    SZ_DIAGNOSTIC_DEFAULT_LEVELS,
+    SZ_DIAGNOSTIC_GROUP_IDS,
+    SZ_REMOVED_DIAGNOSTIC_IDS,
+    SZ_SETTABLE_DIAGNOSTIC_IDS,
+} from '@csszyx/compiler';
 import type {
     CsszyxFileConfig,
     SzDiagnosticLevel,
@@ -80,63 +84,26 @@ export const SZ_DIAGNOSTIC_LEVELS: readonly SzDiagnosticLevel[] = ['off', 'info'
 export const SZ_DIAGNOSTIC_PRESETS: readonly SzDiagnosticPreset[] = ['recommended', 'atomic'];
 
 /** The passes of `csszyx check`, in the order it runs them. */
-export const SZ_DIAGNOSTIC_PASS_IDS: readonly SzDiagnosticPassId[] = [
-    'sz-diagnostic',
-    'dead-class',
-    'broken-opacity',
-    'sibling-keyword',
-    'theme-collision',
-    'merge-covered-key',
-    'merge-covered-class',
-];
+export const SZ_DIAGNOSTIC_PASS_IDS: readonly SzDiagnosticPassId[] = SZ_DIAGNOSTIC_GROUP_IDS;
 
-/** Kinds a pass reports under an id other than its own. */
-const EXTRA_KIND_IDS: readonly SzDiagnosticRuleId[] = [
-    'prefix-disagreement',
-    'custom-class',
-    'unknown-class',
-    'classname-expression-merge',
-    'other',
-];
-
-/** Every id a level can be set for. */
+/**
+ * Every id a level can be set for, from the diagnostic registry: each pass,
+ * each kind the engine or a pass reports, and each id a release shipped that
+ * no longer reports, so a config naming one keeps loading.
+ */
 export const SZ_DIAGNOSTIC_RULE_IDS: readonly SzDiagnosticRuleId[] = [
-    ...SZ_DIAGNOSTIC_PASS_IDS,
-    ...SZ_DIAGNOSTIC_CODES,
-    ...EXTRA_KIND_IDS,
+    ...SZ_SETTABLE_DIAGNOSTIC_IDS,
+    ...(Object.keys(SZ_REMOVED_DIAGNOSTIC_IDS) as SzDiagnosticRuleId[]),
 ];
 
 const KNOWN_IDS: ReadonlySet<string> = new Set(SZ_DIAGNOSTIC_RULE_IDS);
 
 /**
- * Where `recommended` and `atomic` differ from `error`. Everything not listed
- * is `error` under both: that is the 0.17.2 verdict of `csszyx check`, which
- * failed on every finding it reported.
+ * Where `recommended` and `atomic` differ from `error`, from the registry.
+ * Everything not listed is `error` under both: that is the 0.17.2 verdict of
+ * `csszyx check`, which failed on every finding it reported.
  */
-const PRESET_EXCEPTIONS: Readonly<
-    Record<string, readonly [recommended: SzDiagnosticLevel, atomic: SzDiagnosticLevel]>
-> = {
-    // A choice the author made, not a mistake: sz wins over a runtime
-    // className, and two sz attributes merge in order.
-    'class-precedence': ['info', 'warn'],
-    'duplicate-sz': ['info', 'warn'],
-    // What the build merged away; an audit, never a problem.
-    'merge-covered-key': ['info', 'warn'],
-    'merge-covered-class': ['info', 'warn'],
-    // A runtime fallback whose classes were still collected.
-    'fallback-nudge': ['info', 'warn'],
-    // Every class is kept, so the output is only less merged than it could be.
-    'merge-classifier-unavailable': ['warn', 'warn'],
-    // Every class is still emitted.
-    'mangle-vars-hoist-skipped': ['info', 'info'],
-    // `ast-budget` is absent on purpose: a file over the budget is left
-    // unchanged and contributes no class to the safelist, so its styles are
-    // missing — an error, as in 0.17.2 and by ADR 0011's litmus.
-    // The className vocabulary: opt-in, false positives withdrawn (ADR 0024).
-    'custom-class': ['off', 'warn'],
-    'unknown-class': ['off', 'warn'],
-    'classname-expression-merge': ['off', 'info'],
-};
+const PRESET_EXCEPTIONS = SZ_DIAGNOSTIC_DEFAULT_LEVELS;
 
 /**
  * The level a preset gives an id.

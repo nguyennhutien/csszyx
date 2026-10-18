@@ -7,14 +7,20 @@
  *
  * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */
-import type { SzDiagnosticCode, TransformSourceCodeOptions } from '../src/index.js';
+import type {
+    SzDiagnosticCode,
+    SzSettableDiagnosticId,
+    TransformSourceCodeOptions,
+} from '../src/index.js';
 
 /**
- * Codes no engine renders. The verdict behind them comes from the project's
+ * Ids no engine renders. The verdict behind them comes from the project's
  * own Tailwind at build (ADR 0012, 0022), so the build-time oracle reports
- * them, and an engine source for one would be a baked verdict.
+ * them, and an engine source for one would be a baked verdict. The registry
+ * gives them a `check` surface and no `engine` one, so they are not engine
+ * codes at all.
  */
-export const ORACLE_CODES: readonly SzDiagnosticCode[] = ['unsigned-value'];
+export const ORACLE_CODES: readonly SzSettableDiagnosticId[] = ['unsigned-value'];
 
 /** One source per code the engine renders, with the options it needs to be diagnosed. */
 export const CODE_SOURCES: ReadonlyArray<

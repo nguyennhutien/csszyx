@@ -1,0 +1,84 @@
+---
+/**
+ * Every diagnostic code, generated from the registry: what it reports, and
+ * where.
+ */
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+
+import data from '../../../data/diagnostics.json';
+import {
+    type DiagnosticData,
+    type DiagnosticEntry,
+    isSettable,
+    SHIPPED,
+} from '../../../utils/diagnostic-page';
+
+const { diagnostics, groups, removed } = data as DiagnosticData;
+
+/** The columns of the surfaces an id appears on. */
+const surfaces = (entry: DiagnosticEntry): string =>
+    (['engine', 'check', 'runtime', 'error'] as const)
+        .filter(surface => entry.surfaces[surface])
+        .join(', ');
+---
+
+<StarlightPage
+    frontmatter={{
+        title: 'Diagnostic Codes',
+        description: 'Every csszyx diagnostic code, what it reports and where.',
+    }}
+>
+    {SHIPPED.codePrefix && (
+        <p>
+            Every csszyx message starts with <code>[csszyx] &lt;code&gt;:</code>. Match on the code, never
+            on the wording.
+        </p>
+    )}
+    <p>
+        Every code has a page at <code>https://csszyx.com/e/&lt;code&gt;</code>. A
+        level can be set in <code>csszyx.config</code> for a code the build or <code>csszyx check</code>
+        reports, and for each pass of <code>csszyx check</code>.
+    </p>
+
+    <h2 id="passes">Passes of csszyx check</h2>
+    <table>
+        <thead><tr><th>Id</th><th>What it reports</th></tr></thead>
+        <tbody>
+            {groups.map(group => (
+                <tr>
+                    <td><code>{group.id}</code></td>
+                    <td>{group.summary}</td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+
+    <h2 id="codes">Codes</h2>
+    <table>
+        <thead><tr><th>Code</th><th>What it reports</th><th>Where</th><th>Level</th></tr></thead>
+        <tbody>
+            {diagnostics.map(entry => (
+                <tr id={entry.id}>
+                    <td><a href={`/e/${entry.id}`}><code>{entry.id}</code></a></td>
+                    <td>{entry.summary}</td>
+                    <td>{surfaces(entry)}</td>
+                    <td>{isSettable(entry) ? 'settable' : '—'}</td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+
+    <h2 id="removed">No longer reported</h2>
+    <table>
+        <thead><tr><th>Code</th><th>Since</th><th>Replaced by</th></tr></thead>
+        <tbody>
+            {removed.map(entry => (
+                <tr>
+                    <td><code>{entry.id}</code></td>
+                    <td>{entry.since}</td>
+                    <td>{entry.replacedBy ? <a href={`/e/${entry.replacedBy}`}><code>{entry.replacedBy}</code></a> : '—'}</td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</StarlightPage>

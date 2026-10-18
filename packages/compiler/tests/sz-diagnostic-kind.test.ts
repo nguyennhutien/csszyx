@@ -104,15 +104,16 @@ describe.each(ENGINES)('diagnostic kinds — %s', (_name, transform) => {
     );
 });
 
-describe('a code only the build-time oracle reports', () => {
-    it('is read from its code, never from a runtime text', () => {
+describe('a kind only the build-time oracle reports', () => {
+    it('is never read from a runtime text', () => {
         // The runtime said this once, from a table baked from the pinned
-        // Tailwind. It no longer judges (ADR 0022), so no text maps to the kind.
+        // Tailwind. It no longer judges (ADR 0022), so no text maps to the kind,
+        // and no engine code names it: the dead-class pass sets it itself.
         const text =
             '[csszyx] "p: -2": Tailwind serves no negative "p" utility for this value, so the class generates no CSS.';
 
         expect(szDiagnosticKindOf(text)).toBe('other');
-        expect(szDiagnosticKindOf(text, 'unsigned-value')).toBe('unsigned-value');
+        expect(SZ_DIAGNOSTIC_CODES).not.toContain('unsigned-value');
     });
 });
 

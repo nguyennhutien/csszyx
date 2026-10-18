@@ -9,8 +9,7 @@
  *
  * Only classes `sz` EMITTED are asked about. The `className` vocabulary has
  * unserved names too — an app's own `card`, `end`, `row` — and reporting those
- * is what ADR 0024 withdrew; they are `custom-class`/`unknown-class`, off unless
- * a project opts in.
+ * is what ADR 0024 withdrew, and nothing reports them.
  *
  * A dead class whose utility carries the sign `sz` hoisted in front of it
  * (`{ p: -2 }` → `-p-2`) is reported once, as `unsigned-value`, instead: the
