@@ -330,6 +330,23 @@ describe('a runtime value beside the other side of its family', () => {
 
         expect(run.warnings).toEqual([]);
     });
+
+    // A key with no variable form ships no class, so nothing is left for
+    // Tailwind's order to decide: `runtime-value` is the whole story.
+    it.each([
+        ['group', "{ touch: 'auto', touchPanX: c }", 'touch-auto'],
+        ['stand-alone', "{ touch: c, touchPanX: 'x' }", 'touch-pan-x'],
+    ])('stays quiet when the runtime %s key ships no class', (_side, sz, className) => {
+        for (const [name, engine] of ENGINES) {
+            const run = jsx(engine, sz);
+
+            expect(run.className, name).toBe(className);
+            expect(
+                run.result.issues?.map(issue => issue.code),
+                name,
+            ).toEqual(['runtime-value']);
+        }
+    });
 });
 
 describe('a value that belongs to a sibling group', () => {

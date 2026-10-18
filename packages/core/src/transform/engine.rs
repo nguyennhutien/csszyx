@@ -5567,4 +5567,25 @@ mod tests {
             assert!(result.issues.is_empty(), "{:?}", result.issues);
         }
     }
+
+    /// A runtime family key with no variable form ships no class, so it has
+    /// no stylesheet order to lose against the other side of its family.
+    #[test]
+    fn dropped_runtime_family_key_reports_no_conflict() {
+        for source in [
+            "const A = ({ c }) => <div sz={{ touch: 'auto', touchPanX: c }} />;",
+            "const A = ({ c }) => <div sz={{ touch: c, touchPanX: 'x' }} />;",
+        ] {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "src/A.tsx".into(),
+                    source: source.into(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+            let codes: Vec<&str> = result.issues.iter().map(|i| i.code.as_str()).collect();
+            assert_eq!(codes, ["runtime-value"], "{source}");
+        }
+    }
 }

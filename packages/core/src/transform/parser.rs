@@ -4821,6 +4821,16 @@ fn record_dynamic_group_conflicts(
     partial: &mut PartialSzObject,
     dynamic_family_keys: &[(String, TextSpan)],
 ) {
+    // A dropped key ships no class, so it has no stylesheet order to lose.
+    let dynamic_family_keys: Vec<&(String, TextSpan)> = dynamic_family_keys
+        .iter()
+        .filter(|(_, span)| {
+            !partial
+                .dropped_dynamic_keys
+                .iter()
+                .any(|dropped| dropped.span.start == span.start)
+        })
+        .collect();
     if dynamic_family_keys.is_empty() {
         return;
     }
