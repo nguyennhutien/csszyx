@@ -10,7 +10,7 @@
  *
  * Usage: node scripts/check-diagnostic-pages.mjs <dist>
  */
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -31,6 +31,21 @@ export function pageIds() {
 }
 
 /**
+ * What is wrong with one page: missing, or built without its heading (an
+ * empty file, or another page's content).
+ *
+ * @param {string} file - The page.
+ * @param {string} heading - The heading it must hold.
+ * @returns {string[]} At most one problem.
+ */
+function pageProblem(file, heading) {
+    const name = `e/${path.basename(file)}`;
+    if (!existsSync(file)) return [`no page ${name}`];
+    if (!readFileSync(file, 'utf8').includes(heading)) return [`${name} does not hold ${heading}`];
+    return [];
+}
+
+/**
  * What is wrong with a built site's `/e/` pages.
  *
  * @param {string} dist - The built site.
@@ -41,9 +56,9 @@ export function pageProblems(dist) {
     if (!existsSync(dir)) return [`${dir} does not exist`];
     const problems = [];
     for (const id of pageIds()) {
-        if (!existsSync(path.join(dir, `${id}.html`))) problems.push(`no page e/${id}.html`);
+        problems.push(...pageProblem(path.join(dir, `${id}.html`), `<h1><code>${id}</code></h1>`));
     }
-    if (!existsSync(path.join(dir, '404.html'))) problems.push('no page e/404.html');
+    problems.push(...pageProblem(path.join(dir, '404.html'), '<h1>Unknown code</h1>'));
     for (const name of readdirSync(dir)) {
         if (statSync(path.join(dir, name)).isDirectory()) {
             problems.push(`e/${name}/ is a directory; a code page is one flat file`);

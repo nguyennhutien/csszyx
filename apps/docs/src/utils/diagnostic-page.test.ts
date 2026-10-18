@@ -10,8 +10,13 @@ import {
     renderDiagnosticPage,
     renderRemovedPage,
     renderUnknownCodePage,
+    SHIPPED,
+    type Shipped,
     surfaceSentences,
 } from './diagnostic-page';
+
+/** Every ADR 0031 behaviour landed, as the pages read once the last change merges. */
+const LANDED: Shipped = { codePrefix: true, errorCode: true, compactProduction: true };
 
 const entry: DiagnosticEntry = {
     id: 'unknown-key',
@@ -49,6 +54,27 @@ describe('the /e/<code> pages', () => {
         const html = renderDiagnosticPage(entry);
         expect(html).toContain('<code>suggestion</code></td><td><code>string</code></td><td>optional');
         expect(html).toContain('may change between its versions');
+        expect(html).toContain('<p>The values this diagnostic names.</p>');
+    });
+
+    it('promise a JSON record only for a production browser line, once that has landed', () => {
+        const browser = { ...entry, surfaces: { runtime: { production: true } } };
+        expect(renderDiagnosticPage(browser, { shipped: LANDED })).toContain('prints them as JSON');
+        expect(renderDiagnosticPage(browser)).not.toContain('prints them as JSON');
+        expect(renderDiagnosticPage(entry, { shipped: LANDED })).not.toContain('prints them as JSON');
+    });
+
+    it('describe today’s messages until each ADR 0031 change lands', () => {
+        expect(SHIPPED).toEqual({ codePrefix: false, errorCode: false, compactProduction: false });
+        const thrown = { ...entry, surfaces: { error: {} } };
+        expect(surfaceSentences(thrown)).toEqual(['It is thrown as an error.']);
+        expect(surfaceSentences(thrown, LANDED)).toEqual(['It is thrown as an error whose `code` is this id.']);
+    });
+
+    it('say a level reaches neither a console line nor a thrown error', () => {
+        const note = 'It does not change a console line';
+        expect(renderDiagnosticPage(entry)).toContain(note);
+        expect(renderDiagnosticPage({ ...entry, surfaces: { engine: {} } })).not.toContain(note);
     });
 
     it('mark a removed id and name the one that replaced it', () => {
@@ -70,20 +96,30 @@ describe('the /e/<code> pages', () => {
         for (const removed of generated.removed) {
             expect(pages.has(removed.id)).toBe(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(removed.id));
         }
+        const withTombstones: DiagnosticData = {
+            ...generated,
+            removed: [
+                { id: 'old-key', since: '0.18.0', replacedBy: 'unknown-key', was: 'rule', reason: 'Renamed.' },
+                { id: 'OLD_CODE', since: '0.18.0', was: 'error-code', reason: 'Renamed.' },
+            ],
+        };
+        const ids = diagnosticPages(withTombstones).map(([id]) => id);
+        expect(ids).toContain('old-key');
+        expect(ids).not.toContain('OLD_CODE');
     });
 
     it('describe a thrown code, a runtime-only code, an old id with no successor and an unknown code', () => {
         const thrown = surfaceSentences({ ...entry, surfaces: { error: {} }, gaps: ['engine'] });
         expect(thrown).toEqual([
-            'It is thrown as an error whose `code` is this id.',
+            'It is thrown as an error.',
             'The build does not report it; only the runtime lane does.',
         ]);
-        const formerly = renderDiagnosticPage(entry, [
-            { id: 'old-key', since: '0.18.0', replacedBy: 'unknown-key', was: 'rule', reason: 'Renamed.' },
-        ]);
+        const formerly = renderDiagnosticPage(entry, {
+            removed: [{ id: 'old-key', since: '0.18.0', replacedBy: 'unknown-key', was: 'rule', reason: 'Renamed.' }],
+        });
         expect(formerly).toContain('Formerly <code>old-key</code> (until 0.18.0).');
         const orphan = renderRemovedPage({ id: 'gone', since: '0.18.0', was: 'rule', reason: 'Gone.' });
         expect(orphan).not.toContain('replaced by');
-        expect(renderUnknownCodePage()).toContain('<h1>Unknown code</h1>');
+        expect(renderUnknownCodePage()).toContain('<a href="/docs/reference/codes/">Every code</a> is listed');
     });
 });

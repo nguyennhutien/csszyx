@@ -778,6 +778,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "check": {
                 "group": "dead-class"
+            },
+            "runtime": {
+                "production": false
             }
         },
         "position": "file",
@@ -793,6 +796,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "check": {
                 "group": "dead-class"
+            },
+            "runtime": {
+                "production": false
             }
         },
         "position": "file",
@@ -801,6 +807,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             }
         }
+    },
+    {
+        "id": "other",
+        "summary": "An engine diagnostic the text matcher could not name, from a lane that drops its code.",
+        "surfaces": {
+            "check": {
+                "group": "sz-diagnostic"
+            }
+        },
+        "position": "site"
     },
     {
         "id": "prefix-disagreement",

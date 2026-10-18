@@ -255,7 +255,12 @@ test('the TypeScript ids follow the registry', () => {
     );
     const ts = renderTypeScript(input);
     assert.match(ts, /'unknown-key': \['info', 'warn'\]/);
-    assert.match(ts, /'other': undefined/);
+    assert.match(
+        ts,
+        /Readonly<Record<'other', string \| undefined>> = \{\n {4}'other': undefined,\n\};/,
+    );
+    const none = renderTypeScript(registryOf([entry()], []));
+    assert.match(none, /Readonly<Record<never, string \| undefined>> = \{\n\};/);
     assert.deepEqual(settableIds(input), ['sz-diagnostic', 'unknown-key']);
     assert.match(
         ts,

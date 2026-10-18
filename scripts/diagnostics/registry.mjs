@@ -4,8 +4,9 @@
  * One entry per condition: a problem that the engine reports, a `csszyx check`
  * pass finds, the runtime prints or a call throws keeps ONE id, and `surfaces`
  * says where it shows. The generator reads this module and writes the Rust
- * enum (ids with `surfaces.engine` only), the TypeScript types, the per-code
- * browser exports, the Node registry and the docs data for `/e/<id>`.
+ * enum (ids with `surfaces.engine` only), the TypeScript types, the Node
+ * registry and the docs data for `/e/<id>`. Per-code browser exports come with
+ * the runtime reporter that imports them, so no bundle carries an unused one.
  *
  * Ids are a one-way door: they reach `rules`, `check --json`, `err.code` and
  * the console of deployed apps. Renaming one is a breaking change, and the old
@@ -505,18 +506,27 @@ export const DIAGNOSTICS = [
     {
         id: 'unsigned-value',
         summary: 'A negative value on a key Tailwind serves no negative utility for.',
-        surfaces: { check: { group: 'dead-class' } },
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false } },
         position: 'file',
         args: { className: STRING },
-        sources: [`${CHECK}:565`],
+        sources: [`${CHECK}:565`, 'packages/unplugin/src/dead-class.ts:298'],
     },
     {
         id: 'dead-class',
         summary: "An emitted class this project's Tailwind generates no CSS for.",
-        surfaces: { check: { group: 'dead-class' } },
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false } },
         position: 'file',
         args: { className: STRING },
-        sources: [`${CHECK}:633`],
+        sources: [`${CHECK}:633`, 'packages/unplugin/src/dead-class.ts:275'],
+    },
+    {
+        id: 'other',
+        summary:
+            'An engine diagnostic the text matcher could not name, from a lane that drops its code.',
+        surfaces: { check: { group: 'sz-diagnostic' } },
+        position: 'site',
+        // Goes once every lane keeps the engine's code; then it moves to REMOVED.
+        sources: ['packages/compiler/src/sz-diagnostic-kind.ts:135'],
     },
     {
         id: 'prefix-disagreement',
@@ -1786,15 +1796,6 @@ export const DIAGNOSTICS = [
 /** Ids that existed in a released tag and are no longer produced. */
 export const REMOVED = [
     {
-        id: 'other',
-        since: '0.18.0',
-        was: 'check-kind',
-        reason:
-            'The catch-all kind for an engine diagnostic the text matcher could not name. Every ' +
-            'engine diagnostic now carries its own code, so nothing is reported as other; a ' +
-            '`rules` or `--rule` entry naming it selects nothing.',
-    },
-    {
         id: 'CSSZYX_NATIVE_UNAVAILABLE',
         since: '0.18.0',
         replacedBy: 'native-engine-unavailable',
@@ -1888,9 +1889,11 @@ export const REMOVED = [
 // - error.classes lists csszyx classes only; bare Error/TypeError/SyntaxError/RangeError omitted.
 // - CSSZYX_NATIVE_UNAVAILABLE: since '0.18.0' is the release that renames it; it shipped from
 //   v0.9.0 (git grep), recorded in `reason` since the schema has no first-tag field.
-// - REMOVED holds only `other` from v0.17.2 tags: the 18 shipped kinds and the 5 shipped
-//   --rule ids (sz-diagnostic, dead-class, broken-opacity, sibling-keyword, theme-collision)
-//   are all live; unsigned-value, prefix-disagreement, merge-covered-* never shipped in a tag.
+// - REMOVED holds no kebab id yet. Of the v0.17.2 tags, the 18 shipped kinds (`other` among
+//   them, still produced by the text classifier until every lane keeps the engine's code) and
+//   the 5 shipped --rule ids (sz-diagnostic, dead-class, broken-opacity, sibling-keyword,
+//   theme-collision) are all live; unsigned-value, prefix-disagreement, merge-covered-* never
+//   shipped in a tag.
 //   custom-class, unknown-class, classname-expression-merge deleted, not tombstoned.
 //
 // Inventory sites left out on purpose:

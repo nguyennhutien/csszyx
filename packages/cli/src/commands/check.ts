@@ -15,7 +15,6 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-    SZ_DIAGNOSTIC_KIND_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
     szDiagnosticKindOf,
@@ -1102,9 +1101,8 @@ const PREFIX_DISAGREEMENT = 'prefix-disagreement';
 function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | null {
     const include = options.rule ?? [];
     const exclude = options.ignoreRule ?? [];
-    // Every pass and every kind the registry makes settable, plus the kinds the
-    // text classifier still reports (`other`) until each finding carries its code.
-    const known = new Set<string>([...SZ_SETTABLE_DIAGNOSTIC_IDS, ...SZ_DIAGNOSTIC_KIND_IDS]);
+    // Every pass and every kind the registry makes settable.
+    const known = new Set<string>(SZ_SETTABLE_DIAGNOSTIC_IDS);
     const unknown = [...include, ...exclude].filter(id => !known.has(id));
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');

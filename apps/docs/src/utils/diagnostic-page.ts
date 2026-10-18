@@ -52,6 +52,31 @@ export interface DiagnosticData {
     removed: RemovedEntry[];
 }
 
+/** What the messages already do, as opposed to what ADR 0031 has yet to land. */
+export interface Shipped {
+    /** Every message starts with `[csszyx] <code>:`. */
+    codePrefix: boolean;
+    /** A thrown csszyx error carries its id as `code`. */
+    errorCode: boolean;
+    /** A production browser bundle prints a record's args as JSON in place of the sentence. */
+    compactProduction: boolean;
+}
+
+/**
+ * The docs deploy from `main` as each change merges, so a page states a
+ * behaviour only once the code doing it is there. The change that lands one
+ * flips its flag.
+ */
+export const SHIPPED: Shipped = { codePrefix: false, errorCode: false, compactProduction: false };
+
+/** How a page is rendered. */
+export interface PageOptions {
+    /** Ids the registry removed; a live id's page names the ones it replaced. */
+    removed?: RemovedEntry[];
+    /** Which ADR 0031 behaviours to describe; defaults to {@link SHIPPED}. */
+    shipped?: Shipped;
+}
+
 /** Where every page links for the longer explanations. */
 const WARNINGS_PAGE = '/docs/reference/warnings/';
 /** The index of every code. */
@@ -76,9 +101,10 @@ export function escapeHtml(text: string): string {
  * whether `csszyx.config` can set its level.
  *
  * @param entry - The id.
+ * @param shipped - Which ADR 0031 behaviours to describe.
  * @returns The sentences, in surface order.
  */
-export function surfaceSentences(entry: DiagnosticEntry): string[] {
+export function surfaceSentences(entry: DiagnosticEntry, shipped: Shipped = SHIPPED): string[] {
     const out: string[] = [];
     if (entry.surfaces.engine) {
         out.push('The build reports it while it compiles a file, and `csszyx check` lists it.');
@@ -89,11 +115,13 @@ export function surfaceSentences(entry: DiagnosticEntry): string[] {
     if (entry.surfaces.runtime) {
         out.push(
             entry.surfaces.runtime.production
-                ? 'It is printed to the console, in a production build too.'
-                : 'It is printed to the console while developing; a production build leaves it out.',
+                ? 'It is printed to the console, by a production browser bundle too.'
+                : 'It is printed to the console. A production browser bundle leaves it out.',
         );
     }
-    if (entry.surfaces.error) out.push('It is thrown as an error whose `code` is this id.');
+    if (entry.surfaces.error) {
+        out.push(shipped.errorCode ? 'It is thrown as an error whose `code` is this id.' : 'It is thrown as an error.');
+    }
     for (const gap of entry.gaps ?? []) {
         if (gap === 'engine') out.push('The build does not report it; only the runtime lane does.');
     }
@@ -135,6 +163,17 @@ function withCode(text: string): string {
 }
 
 /**
+ * A link.
+ *
+ * @param href - Where it goes, already safe in an attribute.
+ * @param html - Its text, already HTML.
+ * @returns The `<a>` element.
+ */
+function link(href: string, html: string): string {
+    return `<a href="${href}">${html}</a>`;
+}
+
+/**
  * A standalone HTML page around a body.
  *
  * @param title - The page title, unescaped.
@@ -161,7 +200,7 @@ nav { margin-top: 2.5rem; font-size: 0.92em; }
 </head>
 <body>
 ${body}
-<nav><a href="${CODES_PAGE}">Every code</a> · <a href="${WARNINGS_PAGE}">Warnings &amp; troubleshooting</a> · <a href="/">csszyx</a></nav>
+<nav>${[link(CODES_PAGE, 'Every code'), link(WARNINGS_PAGE, 'Warnings &amp; troubleshooting'), link('/', 'csszyx')].join(' · ')}</nav>
 </body>
 </html>
 `;
@@ -171,14 +210,15 @@ ${body}
  * The page of one live id.
  *
  * @param entry - The id.
- * @param removed - Ids that the registry says this one replaced.
+ * @param options - Removed ids and which behaviours to describe.
  * @returns The page's HTML.
  */
-export function renderDiagnosticPage(entry: DiagnosticEntry, removed: RemovedEntry[] = []): string {
+export function renderDiagnosticPage(entry: DiagnosticEntry, options: PageOptions = {}): string {
+    const { removed = [], shipped = SHIPPED } = options;
     const parts = [
         `<h1><code>${escapeHtml(entry.id)}</code></h1>`,
         `<p>${withCode(escapeHtml(entry.summary))}</p>`,
-        `<ul>${surfaceSentences(entry)
+        `<ul>${surfaceSentences(entry, shipped)
             .map(sentence => `<li>${withCode(escapeHtml(sentence))}</li>`)
             .join('')}</ul>`,
     ];
@@ -196,12 +236,19 @@ export function renderDiagnosticPage(entry: DiagnosticEntry, removed: RemovedEnt
             '<h2>Level</h2>',
             `<p>Default: <code>${escapeHtml(defaults.recommended)}</code> under <code>recommended</code>, <code>${escapeHtml(defaults.atomic)}</code> under <code>atomic</code>. Set it in <code>csszyx.config</code>: <code>rules: { '${escapeHtml(entry.id)}': 'warn' }</code>.</p>`,
         );
+        if (entry.surfaces.runtime || entry.surfaces.error) {
+            parts.push(
+                '<p>The level sets how the build and <code>csszyx check</code> report it. It does not change a console line, and it does not stop a thrown error.</p>',
+            );
+        }
     }
     const args = Object.entries(entry.args ?? {});
     if (args.length > 0) {
         parts.push(
             '<h2>Arguments</h2>',
-            '<p>A record of this diagnostic carries these values in <code>args</code>; a production browser build prints them as JSON in place of the sentence.</p>',
+            shipped.compactProduction && entry.surfaces.runtime?.production
+                ? '<p>The values this diagnostic names. A production browser bundle prints them as JSON in place of the sentence.</p>'
+                : '<p>The values this diagnostic names.</p>',
             `<table><thead><tr><th>Name</th><th>Type</th><th></th></tr></thead><tbody>${args
                 .map(
                     ([name, arg]) =>
@@ -247,7 +294,7 @@ export function renderRemovedPage(entry: RemovedEntry): string {
 export function renderUnknownCodePage(): string {
     return page(
         'Unknown code',
-        '<h1>Unknown code</h1>\n<p>No csszyx diagnostic has this code. The list of every code is below.</p>',
+        `<h1>Unknown code</h1>\n<p>No csszyx diagnostic has this code. ${link(CODES_PAGE, 'Every code')} is listed on one page.</p>`,
     );
 }
 
@@ -262,7 +309,7 @@ export function diagnosticPages(data: DiagnosticData): Array<[id: string, html: 
     const kebab = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
     return [
         ...data.diagnostics.map(
-            (entry): [string, string] => [entry.id, renderDiagnosticPage(entry, data.removed)],
+            (entry): [string, string] => [entry.id, renderDiagnosticPage(entry, { removed: data.removed })],
         ),
         ...data.removed
             .filter(entry => kebab.test(entry.id))

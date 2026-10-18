@@ -1,7 +1,7 @@
 ---
 /**
- * Every diagnostic code, generated from the registry: the id each csszyx
- * message starts with, what it reports, and where.
+ * Every diagnostic code, generated from the registry: what it reports, and
+ * where.
  */
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 
@@ -10,6 +10,7 @@ import {
     type DiagnosticData,
     type DiagnosticEntry,
     isSettable,
+    SHIPPED,
 } from '../../../utils/diagnostic-page';
 
 const { diagnostics, groups, removed } = data as DiagnosticData;
@@ -24,12 +25,17 @@ const surfaces = (entry: DiagnosticEntry): string =>
 <StarlightPage
     frontmatter={{
         title: 'Diagnostic Codes',
-        description: 'Every code a csszyx message starts with, what it reports and where.',
+        description: 'Every csszyx diagnostic code, what it reports and where.',
     }}
 >
+    {SHIPPED.codePrefix && (
+        <p>
+            Every csszyx message starts with <code>[csszyx] &lt;code&gt;:</code>. Match on the code, never
+            on the wording.
+        </p>
+    )}
     <p>
-        Every csszyx message starts with <code>[csszyx] &lt;code&gt;:</code>, and every code has a page
-        at <code>https://csszyx.com/e/&lt;code&gt;</code>. Match on the code, never on the wording. A
+        Every code has a page at <code>https://csszyx.com/e/&lt;code&gt;</code>. A
         level can be set in <code>csszyx.config</code> for a code the build or <code>csszyx check</code>
         reports, and for each pass of <code>csszyx check</code>.
     </p>

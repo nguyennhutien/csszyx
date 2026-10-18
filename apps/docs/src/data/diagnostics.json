@@ -706,6 +706,9 @@
       "surfaces": {
         "check": {
           "group": "dead-class"
+        },
+        "runtime": {
+          "production": false
         }
       },
       "position": "file",
@@ -721,6 +724,9 @@
       "surfaces": {
         "check": {
           "group": "dead-class"
+        },
+        "runtime": {
+          "production": false
         }
       },
       "position": "file",
@@ -729,6 +735,16 @@
           "type": "string"
         }
       }
+    },
+    {
+      "id": "other",
+      "summary": "An engine diagnostic the text matcher could not name, from a lane that drops its code.",
+      "surfaces": {
+        "check": {
+          "group": "sz-diagnostic"
+        }
+      },
+      "position": "site"
     },
     {
       "id": "prefix-disagreement",
@@ -2780,12 +2796,6 @@
     }
   ],
   "removed": [
-    {
-      "id": "other",
-      "since": "0.18.0",
-      "was": "check-kind",
-      "reason": "The catch-all kind for an engine diagnostic the text matcher could not name. Every engine diagnostic now carries its own code, so nothing is reported as other; a `rules` or `--rule` entry naming it selects nothing."
-    },
     {
       "id": "CSSZYX_NATIVE_UNAVAILABLE",
       "since": "0.18.0",

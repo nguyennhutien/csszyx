@@ -11,7 +11,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SZ_DIAGNOSTIC_CODES } from '../src/index.js';
+import {
+    SZ_DIAGNOSTIC_REGISTRY,
+    SZ_DIAGNOSTIC_REGISTRY_FORMAT,
+} from '../src/diagnostic-registry.generated.js';
+import {
+    SZ_DIAGNOSTIC_CODES,
+    SZ_DIAGNOSTIC_DEFAULT_LEVELS,
+    SZ_SETTABLE_DIAGNOSTIC_IDS,
+} from '../src/index.js';
 import { CODE_SOURCES, ORACLE_CODES } from './diagnostic-code-sources.js';
 import { ENGINES } from './engine-parity-harness.js';
 
@@ -88,5 +96,23 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
         const result = transform('export const A = () => <div sz={{ p: 4 }} />;', '/p/src/A.tsx');
 
         expect(result.issues).toEqual([]);
+    });
+});
+
+describe('SZ_DIAGNOSTIC_REGISTRY', () => {
+    it('agrees with the id lists generated beside it', () => {
+        expect(SZ_DIAGNOSTIC_REGISTRY_FORMAT).toBe(1);
+        const engine = SZ_DIAGNOSTIC_REGISTRY.filter(entry => entry.surfaces.engine).map(
+            entry => entry.id,
+        );
+        expect(engine).toEqual([...SZ_DIAGNOSTIC_CODES]);
+        for (const entry of SZ_DIAGNOSTIC_REGISTRY) {
+            const settable = Boolean(entry.surfaces.engine || entry.surfaces.check);
+            expect(SZ_SETTABLE_DIAGNOSTIC_IDS.includes(entry.id as never), entry.id).toBe(settable);
+            const levels = SZ_DIAGNOSTIC_DEFAULT_LEVELS[entry.id];
+            expect(levels && { recommended: levels[0], atomic: levels[1] }, entry.id).toEqual(
+                entry.defaults,
+            );
+        }
     });
 });

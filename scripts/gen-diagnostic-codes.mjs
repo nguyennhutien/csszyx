@@ -268,19 +268,6 @@ export function settableIds(input) {
 }
 
 /**
- * The ids `csszyx check` reports under its `sz-diagnostic` pass: what the
- * engine emits, plus what that pass reports beside it.
- *
- * @param {typeof registry} input - The registry module.
- * @returns {Array<Record<string, any>>} The entries.
- */
-function szDiagnosticEntries(input) {
-    return input.DIAGNOSTICS.filter(
-        entry => entry.surfaces.engine || entry.surfaces.check?.group === 'sz-diagnostic',
-    );
-}
-
-/**
  * Convert a kebab-case id to its Rust enum variant.
  *
  * @param {string} id - Code id.
@@ -368,17 +355,21 @@ function list(ids) {
  * @returns {string} TypeScript source.
  */
 export function renderTypeScript(input) {
-    const codes = szDiagnosticEntries(input).map(entry => entry.id);
+    // The engine's codes, as the Rust enum has them; `other` is the pass's own.
+    const codes = input.DIAGNOSTICS.filter(entry => entry.surfaces.engine).map(entry => entry.id);
     const groups = input.GROUPS.map(group => group.id);
     const settable = settableIds(input);
     const live = input.DIAGNOSTICS.map(entry => entry.id);
     const defaults = input.DIAGNOSTICS.filter(entry => entry.defaults).map(
         ({ id, defaults }) => `    '${id}': ['${defaults.recommended}', '${defaults.atomic}'],`,
     );
-    const removedIds = input.REMOVED.filter(entry => entry.was !== 'error-code').map(
-        entry => entry.id,
-    );
-    const removed = input.REMOVED.filter(entry => entry.was !== 'error-code').map(
+    const removedEntries = input.REMOVED.filter(entry => entry.was !== 'error-code');
+    // `never` when nothing is removed yet; an alias of `never` alone reads as redundant.
+    const removedKeys =
+        removedEntries.length === 0
+            ? 'never'
+            : removedEntries.map(entry => `'${entry.id}'`).join(' | ');
+    const removed = removedEntries.map(
         ({ id, replacedBy }) =>
             `    '${id}': ${replacedBy === undefined ? 'undefined' : `'${replacedBy}'`},`,
     );
@@ -426,17 +417,15 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
 ${defaults.join('\n')}
 };
 
-/** An id a release shipped that is no longer reported; a config naming one still loads. */
-export type SzRemovedDiagnosticId =
-${union(removedIds)};
-
 /**
  * Ids that shipped in a release and are no longer reported, with the id that
  * replaced each, if any. A config naming one still loads.
  */
-export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<SzRemovedDiagnosticId, string | undefined>> = {
-${removed.join('\n')}
+export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<${removedKeys}, string | undefined>> = {${removed.map(line => `\n${line}`).join('')}
 };
+
+/** An id a release shipped that is no longer reported; a config naming one still loads. */
+export type SzRemovedDiagnosticId = keyof typeof SZ_REMOVED_DIAGNOSTIC_IDS;
 `;
 }
 

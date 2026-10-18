@@ -135,6 +135,7 @@ export type SzSettableDiagnosticId =
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
     | 'unsigned-value'
+    | 'other'
     | 'prefix-disagreement';
 
 /** Every id a level can be set for, in registry order. */
@@ -179,6 +180,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
     'unsigned-value',
+    'other',
     'prefix-disagreement',
 ];
 
@@ -218,6 +220,7 @@ export type SzDiagnosticId =
     | 'color-slash-opacity'
     | 'unsigned-value'
     | 'dead-class'
+    | 'other'
     | 'prefix-disagreement'
     | 'sibling-keyword'
     | 'broken-opacity'
@@ -350,14 +353,12 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
     'merge-covered-class': ['info', 'warn'],
 };
 
-/** An id a release shipped that is no longer reported; a config naming one still loads. */
-export type SzRemovedDiagnosticId =
-    | 'other';
-
 /**
  * Ids that shipped in a release and are no longer reported, with the id that
  * replaced each, if any. A config naming one still loads.
  */
-export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<SzRemovedDiagnosticId, string | undefined>> = {
-    'other': undefined,
+export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<never, string | undefined>> = {
 };
+
+/** An id a release shipped that is no longer reported; a config naming one still loads. */
+export type SzRemovedDiagnosticId = keyof typeof SZ_REMOVED_DIAGNOSTIC_IDS;
