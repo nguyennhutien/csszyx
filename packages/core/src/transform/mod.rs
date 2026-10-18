@@ -48,9 +48,9 @@ use fast_path::{triage_source, FastPathTriage};
 use rayon::prelude::*;
 
 pub use contract::{
-    CssVariableMapEntry, GlobalVarAliasEntry, Issue, ParserPath, RecoveryMode, RecoveryToken,
-    TransformFile, TransformMetadata, TransformOptions, TransformProducer, TransformResult,
-    TransformTimings,
+    ArgValue, Args, CssVariableMapEntry, GlobalVarAliasEntry, Issue, ParserPath, RecoveryMode,
+    RecoveryToken, TransformFile, TransformMetadata, TransformOptions, TransformProducer,
+    TransformResult, TransformTimings,
 };
 pub use generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
 pub use ir::{

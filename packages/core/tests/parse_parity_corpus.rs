@@ -1,8 +1,9 @@
 //! Frozen regression corpus for the parse level of the native engine.
 //!
 //! The corpus (scripts/gen-rust-parse-parity-corpus.mjs) records, for each
-//! `.tsx` source snippet, the `classes` (sz-derived) and `rawClassNames`
-//! (static className strings) the engine itself produced when the record was
+//! `.tsx` source snippet, the `classes` (sz-derived), `rawClassNames`
+//! (static className strings) and `issues` (each diagnostic's code, offset
+//! and named args) the engine itself produced when the record was
 //! reviewed — the engine has been the canonical answer since 2026-08-12, so
 //! the fixture's job is "the engine still does what it did", not "two
 //! implementations agree". A red run here is a BEHAVIOUR CHANGE: either fix
@@ -30,6 +31,8 @@ mod parse_parity {
         classes: Vec<String>,
         #[serde(rename = "rawClassNames")]
         raw_class_names: Vec<String>,
+        /// Each diagnostic as the wire carries it: code, offset, named args.
+        issues: serde_json::Value,
     }
 
     fn sorted_unique(mut values: Vec<String>) -> Vec<String> {
@@ -62,13 +65,16 @@ mod parse_parity {
             let recorded_classes = sorted_unique(record.classes.clone());
             let recorded_raw = sorted_unique(record.raw_class_names.clone());
 
-            let diverges = rust_classes != recorded_classes || rust_raw != recorded_raw;
+            let rust_issues = serde_json::to_value(&result.issues).expect("issues serialize");
+            let diverges = rust_classes != recorded_classes
+                || rust_raw != recorded_raw
+                || rust_issues != record.issues;
             let known = KNOWN_DIVERGENCES.contains(&record.source.as_str());
 
             if diverges && !known {
                 unexpected.push(format!(
-                    "  {}\n    classes recorded={recorded_classes:?} engine={rust_classes:?}\n    rawClassNames recorded={recorded_raw:?} engine={rust_raw:?}",
-                    record.source
+                    "  {}\n    classes recorded={recorded_classes:?} engine={rust_classes:?}\n    rawClassNames recorded={recorded_raw:?} engine={rust_raw:?}\n    issues recorded={} engine={rust_issues}",
+                    record.source, record.issues
                 ));
             } else if !diverges && known {
                 newly_fixed.push(record.source.clone());

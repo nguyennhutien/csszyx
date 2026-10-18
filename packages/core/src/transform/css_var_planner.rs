@@ -15,7 +15,6 @@ use super::{
         CssVariableHoistUsage,
     },
     diagnostics::Diagnostics,
-    generated::diagnostic_codes::DiagnosticCode,
     lower::dynamic_css_var_class,
     CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
 };
@@ -329,7 +328,12 @@ pub fn apply_css_variable_mangling(
                 let (_, attr_index, prop_index) = locations[diagnostic.first_usage_id];
                 let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
                 (
-                    DiagnosticCode::MangleVarsHoistSkipped,
+                    super::generated::diagnostic_codes::issue::mangle_vars_hoist_skipped(
+                        &diagnostic.name,
+                        diagnostic.usage_count as u64,
+                        hoist_skip_reason(diagnostic.reason),
+                        diagnostic.max_depth.map(|depth| depth as u64),
+                    ),
                     prop.expression_span.start,
                     format_hoist_skip_diagnostic(diagnostic),
                 )
@@ -413,12 +417,17 @@ fn extract_quoted_custom_property_keys(expression: &str) -> Vec<String> {
     names
 }
 
-fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
-    let reason = match diagnostic.reason {
+/// The `reason` arg of a hoist skip, as the diagnostic names it.
+const fn hoist_skip_reason(reason: CssVariableHoistSkipReason) -> &'static str {
+    match reason {
         CssVariableHoistSkipReason::NoLca => "no-lca",
         CssVariableHoistSkipReason::NonHostAncestor => "non-host-ancestor",
         CssVariableHoistSkipReason::MaxDepth => "max-depth",
-    };
+    }
+}
+
+fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
+    let reason = hoist_skip_reason(diagnostic.reason);
     let suffix = diagnostic
         .max_depth
         .map(|max_depth| format!(" (maxDepth {max_depth})"))

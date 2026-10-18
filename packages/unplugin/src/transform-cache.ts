@@ -35,7 +35,9 @@ import {
 // 20: entries keep each one-class object's key and where it is written
 // (`singleClassGroups`); a schema-19 entry would name such an object's dead
 // class by its file alone on every cache hit.
-const CACHE_SCHEMA_VERSION = 20;
+// 21: each stored issue keeps its named `args`; a schema-20 entry would replay
+// issues with empty args, and a report reading the key from them gets none.
+const CACHE_SCHEMA_VERSION = 21;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';

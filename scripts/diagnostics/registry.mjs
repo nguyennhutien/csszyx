@@ -168,7 +168,7 @@ export const DIAGNOSTICS = [
         summary: 'An alias of a key, with the canonical spelling to write.',
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
-        args: { key: STRING, canonical: STRING },
+        args: { key: STRING },
         sources: [`${ENGINE}:1461`, `${CORE_TS}:4124`],
     },
     {
@@ -214,6 +214,10 @@ export const DIAGNOSTICS = [
             key: STRING,
             value: STRING,
             suggestion: OPTIONAL_STRING,
+            // The sibling-group form only: the group the engine found the
+            // class in, by a search the renderer must not run a second time.
+            groupKey: OPTIONAL_STRING,
+            groupValue: OPTIONAL_STRING,
         },
         sources: [
             `${ENGINE}:1521`,
@@ -231,7 +235,8 @@ export const DIAGNOSTICS = [
             'A colour key given its opacity in a string, which emits nothing; the object form takes it.',
         surfaces: { engine: {}, runtime: { production: true } },
         position: 'site',
-        args: { key: STRING, value: STRING },
+        // The value as written is `{color}/{opacity}`, split on its first `/`.
+        args: { key: STRING, color: STRING, opacity: STRING },
         sources: [`${ENGINE}:1549`, 'packages/compiler/src/color-validation.ts:70'],
     },
     {
@@ -279,7 +284,9 @@ export const DIAGNOSTICS = [
         summary: 'A field a structured value (a mask layer) does not take.',
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
-        args: { owner: STRING, member: STRING },
+        // `allowed` travels: the mask member tables are not shared data, and
+        // picking one means parsing `owner`.
+        args: { owner: STRING, member: STRING, allowed: { type: 'string[]', joiner: ', ' } },
         sources: [`${ENGINE}:941`, `${CORE_TS}:3803`],
     },
     {
@@ -349,10 +356,18 @@ export const DIAGNOSTICS = [
         summary: 'Class names and sz on more than one side of a spread.',
         surfaces: { engine: {} },
         position: 'site',
+        // Raw parts only; the sentence names them. `classes` are the class
+        // names written before the spread, `szCount` the earlier `sz`
+        // attributes and `szAt` where they sit among the classes, `spread`
+        // the spread's text when it is a plain name, and `parts` the items
+        // of the one `sz` array that would replace them.
         args: {
             elementName: STRING,
-            earlier: { type: 'string[]', joiner: ' and ' },
-            example: STRING,
+            classes: { type: 'string[]', joiner: ' and ' },
+            szCount: NUMBER,
+            szAt: NUMBER,
+            spread: OPTIONAL_STRING,
+            parts: { type: 'string[]', joiner: ', ' },
         },
         sources: [`${ENGINE}:1325`],
     },
@@ -362,7 +377,14 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: true } },
         position: 'site',
         forms: ['value', 'mask-layer'],
-        args: { form: formArg(['value', 'mask-layer']), key: STRING, value: STRING },
+        args: {
+            form: formArg(['value', 'mask-layer']),
+            key: STRING,
+            value: STRING,
+            // The mask-layer form only: the layer key the value belongs to,
+            // found by parsing it.
+            layerKey: { type: ['enum', 'maskLinear', 'maskRadial', 'maskConic'], optional: true },
+        },
         sources: [`${ENGINE}:1183`, `${ENGINE}:1202`, `${CORE_TS}:3305`, `${CORE_TS}:3979`],
     },
     {
@@ -498,7 +520,17 @@ export const DIAGNOSTICS = [
         summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
-        args: { key: STRING, color: STRING, op: OPTIONAL_STRING },
+        // The colour as written is `{base}/{opacity}{important}`. `op` is the
+        // JS literal the author wrote, quotes included for a string.
+        forms: ['op-given', 'op-absent'],
+        args: {
+            form: formArg(['op-given', 'op-absent']),
+            key: STRING,
+            base: STRING,
+            opacity: STRING,
+            important: { type: ['enum', '!'], optional: true },
+            op: OPTIONAL_STRING,
+        },
         sources: [`${ENGINE}:1579`, `${CORE_TS}:2794`],
     },
 
@@ -1856,17 +1888,18 @@ export const REMOVED = [
 // - Engine ids carry no `check` surface; check reports them under sz-diagnostic by
 //   implication (see Surfaces typedef).
 // - unsigned-value moved from the engine block to check (ADR amendment 1: it leaves Rust).
-// - Derivable args dropped (rule 3), which removes args the ADR examples show:
-//   removed-key replacement/values/groups/canonical/note (all from key; the ADR §4 compact
-//   example carries `replacement`), moved-value replacingKey/replacingValue and the mask
-//   layer key (from key+value), closed-enum-value bare/sibling/allowed, unknown-field allowed,
-//   slash-opacity-string color/opacity, color-slash-opacity written/base/important/used,
-//   merge-classifier-unavailable engineFormat, nesting-depth maxDepth, runtime-family-conflict
-//   first/second (became forms), split-box base/reaching/other/properties/hint, every
-//   constant (thresholds, cap 512, MERGE_TABLE_FORMAT, SAFELIST_FILE). `form` itself is
-//   derivable from key for removed-key; kept because forms select the sentence.
-//   closed-enum-value keeps `suggestion` because amendment 7 names it, though it derives
-//   from value.
+// - Args stay off the wire only when shared data derives them: a table both
+//   engines read from one source (`generate-rust-transform-tables.mjs` reads the TS
+//   tables) or a constant. So removed-key values/groups/canonical/note, canonical-key
+//   canonical, moved-value replacingKey/replacingValue and closed-enum-value bare/allowed
+//   are dropped. What only engine logic yields travels: unknown-field `allowed` (hand-kept
+//   mask tables, parsed `owner`), moved-value `layerKey`, closed-enum-value
+//   `groupKey`/`groupValue` (a reverse search), slash-opacity-string and
+//   color-slash-opacity split into parts (forms `op-given`/`op-absent`), and
+//   spread-split-class as raw parts. removed-key keeps `replacement`: the production
+//   console prints args in place of the sentence (ADR 0031 §4). runtime-family-conflict
+//   first/second are forms. Constants (MAX_SOURCE_NESTING_DEPTH, MERGE_TABLE_FORMAT)
+//   reach the renderer as generated constants, not args.
 // - closed-enum-value forms css-value, font-style, font-smoothing are not engine-emitted until
 //   PR B; `gaps` is per id, so it is not set here. A per-form gap may be needed.
 // - fallback-missing-css / fallback-nudge use the amendment's {site, shape} as enum args, not

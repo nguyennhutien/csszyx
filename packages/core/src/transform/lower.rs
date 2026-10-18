@@ -885,12 +885,12 @@ fn is_mask_slot_member(name: &str, base: &[&str], accepts_sides: bool) -> bool {
 /// Only runs when a member is already known to be wrong, so the allocation
 /// stays off the path every correct mask slot takes.
 #[cfg(feature = "native-engine")]
-fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> String {
-    let mut names: Vec<&str> = base.to_vec();
+fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> Vec<String> {
+    let mut names: Vec<String> = base.iter().map(|name| (*name).to_string()).collect();
     if accepts_sides {
-        names.extend(MASK_SIDES);
+        names.extend(MASK_SIDES.iter().map(|side| (*side).to_string()));
     }
-    names.join(", ")
+    names
 }
 
 /// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
@@ -907,7 +907,7 @@ const MASK_EDGE_MEMBERS: [&str; 2] = ["from", "to"];
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_unknown_mask_slot_members(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, String, u32)>,
+    out: &mut Vec<(String, String, Vec<String>, u32)>,
 ) {
     for property in &object.properties {
         let StaticSzValue::Object(nested) = &property.value else {
@@ -938,7 +938,10 @@ pub(crate) fn collect_unknown_mask_slot_members(
                     out.push((
                         format!("{}.{}", property.key, entry.key),
                         edge_entry.key.clone(),
-                        MASK_EDGE_MEMBERS.join(", "),
+                        MASK_EDGE_MEMBERS
+                            .iter()
+                            .map(|member| (*member).to_string())
+                            .collect(),
                         edge_entry.span.start,
                     ));
                 }
@@ -954,7 +957,7 @@ pub(crate) fn collect_unknown_mask_slot_members(
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_property_object_values(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
+    out: &mut Vec<(String, Vec<String>, u32)>,
 ) {
     for property in &object.properties {
         let StaticSzValue::Object(nested) = &property.value else {
@@ -982,9 +985,8 @@ pub(crate) fn collect_property_object_values(
                 .properties
                 .iter()
                 .take(3)
-                .map(|p| p.key.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
+                .map(|p| p.key.clone())
+                .collect::<Vec<_>>();
             out.push((property.key.clone(), nested_keys, property.span.start));
             continue;
         }
@@ -4789,13 +4791,16 @@ mod tests {
                 ),
             ],
         };
-        let mut out: Vec<(String, String, u32)> = Vec::new();
+        let mut out: Vec<(String, Vec<String>, u32)> = Vec::new();
         super::collect_property_object_values(&object, &mut out);
-        let found: Vec<(&str, &str)> = out
+        let found: Vec<(&str, String)> = out
             .iter()
-            .map(|(k, n, _)| (k.as_str(), n.as_str()))
+            .map(|(k, n, _)| (k.as_str(), n.join(", ")))
             .collect();
-        assert_eq!(found, [("p", "bg"), ("shadow", "op")]);
+        assert_eq!(
+            found,
+            [("p", "bg".to_string()), ("shadow", "op".to_string())]
+        );
     }
 
     #[test]
@@ -5386,7 +5391,7 @@ mod tests {
         };
         let mut out = Vec::new();
         super::collect_unknown_mask_slot_members(&branch, &mut out);
-        assert_eq!(out[0].2, "angle, from, to, t, r, b, l, x, y");
+        assert_eq!(out[0].2.join(", "), "angle, from, to, t, r, b, l, x, y");
     }
     #[cfg(feature = "native-engine")]
     #[test]

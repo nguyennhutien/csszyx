@@ -347,7 +347,16 @@ export const SIZE_BUDGETS = [
         // and refuses an option it does not know, which costs 362 gzip bytes:
         // 585,425 at the branch base, 585,787 after, un-optimized nodejs
         // parser build, same machine.
-        maxGzipBytes: 586_100,
+        //
+        // Raised from 586,100 on 2026-10-18 for one step of ADR 0031: every
+        // issue carries its named args beside the old sentence, which costs
+        // 6,506 gzip bytes (583,410 at main bd3f3f33, 589,916 on the branch,
+        // gzip -9 of the un-optimized nodejs parser build; 592,698 as this
+        // script measures it). Routing the generated constructors through
+        // out-of-line `Args` helpers saved 4,344 of an earlier 10,850. The
+        // next step moves the sentences out of the engine and is measured
+        // against this number again.
+        maxGzipBytes: 593_000,
     },
 ];
 

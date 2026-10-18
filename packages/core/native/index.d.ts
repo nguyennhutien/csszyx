@@ -131,9 +131,11 @@ export interface NativeTransformResult {
     diagnostics: string[];
     /**
      * The code and byte offset of each diagnostic, index-parallel to
-     * `diagnostics`. Codes are the ids `csszyx check --rule` accepts.
+     * `diagnostics`. Codes are the ids `csszyx check --rule` accepts;
+     * `argsJson` is the JSON object of the values the diagnostic names, keys
+     * in the registry's order, the same bytes the wasm artifact writes.
      */
-    issues: Array<{ code: string; start: number }>;
+    issues: Array<{ code: string; start: number; argsJson: string }>;
     /** Recovery token metadata emitted for hydration safety. */
     recoveryTokens: Array<{
         /** Public token inserted into generated code. */

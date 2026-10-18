@@ -202,16 +202,36 @@ impl Drop for MergeGroupScope {
 ///
 /// Returns why the table cannot be used: it is not a table, or it is written in
 /// a format this engine does not read. The caller keeps every class then.
-pub fn decode(json: &str) -> Result<Arc<MergeTable>, String> {
-    let table: MergeTable = serde_json::from_str(json)
-        .map_err(|error| format!("the merge table is not one this engine reads ({error})"))?;
+pub fn decode(json: &str) -> Result<Arc<MergeTable>, TableProblem> {
+    let table: MergeTable =
+        serde_json::from_str(json).map_err(|error| TableProblem::Unreadable(error.to_string()))?;
     if table.format != MERGE_TABLE_FORMAT {
-        return Err(format!(
-            "the merge table is in format {}, and this engine reads format {MERGE_TABLE_FORMAT}",
-            table.format
-        ));
+        return Err(TableProblem::Format(table.format));
     }
     Ok(Arc::new(table))
+}
+
+/// Why a merge table was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TableProblem {
+    /// It is not JSON this engine reads; the reader's own message.
+    Unreadable(String),
+    /// It is in another format than [`MERGE_TABLE_FORMAT`].
+    Format(u32),
+}
+
+impl std::fmt::Display for TableProblem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreadable(error) => {
+                write!(f, "the merge table is not one this engine reads ({error})")
+            }
+            Self::Format(format) => write!(
+                f,
+                "the merge table is in format {format}, and this engine reads format {MERGE_TABLE_FORMAT}"
+            ),
+        }
+    }
 }
 
 /// What a class is merged under: its signature, or itself when it has none.
@@ -518,7 +538,8 @@ mod tests {
     fn a_table_in_another_format_is_refused() {
         let error = decode(r#"{"format":2,"signatures":{},"coverage":[]}"#)
             .expect_err("format 2 is not read");
-        assert!(error.contains("format 2"), "{error}");
+        assert_eq!(error, super::TableProblem::Format(2));
+        assert!(error.to_string().contains("format 2"), "{error}");
     }
 
     #[test]

@@ -71,9 +71,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "key": {
                 "type": "string"
-            },
-            "canonical": {
-                "type": "string"
             }
         }
     },
@@ -167,6 +164,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "suggestion": {
                 "type": "string",
                 "optional": true
+            },
+            "groupKey": {
+                "type": "string",
+                "optional": true
+            },
+            "groupValue": {
+                "type": "string",
+                "optional": true
             }
         }
     },
@@ -184,7 +189,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             },
-            "value": {
+            "color": {
+                "type": "string"
+            },
+            "opacity": {
                 "type": "string"
             }
         }
@@ -295,6 +303,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "member": {
                 "type": "string"
+            },
+            "allowed": {
+                "type": "string[]",
+                "joiner": ", "
             }
         }
     },
@@ -419,12 +431,23 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "elementName": {
                 "type": "string"
             },
-            "earlier": {
+            "classes": {
                 "type": "string[]",
                 "joiner": " and "
             },
-            "example": {
-                "type": "string"
+            "szCount": {
+                "type": "number"
+            },
+            "szAt": {
+                "type": "number"
+            },
+            "spread": {
+                "type": "string",
+                "optional": true
+            },
+            "parts": {
+                "type": "string[]",
+                "joiner": ", "
             }
         }
     },
@@ -455,6 +478,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "value": {
                 "type": "string"
+            },
+            "layerKey": {
+                "type": [
+                    "enum",
+                    "maskLinear",
+                    "maskRadial",
+                    "maskConic"
+                ],
+                "optional": true
             }
         }
     },
@@ -759,12 +791,33 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "op-given",
+            "op-absent"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "op-given",
+                    "op-absent"
+                ]
+            },
             "key": {
                 "type": "string"
             },
-            "color": {
+            "base": {
                 "type": "string"
+            },
+            "opacity": {
+                "type": "string"
+            },
+            "important": {
+                "type": [
+                    "enum",
+                    "!"
+                ],
+                "optional": true
             },
             "op": {
                 "type": "string",

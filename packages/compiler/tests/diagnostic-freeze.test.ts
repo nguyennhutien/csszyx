@@ -26,6 +26,7 @@ interface Frozen {
         code: string;
         line: number | undefined;
         column: number | undefined;
+        args: unknown;
         text: string;
     }>;
 }
@@ -43,6 +44,7 @@ function freeze(engine: (typeof ENGINES)[number][1]): Frozen[] {
             code: issue.code,
             line: issue.line,
             column: issue.column,
+            args: issue.args,
             text: result.diagnostics?.[index] ?? '',
         }));
         return { code, variant, issues };
@@ -64,7 +66,7 @@ describe('the engine diagnostics, frozen', () => {
                 `${entry.code}/${entry.variant}`,
             ).toBe(true);
         }
-        await expect(`${JSON.stringify(frozen, null, 2)}\n`).toMatchFileSnapshot(
+        await expect(`${JSON.stringify(frozen, null, 4)}\n`).toMatchFileSnapshot(
             './fixtures/diagnostic-freeze.json',
         );
     });

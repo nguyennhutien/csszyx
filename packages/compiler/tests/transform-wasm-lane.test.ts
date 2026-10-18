@@ -42,6 +42,14 @@ function comparable(result: SourceTransformResult): unknown {
         classes: [...result.classes].sort(),
         rawClassNames: [...result.rawClassNames].sort(),
         diagnostics: result.diagnostics,
+        // Each issue whole: its code, its position, and every named arg, in
+        // the order the wire carries them.
+        issues: (result.issues ?? []).map(issue => ({
+            code: issue.code,
+            line: issue.line,
+            column: issue.column,
+            args: JSON.stringify(issue.args),
+        })),
         recoveryTokens: [...result.recoveryTokens.entries()],
         cssVariableMap: [...result.cssVariableMap.entries()],
     };

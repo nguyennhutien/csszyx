@@ -1,3 +1,4 @@
+use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 
 /// Source file passed to the Rust transform core.
@@ -181,14 +182,125 @@ pub enum ParserPath {
     Semantic,
 }
 
-/// What one diagnostic reports, and where.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// One named value a diagnostic carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArgValue {
+    /// Text: a key, a value, a class name, as written or lowered.
+    Text(String),
+    /// A count or a depth.
+    Count(u64),
+    /// A list of texts.
+    List(Vec<String>),
+}
+
+impl Serialize for ArgValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Text(text) => serializer.serialize_str(text),
+            Self::Count(count) => serializer.serialize_u64(*count),
+            Self::List(items) => serializer.collect_seq(items),
+        }
+    }
+}
+
+/// The named values of one diagnostic, in the registry's order.
+///
+/// Serialized as a JSON object whose keys keep that order on both artifacts.
+/// An optional value the diagnostic has nothing for is left out, never `null`.
+/// Serialize-only on purpose: nothing reads args back into the engine.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Args(Vec<(&'static str, ArgValue)>);
+
+impl Args {
+    /// Append one value; the generated constructors call this in registry order.
+    #[must_use]
+    pub fn with(mut self, name: &'static str, value: ArgValue) -> Self {
+        self.0.push((name, value));
+        self
+    }
+
+    // One out-of-line helper per arg shape, so a constructor inlines to a few
+    // calls instead of a copy of the push for every arg it names.
+
+    /// Append a text value.
+    #[must_use]
+    #[inline(never)]
+    pub fn text(self, name: &'static str, value: &str) -> Self {
+        self.with(name, ArgValue::Text(value.to_string()))
+    }
+
+    /// Append a text value when there is one.
+    #[must_use]
+    #[inline(never)]
+    pub fn optional_text(self, name: &'static str, value: Option<&str>) -> Self {
+        match value {
+            Some(value) => self.text(name, value),
+            None => self,
+        }
+    }
+
+    /// Append a count.
+    #[must_use]
+    #[inline(never)]
+    pub fn count(self, name: &'static str, value: u64) -> Self {
+        self.with(name, ArgValue::Count(value))
+    }
+
+    /// Append a count when there is one.
+    #[must_use]
+    #[inline(never)]
+    pub fn optional_count(self, name: &'static str, value: Option<u64>) -> Self {
+        match value {
+            Some(value) => self.count(name, value),
+            None => self,
+        }
+    }
+
+    /// Append a list.
+    #[must_use]
+    #[inline(never)]
+    pub fn list(self, name: &'static str, value: Vec<String>) -> Self {
+        self.with(name, ArgValue::List(value))
+    }
+
+    /// The value named `name`, if the diagnostic carries it.
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&ArgValue> {
+        self.0
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| value)
+    }
+
+    /// The args as the JSON object the wire carries.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("args serialize")
+    }
+}
+
+impl Serialize for Args {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (name, value) in &self.0 {
+            map.serialize_entry(name, value)?;
+        }
+        map.end()
+    }
+}
+
+/// What one diagnostic reports, where, and the values its sentence names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Issue {
     /// The kind of problem.
     pub code: super::DiagnosticCode,
     /// Byte offset in the source the diagnostic points at; `0` for one about
     /// the whole file.
     pub start: u32,
+    /// The named values, in the registry's order. Never read back, so a
+    /// deserialized result carries none.
+    #[serde(skip_deserializing)]
+    pub args: Args,
 }
 
 /// Transform output shape returned per source file.

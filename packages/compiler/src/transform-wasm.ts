@@ -48,7 +48,7 @@ interface WasmResultJson {
     single_class_groups: WasmMergeGroup[];
     merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
     diagnostics: string[];
-    issues: Array<{ code: string; start: number }>;
+    issues: Array<{ code: string; start: number; args: object }>;
     recovery_tokens: Array<{
         token: string;
         mode: 'csr' | 'dev-only';

@@ -306,6 +306,9 @@ pub struct NativeIssue {
     /// Byte offset in the source the diagnostic points at; `0` for one about
     /// the whole file.
     pub start: u32,
+    /// The values the diagnostic names, as the JSON object the wasm artifact
+    /// writes for `args`: the same bytes, keys in the registry's order.
+    pub args_json: String,
 }
 
 /// One static object a merge would read, and where it is.
@@ -479,6 +482,7 @@ impl From<TransformResult> for NativeTransformResult {
                 .map(|issue| NativeIssue {
                     code: issue.code.as_str().to_string(),
                     start: issue.start,
+                    args_json: issue.args.to_json(),
                 })
                 .collect(),
             recovery_tokens: result

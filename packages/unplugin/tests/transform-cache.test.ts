@@ -158,7 +158,8 @@ describe('transform cache', () => {
         ) as { result: Record<string, unknown> };
         expect(JSON.stringify(stored.result)).not.toMatch(/"line"|"column"|"positions"/);
         expect(stored.result.issues).toEqual([
-            { code: 'unknown-key', start: source.indexOf('xyzzy') },
+            // The args travel with the offset, so a cache hit reads the key back.
+            { code: 'unknown-key', start: source.indexOf('xyzzy'), args: { key: 'xyzzy' } },
         ]);
 
         const cached = readTransformCache(cacheRoot, spannedInput);
@@ -268,7 +269,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":20');
+        expect(content).toContain('"version":21');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 

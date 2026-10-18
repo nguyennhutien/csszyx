@@ -21,6 +21,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { storeEngineSpans } from '../packages/compiler/src/engine-spans.js';
 import {
     isRustTransformAvailable,
     transformRust,
@@ -139,6 +140,8 @@ const records = sources.map(source => {
         source,
         classes: sorted(result.classes),
         rawClassNames: sorted(result.rawClassNames ?? []),
+        // Each diagnostic as the wire carries it: code, byte offset, args.
+        issues: storeEngineSpans({ issues: result.issues }).issues ?? [],
     };
 });
 

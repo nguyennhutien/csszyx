@@ -1,7 +1,7 @@
 use super::diagnostics::Diagnostics;
 #[cfg(target_arch = "wasm32")]
 use super::engine::Instant;
-use super::generated::diagnostic_codes::DiagnosticCode;
+use super::generated::diagnostic_codes::issue;
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
@@ -183,7 +183,7 @@ pub fn parse_source_shell_with_registries(
         // classes, instead of letting the classes die silently under
         // Tailwind `source(none)`.
         diagnostics.push_issue(
-            DiagnosticCode::ParseError,
+            issue::parse_error_summary(None, Some(errors.len() as u64)),
             errors.first().map_or(0, |(start, _)| *start),
             format!(
                 "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
@@ -195,7 +195,13 @@ pub fn parse_source_shell_with_registries(
     diagnostics.extend(
         errors
             .into_iter()
-            .map(|(start, message)| (DiagnosticCode::ParseError, start, message))
+            .map(|(start, message)| {
+                (
+                    issue::parse_error_syntax(Some(&message), None),
+                    start,
+                    message,
+                )
+            })
             .collect(),
     );
     ParsedSourceShell {
@@ -597,7 +603,7 @@ fn one_line(text: &str) -> String {
 }
 
 /// Markdown code span around text that may itself hold a backtick.
-fn code_span(text: &str) -> String {
+pub fn code_span(text: &str) -> String {
     if text.contains('`') {
         format!("`` {text} ``")
     } else {
@@ -702,13 +708,16 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 "[csszyx] szs at {}: szs has no effect on a host element \u{2014} it maps slot names of a custom component. Attribute left unchanged.",
                 self.ir.filename
             );
-            self.ir
-                .szs_diagnostics
-                .push(SzsDiagnosticIr { start, message });
+            self.ir.szs_diagnostics.push(SzsDiagnosticIr {
+                start,
+                host_element: true,
+                message,
+            });
             return;
         }
         let unsupported_message = SzsDiagnosticIr {
             start,
+            host_element: false,
             message: super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(
                 &self.ir.filename,
             ),
@@ -1174,7 +1183,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     None => (class.value.clone(), format!("'{}'", class.value)),
                 };
                 if is_earlier {
-                    earlier.push(code_span(&label));
+                    earlier.push(label);
                 }
                 parts.push(part);
             }
@@ -1186,30 +1195,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 }
             }
         }
-        if let Some(position) = sz_position {
-            let named = if earlier_sz == 1 {
-                "the classes of an earlier `sz`".to_string()
-            } else {
-                format!("the classes of {earlier_sz} earlier `sz`")
-            };
-            earlier.insert(position, named);
-        }
         if let (Some(index), Some(spread)) = (spread_part, &spread) {
             parts[index] = format!("{spread}.{attribute}");
         }
-        parts.push("{ … }".to_string());
-        let after = spread.map_or_else(
-            || "the spread".to_string(),
-            |text| format!("`{{...{text}}}`"),
-        );
         self.ir.spread_split_classes.push(SpreadSplitClassIr {
             element_name: element_name.to_string(),
             span: TextSpan { start, end: start },
-            earlier,
-            example: format!(
-                "after {after}, in the order that should win: `sz={{[{}]}}`",
-                parts.join(", ")
-            ),
+            classes: earlier,
+            sz_count: earlier_sz,
+            sz_at: sz_position.unwrap_or(0),
+            spread,
+            parts,
         });
     }
 

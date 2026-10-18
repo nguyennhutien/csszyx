@@ -7,7 +7,7 @@ use super::{
     css_var_planner::apply_css_variable_mangling,
     diagnostics::Diagnostics,
     fast_path::{triage_source, FastPathTriage},
-    generated::diagnostic_codes::DiagnosticCode,
+    generated::diagnostic_codes::issue,
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
     parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
@@ -152,7 +152,15 @@ pub(super) fn transform_file_with_options(
         }
     }
     if let Some(problem) = table_problem {
-        result.push_issue(DiagnosticCode::MergeClassifierUnavailable, 0, format!(
+        let issue = match &problem {
+            super::merge::TableProblem::Unreadable(error) => {
+                issue::merge_classifier_unavailable_unreadable(Some(error), None)
+            }
+            super::merge::TableProblem::Format(format) => {
+                issue::merge_classifier_unavailable_format_mismatch(None, Some(u64::from(*format)))
+            }
+        };
+        result.push_issue(issue, 0, format!(
             "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides.",
             file.filename
         ));
@@ -170,7 +178,7 @@ fn transform_file_in_scopes(file: &TransformFile, options: TransformOptions) -> 
     let nesting_depth = max_source_nesting_depth(&file.source);
     if nesting_depth > MAX_SOURCE_NESTING_DEPTH {
         let mut result = noop_result(file);
-        result.push_issue(DiagnosticCode::NestingDepth, 0, format!(
+        result.push_issue(issue::nesting_depth(nesting_depth as u64), 0, format!(
             "[csszyx] {}: source nesting exceeded {MAX_SOURCE_NESTING_DEPTH} levels (found {nesting_depth}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)",
             file.filename
         ));
@@ -347,7 +355,7 @@ fn transform_static_classes_with_options(
     ));
     diagnostics.extend(szs_diagnostics(&parsed.ir));
     if parsed.ast_budget_exceeded {
-        diagnostics.push_issue(DiagnosticCode::AstBudget, 0, format!(
+        diagnostics.push_issue(issue::ast_budget_transform(), 0, format!(
             "[csszyx] AST budget exceeded in {}: the IR walk stopped mid-file, so the file was \
              left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` \
              or split the file.",
@@ -369,7 +377,7 @@ fn transform_static_classes_with_options(
 
     if parsed.panicked {
         diagnostics.push_issue(
-            DiagnosticCode::ParseError,
+            issue::parse_error_panicked(None, None),
             0,
             "oxc parser panicked before csszyx lowering completed".to_string(),
         );
@@ -560,7 +568,7 @@ fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Dia
     ir.unsupported_sz_attribute_spans
         .iter()
         .map(|span| {
-            (DiagnosticCode::UnsupportedDynamicSz, span.start, format!(
+            (issue::unsupported_dynamic_sz(), span.start, format!(
                 "[csszyx] Rust native transform at {}:{}: unsupported dynamic sz attribute; leaving file unchanged for now.",
                 file.filename, span.start
             ))
@@ -573,11 +581,12 @@ fn szs_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.szs_diagnostics
         .iter()
         .map(|diagnostic| {
-            (
-                DiagnosticCode::SzsSlotMap,
-                diagnostic.start,
-                diagnostic.message.clone(),
-            )
+            let issue = if diagnostic.host_element {
+                issue::szs_slot_map_host_element()
+            } else {
+                issue::szs_slot_map_unreadable_slot()
+            };
+            (issue, diagnostic.start, diagnostic.message.clone())
         })
         .collect()
 }
@@ -633,8 +642,18 @@ fn site_fallback_diagnostics(
             };
             // An unread `szr` argument or `szv` config never had its classes
             // collected, whatever the expression's kind.
+            let site_name = match fallback.site {
+                SzFallbackSiteIr::Szr => "szr",
+                SzFallbackSiteIr::Szv => "szv",
+            };
             (
-                DiagnosticCode::FallbackMissingCss,
+                issue::fallback_missing_css(
+                    site_name,
+                    Some(fallback_shape(fallback.kind)),
+                    Some(&fallback.detail),
+                    Some(&fallback.path),
+                    None,
+                ),
                 fallback.offset,
                 format_sz_fallback_diagnostic(
                     site,
@@ -646,6 +665,20 @@ fn site_fallback_diagnostics(
             )
         })
         .collect()
+}
+
+/// The `shape` arg of a fallback diagnostic: what the build found in place
+/// of a readable value.
+const fn fallback_shape(kind: super::RuntimeFallbackKindIr) -> &'static str {
+    use super::RuntimeFallbackKindIr;
+    match kind {
+        RuntimeFallbackKindIr::Call => "call",
+        RuntimeFallbackKindIr::Identifier => "identifier",
+        RuntimeFallbackKindIr::Import => "import",
+        RuntimeFallbackKindIr::Member => "member",
+        RuntimeFallbackKindIr::Other => "other",
+        RuntimeFallbackKindIr::SzvFactory => "szv-factory",
+    }
 }
 
 /// Build-log diagnostics for variant keys left to the runtime.
@@ -669,7 +702,13 @@ fn deferred_variant_diagnostics(
             let reason = sz_fallback_reason(SzFallbackKind::Variant, &deferred.path, "");
             let suggestion = sz_fallback_suggestion(SzFallbackKind::Variant);
             (
-                DiagnosticCode::FallbackMissingCss,
+                issue::fallback_missing_css(
+                    "sz-variant-key",
+                    None,
+                    None,
+                    None,
+                    Some(&deferred.path),
+                ),
                 deferred.start,
                 format!(
                     "sz fallback at {line}:{column}: {reason}.
@@ -715,14 +754,17 @@ fn runtime_fallback_diagnostics(
         };
         let reason = sz_fallback_reason(kind, &diagnostic.detail, &diagnostic.path);
         let suggestion = sz_fallback_suggestion(kind);
-        let code = if sz_site_fallback_misses_css(kind) {
-            DiagnosticCode::FallbackMissingCss
+        let shape = Some(fallback_shape(diagnostic.kind));
+        let detail = Some(diagnostic.detail.as_str());
+        let path = Some(diagnostic.path.as_str());
+        let issue = if sz_site_fallback_misses_css(kind) {
+            issue::fallback_missing_css("sz", shape, detail, path, None)
         } else {
-            DiagnosticCode::FallbackNudge
+            issue::fallback_nudge("sz", shape, detail, path)
         };
         let start = attr.value_span.start;
         out.push_issue(
-            code,
+            issue,
             start,
             format!(
                 "sz fallback at {line}:{column}: {reason}.
@@ -730,7 +772,7 @@ fn runtime_fallback_diagnostics(
             ),
         );
         if attr.runtime_fallback_spread {
-            out.push_issue(DiagnosticCode::UnresolvableSpread, start, format!(
+            out.push_issue(issue::unresolvable_spread(), start, format!(
                 "[csszyx] unresolvable sz spread at {line}:{column}: sz={{{{ ...x }}}} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={{[x, {{ ... }}]}}."
             ));
         }
@@ -756,7 +798,7 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
                 })
         })
         .map(|element| {
-            (DiagnosticCode::StyleOverride, element.opening_span.start, format!(
+            (issue::style_override(), element.opening_span.start, format!(
                 "[csszyx] possible style override at {}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.",
                 file.filename
             ))
@@ -804,7 +846,7 @@ fn var_hostile_diagnostics(
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, dropped.span.start);
             out.push_issue(
-                DiagnosticCode::RuntimeValue,
+                issue::runtime_value(&dropped.key),
                 dropped.span.start,
                 format!(
                 "[csszyx] \"{}\" cannot take a runtime value at {location}:{line}: Tailwind has \
@@ -880,7 +922,7 @@ fn push_dead_spacing_step_diagnostics(
             .line_column(&file.source, *offset);
         // Wording matches transform-core's warnDeadSpacingStep (the runtime lowering),
         // so the build log and the runtime warning say the same thing.
-        out.push_issue(DiagnosticCode::OffScaleValue, *offset, format!(
+        out.push_issue(issue::off_scale_value(key, &value.to_string()), *offset, format!(
             "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
         ));
     }
@@ -898,7 +940,7 @@ fn push_border_side_style_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        out.push_issue(DiagnosticCode::PerSideBorderStyle, *offset, format!(
+        out.push_issue(issue::per_side_border_style(key, value), *offset, format!(
             "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
         ));
     }
@@ -907,18 +949,19 @@ fn push_border_side_style_diagnostics(
 /// An object given to a key that names a property rather than a variant.
 fn push_property_object_diagnostics(
     file: &TransformFile,
-    found: &[(String, String, u32)],
+    found: &[(String, Vec<String>, u32)],
     location: &str,
     lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
-    for (key, nested, offset) in found {
+    for (key, nested_keys, offset) in found {
+        let nested = nested_keys.join(", ");
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
         // Wording matches transform-core's warnPropertyObjectValue (the runtime lowering),
         // so the build log and the runtime warning say the same thing.
-        out.push_issue(DiagnosticCode::PropertyObject, *offset, format!(
+        out.push_issue(issue::property_object(key, nested_keys.clone()), *offset, format!(
             "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
         ));
     }
@@ -927,18 +970,19 @@ fn push_property_object_diagnostics(
 /// A field a mask layer does not take.
 fn push_mask_member_diagnostics(
     file: &TransformFile,
-    found: &[(String, String, String, u32)],
+    found: &[(String, String, Vec<String>, u32)],
     location: &str,
     lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
-    for (owner, member, allowed, offset) in found {
+    for (owner, member, allowed_members, offset) in found {
+        let allowed = allowed_members.join(", ");
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
         // Wording matches transform-core's warnMaskSlotMember (the runtime lowering),
         // so the build log and the runtime warning say the same thing.
-        out.push_issue(DiagnosticCode::UnknownField, *offset, format!(
+        out.push_issue(issue::unknown_field(owner, member, allowed_members.clone()), *offset, format!(
             "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
         ));
     }
@@ -962,12 +1006,12 @@ struct KeyValueFindings {
     dead_weights: Vec<(String, u32)>,
     removed_sugar: Vec<(String, &'static str, &'static str, u32)>,
     border_side_styles: Vec<(String, String, u32)>,
-    property_objects: Vec<(String, String, u32)>,
+    property_objects: Vec<(String, Vec<String>, u32)>,
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
-    mask_members: Vec<(String, String, String, u32)>,
+    mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
     globals_before_groups: Vec<(String, String, &'static str, u32)>,
@@ -1137,7 +1181,7 @@ fn push_runtime_alias_diagnostics(
         let groups = super::generated::tables::global_keyword_groups(canonical)
             .unwrap_or_default()
             .replace(' ', ", ");
-        out.push_issue(DiagnosticCode::RemovedKey, *offset, format!(
+        out.push_issue(issue::removed_key_runtime_alias(key, Some(canonical)), *offset, format!(
             "[csszyx] \"{key}\" was removed and takes a runtime value at {location}:{line}: write {values} on {canonical}, and the other values on {groups}."
         ));
     }
@@ -1156,7 +1200,7 @@ fn push_global_before_group_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        out.push_issue(DiagnosticCode::GlobalBeforeGroup, *offset, format!(
+        out.push_issue(issue::global_before_group(global, value, group), *offset, format!(
             "[csszyx] \"{global}: {value}\" at {location}:{line} comes before \"{group}\" in one sz object, so {group} replaces it and the {global} value styles nothing. A spread override ({{ ...base, {global}: '{value}' }}) leaves this order; to override, layer it: sz={{[base, {{ {global}: '{value}' }}]}}."
         ));
     }
@@ -1180,7 +1224,7 @@ fn push_moved_value_diagnostics(
         } else {
             format!("'{replacing_value}'")
         };
-        out.push_issue(DiagnosticCode::MovedValue, *offset, format!(
+        out.push_issue(issue::moved_value_value(key, value, None), *offset, format!(
             "[csszyx] \"{key}: {value}\" moved to {{ {replacing_key}: {replacement} }} at {location}:{line}. Run `csszyx migrate` to rewrite it."
         ));
     }
@@ -1199,7 +1243,7 @@ fn push_mask_layer_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        out.push_issue(DiagnosticCode::MovedValue, *offset, format!(
+        out.push_issue(issue::moved_value_mask_layer("mask", value, Some(key)), *offset, format!(
             "[csszyx] mask: '{value}' at {location}:{line} — gradient layers moved to \"{key}\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable."
         ));
     }
@@ -1298,7 +1342,12 @@ fn dynamic_group_conflict_diagnostics(
             } else {
                 (&conflict.other, &conflict.key)
             };
-            (DiagnosticCode::RuntimeFamilyConflict, conflict.span.start, format!(
+            let issue = if conflict.key_first {
+                issue::runtime_family_conflict_key_first(&conflict.key, &conflict.other)
+            } else {
+                issue::runtime_family_conflict_other_first(&conflict.key, &conflict.other)
+            };
+            (issue, conflict.span.start, format!(
                 "[csszyx] \"{}\" takes a runtime value beside \"{}\" in one sz object at {location}:{line}, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={{[{{ {first}: … }}, {{ {second}: … }}]}}.",
                 conflict.key, conflict.other
             ))
@@ -1322,11 +1371,38 @@ fn spread_split_class_diagnostics(
         .iter()
         .map(|split| {
             let (line, column) = diagnostic_line_column(&file.source, lines, split.span.start);
-            (DiagnosticCode::SpreadSplitClass, split.span.start, format!(
-                "[csszyx] <{}> at {location}:{line}:{column}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array {}.",
+            let mut earlier: Vec<String> = split
+                .classes
+                .iter()
+                .map(|class| super::parser::code_span(class))
+                .collect();
+            if split.sz_count > 0 {
+                let named = if split.sz_count == 1 {
+                    "the classes of an earlier `sz`".to_string()
+                } else {
+                    format!("the classes of {} earlier `sz`", split.sz_count)
+                };
+                earlier.insert(split.sz_at, named);
+            }
+            let after = split.spread.as_ref().map_or_else(
+                || "the spread".to_string(),
+                |text| format!("`{{...{text}}}`"),
+            );
+            let mut parts = split.parts.clone();
+            parts.push("{ … }".to_string());
+            let issue = issue::spread_split_class(
+                &split.element_name,
+                split.classes.clone(),
+                split.sz_count as u64,
+                split.sz_at as u64,
+                split.spread.as_deref(),
+                split.parts.clone(),
+            );
+            (issue, split.span.start, format!(
+                "[csszyx] <{}> at {location}:{line}:{column}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after {after}, in the order that should win: `sz={{[{}]}}`.",
                 split.element_name,
-                split.earlier.join(" and "),
-                split.example,
+                earlier.join(" and "),
+                parts.join(", "),
             ))
         })
         .collect()
@@ -1347,7 +1423,7 @@ fn duplicate_sz_diagnostics(
         .iter()
         .map(|duplicate| {
             let (line, column) = diagnostic_line_column(&file.source, lines, duplicate.span.start);
-            (DiagnosticCode::DuplicateSz, duplicate.span.start, format!(
+            (issue::duplicate_sz(&duplicate.element_name, duplicate.count as u64), duplicate.span.start, format!(
                 "[csszyx] <{}> at {location}:{line}:{column} carries {} `sz` attributes; they were merged as sz={{[first, …, last]}}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down.",
                 duplicate.element_name, duplicate.count
             ))
@@ -1396,7 +1472,7 @@ fn push_dead_weight_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        out.push_issue(DiagnosticCode::NumericFontWeight, *offset, format!(
+        out.push_issue(issue::numeric_font_weight(value), *offset, format!(
             "[csszyx] \"weight: '{value}'\" at {location}:{line}: Tailwind spells a numeric font weight through --font-weight-*, so \"font-{value}\" generates no CSS. Write weight: {value} as a number, which brackets to \"font-[{value}]\"."
         ));
     }
@@ -1415,12 +1491,19 @@ fn push_removed_sugar_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        let what = if super::generated::tables::is_replaced_key(key) {
+        let replaced = super::generated::tables::is_replaced_key(key);
+        let what = if replaced {
             "was replaced"
         } else {
             "boolean sugar was removed"
         };
-        out.push_issue(DiagnosticCode::RemovedKey, *offset, format!(
+        let replacement = format!("{canonical}: '{value}'");
+        let issue = if replaced {
+            issue::removed_key_sugar_replaced(key, Some(&replacement))
+        } else {
+            issue::removed_key_sugar(key, Some(&replacement))
+        };
+        out.push_issue(issue, *offset, format!(
             "[csszyx] \"{key}\" {what} at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
         ));
     }
@@ -1445,7 +1528,7 @@ fn push_unknown_key_diagnostics(
             .line_column(&file.source, *offset);
         if let Some(note) = super::generated::tables::key_migration_note(key) {
             out.push_issue(
-                DiagnosticCode::RemovedKey,
+                issue::removed_key_removed(key, None),
                 *offset,
                 format!("[csszyx] \"{key}\" was removed at {location}:{line}: {note}."),
             );
@@ -1454,22 +1537,23 @@ fn push_unknown_key_diagnostics(
         {
             // A flag that joined a group under a new name: worded as the other
             // replaced keys are. Mirrors the TypeScript core's replaced-key warning.
-            out.push_issue(DiagnosticCode::RemovedKey, *offset, format!(
+            let replacement = format!("{suggestion}: true");
+            out.push_issue(issue::removed_key_replaced(key, Some(&replacement)), *offset, format!(
                 "[csszyx] \"{key}\" was replaced at {location}:{line}. Use {{ {suggestion}: true }} instead, or run `csszyx migrate`."
             ));
         } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
-            out.push_issue(DiagnosticCode::CanonicalKey, *offset, format!(
+            out.push_issue(issue::canonical_key(key), *offset, format!(
                 "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
             ));
         } else if is_numeric_key(key) {
-            out.push_issue(DiagnosticCode::NumericKey, *offset, format!(
+            out.push_issue(issue::numeric_key(key), *offset, format!(
                 "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
             ));
         } else {
             // Deliberately NOT "this will be ignored": the key is lowered as a
             // literal class exactly like a known one, so the old text sent
             // people looking for a missing class instead of a dead one.
-            out.push_issue(DiagnosticCode::UnknownKey, *offset, format!(
+            out.push_issue(issue::unknown_key(key, None), *offset, format!(
                 "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
             ));
         }
@@ -1491,7 +1575,7 @@ fn push_owned_key_variant_diagnostics(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
-        out.push_issue(DiagnosticCode::NonVariantObject, *offset, format!(
+        out.push_issue(issue::non_variant_object(key), *offset, format!(
             "[csszyx] \"{key}\" at {location}:{line} is not a variant, but it holds an object, so it lowers to the class prefix \"{key}:\" and Tailwind generates no CSS for it. A \"--*\" key takes a declaration value; \"container\" takes true."
         ));
     }
@@ -1517,13 +1601,25 @@ fn push_dead_enum_diagnostics(
         // lookup below cannot miss.
         let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
         let bare = super::lower::bare_closed_enum_class(key, value);
-        if let Some(sibling) = sibling_group_of(key, &bare) {
-            out.push_issue(DiagnosticCode::ClosedEnumValue, *offset, format!(
+        if let Some((group_key, group_value)) = sibling_group_of(key, &bare) {
+            let sibling = if group_value == "true" {
+                format!("{group_key}: true")
+            } else {
+                format!("{group_key}: '{group_value}'")
+            };
+            let issue = issue::closed_enum_value_sibling_group(
+                key,
+                value,
+                None,
+                Some(group_key),
+                Some(group_value),
+            );
+            out.push_issue(issue, *offset, format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" it emits belongs to {{ {sibling} }}: write that key, so it combines with the other groups instead of resetting them. {key} takes one of: {allowed}."
             ));
             continue;
         }
-        out.push_issue(DiagnosticCode::ClosedEnumValue, *offset, format!(
+        out.push_issue(issue::closed_enum_value_dead(key, value, None, None, None), *offset, format!(
             "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {allowed}."
         ));
     }
@@ -1546,7 +1642,7 @@ fn push_slash_opacity_diagnostics(
             .line_column(&file.source, *offset);
         // The collector found a slash, so the split cannot miss.
         let (color, opacity) = value.split_once('/').unwrap_or_default();
-        out.push_issue(DiagnosticCode::SlashOpacityString, *offset, format!(
+        out.push_issue(issue::slash_opacity_string(key, color, opacity), *offset, format!(
             "[csszyx] \"{key}: '{value}'\" at {location}:{line} — string slash opacity is not supported, and nothing is emitted for it. Use object form: {{ color: '{color}', op: {opacity} }}."
         ));
     }
@@ -1576,7 +1672,12 @@ fn push_color_slash_opacity_diagnostics(
             .map_or_else(String::new, |op| format!(", op: {op}"));
         let used = op.as_deref().unwrap_or(opacity);
         // Wording matches transform-core's warnColorObjectSlashOpacity.
-        out.push_issue(DiagnosticCode::ColorSlashOpacity, *offset, format!(
+        let important_mark = (!important.is_empty()).then_some("!");
+        let issue = op.as_deref().map_or_else(
+            || issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
+            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
+        );
+        out.push_issue(issue, *offset, format!(
             "[csszyx] \"{key}: {{ color: '{color}'{written} }}\" at {location}:{line} — a colour object takes its opacity in op, not in color. Write {{ color: '{base}{important}', op: {used} }}."
         ));
     }
@@ -1585,17 +1686,20 @@ fn push_color_slash_opacity_diagnostics(
 /// The group key and value whose class a stand-alone key's stray value emits:
 /// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
 /// Mirrors `siblingGroupOf` in the TypeScript core.
-fn sibling_group_of(key: &str, bare: &str) -> Option<String> {
+///
+/// Returns the group key and the value to write on it; `true` for a boolean
+/// group, written bare.
+fn sibling_group_of(key: &str, bare: &str) -> Option<(&'static str, &'static str)> {
     let groups = super::generated::tables::global_keyword_groups(key)?;
     groups.split(' ').find_map(|group| {
         let values = super::generated::tables::closed_enum_values(group).unwrap_or_default();
         values
             .split(", ")
             .find(|value| super::generated::tables::closed_enum_class(group, value) == Some(bare))
-            .map(|value| format!("{group}: '{value}'"))
+            .map(|value| (group, value))
             .or_else(|| {
                 (super::generated::tables::boolean_class(group) == Some(bare))
-                    .then(|| format!("{group}: true"))
+                    .then_some((group, "true"))
             })
     })
 }
@@ -1646,7 +1750,7 @@ fn class_name_precedence_advisories(
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, span.start);
-        out.push_issue(DiagnosticCode::ClassPrecedence, span.start, format!(
+        out.push_issue(issue::class_precedence(), span.start, format!(
             "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at {location}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={{[{{ … }}, className]}} for the caller to win, sz={{[className, {{ … }}]}} for these styles to win."
         ));
     }
@@ -1668,7 +1772,7 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
             let (line, column) = offset_to_line_column(&file.source, span.start);
             // Its classes are still collected, so this is the advisory side
             // of a fallback.
-            Some((DiagnosticCode::FallbackNudge, span.start, format!(
+            Some((issue::fallback_nudge("sz-array-element", None, None, None), span.start, format!(
                 "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: use finite literal ternary branches when possible, or move truly runtime values to dynamic().",
                 column + 1
             )))
@@ -1685,17 +1789,16 @@ fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) 
     ir.unsupported_recovery_attributes
         .iter()
         .map(|(start, reason)| {
-            let text = match reason {
-                UnsupportedRecoveryIr::NonLiteral => format!(
+            match reason {
+                UnsupportedRecoveryIr::NonLiteral => (issue::sz_recover_non_literal(None), *start, format!(
                     "[csszyx] szRecover at {}: only string-literal values (\"csr\" | \"dev-only\") are supported. Dynamic values disable token emission for this element.",
                     file.filename
-                ),
-                UnsupportedRecoveryIr::UnknownMode(mode) => format!(
+                )),
+                UnsupportedRecoveryIr::UnknownMode(mode) => (issue::sz_recover_unknown_mode(Some(mode)), *start, format!(
                     "[csszyx] szRecover at {}: unknown mode \"{mode}\" — expected \"csr\" or \"dev-only\". Token emission skipped.",
                     file.filename
-                ),
-            };
-            (DiagnosticCode::SzRecover, *start, text)
+                )),
+            }
         })
         .collect()
 }
@@ -3770,6 +3873,26 @@ mod tests {
     }
 
     #[test]
+    fn an_szs_slot_map_the_build_cannot_read_says_which_form() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <Popup szs={{ body: v }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.issues.len(), 1);
+        assert_eq!(
+            result.issues[0].code,
+            crate::transform::DiagnosticCode::SzsSlotMap
+        );
+        assert_eq!(
+            result.issues[0].args.to_json(),
+            r#"{"form":"unreadable-slot"}"#
+        );
+    }
+
+    #[test]
     fn static_engine_emits_recovery_token() {
         let file = TransformFile {
             filename: "src/App.tsx".to_string(),
@@ -5582,6 +5705,8 @@ mod tests {
             [super::super::Issue {
                 code: super::super::DiagnosticCode::UnknownKey,
                 start: u32::try_from(source.find("xyzzy").expect("the key")).expect("small"),
+                args: super::super::Args::default()
+                    .with("key", super::super::ArgValue::Text("xyzzy".to_string())),
             }]
         );
     }
@@ -5906,6 +6031,15 @@ mod tests {
             [crate::transform::Issue {
                 code: crate::transform::DiagnosticCode::FallbackMissingCss,
                 start: u32::try_from(source.find("hover").expect("the key")).expect("small"),
+                args: crate::transform::Args::default()
+                    .with(
+                        "site",
+                        crate::transform::ArgValue::Text("sz-variant-key".to_string())
+                    )
+                    .with(
+                        "keyPath",
+                        crate::transform::ArgValue::Text("md.hover".to_string())
+                    ),
             }]
         );
         assert!(

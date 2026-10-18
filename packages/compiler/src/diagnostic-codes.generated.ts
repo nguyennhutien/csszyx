@@ -36,6 +36,45 @@ export type SzDiagnosticCode =
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity';
 
+/**
+ * The named values each engine code carries in `issue.args`, by code. An
+ * optional value the diagnostic has nothing for is absent, never `null`.
+ */
+export interface SzDiagnosticArgsByCode {
+    'unknown-key': { readonly key: string; readonly suggestion?: string; };
+    'canonical-key': { readonly key: string; };
+    'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string; };
+    'numeric-key': { readonly key: string; };
+    'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string; };
+    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string; };
+    'off-scale-value': { readonly key: string; readonly value: string; };
+    'numeric-font-weight': { readonly value: string; };
+    'per-side-border-style': { readonly key: string; readonly value: string; };
+    'property-object': { readonly key: string; readonly nestedKeys: readonly string[]; };
+    'non-variant-object': { readonly key: string; };
+    'unknown-field': { readonly owner: string; readonly member: string; readonly allowed: readonly string[]; };
+    'runtime-value': { readonly key: string; };
+    'unresolvable-spread': {  };
+    'style-override': {  };
+    'szs-slot-map': { readonly form: 'host-element' | 'unreadable-slot'; };
+    'sz-recover': { readonly form: 'non-literal' | 'unknown-mode'; readonly mode?: string; };
+    'class-precedence': {  };
+    'duplicate-sz': { readonly elementName: string; readonly count: number; };
+    'spread-split-class': { readonly elementName: string; readonly classes: readonly string[]; readonly szCount: number; readonly szAt: number; readonly spread?: string; readonly parts: readonly string[]; };
+    'moved-value': { readonly form: 'value' | 'mask-layer'; readonly key: string; readonly value: string; readonly layerKey?: 'maskLinear' | 'maskRadial' | 'maskConic'; };
+    'global-before-group': { readonly global: string; readonly value: string; readonly group: string; };
+    'runtime-family-conflict': { readonly form: 'key-first' | 'other-first'; readonly key: string; readonly other: string; };
+    'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string; };
+    'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; };
+    'merge-classifier-unavailable': { readonly form: 'unreadable' | 'format-mismatch'; readonly error?: string; readonly tableFormat?: number; };
+    'parse-error': { readonly form: 'syntax' | 'summary' | 'panicked' | 'expression' | 'prescan'; readonly message?: string; readonly errorCount?: number; };
+    'nesting-depth': { readonly depth: number; };
+    'unsupported-dynamic-sz': {  };
+    'ast-budget': { readonly form: 'transform' | 'prescan'; };
+    'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number; };
+    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string; };
+}
+
 /** Every code `csszyx check` reports under its `sz-diagnostic` pass, in registry order. */
 export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'unknown-key',

@@ -281,6 +281,133 @@ export function variantName(id) {
 }
 
 /**
+ * Convert a kebab-case or camelCase name to snake_case.
+ *
+ * @param {string} name - The name.
+ * @returns {string} The snake_case spelling.
+ */
+export function snakeName(name) {
+    return name.replaceAll('-', '_').replaceAll(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * The Rust parameter and the `Args` builder call for one arg of a constructor.
+ *
+ * @param {string} name - The arg's registry name.
+ * @param {Record<string, any>} arg - The arg.
+ * @returns {{ param: string, call: string, check: string }} Source fragments.
+ */
+function rustArg(name, arg) {
+    const param = snakeName(name);
+    const listed = Array.isArray(arg.type) ? arg.type.slice(1) : undefined;
+    const optional = arg.optional ? 'optional_' : '';
+    const [type, method] =
+        arg.type === 'number'
+            ? ['u64', 'count']
+            : arg.type === 'string[]'
+              ? ['Vec<String>', 'list']
+              : [listed ? "&'static str" : '&str', 'text'];
+    // An enum arg names one of a closed set; a value outside it is the
+    // engine's own mistake, caught where it is made.
+    const values = listed ? `[${listed.map(item => JSON.stringify(item)).join(', ')}]` : '';
+    let check = '';
+    if (listed) {
+        check = arg.optional
+            ? `debug_assert!(${param}.is_none_or(|v| ${values}.contains(&v)));\n`
+            : `debug_assert!(${values}.contains(&${param}));\n`;
+    }
+    return {
+        param: arg.optional ? `${param}: Option<${type}>` : `${param}: ${type}`,
+        call: `.${optional}${method}("${name}", ${param})`,
+        check,
+    };
+}
+
+/**
+ * One constructor per (code, form): the only way the engine builds an issue,
+ * so its args carry the registry's names in the registry's order. Each is a
+ * chain of calls to the out-of-line `Args` helpers, inlined where it is used,
+ * so a constructor costs its site a few calls and the binary no name.
+ *
+ * @param {Record<string, any>} entry - An engine id.
+ * @returns {string} The constructors' Rust source.
+ */
+function rustConstructors(entry) {
+    const args = Object.entries(entry.args ?? {}).filter(([name]) => name !== 'form');
+    const fragments = args.map(([name, arg]) => rustArg(name, arg));
+    const params = fragments.map(fragment => fragment.param).join(', ');
+    const checks = fragments.map(fragment => fragment.check).join('');
+    const calls = fragments.map(fragment => fragment.call).join('');
+    const variant = variantName(entry.id);
+    return (entry.forms ?? [undefined])
+        .map(form => {
+            const name = snakeName(form === undefined ? entry.id : `${entry.id}-${form}`);
+            const head =
+                form === undefined ? 'Args::default()' : `Args::default().text("form", "${form}")`;
+            const label = form === undefined ? '' : ` (\`${form}\`)`;
+            return `/// \`${entry.id}\`${label}: ${entry.summary}
+#[must_use]
+#[inline]
+pub fn ${name}(${params}) -> (DiagnosticCode, Args) {
+${checks}(DiagnosticCode::${variant}, ${head}${calls})
+}`;
+        })
+        .join('\n\n');
+}
+
+/**
+ * A Rust string literal: raw when the text holds a quote.
+ *
+ * @param {string} text - The text.
+ * @returns {string} The literal.
+ */
+function rustStringLiteral(text) {
+    return text.includes('"') ? `r#"${text}"#` : `"${text}"`;
+}
+
+/**
+ * One assertion per constructor: called with every arg present, it writes them
+ * under the registry's names, in the registry's order, as the wire carries them.
+ *
+ * @param {Record<string, any>} entry - An engine id.
+ * @returns {string} The assertions' Rust source.
+ */
+function rustConstructorChecks(entry) {
+    const args = Object.entries(entry.args ?? {}).filter(([name]) => name !== 'form');
+    const sample = ([name, arg]) => {
+        if (arg.type === 'number') return { rust: '7', json: 7 };
+        if (arg.type === 'string[]') return { rust: `vec!["${name}".to_string()]`, json: [name] };
+        const value = Array.isArray(arg.type) ? arg.type[1] : name;
+        return { rust: `"${value}"`, json: value };
+    };
+    return (entry.forms ?? [undefined])
+        .map(form => {
+            const name = snakeName(form === undefined ? entry.id : `${entry.id}-${form}`);
+            const values = args.map(arg => ({ arg, ...sample(arg) }));
+            // Once with every optional arg, once with none: an absent one is left out.
+            return [true, false]
+                .map(withOptional => {
+                    const call = values
+                        .map(({ arg: [, spec], rust }) =>
+                            spec.optional ? (withOptional ? `Some(${rust})` : 'None') : rust,
+                        )
+                        .join(', ');
+                    const json = Object.fromEntries([
+                        ...(form === undefined ? [] : [['form', form]]),
+                        ...values
+                            .filter(({ arg: [, spec] }) => withOptional || !spec.optional)
+                            .map(({ arg: [argName], json: value }) => [argName, value]),
+                    ]);
+                    return `let (code, args) = issue::${name}(${call});
+assert_eq!(code, DiagnosticCode::${variantName(entry.id)});
+assert_eq!(args.to_json(), ${rustStringLiteral(JSON.stringify(json))});`;
+                })
+                .join('\n');
+        })
+        .join('\n');
+}
+
+/**
  * Render the Rust module: one variant per id the engine emits.
  *
  * @param {typeof registry} input - The registry module.
@@ -325,7 +452,65 @@ ${arms}
 pub const DIAGNOSTIC_CODES: [DiagnosticCode; ${codes.length}] = [
 ${all}
 ];
+
+/// The engine's diagnostics, one constructor per code and form, each
+/// returning the code with its named args in registry order.
+pub mod issue {
+// A form only the TypeScript lanes report has a constructor the engine never calls.
+#![allow(clippy::too_many_arguments, dead_code)]
+use super::DiagnosticCode;
+use crate::transform::Args;
+
+${codes.map(rustConstructors).join('\n\n')}
+}
+
+#[cfg(test)]
+mod tests {
+use super::{issue, DiagnosticCode};
+
+// One assertion pair per constructor, generated: its length is the registry's.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn every_constructor_names_its_args_in_registry_order() {
+${codes.map(rustConstructorChecks).join('\n')}
+}
+}
 `;
+}
+
+/**
+ * The TypeScript type of one arg.
+ *
+ * @param {Record<string, any>} arg - The arg.
+ * @returns {string} The type.
+ */
+function tsArgType(arg) {
+    if (Array.isArray(arg.type))
+        return arg.type
+            .slice(1)
+            .map(value => `'${value}'`)
+            .join(' | ');
+    return arg.type === 'string[]' ? 'readonly string[]' : arg.type;
+}
+
+/**
+ * One member of \`SzDiagnosticArgsByCode\` per engine id.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {string} The interface body.
+ */
+function engineArgTypes(input) {
+    return input.DIAGNOSTICS.filter(entry => entry.surfaces.engine)
+        .map(entry => {
+            const fields = Object.entries(entry.args ?? {})
+                .map(
+                    ([name, arg]) =>
+                        `readonly ${name}${arg.optional ? '?' : ''}: ${tsArgType(arg)};`,
+                )
+                .join(' ');
+            return `    '${entry.id}': { ${fields} };`;
+        })
+        .join('\n');
 }
 
 /**
@@ -379,6 +564,14 @@ export function renderTypeScript(input) {
 /** What kind of problem one engine diagnostic reports, as \`csszyx check\` names it. */
 export type SzDiagnosticCode =
 ${union(codes)};
+
+/**
+ * The named values each engine code carries in \`issue.args\`, by code. An
+ * optional value the diagnostic has nothing for is absent, never \`null\`.
+ */
+export interface SzDiagnosticArgsByCode {
+${engineArgTypes(input)}
+}
 
 /** Every code \`csszyx check\` reports under its \`sz-diagnostic\` pass, in registry order. */
 export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [

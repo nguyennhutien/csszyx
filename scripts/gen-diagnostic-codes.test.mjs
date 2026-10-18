@@ -13,6 +13,7 @@ import {
     renderRust,
     renderTypeScript,
     settableIds,
+    snakeName,
     validateRegistry,
     variantName,
 } from './gen-diagnostic-codes.mjs';
@@ -239,6 +240,47 @@ test('the Rust enum carries only what the engine emits', () => {
     assert.doesNotMatch(rust, /ThemeCollision/);
     assert.match(rust, /\[DiagnosticCode; 1\]/);
     assert.equal(variantName('mangle-vars-hoist-skipped'), 'MangleVarsHoistSkipped');
+});
+
+test('each engine form gets a constructor that names its args in registry order', () => {
+    const input = registryOf([
+        entry({
+            id: 'mangle-vars-hoist-skipped',
+            forms: ['a', 'b'],
+            args: {
+                form: { type: ['enum', 'a', 'b'] },
+                name: { type: 'string' },
+                usageCount: { type: 'number' },
+                reason: { type: ['enum', 'no-lca', 'max-depth'] },
+                maxDepth: { type: 'number', optional: true },
+                parts: { type: 'string[]', joiner: ', ' },
+            },
+        }),
+        entry({ id: 'style-override', args: {} }),
+    ]);
+    const rust = renderRust(input);
+    assert.match(
+        rust,
+        /pub fn mangle_vars_hoist_skipped_a\(name: &str, usage_count: u64, reason: &'static str, max_depth: Option<u64>, parts: Vec<String>\)/,
+    );
+    assert.match(rust, /pub fn mangle_vars_hoist_skipped_b\(/);
+    assert.match(
+        rust,
+        /Args::default\(\)\.text\("form", "a"\)\.text\("name", name\)\.count\("usageCount", usage_count\)/,
+    );
+    assert.match(rust, /debug_assert!\(\["no-lca", "max-depth"\]\.contains\(&reason\)\);/);
+    assert.match(rust, /\.optional_count\("maxDepth", max_depth\)\.list\("parts", parts\)/);
+    assert.match(
+        rust,
+        /pub fn style_override\(\) -> \(DiagnosticCode, Args\) \{\n\(DiagnosticCode::StyleOverride, Args::default\(\)\)/,
+    );
+    assert.equal(snakeName('usageCount'), 'usage_count');
+    const ts = renderTypeScript(input);
+    assert.match(
+        ts,
+        /'mangle-vars-hoist-skipped': \{ readonly form: 'a' \| 'b'; readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' \| 'max-depth'; readonly maxDepth\?: number; readonly parts: readonly string\[\]; \};/,
+    );
+    assert.match(ts, /'style-override': \{ {2}\};/);
 });
 
 test('the TypeScript ids follow the registry', () => {

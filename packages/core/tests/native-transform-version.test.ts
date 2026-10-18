@@ -48,6 +48,18 @@ describe('@csszyx/core/native transformBatch', () => {
         );
     });
 
+    it('refuses a binding whose issues carry no args, judged on the first issue', async () => {
+        packageName.current = fixture('native-binding-no-args.cjs');
+        const { transformBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
+        const clean = { filename: '/p/a.tsx', source: '' };
+
+        // A result with no issue cannot show the missing field.
+        expect(transformBatch([clean])).toHaveLength(1);
+        expect(() => transformBatch([clean, { filename: '/p/b.tsx', source: '' }])).toThrow(
+            CsszyxNativeUnavailableError,
+        );
+    });
+
     it('names both packages when the binding is older', async () => {
         // The 0.17 result: no `issues`, and each merge group a bare class list.
         packageName.current = fixture('native-binding.cjs');

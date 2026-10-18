@@ -126,9 +126,9 @@ function named(name, manifest) {
 /**
  * Refuse a result an older platform package returned. Such a package still
  * exports the function, so the loader's export check passes; only the result
- * tells. Without this the caller fails on the first missing field, with an
- * error that names neither package. One result is enough: every result has
- * the same shape.
+ * tells. Without this the caller fails on the first missing field, or, for
+ * a field it reads per issue, prints a sentence with holes in it. Every result
+ * has the same shape, so one is enough: the first that has an issue.
  *
  * @template T
  * @param {T[]} results - What the binding returned.
@@ -136,7 +136,10 @@ function named(name, manifest) {
  * @returns {T[]} The results.
  */
 function currentResults(results, current) {
-    if (results.length === 0 || current(results[0])) return results;
+    // A result with no issue says nothing about the shape of one, so judge the
+    // first that has an issue, and the first result when none does.
+    const judged = results.find(result => result.issues?.length > 0) ?? results[0];
+    if (judged === undefined || current(judged)) return results;
     // Versions when the manifests can be read, which a fixture's cannot.
     const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
     const core = named('@csszyx/core', '../package.json');
@@ -149,8 +152,11 @@ function currentResults(results, current) {
 
 export function transformBatch(_files, options) {
     const binding = loadNativeBinding();
-    return currentResults(binding.transformBatch(_files, options), result =>
-        Array.isArray(result.issues),
+    return currentResults(
+        binding.transformBatch(_files, options),
+        result =>
+            Array.isArray(result.issues) &&
+            result.issues.every(issue => typeof issue.argsJson === 'string'),
     );
 }
 

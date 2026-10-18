@@ -21,6 +21,7 @@ interface ParseRecord {
     source: string;
     classes: string[];
     rawClassNames: string[];
+    issues: unknown[];
 }
 
 interface WasmTransformResult {
@@ -28,6 +29,7 @@ interface WasmTransformResult {
     classes: string[];
     raw_class_names: string[];
     diagnostics: string[];
+    issues: unknown[];
 }
 
 interface ParserWasm {
@@ -78,7 +80,7 @@ describe('wasm parser artifact', () => {
         expect(typeof wasm?.transform_batch_json).toBe('function');
     });
 
-    it('replays the parse-parity corpus with the same classes as the engine records', () => {
+    it('replays the parse-parity corpus with the same classes and issues as the engine records', () => {
         const wasm = loadParserWasm();
         expect(wasm, MISSING).not.toBeNull();
         if (!wasm) return;
@@ -93,6 +95,12 @@ describe('wasm parser artifact', () => {
             if (got.join(' ') !== expected.join(' ')) {
                 mismatches.push(
                     `${record.source}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(got)}`,
+                );
+            }
+            // The same bytes as the native artifact recorded: key order included.
+            if (JSON.stringify(result.issues) !== JSON.stringify(record.issues)) {
+                mismatches.push(
+                    `${record.source}\n  issues expected ${JSON.stringify(record.issues)}\n  issues got      ${JSON.stringify(result.issues)}`,
                 );
             }
         }

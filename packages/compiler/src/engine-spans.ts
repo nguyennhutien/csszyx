@@ -21,7 +21,7 @@
  * @module engine-spans
  */
 
-import type { SzDiagnosticCode } from './diagnostic-codes.generated.js';
+import type { SzDiagnosticArgsByCode, SzDiagnosticCode } from './diagnostic-codes.generated.js';
 
 /** A 1-based line and a 1-based column counted in UTF-16 code units. */
 export interface SourcePosition {
@@ -30,10 +30,19 @@ export interface SourcePosition {
 }
 
 /** What one engine diagnostic reports, and where; index-parallel to `diagnostics`. */
-export interface SzDiagnosticIssue extends SourcePosition {
+export interface SzDiagnosticIssue<C extends SzDiagnosticCode = SzDiagnosticCode>
+    extends SourcePosition {
     /** The kind of problem, as `csszyx check --rule` names it. */
-    code: SzDiagnosticCode;
+    code: C;
+    /**
+     * What the sentence names, as data: the key, the value, the form of the
+     * sentence. Read these, never the English, which the registry rewords.
+     */
+    args: SzDiagnosticArgsByCode[C];
 }
+
+/** A diagnostic whose `args` narrow by `code`. */
+export type SzIssue = { [C in SzDiagnosticCode]: SzDiagnosticIssue<C> }[SzDiagnosticCode];
 
 /**
  * One static object a merge would read, from a pass with no merge table.
@@ -207,15 +216,23 @@ class LocatedSpan implements SourcePosition {
 /** A located diagnostic. */
 class LocatedIssue extends LocatedSpan implements SzDiagnosticIssue {
     code: SzDiagnosticCode;
+    args: SzDiagnosticArgsByCode[SzDiagnosticCode];
 
     /**
      * @param code - The diagnostic's code.
+     * @param args - Its named values.
      * @param start - The byte offset.
      * @param locate - The file's locator.
      */
-    constructor(code: SzDiagnosticCode, start: number, locate: ByteOffsetLocator) {
+    constructor(
+        code: SzDiagnosticCode,
+        args: SzDiagnosticArgsByCode[SzDiagnosticCode],
+        start: number,
+        locate: ByteOffsetLocator,
+    ) {
         super(start, locate);
         this.code = code;
+        this.args = args;
     }
 }
 
@@ -241,6 +258,10 @@ class LocatedOverride extends LocatedSpan implements SzMergeOverride {
 interface RawIssue {
     code: string;
     start: number;
+    /** From the wasm artifact and from a store: the object itself. */
+    args?: object;
+    /** From the native binding: the same object as the JSON the wasm writes. */
+    argsJson?: string;
 }
 
 /** One merge group as the engine reports it. */
@@ -297,7 +318,8 @@ export function locateEngineSpans(source: string, raw: RawEngineSpans): LocatedE
  * @returns It located.
  */
 function locateIssue(issue: RawIssue, locate: ByteOffsetLocator): SzDiagnosticIssue {
-    return new LocatedIssue(issue.code as SzDiagnosticCode, issue.start, locate);
+    const args = issue.args ?? JSON.parse(issue.argsJson ?? '{}');
+    return new LocatedIssue(issue.code as SzDiagnosticCode, args, issue.start, locate);
 }
 
 /**
@@ -361,7 +383,7 @@ export function storeEngineSpans(spans: PartialLocatedEngineSpans): StoredEngine
     if (spans.issues) {
         stored.issues = spans.issues.map(issue => {
             const start = LocatedSpan.startOf(issue);
-            return start === undefined ? issue : { code: issue.code, start };
+            return start === undefined ? issue : { code: issue.code, start, args: issue.args };
         });
     }
     if (spans.mergeGroups) stored.mergeGroups = spans.mergeGroups.map(storeGroup);
