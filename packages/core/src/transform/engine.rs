@@ -152,22 +152,15 @@ pub(super) fn transform_file_with_options(
         }
     }
     if let Some(problem) = table_problem {
-        let (issue, refused) = match &problem {
-            super::merge::TableProblem::Unreadable(error) => (
-                issue::merge_classifier_unavailable_unreadable(Some(error), None),
-                format!("The merge table is not one this engine reads ({error})"),
-            ),
-            super::merge::TableProblem::Format(format) => (
-                issue::merge_classifier_unavailable_format_mismatch(None, Some(u64::from(*format))),
-                format!(
-                    "The merge table is in format {format}, and this engine reads format {}",
-                    super::merge::MERGE_TABLE_FORMAT
-                ),
-            ),
+        let issue = match problem {
+            super::merge::TableProblem::Unreadable(error) => {
+                issue::merge_classifier_unavailable_unreadable(Some(&error), None)
+            }
+            super::merge::TableProblem::Format(format) => {
+                issue::merge_classifier_unavailable_format_mismatch(None, Some(u64::from(format)))
+            }
         };
-        result.push_issue(issue, 0, format!(
-            "{refused}, so no sz key was merged with a later key that covers it.\n  help: install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides."
-        ));
+        result.push_issue(issue, 0);
     }
     result
 }
@@ -182,9 +175,7 @@ fn transform_file_in_scopes(file: &TransformFile, options: TransformOptions) -> 
     let nesting_depth = max_source_nesting_depth(&file.source);
     if nesting_depth > MAX_SOURCE_NESTING_DEPTH {
         let mut result = noop_result(file);
-        result.push_issue(issue::nesting_depth(nesting_depth as u64), 0, format!(
-            "Source nesting exceeds {MAX_SOURCE_NESTING_DEPTH} levels (found {nesting_depth}).\n  help: flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.\n  note: the file is left unchanged and contributes no classes."
-        ));
+        result.push_issue(issue::nesting_depth(nesting_depth as u64), 0);
         result.metadata.timings.triage_ns = elapsed_ns(triage_start);
         result.metadata.timings.total_ns = elapsed_ns(total_start);
         return result;
@@ -229,7 +220,7 @@ fn transform_fast_static_ir_with_options(
     let mut diagnostics = unknown_property_diagnostics(lower_ir);
     diagnostics.extend(var_hostile_diagnostics(lower_ir));
     diagnostics.extend(szs_diagnostics(lower_ir));
-    let (diagnostics, issues) = diagnostics.into_parts();
+    let issues = diagnostics.into_issues();
 
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
@@ -239,7 +230,6 @@ fn transform_fast_static_ir_with_options(
         merge_groups: Vec::new(),
         single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
-        diagnostics,
         issues,
         recovery_tokens: Vec::new(),
         css_variable_map: global_var_aliases
@@ -343,11 +333,7 @@ fn transform_static_classes_with_options(
     diagnostics.extend(var_hostile_diagnostics(&parsed.ir));
     diagnostics.extend(szs_diagnostics(&parsed.ir));
     if parsed.ast_budget_exceeded {
-        diagnostics.push_issue(
-            issue::ast_budget_transform(),
-            0,
-            "The file exceeds the AST budget, and the IR walk stopped mid-file.\n  help: raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.\n  note: the file is left unchanged and contributes no classes to the safelist.".to_string(),
-        );
+        diagnostics.push_issue(issue::ast_budget_transform(), 0);
     }
     if let Some(mangling) = &css_var_mangling {
         diagnostics.extend(mangling.diagnostics.clone());
@@ -363,11 +349,7 @@ fn transform_static_classes_with_options(
     let transformed = rewritten_code.is_some();
 
     if parsed.panicked {
-        diagnostics.push_issue(
-            issue::parse_error_panicked(None, None),
-            0,
-            "The parser could not recover from a syntax error, so csszyx did not finish lowering this file.\n  help: fix the syntax error reported for this file.\n  note: the file is left unchanged.".to_string(),
-        );
+        diagnostics.push_issue(issue::parse_error_panicked(None, None), 0);
     }
 
     // Runtime helper flags for downstream import-injection, mirroring the
@@ -462,7 +444,7 @@ fn transform_static_classes_with_options(
     } else {
         (lowered.classes, lowered.raw_class_names)
     };
-    let (diagnostics, issues) = diagnostics.into_parts();
+    let issues = diagnostics.into_issues();
 
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
@@ -472,7 +454,6 @@ fn transform_static_classes_with_options(
         merge_groups: Vec::new(),
         single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
-        diagnostics,
         issues,
         recovery_tokens,
         css_variable_map: merge_variable_maps(
@@ -554,13 +535,7 @@ fn merge_variable_maps(
 fn unsupported_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.unsupported_sz_attribute_spans
         .iter()
-        .map(|span| {
-            (
-                issue::unsupported_dynamic_sz(),
-                span.start,
-                "This `sz` attribute has no value, or a JSX element as its value, and the engine reads neither.\n  help: give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.\n  note: the attribute is left as written; the rest of the file is still transformed.".to_string(),
-            )
-        })
+        .map(|span| (issue::unsupported_dynamic_sz(), span.start))
         .collect()
 }
 
@@ -569,65 +544,29 @@ fn szs_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.szs_diagnostics
         .iter()
         .map(|diagnostic| {
-            let (issue, text) = if diagnostic.host_element {
-                (
-                    issue::szs_slot_map_host_element(),
-                    "`szs` has no effect on a host element; it maps the slot names of a custom component.\n  help: remove `szs`, or move it to the custom component whose slots it names.",
-                )
+            let issue = if diagnostic.host_element {
+                issue::szs_slot_map_host_element()
             } else {
-                (
-                    issue::szs_slot_map_unreadable_slot(),
-                    "A slot value in `szs` could not be read at build time, so no slot classes were compiled.\n  help: make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.",
-                )
+                issue::szs_slot_map_unreadable_slot()
             };
-            (
-                issue,
-                diagnostic.start,
-                format!("{text}\n  note: the attribute is left unchanged."),
-            )
+            (issue, diagnostic.start)
         })
         .collect()
 }
 
 /// Build-log diagnostics for `szr`/`szv` calls whose argument the parser could
 /// not read.
-///
-/// The reason and the advice come from the shared matrix, so the wording is
-/// byte-identical across artifacts.
 fn site_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
-    use super::generated::sz_fallback_matrix::{
-        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
-    };
-    use super::{RuntimeFallbackKindIr, SzFallbackSiteIr};
+    use super::SzFallbackSiteIr;
 
     ir.site_fallbacks
         .iter()
         .map(|fallback| {
-            let kind = match fallback.kind {
-                RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
-                RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
-                RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
-                RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
-                RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
-                RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
-            };
-            let reason = sz_fallback_reason(kind, &fallback.detail, &fallback.path);
             // An unread `szr` argument or `szv` config never had its classes
             // collected, whatever the expression's kind.
-            let (site_name, text) = match fallback.site {
-                SzFallbackSiteIr::Szr => (
-                    "szr",
-                    format!(
-                        "`szr` falls back to the runtime: {reason}.\n  help: {}\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
-                        sz_fallback_suggestion(kind)
-                    ),
-                ),
-                SzFallbackSiteIr::Szv => (
-                    "szv",
-                    format!(
-                        "The `szv` config cannot be read at build time: {reason}.\n  help: pass the config inline, or as a module-level const object literal.\n  note: none of its variant classes are safelisted, so they generate no CSS."
-                    ),
-                ),
+            let site_name = match fallback.site {
+                SzFallbackSiteIr::Szr => "szr",
+                SzFallbackSiteIr::Szv => "szv",
             };
             (
                 issue::fallback_missing_css(
@@ -638,7 +577,6 @@ fn site_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
                     None,
                 ),
                 fallback.offset,
-                text,
             )
         })
         .collect()
@@ -662,17 +600,11 @@ const fn fallback_shape(kind: super::RuntimeFallbackKindIr) -> &'static str {
 ///
 /// `sz={{ m: 1, hover: x }}`: the build cannot see what `x` holds, so the key
 /// goes to `_szPart` and nothing collects its classes — the `sz={s}` failure
-/// for one key, in the same wording, at the key.
+/// for one key, at the key.
 fn deferred_variant_diagnostics(ir: &super::SourceIr) -> Diagnostics {
-    use super::generated::sz_fallback_matrix::{
-        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
-    };
-
     ir.deferred_variant_keys
         .iter()
         .map(|deferred| {
-            let reason = sz_fallback_reason(SzFallbackKind::Variant, &deferred.path, "");
-            let suggestion = sz_fallback_suggestion(SzFallbackKind::Variant);
             (
                 issue::fallback_missing_css(
                     "sz-variant-key",
@@ -682,7 +614,6 @@ fn deferred_variant_diagnostics(ir: &super::SourceIr) -> Diagnostics {
                     Some(&deferred.path),
                 ),
                 deferred.start,
-                format!("`sz` falls back to the runtime: {reason}.\n  help: {suggestion}"),
             )
         })
         .collect()
@@ -690,14 +621,12 @@ fn deferred_variant_diagnostics(ir: &super::SourceIr) -> Diagnostics {
 
 /// Build-log diagnostics for `sz` props left to the runtime `_sz(...)` helper.
 ///
-/// Emits the shared fallback matrix entry (why, and what to do instead) and —
-/// for an object literal with a top-level spread — the unresolvable-spread
-/// notice, in a fixed per-attribute order with byte-identical wording across
-/// artifacts, so which artifact a build loads cannot change the build log.
+/// Emits the fallback finding — missing CSS or a nudge, as the shared matrix
+/// decides for the expression's kind — and, for an object literal with a
+/// top-level spread, the unresolvable-spread notice, in a fixed per-attribute
+/// order, so which artifact a build loads cannot change the build log.
 fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
-    use super::generated::sz_fallback_matrix::{
-        sz_fallback_reason, sz_fallback_suggestion, sz_site_fallback_misses_css, SzFallbackKind,
-    };
+    use super::generated::sz_fallback_matrix::{sz_site_fallback_misses_css, SzFallbackKind};
     use super::RuntimeFallbackKindIr;
 
     let mut out = Diagnostics::default();
@@ -713,36 +642,18 @@ fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
             RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
             RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
         };
-        let reason = sz_fallback_reason(kind, &diagnostic.detail, &diagnostic.path);
-        let suggestion = sz_fallback_suggestion(kind);
         let shape = Some(fallback_shape(diagnostic.kind));
         let detail = Some(diagnostic.detail.as_str());
         let path = Some(diagnostic.path.as_str());
-        let (issue, note) = if sz_site_fallback_misses_css(kind) {
-            (
-                issue::fallback_missing_css("sz", shape, detail, path, None),
-                "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
-            )
+        let issue = if sz_site_fallback_misses_css(kind) {
+            issue::fallback_missing_css("sz", shape, detail, path, None)
         } else {
-            (
-                issue::fallback_nudge("sz", shape, detail, path),
-                "the runtime `_sz` helper still lowers the value.",
-            )
+            issue::fallback_nudge("sz", shape, detail, path)
         };
         let start = attr.value_span.start;
-        out.push_issue(
-            issue,
-            start,
-            format!(
-                "`sz` falls back to the runtime: {reason}.\n  help: {suggestion}\n  note: {note}"
-            ),
-        );
+        out.push_issue(issue, start);
         if attr.runtime_fallback_spread {
-            out.push_issue(
-                issue::unresolvable_spread(),
-                start,
-                "`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime; it may render no styles in production.\n  help: use the array form: `sz={[x, { ... }]}`.".to_string(),
-            );
+            out.push_issue(issue::unresolvable_spread(), start);
         }
     }
     out
@@ -765,13 +676,7 @@ fn style_spread_collision_diagnostics(ir: &super::SourceIr) -> Diagnostics {
                         .any(|property| !property.hoisted)
                 })
         })
-        .map(|element| {
-            (
-                issue::style_override(),
-                element.opening_span.start,
-                "This element spreads props that may carry `style`, and `sz` writes its own `style` attribute, which can replace the one in the spread.\n  help: move the spread `style` to an explicit `style` prop, so csszyx merges both values.".to_string(),
-            )
-        })
+        .map(|element| (issue::style_override(), element.opening_span.start))
         .collect()
 }
 
@@ -800,14 +705,7 @@ fn var_hostile_diagnostics(ir: &super::SourceIr) -> Diagnostics {
             if dropped.reason != DroppedKeyReason::NoVarForm {
                 continue;
             }
-            out.push_issue(
-                issue::runtime_value(&dropped.key),
-                dropped.span.start,
-                format!(
-                    "`{}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.\n  help: name the values with `szv()`, or use `dynamic()` for open-ended data.\n  note: the class and the variable were dropped, so no other property is styled in its place.",
-                    dropped.key
-                ),
-            );
+            out.push_issue(issue::runtime_value(&dropped.key), dropped.span.start);
         }
     }
     out
@@ -863,28 +761,21 @@ fn retain_first_occurrence<T>(
 /// A spacing value Tailwind's scale has no step for.
 fn push_dead_spacing_step_diagnostics(found: &[(String, f64, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        out.push_issue(issue::off_scale_value(key, &value.to_string()), *offset, format!(
-            "`{key}: {value}` is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS.\n  help: use a quarter step (1.25, 1.5, 1.75) or a unit value (`\"{value}rem\"`)."
-        ));
+        out.push_issue(issue::off_scale_value(key, &value.to_string()), *offset);
     }
 }
 
 /// A border style set on one side, which Tailwind cannot express.
 fn push_border_side_style_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        out.push_issue(issue::per_side_border_style(key, value), *offset, format!(
-            "Tailwind has no per-side border style, so `{key}: '{value}'` is dropped and generates no CSS.\n  help: use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."
-        ));
+        out.push_issue(issue::per_side_border_style(key, value), *offset);
     }
 }
 
 /// An object given to a key that names a property rather than a variant.
 fn push_property_object_diagnostics(found: &[(String, Vec<String>, u32)], out: &mut Diagnostics) {
     for (key, nested_keys, offset) in found {
-        let nested = nested_keys.join(", ");
-        out.push_issue(issue::property_object(key, nested_keys.clone()), *offset, format!(
-            "`{key}` names a property and holds an object `{{ {nested} }}`, so it compiles to `{key}:*` classes that match no Tailwind variant and generate no CSS.\n  help: move the nested keys up a level; for color opacity, write `{{ color: '...', op: ... }}`."
-        ));
+        out.push_issue(issue::property_object(key, nested_keys.clone()), *offset);
     }
 }
 
@@ -894,10 +785,10 @@ fn push_mask_member_diagnostics(
     out: &mut Diagnostics,
 ) {
     for (owner, member, allowed_members, offset) in found {
-        let allowed = allowed_members.join(", ");
-        out.push_issue(issue::unknown_field(owner, member, allowed_members.clone()), *offset, format!(
-            "`{owner}` has no field `{member}`, and nothing is emitted for it.\n  help: `{owner}` takes `{{ {allowed} }}`."
-        ));
+        out.push_issue(
+            issue::unknown_field(owner, member, allowed_members.clone()),
+            *offset,
+        );
     }
 }
 
@@ -1045,10 +936,10 @@ fn push_dropped_removed_key(dropped: &super::DroppedSzKeyIr, found: &mut KeyValu
     let offset = dropped.span.start;
     let mut moved = false;
     for literal in &dropped.literals {
-        if let Some((key, value)) = super::lower::moved_value(&dropped.key, literal) {
+        if super::lower::moved_value(&dropped.key, literal).is_some() {
             found
                 .moved_values
-                .push((dropped.key.clone(), literal.clone(), key, value, offset));
+                .push((dropped.key.clone(), literal.clone(), offset));
             moved = true;
         }
     }
@@ -1063,16 +954,13 @@ fn push_dropped_removed_key(dropped: &super::DroppedSzKeyIr, found: &mut KeyValu
 /// values stand alone and some moved to group keys, so the report names both.
 fn push_runtime_alias_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        // The parser read the branches only for such an alias, so both
-        // lookups answer.
+        // The parser read the branches only for such an alias, so the lookup
+        // answers.
         let canonical = super::generated::tables::key_suggestion(key).unwrap_or_default();
-        let values = super::generated::tables::closed_enum_values(canonical).unwrap_or_default();
-        let groups = super::generated::tables::global_keyword_groups(canonical)
-            .unwrap_or_default()
-            .replace(' ', ", ");
-        out.push_issue(issue::removed_key_runtime_alias(key, Some(canonical)), *offset, format!(
-            "`{key}` was removed, and it holds a runtime value, so nothing is emitted for it.\n  help: write {values} on `{canonical}`, and the other values on {groups}."
-        ));
+        out.push_issue(
+            issue::removed_key_runtime_alias(key, Some(canonical)),
+            *offset,
+        );
     }
 }
 
@@ -1082,32 +970,24 @@ fn push_global_before_group_diagnostics(
     out: &mut Diagnostics,
 ) {
     for (global, value, group, offset) in found {
-        out.push_issue(issue::global_before_group(global, value, group), *offset, format!(
-            "`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.\n  help: to override the group, layer it: `sz={{[base, {{ {global}: '{value}' }}]}}`.\n  note: a spread override (`{{ ...base, {global}: '{value}' }}`) keeps this order."
-        ));
+        out.push_issue(issue::global_before_group(global, value, group), *offset);
     }
 }
 
 /// A closed-key value that moved onto its group's own key.
 fn push_moved_value_diagnostics(found: &[super::lower::MovedValue], out: &mut Diagnostics) {
-    for (key, value, replacing_key, replacing_value, offset) in found {
-        let replacement = if *replacing_value == "true" {
-            "true".to_string()
-        } else {
-            format!("'{replacing_value}'")
-        };
-        out.push_issue(issue::moved_value_value(key, value, None), *offset, format!(
-            "`{key}: {value}` moved to `{replacing_key}`, and nothing is emitted for it.\n  help: write `{{ {replacing_key}: {replacement} }}`, or run `csszyx migrate`."
-        ));
+    for (key, value, offset) in found {
+        out.push_issue(issue::moved_value_value(key, value, None), *offset);
     }
 }
 
 /// A `mask` value naming a gradient layer, which moved to its own key.
 fn push_mask_layer_diagnostics(found: &[(String, &'static str, u32)], out: &mut Diagnostics) {
     for (value, key, offset) in found {
-        out.push_issue(issue::moved_value_mask_layer("mask", value, Some(key)), *offset, format!(
-            "`mask: '{value}'` names a gradient layer, and gradient layers moved to `{key}`; nothing is emitted for it.\n  help: write this layer on `{key}`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key."
-        ));
+        out.push_issue(
+            issue::moved_value_mask_layer("mask", value, Some(key)),
+            *offset,
+        );
     }
 }
 
@@ -1170,20 +1050,12 @@ fn dynamic_group_conflict_diagnostics(ir: &super::SourceIr) -> Diagnostics {
         .iter()
         .chain(in_array_elements)
         .map(|conflict| {
-            let (first, second) = if conflict.key_first {
-                (&conflict.key, &conflict.other)
-            } else {
-                (&conflict.other, &conflict.key)
-            };
             let issue = if conflict.key_first {
                 issue::runtime_family_conflict_key_first(&conflict.key, &conflict.other)
             } else {
                 issue::runtime_family_conflict_other_first(&conflict.key, &conflict.other)
             };
-            (issue, conflict.span.start, format!(
-                "`{}` takes a runtime value beside `{}` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.\n  help: layer them, later wins: `sz={{[{{ {first}: … }}, {{ {second}: … }}]}}`.",
-                conflict.key, conflict.other
-            ))
+            (issue, conflict.span.start)
         })
         .collect()
 }
@@ -1198,25 +1070,6 @@ fn spread_split_class_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.spread_split_classes
         .iter()
         .map(|split| {
-            let mut earlier: Vec<String> = split
-                .classes
-                .iter()
-                .map(|class| super::parser::code_span(class))
-                .collect();
-            if split.sz_count > 0 {
-                let named = if split.sz_count == 1 {
-                    "the classes of an earlier `sz`".to_string()
-                } else {
-                    format!("the classes of {} earlier `sz`", split.sz_count)
-                };
-                earlier.insert(split.sz_at, named);
-            }
-            let after = split.spread.as_ref().map_or_else(
-                || "the spread".to_string(),
-                |text| format!("`{{...{text}}}`"),
-            );
-            let mut parts = split.parts.clone();
-            parts.push("{ … }".to_string());
             let issue = issue::spread_split_class(
                 &split.element_name,
                 split.classes.clone(),
@@ -1225,12 +1078,7 @@ fn spread_split_class_diagnostics(ir: &super::SourceIr) -> Diagnostics {
                 split.spread.as_deref(),
                 split.parts.clone(),
             );
-            (issue, split.span.start, format!(
-                "Class names and `sz` on more than one side of a spread on `<{}>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there.\n  help: write them in one `sz` array after {after}, in the order that should win: `sz={{[{}]}}`.\n  note: Vue JSX merges every class, so there every side applies.",
-                split.element_name,
-                earlier.join(" and "),
-                parts.join(", "),
-            ))
+            (issue, split.span.start)
         })
         .collect()
 }
@@ -1244,10 +1092,10 @@ fn duplicate_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.duplicate_sz_attributes
         .iter()
         .map(|duplicate| {
-            (issue::duplicate_sz(&duplicate.element_name, duplicate.count as u64), duplicate.span.start, format!(
-                "`<{}>` carries {} `sz` attributes; they were merged as `sz={{[first, …, last]}}`, later wins per property.\n  help: fold them into one `sz` array, so the order is written down.",
-                duplicate.element_name, duplicate.count
-            ))
+            (
+                issue::duplicate_sz(&duplicate.element_name, duplicate.count as u64),
+                duplicate.span.start,
+            )
         })
         .collect()
 }
@@ -1260,9 +1108,7 @@ fn duplicate_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
 /// rewriting it.
 fn push_dead_weight_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (value, offset) in found {
-        out.push_issue(issue::numeric_font_weight(value), *offset, format!(
-            "`weight: '{value}'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-{value}` generates no CSS.\n  help: write `weight: {value}` as a number, which brackets to `font-[{value}]`."
-        ));
+        out.push_issue(issue::numeric_font_weight(value), *offset);
     }
 }
 
@@ -1280,61 +1126,45 @@ fn push_removed_sugar_diagnostics(
     // no lookup here that could fail and no branch that cannot run.
     for (key, canonical, value, offset) in found {
         let replaced = super::generated::tables::is_replaced_key(key);
-        let what = if replaced {
-            "was replaced"
-        } else {
-            "boolean sugar was removed"
-        };
         let replacement = format!("{canonical}: '{value}'");
         let issue = if replaced {
             issue::removed_key_sugar_replaced(key, Some(&replacement))
         } else {
             issue::removed_key_sugar(key, Some(&replacement))
         };
-        out.push_issue(issue, *offset, format!(
-            "`{key}` {what}, and nothing is emitted for it.\n  help: write `{{ {canonical}: '{value}' }}` instead, or run `csszyx migrate`."
-        ));
+        out.push_issue(issue, *offset);
     }
 }
 
 /// Report one unknown, removed, aliased, or numeric sz key.
 ///
-/// Four wordings for one collector, because the remedy differs: a removed key
+/// Four findings for one collector, because the remedy differs: a removed key
 /// has a replacement, an alias has a canonical spelling, a numeric key means an
 /// array or spread leaked in, and anything else may still target a project's
 /// own `@utility`.
 fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        if let Some(note) = super::generated::tables::key_migration_note(key) {
-            out.push_issue(
-                issue::removed_key_removed(key, None),
-                *offset,
-                format!("`{key}` was removed, and nothing is emitted for it.\n  help: {note}."),
-            );
+        if super::generated::tables::key_migration_note(key).is_some() {
+            out.push_issue(issue::removed_key_removed(key, None), *offset);
         } else if let Some(suggestion) = super::generated::tables::key_suggestion(key)
             .filter(|_| super::generated::tables::is_replaced_key(key))
         {
             // A flag that joined a group under a new name: worded as the other
             // replaced keys are. Mirrors the TypeScript core's replaced-key warning.
             let replacement = format!("{suggestion}: true");
-            out.push_issue(issue::removed_key_replaced(key, Some(&replacement)), *offset, format!(
-                "`{key}` was replaced, and nothing is emitted for it.\n  help: write `{{ {suggestion}: true }}` instead, or run `csszyx migrate`."
-            ));
-        } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
-            out.push_issue(issue::canonical_key(key), *offset, format!(
-                "`{key}` is an alias of `{suggestion}`, and nothing is emitted for it.\n  help: write `{suggestion}` instead of `{key}`."
-            ));
+            out.push_issue(
+                issue::removed_key_replaced(key, Some(&replacement)),
+                *offset,
+            );
+        } else if super::generated::tables::key_suggestion(key).is_some() {
+            out.push_issue(issue::canonical_key(key), *offset);
         } else if is_numeric_key(key) {
-            out.push_issue(issue::numeric_key(key), *offset, format!(
-                "`sz` received a numeric key `{key}`, and its value is ignored.\n  help: pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
-            ));
+            out.push_issue(issue::numeric_key(key), *offset);
         } else {
             // Deliberately NOT "this will be ignored": the key is lowered as a
             // literal class exactly like a known one, so the old text sent
             // people looking for a missing class instead of a dead one.
-            out.push_issue(issue::unknown_key(key, None), *offset, format!(
-                "`{key}` is not an sz property.\n  help: check the spelling. If the class is intentional, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility."
-            ));
+            out.push_issue(issue::unknown_key(key, None), *offset);
         }
     }
 }
@@ -1342,9 +1172,7 @@ fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) 
 /// Report a csszyx-owned key that carries an object and so becomes a prefix.
 fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        out.push_issue(issue::non_variant_object(key), *offset, format!(
-            "`{key}` holds an object, so it lowers to the class prefix `{key}:` and Tailwind generates no CSS for it; `{key}` is not a variant.\n  help: a `--*` key takes a declaration value; `container` takes `true`."
-        ));
+        out.push_issue(issue::non_variant_object(key), *offset);
     }
 }
 
@@ -1354,16 +1182,8 @@ fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnos
 /// replacement, and the alternative is a second trip to the docs.
 fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        // The collector proved the key is a closed enum by finding it, so the
-        // lookup below cannot miss.
-        let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
         let bare = super::lower::bare_closed_enum_class(key, value);
         if let Some((group_key, group_value)) = sibling_group_of(key, &bare) {
-            let sibling = if group_value == "true" {
-                format!("{group_key}: true")
-            } else {
-                format!("{group_key}: '{group_value}'")
-            };
             let issue = issue::closed_enum_value_sibling_group(
                 key,
                 value,
@@ -1371,14 +1191,13 @@ fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnos
                 Some(group_key),
                 Some(group_value),
             );
-            out.push_issue(issue, *offset, format!(
-                "`{key}: {value}` is not a `{key}` value; the class `{bare}` it emits belongs to `{{ {sibling} }}`.\n  help: write `{{ {sibling} }}`, so it combines with the other groups instead of resetting them.\n  note: `{key}` takes one of: {allowed}."
-            ));
+            out.push_issue(issue, *offset);
             continue;
         }
-        out.push_issue(issue::closed_enum_value_dead(key, value, None, None, None), *offset, format!(
-            "`{key}: {value}` is not a `{key}` value.\n  help: use one of: {allowed}.\n  note: the class `{bare}` is still emitted, and it styles nothing unless a rule of your own matches it."
-        ));
+        out.push_issue(
+            issue::closed_enum_value_dead(key, value, None, None, None),
+            *offset,
+        );
     }
 }
 
@@ -1387,9 +1206,7 @@ fn push_slash_opacity_diagnostics(found: &[(String, String, u32)], out: &mut Dia
     for (key, value, offset) in found {
         // The collector found a slash, so the split cannot miss.
         let (color, opacity) = value.split_once('/').unwrap_or_default();
-        out.push_issue(issue::slash_opacity_string(key, color, opacity), *offset, format!(
-            "A string cannot carry slash opacity, so `{key}: '{value}'` emits nothing.\n  help: use the object form: `{{ color: '{color}', op: {opacity} }}`."
-        ));
+        out.push_issue(issue::slash_opacity_string(key, color, opacity), *offset);
     }
 }
 
@@ -1407,25 +1224,11 @@ fn push_color_slash_opacity_diagnostics(
             .map_or((color.as_str(), ""), |color| (color, "!"));
         let (base, opacity) = unmarked.split_once('/').unwrap_or_default();
         let important_mark = (!important.is_empty()).then_some("!");
-        let (issue, text) = op.as_deref().map_or_else(
-            || {
-                (
-                    issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
-                    format!(
-                        "`{key}: {{ color: '{color}' }}` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{{ color: '{base}{important}', op: {opacity} }}`.\n  note: the class still applies opacity {opacity}."
-                    ),
-                )
-            },
-            |op| {
-                (
-                    issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
-                    format!(
-                        "`{key}: {{ color: '{color}', op: {op} }}` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{{ color: '{base}{important}', op: {op} }}`.\n  note: the class uses `op: {op}`; the `/{opacity}` in `color` is ignored."
-                    ),
-                )
-            },
+        let issue = op.as_deref().map_or_else(
+            || issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
+            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
         );
-        out.push_issue(issue, *offset, text);
+        out.push_issue(issue, *offset);
     }
 }
 
@@ -1488,11 +1291,7 @@ fn class_name_precedence_advisories(ir: &super::SourceIr) -> Diagnostics {
         if !ir.sz_attributes[index].array_parts.is_empty() {
             continue;
         }
-        out.push_issue(
-            issue::class_precedence(),
-            span.start,
-            "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.".to_string(),
-        );
+        out.push_issue(issue::class_precedence(), span.start);
     }
     out
 }
@@ -1513,33 +1312,23 @@ fn deferred_array_object_diagnostics(ir: &super::SourceIr) -> Diagnostics {
             Some((
                 issue::fallback_nudge("sz-array-element", None, None, None),
                 span.start,
-                "This `sz` array element is an object literal with a runtime value, so the whole element is deferred to `_szPart` at runtime.\n  help: use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.\n  note: its classes are still safelisted, best-effort.".to_string(),
             ))
         })
         .collect()
 }
 
-/// Renders the `szRecover` diagnostics, byte-identical across artifacts.
+/// The `szRecover` diagnostics.
 ///
 /// The two cases stay separate on purpose: a dynamic value and a misspelled
-/// mode need different fixes, and the native and wasm artifacts must print the
-/// same text.
+/// mode need different fixes.
 fn unsupported_recovery_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.unsupported_recovery_attributes
         .iter()
         .map(|(start, reason)| match reason {
-            UnsupportedRecoveryIr::NonLiteral => (
-                issue::sz_recover_non_literal(None),
-                *start,
-                "`szRecover` takes only a string literal, `\"csr\"` or `\"dev-only\"`.\n  help: write `szRecover=\"csr\"` or `szRecover=\"dev-only\"`.\n  note: no recovery token is emitted for this element.".to_string(),
-            ),
-            UnsupportedRecoveryIr::UnknownMode(mode) => (
-                issue::sz_recover_unknown_mode(Some(mode)),
-                *start,
-                format!(
-                    "`szRecover` has an unknown mode `\"{mode}\"`.\n  help: use `\"csr\"` or `\"dev-only\"`.\n  note: no recovery token is emitted for this element."
-                ),
-            ),
+            UnsupportedRecoveryIr::NonLiteral => (issue::sz_recover_non_literal(None), *start),
+            UnsupportedRecoveryIr::UnknownMode(mode) => {
+                (issue::sz_recover_unknown_mode(Some(mode)), *start)
+            }
         })
         .collect()
 }
@@ -1553,7 +1342,6 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         merge_groups: Vec::new(),
         single_class_groups: Vec::new(),
         merge_overrides: Vec::new(),
-        diagnostics: Vec::new(),
         issues: Vec::new(),
         recovery_tokens: Vec::new(),
         css_variable_map: Vec::new(),
@@ -1606,22 +1394,27 @@ mod tests {
             .collect()
     }
 
-    /// Each diagnostic whose text contains `needle`, beside the 1-based line
-    /// and column its issue points at. A position travels on the issue, not in
-    /// the text, so a test that pins where a finding is reads it from there.
-    fn located<'a>(
-        result: &'a TransformResult,
-        source: &str,
-        needle: &str,
-    ) -> Vec<(&'a str, u32, u32)> {
+    /// Each issue as `<code> <args JSON>`: what the engine reports, with no
+    /// sentence. The compiler renders the text from the registry, so a test
+    /// here pins the code and every arg the sentence would name.
+    fn lines(result: &TransformResult) -> Vec<String> {
         result
-            .diagnostics
+            .issues
             .iter()
+            .map(|issue| format!("{} {}", issue.code.as_str(), issue.args.to_json()))
+            .collect()
+    }
+
+    /// Each issue whose line contains `needle`, beside the 1-based line and
+    /// column it points at.
+    fn located(result: &TransformResult, source: &str, needle: &str) -> Vec<(String, u32, u32)> {
+        lines(result)
+            .into_iter()
             .zip(&result.issues)
-            .filter(|(text, _)| text.contains(needle))
+            .filter(|(line, _)| line.contains(needle))
             .map(|(text, issue)| {
                 let (line, column) = super::offset_to_line_column(source, issue.start);
-                (text.as_str(), line, column + 1)
+                (text, line, column + 1)
             })
             .collect()
     }
@@ -1634,9 +1427,9 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert!(result.code.contains("_sz("), "{}", result.code);
-        assert!(result.diagnostics.iter().any(|message| message.contains(
-            "`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime"
-        )));
+        assert!(lines(&result)
+            .iter()
+            .any(|message| message == "unresolvable-spread {}"));
     }
 
     #[test]
@@ -1647,12 +1440,7 @@ mod tests {
                 source: format!("const App = k => <b sz={{[k && {{ {defect} }}]}} />;"),
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
-            assert_eq!(
-                result.diagnostics.len(),
-                1,
-                "{defect}: {:?}",
-                result.diagnostics
-            );
+            assert_eq!(lines(&result).len(), 1, "{defect}: {:?}", lines(&result));
             assert_eq!(
                 super::offset_to_line_column(&file.source, result.issues[0].start).0,
                 1
@@ -1665,11 +1453,14 @@ mod tests {
     #[test]
     fn resolved_branch_diagnostics_preserve_families_locations_and_occurrences() {
         let defects = [
-            ("workBreak: 'all'", "`workBreak` is not an sz property."),
-            ("wordBreak: 'all'", "`wordBreak` is an alias of `break`"),
-            ("zzzNotAKey: 'x'", "`zzzNotAKey` is not an sz property."),
-            ("display: 'bogus'", "is not a `display` value"),
-            ("italic: true", "italic"),
+            ("workBreak: 'all'", r#"unknown-key {"key":"workBreak"}"#),
+            ("wordBreak: 'all'", r#"canonical-key {"key":"wordBreak"}"#),
+            ("zzzNotAKey: 'x'", r#"unknown-key {"key":"zzzNotAKey"}"#),
+            (
+                "display: 'bogus'",
+                r#"closed-enum-value {"form":"dead","key":"display","value":"bogus"}"#,
+            ),
+            ("italic: true", r#""key":"italic""#),
         ];
         for (defect, message) in defects {
             for expression in [
@@ -1688,7 +1479,7 @@ mod tests {
                     std::time::Instant::now(),
                 );
                 let reports = located(&result, &source, message);
-                assert_eq!(reports.len(), 1, "{expression}: {:?}", result.diagnostics);
+                assert_eq!(reports.len(), 1, "{expression}: {:?}", lines(&result));
                 assert_eq!(reports[0].1, 2, "{}", reports[0].0);
             }
         }
@@ -1703,10 +1494,9 @@ mod tests {
             std::time::Instant::now(),
         );
         assert_eq!(
-            result
-                .diagnostics
+            lines(&result)
                 .iter()
-                .filter(|d| d.contains("`workBreak` is not an sz property."))
+                .filter(|d| *d == r#"unknown-key {"key":"workBreak"}"#)
                 .count(),
             2
         );
@@ -1821,33 +1611,33 @@ mod tests {
         let cases = [
             (
                 "const App = () => <b sz={{ p: 2 }} sz={{ workBreak: 'all' }} />;",
-                "`workBreak` is not an sz property.",
+                r#"unknown-key {"key":"workBreak"}"#,
             ),
             (
                 "const App = k => <b sz={{ workBreak: 'all' }} sz={k ? { p: 2 } : {}} />;",
-                "`workBreak` is not an sz property.",
+                r#"unknown-key {"key":"workBreak"}"#,
             ),
             (
                 "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ workBreak: 'all' }} />;",
-                "`workBreak` is not an sz property.",
+                r#"unknown-key {"key":"workBreak"}"#,
             ),
             (
                 "const App = k => <b sz={{ p: 2 }} sz={k ? { workBreak: 'all' } : {}} />;",
-                "`workBreak` is not an sz property.",
+                r#"unknown-key {"key":"workBreak"}"#,
             ),
             (
                 "const App = k => <b sz={[k && { p: 2 }]} sz={{ workBreak: 'all' }} />;",
-                "`workBreak` is not an sz property.",
+                r#"unknown-key {"key":"workBreak"}"#,
             ),
             (
                 "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ display: 'bogus' }} />;",
-                "bogus",
+                r#"closed-enum-value {"form":"dead","key":"display","value":"bogus"}"#,
             ),
             (
                 // A removed key lowers to no class, so no part is emitted for
                 // this attribute and its object has to travel on its own.
                 "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ italic: true }} />;",
-                "italic",
+                r#""key":"italic""#,
             ),
         ];
         let mut failures = Vec::new();
@@ -1860,14 +1650,13 @@ mod tests {
                 0,
                 std::time::Instant::now(),
             );
-            let reports = result
-                .diagnostics
+            let reports = lines(&result)
                 .iter()
-                .filter(|d| !d.contains("`sz` attributes; they were merged"))
+                .filter(|d| !d.starts_with("duplicate-sz "))
                 .filter(|d| d.contains(marker))
                 .count();
             if reports != 1 {
-                failures.push(format!("{source}: {:?}", result.diagnostics));
+                failures.push(format!("{source}: {:?}", lines(&result)));
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
@@ -1894,11 +1683,11 @@ mod tests {
                 0,
                 std::time::Instant::now(),
             );
-            let reports = located(&result, source, "`workBreak` is not an sz property.");
+            let reports = located(&result, source, r#"unknown-key {"key":"workBreak"}"#);
             if reports.len() == 1 {
                 assert_eq!(reports[0].1, 1, "{}", reports[0].0);
             } else {
-                failures.push(format!("{source}: {:?}", result.diagnostics));
+                failures.push(format!("{source}: {:?}", lines(&result)));
             }
             assert!(result.classes.contains(&"work-break-all".to_string()));
         }
@@ -1914,10 +1703,10 @@ mod tests {
         };
         let result = transform_file(&file);
         assert_eq!(
-            result.diagnostics,
-            vec![
-                "`weight: '700'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-700` generates no CSS.\n  help: write `weight: 700` as a number, which brackets to `font-[700]`.".to_string(),
-                "`weight: '550'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-550` generates no CSS.\n  help: write `weight: 550` as a number, which brackets to `font-[550]`.".to_string(),
+            lines(&result),
+            [
+                r#"numeric-font-weight {"value":"700"}"#,
+                r#"numeric-font-weight {"value":"550"}"#,
             ],
             "code was: {}",
             result.code
@@ -1938,12 +1727,11 @@ mod tests {
         };
         let result = transform_file(&file);
         assert!(
-            !result
-                .diagnostics
+            !lines(&result)
                 .iter()
-                .any(|line| line.contains("font weights")),
+                .any(|line| line.starts_with("numeric-font-weight ")),
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
     }
 
@@ -2004,10 +1792,8 @@ mod tests {
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
-        assert_eq!(
-            result.diagnostics,
-            ["Source nesting exceeds 64 levels (found 65).\n  help: flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.\n  note: the file is left unchanged and contributes no classes."]
-        );
+        assert_eq!(lines(&result), [r#"nesting-depth {"depth":65}"#]);
+        assert_eq!(result.issues[0].start, 0);
     }
 
     #[test]
@@ -2092,23 +1878,18 @@ mod tests {
             &file,
             0,
             std::time::Instant::now(),
-            TransformOptions {
-                root_dir: Some("/repo/".to_string()),
-                ..TransformOptions::default()
-            },
+            TransformOptions::default(),
         );
 
-        let numeric = located(&result, &file.source, "numeric key `1.5`");
-        assert_eq!(numeric.len(), 1, "{:?}", result.diagnostics);
+        let numeric = located(&result, &file.source, r#"numeric-key {"key":"1.5"}"#);
+        assert_eq!(numeric.len(), 1, "{:?}", lines(&result));
         assert_eq!(numeric[0].1, 1, "{}", numeric[0].0);
-        assert!(result
-            .diagnostics
+        assert!(lines(&result)
             .iter()
-            .any(|diagnostic| diagnostic.contains("not on Tailwind's spacing scale")));
-        assert!(result.diagnostics.iter().any(|diagnostic| {
-            diagnostic.contains("object literal with a runtime value")
-                && diagnostic.contains("deferred to `_szPart`")
-        }));
+            .any(|diagnostic| diagnostic == r#"off-scale-value {"key":"p","value":"1.4"}"#));
+        assert!(lines(&result)
+            .iter()
+            .any(|diagnostic| diagnostic == r#"fallback-nudge {"site":"sz-array-element"}"#));
     }
 
     #[test]
@@ -2119,16 +1900,20 @@ mod tests {
             // value nothing lowers is not named, so it stands alone here.
             source: "export const A = () => <><p sz={{ nums: 'reset' }} /><p sz={{ numFigure: 'old', numSpacing: 'tab', numFraction: 'slash' }} /></>;".to_string(),
         };
-        let diagnostics = transform_static_classes(&file, 0, std::time::Instant::now()).diagnostics;
+        let diagnostics = lines(&transform_static_classes(
+            &file,
+            0,
+            std::time::Instant::now(),
+        ));
 
         for expected in [
-            "`nums: reset` is not a `nums` value.\n  help: use one of: normal.\n  note: the class `reset-nums` is still emitted, and it styles nothing unless a rule of your own matches it.",
-            "`numFigure: old` is not a `numFigure` value.\n  help: use one of: lining, oldstyle.",
-            "`numSpacing: tab` is not a `numSpacing` value.\n  help: use one of: proportional, tabular.",
-            "`numFraction: slash` is not a `numFraction` value.\n  help: use one of: diagonal, stacked.\n  note: the class `slash-fractions` is still emitted, and it styles nothing unless a rule of your own matches it.",
+            r#"closed-enum-value {"form":"dead","key":"nums","value":"reset"}"#,
+            r#"closed-enum-value {"form":"dead","key":"numFigure","value":"old"}"#,
+            r#"closed-enum-value {"form":"dead","key":"numSpacing","value":"tab"}"#,
+            r#"closed-enum-value {"form":"dead","key":"numFraction","value":"slash"}"#,
         ] {
             assert!(
-                diagnostics.iter().any(|line| line.contains(expected)),
+                diagnostics.iter().any(|line| line == expected),
                 "{expected} in {diagnostics:?}"
             );
         }
@@ -2144,12 +1929,11 @@ mod tests {
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
             // A stand-alone key a later group replaces is named, nothing else.
             assert!(
-                result
-                    .diagnostics
+                lines(&result)
                     .iter()
-                    .all(|diagnostic| diagnostic.contains("in one sz object, so")),
+                    .all(|diagnostic| diagnostic.starts_with("global-before-group ")),
                 "{sz}: {:?}",
-                result.diagnostics
+                lines(&result)
             );
             result.classes.join(" ")
         };
@@ -2194,25 +1978,32 @@ mod tests {
             "{:?}",
             result.classes
         );
-        let joined = result.diagnostics.join("\n");
-        let pinch = located(&result, &file.source, "`touch: pinch-zoom`");
+        let joined = lines(&result).join("\n");
+        let pinch = located(&result, &file.source, r#""value":"pinch-zoom""#);
         assert_eq!(
-            pinch.iter().map(|(text, line, _)| (*text, *line)).collect::<Vec<_>>(),
-            [("`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.\n  help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.", 1)],
+            pinch
+                .iter()
+                .map(|(text, line, _)| (text.as_str(), *line))
+                .collect::<Vec<_>>(),
+            [(
+                r#"moved-value {"form":"value","key":"touch","value":"pinch-zoom"}"#,
+                1
+            )],
             "{joined}"
         );
         assert!(
-            joined.contains("`touch: pan-down` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'down' }`, or run `csszyx migrate`."),
+            joined.contains(r#"moved-value {"form":"value","key":"touch","value":"pan-down"}"#),
             "{joined}"
         );
         // A parametric variant's parameter names an object of sz keys, so a
         // moved value there is named too.
         assert!(
-            joined.contains("`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`."),
+            joined.contains(r#"moved-value {"form":"value","key":"touch","value":"pan-x"}"#),
             "{joined}"
         );
         // A moved value is not also reported as a misspelling.
-        assert!(!joined.contains("is not a `touch` value"), "{joined}");
+        assert!(!joined.contains("closed-enum-value"), "{joined}");
+        assert_eq!(lines(&result).len(), 3, "{joined}");
     }
 
     #[test]
@@ -2232,35 +2023,37 @@ mod tests {
 
         // Every branch of the ternary lowered to nothing, with no word.
         let nested = run("absolute: c ? (v ? true : false) : false");
-        assert_eq!(nested.diagnostics.len(), 1, "{:?}", nested.diagnostics);
+        assert_eq!(lines(&nested).len(), 1, "{:?}", lines(&nested));
         assert_eq!(
-            nested.diagnostics[0],
-            "`absolute` boolean sugar was removed, and nothing is emitted for it.\n  help: write `{ position: 'absolute' }` instead, or run `csszyx migrate`."
+            lines(&nested)[0],
+            r#"removed-key {"form":"sugar","key":"absolute","replacement":"position: 'absolute'"}"#
         );
 
         // A runtime value reached the css-var lane as a dead `isolate-(--…)`.
         let runtime = run("isolate: v");
         assert!(!runtime.code.contains("--_sz-isolate"), "{}", runtime.code);
-        assert!(runtime.diagnostics[0].contains("`isolate` boolean sugar was removed"));
+        assert_eq!(
+            lines(&runtime)[0],
+            r#"removed-key {"form":"sugar","key":"isolate","replacement":"isolation: 'isolate'"}"#
+        );
 
         // `flex` is also the flex shorthand: only a `true` branch is the sugar.
         let flex_sugar = run("flex: c ? true : undefined");
-        assert!(flex_sugar.diagnostics[0].contains("`flex` boolean sugar was removed"));
+        assert_eq!(
+            lines(&flex_sugar)[0],
+            r#"removed-key {"form":"sugar","key":"flex","replacement":"display: 'flex'"}"#
+        );
         // A key that was canonical until 0.18.0 is named as replaced, not sugar.
         let replaced = run("tabularNums: true");
         assert_eq!(
-            replaced.diagnostics[0],
-            "`tabularNums` was replaced, and nothing is emitted for it.\n  help: write `{ numSpacing: 'tabular' }` instead, or run `csszyx migrate`.",
+            lines(&replaced)[0],
+            r#"removed-key {"form":"sugar-replaced","key":"tabularNums","replacement":"numSpacing: 'tabular'"}"#,
             "{:?}",
-            replaced.diagnostics
+            lines(&replaced)
         );
         assert_eq!(replaced.issues[0].start, 37, "{:?}", replaced.issues);
         let flex_values = run("flex: c ? 1 : 'none'");
-        assert!(
-            flex_values.diagnostics.is_empty(),
-            "{:?}",
-            flex_values.diagnostics
-        );
+        assert!(lines(&flex_values).is_empty(), "{:?}", lines(&flex_values));
         let flex_runtime = run("flex: v");
         assert!(
             flex_runtime.code.contains("flex-(--_sz-flex)"),
@@ -2268,9 +2061,9 @@ mod tests {
             flex_runtime.code
         );
         assert!(
-            flex_runtime.diagnostics.is_empty(),
+            lines(&flex_runtime).is_empty(),
             "{:?}",
-            flex_runtime.diagnostics
+            lines(&flex_runtime)
         );
     }
 
@@ -2288,31 +2081,22 @@ mod tests {
             &file,
             0,
             std::time::Instant::now(),
-            TransformOptions {
-                root_dir: Some("/repo/".to_string()),
-                ..TransformOptions::default()
-            },
+            TransformOptions::default(),
         );
 
         // `text-(--v)` is a COLOUR in Tailwind v4, so emitting the class would
         // style the wrong property with an invalid value rather than align.
         assert!(!result.code.contains("--_sz-text-align"), "{}", result.code);
         assert!(result.classes.is_empty(), "{:?}", result.classes);
-        assert_eq!(result.diagnostics.len(), 2, "{:?}", result.diagnostics);
+        assert_eq!(lines(&result).len(), 2, "{:?}", lines(&result));
         let found = located(&result, &file.source, "textAlign");
-        let &[(diagnostic, line, _)] = found.as_slice() else {
-            panic!("one report naming the key: {:?}", result.diagnostics);
+        let [(diagnostic, line, _)] = found.as_slice() else {
+            panic!("one report naming the key: {:?}", lines(&result));
         };
-        assert!(diagnostic.contains("`textAlign`"), "{diagnostic}");
-        assert_eq!(line, 1, "{diagnostic}");
-        assert!(diagnostic.contains("szv()"), "{diagnostic}");
         // A supported key with one unsupported value shape must not read as a
         // typo, or the author goes looking for a misspelling that is not there.
-        assert!(!diagnostic.contains("was removed"), "{diagnostic}");
-        assert!(
-            !diagnostic.contains("is not an sz property"),
-            "{diagnostic}"
-        );
+        assert_eq!(diagnostic, r#"runtime-value {"key":"textAlign"}"#);
+        assert_eq!(*line, 1, "{diagnostic}");
     }
 
     #[test]
@@ -2326,28 +2110,25 @@ mod tests {
             &file,
             0,
             std::time::Instant::now(),
-            TransformOptions {
-                root_dir: Some("/repo/".to_string()),
-                ..TransformOptions::default()
-            },
+            TransformOptions::default(),
         );
 
         let removed = located(
             &result,
             &file.source,
-            "`maskFrom` was removed, and nothing is emitted for it.\n  help: ",
+            r#"removed-key {"form":"removed","key":"maskFrom"}"#,
         );
-        assert_eq!(removed.len(), 1, "{:?}", result.diagnostics);
+        assert_eq!(removed.len(), 1, "{:?}", lines(&result));
         assert_eq!(removed[0].1, 1, "{}", removed[0].0);
         assert_eq!(
-            located(&result, &file.source, "`backgroundColor`"),
+            located(&result, &file.source, "backgroundColor"),
             [(
-                "`backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg` instead of `backgroundColor`.",
+                r#"canonical-key {"key":"backgroundColor"}"#.to_string(),
                 1,
                 43
             )],
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
     }
 
@@ -2360,11 +2141,10 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert!(result.diagnostics.iter().any(|d| {
-            d.contains("`p` names a property and holds an object `{ bg }`")
-                && d.contains("{ bg }")
-                && d.contains("generate no CSS")
-        }));
+        assert_eq!(
+            lines(&result),
+            [r#"property-object {"key":"p","nestedKeys":["bg"]}"#]
+        );
     }
 
     #[test]
@@ -2375,24 +2155,27 @@ mod tests {
                 .to_string(),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        let szr_lines: Vec<u32> =
-            located(&result, &file.source, "`szr` falls back to the runtime: ")
-                .iter()
-                .map(|(_, line, _)| *line)
-                .collect();
+        let szr_lines: Vec<u32> = located(&result, &file.source, r#"{"site":"szr","#)
+            .iter()
+            .map(|(_, line, _)| *line)
+            .collect();
         assert_eq!(szr_lines, [2, 3, 4], "{diagnostics}");
-        assert!(diagnostics.contains("identifier `cfg`"), "{diagnostics}");
-        assert!(diagnostics.contains("member expression"), "{diagnostics}");
-        assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
-        let szv = located(
-            &result,
-            &file.source,
-            "The `szv` config cannot be read at build time: ",
-        );
+        let szv = located(&result, &file.source, r#"{"site":"szv","#);
         assert_eq!(szv.len(), 1, "{diagnostics}");
         assert_eq!(szv[0].1, 5, "{diagnostics}");
+        // The shape and the expression it names: the renderer words the
+        // reason and the advice from them.
+        assert_eq!(
+            lines(&result),
+            [
+                r#"fallback-missing-css {"site":"szv","shape":"call","detail":"makeConfig","path":""}"#,
+                r#"fallback-missing-css {"site":"szr","shape":"identifier","detail":"cfg","path":""}"#,
+                r#"fallback-missing-css {"site":"szr","shape":"member","detail":"","path":""}"#,
+                r#"fallback-missing-css {"site":"szr","shape":"other","detail":"AwaitExpression","path":""}"#,
+            ]
+        );
     }
 
     #[test]
@@ -2413,21 +2196,19 @@ mod tests {
             .join("\n"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
+        // The `szv-factory` shape and the path that disqualified are what the
+        // sentence names; a generic `call` shape would give the old, circular
+        // advice to convert to szv().
         let found = located(
             &result,
             &file.source,
-            "`szr` falls back to the runtime: szv factory `t()` did not precompile",
+            r#"fallback-missing-css {"site":"szr","shape":"szv-factory","detail":"t","path":"base.color"}"#,
         );
         assert_eq!(found.len(), 1, "{diagnostics}");
         assert_eq!((found[0].1, found[0].2), (3, 44), "{diagnostics}");
-        assert!(
-            diagnostics.contains("config disqualified at `base.color`"),
-            "{diagnostics}"
-        );
-        // The old advice was circular — the author is already writing szv().
-        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+        assert_eq!(lines(&result).len(), 1, "{diagnostics}");
     }
 
     #[test]
@@ -2448,20 +2229,16 @@ mod tests {
             .join("\n"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
         let found = located(
             &result,
             &file.source,
-            "`sz` falls back to the runtime: szv factory `t()` did not precompile",
+            r#"fallback-nudge {"site":"sz","shape":"szv-factory","detail":"t","path":"base.color"}"#,
         );
         assert_eq!(found.len(), 1, "{diagnostics}");
         assert_eq!((found[0].1, found[0].2), (2, 33), "{diagnostics}");
-        assert!(
-            diagnostics.contains("config disqualified at `base.color`"),
-            "{diagnostics}"
-        );
-        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+        assert_eq!(lines(&result).len(), 1, "{diagnostics}");
     }
 
     #[test]
@@ -2479,13 +2256,12 @@ mod tests {
             .join("\n"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("function call `mk()` result is unknown at build time"),
-            "{diagnostics}"
+        assert_eq!(
+            diagnostics,
+            r#"fallback-nudge {"site":"sz","shape":"call","detail":"mk","path":""}"#
         );
-        assert!(!diagnostics.contains("szv factory `mk()`"), "{diagnostics}");
     }
 
     #[test]
@@ -2497,15 +2273,15 @@ mod tests {
         for (source_line, expected) in [
             (
                 "const t = szv({ variants: { c: { blue: { ...base } } } });",
-                "config disqualified at `variants.c.blue`",
+                r#"fallback-missing-css {"site":"szr","shape":"szv-factory","detail":"t","path":"variants.c.blue"}"#,
             ),
             (
                 "const t = szv({ variants: { c: { blue: { 1n: 4 } } } });",
-                "config disqualified at `variants.c.blue`",
+                r#"fallback-missing-css {"site":"szr","shape":"szv-factory","detail":"t","path":"variants.c.blue"}"#,
             ),
             (
                 "const t = szv({ ...spread });",
-                "config disqualified at `config`",
+                r#"fallback-missing-css {"site":"szr","shape":"szv-factory","detail":"t","path":"config"}"#,
             ),
         ] {
             let file = TransformFile {
@@ -2518,10 +2294,10 @@ mod tests {
                 .join("\n"),
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
-            let diagnostics = result.diagnostics.join("\n");
-            assert!(
-                diagnostics.contains(expected),
-                "expected {expected} for {source_line}, got: {diagnostics}"
+            let diagnostics = lines(&result).join("\n");
+            assert_eq!(
+                diagnostics, expected,
+                "expected {expected} for {source_line}"
             );
         }
     }
@@ -2543,13 +2319,12 @@ mod tests {
             .join("\n"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("function call `t()` result is unknown at build time"),
-            "{diagnostics}"
+        assert_eq!(
+            diagnostics,
+            r#"fallback-missing-css {"site":"szr","shape":"call","detail":"t","path":""}"#
         );
-        assert!(!diagnostics.contains("did not precompile"), "{diagnostics}");
     }
 
     #[test]
@@ -2580,31 +2355,24 @@ mod tests {
             .join("\n"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        for name in ["cardSz", "fallbackSz", "S"] {
-            assert!(
-                diagnostics.contains(&format!("imported binding `{name}`")),
-                "{diagnostics}"
-            );
-        }
-        // A phrase only the import template carries, so the assertion proves
-        // the import SUGGESTION was rendered and not merely its reason line.
-        assert!(
-            diagnostics.contains("build.importedStaticSz: false"),
-            "{diagnostics}"
-        );
-        // The forwarded prop keeps the plain wording, and must not be reported
-        // as an import just because it is also an unresolved identifier.
-        assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");
-        assert!(
-            !diagnostics.contains("imported binding `sz`"),
-            "{diagnostics}"
-        );
-        // The szr site renders through its own mapping, so an import reaching
-        // it has to be named there too.
-        assert!(
-            diagnostics.contains("`szr` falls back to the runtime: imported binding `cardSz`"),
+        // Each import is named by its `import` shape, which is what the
+        // renderer words as an imported binding with its own advice. The
+        // forwarded prop keeps the `identifier` shape, and must not be
+        // reported as an import just because it is also unresolved. The szr
+        // site maps the same shape, so an import reaching it is named there too.
+        assert_eq!(
+            lines(&result),
+            [
+                r#"fallback-missing-css {"site":"sz","shape":"import","detail":"cardSz","path":""}"#,
+                r#"fallback-missing-css {"site":"sz","shape":"import","detail":"fallbackSz","path":""}"#,
+                r#"fallback-missing-css {"site":"sz","shape":"import","detail":"S","path":""}"#,
+                r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"sz","path":""}"#,
+                r#"fallback-missing-css {"site":"sz","shape":"import","detail":"cardSz","path":""}"#,
+                r#"fallback-missing-css {"site":"sz","shape":"import","detail":"S","path":""}"#,
+                r#"fallback-missing-css {"site":"szr","shape":"import","detail":"cardSz","path":""}"#,
+            ],
             "{diagnostics}"
         );
     }
@@ -2617,10 +2385,12 @@ mod tests {
                 .to_string(),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.contains("`maskLinear` has no field `form`")));
+        assert_eq!(
+            lines(&result),
+            [
+                r#"unknown-field {"owner":"maskLinear","member":"form","allowed":["angle","from","to","t","r","b","l","x","y"]}"#
+            ]
+        );
     }
 
     #[test]
@@ -2628,27 +2398,25 @@ mod tests {
         // The four keys that spell their value as the class itself. An
         // unrecognised one used to ship verbatim as a bare class name, which
         // in a hybrid app can MATCH a rule the author never meant.
-        for (key, value, bare, legal) in [
-            ("display", "bogus", "bogus", "inline-block"),
-            ("position", "bogus", "bogus", "sticky"),
-            ("visibility", "bogus", "bogus", "collapse"),
-            ("isolation", "bogus", "isolation-bogus", "isolate, auto"),
+        for (key, value, bare) in [
+            ("display", "bogus", "bogus"),
+            ("position", "bogus", "bogus"),
+            ("visibility", "bogus", "bogus"),
+            ("isolation", "bogus", "isolation-bogus"),
         ] {
             let file = TransformFile {
                 filename: "/repo/src/App.tsx".to_string(),
                 source: format!("export const A = () => <div sz={{{{ {key}: '{value}' }}}} />;"),
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
-            let hit = result
-                .diagnostics
-                .iter()
-                .find(|diagnostic| diagnostic.contains(&format!("`{key}: {value}`")))
-                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
-            assert!(
-                hit.contains(&format!("the class `{bare}` is still emitted")),
-                "{hit}"
+            // The legal set and the class still emitted are the registry's
+            // to name, from the key and the value.
+            assert_eq!(
+                lines(&result),
+                [format!(
+                    r#"closed-enum-value {{"form":"dead","key":"{key}","value":"{value}"}}"#
+                )]
             );
-            assert!(hit.contains(legal), "{hit}");
             // Still emitted, as before the diagnostic existed: the collectors
             // do not reach every site the lowering does, and a drop where the
             // diagnostic cannot follow would be a silent loss.
@@ -2676,15 +2444,15 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert_eq!(
-            result.diagnostics,
+            lines(&result),
             [
-                "A string cannot carry slash opacity, so `bg: 'red-500/50'` emits nothing.\n  help: use the object form: `{ color: 'red-500', op: 50 }`.",
-                "A string cannot carry slash opacity, so `from: 'blue-500/20'` emits nothing.\n  help: use the object form: `{ color: 'blue-500', op: 20 }`.",
-                "A string cannot carry slash opacity, so `bg: 'red-500/5'` emits nothing.\n  help: use the object form: `{ color: 'red-500', op: 5 }`.",
+                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"50"}"#,
+                r#"slash-opacity-string {"key":"from","color":"blue-500","opacity":"20"}"#,
+                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"5"}"#,
             ]
         );
         assert_eq!(
-            located(&result, &file.source, "slash opacity")
+            located(&result, &file.source, "slash-opacity-string")
                 .iter()
                 .map(|(_, line, _)| *line)
                 .collect::<Vec<_>>(),
@@ -2716,14 +2484,14 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert_eq!(
-            result.diagnostics,
+            lines(&result),
             [
-                "`mask: 'linear-45'` names a gradient layer, and gradient layers moved to `maskLinear`; nothing is emitted for it.\n  help: write this layer on `maskLinear`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.",
-                "`mask: 'radial'` names a gradient layer, and gradient layers moved to `maskRadial`; nothing is emitted for it.\n  help: write this layer on `maskRadial`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.",
+                r#"moved-value {"form":"mask-layer","key":"mask","value":"linear-45","layerKey":"maskLinear"}"#,
+                r#"moved-value {"form":"mask-layer","key":"mask","value":"radial","layerKey":"maskRadial"}"#,
             ]
         );
         assert_eq!(
-            located(&result, &file.source, "gradient layer")
+            located(&result, &file.source, "mask-layer")
                 .iter()
                 .map(|(_, line, _)| *line)
                 .collect::<Vec<_>>(),
@@ -2771,7 +2539,7 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert!(result.code.contains("flex! absolute!"), "{}", result.code);
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(lines(&result).is_empty(), "{:?}", lines(&result));
     }
 
     #[test]
@@ -2786,15 +2554,7 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert!(result.code.contains("min-md:--v-y:p-2"), "{}", result.code);
-        assert!(
-            result
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.contains("`--v-y`")
-                    && diagnostic.contains("holds an object, so it lowers to the class prefix")),
-            "{:?}",
-            result.diagnostics
-        );
+        assert_eq!(lines(&result), [r#"non-variant-object {"key":"--v-y"}"#]);
     }
 
     #[test]
@@ -2829,7 +2589,7 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert!(result.code.contains("hidden sticky"), "{}", result.code);
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(lines(&result).is_empty(), "{:?}", lines(&result));
     }
 
     #[test]
@@ -2849,14 +2609,9 @@ mod tests {
                 source: source.to_string(),
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
-            let hit = result
-                .diagnostics
-                .iter()
-                .find(|diagnostic| diagnostic.contains(&format!("`{key}`")))
-                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
-            assert!(
-                hit.contains("holds an object, so it lowers to the class prefix"),
-                "{hit}"
+            assert_eq!(
+                lines(&result),
+                [format!(r#"non-variant-object {{"key":"{key}"}}"#)]
             );
             // Still emitted: dropping it would be a second behaviour change on
             // a shape the diagnostic already covers.
@@ -2884,10 +2639,11 @@ mod tests {
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
             assert!(
-                !result.diagnostics.iter().any(|diagnostic| diagnostic
-                    .contains("holds an object, so it lowers to the class prefix")),
+                !lines(&result)
+                    .iter()
+                    .any(|diagnostic| diagnostic.starts_with("non-variant-object ")),
                 "{source}: {:?}",
-                result.diagnostics
+                lines(&result)
             );
         }
     }
@@ -2910,10 +2666,9 @@ mod tests {
             );
 
             assert!(
-                result
-                    .diagnostics
+                lines(&result)
                     .iter()
-                    .any(|diagnostic| diagnostic.contains("can replace the one in the spread")),
+                    .any(|diagnostic| diagnostic == "style-override {}"),
                 "{source}"
             );
         }
@@ -2941,10 +2696,9 @@ mod tests {
             );
 
             assert!(
-                result
-                    .diagnostics
+                lines(&result)
                     .iter()
-                    .all(|diagnostic| !diagnostic.contains("can replace the one in the spread")),
+                    .all(|diagnostic| diagnostic != "style-override {}"),
                 "{source}"
             );
         }
@@ -2975,7 +2729,7 @@ mod tests {
         assert!(result.metadata.timings.lower_ns > 0);
         assert!(result.metadata.timings.rewrite_ns > 0);
         assert!(result.raw_class_names.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert!(lines(&result).is_empty());
         assert!(result.recovery_tokens.is_empty());
     }
 
@@ -3069,7 +2823,11 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert!(!result.diagnostics.is_empty());
+        assert_eq!(
+            lines(&result)[0],
+            r#"parse-error {"form":"summary","errorCount":1}"#
+        );
+        assert!(lines(&result)[1].starts_with(r#"parse-error {"form":"syntax","message":"#));
         assert!(result.classes.is_empty());
         assert!(!result.metadata.transformed);
     }
@@ -3091,10 +2849,8 @@ mod tests {
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
         assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
-            )]
+            lines(&result),
+            [r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"styles","path":""}"#]
         );
         assert_eq!(positions(&result, &file.source), [(1, 45)]);
     }
@@ -3118,10 +2874,8 @@ mod tests {
         assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4"]);
         assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
-            )]
+            lines(&result),
+            [r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"styles","path":""}"#]
         );
         assert_eq!(positions(&result, &file.source), [(1, 69)]);
     }
@@ -3142,8 +2896,9 @@ mod tests {
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
         assert!(result.metadata.ast_budget_exceeded);
-        assert!(result.diagnostics.iter().any(|diagnostic| diagnostic
-            .contains("The file exceeds the AST budget, and the IR walk stopped mid-file.")));
+        assert!(lines(&result)
+            .iter()
+            .any(|diagnostic| diagnostic == r#"ast-budget {"form":"transform"}"#));
     }
 
     #[test]
@@ -3224,13 +2979,9 @@ mod tests {
         // A top-level spread forces the runtime fallback, so it now surfaces the
         // build-log spread diagnostic (the dev-assert fires for the same shape).
         assert!(
-            result
-                .diagnostics
-                .iter()
-                .any(|d| d
-                    .contains("cannot be resolved at build time and falls back to the runtime")),
+            lines(&result).iter().any(|d| d == "unresolvable-spread {}"),
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
     }
 
@@ -3382,10 +3133,8 @@ mod tests {
         // The fallback matrix is a cross-artifact parity surface (ADR 0011):
         // this wording must be byte-identical across artifacts.
         assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
-            )]
+            lines(&result),
+            [r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"styles","path":""}"#]
         );
         assert_eq!(positions(&result, &file.source), [(1, 36)]);
     }
@@ -3410,10 +3159,8 @@ mod tests {
         assert!(result.classes.is_empty());
         assert_eq!(result.raw_class_names, ["existing"]);
         assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
-            )]
+            lines(&result),
+            [r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"styles","path":""}"#]
         );
         assert_eq!(positions(&result, &file.source), [(1, 57)]);
     }
@@ -3441,14 +3188,10 @@ mod tests {
         // precedence advisory reports: `sz` is emitted last and wins, and
         // whatever `getClass()` returns is the losing side.
         assert_eq!(
-            result.diagnostics,
-            vec![
-                String::from(
-                    "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
-                ),
-                String::from(
-                    "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
-                ),
+            lines(&result),
+            [
+                r#"fallback-nudge {"site":"sz","shape":"identifier","detail":"styles","path":""}"#,
+                "class-precedence {}",
             ]
         );
         assert_eq!(positions(&result, &file.source), [(1, 59), (1, 43)]);
@@ -3473,10 +3216,8 @@ mod tests {
         assert!(result.metadata.transformed);
         assert_eq!(result.classes, vec!["p-2".to_string(), "m-1".to_string()]);
         assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`<div>` carries 2 `sz` attributes; they were merged as `sz={[first, …, last]}`, later wins per property.\n  help: fold them into one `sz` array, so the order is written down."
-            )]
+            lines(&result),
+            [r#"duplicate-sz {"elementName":"div","count":2}"#]
         );
         assert_eq!(positions(&result, &file.source), [(1, 22)]);
     }
@@ -3497,14 +3238,10 @@ mod tests {
             "const X = (r) => <div className=\"card\" {...r} className=\"p-4\" />;\nconst Y = (r) => <b className=\"m-1\" {...r} className={c} />;\nconst Z = (r) => <i {...r} className=\"card p-4\" />;"
         );
         assert_eq!(
-            result.diagnostics,
-            vec![
-                String::from(
-                    "Class names and `sz` on more than one side of a spread on `<div>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
-                ),
-                String::from(
-                    "Class names and `sz` on more than one side of a spread on `<b>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so the classes of an earlier `sz` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={[r.className, c, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
-                ),
+            lines(&result),
+            [
+                r#"spread-split-class {"elementName":"div","classes":["card"],"szCount":0,"szAt":0,"spread":"r","parts":["'card'","r.className"]}"#,
+                r#"spread-split-class {"elementName":"b","classes":[],"szCount":1,"szAt":0,"spread":"r","parts":["r.className","c"]}"#,
             ]
         );
         assert_eq!(positions(&result, &file.source), [(1, 23), (2, 21)]);
@@ -3522,11 +3259,11 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
-        assert!(
-            result.diagnostics[0].contains("so `c` will not apply"),
-            "{:?}",
-            result.diagnostics
+        assert_eq!(
+            lines(&result),
+            [
+                r#"spread-split-class {"elementName":"div","classes":["c"],"szCount":0,"szAt":0,"spread":"r","parts":["c","r.className"]}"#
+            ]
         );
     }
 
@@ -3540,13 +3277,11 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
-        assert!(
-            result.diagnostics[0].ends_with(
-                "after `{...$rest}`, in the order that should win: `sz={['card', $rest.className, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
-            ),
-            "{:?}",
-            result.diagnostics
+        assert_eq!(
+            lines(&result),
+            [
+                r#"spread-split-class {"elementName":"div","classes":["card"],"szCount":0,"szAt":0,"spread":"$rest","parts":["'card'","$rest.className"]}"#
+            ]
         );
     }
 
@@ -3562,29 +3297,13 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.diagnostics.len(), 3, "{:?}", result.diagnostics);
-        assert!(
-            result.diagnostics[0]
-                .ends_with("after `{...p.rest}`, in the order that should win: `sz={['card', p.rest.class, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."),
-            "{:?}",
-            result.diagnostics
-        );
-        assert!(
-            result.diagnostics[1].contains("so `cn( 'a', 'b' )` will not apply"),
-            "{:?}",
-            result.diagnostics
-        );
-        assert!(
-            result.diagnostics[2].contains("so `` `x ${y}` `` will not apply"),
-            "{:?}",
-            result.diagnostics
-        );
-        assert!(
-            result.diagnostics[2].ends_with(
-                "after the spread, in the order that should win: `sz={[`x ${y}`, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
-            ),
-            "{:?}",
-            result.diagnostics
+        assert_eq!(
+            lines(&result),
+            [
+                r#"spread-split-class {"elementName":"div","classes":["card"],"szCount":0,"szAt":0,"spread":"p.rest","parts":["'card'","p.rest.class"]}"#,
+                r#"spread-split-class {"elementName":"b","classes":["cn( 'a', 'b' )"],"szCount":0,"szAt":0,"spread":"r","parts":["cn( 'a', 'b' )","r.className"]}"#,
+                r#"spread-split-class {"elementName":"i","classes":["`x ${y}`"],"szCount":0,"szAt":0,"parts":["`x ${y}`"]}"#,
+            ]
         );
     }
 
@@ -3611,17 +3330,11 @@ mod tests {
                     .to_string(),
         };
         let result = transform_static_classes(&many, 0, std::time::Instant::now());
-        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
         assert_eq!(
-            result.diagnostics[0].matches("earlier `sz`").count(),
-            1,
-            "{:?}",
-            result.diagnostics
-        );
-        assert!(
-            result.diagnostics[0].contains("the classes of 2 earlier `sz` will not apply"),
-            "{:?}",
-            result.diagnostics
+            lines(&result),
+            [
+                r#"spread-split-class {"elementName":"div","classes":[],"szCount":2,"szAt":0,"spread":"r","parts":["r.className"]}"#
+            ]
         );
 
         // With no style to extend, the element still gets exactly one.
@@ -3657,12 +3370,7 @@ mod tests {
         // Same shape, static sz this time: the advisory keys on the className
         // being an expression, not on how the sz resolved. The static-className
         // twin above stays diagnostic-free, which is what keeps this precise.
-        assert_eq!(
-            result.diagnostics,
-            vec![String::from(
-                "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
-            )]
-        );
+        assert_eq!(lines(&result), ["class-precedence {}"]);
         assert_eq!(positions(&result, &file.source), [(1, 33)]);
     }
 
@@ -3714,7 +3422,7 @@ mod tests {
         assert_eq!(result.recovery_tokens[0].component, "div");
         assert_eq!(result.recovery_tokens[0].path, "src/App.tsx:1:30");
         assert_eq!(result.recovery_tokens[0].token.len(), 12);
-        assert!(result.diagnostics.is_empty());
+        assert!(lines(&result).is_empty());
     }
 
     #[test]
@@ -3733,10 +3441,7 @@ mod tests {
             "export const App = ({ mode }) => <div data-sz-recover={mode}>x</div>;"
         );
         assert!(result.recovery_tokens.is_empty());
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.contains("szRecover")));
+        assert_eq!(lines(&result), [r#"sz-recover {"form":"non-literal"}"#]);
     }
 
     #[test]
@@ -3753,9 +3458,10 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(result.recovery_tokens.is_empty());
-        let diagnostics = result.diagnostics.join("\n");
-        assert!(diagnostics.contains("csrr"), "{diagnostics}");
-        assert!(diagnostics.contains("unknown mode"), "{diagnostics}");
+        assert_eq!(
+            lines(&result),
+            [r#"sz-recover {"form":"unknown-mode","mode":"csrr"}"#]
+        );
     }
 
     #[test]
@@ -3774,7 +3480,7 @@ mod tests {
             "export const App = () => <div data-sz-recover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;"
         );
         assert!(result.recovery_tokens.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert!(lines(&result).is_empty());
     }
 
     /// Global custom-property aliases must reach the PARSER lane too.
@@ -3925,7 +3631,7 @@ mod tests {
                 ..TransformOptions::default()
             },
         );
-        assert!(!result.issues.is_empty(), "{:?}", result.diagnostics);
+        assert!(!result.issues.is_empty(), "{:?}", lines(&result));
         let [group] = result.merge_groups.as_slice() else {
             panic!("one group: {:?}", result.merge_groups);
         };
@@ -3997,9 +3703,12 @@ mod tests {
         for (table, refused) in [
             (
                 r#"{"format":99,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#,
-                "The merge table is in format 99, and this engine reads format 1, so",
+                r#"merge-classifier-unavailable {"form":"format-mismatch","tableFormat":99}"#,
             ),
-            ("[]", "The merge table is not one this engine reads ("),
+            (
+                "[]",
+                r#"merge-classifier-unavailable {"form":"unreadable","error":"invalid length 0, expected struct MergeTable with 3 elements at line 1 column 2"}"#,
+            ),
         ] {
             let result = transform_file_with_options(
                 &file,
@@ -4013,17 +3722,13 @@ mod tests {
                 "{}",
                 result.code
             );
-            assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+            assert_eq!(lines(&result).len(), 1, "{:?}", lines(&result));
             assert_eq!(
                 result.issues[0].code,
                 crate::transform::DiagnosticCode::MergeClassifierUnavailable
             );
-            let text = &result.diagnostics[0];
-            assert!(text.starts_with(refused), "{text}");
-            assert!(
-                text.ends_with(", so no sz key was merged with a later key that covers it.\n  help: install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides."),
-                "{text}"
-            );
+            assert_eq!(lines(&result), [refused]);
+            assert_eq!(result.issues[0].start, 0);
         }
     }
 
@@ -4346,13 +4051,11 @@ mod tests {
         assert!(!result.metadata.transformed);
         assert!(!result.code.contains("className"));
         assert!(
-            result
-                .diagnostics
+            lines(&result)
                 .iter()
-                .any(|diagnostic| diagnostic
-                    .contains("The engine could not fully parse this file (")),
+                .any(|diagnostic| diagnostic.starts_with(r#"parse-error {"form":"summary","#)),
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
     }
 
@@ -4408,12 +4111,11 @@ mod tests {
         assert!(result.metadata.transformed, "a normal file must transform");
         assert!(result.classes.iter().any(|class| class == "p-2"));
         assert!(
-            !result
-                .diagnostics
+            !lines(&result)
                 .iter()
-                .any(|diagnostic| diagnostic.contains("Source nesting exceeds")),
+                .any(|diagnostic| diagnostic.starts_with("nesting-depth ")),
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
     }
 
@@ -4431,12 +4133,8 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert!(
-            result.diagnostics.iter().any(|diagnostic| diagnostic
-                .contains("This `sz` attribute has no value, or a JSX element as its value")),
-            "{:?}",
-            result.diagnostics
-        );
+        assert_eq!(lines(&result), ["unsupported-dynamic-sz {}"]);
+        assert_eq!(positions(&result, &file.source), [(1, 31)]);
     }
 
     /// A variant object that HAPPENS to set a colour keeps its own checks.
@@ -4456,14 +4154,14 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
         assert!(
-            diagnostics.contains("`paddng`"),
+            diagnostics.contains(r#"unknown-key {"key":"paddng"}"#),
             "the typo must still be reported: {diagnostics}"
         );
         assert!(
-            diagnostics.contains("not on Tailwind's spacing scale"),
+            diagnostics.contains(r#"off-scale-value {"key":"p","value":"1.4"}"#),
             "the dead step must still be reported: {diagnostics}"
         );
 
@@ -4479,7 +4177,7 @@ mod tests {
             0,
             std::time::Instant::now(),
         );
-        assert!(opacity.diagnostics.is_empty(), "{:?}", opacity.diagnostics);
+        assert!(lines(&opacity).is_empty(), "{:?}", lines(&opacity));
     }
 
     /// A project-defined variant is not a mistyped property.
@@ -4501,12 +4199,11 @@ mod tests {
             std::time::Instant::now(),
         );
         assert!(
-            !custom
-                .diagnostics
+            !lines(&custom)
                 .iter()
-                .any(|diagnostic| diagnostic.contains("names a property and holds an object")),
+                .any(|diagnostic| diagnostic.starts_with("property-object ")),
             "{:?}",
-            custom.diagnostics
+            lines(&custom)
         );
         assert!(custom.classes.iter().any(|class| class == "tablet:p-4"));
 
@@ -4519,13 +4216,12 @@ mod tests {
             0,
             std::time::Instant::now(),
         );
-        assert!(
-            property
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.contains("names a property and holds an object")),
-            "{:?}",
-            property.diagnostics
+        assert_eq!(
+            lines(&property),
+            [
+                r#"unknown-key {"key":"foo"}"#,
+                r#"property-object {"key":"bg","nestedKeys":["foo"]}"#
+            ]
         );
     }
 
@@ -4543,13 +4239,9 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("`colr` is not an sz property."),
-            "{diagnostics}"
-        );
-        assert!(!diagnostics.contains("numeric key"), "{diagnostics}");
+        assert_eq!(diagnostics, r#"unknown-key {"key":"colr"}"#);
     }
 
     /// A style keyword on a per-side border key is reported, not silently kept.
@@ -4567,13 +4259,12 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
 
-        assert!(
-            diagnostics.contains("no per-side border style"),
-            "{diagnostics}"
+        assert_eq!(
+            lines(&result),
+            [r#"per-side-border-style {"key":"borderB","value":"none"}"#]
         );
-        assert!(diagnostics.contains("borderB"), "{diagnostics}");
+        assert_eq!(positions(&result, &file.source), [(1, 37)]);
         assert!(
             !result
                 .classes
@@ -4598,11 +4289,10 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
 
-        assert!(
-            diagnostics.contains("no per-side border style"),
-            "{diagnostics}"
+        assert_eq!(
+            lines(&result),
+            [r#"per-side-border-style {"key":"borderT","value":"dashed"}"#]
         );
         assert!(
             !result
@@ -4628,12 +4318,11 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(
-            result
-                .diagnostics
+            lines(&result)
                 .iter()
-                .all(|diagnostic| !diagnostic.contains("no per-side border style")),
+                .all(|diagnostic| !diagnostic.starts_with("per-side-border-style ")),
             "{:?}",
-            result.diagnostics
+            lines(&result)
         );
         assert!(
             result.classes.iter().any(|class| class == "border-b-2"),
@@ -4658,13 +4347,11 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
 
-        assert!(
-            diagnostics.contains("no per-side border style"),
-            "{diagnostics}"
+        assert_eq!(
+            lines(&result),
+            [r#"per-side-border-style {"key":"borderB","value":"dashed"}"#]
         );
-        assert!(diagnostics.contains("borderB"), "{diagnostics}");
     }
 
     /// A `/` that divides must not read as the start of a comment.
@@ -4806,13 +4493,9 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("`pading` is not an sz property."),
-            "{diagnostics}"
-        );
-        assert!(!diagnostics.contains("margn"), "{diagnostics}");
+        assert_eq!(diagnostics, r#"unknown-key {"key":"pading"}"#);
     }
 
     /// Every refused szv factory is named, not just the first one recorded.
@@ -4836,14 +4519,14 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("szv factory `t()` did not precompile"),
-            "{diagnostics}"
-        );
-        assert!(
-            diagnostics.contains("szv factory `u()` did not precompile"),
+        assert_eq!(
+            lines(&result),
+            [
+                r#"fallback-nudge {"site":"sz","shape":"szv-factory","detail":"t","path":"base.color"}"#,
+                r#"fallback-nudge {"site":"sz","shape":"szv-factory","detail":"u","path":"base.color"}"#,
+            ],
             "{diagnostics}"
         );
     }
@@ -4867,10 +4550,10 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
         assert!(
-            diagnostics.contains("`pading` is not an sz property."),
+            diagnostics.contains(r#"unknown-key {"key":"pading"}"#),
             "{diagnostics}"
         );
     }
@@ -4895,10 +4578,14 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("config disqualified at `base.underline`"),
+        assert_eq!(
+            lines(&result),
+            [
+                r#"fallback-nudge {"site":"sz","shape":"szv-factory","detail":"t","path":"base.underline"}"#,
+                r#"removed-key {"form":"sugar","key":"underline","replacement":"decoration: 'underline'"}"#,
+            ],
             "{diagnostics}"
         );
     }
@@ -4921,11 +4608,11 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("imported binding `styles` could not be read at build time"),
-            "{diagnostics}"
+        assert_eq!(
+            diagnostics,
+            r#"fallback-missing-css {"site":"sz","shape":"import","detail":"styles","path":""}"#
         );
     }
 
@@ -4942,11 +4629,11 @@ mod tests {
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        let diagnostics = result.diagnostics.join("\n");
+        let diagnostics = lines(&result).join("\n");
 
-        assert!(
-            diagnostics.contains("imported binding `styles` could not be read at build time"),
-            "{diagnostics}"
+        assert_eq!(
+            diagnostics,
+            r#"fallback-missing-css {"site":"sz","shape":"import","detail":"styles","path":""}"#
         );
     }
 
@@ -4963,24 +4650,31 @@ mod tests {
                 filename: "/repo/src/Sugar.tsx".to_string(),
                 source: format!("export const A = () => <div sz={{{{ {prop} }}}} />;"),
             };
-            transform_static_classes(&file, 0, std::time::Instant::now())
-                .diagnostics
-                .join("\n")
+            lines(&transform_static_classes(
+                &file,
+                0,
+                std::time::Instant::now(),
+            ))
+            .join("\n")
         };
 
         for (prop, canonical) in [
-            ("notItalic: true", "{ fontStyle: 'normal' }"),
-            ("underline: true", "{ decoration: 'underline' }"),
-            ("overline: true", "{ decoration: 'overline' }"),
-            ("lineThrough: true", "{ decoration: 'line-through' }"),
-            ("noUnderline: true", "{ decoration: 'none' }"),
-            ("antialiased: true", "{ fontSmoothing: 'grayscale' }"),
-            ("subpixelAntialiased: true", "{ fontSmoothing: 'subpixel' }"),
+            ("notItalic: true", "fontStyle: 'normal'"),
+            ("underline: true", "decoration: 'underline'"),
+            ("overline: true", "decoration: 'overline'"),
+            ("lineThrough: true", "decoration: 'line-through'"),
+            ("noUnderline: true", "decoration: 'none'"),
+            ("antialiased: true", "fontSmoothing: 'grayscale'"),
+            ("subpixelAntialiased: true", "fontSmoothing: 'subpixel'"),
         ] {
             let diagnostics = report(prop);
-            assert!(
-                diagnostics.contains(canonical),
-                "{prop} must name {canonical}, got: {diagnostics}"
+            let key = prop.trim_end_matches(": true");
+            assert_eq!(
+                diagnostics,
+                format!(
+                    r#"removed-key {{"form":"sugar","key":"{key}","replacement":"{canonical}"}}"#
+                ),
+                "{prop} must name {canonical}"
             );
         }
 
@@ -4988,7 +4682,7 @@ mod tests {
         // the collector keys on the removed-sugar list, and the two are
         // generated from the same source, so a gap between them would be a
         // message with no replacement to offer rather than a wrong one.
-        assert!(!report("p: 4").contains("boolean sugar was removed"));
+        assert!(!report("p: 4").contains("removed-key"));
     }
 
     /// Lower one JSX module and return its classes and diagnostics.
@@ -4998,7 +4692,7 @@ mod tests {
             source: format!("export const A = ({{ c, m }}) => <p sz={{{sz}}} />;"),
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
-        (result.classes.join(" "), result.diagnostics)
+        (result.classes.join(" "), lines(&result))
     }
 
     #[test]
@@ -5051,7 +4745,7 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            ["`contain: size` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'size' }]}`.\n  note: a spread override (`{ ...base, contain: 'size' }`) keeps this order."]
+            [r#"global-before-group {"global":"contain","value":"size","group":"containPaint"}"#]
         );
         let (classes, diagnostics) =
             layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
@@ -5066,8 +4760,8 @@ mod tests {
         assert_eq!(
             diagnostics,
             [
-                "`contain: paint` is not a `contain` value; the class `contain-paint` it emits belongs to `{ containPaint: true }`.\n  help: write `{ containPaint: true }`, so it combines with the other groups instead of resetting them.\n  note: `contain` takes one of: none, strict, content.",
-                "`nums: tabular` is not a `nums` value; the class `tabular-nums` it emits belongs to `{ numSpacing: 'tabular' }`.\n  help: write `{ numSpacing: 'tabular' }`, so it combines with the other groups instead of resetting them.\n  note: `nums` takes one of: normal.",
+                r#"closed-enum-value {"form":"sibling-group","key":"contain","value":"paint","groupKey":"containPaint","groupValue":"true"}"#,
+                r#"closed-enum-value {"form":"sibling-group","key":"nums","value":"tabular","groupKey":"numSpacing","groupValue":"tabular"}"#,
             ]
         );
     }
@@ -5078,8 +4772,8 @@ mod tests {
         assert_eq!(
             diagnostics,
             [
-                "`ordinal` was replaced, and nothing is emitted for it.\n  help: write `{ numOrdinal: true }` instead, or run `csszyx migrate`.",
-                "`touchAction: pan-y` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'y' }`, or run `csszyx migrate`.",
+                r#"removed-key {"form":"replaced","key":"ordinal","replacement":"numOrdinal: true"}"#,
+                r#"moved-value {"form":"value","key":"touchAction","value":"pan-y"}"#,
             ]
         );
     }
@@ -5091,11 +4785,14 @@ mod tests {
         );
         let joined = diagnostics.join("\n");
         for moved in [
-            "`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
-            "`touch: pan-up` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'up' }`, or run `csszyx migrate`.",
-            "`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.\n  help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.",
+            r#"moved-value {"form":"value","key":"touch","value":"pan-x"}"#,
+            r#"moved-value {"form":"value","key":"touch","value":"pan-up"}"#,
+            r#"moved-value {"form":"value","key":"touch","value":"pinch-zoom"}"#,
         ] {
-            assert!(joined.contains(moved), "{moved} in {joined}");
+            assert!(
+                diagnostics.iter().any(|line| line == moved),
+                "{moved} in {joined}"
+            );
         }
         // A finding about the key alone would read the same from both branches.
         let (_, diagnostics) =
@@ -5103,42 +4800,35 @@ mod tests {
         assert!(
             diagnostics
                 .iter()
-                .all(|line| !line.contains("bgg") && !line.contains("`p`")),
+                .all(|line| !line.contains(r#""bgg""#) && !line.contains(r#""key":"p""#)),
             "{diagnostics:?}"
         );
     }
 
     #[test]
     fn a_runtime_value_beside_the_other_side_of_its_family_is_named() {
-        let layered = |key: &str, other: &str, first: &str, second: &str| {
-            format!("`{key}` takes a runtime value beside `{other}` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.\n  help: layer them, later wins: `sz={{[{{ {first}: … }}, {{ {second}: … }}]}}`.")
+        // The form says which of the two the object writes first.
+        let layered = |form: &str, key: &str, other: &str| {
+            format!(
+                r#"runtime-family-conflict {{"form":"{form}","key":"{key}","other":"{other}"}}"#
+            )
         };
         for (sz, expected) in [
             (
                 "{ touch: 'none', touchPanX: c ? 'x' : undefined }",
-                vec![layered("touchPanX", "touch", "touch", "touchPanX")],
+                vec![layered("other-first", "touchPanX", "touch")],
             ),
             (
                 "{ md: { contain: 'strict', containPaint: c } }",
-                vec![layered(
-                    "containPaint",
-                    "contain",
-                    "contain",
-                    "containPaint",
-                )],
+                vec![layered("other-first", "containPaint", "contain")],
             ),
             (
                 "{ contain: c ? 'strict' : 'none', containPaint: true }",
-                vec![layered(
-                    "contain",
-                    "containPaint",
-                    "contain",
-                    "containPaint",
-                )],
+                vec![layered("key-first", "contain", "containPaint")],
             ),
             (
                 "{ numSpacing: m ? 'tabular' : 'proportional', nums: c ? 'normal' : undefined }",
-                vec![layered("numSpacing", "nums", "numSpacing", "nums")],
+                vec![layered("key-first", "numSpacing", "nums")],
             ),
             (
                 "{ touchPanX: c ? 'x' : undefined, touchPanY: 'up' }",
@@ -5158,12 +4848,14 @@ mod tests {
                 filename: "/repo/src/Dup.jsx".to_string(),
                 source: format!("export const A = () => <p sz={{{{ {sz} }}}} />;"),
             });
-            (result.classes.join(" "), result.diagnostics)
+            (result.classes.join(" "), lines(&result))
         };
         let (classes, diagnostics) = run("contain: 'strict', containPaint: true, contain: 'size'");
         assert_eq!(classes, "contain-paint");
-        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-        assert!(diagnostics[0].starts_with("`contain: size` comes before `containPaint`"));
+        assert_eq!(
+            diagnostics,
+            [r#"global-before-group {"global":"contain","value":"size","group":"containPaint"}"#]
+        );
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -5185,19 +4877,16 @@ mod tests {
         let (_, moved) = layers_run("{ touchAction: m ? 'pan-x' : undefined }");
         assert_eq!(
             moved,
-            ["`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`."]
+            [r#"moved-value {"form":"value","key":"touchAction","value":"pan-x"}"#]
         );
         let (_, standing) = layers_run("{ touchAction: m ? 'none' : 'auto' }");
-        assert_eq!(
-            standing,
-            ["`touchAction` is an alias of `touch`, and nothing is emitted for it.\n  help: write `touch` instead of `touchAction`."]
-        );
+        assert_eq!(standing, [r#"canonical-key {"key":"touchAction"}"#]);
         let (_, runtime) = layers_run("{ touchAction: m ? c : 'pan-y' }");
         assert_eq!(
             runtime,
             [
-                "`touchAction: pan-y` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'y' }`, or run `csszyx migrate`.",
-                "`touchAction` was removed, and it holds a runtime value, so nothing is emitted for it.\n  help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.",
+                r#"moved-value {"form":"value","key":"touchAction","value":"pan-y"}"#,
+                r#"removed-key {"form":"runtime-alias","key":"touchAction","replacement":"touch"}"#,
             ]
         );
     }
@@ -5206,8 +4895,10 @@ mod tests {
     fn a_family_conflict_in_an_sz_array_element_is_named() {
         let (_, diagnostics) =
             layers_run("[{ p: 1 }, { touchPanX: c ? 'x' : undefined, touch: 'none' }]");
-        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-        assert!(diagnostics[0].contains("`touchPanX` takes a runtime value beside `touch`"));
+        assert_eq!(
+            diagnostics,
+            [r#"runtime-family-conflict {"form":"key-first","key":"touchPanX","other":"touch"}"#]
+        );
         let (_, layered) = layers_run("[{ touch: 'none' }, { touchPanX: c ? 'x' : undefined }]");
         assert!(layered.is_empty(), "{layered:?}");
     }
@@ -5218,18 +4909,15 @@ mod tests {
             layers_run("{ contain: 1, containPaint: true, md: { touch: true, touchPanX: 'x', nums: { a: 1 }, numFigure: 'lining' } }");
         let named: Vec<_> = diagnostics
             .iter()
-            .filter(|line| line.contains("comes before"))
+            .filter(|line| line.starts_with("global-before-group "))
             .collect();
-        assert_eq!(named.len(), 2, "{diagnostics:?}");
-        assert!(
-            named[0].starts_with("`contain: 1` comes before"),
-            "{}",
-            named[0]
-        );
-        assert!(
-            named[1].starts_with("`touch: true` comes before"),
-            "{}",
-            named[1]
+        assert_eq!(
+            named,
+            [
+                r#"global-before-group {"global":"contain","value":"1","group":"containPaint"}"#,
+                r#"global-before-group {"global":"touch","value":"true","group":"touchPanX"}"#,
+            ],
+            "{diagnostics:?}"
         );
     }
 
@@ -5237,10 +4925,9 @@ mod tests {
     fn a_moved_value_a_later_group_replaced_is_named_by_the_order_only() {
         let (classes, diagnostics) = layers_run("{ touch: 'pan-x', touchPanX: 'left' }");
         assert_eq!(classes, "touch-pan-left");
-        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-        assert!(
-            diagnostics[0].contains("comes before `touchPanX`"),
-            "{diagnostics:?}"
+        assert_eq!(
+            diagnostics,
+            [r#"global-before-group {"global":"touch","value":"pan-x","group":"touchPanX"}"#]
         );
     }
 
@@ -5254,10 +4941,7 @@ mod tests {
     #[test]
     fn a_removed_key_with_a_runtime_value_keeps_its_own_report() {
         let (_, diagnostics) = layers_run("{ backgroundColor: c }");
-        assert_eq!(
-            diagnostics,
-            ["`backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg` instead of `backgroundColor`."]
-        );
+        assert_eq!(diagnostics, [r#"canonical-key {"key":"backgroundColor"}"#]);
     }
 
     #[test]
@@ -5266,7 +4950,7 @@ mod tests {
             layers_run(sz)
                 .1
                 .iter()
-                .any(|line| line.contains("`flex` boolean sugar was removed"))
+                .any(|line| line == r#"removed-key {"form":"sugar","key":"flex","replacement":"display: 'flex'"}"#)
         };
         assert!(sugar("{ flex: c ? 1 : true }"));
         assert!(sugar("{ flex: c ? true : 1 }"));
@@ -5487,12 +5171,6 @@ mod tests {
                 },
                 options,
             );
-            assert_eq!(
-                result.issues.len(),
-                result.diagnostics.len(),
-                "{code:?}: {:?}",
-                result.diagnostics
-            );
             assert!(
                 result.issues.iter().any(|issue| issue.code == code),
                 "{code:?}: {:?}",
@@ -5537,7 +5215,7 @@ mod tests {
             "{}",
             result.code
         );
-        assert_eq!(result.diagnostics, Vec::<String>::new());
+        assert_eq!(lines(&result), Vec::<String>::new());
         assert!(result.issues.is_empty());
     }
 
@@ -5627,32 +5305,32 @@ mod tests {
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
                 r#"className="bg-red-500/[20]!""#,
-                "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500!', op: '20' }`.\n  note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"'20'"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
                 r#"className="bg-red-500/20""#,
-                "`bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class uses `op: 20`; the `/50` in `color` is ignored.",
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"20"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
                 r#"className="bg-red-500/50""#,
-                "`bg: { color: 'red-500/50' }` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{ color: 'red-500', op: 50 }`.\n  note: the class still applies opacity 50.",
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '20' } }} />;",
                 r#"className="bg-red-500/[20]""#,
-                "`bg: { color: 'red-500/50', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: '20' }`.\n  note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'20'"}"#,
             ),
             (
                 "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",
                 r#"className="hover:bg-red-500/0.5""#,
-                "`bg: { color: 'red-500/50', op: 0.5 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 0.5 }`.\n  note: the class uses `op: 0.5`; the `/50` in `color` is ignored.",
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"0.5"}"#,
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",
                 r#"className="md:hover:border-blue-600/75""#,
-                "`borderColor: { color: 'blue-600/75' }` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{ color: 'blue-600', op: 75 }`.\n  note: the class still applies opacity 75.",
+                r#"color-slash-opacity {"form":"op-absent","key":"borderColor","base":"blue-600","opacity":"75"}"#,
             ),
         ];
         for (source, class_attr, message) in cases {
@@ -5668,7 +5346,7 @@ mod tests {
                 .filter(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity)
                 .count();
             assert_eq!(found, 1, "{source}: {:?}", result.issues);
-            assert_eq!(result.diagnostics, vec![message.to_string()], "{source}");
+            assert_eq!(lines(&result), [message], "{source}");
         }
         // A variant holding a `color` key is not a colour object: it is searched.
         let result = run_variant_source(
@@ -5851,13 +5529,7 @@ mod tests {
                     ),
             }]
         );
-        assert!(
-            result.diagnostics[0].starts_with(
-                "`sz` falls back to the runtime: key `md.hover` holds a value only known at runtime and no sz property claims it"
-            ),
-            "{:?}",
-            result.diagnostics
-        );
+
         // An unknown slot member beside it is still reported from the rest.
         let result =
             run("const A = ({ x }) => <div sz={{ maskRadial: { angle: 4 }, hover: x }} />;");

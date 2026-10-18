@@ -167,16 +167,14 @@ export function isRustTransformAvailable(): boolean {
  *
  * @param options Compiler options.
  * @returns The binding's options.
- * @internal Read by the diagnostic differential test too.
  */
-export function nativeTransformOptions(
+function nativeTransformOptions(
     options?: TransformSourceCodeOptions,
 ): Parameters<typeof transformBatch>[1] {
     return {
         mangleVars: options?.mangleVars === true,
         mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
         globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-        rootDir: options?.rootDir,
         // The node cap is counted by the engine's parser, so the user's
         // raised `build.astBudgetLimit` has to reach it.
         astBudget: options?.astBudget,

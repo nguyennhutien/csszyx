@@ -388,6 +388,7 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
     'fallback-nudge': ['info', 'warn'],
     'merge-classifier-unavailable': ['warn', 'warn'],
     'mangle-vars-hoist-skipped': ['info', 'info'],
+    'color-slash-opacity': ['info', 'warn'],
     'merge-covered-key': ['info', 'warn'],
     'merge-covered-class': ['info', 'warn'],
 };

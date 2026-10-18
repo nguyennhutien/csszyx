@@ -185,19 +185,12 @@ pub fn parse_source_shell_with_registries(
         diagnostics.push_issue(
             issue::parse_error_summary(None, Some(errors.len() as u64)),
             errors.first().map_or(0, |(start, _)| *start),
-            format!(
-                "The engine could not fully parse this file ({} syntax error(s)).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.",
-                errors.len()
-            ),
         );
     }
     diagnostics.extend(
         errors
             .into_iter()
-            .map(|(start, message)| {
-                let text = format!("{message}\n  help: fix the syntax at this position.");
-                (issue::parse_error_syntax(Some(&message), None), start, text)
-            })
+            .map(|(start, message)| (issue::parse_error_syntax(Some(&message), None), start))
             .collect(),
     );
     ParsedSourceShell {
@@ -596,15 +589,6 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 /// would break the one-line note it is quoted in.
 fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Markdown code span around text that may itself hold a backtick.
-pub fn code_span(text: &str) -> String {
-    if text.contains('`') {
-        format!("`` {text} ``")
-    } else {
-        format!("`{text}`")
-    }
 }
 
 /// Classify one JSX spread whose object branches can absorb generated style vars.
@@ -5951,12 +5935,18 @@ mod tests {
         let parsed = parse_source_shell(&file);
 
         assert!(!parsed.panicked, "the fixture must be a recovered parse");
-        let texts = parsed.diagnostics.texts();
-        assert!(texts.len() >= 2, "{texts:?}");
-        assert!(
-            texts[0].starts_with("The engine could not fully parse this file ("),
-            "{texts:?}"
+        let issues = parsed.diagnostics.issues();
+        assert!(issues.len() >= 2, "{issues:?}");
+        let summary = format!(r#"{{"form":"summary","errorCount":{}}}"#, issues.len() - 1);
+        assert_eq!(
+            (issues[0].code, issues[0].args.to_json()),
+            (crate::transform::DiagnosticCode::ParseError, summary),
+            "{issues:?}"
         );
+        assert!(issues[1..].iter().all(|issue| issue
+            .args
+            .to_json()
+            .starts_with(r#"{"form":"syntax","message":"#)));
     }
 
     #[test]

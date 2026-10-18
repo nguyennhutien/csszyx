@@ -133,6 +133,14 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
     if (!POSITIONS.includes(entry.position)) {
         problems.push(`${at}: position must be one of ${POSITIONS.join(', ')}`);
     }
+    // The renderer heads an engine message with its place and fills its
+    // sentence from declared args: both must be there to read.
+    if (entry.surfaces?.engine && entry.position === 'none') {
+        problems.push(`${at}: an engine id points at a site or at its file, never at no place`);
+    }
+    if (entry.surfaces?.engine && entry.args === undefined) {
+        problems.push(`${at}: an engine id declares its args, \`{}\` for none`);
+    }
     const args = entry.args ?? {};
     for (const [name, arg] of Object.entries(args)) {
         if (!/^[a-z][a-zA-Z0-9]*$/.test(name))
@@ -140,6 +148,9 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
         if (!isArgType(arg?.type)) problems.push(`${at}: argument ${name} has an unknown type`);
         if (arg?.joiner !== undefined && arg.type !== 'string[]') {
             problems.push(`${at}: argument ${name} has a joiner but is not a list`);
+        }
+        if (arg?.type === 'string[]' && typeof arg.joiner !== 'string') {
+            problems.push(`${at}: list argument ${name} declares no joiner`);
         }
     }
     if (entry.forms !== undefined) {

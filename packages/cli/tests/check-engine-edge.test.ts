@@ -2,10 +2,10 @@
  * Engine-boundary edges of `csszyx check`.
  *
  * The scan runs the real engine over every file, so two things must hold that
- * the happy-path suite never exercises: a diagnostic that is not a `[csszyx]`
- * key issue (the runtime-fallback notes) must not be reported as a check
- * failure, and a file the engine cannot process at all must be skipped rather
- * than abort the whole project scan.
+ * the happy-path suite never exercises: a fallback whose classes were still
+ * collected is the build log's note, not a check finding, while one whose
+ * classes were never collected is; and a file the engine cannot process at
+ * all must be skipped rather than abort the whole project scan.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,14 +54,12 @@ afterEach(() => {
 });
 
 describe('csszyx check engine edges', () => {
-    it('does not fail the run on a runtime-fallback diagnostic', async () => {
+    it('leaves a fallback whose classes were collected to the build log', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-        // An imported binding produces a fallback note (`fallback-nudge`),
-        // which is advice about the runtime path, not a broken key — check
-        // leaves it to the build log.
+        // A forwarded prop is `fallback-nudge`: the caller's literal is
+        // collected where the caller writes it.
         const cwd = projectWith({
-            'src/Fallback.tsx':
-                "import { cardSz } from './styles'; export const C = () => <div sz={cardSz} />;",
+            'src/Fallback.tsx': 'export const C = ({ s }) => <div sz={s} />;',
         });
 
         await check({ cwd, json: true });
@@ -71,6 +69,47 @@ describe('csszyx check engine edges', () => {
             findings.filter((finding: { rule: string }) => finding.rule === 'sz-diagnostic'),
         ).toEqual([]);
         expect(process.exitCode).not.toBe(1);
+    });
+
+    it('lists a fallback whose classes were never collected, and fails on it', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        // A variant key holding a runtime value: nothing collects what it holds,
+        // so its classes get no CSS.
+        const cwd = projectWith({
+            'src/Variant.tsx': 'export const C = ({ h }) => <div sz={{ p: 4, hover: h }} />;',
+        });
+
+        await check({ cwd, json: true });
+
+        const { findings } = JSON.parse(log.mock.calls.flat().join('\n'));
+        expect(findings).toContainEqual(
+            expect.objectContaining({
+                rule: 'sz-diagnostic',
+                kind: 'fallback-missing-css',
+                file: 'src/Variant.tsx',
+                level: 'error',
+                args: expect.objectContaining({ site: 'sz-variant-key', keyPath: 'hover' }),
+            }),
+        );
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('lists a file it could not parse once, by its summary', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        // The parser's own lines sit under the summary; only the summary is a finding.
+        const cwd = projectWith({
+            'src/Broken.tsx':
+                'export const A = ({ c }) => <div sz={{ p: c ? 4 : 2 }} />;\nconst broken = ;',
+        });
+
+        await check({ cwd, json: true });
+
+        const { findings } = JSON.parse(log.mock.calls.flat().join('\n'));
+        const parseErrors = findings.filter(
+            (finding: { kind: string }) => finding.kind === 'parse-error',
+        );
+        expect(parseErrors).toHaveLength(1);
+        expect(parseErrors[0].args).toMatchObject({ form: 'summary' });
     });
 
     it('skips a file the engine throws on and still checks the rest', async () => {

@@ -819,6 +819,9 @@ export const DIAGNOSTICS = [
         id: 'color-slash-opacity',
         summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
         surfaces: { engine: {}, runtime: { production: false } },
+        // The class still applies an opacity either way: a note on the
+        // spelling, raised to warn under atomic (user decision 2026-10-18).
+        defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
         // The colour as written is `{base}/{opacity}{important}`. `op` is the
         // JS literal the author wrote, quotes included for a string.

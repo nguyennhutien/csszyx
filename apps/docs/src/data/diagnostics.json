@@ -899,6 +899,10 @@
           "production": false
         }
       },
+      "defaults": {
+        "recommended": "info",
+        "atomic": "warn"
+      },
       "position": "site",
       "forms": ["op-given", "op-absent"],
       "args": {

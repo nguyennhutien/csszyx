@@ -48,7 +48,8 @@ function specOf(code: SzDiagnosticCode): SzDiagnosticSpec {
  */
 function joinersOf(spec: SzDiagnosticSpec): Readonly<Record<string, string>> {
     const joiners: Record<string, string> = {};
-    for (const [name, arg] of Object.entries(spec.args ?? {})) {
+    // The generator requires every engine id to declare its args.
+    for (const [name, arg] of Object.entries(spec.args as NonNullable<SzDiagnosticSpec['args']>)) {
         if (arg.joiner !== undefined) joiners[name] = arg.joiner;
     }
     return joiners;
@@ -105,7 +106,8 @@ function fill(
     // PLACEHOLDER is global, so `replace` fills every placeholder in one pass.
     return template.replace(PLACEHOLDER, (_: string, name: string) => {
         const value = args[name];
-        if (Array.isArray(value)) return value.join(joiners[name] ?? ', ');
+        // The generator requires every list arg to declare its joiner.
+        if (Array.isArray(value)) return value.join(joiners[name]);
         if (value !== undefined) return String(value);
         return computed[name]?.(args) ?? '';
     });
@@ -160,7 +162,7 @@ export function szDiagnosticPositionOf(code: SzDiagnosticCode): SzDiagnosticSpec
  */
 function whereOf(diagnostic: RenderableDiagnostic, file: string): string {
     const position = szDiagnosticPositionOf(diagnostic.code);
-    if (position === 'none') return '';
+    // An engine id points at a site or at its file; the generator refuses `none`.
     if (position === 'file' || diagnostic.line === undefined) return file;
     // With no file name, as a template lowered from a string has, the place alone.
     const place = `${diagnostic.line}:${diagnostic.column}`;

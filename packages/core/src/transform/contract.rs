@@ -24,9 +24,6 @@ pub struct TransformOptions {
     pub mangle_var_hoist_max_depth: Option<usize>,
     /// Exact app-owned global custom-property aliases for static sz values.
     pub global_var_aliases: Vec<GlobalVarAliasEntry>,
-    /// Project root used only to render diagnostic file paths relative to it.
-    #[serde(default)]
-    pub root_dir: Option<String>,
     /// Per-file AST node cap override (`build.astBudgetLimit`). Engines count
     /// AST nodes differently, so a real page file can trip the default cap
     /// under one engine only — the override must reach the native parser too.
@@ -327,10 +324,8 @@ pub struct TransformResult {
     /// the pass had no merge table; one side empty is left out.
     #[serde(default)]
     pub merge_overrides: Vec<super::merge::MergeOverride>,
-    /// Non-fatal transform diagnostics.
-    pub diagnostics: Vec<String>,
-    /// The code and position of each diagnostic, index-parallel to
-    /// `diagnostics`.
+    /// Each non-fatal diagnostic: its code, position and args. The engine
+    /// writes no sentence; the compiler renders one from the registry.
     #[serde(default)]
     pub issues: Vec<Issue>,
     /// Recovery token metadata emitted for hydration safety.

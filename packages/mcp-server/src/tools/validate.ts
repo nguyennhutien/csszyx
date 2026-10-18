@@ -21,6 +21,7 @@ import {
     REPLACED_KEYS,
     renderUnplacedDiagnostic,
     SUGGESTION_MAP,
+    type SzDiagnosticIssue,
     type SzObject,
     transform,
 } from '@csszyx/compiler';
@@ -163,7 +164,9 @@ function nest(leaf: Leaf): Record<string, unknown> {
 function engineDiagnostics(sz: Record<string, unknown>): string[] {
     try {
         const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
-        return (transformSource(source, PREVIEW_FILE).issues ?? []).map(renderUnplacedDiagnostic);
+        // Both engine artifacts always report the issue list.
+        const { issues } = transformSource(source, PREVIEW_FILE);
+        return (issues as SzDiagnosticIssue[]).map(renderUnplacedDiagnostic);
     } catch {
         return [];
     }

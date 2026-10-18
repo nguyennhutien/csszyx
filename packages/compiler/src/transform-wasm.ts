@@ -47,7 +47,6 @@ interface WasmResultJson {
     merge_groups: WasmMergeGroup[];
     single_class_groups: WasmMergeGroup[];
     merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
-    diagnostics: string[];
     issues: Array<{ code: string; start: number; args: object }>;
     recovery_tokens: Array<{
         token: string;
@@ -217,14 +216,12 @@ export function transformWasm(
  *
  * @param options Compiler options.
  * @returns The options object to serialize.
- * @internal Read by the diagnostic differential test too.
  */
-export function wasmTransformOptions(options?: TransformSourceCodeOptions): object {
+function wasmTransformOptions(options?: TransformSourceCodeOptions): object {
     return {
         mangle_vars: options?.mangleVars === true,
         mangle_var_hoist_max_depth: options?.mangleVarHoistMaxDepth ?? null,
         global_var_aliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-        root_dir: options?.rootDir ?? null,
         ast_budget: options?.astBudget ?? null,
         cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
         cross_module_sz_objects_json:

@@ -146,3 +146,15 @@ describe('transform-wasm lane', () => {
         expect(wasm).toEqual(native);
     });
 });
+
+describe('the wasm lane names a file the caller left unnamed', () => {
+    it('by its place in the batch', async () => {
+        const { transformWasmBatch } = await import('../src/transform-wasm.js');
+        const [result] = transformWasmBatch([
+            { source: 'export const A = () => <div sz={{ xyzzy: 1 }} />;' },
+        ]);
+        expect(result?.diagnostics[0]?.split('\n')[0]).toBe(
+            '[csszyx] unknown-key: file-0.tsx:1:35',
+        );
+    });
+});

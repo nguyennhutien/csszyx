@@ -10,9 +10,8 @@ use crate::encoder::encode;
 
 use super::{
     css_var_hoist_planner::{
-        plan_component_variable_hoists_with_diagnostics, CssVariableHoistDiagnostic,
-        CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistSkipReason,
-        CssVariableHoistUsage,
+        plan_component_variable_hoists_with_diagnostics, CssVariableHoistNode,
+        CssVariableHoistOptions, CssVariableHoistSkipReason, CssVariableHoistUsage,
     },
     diagnostics::Diagnostics,
     lower::dynamic_css_var_class,
@@ -335,7 +334,6 @@ pub fn apply_css_variable_mangling(
                         diagnostic.max_depth.map(|depth| depth as u64),
                     ),
                     prop.expression_span.start,
-                    format_hoist_skip_diagnostic(diagnostic),
                 )
             })
             .collect(),
@@ -424,28 +422,6 @@ const fn hoist_skip_reason(reason: CssVariableHoistSkipReason) -> &'static str {
         CssVariableHoistSkipReason::NonHostAncestor => "non-host-ancestor",
         CssVariableHoistSkipReason::MaxDepth => "max-depth",
     }
-}
-
-fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
-    let name = &diagnostic.name;
-    let count = diagnostic.usage_count;
-    let text = match diagnostic.reason {
-        CssVariableHoistSkipReason::NoLca => format!(
-            "`mangleVars` did not hoist `{name}` to a component: its {count} usages share no common JSX ancestor."
-        ),
-        CssVariableHoistSkipReason::NonHostAncestor => format!(
-            "`mangleVars` did not hoist `{name}` to a component: the common ancestor of its {count} usages cannot take a `style` prop."
-        ),
-        CssVariableHoistSkipReason::MaxDepth => format!(
-            "`mangleVars` did not hoist `{name}` to a component: one of its {count} usages sits deeper below their common ancestor than `maxDepth` {} allows.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.",
-            diagnostic
-                .max_depth
-                .map_or_else(String::new, |depth| depth.to_string())
-        ),
-    };
-    format!(
-        "{text}\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted."
-    )
 }
 
 fn push_variable_map(map: &mut Vec<CssVariableMapEntry>, original: &str, mangled: &str) {
@@ -736,17 +712,17 @@ mod tests {
             (
                 "const A=({pad})=><><div sz={{p:pad}}/><span sz={{p:pad}}/></>;",
                 None,
-                "`mangleVars` did not hoist `--cz` to a component: the common ancestor of its 2 usages cannot take a `style` prop.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
+                r#"{"name":"--cz","usageCount":2,"reason":"non-host-ancestor"}"#,
             ),
             (
                 "const A=({pad})=><div sz={{p:pad}}/>; const B=({pad})=><span sz={{p:pad}}/>;",
                 None,
-                "`mangleVars` did not hoist `--cz` to a component: its 2 usages share no common JSX ancestor.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
+                r#"{"name":"--cz","usageCount":2,"reason":"no-lca"}"#,
             ),
             (
                 "const A=({pad})=><section><div><span sz={{p:pad}}/><b sz={{p:pad}}/></div></section>;",
                 Some(0),
-                "`mangleVars` did not hoist `--cz` to a component: one of its 2 usages sits deeper below their common ancestor than `maxDepth` 0 allows.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
+                r#"{"name":"--cz","usageCount":2,"reason":"max-depth","maxDepth":0}"#,
             ),
         ];
 
@@ -758,8 +734,13 @@ mod tests {
             .ir;
             let result = apply_css_variable_mangling(&ir, source, max_depth);
 
-            assert_eq!(result.diagnostics.texts().len(), 1, "{marker}");
-            assert_eq!(result.diagnostics.texts(), [marker]);
+            let issues = result.diagnostics.issues();
+            assert_eq!(issues.len(), 1, "{marker}");
+            assert_eq!(
+                issues[0].code,
+                crate::transform::DiagnosticCode::MangleVarsHoistSkipped
+            );
+            assert_eq!(issues[0].args.to_json(), marker);
             assert!(result
                 .ir
                 .sz_attributes

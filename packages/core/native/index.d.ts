@@ -87,8 +87,6 @@ export interface NativeTransformOptions {
         /** Alias custom-property name, including `--`. */
         alias: string;
     }>;
-    /** Project root used only to render diagnostic file paths relative to it. */
-    rootDir?: string;
     /** Per-file AST node cap override (`build.astBudgetLimit`). */
     astBudget?: number;
     /** Cross-module szv registry payload (ordered-pair JSON). */
@@ -127,13 +125,12 @@ export interface NativeTransformResult {
      * read, with the byte offset of the class-name attribute.
      */
     mergeOverrides: Array<{ start: number; base: string[]; over: string[] }>;
-    /** Non-fatal transform diagnostics. */
-    diagnostics: string[];
     /**
-     * The code and byte offset of each diagnostic, index-parallel to
-     * `diagnostics`. Codes are the ids `csszyx check --rule` accepts;
-     * `argsJson` is the JSON object of the values the diagnostic names, keys
-     * in the registry's order, the same bytes the wasm artifact writes.
+     * The code and byte offset of each non-fatal diagnostic. Codes are the ids
+     * `csszyx check --rule` accepts; `argsJson` is the JSON object of the
+     * values the diagnostic names, keys in the registry's order, the same
+     * bytes the wasm artifact writes. The engine writes no sentence:
+     * `@csszyx/compiler` renders one from the diagnostic registry.
      */
     issues: Array<{ code: string; start: number; argsJson: string }>;
     /** Recovery token metadata emitted for hydration safety. */

@@ -29,6 +29,8 @@ describe('the recommended preset', () => {
             ['fallback-nudge', 'info'],
             ['merge-classifier-unavailable', 'warn'],
             ['mangle-vars-hoist-skipped', 'info'],
+            // The class still applies the opacity: a note on the spelling.
+            ['color-slash-opacity', 'info'],
         ]);
         for (const code of SZ_DIAGNOSTIC_CODES) {
             expect([code, policy.levelOf({ rule: 'sz-diagnostic', kind: code })]).toEqual([

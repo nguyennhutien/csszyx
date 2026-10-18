@@ -1,90 +1,78 @@
-//! The engine's diagnostics: each rendered line beside its code and position.
+//! The engine's diagnostics: what each reports, and where.
 //!
-//! The text is for people: the body the diagnostic registry renders from the
-//! same args, with no position in it (ADR 0031). A gate, a config rule or an
-//! editor needs to know which kind of problem a line reports and where, and
-//! reading either back out of the English breaks the day a message is
-//! reworded. Every diagnostic therefore goes through [`Diagnostics::push_issue`],
-//! which records the [`Issue`] beside the text, so the two lists stay
-//! index-parallel by construction.
+//! The engine writes no sentences. A gate, a config rule or an editor needs
+//! to know which kind of problem a finding reports and where, and the
+//! compiler renders the sentence from the diagnostic registry and the same
+//! args (ADR 0031). Every diagnostic therefore goes through
+//! [`Diagnostics::push_issue`], which records only the [`Issue`].
 //!
 //! Positions are byte offsets into the source. Turning one into a line costs a
 //! pass over the file, which the consumer pays only when it reads one (ADR 0011).
 //!
-//! Each issue also carries its named [`Args`]: what the sentence says, as
-//! data, so a consumer reads the key or the value it names without parsing the
-//! English (ADR 0031). The generated constructors in
+//! Each issue carries its named [`Args`]: what the sentence says, as data, so
+//! a consumer reads the key or the value it names without parsing English
+//! (ADR 0031). The generated constructors in
 //! `generated::diagnostic_codes::issue` are the only way to build them, so the
 //! names and their order are the registry's.
 
 use super::contract::{Args, Issue};
 use super::generated::diagnostic_codes::DiagnosticCode;
 
-/// Rendered diagnostics with the [`Issue`] of each, index-parallel.
+/// The [`Issue`] of each diagnostic, in order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Diagnostics {
-    texts: Vec<String>,
     issues: Vec<Issue>,
 }
 
 impl Diagnostics {
-    /// Record one diagnostic: what it reports, where, and its text.
+    /// Record one diagnostic: what it reports and where.
     ///
     /// # Arguments
     /// * `issue` - The kind of problem and its args, from a generated
     ///   constructor.
     /// * `start` - Byte offset in the source the diagnostic points at; `0`
     ///   for one about the whole file.
-    /// * `text` - The rendered message.
-    pub fn push_issue(&mut self, (code, args): (DiagnosticCode, Args), start: u32, text: String) {
-        self.texts.push(text);
+    pub fn push_issue(&mut self, (code, args): (DiagnosticCode, Args), start: u32) {
         self.issues.push(Issue { code, start, args });
     }
 
     /// Append every diagnostic of `other`, in order.
     pub fn extend(&mut self, other: Self) {
-        self.texts.extend(other.texts);
         self.issues.extend(other.issues);
     }
 
     /// Whether nothing was recorded.
     pub const fn is_empty(&self) -> bool {
-        self.texts.is_empty()
+        self.issues.is_empty()
     }
 
-    /// The rendered texts, in order.
+    /// The issues, in order.
     #[cfg(test)]
-    pub fn texts(&self) -> &[String] {
-        &self.texts
+    pub fn issues(&self) -> &[Issue] {
+        &self.issues
     }
 
-    /// The texts and their issues, index-parallel.
-    pub fn into_parts(self) -> (Vec<String>, Vec<Issue>) {
-        (self.texts, self.issues)
+    /// The issues, in order.
+    pub fn into_issues(self) -> Vec<Issue> {
+        self.issues
     }
 }
 
 impl super::TransformResult {
-    /// Record one diagnostic on a finished result, beside its [`Issue`].
+    /// Record one diagnostic on a finished result.
     ///
     /// For the few reported after the per-file pass: a file the nesting guard
     /// refused, or a merge table the engine could not read.
-    pub(crate) fn push_issue(
-        &mut self,
-        (code, args): (DiagnosticCode, Args),
-        start: u32,
-        text: String,
-    ) {
-        self.diagnostics.push(text);
+    pub(crate) fn push_issue(&mut self, (code, args): (DiagnosticCode, Args), start: u32) {
         self.issues.push(Issue { code, start, args });
     }
 }
 
-impl FromIterator<((DiagnosticCode, Args), u32, String)> for Diagnostics {
-    fn from_iter<I: IntoIterator<Item = ((DiagnosticCode, Args), u32, String)>>(iter: I) -> Self {
+impl FromIterator<((DiagnosticCode, Args), u32)> for Diagnostics {
+    fn from_iter<I: IntoIterator<Item = ((DiagnosticCode, Args), u32)>>(iter: I) -> Self {
         let mut diagnostics = Self::default();
-        for (issue, start, text) in iter {
-            diagnostics.push_issue(issue, start, text);
+        for (issue, start) in iter {
+            diagnostics.push_issue(issue, start);
         }
         diagnostics
     }
@@ -97,29 +85,25 @@ mod tests {
     use crate::transform::generated::diagnostic_codes::{issue, DiagnosticCode, DIAGNOSTIC_CODES};
 
     #[test]
-    fn every_text_keeps_its_issue_at_the_same_index() {
+    fn every_issue_keeps_its_order_and_position() {
         let mut diagnostics: Diagnostics =
-            std::iter::once((issue::unknown_key("a", None), 7, "a".to_string())).collect();
+            std::iter::once((issue::unknown_key("a", None), 7)).collect();
         assert!(!diagnostics.is_empty());
-        diagnostics.extend(
-            std::iter::once((
-                issue::parse_error_summary(None, Some(1)),
-                0,
-                "b".to_string(),
-            ))
-            .collect(),
-        );
-        assert_eq!(diagnostics.texts(), ["a", "b"]);
-        let (texts, issues) = diagnostics.into_parts();
-        assert_eq!(texts, ["a", "b"]);
+        diagnostics
+            .extend(std::iter::once((issue::parse_error_summary(None, Some(1)), 0)).collect());
+        let issues = diagnostics.into_issues();
         assert_eq!(
             issues
                 .iter()
-                .map(|issue| (issue.code, issue.start))
+                .map(|issue| (issue.code, issue.start, issue.args.to_json()))
                 .collect::<Vec<_>>(),
             [
-                (DiagnosticCode::UnknownKey, 7),
-                (DiagnosticCode::ParseError, 0)
+                (DiagnosticCode::UnknownKey, 7, r#"{"key":"a"}"#.to_string()),
+                (
+                    DiagnosticCode::ParseError,
+                    0,
+                    r#"{"form":"summary","errorCount":1}"#.to_string()
+                )
             ]
         );
         assert!(Diagnostics::default().is_empty());

@@ -138,7 +138,10 @@ fn an_unproven_szr_argument_reports_through_the_shared_channel() {
     let source = format!("{IMPORTS}export const x = szr(makeSz());\n");
     let result = run(&source);
     assert!(
-        !result.diagnostics.is_empty(),
+        result
+            .issues
+            .iter()
+            .any(|issue| issue.code == csszyx_core::transform::DiagnosticCode::FallbackMissingCss),
         "an unresolvable szr argument must surface a diagnostic"
     );
 }

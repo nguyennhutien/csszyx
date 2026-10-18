@@ -54,6 +54,7 @@ import fg from 'fast-glob';
 import {
     type CheckRule,
     createReporter,
+    type FindingInput,
     type Reporter,
     renderJsonReport,
 } from '../scanner/check-report.js';
@@ -150,15 +151,17 @@ interface SzIssue {
 }
 
 /**
- * Engine diagnostics `check` leaves to the build: a runtime fallback is the
- * build log's advice about one sz prop, and a parser's own syntax lines sit
- * under the parse-error summary `check` already reports for the file.
+ * Engine diagnostics `check` leaves to the build: a fallback whose classes
+ * were still collected is the build log's advice about one sz prop, and a
+ * parser's own syntax lines sit under the parse-error summary `check` already
+ * reports for the file. A fallback whose classes were never collected
+ * (`fallback-missing-css`) is listed: those classes have no CSS.
  *
  * @param issue - The diagnostic.
  * @returns Whether `check` lists it.
  */
 function isCheckedIssue(issue: Pick<SzIssue, 'code' | 'args'>): boolean {
-    if (issue.code === 'fallback-missing-css' || issue.code === 'fallback-nudge') return false;
+    if (issue.code === 'fallback-nudge') return false;
     return !(
         issue.code === 'parse-error' &&
         (issue.args.form === 'syntax' || issue.args.form === 'panicked')
@@ -690,6 +693,43 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
 }
 
 /**
+ * One captured diagnostic as a machine-readable finding.
+ *
+ * @param issue - The diagnostic.
+ * @returns The finding, its suggestion mirrored where version 1 put it.
+ */
+function findingOf(issue: ClassifiedIssue): FindingInput {
+    const { file, message, kind, args, line, column } = issue;
+    const suggestion = typeof args.suggestion === 'string' ? args.suggestion : undefined;
+    return {
+        rule: 'sz-diagnostic',
+        kind,
+        file,
+        ...(line === undefined ? {} : { line, column }),
+        message,
+        ...(suggestion === undefined ? {} : { suggestion }),
+        args,
+        url: `${SZ_DIAGNOSTIC_URL_BASE}${kind}`,
+    };
+}
+
+/**
+ * One captured diagnostic as a line of the prose report.
+ *
+ * An error reads as it always has; a quieter level says so, since it is the
+ * reason the run can still pass.
+ *
+ * @param issue - The diagnostic.
+ * @param level - The level the project gives it.
+ * @returns The line, its continuation lines indented under it.
+ */
+function issueLine(issue: ClassifiedIssue, level: SzDiagnosticLevel): string {
+    const where = issue.line === undefined ? '' : `${issue.line}:${issue.column} `;
+    const tag = level === 'error' ? '' : `(${level}) `;
+    return `  ${where}${tag}${issue.kind}: ${issue.message.split('\n').join('\n  ')}`;
+}
+
+/**
  * Print captured diagnostics, each at its level.
  *
  * @param out - Where this pass sends its prose and its findings.
@@ -697,30 +737,11 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
  * @param failOn - The quietest level that fails the run.
  */
 function reportIssues(out: Reporter, issues: ClassifiedIssue[], failOn: SzDiagnosticLevel): void {
-    for (const { file, message, kind, args, line, column } of issues) {
-        const suggestion = typeof args.suggestion === 'string' ? args.suggestion : undefined;
-        out.push({
-            rule: 'sz-diagnostic',
-            kind,
-            file,
-            ...(line === undefined ? {} : { line, column }),
-            message,
-            ...(suggestion === undefined ? {} : { suggestion }),
-            args,
-            url: `${SZ_DIAGNOSTIC_URL_BASE}${kind}`,
-        });
-    }
+    for (const issue of issues) out.push(findingOf(issue));
     const byFile = groupIssuesByFile(issues);
     for (const [file, inFile] of byFile) {
         out.warn(file);
-        for (const issue of inFile) {
-            // An error reads as it always has; a quieter level says so, since
-            // it is the reason the run can still pass.
-            const level = issueLevel(out, issue);
-            const where = issue.line === undefined ? '' : `${issue.line}:${issue.column} `;
-            const tag = level === 'error' ? '' : `(${level}) `;
-            out.info(`  ${where}${tag}${issue.kind}: ${issue.message.split('\n').join('\n  ')}`);
-        }
+        for (const issue of inFile) out.info(issueLine(issue, issueLevel(out, issue)));
     }
     const { mark, below } = summaryMark(
         issues.map(issue => issueLevel(out, issue)),

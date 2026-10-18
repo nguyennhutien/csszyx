@@ -597,10 +597,10 @@ pub(crate) fn collect_owned_key_variant_objects(
 }
 
 /// Collect closed-key values that moved onto their group's own key, as the
-/// key, the value, the key and value that replaced them, and the offset.
+/// key, the value and the offset.
 ///
 /// `touch: 'pan-x'` is `touchPanX: 'x'` now; the lowering emits nothing for
-/// it, and this names the replacement. Descends wherever the lowering does,
+/// it, and the diagnostic names the replacement from the key and the value. Descends wherever the lowering does,
 /// parametric variants (`group`, `data`, …) included, so a moved value is
 /// named in every place it can be written; a value a later key of its object
 /// replaced is left out, as the runtime leaves it out.
@@ -610,14 +610,8 @@ pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedV
     for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
             StaticSzValue::String(value) if !settled.contains(&index) => {
-                if let Some((key, replacement)) = moved_value(&property.key, value) {
-                    out.push((
-                        property.key.clone(),
-                        value.clone(),
-                        key,
-                        replacement,
-                        property.span.start,
-                    ));
+                if moved_value(&property.key, value).is_some() {
+                    out.push((property.key.clone(), value.clone(), property.span.start));
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -696,9 +690,9 @@ fn for_each_sz_object_in(
     }
 }
 
-/// A moved value: key, value, replacing key, replacing value, offset.
+/// A moved value: key, value, offset.
 #[cfg(feature = "native-engine")]
-pub(crate) type MovedValue = (String, String, &'static str, &'static str, u32);
+pub(crate) type MovedValue = (String, String, u32);
 
 /// Keys whose objects hold parameters or values, not sz properties.
 #[cfg(feature = "native-engine")]

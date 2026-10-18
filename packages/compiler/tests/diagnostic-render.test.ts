@@ -9,7 +9,13 @@ import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
 import { SZ_DIAGNOSTIC_COMPUTED } from '../src/diagnostic-registry.generated.js';
 import { renderSzDiagnostic, renderSzDiagnosticBody } from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
-import { diagnosticPath, szDiagnosticKey } from '../src/engine-diagnostics.js';
+import {
+    diagnosticPath,
+    renderEngineDiagnostics,
+    renderUnplacedDiagnostic,
+    szDiagnosticKey,
+} from '../src/engine-diagnostics.js';
+import type { SzDiagnosticIssue } from '../src/engine-spans.js';
 
 const computed = SZ_DIAGNOSTIC_COMPUTED_VALUES;
 
@@ -76,6 +82,21 @@ describe('renderSzDiagnostic', () => {
         ).toContain('`{ x, y }`');
     });
 
+    it('heads a diagnostic with its code alone when it has no place', () => {
+        const message = renderUnplacedDiagnostic({ code: 'numeric-key', args: { key: '0' } });
+        expect(message.split('\n')[0]).toBe('[csszyx] numeric-key:');
+        expect(message).toContain('docs: https://csszyx.com/e/numeric-key');
+    });
+
+    it('prints nothing for a per-form field when the issue names no form', () => {
+        expect(
+            renderSzDiagnosticBody(
+                { code: 'closed-enum-value', args: { key: 'k', value: 'v' } },
+                computed,
+            ),
+        ).toBe('');
+    });
+
     it('prints nothing for a field the variant has no template for', () => {
         const body = renderSzDiagnosticBody(
             { code: 'closed-enum-value', args: { form: 'nope', key: 'k', value: 'v' } },
@@ -89,6 +110,18 @@ describe('the computed values', () => {
     it('are exactly the ones the registry lists', () => {
         expect(Object.keys(computed).sort()).toEqual(Object.keys(COMPUTED).sort());
         expect([...SZ_DIAGNOSTIC_COMPUTED].sort()).toEqual(Object.keys(COMPUTED).sort());
+    });
+
+    it('read a missing or non-text arg as nothing', () => {
+        expect(computed.canonical?.({ key: 4 })).toBe('');
+        expect(computed.enumAllowed?.({ key: 'nope' })).toBe('');
+        expect(computed.canonicalAllowed?.({ key: 'nope' })).toBe('');
+        expect(computed.canonicalAllowed?.({ key: 'touchAction' })).toBe(
+            'auto, none, manipulation',
+        );
+        expect(computed.earlier?.({ classes: ['card'], szCount: 1 })).toBe(
+            'the classes of an earlier `sz` and `card`',
+        );
     });
 
     it('render a miss as nothing, as the engine did', () => {
@@ -125,11 +158,30 @@ describe('diagnosticPath', () => {
         expect(diagnosticPath('/repo/src/A.tsx', '/repo/')).toBe('src/A.tsx');
         expect(diagnosticPath('/repository/A.tsx', '/repo')).toBe('/repository/A.tsx');
         expect(diagnosticPath('/repo/src/A.tsx')).toBe('/repo/src/A.tsx');
+        expect(diagnosticPath('/elsewhere/A.tsx', '/repo')).toBe('/elsewhere/A.tsx');
         expect(diagnosticPath('C:\\repo\\A.tsx', 'C:\\repo')).toBe('A.tsx');
     });
 });
 
+describe('renderEngineDiagnostics', () => {
+    it('keeps a suggestion an issue already carries', () => {
+        const issue = {
+            code: 'unknown-key',
+            args: { key: 'workBreak', suggestion: 'mine' },
+            line: 1,
+            column: 1,
+        } as SzDiagnosticIssue;
+        const [message] = renderEngineDiagnostics([issue], 'src/A.tsx');
+        expect(issue.args).toEqual({ key: 'workBreak', suggestion: 'mine' });
+        expect(message).toContain('did you mean `mine`?');
+    });
+});
+
 describe('szDiagnosticKey', () => {
+    it('is empty for a code the registry does not know', () => {
+        expect(szDiagnosticKey({ code: 'nope' as never, args: {} })).toBe('');
+    });
+
     it('reads the args in registry order, whatever order they were written in', () => {
         expect(
             szDiagnosticKey({ code: 'property-object', args: { nestedKeys: ['x'], key: 'p' } }),

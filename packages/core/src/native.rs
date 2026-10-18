@@ -188,8 +188,6 @@ pub struct NativeTransformOptions {
     pub mangle_var_hoist_max_depth: Option<u32>,
     /// Exact app-owned global custom-property aliases for static sz values.
     pub global_var_aliases: Option<Vec<NativeGlobalVarAliasEntry>>,
-    /// Project root used only to render diagnostic file paths relative to it.
-    pub root_dir: Option<String>,
     /// Per-file AST node cap override (`build.astBudgetLimit`).
     pub ast_budget: Option<u32>,
     /// Cross-module szv registry payload (ordered-pair JSON).
@@ -365,10 +363,8 @@ pub struct NativeTransformResult {
     pub single_class_groups: Vec<NativeMergeGroup>,
     /// Each static class name beside a static `sz` a merge would read.
     pub merge_overrides: Vec<NativeMergeOverride>,
-    /// Non-fatal transform diagnostics.
-    pub diagnostics: Vec<String>,
-    /// The code and position of each diagnostic, index-parallel to
-    /// `diagnostics`.
+    /// Each non-fatal diagnostic: its code, position and args. The engine
+    /// writes no sentence; the compiler renders one from the registry.
     pub issues: Vec<NativeIssue>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<NativeRecoveryToken>,
@@ -432,7 +428,6 @@ pub fn transform_batch_native(
                     alias: entry.alias,
                 })
                 .collect(),
-            root_dir: options.root_dir,
             ast_budget: options.ast_budget.map(|budget| budget as usize),
             cross_module_statics_json: options.cross_module_statics_json,
             cross_module_sz_objects_json: options.cross_module_sz_objects_json,
@@ -475,7 +470,6 @@ impl From<TransformResult> for NativeTransformResult {
                     over: pair.over,
                 })
                 .collect(),
-            diagnostics: result.diagnostics,
             issues: result
                 .issues
                 .into_iter()

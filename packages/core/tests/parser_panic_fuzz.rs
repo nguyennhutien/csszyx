@@ -12,7 +12,7 @@
 
 #[cfg(feature = "native-engine")]
 mod parser_panic_fuzz {
-    use csszyx_core::transform::{transform_batch, TransformFile};
+    use csszyx_core::transform::{transform_batch, DiagnosticCode, TransformFile};
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     /// Deterministic mulberry32 PRNG — no external crate, seeded so any failure
@@ -191,11 +191,12 @@ mod parser_panic_fuzz {
         );
         assert!(
             result
-                .diagnostics
+                .issues
                 .iter()
-                .any(|d| d.starts_with("Source nesting exceeds 64 levels (found ")),
+                .any(|issue| issue.code == DiagnosticCode::NestingDepth
+                    && issue.args.to_json().starts_with(r#"{"depth":"#)),
             "must surface the nesting-depth diagnostic, got: {:?}",
-            result.diagnostics
+            result.issues
         );
     }
 
@@ -215,9 +216,9 @@ mod parser_panic_fuzz {
         let results = transform_batch(std::slice::from_ref(&file)).expect("batch returns Ok");
         assert!(
             !results[0]
-                .diagnostics
+                .issues
                 .iter()
-                .any(|d| d.starts_with("Source nesting exceeds")),
+                .any(|issue| issue.code == DiagnosticCode::NestingDepth),
             "source below the guard must not trip the nesting diagnostic"
         );
     }

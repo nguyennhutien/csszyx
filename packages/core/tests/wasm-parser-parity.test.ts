@@ -28,7 +28,6 @@ interface WasmTransformResult {
     code: string;
     classes: string[];
     raw_class_names: string[];
-    diagnostics: string[];
     issues: unknown[];
 }
 
@@ -128,7 +127,6 @@ describe('wasm parser artifact', () => {
             mangle_vars: false,
             mangle_var_hoist_max_depth: null,
             global_var_aliases: [],
-            root_dir: '/p',
             ast_budget: null,
             cross_module_statics_json: JSON.stringify([
                 [

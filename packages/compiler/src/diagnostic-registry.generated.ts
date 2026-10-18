@@ -993,6 +993,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "production": false
             }
         },
+        "defaults": {
+            "recommended": "info",
+            "atomic": "warn"
+        },
         "position": "site",
         "forms": [
             "op-given",

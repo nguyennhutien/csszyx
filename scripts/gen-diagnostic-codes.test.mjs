@@ -204,6 +204,21 @@ test('a computed value counts the args it reads, and may not share an arg name',
     );
 });
 
+test('an engine id has a place and declared args, and a list arg its joiner', () => {
+    assert.match(
+        validateRegistry(registryOf([entry({ position: 'none' })])).join('\n'),
+        /never at no place/,
+    );
+    assert.match(
+        validateRegistry(registryOf([entry({ args: undefined })])).join('\n'),
+        /declares its args/,
+    );
+    assert.match(
+        validateRegistry(registryOf([entry({ args: { keys: { type: 'string[]' } } })])).join('\n'),
+        /list argument keys declares no joiner/,
+    );
+});
+
 test('a template keyed by an arg other than form names that enum arg', () => {
     const base = {
         args: { site: { type: ['enum', 'sz', 'szr'] } },
