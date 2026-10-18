@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { COMPUTED } from '../../../scripts/diagnostics/registry.mjs';
-import { PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagnostic-codes.mjs';
+import { casingProblems, PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagnostic-codes.mjs';
 import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
 import { SZ_DIAGNOSTIC_COMPUTED } from '../src/diagnostic-registry.generated.js';
 import { renderSzDiagnostic, renderSzDiagnosticBody } from '../src/diagnostic-render.js';
@@ -16,6 +16,8 @@ import {
     szDiagnosticKey,
 } from '../src/engine-diagnostics.js';
 import type { SzDiagnosticIssue } from '../src/engine-spans.js';
+import { SZ_FALLBACK_KINDS } from '../src/sz-fallback-matrix.js';
+import { MIGRATION_NOTES } from '../src/transform-core.js';
 
 const computed = SZ_DIAGNOSTIC_COMPUTED_VALUES;
 
@@ -131,8 +133,13 @@ describe('the computed values', () => {
     });
 
     it('present the optional args a template cannot leave blank', () => {
-        expect(computed.spellingHint?.({ suggestion: 'break' })).toBe('did you mean `break`?');
-        expect(computed.spellingHint?.({})).toBe('check the spelling.');
+        expect(computed.spellingHint?.({ suggestion: 'break' })).toBe(
+            'write `break` if you meant it',
+        );
+        expect(computed.spellingHint?.({})).toBe('check the spelling');
+        expect(computed.parserMessage?.({ message: 'Unexpected token.' })).toBe('Unexpected token');
+        expect(computed.parserMessage?.({ message: 'Unexpected token' })).toBe('Unexpected token');
+        expect(computed.parserMessage?.({})).toBe('');
         expect(computed.spreadPlace?.({ spread: 'r' })).toBe('`{...r}`');
         expect(computed.spreadPlace?.({})).toBe('the spread');
         expect(computed.groupLiteral?.({ groupValue: 'true' })).toBe('true');
@@ -142,6 +149,90 @@ describe('the computed values', () => {
         );
         expect(computed.earlier?.({})).toBe('');
         expect(computed.example?.({})).toBe('{ … }');
+    });
+});
+
+/**
+ * The parts of a rendered body: its text, then each labelled line.
+ *
+ * @param body - A body as `renderSzDiagnosticBody` returns it.
+ * @returns The fields that render, by name.
+ */
+function partsOf(body: string): Array<['text' | 'help' | 'note', string]> {
+    const [text = '', ...rest] = body.split('\n  ');
+    return [
+        ['text', text],
+        ...rest.map(line => {
+            const [label, ...value] = line.split(': ');
+            return [label as 'help' | 'note', value.join(': ')] as ['help' | 'note', string];
+        }),
+    ];
+}
+
+describe('the text composed at render time', () => {
+    // The generator checks every template, but a computed value, a migration
+    // note or a fallback-matrix entry is only text once rendered.
+    const bodies: Array<[string, string]> = [
+        ...[{}, { suggestion: 'wordBreak' }].map(
+            extra =>
+                [
+                    'unknown-key',
+                    renderSzDiagnosticBody(
+                        { code: 'unknown-key', args: { key: 'workBreak', ...extra } },
+                        computed,
+                    ),
+                ] as [string, string],
+        ),
+        ...Object.keys(MIGRATION_NOTES).map(
+            key =>
+                [
+                    `removed-key ${key}`,
+                    renderSzDiagnosticBody(
+                        { code: 'removed-key', args: { form: 'removed', key } },
+                        computed,
+                    ),
+                ] as [string, string],
+        ),
+        ...SZ_FALLBACK_KINDS.flatMap(shape =>
+            (
+                [
+                    ['fallback-missing-css', ['sz', 'szr', 'sz-variant-key']],
+                    ['fallback-nudge', ['sz']],
+                ] as const
+            ).flatMap(([code, sites]) =>
+                sites.map(
+                    site =>
+                        [
+                            `${code} ${site} ${shape}`,
+                            renderSzDiagnosticBody(
+                                {
+                                    code,
+                                    args: { site, shape, detail: 'x', path: 'p', keyPath: 'k' },
+                                },
+                                computed,
+                            ),
+                        ] as [string, string],
+                ),
+            ),
+        ),
+        ...['Unexpected token', 'Expected `}`.'].map(
+            message =>
+                [
+                    'parse-error syntax',
+                    renderSzDiagnosticBody(
+                        { code: 'parse-error', args: { form: 'syntax', message } },
+                        computed,
+                    ),
+                ] as [string, string],
+        ),
+    ];
+
+    it.each(bodies)('keeps the casing rule: %s', (_, body) => {
+        expect(body).not.toBe('');
+        for (const [field, value] of partsOf(body)) {
+            if (value === '') continue;
+            expect(casingProblems(field, value), `${field}: ${value}`).toEqual([]);
+        }
     });
 });
 
@@ -173,7 +264,7 @@ describe('renderEngineDiagnostics', () => {
         } as SzDiagnosticIssue;
         const [message] = renderEngineDiagnostics([issue], 'src/A.tsx');
         expect(issue.args).toEqual({ key: 'workBreak', suggestion: 'mine' });
-        expect(message).toContain('did you mean `mine`?');
+        expect(message).toContain('write `mine` if you meant it;');
     });
 });
 

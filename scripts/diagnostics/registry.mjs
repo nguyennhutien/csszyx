@@ -104,7 +104,12 @@ export const COMPUTED = {
     },
     spellingHint: {
         reads: ['suggestion'],
-        summary: 'A `suggestion` as "did you mean …?", or "check the spelling." without one.',
+        summary:
+            'A `suggestion` as "write `…` if you meant it", or "check the spelling" without one.',
+    },
+    parserMessage: {
+        reads: ['message'],
+        summary: "The parser's `message`, without a closing period of its own.",
     },
     groupLiteral: {
         reads: ['groupValue'],
@@ -253,7 +258,7 @@ export const DIAGNOSTICS = [
         position: 'site',
         args: { key: STRING, suggestion: OPTIONAL_STRING },
         text: '`{key}` is not an sz property.',
-        help: "{spellingHint} For a custom utility, define it with Tailwind's `@utility`.",
+        help: "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
         sources: [`${ENGINE}:1472`, `${CORE_TS}:4124`],
     },
@@ -554,7 +559,7 @@ export const DIAGNOSTICS = [
         },
         text: '`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.',
         help: 'write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.',
-        note: 'Vue JSX merges every class, so every side applies there.',
+        note: 'in Vue JSX every class is merged, so every side applies there.',
         sources: [`${ENGINE}:1325`],
     },
     {
@@ -709,8 +714,8 @@ export const DIAGNOSTICS = [
             errorCount: OPTIONAL_NUMBER,
         },
         text: {
-            syntax: '{message}',
-            summary: 'csszyx could not parse this file (syntax errors: {errorCount}).',
+            syntax: 'Syntax error: {parserMessage}.',
+            summary: 'This file could not be parsed (syntax errors: {errorCount}).',
             panicked: 'The parser stopped at a syntax error it could not recover from.',
             expression: 'This `sz` value could not be parsed as a JavaScript expression.',
             prescan: 'This file failed to parse, so the build collected no classes from it.',

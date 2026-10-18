@@ -539,7 +539,7 @@ pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
     match key {
         "maskFrom" => Some("write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"),
         "maskTo" => Some("write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"),
-        "maskVia" => Some("Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`"),
+        "maskVia" => Some("write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop"),
         "maskShape" => Some("write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"),
         "fontVariant" => Some("write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"),
         _ => None,

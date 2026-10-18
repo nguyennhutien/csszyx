@@ -70,7 +70,7 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
                 'fallback-missing-css',
                 `/p/App.tsx:1:${source.indexOf('hover') + 1}`,
                 '`sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.',
-                'help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.',
+                'help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.',
             ),
         );
     });

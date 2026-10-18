@@ -382,7 +382,7 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
         expect(result.issues.map(issue => issue.code)).toEqual(['unknown-key']);
         const msg = result.diagnostics[0];
         expect(msg).toContain('`xyzzy` is not an sz property.');
-        expect(msg).toContain('help: check the spelling.');
+        expect(msg).toContain('help: check the spelling;');
         expect(msg).not.toContain('an array or a spread');
     });
 });

@@ -643,7 +643,7 @@ export const MIGRATION_NOTES: Record<string, string> = {
         'write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`',
     maskTo: 'write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`',
     maskVia:
-        'Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`',
+        'write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop',
     maskShape: "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`",
     // One key could hold one keyword, while CSS combines one per group.
     fontVariant:

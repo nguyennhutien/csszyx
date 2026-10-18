@@ -70,7 +70,7 @@ describe.each(ENGINES)('the suggestion on an unknown key — %s', (_name, transf
         const result = transform(source, '/p/src/A.tsx');
 
         expect(result.issues?.[0]?.args).toEqual({ key: 'workBreak', suggestion: 'break' });
-        expect(result.diagnostics?.[0]).toContain('help: did you mean `break`?');
+        expect(result.diagnostics?.[0]).toContain('help: write `break` if you meant it;');
     });
 
     it('is left out when no known key is near', () => {
@@ -78,6 +78,6 @@ describe.each(ENGINES)('the suggestion on an unknown key — %s', (_name, transf
         const result = transform(source, '/p/src/A.tsx');
 
         expect(result.issues?.[0]?.args).toEqual({ key: 'xyzzy' });
-        expect(result.diagnostics?.[0]).toContain('help: check the spelling.');
+        expect(result.diagnostics?.[0]).toContain('help: check the spelling;');
     });
 });

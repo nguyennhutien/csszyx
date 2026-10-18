@@ -185,7 +185,7 @@ mod diagnostic_table_tests {
         for (key, note) in [
             ("maskFrom", "write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"),
             ("maskTo", "write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"),
-            ("maskVia", "Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`"),
+            ("maskVia", "write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop"),
             ("maskShape", "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"),
             ("fontVariant", "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"),
         ] {

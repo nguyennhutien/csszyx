@@ -47,7 +47,7 @@ const SPREAD = '[csszyx] unresolvable sz spread at 5:9: sz={{ ...x }} cannot be 
 
 /** An unknown-key message as the compiler renders it: header, text, help, note, docs. */
 const ENGINE_UNKNOWN =
-    '[csszyx] unknown-key: src/A.tsx:3:7\n  `workBreak` is not an sz property.\n  help: did you mean `break`?\n  docs: https://csszyx.com/e/unknown-key';
+    "[csszyx] unknown-key: src/A.tsx:3:7\n  `workBreak` is not an sz property.\n  help: write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.\n  docs: https://csszyx.com/e/unknown-key";
 const ENGINE_SPREAD =
     '[csszyx] unresolvable-spread: src/A.tsx:5:9\n  `sz={{ ...x }}` cannot be resolved at build time.\n  docs: https://csszyx.com/e/unresolvable-spread';
 const UNKNOWN_ISSUE = {

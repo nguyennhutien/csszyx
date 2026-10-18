@@ -86,7 +86,7 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     import: {
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
-            'export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime. For variant-based styling use `szv()`, for runtime values `dynamic()`.',
+            'export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
     },
     member: {
         reason: 'member expression is not statically resolvable',
@@ -121,7 +121,7 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     variant: {
         reason: 'key `{detail}` holds a value only known at runtime and no sz property claims it, so its classes were never collected',
         suggestion:
-            'if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.',
+            'if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.',
     },
 };
 

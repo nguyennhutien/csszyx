@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import * as registry from './diagnostics/registry.mjs';
 import {
+    casingProblems,
     placeholdersOf,
     publicData,
     renderRegistryModule,
@@ -192,7 +193,7 @@ test('a computed value counts the args it reads, and may not share an arg name',
     const input = registryOf([
         entry({
             args: { key: { type: 'string' }, hint: { type: 'string' } },
-            text: '{shown}',
+            text: '{shown}.',
         }),
     ]);
     input.COMPUTED = { shown: { reads: ['key', 'hint'], summary: 'Both.' } };
@@ -259,8 +260,8 @@ test('templates may only name arguments, and every required argument is used', (
             registryOf([
                 entry({
                     args: { key: { type: 'string' }, hint: { type: 'string', optional: true } },
-                    text: 'Unknown "{key}" in { p: 4 }',
-                    help: 'Did you mean "{hint}"?',
+                    text: 'Unknown "{key}" in { p: 4 }.',
+                    help: 'did you mean "{hint}"?',
                 }),
             ]),
         ),
@@ -365,4 +366,63 @@ test('the Node registry module carries the public data and no review metadata', 
     const data = publicData(input);
     assert.equal(data.diagnostics[0].sources, undefined);
     assert.ok(renderRegistryModule(input).includes(JSON.stringify(data.diagnostics, null, 4)));
+});
+
+test('a sentence starts upper-case or with a code span, and ends with a period', () => {
+    assert.deepEqual(casingProblems('text', '`{key}` is not an sz property.'), []);
+    assert.deepEqual(casingProblems('text', 'This `sz` value is unread.'), []);
+    assert.deepEqual(casingProblems('text', '{reason}.', new Set(['reason'])), []);
+    assert.match(casingProblems('text', 'csszyx could not parse it.').join('\n'), /upper-case/);
+    assert.match(casingProblems('text', 'This is unread').join('\n'), /does not end with a period/);
+    // An arg is third-party text: its casing is not the template's.
+    assert.match(casingProblems('text', '{message}.').join('\n'), /upper-case/);
+});
+
+test('help and note are one lower-case clause, further advice after `;`', () => {
+    const help = "check the spelling; for a custom utility, define it with Tailwind's `@utility`.";
+    assert.deepEqual(casingProblems('help', help), []);
+    assert.deepEqual(casingProblems('note', '`szs` is left unchanged.'), []);
+    assert.deepEqual(casingProblems('help', '{hint}; or not.', new Set(['hint'])), []);
+    // A period inside a code span or a number ends no sentence.
+    assert.deepEqual(casingProblems('help', 'use `a. B` or `1.5`; in Vue JSX, `x`.'), []);
+    assert.match(casingProblems('help', 'Check the spelling.').join('\n'), /lower-case/);
+    // A proper noun may sit anywhere but at the start.
+    assert.match(casingProblems('note', 'Vue JSX merges every class.').join('\n'), /lower-case/);
+    assert.match(
+        casingProblems('help', 'check the spelling. For a utility, use `@utility`.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling. Tailwind serves it.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling? Then rebuild.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling; For a utility, use it.').join('\n'),
+        /after `;`/,
+    );
+    assert.match(casingProblems('help', '{key} is wrong.').join('\n'), /lower-case/);
+});
+
+test('the registry check applies the casing rule to every field and form', () => {
+    assert.match(
+        validateRegistry(registryOf([entry({ text: 'unknown `{key}`.' })])).join('\n'),
+        /diagnostic "unknown-key": text: starts/,
+    );
+    assert.match(
+        validateRegistry(
+            registryOf([
+                entry({
+                    forms: ['a', 'b'],
+                    args: { key: { type: 'string' }, form: { type: ['enum', 'a', 'b'] } },
+                    text: { a: 'Unknown `{key}`.', b: 'Unknown `{key}`.' },
+                    note: { b: 'Fine. Then not.' },
+                }),
+            ]),
+        ).join('\n'),
+        /note \(b\): .*second sentence/,
+    );
 });

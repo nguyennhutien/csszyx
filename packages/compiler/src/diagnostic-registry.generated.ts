@@ -51,7 +51,7 @@ export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = 1;
 export const SZ_DIAGNOSTIC_CONSTANTS = {"maxNestingDepth":64,"mergeTableFormat":1} as const;
 
 /** The computed values a template may name beside its args. */
-export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","groupLiteral"];
+export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral"];
 
 /** Every live id, in registry order. */
 export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
@@ -75,7 +75,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": "`{key}` is not an sz property.",
-        "help": "{spellingHint} For a custom utility, define it with Tailwind's `@utility`.",
+        "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
     },
     {
@@ -551,7 +551,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         },
         "text": "`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.",
         "help": "write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.",
-        "note": "Vue JSX merges every class, so every side applies there."
+        "note": "in Vue JSX every class is merged, so every side applies there."
     },
     {
         "id": "moved-value",
@@ -858,8 +858,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": {
-            "syntax": "{message}",
-            "summary": "csszyx could not parse this file (syntax errors: {errorCount}).",
+            "syntax": "Syntax error: {parserMessage}.",
+            "summary": "This file could not be parsed (syntax errors: {errorCount}).",
             "panicked": "The parser stopped at a syntax error it could not recover from.",
             "expression": "This `sz` value could not be parsed as a JavaScript expression.",
             "prescan": "This file failed to parse, so the build collected no classes from it."

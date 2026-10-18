@@ -55,6 +55,84 @@ const SCALAR_TYPES = ['string', 'number', 'string[]'];
 const TEMPLATE_FIELDS = ['text', 'help', 'note'];
 
 /**
+ * Names that keep their capital letter wherever they sit in a help or note
+ * clause, including right after a `;`. None of them may start a clause after
+ * the label or a second sentence: the label's clause starts lower-case.
+ */
+export const PROPER_NOUNS = new Set([
+    'Astro',
+    'CSS',
+    'ESLint',
+    'JavaScript',
+    'JSX',
+    'Next',
+    'Node',
+    'Preact',
+    'Qwik',
+    'React',
+    'Solid',
+    'Svelte',
+    'Tailwind',
+    'Turbopack',
+    'TypeScript',
+    'Vite',
+    'Vue',
+]);
+
+/** A Markdown code span: double backticks around text holding one, or single. */
+const CODE_SPAN = /``[^`]*?``|`[^`]*`/g;
+
+/** What a code span reads as once its text is set aside. */
+const CODE_MARK = '\u0001';
+
+/**
+ * Where a template or a rendered field breaks the casing rule (ADR 0031):
+ * the main sentence (`text`) starts upper-case or with a code span and ends
+ * with a period, as tsc and ESLint write theirs; a `help` or `note` is one
+ * clause after its label, starting lower-case or with a code span, with more
+ * advice joined by `;`, never a second sentence. Text inside a code span is
+ * code, not prose, so it is not read.
+ *
+ * A placeholder renders text the template cannot see. At the start of a field
+ * only a computed value may stand, and a test renders every value it takes;
+ * an arg there is third-party text whose casing nobody chose.
+ *
+ * @param {'text' | 'help' | 'note'} field - The field.
+ * @param {string} template - A template, or a field as rendered.
+ * @param {ReadonlySet<string>} [computed] - The computed value names.
+ * @returns {string[]} One message per broken rule.
+ */
+export function casingProblems(field, template, computed = new Set()) {
+    const problems = [];
+    const prose = template.replace(CODE_SPAN, CODE_MARK);
+    const lead = /^\{([a-z][a-zA-Z0-9]*)\}/.exec(prose);
+    const first = prose.charAt(0);
+    const leadsWell =
+        lead !== null
+            ? computed.has(lead[1])
+            : first === CODE_MARK || (field === 'text' ? /[A-Z]/ : /[a-z]/).test(first);
+    if (!leadsWell) {
+        problems.push(
+            field === 'text'
+                ? 'starts with neither an upper-case letter nor a code span'
+                : 'starts with neither a lower-case letter nor a code span',
+        );
+    }
+    if (field === 'text' && !prose.trimEnd().endsWith('.')) {
+        problems.push('does not end with a period');
+    }
+    if (field !== 'text' && /[.?!]\s+[A-Z]/.test(prose)) {
+        problems.push('has a second sentence; join further advice with `;`');
+    }
+    for (const [, word] of prose.matchAll(/;\s+([A-Z][A-Za-z]*)/g)) {
+        if (!PROPER_NOUNS.has(word)) {
+            problems.push(`starts a clause after \`;\` upper-case (${word})`);
+        }
+    }
+    return problems;
+}
+
+/**
  * The placeholder names a template uses, in order of first use.
  *
  * @param {string} template - A template.
@@ -216,6 +294,11 @@ function validateTemplates(entry, at, problems, computed = new Map()) {
     }
     if (entry.variesBy !== undefined && !Array.isArray(args[entry.variesBy]?.type)) {
         problems.push(`${at}: varies by ${entry.variesBy}, which is not one of its enum args`);
+    }
+    for (const { field, form, template } of templates) {
+        for (const problem of casingProblems(field, template, new Set(computed.keys()))) {
+            problems.push(`${at}: ${field}${form ? ` (${form})` : ''}: ${problem}`);
+        }
     }
     const texts = templates.filter(({ field }) => field === 'text');
     if (texts.length === 0) return;

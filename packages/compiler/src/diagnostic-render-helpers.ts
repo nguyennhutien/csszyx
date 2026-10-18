@@ -151,7 +151,8 @@ export const SZ_DIAGNOSTIC_COMPUTED_VALUES: Readonly<Record<string, SzDiagnostic
         typeof args.spread === 'string' ? `\`{...${args.spread}}\`` : 'the spread',
     spellingHint: args =>
         typeof args.suggestion === 'string'
-            ? `did you mean \`${args.suggestion}\`?`
-            : 'check the spelling.',
+            ? `write \`${args.suggestion}\` if you meant it`
+            : 'check the spelling',
+    parserMessage: args => text(args, 'message').replace(/\.$/, ''),
     groupLiteral: args => literal(text(args, 'groupValue')),
 };

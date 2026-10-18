@@ -73,7 +73,7 @@
                     "form": "syntax",
                     "message": "Unexpected token"
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  Unexpected token\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  Syntax error: Unexpected token.\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             }
         ]
     },
@@ -168,7 +168,7 @@
                     "site": "sz-variant-key",
                     "keyPath": "hover"
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:46\n  `sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.\n  help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:46\n  `sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.\n  help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -186,7 +186,7 @@
                     "detail": "s",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:2:33\n  `sz` falls back to the runtime: imported binding `s` could not be read at build time.\n  help: export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime. For variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:2:33\n  `sz` falls back to the runtime: imported binding `s` could not be read at build time.\n  help: export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -433,7 +433,7 @@
                         "r.className"
                     ]
                 },
-                "text": "[csszyx] spread-split-class: src/freeze.tsx:1:30\n  `<div>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: Vue JSX merges every class, so every side applies there.\n  docs: https://csszyx.com/e/spread-split-class"
+                "text": "[csszyx] spread-split-class: src/freeze.tsx:1:30\n  `<div>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: in Vue JSX every class is merged, so every side applies there.\n  docs: https://csszyx.com/e/spread-split-class"
             }
         ]
     },
@@ -576,7 +576,7 @@
                 "args": {
                     "key": "xyzzy"
                 },
-                "text": "[csszyx] unknown-key: src/freeze.tsx:1:35\n  `xyzzy` is not an sz property.\n  help: check the spelling. For a custom utility, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.\n  docs: https://csszyx.com/e/unknown-key"
+                "text": "[csszyx] unknown-key: src/freeze.tsx:1:35\n  `xyzzy` is not an sz property.\n  help: check the spelling; for a custom utility, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.\n  docs: https://csszyx.com/e/unknown-key"
             }
         ]
     },
@@ -790,7 +790,7 @@
                     "form": "syntax",
                     "message": "A 'return' statement can only be used within a function body."
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  A 'return' statement can only be used within a function body.\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  Syntax error: A 'return' statement can only be used within a function body.\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             }
         ]
     },

@@ -339,7 +339,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         const printed = log.mock.calls.flat().join('\n');
         expect(printed).toMatch(
-            /\n\S* +1:35 unknown-key: `workBreak` is not an sz property\.\n\s+help: did you mean `break`\?/,
+            /\n\S* +1:35 unknown-key: `workBreak` is not an sz property\.\n\s+help: write `break` if you meant it;/,
         );
         expect(printed).not.toContain('Did you mean');
     });
