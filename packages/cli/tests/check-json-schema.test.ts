@@ -46,6 +46,67 @@ function typeOf(value: unknown): string {
     return typeof value;
 }
 
+/** One keyword's check: the problems an instance has against its value. */
+type KeywordCheck = (rule: unknown, value: unknown, at: string) => string[];
+
+/**
+ * The problem, when there is one.
+ *
+ * @param broken - Whether the keyword is broken.
+ * @param problem - What to say.
+ * @returns The problem alone, or none.
+ */
+function when(broken: boolean, problem: string): string[] {
+    return broken ? [problem] : [];
+}
+
+/**
+ * The keywords the published schema uses. Like JSON Schema, `pattern`,
+ * `minimum`, `required`, `properties` and `items` read only the instance type
+ * they apply to.
+ */
+const KEYWORDS: Readonly<Record<string, KeywordCheck>> = {
+    $ref: (rule, value, at) => {
+        const defs = schema.$defs as Record<string, Schema>;
+        return validate(defs[String(rule).replace('#/$defs/', '')] as Schema, value, at);
+    },
+    type: (rule, value, at) =>
+        when(typeOf(value) !== rule, `${at}: is ${typeOf(value)}, not ${rule}`),
+    const: (rule, value, at) => when(value !== rule, `${at}: is not ${JSON.stringify(rule)}`),
+    enum: (rule, value, at) =>
+        when(
+            !(rule as unknown[]).includes(value),
+            `${at}: ${JSON.stringify(value)} is not one of the enum`,
+        ),
+    pattern: (rule, value, at) =>
+        when(
+            typeof value === 'string' && !new RegExp(rule as string, 'u').test(value),
+            `${at}: ${JSON.stringify(value)} does not match ${rule}`,
+        ),
+    minimum: (rule, value, at) =>
+        when(
+            typeof value === 'number' && value < (rule as number),
+            `${at}: ${value} is below ${rule}`,
+        ),
+    required: (rule, value, at) =>
+        typeOf(value) === 'object'
+            ? (rule as string[]).flatMap(name =>
+                  when(!(name in (value as object)), `${at}: lacks ${name}`),
+              )
+            : [],
+    properties: (rule, value, at) =>
+        typeOf(value) === 'object'
+            ? Object.entries(rule as Record<string, Schema>).flatMap(([name, sub]) => {
+                  const inner = (value as Record<string, unknown>)[name];
+                  return inner === undefined ? [] : validate(sub, inner, `${at}/${name}`);
+              })
+            : [],
+    items: (rule, value, at) =>
+        Array.isArray(value)
+            ? value.flatMap((item, index) => validate(rule as Schema, item, `${at}/${index}`))
+            : [],
+};
+
 /**
  * Where an instance breaks a schema node, for the keywords the published
  * schema uses.
@@ -54,69 +115,17 @@ function typeOf(value: unknown): string {
  * @param value - The instance.
  * @param at - The instance's JSON pointer, for the message.
  * @returns One message per broken keyword.
+ * @throws {Error} When the node uses a keyword this check does not read.
  */
 function validate(node: Schema, value: unknown, at = ''): string[] {
-    const problems: string[] = [];
-    for (const [keyword, rule] of Object.entries(node)) {
-        if (ANNOTATIONS.has(keyword)) continue;
-        switch (keyword) {
-            case '$ref': {
-                const name = String(rule).replace('#/$defs/', '');
-                const defs = schema.$defs as Record<string, Schema>;
-                problems.push(...validate(defs[name] as Schema, value, at));
-                break;
-            }
-            case 'type': {
-                const actual = typeOf(value);
-                if (actual !== rule) {
-                    problems.push(`${at}: is ${actual}, not ${rule}`);
-                }
-                break;
-            }
-            case 'const':
-                if (value !== rule) problems.push(`${at}: is not ${JSON.stringify(rule)}`);
-                break;
-            case 'enum':
-                if (!(rule as unknown[]).includes(value)) {
-                    problems.push(`${at}: ${JSON.stringify(value)} is not one of the enum`);
-                }
-                break;
-            case 'pattern':
-                if (typeof value === 'string' && !new RegExp(rule as string, 'u').test(value)) {
-                    problems.push(`${at}: ${JSON.stringify(value)} does not match ${rule}`);
-                }
-                break;
-            case 'minimum':
-                if (typeof value === 'number' && value < (rule as number)) {
-                    problems.push(`${at}: ${value} is below ${rule}`);
-                }
-                break;
-            // Like JSON Schema, these read only the instance type they apply to.
-            case 'required':
-                if (typeOf(value) !== 'object') break;
-                for (const name of rule as string[]) {
-                    if (!(name in (value as object))) problems.push(`${at}: lacks ${name}`);
-                }
-                break;
-            case 'properties':
-                if (typeOf(value) !== 'object') break;
-                for (const [name, sub] of Object.entries(rule as Record<string, Schema>)) {
-                    const inner = (value as Record<string, unknown>)[name];
-                    if (inner !== undefined)
-                        problems.push(...validate(sub, inner, `${at}/${name}`));
-                }
-                break;
-            case 'items':
-                if (!Array.isArray(value)) break;
-                for (const [index, item] of (value as unknown[]).entries()) {
-                    problems.push(...validate(rule as Schema, item, `${at}/${index}`));
-                }
-                break;
-            default:
-                throw new Error(`the schema uses ${keyword}, which this check does not read`);
+    return Object.entries(node).flatMap(([keyword, rule]) => {
+        if (ANNOTATIONS.has(keyword)) return [];
+        const check = KEYWORDS[keyword];
+        if (check === undefined) {
+            throw new Error(`the schema uses ${keyword}, which this check does not read`);
         }
-    }
-    return problems;
+        return check(rule, value, at);
+    });
 }
 
 afterEach(() => {
