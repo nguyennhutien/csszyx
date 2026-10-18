@@ -232,18 +232,6 @@
         "variant": "spread",
         "issues": [
             {
-                "code": "fallback-nudge",
-                "line": 1,
-                "column": 38,
-                "args": {
-                    "site": "sz",
-                    "shape": "other",
-                    "detail": "ObjectExpression",
-                    "path": ""
-                },
-                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:38\n  `sz` falls back to the runtime: expression of type `ObjectExpression` cannot be read at build time.\n  help: use a literal sz object or a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: the runtime still turns the value into classes.\n  docs: https://csszyx.com/e/fallback-nudge"
-            },
-            {
                 "code": "unresolvable-spread",
                 "line": 1,
                 "column": 38,

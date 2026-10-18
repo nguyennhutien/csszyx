@@ -136,12 +136,10 @@ fn fallback_golden_other_await() {
 #[test]
 fn fallback_golden_spread_object() {
     let result = run("export const A = ({o}) => <div sz={{ ...o, p: 4 }} />;");
-    let expected = [
-        r#"fallback-nudge {"site":"sz","shape":"other","detail":"ObjectExpression","path":""}"#,
-        "unresolvable-spread {}",
-    ];
+    // The spread notice alone: a nudge for the same site would contradict it.
+    let expected = ["unresolvable-spread {}"];
     assert_eq!(lines(&result), expected, "code was: {}", result.code);
-    assert_eq!(starts(&result), [35, 35]);
+    assert_eq!(starts(&result), [35]);
 }
 
 #[test]

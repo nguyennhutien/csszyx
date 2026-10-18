@@ -621,10 +621,9 @@ fn deferred_variant_diagnostics(ir: &super::SourceIr) -> Diagnostics {
 
 /// Build-log diagnostics for `sz` props left to the runtime `_sz(...)` helper.
 ///
-/// Emits the fallback finding — missing CSS or a nudge, as the shared matrix
-/// decides for the expression's kind — and, for an object literal with a
-/// top-level spread, the unresolvable-spread notice, in a fixed per-attribute
-/// order, so which artifact a build loads cannot change the build log.
+/// Emits one finding per attribute: for an object literal with a top-level
+/// spread, the unresolvable-spread notice; otherwise missing CSS or a nudge,
+/// as the shared matrix decides for the expression's kind.
 fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     use super::generated::sz_fallback_matrix::{sz_site_fallback_misses_css, SzFallbackKind};
     use super::RuntimeFallbackKindIr;
@@ -645,16 +644,17 @@ fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
         let shape = Some(fallback_shape(diagnostic.kind));
         let detail = Some(diagnostic.detail.as_str());
         let path = Some(diagnostic.path.as_str());
-        let issue = if sz_site_fallback_misses_css(kind) {
+        // A spread object is an object literal, never a missing-CSS kind, and
+        // its notice names the unreadable part and the fix: a nudge for the
+        // same site would only say the whole object cannot be read.
+        let issue = if attr.runtime_fallback_spread {
+            issue::unresolvable_spread()
+        } else if sz_site_fallback_misses_css(kind) {
             issue::fallback_missing_css("sz", shape, detail, path, None)
         } else {
             issue::fallback_nudge("sz", shape, detail, path)
         };
-        let start = attr.value_span.start;
-        out.push_issue(issue, start);
-        if attr.runtime_fallback_spread {
-            out.push_issue(issue::unresolvable_spread(), start);
-        }
+        out.push_issue(issue, attr.value_span.start);
     }
     out
 }

@@ -340,7 +340,8 @@ in an sz array. A property shared by both branches is reported once at its sourc
 two separate declarations are still reported separately. Both branches are checked
 because either may be used. The diagnostics do not change the emitted classes.
 
-An unresolved spread still reports its runtime fallback. That warning is not a
+An unresolved spread reports `unresolvable-spread` in place of the fallback
+nudge, since both name the same site. That warning is not a
 certificate that the literal keys beside it are valid: complete key/value checking
 of unresolved objects is not supported yet.
 

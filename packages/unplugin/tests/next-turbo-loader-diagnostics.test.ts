@@ -54,7 +54,10 @@ function options(mode: 'development' | 'production', env: Record<string, string>
 
 const REPLACED = 'export const App = () => <p sz={{ ordinal: true, p: 4 }} />;\n';
 const CLEAN = 'export const App = () => <p sz={{ p: 4 }} />;\n';
-const SPREAD = 'export const App = (props: any) => <p sz={{ ...props.x }} />;\n';
+// A spread, and beside it a value the build cannot read: the spread is
+// reported in every build, the advisory nudge only in development.
+const SPREAD =
+    'export const App = (props: any) => <p sz={{ ...props.x }}><b sz={props.s} /></p>;\n';
 
 /**
  * A project holding one page with the given source.

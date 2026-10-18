@@ -13,10 +13,9 @@
  * already renders the variant, the entry reuses that source rather than
  * keeping a second copy of it.
  *
- * Most sources render exactly one issue. The exceptions render a fixed
- * companion the engine always emits beside the variant: an unresolvable spread
- * follows its own `fallback-nudge`, and every `parse-error` form comes with
- * the summary line and the oxc message.
+ * Most sources render exactly one issue. The exception renders a fixed
+ * companion the engine always emits beside the variant: every `parse-error`
+ * form comes with the summary line and the oxc message.
  *
  * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */

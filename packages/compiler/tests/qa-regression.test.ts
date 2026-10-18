@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
 import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 function warnsSpread(source: string): boolean {
     return transformWasm(source, 'App.tsx').issues.some(
@@ -141,5 +142,16 @@ describe('an unresolvable sz spread warns, other fallbacks stay quiet', () => {
         'const X = () => <div sz={{ p: 4 }} />;',
     ])('does not flag %s', source => {
         expect(warnsSpread(source)).toBe(false);
+    });
+
+    // The nudge would say the object cannot be read and to use a literal one;
+    // the spread notice names the part that cannot be read and the fix.
+    it.each(ENGINES)('%s reports the spread alone, with no fallback nudge', (_name, engine) => {
+        const result = engine(
+            'const X = ({ props }) => <div sz={{ ...props, p: 4 }} />;',
+            'App.tsx',
+        );
+
+        expect(result.issues?.map(issue => issue.code)).toEqual(['unresolvable-spread']);
     });
 });
