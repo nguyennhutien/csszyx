@@ -192,7 +192,7 @@ pub fn parse_source_shell_with_registries(
 /// yielded no classes, instead of letting them die silently under Tailwind
 /// `source(none)`. The generic summary stands in only for errors that carry no
 /// message, and `panicked` only for a parser that stopped with none at all.
-pub(crate) fn parse_error_diagnostics(errors: Vec<(u32, String)>, panicked: bool) -> Diagnostics {
+pub fn parse_error_diagnostics(errors: Vec<(u32, String)>, panicked: bool) -> Diagnostics {
     let mut diagnostics = Diagnostics::default();
     let count = errors.len() as u64;
     let mut unnamed_at = None;
