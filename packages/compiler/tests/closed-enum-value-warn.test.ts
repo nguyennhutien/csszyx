@@ -117,3 +117,53 @@ describe('closed-enum values', () => {
         },
     );
 });
+
+/**
+ * The values the runtime lane names that no closed-enum table holds: a CSS
+ * longhand on an alignment key, which lowers to a dead class, and a font style
+ * or smoothing Tailwind has no class for, which lowers to nothing. The build
+ * ships what the runtime ships, and says so as the runtime does.
+ */
+describe('closed-enum values the runtime lane names', () => {
+    const LANES = ENGINES.map(([lane, engine]) => ({ lane, engine }));
+
+    it.each(LANES)('$lane names a CSS longhand on an alignment key', ({ engine }) => {
+        const { emitted, diagnostics, issues } = run(engine, "{ justify: 'flex-start' }");
+        expect(emitted).toBe('justify-flex-start');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'closed-enum-value',
+                { form: 'css-value', key: 'justify', value: 'flex-start', suggestion: 'start' },
+            ],
+        ]);
+        expect(diagnostics[0]).toContain(
+            "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` generates no CSS.",
+        );
+        expect(diagnostics[0]).toContain("help: use the short form: `{ justify: 'start' }`.");
+    });
+
+    it.each(LANES)('$lane names a font style Tailwind has no class for', ({ engine }) => {
+        const { emitted, issues } = run(engine, "{ fontStyle: 'oblique', p: 4 }");
+        expect(emitted).toBe('p-4');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['closed-enum-value', { form: 'font-style', key: 'fontStyle', value: 'oblique' }],
+        ]);
+    });
+
+    it.each(LANES)('$lane names a font smoothing Tailwind has no class for', ({ engine }) => {
+        const { emitted, issues } = run(engine, "{ hover: { fontSmoothing: 'auto' }, p: 4 }");
+        expect(emitted).toBe('p-4');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['closed-enum-value', { form: 'font-smoothing', key: 'fontSmoothing', value: 'auto' }],
+        ]);
+    });
+
+    it.each(LANES)('$lane stays quiet on the values with a class', ({ engine }) => {
+        const { emitted, issues } = run(
+            engine,
+            "{ justify: 'start', fontStyle: 'italic', fontSmoothing: 'grayscale' }",
+        );
+        expect(emitted).toBe('justify-start italic antialiased');
+        expect(issues).toEqual([]);
+    });
+});

@@ -95,6 +95,8 @@ function readTables() {
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
             suggestionMap: core.stringObject('SUGGESTION_MAP'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
+            alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
+            alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
             closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
@@ -164,6 +166,8 @@ function renderRust({
     specialVariants,
     suggestionMap,
     cssVarTypeHints,
+    alignmentKeys,
+    alignmentCssValueHints,
     migrationNotes,
     closedEnumClasses,
     closedEnumAffixes,
@@ -207,6 +211,25 @@ ${renderMatchArms(suggestionMap)}
 pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
     match key {
 ${renderMatchArms(cssVarTypeHints)}
+        _ => None,
+    }
+}
+
+/// Returns true when a key takes csszyx's short alignment values
+/// (\`start\`, \`between\`), not the CSS longhand. Mirrors \`ALIGNMENT_KEYS\`.
+pub(crate) fn is_alignment_key(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(alignmentKeys)}
+    )
+}
+
+/// The short form of a CSS longhand alignment value, whose class on an
+/// alignment key Tailwind has no utility for. Mirrors
+/// \`ALIGNMENT_CSS_VALUE_HINT\`.
+pub(crate) fn alignment_css_value_hint(value: &str) -> Option<&'static str> {
+    match value {
+${renderMatchArms(alignmentCssValueHints)}
         _ => None,
     }
 }

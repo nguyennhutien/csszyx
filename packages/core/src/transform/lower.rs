@@ -764,6 +764,37 @@ fn is_dead_enum_value(key: &str, value: &str) -> bool {
         && super::generated::tables::closed_enum_value_move(key, value).is_none()
 }
 
+/// A value no closed-enum table holds that still has no Tailwind class: the
+/// values the runtime lane names beside the closed sets.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnclassedValue {
+    /// A CSS longhand on an alignment key, with the short form to write; its
+    /// class is still emitted, and generates no CSS.
+    CssValue(&'static str),
+    /// A `fontStyle` other than `italic` and `normal`; nothing is emitted.
+    FontStyle,
+    /// A `fontSmoothing` other than `grayscale` and `subpixel`; nothing is
+    /// emitted.
+    FontSmoothing,
+}
+
+/// Which [`UnclassedValue`] a key's value is, if any. The font modes mirror
+/// the lowering's own match on them.
+#[cfg(feature = "native-engine")]
+pub(crate) fn unclassed_value(key: &str, value: &str) -> Option<UnclassedValue> {
+    match key {
+        "fontStyle" => (!matches!(value, "italic" | "normal")).then_some(UnclassedValue::FontStyle),
+        "fontSmoothing" => {
+            (!matches!(value, "grayscale" | "subpixel")).then_some(UnclassedValue::FontSmoothing)
+        }
+        _ if super::generated::tables::is_alignment_key(key) => {
+            super::generated::tables::alignment_css_value_hint(value).map(UnclassedValue::CssValue)
+        }
+        _ => None,
+    }
+}
+
 /// Collect closed-enum keys whose value is not in their set, for the diagnostic.
 ///
 /// `display`, `position`, `visibility` and `isolation` spell their value as the
@@ -793,7 +824,10 @@ pub(crate) fn collect_dead_enum_values(
                         .iter()
                         .any(|(replaced, _)| std::ptr::eq(*replaced, property))
                         && is_stray_group_value(&property.key, base));
-                if named && is_dead_enum_value(&property.key, base) {
+                if named
+                    && (is_dead_enum_value(&property.key, base)
+                        || unclassed_value(&property.key, base).is_some())
+                {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
             }

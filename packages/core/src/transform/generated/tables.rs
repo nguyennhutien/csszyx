@@ -504,6 +504,36 @@ pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
     }
 }
 
+/// Returns true when a key takes csszyx's short alignment values
+/// (`start`, `between`), not the CSS longhand. Mirrors `ALIGNMENT_KEYS`.
+pub(crate) fn is_alignment_key(key: &str) -> bool {
+    matches!(
+        key,
+        "justify"
+            | "items"
+            | "self"
+            | "alignContent"
+            | "placeItems"
+            | "placeContent"
+            | "justifyItems"
+            | "justifySelf"
+    )
+}
+
+/// The short form of a CSS longhand alignment value, whose class on an
+/// alignment key Tailwind has no utility for. Mirrors
+/// `ALIGNMENT_CSS_VALUE_HINT`.
+pub(crate) fn alignment_css_value_hint(value: &str) -> Option<&'static str> {
+    match value {
+        "flex-start" => Some("start"),
+        "flex-end" => Some("end"),
+        "space-between" => Some("between"),
+        "space-around" => Some("around"),
+        "space-evenly" => Some("evenly"),
+        _ => None,
+    }
+}
+
 /// Migration note for a removed sz key whose replacement needs a sentence.
 pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
     match key {

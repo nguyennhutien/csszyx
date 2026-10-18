@@ -1179,9 +1179,27 @@ fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnos
 /// Report a closed-enum key carrying a value CSS does not define for it.
 ///
 /// The legal set is named in full, like the mask-slot diagnostic: the author has to pick a
-/// replacement, and the alternative is a second trip to the docs.
+/// replacement, and the alternative is a second trip to the docs. A value with no class that
+/// no closed set holds (a CSS longhand on an alignment key, a font mode Tailwind does not
+/// model) is named in the form the runtime lane names it.
 fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
+    use super::lower::UnclassedValue;
     for (key, value, offset) in found {
+        if let Some(unclassed) = super::lower::unclassed_value(key, value) {
+            let issue = match unclassed {
+                UnclassedValue::CssValue(short) => {
+                    issue::closed_enum_value_css_value(key, value, Some(short), None, None)
+                }
+                UnclassedValue::FontStyle => {
+                    issue::closed_enum_value_font_style(key, value, None, None, None)
+                }
+                UnclassedValue::FontSmoothing => {
+                    issue::closed_enum_value_font_smoothing(key, value, None, None, None)
+                }
+            };
+            out.push_issue(issue, *offset);
+            continue;
+        }
         let bare = super::lower::bare_closed_enum_class(key, value);
         if let Some((group_key, group_value)) = super::lower::sibling_group_of(key, &bare) {
             let issue = issue::closed_enum_value_sibling_group(
@@ -4736,6 +4754,22 @@ mod tests {
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 
+    /// Only an alignment key names a CSS longhand as its short form: the same
+    /// word on another key is that key's own value.
+    #[test]
+    fn a_css_alignment_word_on_another_key_is_not_named_as_its_short_form() {
+        let (classes, diagnostics) = layers_run("{ justify: 'flex-start', p: 'flex-start' }");
+        assert_eq!(classes, "justify-flex-start p-flex-start");
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|line| line.starts_with("closed-enum-value"))
+                .count(),
+            1,
+            "{diagnostics:?}"
+        );
+    }
+
     #[test]
     fn a_stand_alone_keyword_before_its_group_is_named() {
         let (classes, diagnostics) =
@@ -5585,5 +5619,56 @@ mod tests {
             let codes: Vec<&str> = result.issues.iter().map(|i| i.code.as_str()).collect();
             assert_eq!(codes, ["runtime-value"], "{source}");
         }
+    }
+
+    /// A value with no class that no closed set holds is named in the form
+    /// the runtime lane names it; a value with a class is not.
+    #[test]
+    fn unclassed_values_are_named_in_the_runtime_form() {
+        let run = |sz: &str| {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "src/A.tsx".into(),
+                    source: format!("const A = () => <div sz={{{{ {sz} }}}} />;"),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+            (result.classes.join(" "), lines(&result))
+        };
+        assert_eq!(
+            run("justify: 'flex-start!'"),
+            (
+                "justify-flex-start!".to_string(),
+                vec![concat!(
+                    r#"closed-enum-value {"form":"css-value","key":"justify","#,
+                    r#""value":"flex-start","suggestion":"start"}"#
+                )
+                .to_string()]
+            )
+        );
+        assert_eq!(
+            run("fontStyle: 'oblique', hover: { fontSmoothing: 'auto' }"),
+            (
+                String::new(),
+                vec![
+                    r#"closed-enum-value {"form":"font-style","key":"fontStyle","value":"oblique"}"#
+                        .to_string(),
+                    concat!(
+                        r#"closed-enum-value {"form":"font-smoothing","key":"fontSmoothing","#,
+                        r#""value":"auto"}"#
+                    )
+                    .to_string(),
+                ]
+            )
+        );
+        let (classes, diagnostics) = run(
+            "justify: 'start', items: 'center', fontStyle: 'normal', fontSmoothing: 'subpixel'",
+        );
+        assert_eq!(
+            classes,
+            "justify-start items-center not-italic subpixel-antialiased"
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 }

@@ -2211,8 +2211,9 @@ export const REMOVED = [
 //   console prints args in place of the sentence (ADR 0031 §4). runtime-family-conflict
 //   first/second are forms. Constants (MAX_SOURCE_NESTING_DEPTH, MERGE_TABLE_FORMAT)
 //   reach the renderer as generated constants, not args.
-// - closed-enum-value forms css-value, font-style, font-smoothing are not engine-emitted until
-//   PR B; `gaps` is per id, so it is not set here. A per-form gap may be needed.
+// - closed-enum-value forms css-value, font-style, font-smoothing are engine-emitted since
+//   PR B, from the alignment tables `generate-rust-transform-tables.mjs` reads and the
+//   lowering's own font modes, so no form carries a gap.
 // - fallback-missing-css / fallback-nudge use the amendment's {site, shape} as enum args, not
 //   `forms`; detail, path and keyPath are kept as optional user-data args (callee name,
 //   import path, variant key path), which {site, shape} alone cannot carry. shape is

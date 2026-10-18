@@ -651,6 +651,58 @@
         ]
     },
     {
+        "code": "closed-enum-value",
+        "variant": "css-value",
+        "issues": [
+            {
+                "code": "closed-enum-value",
+                "line": 1,
+                "column": 35,
+                "args": {
+                    "form": "css-value",
+                    "key": "justify",
+                    "value": "flex-start",
+                    "suggestion": "start"
+                },
+                "text": "[csszyx] closed-enum-value: src/freeze.tsx:1:35\n  `justify: 'flex-start'` is a CSS value, and `justify-flex-start` generates no CSS.\n  help: use the short form: `{ justify: 'start' }`.\n  docs: https://csszyx.com/e/closed-enum-value"
+            }
+        ]
+    },
+    {
+        "code": "closed-enum-value",
+        "variant": "font-style",
+        "issues": [
+            {
+                "code": "closed-enum-value",
+                "line": 1,
+                "column": 35,
+                "args": {
+                    "form": "font-style",
+                    "key": "fontStyle",
+                    "value": "oblique"
+                },
+                "text": "[csszyx] closed-enum-value: src/freeze.tsx:1:35\n  `fontStyle: 'oblique'` has no Tailwind class, and nothing is emitted for it.\n  help: use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: 'oblique' }`.\n  docs: https://csszyx.com/e/closed-enum-value"
+            }
+        ]
+    },
+    {
+        "code": "closed-enum-value",
+        "variant": "font-smoothing",
+        "issues": [
+            {
+                "code": "closed-enum-value",
+                "line": 1,
+                "column": 35,
+                "args": {
+                    "form": "font-smoothing",
+                    "key": "fontSmoothing",
+                    "value": "auto"
+                },
+                "text": "[csszyx] closed-enum-value: src/freeze.tsx:1:35\n  `fontSmoothing: 'auto'` has no Tailwind class, and nothing is emitted for it.\n  help: use `'grayscale'` or `'subpixel'`.\n  docs: https://csszyx.com/e/closed-enum-value"
+            }
+        ]
+    },
+    {
         "code": "slash-opacity-string",
         "variant": "string",
         "issues": [

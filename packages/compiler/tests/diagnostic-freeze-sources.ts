@@ -152,6 +152,21 @@ export const FREEZE_SOURCES: ReadonlyArray<FreezeSource> = [
         source: "export const A = () => <div sz={{ nums: 'oldstyle' }} />;",
     },
     shared('closed-enum-value', 'dead'),
+    {
+        code: 'closed-enum-value',
+        variant: 'css-value',
+        source: "export const A = () => <div sz={{ justify: 'flex-start' }} />;",
+    },
+    {
+        code: 'closed-enum-value',
+        variant: 'font-style',
+        source: "export const A = () => <div sz={{ fontStyle: 'oblique' }} />;",
+    },
+    {
+        code: 'closed-enum-value',
+        variant: 'font-smoothing',
+        source: "export const A = () => <div sz={{ fontSmoothing: 'auto' }} />;",
+    },
     shared('slash-opacity-string', 'string'),
     shared('color-slash-opacity', 'object'),
     shared('class-precedence', 'runtime-classname'),
