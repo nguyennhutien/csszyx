@@ -52,7 +52,7 @@ describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engin
         expect(removedKeys(engine, 'underline: true')).toEqual([
             { form: 'sugar', key: 'underline', replacement: "decoration: 'underline'" },
         ]);
-        expect(messages[0]).toContain('`underline` boolean sugar was removed');
+        expect(messages[0]).toContain('The boolean shorthand `underline` was removed');
         expect(messages[0]).toContain("{ decoration: 'underline' }");
         expect(messages[0]).toContain('[csszyx] removed-key: /p/App.tsx:1:');
     });

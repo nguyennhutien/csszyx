@@ -303,7 +303,7 @@ describe('the slash opacity diagnostic', () => {
     const engineExpected = engineMessage(
         'slash-opacity-string',
         '/p/src/Spelling.jsx:1:33',
-        "A string cannot carry slash opacity, so `bg: 'red-500/50'` emits nothing.",
+        "`bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.",
         "help: use the object form: `{ color: 'red-500', op: 50 }`.",
     );
 
@@ -581,9 +581,8 @@ describe('the mask layer diagnostic', () => {
             engineMessage(
                 'moved-value',
                 '/p/src/Spelling.jsx:1:33',
-                "`mask: 'linear-45'` names a gradient layer, and gradient layers moved to `maskLinear`; nothing is emitted for it.",
-                'help: write this layer on `maskLinear`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.',
-                'note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.',
+                "`mask: 'linear-45'` names a gradient layer, which moved to `maskLinear`, and nothing is emitted for it.",
+                'help: write this layer on `maskLinear`; `mask` takes only `none`, a `url()` or a CSS variable.',
             ),
         ]);
         expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([

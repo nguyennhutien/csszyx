@@ -176,7 +176,7 @@ describe('removed mask keys carry migration notes', () => {
         const warnings = captureRuntimeWarnings(() => transform({ maskVia: '50%' }));
         const hit = warnings.find(message => message.includes('"maskVia" was removed'));
         expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('masks have no via stop in Tailwind');
+        expect(hit).toContain('Tailwind masks have no via stop');
     });
 
     it('points maskShape at maskRadial', () => {

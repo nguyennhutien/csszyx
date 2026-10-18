@@ -69,8 +69,8 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
             engineMessage(
                 'fallback-missing-css',
                 `/p/App.tsx:1:${source.indexOf('hover') + 1}`,
-                '`sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected.',
-                'help: If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().',
+                '`sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.',
+                'help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.',
             ),
         );
     });
@@ -165,7 +165,7 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
             ': key `tablt` holds a value only known at runtime and no sz property claims it',
         );
         expect(run.warnings[0]).not.toContain('variant key');
-        expect(run.warnings[0]).toContain('if it is meant as an sz property, check its spelling');
+        expect(run.warnings[0]).toContain('if it is an sz property, check its spelling');
     });
 
     it('defers a project variant nested under a built-in one, and a conditional under it', () => {

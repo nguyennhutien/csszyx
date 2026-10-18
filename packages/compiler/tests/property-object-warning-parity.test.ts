@@ -41,7 +41,7 @@ describe('property-object warning parity', () => {
             ['property-object', expect.objectContaining({ key })],
         ]);
         const [hit] = warnings;
-        expect(hit).toContain(`\`${key}\` names a property and holds an object`);
+        expect(hit).toContain(`\`${key}\` is a property, and its object`);
         expect(hit).toContain('generate no CSS');
     });
 

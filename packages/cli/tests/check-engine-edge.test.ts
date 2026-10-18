@@ -23,6 +23,15 @@ vi.mock('@csszyx/compiler/engine', async importActual => {
             if (file?.includes('Explodes')) {
                 throw new Error('engine rejected this module');
             }
+            if (file?.includes('Cached')) {
+                // A result cached before the engine reported codes has no issues.
+                const result = actual.transformSource(
+                    source,
+                    file,
+                    options as Parameters<typeof actual.transformSource>[2],
+                );
+                return { ...result, issues: undefined };
+            }
             return actual.transformSource(
                 source,
                 file,
@@ -110,6 +119,20 @@ describe('csszyx check engine edges', () => {
         );
         expect(parseErrors).toHaveLength(1);
         expect(parseErrors[0].args).toMatchObject({ form: 'summary' });
+    });
+
+    it('reads a result without issues as a file with no findings', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/Cached.tsx': 'export const C = () => <div sz={{ pading: 4 }} />;',
+        });
+
+        await check({ cwd, json: true });
+
+        const { findings } = JSON.parse(log.mock.calls.flat().join('\n'));
+        expect(
+            findings.filter((finding: { rule: string }) => finding.rule === 'sz-diagnostic'),
+        ).toEqual([]);
     });
 
     it('skips a file the engine throws on and still checks the rest', async () => {

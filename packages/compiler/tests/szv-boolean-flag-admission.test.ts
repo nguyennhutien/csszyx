@@ -41,7 +41,7 @@ function refusals(
     const source = `${IMPORT}const t = szv(${config});\nexport const a = szr(t(${selection}));`;
     return (engine(source, '/p/t.tsx').diagnostics ?? [])
         .map(String)
-        .filter(message => message.includes('did not precompile'));
+        .filter(message => message.includes('could not be compiled'));
 }
 
 describe.each(ENGINES)('a canonical boolean flag inside a branch (%s)', (_name, engine) => {

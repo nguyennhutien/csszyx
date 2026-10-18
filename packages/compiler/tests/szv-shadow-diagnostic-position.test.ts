@@ -40,7 +40,7 @@ function disqualifiedAt(
 ): string {
     const source = `${IMPORT}const t = szv(${config});\nexport const a = szr(t({}));`;
     const [message = ''] = (engine(source, '/p/t.tsx').diagnostics ?? []).map(String);
-    return /disqualified at `([^`]+)`/.exec(message)?.[1] ?? message;
+    return /config fails at `([^`]+)`/.exec(message)?.[1] ?? message;
 }
 
 describe.each(ENGINES)('a base key a variant shadows (%s)', (_name, engine) => {

@@ -92,7 +92,7 @@ describe('the jest transform with csszyx.config and no state file', () => {
 
     it('prints a note the config raises', () => {
         expect(jest({ ...project(PRECEDENCE, ATOMIC), source: PRECEDENCE }).join('\n')).toContain(
-            'takes precedence over the runtime `className`',
+            'wins over the runtime `className`',
         );
     });
 

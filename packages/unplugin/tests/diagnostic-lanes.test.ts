@@ -146,14 +146,14 @@ describe('the Vite lane', () => {
     it('lists a note the atomic preset raises, in a production build', async () => {
         vi.stubEnv('NODE_ENV', 'production');
         const lines = await vite({ source: PRECEDENCE, config: ATOMIC });
-        expect(lines.join('\n')).toContain('takes precedence over the runtime `className`');
+        expect(lines.join('\n')).toContain('wins over the runtime `className`');
         expect(lines.join('\n')).not.toContain('not listed above');
     }, 60_000);
 
     it('counts that note instead of listing it under the recommended preset', async () => {
         vi.stubEnv('NODE_ENV', 'production');
         const lines = await vite({ source: PRECEDENCE });
-        expect(lines.join('\n')).not.toContain('takes precedence over the runtime `className`');
+        expect(lines.join('\n')).not.toContain('wins over the runtime `className`');
     }, 60_000);
 
     it('lists a site once while the file is unchanged, and again once it is edited', async () => {
@@ -341,7 +341,7 @@ describe('the jest transform', () => {
 
     it('prints it once the policy raises it', () => {
         expect(jest(PRECEDENCE, { preset: 'atomic' }).join('\n')).toContain(
-            'takes precedence over the runtime `className`',
+            'wins over the runtime `className`',
         );
     });
 

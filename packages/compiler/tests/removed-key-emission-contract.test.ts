@@ -128,10 +128,10 @@ describe('removed sz key emission contract', () => {
             ['removed-key', { form: 'sugar', key: 'isolate', replacement: "isolation: 'isolate'" }],
             ['removed-key', { form: 'sugar', key: 'flex', replacement: "display: 'flex'" }],
         ]);
-        expect(warnings).toContain('`absolute` boolean sugar was removed');
+        expect(warnings).toContain('The boolean shorthand `absolute` was removed');
         expect(warnings).toContain("help: write `{ position: 'absolute' }` instead");
-        expect(warnings).toContain('`isolate` boolean sugar was removed');
-        expect(warnings).toContain('`flex` boolean sugar was removed');
+        expect(warnings).toContain('The boolean shorthand `isolate` was removed');
+        expect(warnings).toContain('The boolean shorthand `flex` was removed');
         expect(code).toContain('p-4');
     });
 

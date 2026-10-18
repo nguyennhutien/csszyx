@@ -174,7 +174,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
                 'szs-slot-map',
                 `/p/t.tsx:2:${body.indexOf('szs=') + 1}`,
                 'A slot value in `szs` could not be read at build time, so no slot classes were compiled.',
-                'help: make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.',
+                'help: write every slot as an identifier key with a static object literal or class string; for a value known only at runtime, pass the class string `dynamic()` returns.',
                 'note: the attribute is left unchanged.',
             ),
         ]);

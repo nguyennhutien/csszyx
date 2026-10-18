@@ -40,7 +40,7 @@ describe('AST budget guard', () => {
         // A file-wide code: the header names the file alone, no line or column.
         expect(result.diagnostics).toHaveLength(1);
         expect(result.diagnostics[0]).toContain(`[csszyx] ast-budget: ${filename}\n`);
-        expect(result.diagnostics[0]).toContain('The file exceeds the AST budget');
+        expect(result.diagnostics[0]).toContain('The file exceeds the AST node budget');
         expect(result.diagnostics[0]).toContain('help: raise `build.astBudgetLimit`');
     }
 

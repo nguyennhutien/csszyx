@@ -86,7 +86,7 @@ describe('csszyx-owned keys holding an object', () => {
         );
         expect(named, diagnostics.join('\n')).toHaveLength(1);
         const index = issues.indexOf(named[0] as (typeof issues)[number]);
-        expect(diagnostics[index]).toContain(`\`${key}\` holds an object`);
+        expect(diagnostics[index]).toContain(`\`${key}\` is not a variant, so its object emits`);
     });
 
     it.each(reported)('$lane still emits the $key prefix', ({ engine, key, sz }) => {

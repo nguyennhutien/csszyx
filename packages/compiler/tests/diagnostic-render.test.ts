@@ -69,7 +69,7 @@ describe('renderSzDiagnostic', () => {
             },
             computed,
         );
-        expect(body).toContain('`maxDepth` 5 allows');
+        expect(body).toContain('more than 5 levels below');
         expect(body).toContain('help: raise `production.mangleVarHoistMaxDepth` to hoist it.');
     });
 

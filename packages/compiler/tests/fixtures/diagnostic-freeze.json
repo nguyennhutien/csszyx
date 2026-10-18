@@ -57,7 +57,7 @@
                 "args": {
                     "form": "transform"
                 },
-                "text": "[csszyx] ast-budget: src/freeze.tsx\n  The file exceeds the AST budget, and the IR walk stopped mid-file.\n  help: raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.\n  note: the file is left unchanged and contributes no classes to the safelist.\n  docs: https://csszyx.com/e/ast-budget"
+                "text": "[csszyx] ast-budget: src/freeze.tsx\n  The file exceeds the AST node budget.\n  help: raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.\n  note: the file is left unchanged, and none of its classes are collected.\n  docs: https://csszyx.com/e/ast-budget"
             }
         ]
     },
@@ -73,7 +73,7 @@
                     "form": "summary",
                     "errorCount": 1
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  The engine could not fully parse this file (1 syntax error(s)).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             },
             {
                 "code": "parse-error",
@@ -92,7 +92,7 @@
                 "args": {
                     "form": "panicked"
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:1:1\n  The parser could not recover from a syntax error, so csszyx did not finish lowering this file.\n  help: fix the syntax error reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:1:1\n  The parser stopped at a syntax error it could not recover from.\n  help: fix the syntax error reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             }
         ]
     },
@@ -105,7 +105,7 @@
                 "line": 1,
                 "column": 29,
                 "args": {},
-                "text": "[csszyx] unsupported-dynamic-sz: src/freeze.tsx:1:29\n  This `sz` attribute has no value, or a JSX element as its value, and the engine reads neither.\n  help: give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.\n  note: the attribute is left as written; the rest of the file is still transformed.\n  docs: https://csszyx.com/e/unsupported-dynamic-sz"
+                "text": "[csszyx] unsupported-dynamic-sz: src/freeze.tsx:1:29\n  This `sz` attribute has no value, or a JSX element as its value.\n  help: give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.\n  note: the attribute is left as written; the rest of the file is still transformed.\n  docs: https://csszyx.com/e/unsupported-dynamic-sz"
             }
         ]
     },
@@ -135,7 +135,7 @@
                 "args": {
                     "form": "unreadable-slot"
                 },
-                "text": "[csszyx] szs-slot-map: src/freeze.tsx:1:36\n  A slot value in `szs` could not be read at build time, so no slot classes were compiled.\n  help: make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.\n  note: the attribute is left unchanged.\n  docs: https://csszyx.com/e/szs-slot-map"
+                "text": "[csszyx] szs-slot-map: src/freeze.tsx:1:36\n  A slot value in `szs` could not be read at build time, so no slot classes were compiled.\n  help: write every slot as an identifier key with a static object literal or class string; for a value known only at runtime, pass the class string `dynamic()` returns.\n  note: the attribute is left unchanged.\n  docs: https://csszyx.com/e/szs-slot-map"
             }
         ]
     },
@@ -153,7 +153,7 @@
                     "detail": "cfg",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:22\n  `szr` falls back to the runtime: identifier `cfg` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:22\n  `szr` falls back to the runtime: identifier `cfg` could not be resolved to a static value.\n  help: make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -171,7 +171,7 @@
                     "detail": "cfg",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:22\n  The `szv` config cannot be read at build time: identifier `cfg` could not be resolved to a static value.\n  help: pass the config inline, or as a module-level const object literal.\n  note: none of its variant classes are safelisted, so they generate no CSS.\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:22\n  The `szv` config cannot be read at build time: identifier `cfg` could not be resolved to a static value.\n  help: pass the config inline, or as a module-level const object literal.\n  note: none of its variant classes were collected, so they generate no CSS.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -187,7 +187,7 @@
                     "site": "sz-variant-key",
                     "keyPath": "hover"
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:46\n  `sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected.\n  help: If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:1:46\n  `sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.\n  help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -205,7 +205,7 @@
                     "detail": "s",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:2:33\n  `sz` falls back to the runtime: imported binding `s` could not be read at build time.\n  help: Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
+                "text": "[csszyx] fallback-missing-css: src/freeze.tsx:2:33\n  `sz` falls back to the runtime: imported binding `s` could not be read at build time.\n  help: export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime. For variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.\n  docs: https://csszyx.com/e/fallback-missing-css"
             }
         ]
     },
@@ -223,7 +223,7 @@
                     "detail": "s",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:38\n  `sz` falls back to the runtime: identifier `s` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value.\n  docs: https://csszyx.com/e/fallback-nudge"
+                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:38\n  `sz` falls back to the runtime: identifier `s` could not be resolved to a static value.\n  help: make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: the runtime still turns the value into classes.\n  docs: https://csszyx.com/e/fallback-nudge"
             }
         ]
     },
@@ -241,14 +241,14 @@
                     "detail": "ObjectExpression",
                     "path": ""
                 },
-                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:38\n  `sz` falls back to the runtime: expression of type `ObjectExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value.\n  docs: https://csszyx.com/e/fallback-nudge"
+                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:38\n  `sz` falls back to the runtime: expression of type `ObjectExpression` cannot be read at build time.\n  help: use a literal sz object or a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.\n  note: the runtime still turns the value into classes.\n  docs: https://csszyx.com/e/fallback-nudge"
             },
             {
                 "code": "unresolvable-spread",
                 "line": 1,
                 "column": 38,
                 "args": {},
-                "text": "[csszyx] unresolvable-spread: src/freeze.tsx:1:38\n  `sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime; it may render no styles in production.\n  help: use the array form: `sz={[x, { ... }]}`.\n  docs: https://csszyx.com/e/unresolvable-spread"
+                "text": "[csszyx] unresolvable-spread: src/freeze.tsx:1:38\n  This `sz` object spreads a value the build cannot read, so the object falls back to the runtime and may render no styles in production.\n  help: use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.\n  docs: https://csszyx.com/e/unresolvable-spread"
             }
         ]
     },
@@ -261,7 +261,7 @@
                 "line": 1,
                 "column": 40,
                 "args": {},
-                "text": "[csszyx] style-override: src/freeze.tsx:1:40\n  This element spreads props that may carry `style`, and `sz` writes its own `style` attribute, which can replace the one in the spread.\n  help: move the spread `style` to an explicit `style` prop, so csszyx merges both values.\n  docs: https://csszyx.com/e/style-override"
+                "text": "[csszyx] style-override: src/freeze.tsx:1:40\n  This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.\n  help: move the spread `style` to an explicit `style` prop, so csszyx merges both values.\n  docs: https://csszyx.com/e/style-override"
             }
         ]
     },
@@ -276,7 +276,7 @@
                 "args": {
                     "key": "alignContent"
                 },
-                "text": "[csszyx] runtime-value: src/freeze.tsx:1:40\n  `alignContent` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.\n  help: name the values with `szv()`, or use `dynamic()` for open-ended data.\n  note: the class and the variable were dropped, so no other property is styled in its place.\n  docs: https://csszyx.com/e/runtime-value"
+                "text": "[csszyx] runtime-value: src/freeze.tsx:1:40\n  `alignContent` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.\n  help: name the values with `szv()`, or use `dynamic()` for open-ended data.\n  note: no class or variable is emitted for `alignContent`.\n  docs: https://csszyx.com/e/runtime-value"
             }
         ]
     },
@@ -292,7 +292,7 @@
                     "key": "p",
                     "value": "1.3"
                 },
-                "text": "[csszyx] off-scale-value: src/freeze.tsx:1:35\n  `p: 1.3` is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS.\n  help: use a quarter step (1.25, 1.5, 1.75) or a unit value (`\"1.3rem\"`).\n  docs: https://csszyx.com/e/off-scale-value"
+                "text": "[csszyx] off-scale-value: src/freeze.tsx:1:35\n  `p: 1.3` is not on Tailwind's spacing scale, so the class generates no CSS.\n  help: use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'1.3rem'`.\n  docs: https://csszyx.com/e/off-scale-value"
             }
         ]
     },
@@ -308,7 +308,7 @@
                     "key": "borderT",
                     "value": "dashed"
                 },
-                "text": "[csszyx] per-side-border-style: src/freeze.tsx:1:44\n  Tailwind has no per-side border style, so `borderT: 'dashed'` is dropped and generates no CSS.\n  help: use `borderStyle: 'dashed'` for every side, or a number on `borderT` for the width.\n  docs: https://csszyx.com/e/per-side-border-style"
+                "text": "[csszyx] per-side-border-style: src/freeze.tsx:1:44\n  `borderT: 'dashed'` emits nothing: Tailwind has no per-side border style.\n  help: use `borderStyle: 'dashed'` for every side, or a number on `borderT` for the width.\n  docs: https://csszyx.com/e/per-side-border-style"
             }
         ]
     },
@@ -326,7 +326,7 @@
                         "hover"
                     ]
                 },
-                "text": "[csszyx] property-object: src/freeze.tsx:1:35\n  `p` names a property and holds an object `{ hover }`, so it compiles to `p:*` classes that match no Tailwind variant and generate no CSS.\n  help: move the nested keys up a level; for color opacity, write `{ color: '...', op: ... }`.\n  docs: https://csszyx.com/e/property-object"
+                "text": "[csszyx] property-object: src/freeze.tsx:1:35\n  `p` is a property, and its object `{ hover }` emits `p:*` classes that match no Tailwind variant and generate no CSS.\n  help: move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.\n  docs: https://csszyx.com/e/property-object"
             }
         ]
     },
@@ -370,7 +370,7 @@
                     "key": "touchAction",
                     "replacement": "touch"
                 },
-                "text": "[csszyx] removed-key: src/freeze.tsx:1:40\n  `touchAction` was removed, and it holds a runtime value, so nothing is emitted for it.\n  help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.\n  docs: https://csszyx.com/e/removed-key"
+                "text": "[csszyx] removed-key: src/freeze.tsx:1:40\n  `touchAction` was removed, and nothing is emitted for its runtime value.\n  help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.\n  docs: https://csszyx.com/e/removed-key"
             }
         ]
     },
@@ -387,7 +387,7 @@
                     "value": "size",
                     "group": "containPaint"
                 },
-                "text": "[csszyx] global-before-group: src/freeze.tsx:1:35\n  `contain: size` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'size' }]}`.\n  note: a spread override (`{ ...base, contain: 'size' }`) keeps this order.\n  docs: https://csszyx.com/e/global-before-group"
+                "text": "[csszyx] global-before-group: src/freeze.tsx:1:35\n  `contain: size` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'size' }]}`.\n  note: a spread such as `{ ...base, contain: 'size' }` keeps the same key order, so it does not fix this.\n  docs: https://csszyx.com/e/global-before-group"
             }
         ]
     },
@@ -422,7 +422,7 @@
                     "value": "linear-45",
                     "layerKey": "maskLinear"
                 },
-                "text": "[csszyx] moved-value: src/freeze.tsx:1:35\n  `mask: 'linear-45'` names a gradient layer, and gradient layers moved to `maskLinear`; nothing is emitted for it.\n  help: write this layer on `maskLinear`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.\n  docs: https://csszyx.com/e/moved-value"
+                "text": "[csszyx] moved-value: src/freeze.tsx:1:35\n  `mask: 'linear-45'` names a gradient layer, which moved to `maskLinear`, and nothing is emitted for it.\n  help: write this layer on `maskLinear`; `mask` takes only `none`, a `url()` or a CSS variable.\n  docs: https://csszyx.com/e/moved-value"
             }
         ]
     },
@@ -439,7 +439,7 @@
                     "key": "touchPanX",
                     "other": "touch"
                 },
-                "text": "[csszyx] runtime-family-conflict: src/freeze.tsx:1:55\n  `touchPanX` takes a runtime value beside `touch` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.\n  help: layer them, later wins: `sz={[{ touch: … }, { touchPanX: … }]}`.\n  docs: https://csszyx.com/e/runtime-family-conflict"
+                "text": "[csszyx] runtime-family-conflict: src/freeze.tsx:1:55\n  `touchPanX` takes a runtime value beside `touch` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.\n  help: layer them, later wins: `sz={[{ touch: … }, { touchPanX: … }]}`.\n  docs: https://csszyx.com/e/runtime-family-conflict"
             }
         ]
     },
@@ -464,7 +464,7 @@
                         "r.className"
                     ]
                 },
-                "text": "[csszyx] spread-split-class: src/freeze.tsx:1:30\n  Class names and `sz` on more than one side of a spread on `<div>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies.\n  docs: https://csszyx.com/e/spread-split-class"
+                "text": "[csszyx] spread-split-class: src/freeze.tsx:1:30\n  `<div>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: Vue JSX merges every class, so every side applies there.\n  docs: https://csszyx.com/e/spread-split-class"
             }
         ]
     },
@@ -480,7 +480,7 @@
                     "elementName": "div",
                     "count": 2
                 },
-                "text": "[csszyx] duplicate-sz: src/freeze.tsx:1:29\n  `<div>` carries 2 `sz` attributes; they were merged as `sz={[first, …, last]}`, later wins per property.\n  help: fold them into one `sz` array, so the order is written down.\n  docs: https://csszyx.com/e/duplicate-sz"
+                "text": "[csszyx] duplicate-sz: src/freeze.tsx:1:29\n  `<div>` carries 2 `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.\n  help: fold them into one `sz` array, so the order is written down.\n  docs: https://csszyx.com/e/duplicate-sz"
             }
         ]
     },
@@ -495,7 +495,7 @@
                 "args": {
                     "value": "700"
                 },
-                "text": "[csszyx] numeric-font-weight: src/freeze.tsx:1:35\n  `weight: '700'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-700` generates no CSS.\n  help: write `weight: 700` as a number, which brackets to `font-[700]`.\n  docs: https://csszyx.com/e/numeric-font-weight"
+                "text": "[csszyx] numeric-font-weight: src/freeze.tsx:1:35\n  `weight: '700'` is a numeric string, so `font-700` generates no CSS.\n  help: write `weight: 700` as a number; it emits `font-[700]`.\n  docs: https://csszyx.com/e/numeric-font-weight"
             }
         ]
     },
@@ -529,7 +529,7 @@
                     "key": "inlineFlex",
                     "replacement": "display: 'inline-flex'"
                 },
-                "text": "[csszyx] removed-key: src/freeze.tsx:1:35\n  `inlineFlex` boolean sugar was removed, and nothing is emitted for it.\n  help: write `{ display: 'inline-flex' }` instead, or run `csszyx migrate`.\n  docs: https://csszyx.com/e/removed-key"
+                "text": "[csszyx] removed-key: src/freeze.tsx:1:35\n  The boolean shorthand `inlineFlex` was removed, and nothing is emitted for it.\n  help: write `{ display: 'inline-flex' }` instead, or run `csszyx migrate`.\n  docs: https://csszyx.com/e/removed-key"
             }
         ]
     },
@@ -545,7 +545,7 @@
                     "form": "removed",
                     "key": "maskFrom"
                 },
-                "text": "[csszyx] removed-key: src/freeze.tsx:1:35\n  `maskFrom` was removed, and nothing is emitted for it.\n  help: the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }.\n  docs: https://csszyx.com/e/removed-key"
+                "text": "[csszyx] removed-key: src/freeze.tsx:1:35\n  `maskFrom` was removed, and nothing is emitted for it.\n  help: write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`.\n  docs: https://csszyx.com/e/removed-key"
             }
         ]
     },
@@ -577,7 +577,7 @@
                 "args": {
                     "key": "backgroundColor"
                 },
-                "text": "[csszyx] canonical-key: src/freeze.tsx:1:35\n  `backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg` instead of `backgroundColor`.\n  docs: https://csszyx.com/e/canonical-key"
+                "text": "[csszyx] canonical-key: src/freeze.tsx:1:35\n  `backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg`.\n  docs: https://csszyx.com/e/canonical-key"
             }
         ]
     },
@@ -607,7 +607,7 @@
                 "args": {
                     "key": "xyzzy"
                 },
-                "text": "[csszyx] unknown-key: src/freeze.tsx:1:35\n  `xyzzy` is not an sz property.\n  help: check the spelling. If the class is intentional, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.\n  docs: https://csszyx.com/e/unknown-key"
+                "text": "[csszyx] unknown-key: src/freeze.tsx:1:35\n  `xyzzy` is not an sz property.\n  help: check the spelling. For a custom utility, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.\n  docs: https://csszyx.com/e/unknown-key"
             }
         ]
     },
@@ -622,7 +622,7 @@
                 "args": {
                     "key": "container"
                 },
-                "text": "[csszyx] non-variant-object: src/freeze.tsx:1:35\n  `container` holds an object, so it lowers to the class prefix `container:` and Tailwind generates no CSS for it; `container` is not a variant.\n  help: a `--*` key takes a declaration value; `container` takes `true`.\n  docs: https://csszyx.com/e/non-variant-object"
+                "text": "[csszyx] non-variant-object: src/freeze.tsx:1:35\n  `container` is not a variant, so its object emits `container:` classes that generate no CSS.\n  help: a `--*` key takes a declaration value; `container` takes `true`.\n  docs: https://csszyx.com/e/non-variant-object"
             }
         ]
     },
@@ -675,7 +675,7 @@
                     "color": "red-500",
                     "opacity": "50"
                 },
-                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  A string cannot carry slash opacity, so `bg: 'red-500/50'` emits nothing.\n  help: use the object form: `{ color: 'red-500', op: 50 }`.\n  docs: https://csszyx.com/e/slash-opacity-string"
+                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.\n  help: use the object form: `{ color: 'red-500', op: 50 }`.\n  docs: https://csszyx.com/e/slash-opacity-string"
             }
         ]
     },
@@ -707,7 +707,7 @@
                 "line": 1,
                 "column": 45,
                 "args": {},
-                "text": "[csszyx] class-precedence: src/freeze.tsx:1:45\n  `sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.\n  docs: https://csszyx.com/e/class-precedence"
+                "text": "[csszyx] class-precedence: src/freeze.tsx:1:45\n  `sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.\n  docs: https://csszyx.com/e/class-precedence"
             }
         ]
     },
@@ -722,7 +722,7 @@
                 "args": {
                     "site": "sz-array-element"
                 },
-                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:41\n  This `sz` array element is an object literal with a runtime value, so the whole element is deferred to `_szPart` at runtime.\n  help: use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.\n  note: its classes are still safelisted, best-effort.\n  docs: https://csszyx.com/e/fallback-nudge"
+                "text": "[csszyx] fallback-nudge: src/freeze.tsx:1:41\n  This `sz` array element is an object literal with a runtime value, so the whole element is resolved at runtime.\n  help: use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.\n  note: its classes are still collected, best-effort.\n  docs: https://csszyx.com/e/fallback-nudge"
             }
         ]
     },
@@ -737,7 +737,7 @@
                 "args": {
                     "form": "non-literal"
                 },
-                "text": "[csszyx] sz-recover: src/freeze.tsx:1:34\n  `szRecover` takes only a string literal, `\"csr\"` or `\"dev-only\"`.\n  help: write `szRecover=\"csr\"` or `szRecover=\"dev-only\"`.\n  note: no recovery token is emitted for this element.\n  docs: https://csszyx.com/e/sz-recover"
+                "text": "[csszyx] sz-recover: src/freeze.tsx:1:34\n  `szRecover` takes only a string literal.\n  help: write `szRecover=\"csr\"` or `szRecover=\"dev-only\"`.\n  note: no `data-sz-recovery-token` is written for this element.\n  docs: https://csszyx.com/e/sz-recover"
             }
         ]
     },
@@ -753,7 +753,7 @@
                     "form": "unknown-mode",
                     "mode": "ssr"
                 },
-                "text": "[csszyx] sz-recover: src/freeze.tsx:1:29\n  `szRecover` has an unknown mode `\"ssr\"`.\n  help: use `\"csr\"` or `\"dev-only\"`.\n  note: no recovery token is emitted for this element.\n  docs: https://csszyx.com/e/sz-recover"
+                "text": "[csszyx] sz-recover: src/freeze.tsx:1:29\n  `szRecover` has an unknown mode `\"ssr\"`.\n  help: use `\"csr\"` or `\"dev-only\"`.\n  note: no `data-sz-recovery-token` is written for this element.\n  docs: https://csszyx.com/e/sz-recover"
             }
         ]
     },
@@ -769,7 +769,7 @@
                     "form": "summary",
                     "errorCount": 1
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  The engine could not fully parse this file (1 syntax error(s)).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             },
             {
                 "code": "parse-error",
@@ -795,7 +795,7 @@
                     "form": "summary",
                     "errorCount": 1
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  The engine could not fully parse this file (1 syntax error(s)).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             },
             {
                 "code": "parse-error",
@@ -822,7 +822,7 @@
                     "usageCount": 2,
                     "reason": "no-lca"
                 },
-                "text": "[csszyx] mangle-vars-hoist-skipped: src/freeze.tsx:1:47\n  `mangleVars` did not hoist `--cz` to a component: its 2 usages share no common JSX ancestor.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.\n  docs: https://csszyx.com/e/mangle-vars-hoist-skipped"
+                "text": "[csszyx] mangle-vars-hoist-skipped: src/freeze.tsx:1:47\n  `mangleVars` did not hoist `--cz`: its 2 usages share no common JSX ancestor.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.\n  docs: https://csszyx.com/e/mangle-vars-hoist-skipped"
             }
         ]
     },
@@ -840,7 +840,7 @@
                     "reason": "max-depth",
                     "maxDepth": 5
                 },
-                "text": "[csszyx] mangle-vars-hoist-skipped: src/freeze.tsx:1:86\n  `mangleVars` did not hoist `--cz` to a component: one of its 2 usages sits deeper below their common ancestor than `maxDepth` 5 allows.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.\n  docs: https://csszyx.com/e/mangle-vars-hoist-skipped"
+                "text": "[csszyx] mangle-vars-hoist-skipped: src/freeze.tsx:1:86\n  `mangleVars` did not hoist `--cz`: one of its 2 usages sits more than 5 levels below their common ancestor.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.\n  docs: https://csszyx.com/e/mangle-vars-hoist-skipped"
             }
         ]
     }

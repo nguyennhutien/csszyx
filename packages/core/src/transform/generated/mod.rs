@@ -183,11 +183,11 @@ mod diagnostic_table_tests {
     #[test]
     fn every_removed_key_carries_its_migration_note() {
         for (key, note) in [
-            ("maskFrom", "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }"),
-            ("maskTo", "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
-            ("maskVia", "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
-            ("maskShape", "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
-            ("fontVariant", "font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
+            ("maskFrom", "write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"),
+            ("maskTo", "write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"),
+            ("maskVia", "Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`"),
+            ("maskShape", "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"),
+            ("fontVariant", "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"),
         ] {
             assert_eq!(key_migration_note(key), Some(note), "note for {key}");
         }

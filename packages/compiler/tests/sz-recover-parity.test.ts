@@ -24,9 +24,9 @@ import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 const NON_LITERAL = engineMessage(
     'sz-recover',
     '/p/t.tsx:1:37',
-    '`szRecover` takes only a string literal, `"csr"` or `"dev-only"`.',
+    '`szRecover` takes only a string literal.',
     'help: write `szRecover="csr"` or `szRecover="dev-only"`.',
-    'note: no recovery token is emitted for this element.',
+    'note: no `data-sz-recovery-token` is written for this element.',
 );
 
 const UNKNOWN_MODE = engineMessage(
@@ -34,7 +34,7 @@ const UNKNOWN_MODE = engineMessage(
     '/p/t.tsx:1:29',
     '`szRecover` has an unknown mode `"ssr"`.',
     'help: use `"csr"` or `"dev-only"`.',
-    'note: no recovery token is emitted for this element.',
+    'note: no `data-sz-recovery-token` is written for this element.',
 );
 
 describe('szRecover diagnostics are identical on every engine', () => {

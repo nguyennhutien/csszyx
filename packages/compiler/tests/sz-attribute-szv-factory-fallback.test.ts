@@ -49,7 +49,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('szv factory `t()` did not precompile');
+        expect(diagnostics[0]).toContain('szv factory `t()` could not be compiled');
         expect(diagnostics[0]).toContain('base.color');
         const { issues } = engine(
             `${RUNTIME_IMPORT}${DISQUALIFIED_FACTORY}export const A = () => <div sz={t({ c: 'blue' })} />;`,
@@ -70,7 +70,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics[0]).not.toContain('convert to szv()');
-        expect(diagnostics[0]).not.toContain('result is unknown at build time');
+        expect(diagnostics[0]).not.toContain('returns a value unknown at build time');
     });
 
     it('reads the same at both positions, because it is the same cause', () => {
@@ -111,7 +111,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('szv factory `t()` did not precompile');
+        expect(diagnostics[0]).toContain('szv factory `t()` could not be compiled');
     });
 });
 
@@ -120,7 +120,9 @@ describe.each(ENGINES)('what must keep reading as a generic call (%s)', (_name, 
         const diagnostics = diagnosticsFor(engine, 'export const A = () => <div sz={mk()} />;');
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('function call `mk()` result is unknown at build time');
+        expect(diagnostics[0]).toContain(
+            'function call `mk()` returns a value unknown at build time',
+        );
         expect(diagnostics[0]).not.toContain('szv factory');
     });
 
@@ -134,7 +136,7 @@ describe.each(ENGINES)('what must keep reading as a generic call (%s)', (_name, 
         );
 
         for (const message of diagnostics) {
-            expect(message).not.toContain('szv factory `t()` did not precompile');
+            expect(message).not.toContain('szv factory `t()` could not be compiled');
         }
     });
 });

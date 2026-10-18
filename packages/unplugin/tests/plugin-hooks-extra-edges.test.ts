@@ -130,7 +130,7 @@ describe('buildEnd unresolvable-spread warning', () => {
         await h.invoke('buildEnd');
         const message = warn.mock.calls.map(c => String(c[0])).join('\n');
         expect(message).toContain('[csszyx] unresolvable-spread: src/Spread.tsx:1:');
-        expect(message).toContain('cannot be resolved at build time');
+        expect(message).toContain('spreads a value the build cannot read');
     });
 });
 

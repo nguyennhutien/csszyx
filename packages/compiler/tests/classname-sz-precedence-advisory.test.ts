@@ -54,7 +54,7 @@ describe.each(ENGINES)('className and sz on one element (%s)', (_name, engine) =
         expect(messages).toHaveLength(1);
         // Reported where the forwarded `className` value is written.
         expect(messages[0]).toContain('[csszyx] class-precedence: /p/W.tsx:2:53\n');
-        expect(messages[0]).toContain('`sz` takes precedence over the runtime `className`');
+        expect(messages[0]).toContain('`sz` wins over the runtime `className`');
         // Both intents, because the compiler cannot know which one is meant.
         expect(messages[0]).toContain('sz={[{ … }, className]}');
         expect(messages[0]).toContain('sz={[className, { … }]}');

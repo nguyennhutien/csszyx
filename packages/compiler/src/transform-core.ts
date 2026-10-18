@@ -640,14 +640,14 @@ export const MIGRATION_NOTES: Record<string, string> = {
     // Mask gradient stops moved onto the layer that owns them: Tailwind has no
     // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
     maskFrom:
-        'the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }',
-    maskTo: 'the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }',
+        'write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`',
+    maskTo: 'write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`',
     maskVia:
-        'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
-    maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
+        'Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`',
+    maskShape: "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`",
     // One key could hold one keyword, while CSS combines one per group.
     fontVariant:
-        'font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal"',
+        "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`",
 };
 
 export const SUGGESTION_MAP: Record<string, string> = {

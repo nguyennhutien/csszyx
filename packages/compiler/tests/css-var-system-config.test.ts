@@ -157,7 +157,7 @@ describe('CSS variable system config contract', () => {
             engineMessage(
                 'mangle-vars-hoist-skipped',
                 'mangle-vars-component-boundary.tsx:1:46',
-                '`mangleVars` did not hoist `--cz` to a component: the common ancestor of its 2 usages cannot take a `style` prop.',
+                '`mangleVars` did not hoist `--cz`: the common ancestor of its 2 usages cannot take a `style` prop.',
                 'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
             ),
         ]);
@@ -200,7 +200,7 @@ describe('CSS variable system config contract', () => {
             engineMessage(
                 'mangle-vars-hoist-skipped',
                 'mangle-vars-default-depth.tsx:1:81',
-                '`mangleVars` did not hoist `--cz` to a component: one of its 2 usages sits deeper below their common ancestor than `maxDepth` 5 allows.',
+                '`mangleVars` did not hoist `--cz`: one of its 2 usages sits more than 5 levels below their common ancestor.',
                 'help: raise `production.mangleVarHoistMaxDepth` to hoist it.',
                 'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
             ),
@@ -270,7 +270,7 @@ describe('CSS variable system config contract', () => {
             engineMessage(
                 'mangle-vars-hoist-skipped',
                 'mangle-vars-fragment-boundary.tsx:1:42',
-                '`mangleVars` did not hoist `--cz` to a component: the common ancestor of its 2 usages cannot take a `style` prop.',
+                '`mangleVars` did not hoist `--cz`: the common ancestor of its 2 usages cannot take a `style` prop.',
                 'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
             ),
         ]);

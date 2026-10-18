@@ -179,7 +179,7 @@ describe('font-variant-numeric keys', () => {
                 '/p/t.tsx:1:78',
                 '`nums: normal` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.',
                 "help: to override the group, layer it: `sz={[base, { nums: 'normal' }]}`.",
-                "note: a spread override (`{ ...base, nums: 'normal' }`) keeps this order.",
+                "note: a spread such as `{ ...base, nums: 'normal' }` keeps the same key order, so it does not fix this.",
             ),
         ]);
         expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([

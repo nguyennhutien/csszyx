@@ -47,13 +47,13 @@ const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
 describe('describeSzFallback', () => {
     it('substitutes the detail into every reason that asks for one', () => {
         expect(describeSzFallback('call', 'makeSz').reason).toBe(
-            'function call `makeSz()` result is unknown at build time',
+            'function call `makeSz()` returns a value unknown at build time',
         );
         expect(describeSzFallback('identifier', 'cardSz').reason).toBe(
             'identifier `cardSz` could not be resolved to a static value',
         );
         expect(describeSzFallback('other', 'ConditionalExpression').reason).toBe(
-            'expression of type `ConditionalExpression` is not statically analyzable',
+            'expression of type `ConditionalExpression` cannot be read at build time',
         );
     });
 
@@ -75,7 +75,7 @@ describe('describeSzFallback', () => {
         // The caller decides what to print when a name is unreadable; the
         // matrix must not silently substitute a fallback of its own.
         expect(describeSzFallback('call').reason).toBe(
-            'function call `()` result is unknown at build time',
+            'function call `()` returns a value unknown at build time',
         );
     });
 
@@ -208,7 +208,7 @@ describe('engine parity for sz fallback diagnostics', () => {
         const tsx = 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;';
         for (const [name, diagnostics] of diagnosticsPerEngine(tsx)) {
             expect(diagnostics[0], name).toContain(
-                `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` result is unknown`,
+                `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` returns a value unknown`,
             );
         }
     });

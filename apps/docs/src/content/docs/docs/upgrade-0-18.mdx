@@ -1156,8 +1156,8 @@ production too:
 
 ```text
 [csszyx] src/Card.tsx:3:28
-  sz fallback at 3:28: key `hover` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected.
-  Suggestion: If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().
+  sz fallback at 3:28: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.
+  Suggestion: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling. For runtime values use `dynamic()`.
 ```
 
 **You are affected** when an `sz` object holds a runtime value under a variant

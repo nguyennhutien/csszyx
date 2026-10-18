@@ -507,11 +507,11 @@ pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
 /// Migration note for a removed sz key whose replacement needs a sentence.
 pub(crate) fn key_migration_note(key: &str) -> Option<&'static str> {
     match key {
-        "maskFrom" => Some("the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }"),
-        "maskTo" => Some("the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
-        "maskVia" => Some("masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
-        "maskShape" => Some("the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
-        "fontVariant" => Some("font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
+        "maskFrom" => Some("write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"),
+        "maskTo" => Some("write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"),
+        "maskVia" => Some("Tailwind masks have no via stop; write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`"),
+        "maskShape" => Some("write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"),
+        "fontVariant" => Some("write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"),
         _ => None,
     }
 }

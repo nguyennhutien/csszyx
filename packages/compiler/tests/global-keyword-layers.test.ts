@@ -146,7 +146,7 @@ const engineSpread = (global: string, value: string, group: string, column: numb
         `/p/src/Layers.jsx:1:${column}`,
         `\`${global}: ${value}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
         `help: to override the group, layer it: \`sz={[base, { ${global}: '${value}' }]}\`.`,
-        `note: a spread override (\`{ ...base, ${global}: '${value}' }\`) keeps this order.`,
+        `note: a spread such as \`{ ...base, ${global}: '${value}' }\` keeps the same key order, so it does not fix this.`,
     );
 
 describe('a stand-alone key written before a group key of its family', () => {
@@ -287,7 +287,7 @@ describe('a runtime value beside the other side of its family', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -526,7 +526,7 @@ describe('a removed key prints everywhere, once', () => {
         }
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            '[csszyx] "fontVariant" was removed: font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal".',
+            '[csszyx] "fontVariant" was removed: write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: \'normal\'`.',
         ]);
     });
 
@@ -550,7 +550,7 @@ describe('a family conflict inside an sz array element', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -602,7 +602,7 @@ describe('an alias of a stand-alone key with a runtime value', () => {
                     'canonical-key',
                     at,
                     '`touchAction` is an alias of `touch`, and nothing is emitted for it.',
-                    'help: write `touch` instead of `touchAction`.',
+                    'help: write `touch`.',
                 ),
             ]);
         },
@@ -615,7 +615,7 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             engineMessage(
                 'removed-key',
                 at,
-                '`touchAction` was removed, and it holds a runtime value, so nothing is emitted for it.',
+                '`touchAction` was removed, and nothing is emitted for its runtime value.',
                 'help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.',
             ),
         ]);
@@ -649,7 +649,7 @@ describe('the runtime names these with their location', () => {
 
         const messages = warn.mock.calls.map(([message]) => String(message));
         expect(messages[0]).toBe(
-            '[csszyx] "maskTo" was removed at src/Gone.tsx:2: the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }.',
+            '[csszyx] "maskTo" was removed at src/Gone.tsx:2: write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`.',
         );
         expect(messages.some(message => message.includes('comes before'))).toBe(false);
     });

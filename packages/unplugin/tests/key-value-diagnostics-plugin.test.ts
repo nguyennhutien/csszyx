@@ -83,7 +83,7 @@ describe('key and value diagnostics through the plugin', () => {
         const lines = await consoleWarnings();
         expect(count(lines, '`zzz` is not an sz property.')).toBe(1);
         expect(count(lines, '`display: bogus` is not a `display` value.')).toBe(1);
-        expect(count(lines, '`--v-x` holds an object')).toBe(1);
+        expect(count(lines, '`--v-x` is not a variant, so its object emits')).toBe(1);
     }, 60_000);
 
     it('still prints them under quiet: nudges', async () => {
@@ -95,6 +95,6 @@ describe('key and value diagnostics through the plugin', () => {
         const lines = await consoleWarnings('all');
         expect(count(lines, '`zzz` is not an sz property.')).toBe(0);
         expect(count(lines, '`display: bogus` is not a `display` value.')).toBe(0);
-        expect(count(lines, '`--v-x` holds an object')).toBe(0);
+        expect(count(lines, '`--v-x` is not a variant, so its object emits')).toBe(0);
     }, 60_000);
 });

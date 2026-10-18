@@ -47,7 +47,7 @@ describe('a TS assertion at the sz site is unwrapped', () => {
                 ['fallback-nudge', expect.objectContaining({ site: 'sz' })],
             ]);
             expect(run.warnings.join('\n')).toContain(
-                '`sz` falls back to the runtime: expression of type `TSAsExpression` is not statically analyzable.',
+                '`sz` falls back to the runtime: expression of type `TSAsExpression` cannot be read at build time.',
             );
         });
     }
