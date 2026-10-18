@@ -38,6 +38,22 @@ pub fn rewrite_static_sz_attributes(
     rewrite_static_sz_attributes_with_options(source, filename, ir, RewriteOptions::default())
 }
 
+/// The JSX spelling of the recovery directive, and the DOM attribute it becomes.
+const RECOVERY_ATTRIBUTE: &str = "szRecover";
+const RECOVERY_DOM_ATTRIBUTE: &str = "data-sz-recover";
+
+/// Rename the `szRecover` attribute whose name starts at `start`.
+fn rename_recovery_attribute(magic: &mut MagicString<'_>, start: u32) {
+    let start = start as usize;
+    // Nothing is ever inserted inside an attribute name, so a plain update is
+    // the whole edit.
+    magic.update(
+        start,
+        start + RECOVERY_ATTRIBUTE.len(),
+        RECOVERY_DOM_ATTRIBUTE,
+    );
+}
+
 /// Rewrite static `sz` attributes into `className="..."` with native options.
 pub fn rewrite_static_sz_attributes_with_options(
     source: &str,
@@ -52,11 +68,21 @@ pub fn rewrite_static_sz_attributes_with_options(
     let mut magic = MagicString::new(source);
     let mut rewrote = false;
 
+    // React warns in development on a camelCase attribute it does not know,
+    // so every `szRecover` reaches the DOM as `data-sz-recover`, a value the
+    // build could not read included: its own warning says what to fix.
+    for &(start, _) in &ir.unsupported_recovery_attributes {
+        rename_recovery_attribute(&mut magic, start);
+        rewrote = true;
+    }
+
     for element in &ir.jsx_opening_elements {
         if let Some(recovery_index) = element.recovery_attribute_index {
+            let recovery = &ir.recovery_attributes[recovery_index];
+            rename_recovery_attribute(&mut magic, recovery.attribute_span.start);
+            rewrote = true;
             if !element.has_recovery_token_attribute {
                 if let Some(last_attribute_end) = element.last_attribute_end {
-                    let recovery = &ir.recovery_attributes[recovery_index];
                     let (line, column) =
                         offset_to_line_column(source, recovery.attribute_span.start);
                     let token = generate_inline_recovery_token(
@@ -69,7 +95,6 @@ pub fn rewrite_static_sz_attributes_with_options(
                         last_attribute_end as usize,
                         format!(" data-sz-recovery-token=\"{token}\""),
                     );
-                    rewrote = true;
                 }
             }
         }
@@ -1903,7 +1928,7 @@ mod tests {
         let source = "export const App = () => <div szRecover=\"csr\">x</div>;";
         let rewritten = rewrite(source).expect("rewritten");
 
-        assert!(rewritten.contains("szRecover=\"csr\" data-sz-recovery-token=\""));
+        assert!(rewritten.contains("data-sz-recover=\"csr\" data-sz-recovery-token=\""));
         assert_eq!(rewritten.matches("data-sz-recovery-token").count(), 1);
     }
 
@@ -1912,7 +1937,8 @@ mod tests {
         let source = "export const App = () => <div szRecover=\"csr\" sz={{ p: 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
-        assert!(rewritten.contains("szRecover=\"csr\" className=\"p-4\" data-sz-recovery-token=\""));
+        assert!(rewritten
+            .contains("data-sz-recover=\"csr\" className=\"p-4\" data-sz-recovery-token=\""));
         assert_eq!(rewritten.matches("data-sz-recovery-token").count(), 1);
     }
 
@@ -1922,8 +1948,8 @@ mod tests {
             "export const App = () => <div szRecover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;";
 
         assert_eq!(
-            rewrite(source),
-            Err(StaticRewriteUnsupported::NoStaticSzAttribute)
+            rewrite(source).as_deref(),
+            Ok("export const App = () => <div data-sz-recover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;")
         );
     }
 

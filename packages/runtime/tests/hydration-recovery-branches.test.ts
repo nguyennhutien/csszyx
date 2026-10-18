@@ -48,7 +48,7 @@ describe('attemptCSRRecovery — dev-only mode in production', () => {
         enableCSRRecovery();
         const element = document.createElement('div');
         element.setAttribute('data-sz-recovery-token', 't1');
-        element.setAttribute('szRecover', 'dev-only');
+        element.setAttribute('data-sz-recover', 'dev-only');
 
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(attemptCSRRecovery(element)).toBe(false);
@@ -65,7 +65,7 @@ describe('attemptCSRRecovery on an element that was never aborted', () => {
         enableCSRRecovery();
         const element = document.createElement('div');
         element.setAttribute('data-sz-recovery-token', 't2');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const before = getAbortedSubtreeCount();
         expect(attemptCSRRecovery(element)).toBe(true);

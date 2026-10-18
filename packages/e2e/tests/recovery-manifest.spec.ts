@@ -57,15 +57,34 @@ test.describe('Recovery manifest pipeline (vite-react fixture)', () => {
         const token = await csr.getAttribute('data-sz-recovery-token');
         expect(token, 'csr element must carry a recovery token').not.toBeNull();
         expect(token).toMatch(/^[0-9a-f]{12}$/);
-        // The visitor preserves szRecover so the runtime can match it against the token's mode.
-        expect(await csr.getAttribute('szRecover')).toBe('csr');
+        // The mode reaches the DOM as data-sz-recover, which React does not warn about,
+        // so the runtime can match it against the token's mode.
+        expect(await csr.getAttribute('data-sz-recover')).toBe('csr');
+        expect(await csr.getAttribute('szRecover')).toBeNull();
     });
 
     test('dev-only element also gets a recovery token in development builds', async ({ page }) => {
         const devOnly = page.locator('[data-testid="dev-only-section"]');
         const token = await devOnly.getAttribute('data-sz-recovery-token');
         expect(token).toMatch(/^[0-9a-f]{12}$/);
-        expect(await devOnly.getAttribute('szRecover')).toBe('dev-only');
+        expect(await devOnly.getAttribute('data-sz-recover')).toBe('dev-only');
+    });
+
+    test('React reports no unknown szRecover prop', async ({ page }) => {
+        // React warns in development on a camelCase attribute it does not know;
+        // the build renames every szRecover, the dynamic one included.
+        const errors: string[] = [];
+        page.on('console', message => {
+            if (message.type() === 'error') errors.push(message.text());
+        });
+        await page.reload();
+        await page.locator('[data-testid="title"]').waitFor();
+        expect(errors.filter(text => text.includes('szRecover'))).toEqual([]);
+        expect(
+            await page
+                .locator('[data-testid="unknown-mode-section"]')
+                .getAttribute('data-sz-recover'),
+        ).toBe('ssr');
     });
 
     test('unknown szRecover modes produce no token', async ({ page }) => {

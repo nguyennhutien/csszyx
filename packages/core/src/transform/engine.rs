@@ -3779,7 +3779,16 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(result.metadata.transformed);
-        assert!(result.code.contains("data-sz-recovery-token="));
+        // React warns on a camelCase attribute it does not know, so the mode
+        // reaches the DOM under a data attribute, beside its token.
+        assert!(
+            result
+                .code
+                .contains("<div data-sz-recover=\"csr\" data-sz-recovery-token=\""),
+            "{}",
+            result.code
+        );
+        assert!(!result.code.contains("szRecover"), "{}", result.code);
         assert_eq!(result.recovery_tokens.len(), 1);
         assert_eq!(
             result.recovery_tokens[0].mode,
@@ -3800,8 +3809,12 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.code, file.source);
-        assert!(!result.metadata.transformed);
+        // Renamed all the same, so React stays quiet; the diagnostic below
+        // is what tells the author to fix the value.
+        assert_eq!(
+            result.code,
+            "export const App = ({ mode }) => <div data-sz-recover={mode}>x</div>;"
+        );
         assert!(result.recovery_tokens.is_empty());
         assert!(result
             .diagnostics
@@ -3839,8 +3852,10 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.code, file.source);
-        assert!(!result.metadata.transformed);
+        assert_eq!(
+            result.code,
+            "export const App = () => <div data-sz-recover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;"
+        );
         assert!(result.recovery_tokens.is_empty());
         assert!(result.diagnostics.is_empty());
     }

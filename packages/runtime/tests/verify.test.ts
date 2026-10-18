@@ -107,7 +107,7 @@ describe('verifyRecoveryToken', () => {
 
     it('should verify valid token', () => {
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const result = verifyRecoveryToken(element, manifest);
         expect(result.valid).toBe(true);
@@ -126,7 +126,7 @@ describe('verifyRecoveryToken', () => {
 
     it('should reject token not in manifest', () => {
         element.setAttribute('data-sz-recovery-token', 'invalid');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const result = verifyRecoveryToken(element, manifest);
         expect(result.valid).toBe(false);
@@ -135,7 +135,7 @@ describe('verifyRecoveryToken', () => {
 
     it('should reject mode mismatch', () => {
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'dev-only');
+        element.setAttribute('data-sz-recover', 'dev-only');
 
         const result = verifyRecoveryToken(element, manifest);
         expect(result.valid).toBe(false);
@@ -159,24 +159,31 @@ describe('hasRecoveryToken', () => {
 describe('getRecoveryMode', () => {
     it('should return csr mode', () => {
         const element = document.createElement('div');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
         expect(getRecoveryMode(element)).toBe('csr');
     });
 
     it('should return dev-only mode', () => {
         const element = document.createElement('div');
-        element.setAttribute('szRecover', 'dev-only');
+        element.setAttribute('data-sz-recover', 'dev-only');
         expect(getRecoveryMode(element)).toBe('dev-only');
     });
 
     it('should return null for invalid mode', () => {
         const element = document.createElement('div');
-        element.setAttribute('szRecover', 'invalid');
+        element.setAttribute('data-sz-recover', 'invalid');
         expect(getRecoveryMode(element)).toBeNull();
     });
 
     it('should return null for missing attribute', () => {
         const element = document.createElement('div');
+        expect(getRecoveryMode(element)).toBeNull();
+    });
+    it('reads the attribute the build writes, not the JSX spelling', () => {
+        // The build renames `szRecover` to `data-sz-recover`: React warns on a
+        // camelCase attribute it does not know.
+        const element = document.createElement('div');
+        element.setAttribute('szRecover', 'csr');
         expect(getRecoveryMode(element)).toBeNull();
     });
 });

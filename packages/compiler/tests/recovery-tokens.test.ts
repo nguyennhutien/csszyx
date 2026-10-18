@@ -18,7 +18,7 @@ describe('transformSource — szRecover handling', () => {
 
         expect(result.transformed).toBe(true);
         expect(result.code).toMatch(/data-sz-recovery-token="[0-9a-f]{12}"/);
-        expect(result.code).toContain('szRecover="csr"'); // szRecover preserved for runtime check
+        expect(result.code).toContain('data-sz-recover="csr"'); // the mode the runtime checks
 
         expect(result.recoveryTokens.size).toBe(1);
         const [[token, data]] = result.recoveryTokens;

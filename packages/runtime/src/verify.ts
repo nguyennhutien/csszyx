@@ -51,6 +51,13 @@ export interface VerificationResult {
 }
 
 /**
+ * The attribute an element's recovery mode reaches the DOM in. The build
+ * renames the `szRecover` JSX attribute to it, because React warns in
+ * development on a camelCase attribute it does not know.
+ */
+const RECOVERY_MODE_ATTRIBUTE = 'data-sz-recover';
+
+/**
  * Verifies a recovery token against the manifest.
  *
  * Checks that the token exists in the manifest and returns its metadata.
@@ -96,13 +103,13 @@ export function verifyRecoveryToken(
         };
     }
 
-    // Verify szRecover attribute matches token mode
-    const szRecover = element.getAttribute('szRecover');
+    // Verify the element's mode matches the token's
+    const mode = element.getAttribute(RECOVERY_MODE_ATTRIBUTE);
 
-    if (szRecover !== tokenData.mode) {
+    if (mode !== tokenData.mode) {
         return {
             valid: false,
-            error: `szRecover attribute (${szRecover}) does not match token mode (${tokenData.mode})`,
+            error: `${RECOVERY_MODE_ATTRIBUTE} attribute (${mode}) does not match token mode (${tokenData.mode})`,
         };
     }
 
@@ -239,10 +246,10 @@ export function hasRecoveryToken(element: HTMLElement): boolean {
  * ```
  */
 export function getRecoveryMode(element: HTMLElement): RecoveryMode | null {
-    const szRecover = element.getAttribute('szRecover');
+    const mode = element.getAttribute(RECOVERY_MODE_ATTRIBUTE);
 
-    if (szRecover === 'csr' || szRecover === 'dev-only') {
-        return szRecover;
+    if (mode === 'csr' || mode === 'dev-only') {
+        return mode;
     }
 
     return null;

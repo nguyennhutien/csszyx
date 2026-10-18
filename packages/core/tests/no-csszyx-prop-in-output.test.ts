@@ -9,17 +9,18 @@
  * checks what a whole FILE emits, which is where the defects below live and
  * where none of the object-level suites can see.
  *
- * Two survivals are allowed, and both are measured rather than assumed:
+ * One survival is allowed, and it is measured rather than assumed: `szsc` on
+ * a COMPONENT. The compiler rewrites a slot-map `szs` into the lowered `szsc`
+ * for the component to forward into its parts (`rewrite.rs`, the
+ * `szs_attributes` loop). A component is any element whose name does not
+ * start with a lowercase letter or `-`, which is the parser's own host test
+ * (`is_style_host_element_name`).
  *
- * - `szsc` on a COMPONENT. The compiler rewrites a slot-map `szs` into the
- *   lowered `szsc` for the component to forward into its parts
- *   (`rewrite.rs`, the `szs_attributes` loop). A component is any element
- *   whose name does not start with a lowercase letter or `-`, which is the
- *   parser's own host test (`is_style_host_element_name`).
- * - `szRecover` on an element that also carries `data-sz-recovery-token`. The
- *   runtime reads the attribute back off the DOM and checks it against the
- *   mode encoded in the token (`packages/runtime/src/verify.ts`), so the pair
- *   is the tamper check and must reach the DOM together.
+ * `szRecover` never survives: the compiler renames it to `data-sz-recover`,
+ * which the runtime reads back beside `data-sz-recovery-token`
+ * (`packages/runtime/src/verify.ts`). React warns in development on the
+ * camelCase spelling, so it must not reach the DOM even when its value is
+ * one the compiler cannot read.
  *
  * Both engine artifacts are driven, and their answers are compared: a leak on
  * one lane and not the other would itself be a finding.
@@ -63,8 +64,8 @@ function isHost(tag: string): boolean {
 }
 
 /**
- * Every csszyx prop still present in a transformed module, minus the two
- * allowed survivals.
+ * Every csszyx prop still present in a transformed module, minus the one
+ * allowed survival.
  *
  * Reads the attributes off an AST rather than matching them. A regex over
  * `<tag ...>` stops at the first `>`, so a `>` inside an earlier attribute
@@ -77,15 +78,10 @@ function isHost(tag: string): boolean {
  * @returns The offending props, in document order.
  */
 function leaksIn(code: string): Leak[] {
-    const attributes = jsxAttributes(code);
-    const tokenBearing = new Set(
-        attributes.filter(a => a.name === 'data-sz-recovery-token').map(a => a.tag),
-    );
     const out: Leak[] = [];
-    for (const { tag, name } of attributes) {
+    for (const { tag, name } of jsxAttributes(code)) {
         if (!AUTHORING_PROPS.includes(name as (typeof AUTHORING_PROPS)[number])) continue;
         if (name === 'szsc' && !isHost(tag)) continue;
-        if (name === 'szRecover' && tokenBearing.has(tag)) continue;
         out.push({ tag, prop: name });
     }
     return out;
@@ -215,13 +211,6 @@ const KNOWN_LEAKS: readonly { name: string; source: string; why: string }[] = [
             'DOM as `szs="[object Object]"`.',
     },
     {
-        name: 'szRecover with an unknown mode keeps the attribute and drops the token',
-        source: `export const C0 = () => <div sz={{"p":4}} szRecover="strict" />;`,
-        why:
-            'The compiler diagnoses the unknown mode and skips token emission, but leaves the ' +
-            'attribute — so it reaches the DOM with nothing for `verifyRecoveryToken` to pair it with.',
-    },
-    {
         name: 'szs with quoted slot keys is not read, and stays on the component',
         source: moduleOf([element('Card', 'szs', { root: { p: 4 } })]),
         why:
@@ -285,6 +274,8 @@ describe('no csszyx authoring prop survives into the output', () => {
                 moduleOf(["<Card szs={{ root: { p: 4 }, title: { weight: 'bold' } }} />"]),
                 moduleOf([element('div', 'sz', { p: 4 }, ' szRecover="csr"')]),
                 moduleOf([element('Card', 'sz', { p: 4 }, ' szRecover="dev-only"')]),
+                moduleOf([element('div', 'sz', { p: 4 }, ' szRecover="strict"')]),
+                moduleOf(['<div szRecover={mode} />']),
                 moduleOf([element('div', 'sz', { p: 4 }), '<Card szs={{ root: { m: 2 } }} />']),
                 // Zero-class shapes. `false` turns a key off and a variant block can
                 // be left empty, so both are ordinary authoring, and the sibling
