@@ -44,7 +44,12 @@ describe('transformSource — szRecover handling', () => {
 
         expect(result.recoveryTokens.size).toBe(0);
         expect(result.code).not.toContain('data-sz-recovery-token');
-        expect(result.diagnostics.some(d => d.includes('szRecover'))).toBe(true);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['sz-recover', { form: 'non-literal' }],
+        ]);
+        expect(
+            result.diagnostics.some(d => d.includes('`szRecover` takes only a string literal')),
+        ).toBe(true);
     });
 
     it('skips emission and emits a diagnostic on unknown mode strings', () => {
@@ -53,7 +58,10 @@ describe('transformSource — szRecover handling', () => {
 
         expect(result.recoveryTokens.size).toBe(0);
         expect(result.code).not.toContain('data-sz-recovery-token');
-        expect(result.diagnostics.some(d => d.includes('unknown mode "ssr"'))).toBe(true);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['sz-recover', { form: 'unknown-mode', mode: 'ssr' }],
+        ]);
+        expect(result.diagnostics.some(d => d.includes('has an unknown mode `"ssr"`'))).toBe(true);
     });
 
     it('is idempotent on re-transform (HMR safe)', () => {

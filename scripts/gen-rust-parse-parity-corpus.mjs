@@ -75,7 +75,8 @@ const sources = [
     // sz inside // line and /** doc comments must not contribute classes: the
     // rust scanner used to extract them while the JavaScript engines it replaced ignore comments.
     'const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};',
-    '/** example: <svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
+    // Split at the tag so a regex scan does not read the comment as a pattern.
+    '/** example: <' + 'svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
     'const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;',
     // An `as`-cast literal in a conditional branch resolves statically in every
     // lane (rust always unwrapped casts; the JavaScript engines it replaced used to collapse the whole

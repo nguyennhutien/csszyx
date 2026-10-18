@@ -11,7 +11,7 @@ use super::{
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
     parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
-    recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
+    recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
     DroppedKeyReason, DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile,
     TransformMetadata, TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -40,19 +40,19 @@ impl Instant {
     }
 }
 
-/// Maximum structural nesting depth of `{}`/`[]`/`()` allowed in a source file
-/// before it is handed to the parser.
-///
-/// oxc's recursive-descent parser overflows the call stack on pathologically
-/// nested input — e.g. a code generator that emits `{ hover: { hover: … } }`
-/// hundreds of levels deep. A stack overflow is a FATAL process abort, not a
-/// catchable panic, so it would crash the whole bundler (a build-time DoS) and
-/// is invisible to the parser's `catch_unwind`. 64 is far above any legitimate
-/// single-file nesting (deep JSX / data literals top out around 20-30) yet far
-/// below the overflow threshold (~800), so it converts the abort into a graceful,
-/// file-unchanged diagnostic. The runtime sz-object depth is bounded separately
-/// (`MAX_SZ_DEPTH`); this guards the build-time source-parsing layer.
-const MAX_SOURCE_NESTING_DEPTH: usize = 64;
+// Maximum structural nesting depth of `{}`/`[]`/`()` allowed in a source file
+// before it is handed to the parser.
+//
+// oxc's recursive-descent parser overflows the call stack on pathologically
+// nested input — e.g. a code generator that emits `{ hover: { hover: … } }`
+// hundreds of levels deep. A stack overflow is a FATAL process abort, not a
+// catchable panic, so it would crash the whole bundler (a build-time DoS) and
+// is invisible to the parser's `catch_unwind`. 64 is far above any legitimate
+// single-file nesting (deep JSX / data literals top out around 20-30) yet far
+// below the overflow threshold (~800), so it converts the abort into a graceful,
+// file-unchanged diagnostic. The runtime sz-object depth is bounded separately
+// (`MAX_SZ_DEPTH`); this guards the build-time source-parsing layer.
+use super::generated::diagnostic_codes::MAX_SOURCE_NESTING_DEPTH;
 
 /// Deepest `{[(` nesting in `source`, ignoring brackets inside string/template
 /// literals and `//` / `/* */` comments.
@@ -152,17 +152,21 @@ pub(super) fn transform_file_with_options(
         }
     }
     if let Some(problem) = table_problem {
-        let issue = match &problem {
-            super::merge::TableProblem::Unreadable(error) => {
-                issue::merge_classifier_unavailable_unreadable(Some(error), None)
-            }
-            super::merge::TableProblem::Format(format) => {
-                issue::merge_classifier_unavailable_format_mismatch(None, Some(u64::from(*format)))
-            }
+        let (issue, refused) = match &problem {
+            super::merge::TableProblem::Unreadable(error) => (
+                issue::merge_classifier_unavailable_unreadable(Some(error), None),
+                format!("The merge table is not one this engine reads ({error})"),
+            ),
+            super::merge::TableProblem::Format(format) => (
+                issue::merge_classifier_unavailable_format_mismatch(None, Some(u64::from(*format))),
+                format!(
+                    "The merge table is in format {format}, and this engine reads format {}",
+                    super::merge::MERGE_TABLE_FORMAT
+                ),
+            ),
         };
         result.push_issue(issue, 0, format!(
-            "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides.",
-            file.filename
+            "{refused}, so no sz key was merged with a later key that covers it.\n  help: install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides."
         ));
     }
     result
@@ -179,8 +183,7 @@ fn transform_file_in_scopes(file: &TransformFile, options: TransformOptions) -> 
     if nesting_depth > MAX_SOURCE_NESTING_DEPTH {
         let mut result = noop_result(file);
         result.push_issue(issue::nesting_depth(nesting_depth as u64), 0, format!(
-            "[csszyx] {}: source nesting exceeded {MAX_SOURCE_NESTING_DEPTH} levels (found {nesting_depth}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)",
-            file.filename
+            "Source nesting exceeds {MAX_SOURCE_NESTING_DEPTH} levels (found {nesting_depth}).\n  help: flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.\n  note: the file is left unchanged and contributes no classes."
         ));
         result.metadata.timings.triage_ns = elapsed_ns(triage_start);
         result.metadata.timings.total_ns = elapsed_ns(total_start);
@@ -223,12 +226,8 @@ fn transform_fast_static_ir_with_options(
     let rewritten_code = rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok();
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
-    let mut diagnostics = unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
-    diagnostics.extend(var_hostile_diagnostics(
-        file,
-        lower_ir,
-        options.root_dir.as_deref(),
-    ));
+    let mut diagnostics = unknown_property_diagnostics(lower_ir);
+    diagnostics.extend(var_hostile_diagnostics(lower_ir));
     diagnostics.extend(szs_diagnostics(lower_ir));
     let (diagnostics, issues) = diagnostics.into_parts();
 
@@ -333,34 +332,22 @@ fn transform_static_classes_with_options(
     // path has the same contract: a warning on one element keeps the
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
-    diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
-    // One line table per file, built lazily on the first position lookup: a
-    // file that reports nothing must not pay a pass over its own source.
-    let mut lines: Option<LineIndex> = None;
-    diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
-    diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
-    diagnostics.extend(deferred_variant_diagnostics(file, &parsed.ir, &mut lines));
-    diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
-    diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
-    diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
-    diagnostics.extend(unknown_property_diagnostics(
-        file,
-        &parsed.ir,
-        options.root_dir.as_deref(),
-    ));
-    diagnostics.extend(var_hostile_diagnostics(
-        file,
-        &parsed.ir,
-        options.root_dir.as_deref(),
-    ));
+    diagnostics.extend(unsupported_sz_diagnostics(&parsed.ir));
+    diagnostics.extend(runtime_fallback_diagnostics(&parsed.ir));
+    diagnostics.extend(site_fallback_diagnostics(&parsed.ir));
+    diagnostics.extend(deferred_variant_diagnostics(&parsed.ir));
+    diagnostics.extend(style_spread_collision_diagnostics(&parsed.ir));
+    diagnostics.extend(deferred_array_object_diagnostics(&parsed.ir));
+    diagnostics.extend(unsupported_recovery_diagnostics(&parsed.ir));
+    diagnostics.extend(unknown_property_diagnostics(&parsed.ir));
+    diagnostics.extend(var_hostile_diagnostics(&parsed.ir));
     diagnostics.extend(szs_diagnostics(&parsed.ir));
     if parsed.ast_budget_exceeded {
-        diagnostics.push_issue(issue::ast_budget_transform(), 0, format!(
-            "[csszyx] AST budget exceeded in {}: the IR walk stopped mid-file, so the file was \
-             left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` \
-             or split the file.",
-            file.filename
-        ));
+        diagnostics.push_issue(
+            issue::ast_budget_transform(),
+            0,
+            "The file exceeds the AST budget, and the IR walk stopped mid-file.\n  help: raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.\n  note: the file is left unchanged and contributes no classes to the safelist.".to_string(),
+        );
     }
     if let Some(mangling) = &css_var_mangling {
         diagnostics.extend(mangling.diagnostics.clone());
@@ -379,7 +366,7 @@ fn transform_static_classes_with_options(
         diagnostics.push_issue(
             issue::parse_error_panicked(None, None),
             0,
-            "oxc parser panicked before csszyx lowering completed".to_string(),
+            "The parser could not recover from a syntax error, so csszyx did not finish lowering this file.\n  help: fix the syntax error reported for this file.\n  note: the file is left unchanged.".to_string(),
         );
     }
 
@@ -564,14 +551,15 @@ fn merge_variable_maps(
     merged
 }
 
-fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Diagnostics {
+fn unsupported_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.unsupported_sz_attribute_spans
         .iter()
         .map(|span| {
-            (issue::unsupported_dynamic_sz(), span.start, format!(
-                "[csszyx] Rust native transform at {}:{}: unsupported dynamic sz attribute; leaving file unchanged for now.",
-                file.filename, span.start
-            ))
+            (
+                issue::unsupported_dynamic_sz(),
+                span.start,
+                "This `sz` attribute has no value, or a JSX element as its value, and the engine reads neither.\n  help: give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.\n  note: the attribute is left as written; the rest of the file is still transformed.".to_string(),
+            )
         })
         .collect()
 }
@@ -581,53 +569,40 @@ fn szs_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.szs_diagnostics
         .iter()
         .map(|diagnostic| {
-            let issue = if diagnostic.host_element {
-                issue::szs_slot_map_host_element()
+            let (issue, text) = if diagnostic.host_element {
+                (
+                    issue::szs_slot_map_host_element(),
+                    "`szs` has no effect on a host element; it maps the slot names of a custom component.\n  help: remove `szs`, or move it to the custom component whose slots it names.",
+                )
             } else {
-                issue::szs_slot_map_unreadable_slot()
+                (
+                    issue::szs_slot_map_unreadable_slot(),
+                    "A slot value in `szs` could not be read at build time, so no slot classes were compiled.\n  help: make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.",
+                )
             };
-            (issue, diagnostic.start, diagnostic.message.clone())
+            (
+                issue,
+                diagnostic.start,
+                format!("{text}\n  note: the attribute is left unchanged."),
+            )
         })
         .collect()
-}
-
-/// Resolve a byte offset to a diagnostic `line:column` — 1-based line, 1-based
-/// column counted in UTF-16 code units, the convention JS tooling reports
-/// (`expression.loc.start.column + 1`). The goldens in `sz_fallback_parity.rs`
-/// were captured from the removed Babel lane under that convention, and both
-/// artifacts must keep printing identical positions.
-fn diagnostic_line_column(
-    source: &str,
-    lines: &mut Option<LineIndex>,
-    offset: u32,
-) -> (u32, usize) {
-    let (line, byte_column) = lines
-        .get_or_insert_with(|| LineIndex::new(source))
-        .line_column(source, offset);
-    let end = offset.min(u32::try_from(source.len()).unwrap_or(u32::MAX)) as usize;
-    let start = end - byte_column as usize;
-    (line, source[start..end].encode_utf16().count() + 1)
 }
 
 /// Build-log diagnostics for `szr`/`szv` calls whose argument the parser could
 /// not read.
 ///
-/// The site label and the advice come from the shared matrix, so the wording,
-/// order and `line:column` semantics are byte-identical across artifacts.
-fn site_fallback_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+/// The reason and the advice come from the shared matrix, so the wording is
+/// byte-identical across artifacts.
+fn site_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     use super::generated::sz_fallback_matrix::{
-        format_sz_fallback_diagnostic, SzFallbackKind, SzFallbackSite,
+        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
     };
     use super::{RuntimeFallbackKindIr, SzFallbackSiteIr};
 
     ir.site_fallbacks
         .iter()
         .map(|fallback| {
-            let (line, column) = diagnostic_line_column(&file.source, lines, fallback.offset);
             let kind = match fallback.kind {
                 RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
                 RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
@@ -636,15 +611,23 @@ fn site_fallback_diagnostics(
                 RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
                 RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
             };
-            let site = match fallback.site {
-                SzFallbackSiteIr::Szr => SzFallbackSite::Szr,
-                SzFallbackSiteIr::Szv => SzFallbackSite::Szv,
-            };
+            let reason = sz_fallback_reason(kind, &fallback.detail, &fallback.path);
             // An unread `szr` argument or `szv` config never had its classes
             // collected, whatever the expression's kind.
-            let site_name = match fallback.site {
-                SzFallbackSiteIr::Szr => "szr",
-                SzFallbackSiteIr::Szv => "szv",
+            let (site_name, text) = match fallback.site {
+                SzFallbackSiteIr::Szr => (
+                    "szr",
+                    format!(
+                        "`szr` falls back to the runtime: {reason}.\n  help: {}\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
+                        sz_fallback_suggestion(kind)
+                    ),
+                ),
+                SzFallbackSiteIr::Szv => (
+                    "szv",
+                    format!(
+                        "The `szv` config cannot be read at build time: {reason}.\n  help: pass the config inline, or as a module-level const object literal.\n  note: none of its variant classes are safelisted, so they generate no CSS."
+                    ),
+                ),
             };
             (
                 issue::fallback_missing_css(
@@ -655,13 +638,7 @@ fn site_fallback_diagnostics(
                     None,
                 ),
                 fallback.offset,
-                format_sz_fallback_diagnostic(
-                    site,
-                    &format!("{line}:{column}"),
-                    kind,
-                    &fallback.detail,
-                    &fallback.path,
-                ),
+                text,
             )
         })
         .collect()
@@ -686,11 +663,7 @@ const fn fallback_shape(kind: super::RuntimeFallbackKindIr) -> &'static str {
 /// `sz={{ m: 1, hover: x }}`: the build cannot see what `x` holds, so the key
 /// goes to `_szPart` and nothing collects its classes — the `sz={s}` failure
 /// for one key, in the same wording, at the key.
-fn deferred_variant_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+fn deferred_variant_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     use super::generated::sz_fallback_matrix::{
         sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
     };
@@ -698,7 +671,6 @@ fn deferred_variant_diagnostics(
     ir.deferred_variant_keys
         .iter()
         .map(|deferred| {
-            let (line, column) = diagnostic_line_column(&file.source, lines, deferred.start);
             let reason = sz_fallback_reason(SzFallbackKind::Variant, &deferred.path, "");
             let suggestion = sz_fallback_suggestion(SzFallbackKind::Variant);
             (
@@ -710,10 +682,7 @@ fn deferred_variant_diagnostics(
                     Some(&deferred.path),
                 ),
                 deferred.start,
-                format!(
-                    "sz fallback at {line}:{column}: {reason}.
-  Suggestion: {suggestion}"
-                ),
+                format!("`sz` falls back to the runtime: {reason}.\n  help: {suggestion}"),
             )
         })
         .collect()
@@ -723,16 +692,9 @@ fn deferred_variant_diagnostics(
 ///
 /// Emits the shared fallback matrix entry (why, and what to do instead) and —
 /// for an object literal with a top-level spread — the unresolvable-spread
-/// notice, in a fixed per-attribute order with byte-identical wording and
-/// `line:column` positions across artifacts, so which artifact a build loads
-/// cannot change the build log. The `unresolvable sz spread` phrase is
-/// the marker the bundler plugin matches to promote those to a build-log
-/// warning in every mode.
-fn runtime_fallback_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+/// notice, in a fixed per-attribute order with byte-identical wording across
+/// artifacts, so which artifact a build loads cannot change the build log.
+fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     use super::generated::sz_fallback_matrix::{
         sz_fallback_reason, sz_fallback_suggestion, sz_site_fallback_misses_css, SzFallbackKind,
     };
@@ -743,7 +705,6 @@ fn runtime_fallback_diagnostics(
         let Some(diagnostic) = &attr.runtime_fallback_diagnostic else {
             continue;
         };
-        let (line, column) = diagnostic_line_column(&file.source, lines, attr.value_span.start);
         let kind = match diagnostic.kind {
             RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
@@ -757,24 +718,31 @@ fn runtime_fallback_diagnostics(
         let shape = Some(fallback_shape(diagnostic.kind));
         let detail = Some(diagnostic.detail.as_str());
         let path = Some(diagnostic.path.as_str());
-        let issue = if sz_site_fallback_misses_css(kind) {
-            issue::fallback_missing_css("sz", shape, detail, path, None)
+        let (issue, note) = if sz_site_fallback_misses_css(kind) {
+            (
+                issue::fallback_missing_css("sz", shape, detail, path, None),
+                "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
+            )
         } else {
-            issue::fallback_nudge("sz", shape, detail, path)
+            (
+                issue::fallback_nudge("sz", shape, detail, path),
+                "the runtime `_sz` helper still lowers the value.",
+            )
         };
         let start = attr.value_span.start;
         out.push_issue(
             issue,
             start,
             format!(
-                "sz fallback at {line}:{column}: {reason}.
-  Suggestion: {suggestion}"
+                "`sz` falls back to the runtime: {reason}.\n  help: {suggestion}\n  note: {note}"
             ),
         );
         if attr.runtime_fallback_spread {
-            out.push_issue(issue::unresolvable_spread(), start, format!(
-                "[csszyx] unresolvable sz spread at {line}:{column}: sz={{{{ ...x }}}} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={{[x, {{ ... }}]}}."
-            ));
+            out.push_issue(
+                issue::unresolvable_spread(),
+                start,
+                "`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime; it may render no styles in production.\n  help: use the array form: `sz={[x, { ... }]}`.".to_string(),
+            );
         }
     }
     out
@@ -783,7 +751,7 @@ fn runtime_fallback_diagnostics(
 /// Warn when generated style custom properties share an element with a prop
 /// spread that may also provide `style`. The explicit generated attribute wins
 /// in JSX source order, so the spread style can otherwise disappear silently.
-fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Diagnostics {
+fn style_spread_collision_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.jsx_opening_elements
         .iter()
         .filter(|element| element.has_spread_attribute)
@@ -798,19 +766,15 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
                 })
         })
         .map(|element| {
-            (issue::style_override(), element.opening_span.start, format!(
-                "[csszyx] possible style override at {}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.",
-                file.filename
-            ))
+            (
+                issue::style_override(),
+                element.opening_span.start,
+                "This element spreads props that may carry `style`, and `sz` writes its own `style` attribute, which can replace the one in the spread.\n  help: move the spread `style` to an explicit `style` prop, so csszyx merges both values.".to_string(),
+            )
         })
         .collect()
 }
 
-/// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
-/// typos), located by file and line so they are findable in a large codebase —
-/// parity with the removed JavaScript lanes, which previously were the only ones to
-/// warn. The bundler plugin gates these to dev (and suppresses source paths in
-/// production), the same as the other soft diagnostics here.
 /// Matches the removed JavaScript lanes' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
 /// shape of an array index or a spread's numeric key that reached `sz`.
 fn is_numeric_key(key: &str) -> bool {
@@ -829,32 +793,20 @@ fn is_numeric_key(key: &str) -> bool {
 /// values rather than to fix a typo. Production, not dev-only — a dropped
 /// class is the csszyx→Tailwind→CSS contract failing, which is the bar this
 /// project warns at in every build.
-fn var_hostile_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    root_dir: Option<&str>,
-) -> Diagnostics {
-    let location = relativize_diagnostic_path(&file.filename, root_dir);
-    let mut lines: Option<LineIndex> = None;
+fn var_hostile_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     let mut out = Diagnostics::default();
     for attribute in &ir.sz_attributes {
         for dropped in &attribute.dropped_dynamic_keys {
             if dropped.reason != DroppedKeyReason::NoVarForm {
                 continue;
             }
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, dropped.span.start);
             out.push_issue(
                 issue::runtime_value(&dropped.key),
                 dropped.span.start,
                 format!(
-                "[csszyx] \"{}\" cannot take a runtime value at {location}:{line}: Tailwind has \
-                 no utility for this key that reads a CSS variable, so the class and the variable \
-                 were dropped instead of styling a different property. Name the values with \
-                 szv(), or use dynamic() for open-ended data.",
-                dropped.key
-            ),
+                    "`{}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.\n  help: name the values with `szv()`, or use `dynamic()` for open-ended data.\n  note: the class and the variable were dropped, so no other property is styled in its place.",
+                    dropped.key
+                ),
             );
         }
     }
@@ -909,92 +861,44 @@ fn retain_first_occurrence<T>(
 }
 
 /// A spacing value Tailwind's scale has no step for.
-fn push_dead_spacing_step_diagnostics(
-    file: &TransformFile,
-    found: &[(String, f64, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_dead_spacing_step_diagnostics(found: &[(String, f64, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
-        // Wording matches transform-core's warnDeadSpacingStep (the runtime lowering),
-        // so the build log and the runtime warning say the same thing.
         out.push_issue(issue::off_scale_value(key, &value.to_string()), *offset, format!(
-            "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            "`{key}: {value}` is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS.\n  help: use a quarter step (1.25, 1.5, 1.75) or a unit value (`\"{value}rem\"`)."
         ));
     }
 }
 
 /// A border style set on one side, which Tailwind cannot express.
-fn push_border_side_style_diagnostics(
-    file: &TransformFile,
-    found: &[(String, String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_border_side_style_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         out.push_issue(issue::per_side_border_style(key, value), *offset, format!(
-            "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
+            "Tailwind has no per-side border style, so `{key}: '{value}'` is dropped and generates no CSS.\n  help: use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."
         ));
     }
 }
 
 /// An object given to a key that names a property rather than a variant.
-fn push_property_object_diagnostics(
-    file: &TransformFile,
-    found: &[(String, Vec<String>, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_property_object_diagnostics(found: &[(String, Vec<String>, u32)], out: &mut Diagnostics) {
     for (key, nested_keys, offset) in found {
         let nested = nested_keys.join(", ");
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
-        // Wording matches transform-core's warnPropertyObjectValue (the runtime lowering),
-        // so the build log and the runtime warning say the same thing.
         out.push_issue(issue::property_object(key, nested_keys.clone()), *offset, format!(
-            "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
+            "`{key}` names a property and holds an object `{{ {nested} }}`, so it compiles to `{key}:*` classes that match no Tailwind variant and generate no CSS.\n  help: move the nested keys up a level; for color opacity, write `{{ color: '...', op: ... }}`."
         ));
     }
 }
 
 /// A field a mask layer does not take.
 fn push_mask_member_diagnostics(
-    file: &TransformFile,
     found: &[(String, String, Vec<String>, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
     for (owner, member, allowed_members, offset) in found {
         let allowed = allowed_members.join(", ");
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
-        // Wording matches transform-core's warnMaskSlotMember (the runtime lowering),
-        // so the build log and the runtime warning say the same thing.
         out.push_issue(issue::unknown_field(owner, member, allowed_members.clone()), *offset, format!(
-            "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
+            "`{owner}` has no field `{member}`, and nothing is emitted for it.\n  help: `{owner}` takes `{{ {allowed} }}`."
         ));
     }
-}
-
-/// Where the key and value families write, gathered so one pass takes a handful
-/// of arguments rather than a dozen.
-struct DiagnosticSink<'a> {
-    file: &'a TransformFile,
-    location: &'a str,
-    lines: &'a mut Option<LineIndex>,
-    out: &'a mut Diagnostics,
 }
 
 /// Buffers the families refill per group, so a file with many objects allocates
@@ -1052,18 +956,12 @@ impl KeyValueFindings {
 /// spread is resolved into every branch it reaches, so it arrives once per
 /// branch.
 fn push_group_key_value_diagnostics<'a>(
-    sink: &mut DiagnosticSink<'_>,
+    out: &mut Diagnostics,
     objects: impl Iterator<Item = &'a super::StaticSzObject>,
     dropped_dynamic_keys: &[super::DroppedSzKeyIr],
     repeat_free: bool,
     found: &mut KeyValueFindings,
 ) {
-    let DiagnosticSink {
-        file,
-        location,
-        lines,
-        out,
-    } = sink;
     found.clear();
     for object in objects {
         collect_unknown_sz_keys(object, &mut found.unknown);
@@ -1119,21 +1017,21 @@ fn push_group_key_value_diagnostics<'a>(
                 )
             }),
     );
-    push_unknown_key_diagnostics(file, &found.unknown, location, lines, out);
-    push_dead_spacing_step_diagnostics(file, &found.dead_steps, location, lines, out);
-    push_dead_weight_diagnostics(file, &found.dead_weights, location, lines, out);
-    push_removed_sugar_diagnostics(file, &found.removed_sugar, location, lines, out);
-    push_border_side_style_diagnostics(file, &found.border_side_styles, location, lines, out);
-    push_property_object_diagnostics(file, &found.property_objects, location, lines, out);
-    push_owned_key_variant_diagnostics(file, &found.unknown_variants, location, lines, out);
-    push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
-    push_slash_opacity_diagnostics(file, &found.slash_opacities, location, lines, out);
-    push_color_slash_opacity_diagnostics(file, &found.color_slash_opacities, location, lines, out);
-    push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
-    push_moved_value_diagnostics(file, &found.moved_values, location, lines, out);
-    push_mask_layer_diagnostics(file, &found.mask_layers, location, lines, out);
-    push_global_before_group_diagnostics(file, &found.globals_before_groups, location, lines, out);
-    push_runtime_alias_diagnostics(file, &found.runtime_aliases, location, lines, out);
+    push_unknown_key_diagnostics(&found.unknown, out);
+    push_dead_spacing_step_diagnostics(&found.dead_steps, out);
+    push_dead_weight_diagnostics(&found.dead_weights, out);
+    push_removed_sugar_diagnostics(&found.removed_sugar, out);
+    push_border_side_style_diagnostics(&found.border_side_styles, out);
+    push_property_object_diagnostics(&found.property_objects, out);
+    push_owned_key_variant_diagnostics(&found.unknown_variants, out);
+    push_dead_enum_diagnostics(&found.dead_enums, out);
+    push_slash_opacity_diagnostics(&found.slash_opacities, out);
+    push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
+    push_mask_member_diagnostics(&found.mask_members, out);
+    push_moved_value_diagnostics(&found.moved_values, out);
+    push_mask_layer_diagnostics(&found.mask_layers, out);
+    push_global_before_group_diagnostics(&found.globals_before_groups, out);
+    push_runtime_alias_diagnostics(&found.runtime_aliases, out);
 }
 
 /// Sort one removed key with a runtime value into the family that reports it.
@@ -1163,17 +1061,8 @@ fn push_dropped_removed_key(dropped: &super::DroppedSzKeyIr, found: &mut KeyValu
 
 /// An alias of a stand-alone keyword key holding a runtime value: some of its
 /// values stand alone and some moved to group keys, so the report names both.
-fn push_runtime_alias_diagnostics(
-    file: &TransformFile,
-    found: &[(String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_runtime_alias_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         // The parser read the branches only for such an alias, so both
         // lookups answer.
         let canonical = super::generated::tables::key_suggestion(key).unwrap_or_default();
@@ -1182,91 +1071,49 @@ fn push_runtime_alias_diagnostics(
             .unwrap_or_default()
             .replace(' ', ", ");
         out.push_issue(issue::removed_key_runtime_alias(key, Some(canonical)), *offset, format!(
-            "[csszyx] \"{key}\" was removed and takes a runtime value at {location}:{line}: write {values} on {canonical}, and the other values on {groups}."
+            "`{key}` was removed, and it holds a runtime value, so nothing is emitted for it.\n  help: write {values} on `{canonical}`, and the other values on {groups}."
         ));
     }
 }
 
-/// A stand-alone key a group key written after it replaces. Mirrors
-/// `warnGlobalBeforeGroup` in the TypeScript core byte for byte.
+/// A stand-alone key a group key written after it replaces.
 fn push_global_before_group_diagnostics(
-    file: &TransformFile,
     found: &[(String, String, &'static str, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
     for (global, value, group, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         out.push_issue(issue::global_before_group(global, value, group), *offset, format!(
-            "[csszyx] \"{global}: {value}\" at {location}:{line} comes before \"{group}\" in one sz object, so {group} replaces it and the {global} value styles nothing. A spread override ({{ ...base, {global}: '{value}' }}) leaves this order; to override, layer it: sz={{[base, {{ {global}: '{value}' }}]}}."
+            "`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.\n  help: to override the group, layer it: `sz={{[base, {{ {global}: '{value}' }}]}}`.\n  note: a spread override (`{{ ...base, {global}: '{value}' }}`) keeps this order."
         ));
     }
 }
 
-/// A closed-key value that moved onto its group's own key. Mirrors
-/// `movedValueMessage` in the TypeScript core byte for byte.
-fn push_moved_value_diagnostics(
-    file: &TransformFile,
-    found: &[super::lower::MovedValue],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+/// A closed-key value that moved onto its group's own key.
+fn push_moved_value_diagnostics(found: &[super::lower::MovedValue], out: &mut Diagnostics) {
     for (key, value, replacing_key, replacing_value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         let replacement = if *replacing_value == "true" {
             "true".to_string()
         } else {
             format!("'{replacing_value}'")
         };
         out.push_issue(issue::moved_value_value(key, value, None), *offset, format!(
-            "[csszyx] \"{key}: {value}\" moved to {{ {replacing_key}: {replacement} }} at {location}:{line}. Run `csszyx migrate` to rewrite it."
+            "`{key}: {value}` moved to `{replacing_key}`, and nothing is emitted for it.\n  help: write `{{ {replacing_key}: {replacement} }}`, or run `csszyx migrate`."
         ));
     }
 }
 
 /// A `mask` value naming a gradient layer, which moved to its own key.
-/// Mirrors `warnMaskLayerValue` in the TypeScript core byte for byte.
-fn push_mask_layer_diagnostics(
-    file: &TransformFile,
-    found: &[(String, &'static str, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_mask_layer_diagnostics(found: &[(String, &'static str, u32)], out: &mut Diagnostics) {
     for (value, key, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         out.push_issue(issue::moved_value_mask_layer("mask", value, Some(key)), *offset, format!(
-            "[csszyx] mask: '{value}' at {location}:{line} — gradient layers moved to \"{key}\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable."
+            "`mask: '{value}'` names a gradient layer, and gradient layers moved to `{key}`; nothing is emitted for it.\n  help: write this layer on `{key}`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key."
         ));
     }
 }
 
-fn unknown_property_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    root_dir: Option<&str>,
-) -> Diagnostics {
-    let location = relativize_diagnostic_path(&file.filename, root_dir);
+fn unknown_property_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     let mut out = Diagnostics::default();
     let mut found = KeyValueFindings::default();
-    // Built on the first position lookup, not up front: a file whose `sz` props
-    // are all clean reaches none of the branches below, and must not pay a pass
-    // over its own source for a table nobody reads.
-    let mut lines: Option<LineIndex> = None;
-    let mut sink = DiagnosticSink {
-        file,
-        location: &location,
-        lines: &mut lines,
-        out: &mut out,
-    };
     // sz props first, then the catalog objects (szv leaves + static szr
     // arguments) through the SAME unknown/numeric emission — a typo inside a
     // catalog must be as findable by `csszyx check` as one on an element.
@@ -1281,7 +1128,7 @@ fn unknown_property_diagnostics(
         .map(|object| (object, &[][..]));
     for (object, dropped_dynamic_keys) in attribute_objects.chain(catalog_objects) {
         push_group_key_value_diagnostics(
-            &mut sink,
+            &mut out,
             std::iter::once(object),
             dropped_dynamic_keys,
             true,
@@ -1295,18 +1142,12 @@ fn unknown_property_diagnostics(
         if group.is_empty() {
             continue;
         }
-        push_group_key_value_diagnostics(&mut sink, group.into_iter(), &[], false, &mut found);
+        push_group_key_value_diagnostics(&mut out, group.into_iter(), &[], false, &mut found);
     }
-    out.extend(dynamic_group_conflict_diagnostics(
-        file, ir, &location, &mut lines,
-    ));
-    out.extend(class_name_precedence_advisories(
-        file, ir, &location, &mut lines,
-    ));
-    out.extend(duplicate_sz_diagnostics(file, ir, &location, &mut lines));
-    out.extend(spread_split_class_diagnostics(
-        file, ir, &location, &mut lines,
-    ));
+    out.extend(dynamic_group_conflict_diagnostics(ir));
+    out.extend(class_name_precedence_advisories(ir));
+    out.extend(duplicate_sz_diagnostics(ir));
+    out.extend(spread_split_class_diagnostics(ir));
     out
 }
 
@@ -1317,12 +1158,7 @@ fn unknown_property_diagnostics(
 /// to the other side's class, so both can ship and Tailwind's stylesheet order
 /// decides, which puts the stand-alone class last whatever the object says.
 /// Layers in an sz array merge by their order at runtime, so that is the fix.
-fn dynamic_group_conflict_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    location: &str,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+fn dynamic_group_conflict_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     // An sz array element's object is one object; its layers are not, since
     // szcn keeps their order.
     let in_array_elements = ir
@@ -1334,9 +1170,6 @@ fn dynamic_group_conflict_diagnostics(
         .iter()
         .chain(in_array_elements)
         .map(|conflict| {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, conflict.span.start);
             let (first, second) = if conflict.key_first {
                 (&conflict.key, &conflict.other)
             } else {
@@ -1348,7 +1181,7 @@ fn dynamic_group_conflict_diagnostics(
                 issue::runtime_family_conflict_other_first(&conflict.key, &conflict.other)
             };
             (issue, conflict.span.start, format!(
-                "[csszyx] \"{}\" takes a runtime value beside \"{}\" in one sz object at {location}:{line}, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={{[{{ {first}: … }}, {{ {second}: … }}]}}.",
+                "`{}` takes a runtime value beside `{}` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.\n  help: layer them, later wins: `sz={{[{{ {first}: … }}, {{ {second}: … }}]}}`.",
                 conflict.key, conflict.other
             ))
         })
@@ -1361,16 +1194,10 @@ fn dynamic_group_conflict_diagnostics(
 /// between them as it does between any attributes: in React, Preact, Solid
 /// and Qwik the last one replaces the others and what the spreads set. So the
 /// earlier sides never apply, which is output lost in any build, not advice.
-fn spread_split_class_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    location: &str,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+fn spread_split_class_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.spread_split_classes
         .iter()
         .map(|split| {
-            let (line, column) = diagnostic_line_column(&file.source, lines, split.span.start);
             let mut earlier: Vec<String> = split
                 .classes
                 .iter()
@@ -1399,7 +1226,7 @@ fn spread_split_class_diagnostics(
                 split.parts.clone(),
             );
             (issue, split.span.start, format!(
-                "[csszyx] <{}> at {location}:{line}:{column}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after {after}, in the order that should win: `sz={{[{}]}}`.",
+                "Class names and `sz` on more than one side of a spread on `<{}>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there.\n  help: write them in one `sz` array after {after}, in the order that should win: `sz={{[{}]}}`.\n  note: Vue JSX merges every class, so there every side applies.",
                 split.element_name,
                 earlier.join(" and "),
                 parts.join(", "),
@@ -1413,39 +1240,30 @@ fn spread_split_class_diagnostics(
 /// The parser has already merged them as one array, so nothing is lost and
 /// the build goes on. The note exists because the shape is one lint rejects,
 /// and the order the merge used is worth writing down where it is read.
-fn duplicate_sz_diagnostics(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    location: &str,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+fn duplicate_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.duplicate_sz_attributes
         .iter()
         .map(|duplicate| {
-            let (line, column) = diagnostic_line_column(&file.source, lines, duplicate.span.start);
             (issue::duplicate_sz(&duplicate.element_name, duplicate.count as u64), duplicate.span.start, format!(
-                "[csszyx] <{}> at {location}:{line}:{column} carries {} `sz` attributes; they were merged as sz={{[first, …, last]}}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down.",
+                "`<{}>` carries {} `sz` attributes; they were merged as `sz={{[first, …, last]}}`, later wins per property.\n  help: fold them into one `sz` array, so the order is written down.",
                 duplicate.element_name, duplicate.count
             ))
         })
         .collect()
 }
 
-/// Strip the project-root prefix from a diagnostic filename so it reads
-/// `src/Foo.tsx`, not an absolute path. Mirrors the JS `formatSzWarnLocation`
-/// prefix strip; falls back to the filename as given when no root is known or it
-/// is not a prefix.
-fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String {
-    if let Some(root) = root_dir {
-        let root = root.trim_end_matches(['/', '\\']);
-        if let Some(rest) = filename
-            .strip_prefix(root)
-            .and_then(|rest| rest.strip_prefix(['/', '\\']))
-        {
-            return rest.to_string();
-        }
+/// Reports each `weight` value written as a numeric string.
+///
+/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
+/// utility and generates no CSS. The class is still emitted — the diagnostic
+/// reports what Tailwind will do with what the author wrote rather than
+/// rewriting it.
+fn push_dead_weight_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
+    for (value, offset) in found {
+        out.push_issue(issue::numeric_font_weight(value), *offset, format!(
+            "`weight: '{value}'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-{value}` generates no CSS.\n  help: write `weight: {value}` as a number, which brackets to `font-[{value}]`."
+        ));
     }
-    filename.to_string()
 }
 
 /// Report each removed boolean-sugar alias found in one sz object.
@@ -1453,44 +1271,14 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
 /// The build lane is the ONLY one that sees a statically extracted prop: the
 /// runtime warning for these keys never fires for source this pass compiled,
 /// so silence here meant a style vanished with nothing to search for. Names the
-/// canonical spelling and the codemod, mirroring the runtime channel's wording.
-/// Reports each `weight` value written as a numeric string.
-///
-/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
-/// utility and generates no CSS. The class is still emitted — the diagnostic
-/// reports what Tailwind will do with what the author wrote rather than
-/// rewriting it — and the wording is transform-core's `warnDeadWeightValue`,
-/// so the build log and the runtime warning say the same thing.
-fn push_dead_weight_diagnostics(
-    file: &TransformFile,
-    found: &[(String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
-    for (value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
-        out.push_issue(issue::numeric_font_weight(value), *offset, format!(
-            "[csszyx] \"weight: '{value}'\" at {location}:{line}: Tailwind spells a numeric font weight through --font-weight-*, so \"font-{value}\" generates no CSS. Write weight: {value} as a number, which brackets to \"font-[{value}]\"."
-        ));
-    }
-}
-
+/// canonical spelling and the codemod.
 fn push_removed_sugar_diagnostics(
-    file: &TransformFile,
     found: &[(String, &'static str, &'static str, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
     // The collector proved the replacement exists by finding it, so there is
     // no lookup here that could fail and no branch that cannot run.
     for (key, canonical, value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         let replaced = super::generated::tables::is_replaced_key(key);
         let what = if replaced {
             "was replaced"
@@ -1504,7 +1292,7 @@ fn push_removed_sugar_diagnostics(
             issue::removed_key_sugar(key, Some(&replacement))
         };
         out.push_issue(issue, *offset, format!(
-            "[csszyx] \"{key}\" {what} at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
+            "`{key}` {what}, and nothing is emitted for it.\n  help: write `{{ {canonical}: '{value}' }}` instead, or run `csszyx migrate`."
         ));
     }
 }
@@ -1514,23 +1302,14 @@ fn push_removed_sugar_diagnostics(
 /// Four wordings for one collector, because the remedy differs: a removed key
 /// has a replacement, an alias has a canonical spelling, a numeric key means an
 /// array or spread leaked in, and anything else may still target a project's
-/// own `@utility`. Every wording mirrors the runtime channel byte for byte.
-fn push_unknown_key_diagnostics(
-    file: &TransformFile,
-    found: &[(String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+/// own `@utility`.
+fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         if let Some(note) = super::generated::tables::key_migration_note(key) {
             out.push_issue(
                 issue::removed_key_removed(key, None),
                 *offset,
-                format!("[csszyx] \"{key}\" was removed at {location}:{line}: {note}."),
+                format!("`{key}` was removed, and nothing is emitted for it.\n  help: {note}."),
             );
         } else if let Some(suggestion) = super::generated::tables::key_suggestion(key)
             .filter(|_| super::generated::tables::is_replaced_key(key))
@@ -1539,64 +1318,42 @@ fn push_unknown_key_diagnostics(
             // replaced keys are. Mirrors the TypeScript core's replaced-key warning.
             let replacement = format!("{suggestion}: true");
             out.push_issue(issue::removed_key_replaced(key, Some(&replacement)), *offset, format!(
-                "[csszyx] \"{key}\" was replaced at {location}:{line}. Use {{ {suggestion}: true }} instead, or run `csszyx migrate`."
+                "`{key}` was replaced, and nothing is emitted for it.\n  help: write `{{ {suggestion}: true }}` instead, or run `csszyx migrate`."
             ));
         } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
             out.push_issue(issue::canonical_key(key), *offset, format!(
-                "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
+                "`{key}` is an alias of `{suggestion}`, and nothing is emitted for it.\n  help: write `{suggestion}` instead of `{key}`."
             ));
         } else if is_numeric_key(key) {
             out.push_issue(issue::numeric_key(key), *offset, format!(
-                "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
+                "`sz` received a numeric key `{key}`, and its value is ignored.\n  help: pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
             ));
         } else {
             // Deliberately NOT "this will be ignored": the key is lowered as a
             // literal class exactly like a known one, so the old text sent
             // people looking for a missing class instead of a dead one.
             out.push_issue(issue::unknown_key(key, None), *offset, format!(
-                "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
+                "`{key}` is not an sz property.\n  help: check the spelling. If the class is intentional, define it with Tailwind's `@utility`.\n  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility."
             ));
         }
     }
 }
 
 /// Report a csszyx-owned key that carries an object and so becomes a prefix.
-///
-/// Wording matches the runtime channel's `warnOwnedKeyVariantObject` so the
-/// same mistake reads the same in a build log and in a browser console.
-fn push_owned_key_variant_diagnostics(
-    file: &TransformFile,
-    found: &[(String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
     for (key, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         out.push_issue(issue::non_variant_object(key), *offset, format!(
-            "[csszyx] \"{key}\" at {location}:{line} is not a variant, but it holds an object, so it lowers to the class prefix \"{key}:\" and Tailwind generates no CSS for it. A \"--*\" key takes a declaration value; \"container\" takes true."
+            "`{key}` holds an object, so it lowers to the class prefix `{key}:` and Tailwind generates no CSS for it; `{key}` is not a variant.\n  help: a `--*` key takes a declaration value; `container` takes `true`."
         ));
     }
 }
 
 /// Report a closed-enum key carrying a value CSS does not define for it.
 ///
-/// Wording matches the runtime channel's `warnClosedEnumValue`. The legal set
-/// is named in full, like the mask-slot diagnostic: the author has to pick a
+/// The legal set is named in full, like the mask-slot diagnostic: the author has to pick a
 /// replacement, and the alternative is a second trip to the docs.
-fn push_dead_enum_diagnostics(
-    file: &TransformFile,
-    found: &[(String, String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         // The collector proved the key is a closed enum by finding it, so the
         // lookup below cannot miss.
         let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
@@ -1615,35 +1372,23 @@ fn push_dead_enum_diagnostics(
                 Some(group_value),
             );
             out.push_issue(issue, *offset, format!(
-                "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" it emits belongs to {{ {sibling} }}: write that key, so it combines with the other groups instead of resetting them. {key} takes one of: {allowed}."
+                "`{key}: {value}` is not a `{key}` value; the class `{bare}` it emits belongs to `{{ {sibling} }}`.\n  help: write `{{ {sibling} }}`, so it combines with the other groups instead of resetting them.\n  note: `{key}` takes one of: {allowed}."
             ));
             continue;
         }
         out.push_issue(issue::closed_enum_value_dead(key, value, None, None, None), *offset, format!(
-            "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {allowed}."
+            "`{key}: {value}` is not a `{key}` value.\n  help: use one of: {allowed}.\n  note: the class `{bare}` is still emitted, and it styles nothing unless a rule of your own matches it."
         ));
     }
 }
 
 /// Report a colour key whose slash-opacity string the lowering dropped.
-///
-/// Wording matches the runtime channel's `warnStringColorOpacity`, so the same
-/// value reads the same in a build log and in a browser console.
-fn push_slash_opacity_diagnostics(
-    file: &TransformFile,
-    found: &[(String, String, u32)],
-    location: &str,
-    lines: &mut Option<LineIndex>,
-    out: &mut Diagnostics,
-) {
+fn push_slash_opacity_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         // The collector found a slash, so the split cannot miss.
         let (color, opacity) = value.split_once('/').unwrap_or_default();
         out.push_issue(issue::slash_opacity_string(key, color, opacity), *offset, format!(
-            "[csszyx] \"{key}: '{value}'\" at {location}:{line} — string slash opacity is not supported, and nothing is emitted for it. Use object form: {{ color: '{color}', op: {opacity} }}."
+            "A string cannot carry slash opacity, so `{key}: '{value}'` emits nothing.\n  help: use the object form: `{{ color: '{color}', op: {opacity} }}`."
         ));
     }
 }
@@ -1652,34 +1397,35 @@ fn push_slash_opacity_diagnostics(
 /// (with `op` as the opacity when both are given), and the finding points at
 /// `op`, the one spelling.
 fn push_color_slash_opacity_diagnostics(
-    file: &TransformFile,
     found: &[super::lower::ColorSlashOpacity],
-    location: &str,
-    lines: &mut Option<LineIndex>,
     out: &mut Diagnostics,
 ) {
     for (key, color, op, offset) in found {
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, *offset);
         // The collector found a plain opacity, so the split cannot miss.
         let (unmarked, important) = color
             .strip_suffix('!')
             .map_or((color.as_str(), ""), |color| (color, "!"));
         let (base, opacity) = unmarked.split_once('/').unwrap_or_default();
-        let written = op
-            .as_ref()
-            .map_or_else(String::new, |op| format!(", op: {op}"));
-        let used = op.as_deref().unwrap_or(opacity);
-        // Wording matches transform-core's warnColorObjectSlashOpacity.
         let important_mark = (!important.is_empty()).then_some("!");
-        let issue = op.as_deref().map_or_else(
-            || issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
-            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
+        let (issue, text) = op.as_deref().map_or_else(
+            || {
+                (
+                    issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
+                    format!(
+                        "`{key}: {{ color: '{color}' }}` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{{ color: '{base}{important}', op: {opacity} }}`.\n  note: the class still applies opacity {opacity}."
+                    ),
+                )
+            },
+            |op| {
+                (
+                    issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
+                    format!(
+                        "`{key}: {{ color: '{color}', op: {op} }}` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{{ color: '{base}{important}', op: {op} }}`.\n  note: the class uses `op: {op}`; the `/{opacity}` in `color` is ignored."
+                    ),
+                )
+            },
         );
-        out.push_issue(issue, *offset, format!(
-            "[csszyx] \"{key}: {{ color: '{color}'{written} }}\" at {location}:{line} — a colour object takes its opacity in op, not in color. Write {{ color: '{base}{important}', op: {used} }}."
-        ));
+        out.push_issue(issue, *offset, text);
     }
 }
 
@@ -1723,12 +1469,7 @@ fn sibling_group_of(key: &str, bare: &str) -> Option<(&'static str, &'static str
 /// Both intents are spellable, and either rewrite drops the `className`
 /// attribute, so the trigger disappears once the author has said which one
 /// they mean. There is no suppression flag because none is needed.
-fn class_name_precedence_advisories(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    location: &str,
-    lines: &mut Option<LineIndex>,
-) -> Diagnostics {
+fn class_name_precedence_advisories(ir: &super::SourceIr) -> Diagnostics {
     let mut out = Diagnostics::default();
     for (index, class_index) in ir
         .jsx_opening_elements
@@ -1747,12 +1488,11 @@ fn class_name_precedence_advisories(
         if !ir.sz_attributes[index].array_parts.is_empty() {
             continue;
         }
-        let (line, _) = lines
-            .get_or_insert_with(|| LineIndex::new(&file.source))
-            .line_column(&file.source, span.start);
-        out.push_issue(issue::class_precedence(), span.start, format!(
-            "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at {location}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={{[{{ … }}, className]}} for the caller to win, sz={{[className, {{ … }}]}} for these styles to win."
-        ));
+        out.push_issue(
+            issue::class_precedence(),
+            span.start,
+            "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.".to_string(),
+        );
     }
     out
 }
@@ -1760,22 +1500,21 @@ fn class_name_precedence_advisories(
 /// Dev diagnostic for an sz ARRAY element that is an object literal carrying a
 /// runtime value: the whole element degrades to `_szPart` at runtime instead
 /// of compiling statically. Only object literals warn — identifiers, calls,
-/// and member expressions are legitimate forwarded slots. The wording and the
-/// 1-based line:column position match the removed JavaScript lanes byte-for-byte.
-fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Diagnostics {
+/// and member expressions are legitimate forwarded slots.
+fn deferred_array_object_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.sz_attributes
         .iter()
         .flat_map(|attr| &attr.array_parts)
         .filter(|part| part.dynamic_object_literal)
         .filter_map(|part| {
             let span = part.dynamic_span?;
-            let (line, column) = offset_to_line_column(&file.source, span.start);
             // Its classes are still collected, so this is the advisory side
             // of a fallback.
-            Some((issue::fallback_nudge("sz-array-element", None, None, None), span.start, format!(
-                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: use finite literal ternary branches when possible, or move truly runtime values to dynamic().",
-                column + 1
-            )))
+            Some((
+                issue::fallback_nudge("sz-array-element", None, None, None),
+                span.start,
+                "This `sz` array element is an object literal with a runtime value, so the whole element is deferred to `_szPart` at runtime.\n  help: use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.\n  note: its classes are still safelisted, best-effort.".to_string(),
+            ))
         })
         .collect()
 }
@@ -1785,20 +1524,22 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
 /// The two cases stay separate on purpose: a dynamic value and a misspelled
 /// mode need different fixes, and the native and wasm artifacts must print the
 /// same text.
-fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Diagnostics {
+fn unsupported_recovery_diagnostics(ir: &super::SourceIr) -> Diagnostics {
     ir.unsupported_recovery_attributes
         .iter()
-        .map(|(start, reason)| {
-            match reason {
-                UnsupportedRecoveryIr::NonLiteral => (issue::sz_recover_non_literal(None), *start, format!(
-                    "[csszyx] szRecover at {}: only string-literal values (\"csr\" | \"dev-only\") are supported. Dynamic values disable token emission for this element.",
-                    file.filename
-                )),
-                UnsupportedRecoveryIr::UnknownMode(mode) => (issue::sz_recover_unknown_mode(Some(mode)), *start, format!(
-                    "[csszyx] szRecover at {}: unknown mode \"{mode}\" — expected \"csr\" or \"dev-only\". Token emission skipped.",
-                    file.filename
-                )),
-            }
+        .map(|(start, reason)| match reason {
+            UnsupportedRecoveryIr::NonLiteral => (
+                issue::sz_recover_non_literal(None),
+                *start,
+                "`szRecover` takes only a string literal, `\"csr\"` or `\"dev-only\"`.\n  help: write `szRecover=\"csr\"` or `szRecover=\"dev-only\"`.\n  note: no recovery token is emitted for this element.".to_string(),
+            ),
+            UnsupportedRecoveryIr::UnknownMode(mode) => (
+                issue::sz_recover_unknown_mode(Some(mode)),
+                *start,
+                format!(
+                    "`szRecover` has an unknown mode `\"{mode}\"`.\n  help: use `\"csr\"` or `\"dev-only\"`.\n  note: no recovery token is emitted for this element."
+                ),
+            ),
         })
         .collect()
 }
@@ -1844,15 +1585,46 @@ fn elapsed_ns(start: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        lower_source_ir_classes, merge_variable_maps, relativize_diagnostic_path,
-        resolved_branch_object_groups, rewrite_static_sz_attributes, transform_file,
-        transform_file_with_options, transform_static_classes,
-        transform_static_classes_with_options,
+        lower_source_ir_classes, merge_variable_maps, resolved_branch_object_groups,
+        rewrite_static_sz_attributes, transform_file, transform_file_with_options,
+        transform_static_classes, transform_static_classes_with_options,
     };
     use crate::transform::{
         CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, TransformFile, TransformOptions,
-        TransformProducer,
+        TransformProducer, TransformResult,
     };
+
+    /// The 1-based line and column of every issue, in order.
+    fn positions(result: &TransformResult, source: &str) -> Vec<(u32, u32)> {
+        result
+            .issues
+            .iter()
+            .map(|issue| {
+                let (line, column) = super::offset_to_line_column(source, issue.start);
+                (line, column + 1)
+            })
+            .collect()
+    }
+
+    /// Each diagnostic whose text contains `needle`, beside the 1-based line
+    /// and column its issue points at. A position travels on the issue, not in
+    /// the text, so a test that pins where a finding is reads it from there.
+    fn located<'a>(
+        result: &'a TransformResult,
+        source: &str,
+        needle: &str,
+    ) -> Vec<(&'a str, u32, u32)> {
+        result
+            .diagnostics
+            .iter()
+            .zip(&result.issues)
+            .filter(|(text, _)| text.contains(needle))
+            .map(|(text, issue)| {
+                let (line, column) = super::offset_to_line_column(source, issue.start);
+                (text.as_str(), line, column + 1)
+            })
+            .collect()
+    }
 
     #[test]
     fn unresolved_spread_branch_retains_runtime_fallback() {
@@ -1862,10 +1634,9 @@ mod tests {
         };
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         assert!(result.code.contains("_sz("), "{}", result.code);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|message| message.contains("unresolvable sz spread")));
+        assert!(result.diagnostics.iter().any(|message| message.contains(
+            "`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime"
+        )));
     }
 
     #[test]
@@ -1882,7 +1653,10 @@ mod tests {
                 "{defect}: {:?}",
                 result.diagnostics
             );
-            assert!(result.diagnostics[0].contains("src/Branch.tsx:1"));
+            assert_eq!(
+                super::offset_to_line_column(&file.source, result.issues[0].start).0,
+                1
+            );
             let parsed = super::super::parser::parse_source_shell(&file);
             assert!(parsed.ir.sz_attributes[0].array_parts.is_empty());
         }
@@ -1891,10 +1665,10 @@ mod tests {
     #[test]
     fn resolved_branch_diagnostics_preserve_families_locations_and_occurrences() {
         let defects = [
-            ("workBreak: 'all'", "Unknown property \"workBreak\""),
-            ("wordBreak: 'all'", "canonical key \"break\""),
-            ("zzzNotAKey: 'x'", "Unknown property \"zzzNotAKey\""),
-            ("display: 'bogus'", "not a display value"),
+            ("workBreak: 'all'", "`workBreak` is not an sz property."),
+            ("wordBreak: 'all'", "`wordBreak` is an alias of `break`"),
+            ("zzzNotAKey: 'x'", "`zzzNotAKey` is not an sz property."),
+            ("display: 'bogus'", "is not a `display` value"),
             ("italic: true", "italic"),
         ];
         for (defect, message) in defects {
@@ -1904,21 +1678,18 @@ mod tests {
                 format!("{{ p: 2, ...(k ? {{}} : {{ {defect} }}) }}"),
                 format!("{{ hover: {{ {defect} }}, ...(k ? {{ p: 2 }} : {{}}) }}"),
             ] {
+                let source = format!("const App = k => <b\n sz={{{expression}}} />;");
                 let result = transform_static_classes(
                     &TransformFile {
                         filename: "src/Branch.tsx".into(),
-                        source: format!("const App = k => <b\n sz={{{expression}}} />;"),
+                        source: source.clone(),
                     },
                     0,
                     std::time::Instant::now(),
                 );
-                let reports: Vec<_> = result
-                    .diagnostics
-                    .iter()
-                    .filter(|d| d.contains(message))
-                    .collect();
+                let reports = located(&result, &source, message);
                 assert_eq!(reports.len(), 1, "{expression}: {:?}", result.diagnostics);
-                assert!(reports[0].contains("src/Branch.tsx:2"), "{}", reports[0]);
+                assert_eq!(reports[0].1, 2, "{}", reports[0].0);
             }
         }
         let result = transform_static_classes(
@@ -1935,7 +1706,7 @@ mod tests {
             result
                 .diagnostics
                 .iter()
-                .filter(|d| d.contains("Unknown property \"workBreak\""))
+                .filter(|d| d.contains("`workBreak` is not an sz property."))
                 .count(),
             2
         );
@@ -2050,23 +1821,23 @@ mod tests {
         let cases = [
             (
                 "const App = () => <b sz={{ p: 2 }} sz={{ workBreak: 'all' }} />;",
-                "Unknown property \"workBreak\"",
+                "`workBreak` is not an sz property.",
             ),
             (
                 "const App = k => <b sz={{ workBreak: 'all' }} sz={k ? { p: 2 } : {}} />;",
-                "Unknown property \"workBreak\"",
+                "`workBreak` is not an sz property.",
             ),
             (
                 "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ workBreak: 'all' }} />;",
-                "Unknown property \"workBreak\"",
+                "`workBreak` is not an sz property.",
             ),
             (
                 "const App = k => <b sz={{ p: 2 }} sz={k ? { workBreak: 'all' } : {}} />;",
-                "Unknown property \"workBreak\"",
+                "`workBreak` is not an sz property.",
             ),
             (
                 "const App = k => <b sz={[k && { p: 2 }]} sz={{ workBreak: 'all' }} />;",
-                "Unknown property \"workBreak\"",
+                "`workBreak` is not an sz property.",
             ),
             (
                 "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ display: 'bogus' }} />;",
@@ -2123,13 +1894,9 @@ mod tests {
                 0,
                 std::time::Instant::now(),
             );
-            let reports: Vec<_> = result
-                .diagnostics
-                .iter()
-                .filter(|d| d.contains("Unknown property \"workBreak\""))
-                .collect();
+            let reports = located(&result, source, "`workBreak` is not an sz property.");
             if reports.len() == 1 {
-                assert!(reports[0].contains("src/Branch.tsx:1"), "{}", reports[0]);
+                assert_eq!(reports[0].1, 1, "{}", reports[0].0);
             } else {
                 failures.push(format!("{source}: {:?}", result.diagnostics));
             }
@@ -2149,8 +1916,8 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![
-                "[csszyx] \"weight: '700'\" at /repo/App.tsx:1: Tailwind spells a numeric font weight through --font-weight-*, so \"font-700\" generates no CSS. Write weight: 700 as a number, which brackets to \"font-[700]\".".to_string(),
-                "[csszyx] \"weight: '550'\" at /repo/App.tsx:1: Tailwind spells a numeric font weight through --font-weight-*, so \"font-550\" generates no CSS. Write weight: 550 as a number, which brackets to \"font-[550]\".".to_string(),
+                "`weight: '700'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-700` generates no CSS.\n  help: write `weight: 700` as a number, which brackets to `font-[700]`.".to_string(),
+                "`weight: '550'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-550` generates no CSS.\n  help: write `weight: 550` as a number, which brackets to `font-[550]`.".to_string(),
             ],
             "code was: {}",
             result.code
@@ -2174,25 +1941,9 @@ mod tests {
             !result
                 .diagnostics
                 .iter()
-                .any(|line| line.contains("font weight")),
+                .any(|line| line.contains("font weights")),
             "{:?}",
             result.diagnostics
-        );
-    }
-
-    #[test]
-    fn diagnostic_paths_are_relative_only_below_the_configured_root() {
-        assert_eq!(
-            relativize_diagnostic_path("/repo/src/App.tsx", Some("/repo/")),
-            "src/App.tsx"
-        );
-        assert_eq!(
-            relativize_diagnostic_path("/other/App.tsx", Some("/repo")),
-            "/other/App.tsx"
-        );
-        assert_eq!(
-            relativize_diagnostic_path("src/App.tsx", None),
-            "src/App.tsx"
         );
     }
 
@@ -2253,10 +2004,10 @@ mod tests {
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
-        assert!(result.diagnostics.iter().any(|diagnostic| {
-            diagnostic.contains("source nesting exceeded 64 levels")
-                && diagnostic.contains("prevents a parser stack overflow")
-        }));
+        assert_eq!(
+            result.diagnostics,
+            ["Source nesting exceeds 64 levels (found 65).\n  help: flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.\n  note: the file is left unchanged and contributes no classes."]
+        );
     }
 
     #[test]
@@ -2347,21 +2098,16 @@ mod tests {
             },
         );
 
-        assert!(
-            result.diagnostics.iter().any(|diagnostic| {
-                diagnostic.contains("numeric key \"1.5\"")
-                    && diagnostic.contains("src/Diagnostics.tsx:1")
-            }),
-            "{:?}",
-            result.diagnostics
-        );
+        let numeric = located(&result, &file.source, "numeric key `1.5`");
+        assert_eq!(numeric.len(), 1, "{:?}", result.diagnostics);
+        assert_eq!(numeric[0].1, 1, "{}", numeric[0].0);
         assert!(result
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("not on Tailwind's spacing scale")));
         assert!(result.diagnostics.iter().any(|diagnostic| {
-            diagnostic.contains("object literal contains a runtime value")
-                && diagnostic.contains("deferred to _szPart")
+            diagnostic.contains("object literal with a runtime value")
+                && diagnostic.contains("deferred to `_szPart`")
         }));
     }
 
@@ -2376,10 +2122,10 @@ mod tests {
         let diagnostics = transform_static_classes(&file, 0, std::time::Instant::now()).diagnostics;
 
         for expected in [
-            "The class \"reset-nums\" is still emitted and styles nothing, unless a rule of your own happens to match it. nums takes one of: normal.",
-            "numFigure takes one of: lining, oldstyle.",
-            "numSpacing takes one of: proportional, tabular.",
-            "The class \"slash-fractions\" is still emitted and styles nothing, unless a rule of your own happens to match it. numFraction takes one of: diagonal, stacked.",
+            "`nums: reset` is not a `nums` value.\n  help: use one of: normal.\n  note: the class `reset-nums` is still emitted, and it styles nothing unless a rule of your own matches it.",
+            "`numFigure: old` is not a `numFigure` value.\n  help: use one of: lining, oldstyle.",
+            "`numSpacing: tab` is not a `numSpacing` value.\n  help: use one of: proportional, tabular.",
+            "`numFraction: slash` is not a `numFraction` value.\n  help: use one of: diagonal, stacked.\n  note: the class `slash-fractions` is still emitted, and it styles nothing unless a rule of your own matches it.",
         ] {
             assert!(
                 diagnostics.iter().any(|line| line.contains(expected)),
@@ -2449,24 +2195,24 @@ mod tests {
             result.classes
         );
         let joined = result.diagnostics.join("\n");
-        assert!(
-            joined.contains(
-                "\"touch: pinch-zoom\" moved to { touchPinchZoom: true } at /repo/src/Touch.tsx:1."
-            ),
+        let pinch = located(&result, &file.source, "`touch: pinch-zoom`");
+        assert_eq!(
+            pinch.iter().map(|(text, line, _)| (*text, *line)).collect::<Vec<_>>(),
+            [("`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.\n  help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.", 1)],
             "{joined}"
         );
         assert!(
-            joined.contains("\"touch: pan-down\" moved to { touchPanY: 'down' }"),
+            joined.contains("`touch: pan-down` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'down' }`, or run `csszyx migrate`."),
             "{joined}"
         );
         // A parametric variant's parameter names an object of sz keys, so a
         // moved value there is named too.
         assert!(
-            joined.contains("\"touch: pan-x\" moved to { touchPanX: 'x' }"),
+            joined.contains("`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`."),
             "{joined}"
         );
         // A moved value is not also reported as a misspelling.
-        assert!(!joined.contains("is not a touch value"), "{joined}");
+        assert!(!joined.contains("is not a `touch` value"), "{joined}");
     }
 
     #[test]
@@ -2487,25 +2233,28 @@ mod tests {
         // Every branch of the ternary lowered to nothing, with no word.
         let nested = run("absolute: c ? (v ? true : false) : false");
         assert_eq!(nested.diagnostics.len(), 1, "{:?}", nested.diagnostics);
-        assert!(nested.diagnostics[0].contains("\"absolute\" boolean sugar was removed"));
-        assert!(nested.diagnostics[0].contains("{ position: 'absolute' }"));
+        assert_eq!(
+            nested.diagnostics[0],
+            "`absolute` boolean sugar was removed, and nothing is emitted for it.\n  help: write `{ position: 'absolute' }` instead, or run `csszyx migrate`."
+        );
 
         // A runtime value reached the css-var lane as a dead `isolate-(--…)`.
         let runtime = run("isolate: v");
         assert!(!runtime.code.contains("--_sz-isolate"), "{}", runtime.code);
-        assert!(runtime.diagnostics[0].contains("\"isolate\" boolean sugar was removed"));
+        assert!(runtime.diagnostics[0].contains("`isolate` boolean sugar was removed"));
 
         // `flex` is also the flex shorthand: only a `true` branch is the sugar.
         let flex_sugar = run("flex: c ? true : undefined");
-        assert!(flex_sugar.diagnostics[0].contains("\"flex\" boolean sugar was removed"));
+        assert!(flex_sugar.diagnostics[0].contains("`flex` boolean sugar was removed"));
         // A key that was canonical until 0.18.0 is named as replaced, not sugar.
         let replaced = run("tabularNums: true");
-        assert!(
-            replaced.diagnostics[0]
-                .contains("\"tabularNums\" was replaced at /repo/src/Sugar.tsx:1."),
+        assert_eq!(
+            replaced.diagnostics[0],
+            "`tabularNums` was replaced, and nothing is emitted for it.\n  help: write `{ numSpacing: 'tabular' }` instead, or run `csszyx migrate`.",
             "{:?}",
             replaced.diagnostics
         );
+        assert_eq!(replaced.issues[0].start, 37, "{:?}", replaced.issues);
         let flex_values = run("flex: c ? 1 : 'none'");
         assert!(
             flex_values.diagnostics.is_empty(),
@@ -2550,18 +2299,20 @@ mod tests {
         assert!(!result.code.contains("--_sz-text-align"), "{}", result.code);
         assert!(result.classes.is_empty(), "{:?}", result.classes);
         assert_eq!(result.diagnostics.len(), 2, "{:?}", result.diagnostics);
-        let diagnostic = result
-            .diagnostics
-            .iter()
-            .find(|entry| entry.contains("textAlign"))
-            .expect("a report naming the key");
-        assert!(diagnostic.contains("\"textAlign\""), "{diagnostic}");
-        assert!(diagnostic.contains("src/Align.tsx:1"), "{diagnostic}");
+        let found = located(&result, &file.source, "textAlign");
+        let &[(diagnostic, line, _)] = found.as_slice() else {
+            panic!("one report naming the key: {:?}", result.diagnostics);
+        };
+        assert!(diagnostic.contains("`textAlign`"), "{diagnostic}");
+        assert_eq!(line, 1, "{diagnostic}");
         assert!(diagnostic.contains("szv()"), "{diagnostic}");
         // A supported key with one unsupported value shape must not read as a
         // typo, or the author goes looking for a misspelling that is not there.
         assert!(!diagnostic.contains("was removed"), "{diagnostic}");
-        assert!(!diagnostic.contains("Unknown"), "{diagnostic}");
+        assert!(
+            !diagnostic.contains("is not an sz property"),
+            "{diagnostic}"
+        );
     }
 
     #[test]
@@ -2581,19 +2332,20 @@ mod tests {
             },
         );
 
-        assert!(
-            result.diagnostics.iter().any(|diagnostic| {
-                diagnostic.contains("\"maskFrom\" was removed at src/Diagnostics.tsx:1:")
-            }),
-            "{:?}",
-            result.diagnostics
+        let removed = located(
+            &result,
+            &file.source,
+            "`maskFrom` was removed, and nothing is emitted for it.\n  help: ",
         );
-        assert!(
-            result.diagnostics.iter().any(|diagnostic| {
-                diagnostic.contains(
-                    "Use the canonical key \"bg\" instead of \"backgroundColor\" at src/Diagnostics.tsx:1",
-                )
-            }),
+        assert_eq!(removed.len(), 1, "{:?}", result.diagnostics);
+        assert_eq!(removed[0].1, 1, "{}", removed[0].0);
+        assert_eq!(
+            located(&result, &file.source, "`backgroundColor`"),
+            [(
+                "`backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg` instead of `backgroundColor`.",
+                1,
+                43
+            )],
             "{:?}",
             result.diagnostics
         );
@@ -2609,7 +2361,7 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(result.diagnostics.iter().any(|d| {
-            d.contains("\"p\" is a property, not a variant")
+            d.contains("`p` names a property and holds an object `{ bg }`")
                 && d.contains("{ bg }")
                 && d.contains("generate no CSS")
         }));
@@ -2625,11 +2377,22 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         let diagnostics = result.diagnostics.join("\n");
 
-        assert!(diagnostics.contains("szr fallback at 2:"), "{diagnostics}");
+        let szr_lines: Vec<u32> =
+            located(&result, &file.source, "`szr` falls back to the runtime: ")
+                .iter()
+                .map(|(_, line, _)| *line)
+                .collect();
+        assert_eq!(szr_lines, [2, 3, 4], "{diagnostics}");
         assert!(diagnostics.contains("identifier `cfg`"), "{diagnostics}");
         assert!(diagnostics.contains("member expression"), "{diagnostics}");
         assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
-        assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+        let szv = located(
+            &result,
+            &file.source,
+            "The `szv` config cannot be read at build time: ",
+        );
+        assert_eq!(szv.len(), 1, "{diagnostics}");
+        assert_eq!(szv[0].1, 5, "{diagnostics}");
     }
 
     #[test]
@@ -2652,10 +2415,13 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         let diagnostics = result.diagnostics.join("\n");
 
-        assert!(
-            diagnostics.contains("szr fallback at 3:44: szv factory `t()` did not precompile"),
-            "{diagnostics}"
+        let found = located(
+            &result,
+            &file.source,
+            "`szr` falls back to the runtime: szv factory `t()` did not precompile",
         );
+        assert_eq!(found.len(), 1, "{diagnostics}");
+        assert_eq!((found[0].1, found[0].2), (3, 44), "{diagnostics}");
         assert!(
             diagnostics.contains("config disqualified at `base.color`"),
             "{diagnostics}"
@@ -2684,10 +2450,13 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
         let diagnostics = result.diagnostics.join("\n");
 
-        assert!(
-            diagnostics.contains("sz fallback at 2:33: szv factory `t()` did not precompile"),
-            "{diagnostics}"
+        let found = located(
+            &result,
+            &file.source,
+            "`sz` falls back to the runtime: szv factory `t()` did not precompile",
         );
+        assert_eq!(found.len(), 1, "{diagnostics}");
+        assert_eq!((found[0].1, found[0].2), (2, 33), "{diagnostics}");
         assert!(
             diagnostics.contains("config disqualified at `base.color`"),
             "{diagnostics}"
@@ -2834,7 +2603,10 @@ mod tests {
         );
         // The szr site renders through its own mapping, so an import reaching
         // it has to be named there too.
-        assert!(diagnostics.contains("szr fallback at "), "{diagnostics}");
+        assert!(
+            diagnostics.contains("`szr` falls back to the runtime: imported binding `cardSz`"),
+            "{diagnostics}"
+        );
     }
 
     #[test]
@@ -2848,7 +2620,7 @@ mod tests {
         assert!(result
             .diagnostics
             .iter()
-            .any(|diagnostic| diagnostic.contains("maskLinear: unknown field \"form\"")));
+            .any(|diagnostic| diagnostic.contains("`maskLinear` has no field `form`")));
     }
 
     #[test]
@@ -2870,10 +2642,10 @@ mod tests {
             let hit = result
                 .diagnostics
                 .iter()
-                .find(|diagnostic| diagnostic.contains(&format!("\"{key}: {value}\"")))
+                .find(|diagnostic| diagnostic.contains(&format!("`{key}: {value}`")))
                 .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
             assert!(
-                hit.contains(&format!("The class \"{bare}\" is still emitted")),
+                hit.contains(&format!("the class `{bare}` is still emitted")),
                 "{hit}"
             );
             assert!(hit.contains(legal), "{hit}");
@@ -2906,10 +2678,17 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             [
-                "[csszyx] \"bg: 'red-500/50'\" at /repo/src/App.tsx:1 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 50 }.",
-                "[csszyx] \"from: 'blue-500/20'\" at /repo/src/App.tsx:2 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'blue-500', op: 20 }.",
-                "[csszyx] \"bg: 'red-500/5'\" at /repo/src/App.tsx:3 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 5 }.",
+                "A string cannot carry slash opacity, so `bg: 'red-500/50'` emits nothing.\n  help: use the object form: `{ color: 'red-500', op: 50 }`.",
+                "A string cannot carry slash opacity, so `from: 'blue-500/20'` emits nothing.\n  help: use the object form: `{ color: 'blue-500', op: 20 }`.",
+                "A string cannot carry slash opacity, so `bg: 'red-500/5'` emits nothing.\n  help: use the object form: `{ color: 'red-500', op: 5 }`.",
             ]
+        );
+        assert_eq!(
+            located(&result, &file.source, "slash opacity")
+                .iter()
+                .map(|(_, line, _)| *line)
+                .collect::<Vec<_>>(),
+            [1, 2, 3]
         );
         assert_eq!(
             result
@@ -2939,9 +2718,16 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             [
-                "[csszyx] mask: 'linear-45' at /repo/src/App.tsx:1 — gradient layers moved to \"maskLinear\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.",
-                "[csszyx] mask: 'radial' at /repo/src/App.tsx:2 — gradient layers moved to \"maskRadial\". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.",
+                "`mask: 'linear-45'` names a gradient layer, and gradient layers moved to `maskLinear`; nothing is emitted for it.\n  help: write this layer on `maskLinear`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.",
+                "`mask: 'radial'` names a gradient layer, and gradient layers moved to `maskRadial`; nothing is emitted for it.\n  help: write this layer on `maskRadial`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.\n  note: Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.",
             ]
+        );
+        assert_eq!(
+            located(&result, &file.source, "gradient layer")
+                .iter()
+                .map(|(_, line, _)| *line)
+                .collect::<Vec<_>>(),
+            [1, 2]
         );
         assert_eq!(
             result
@@ -3004,8 +2790,8 @@ mod tests {
             result
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.contains("\"--v-y\"")
-                    && diagnostic.contains("it holds an object")),
+                .any(|diagnostic| diagnostic.contains("`--v-y`")
+                    && diagnostic.contains("holds an object, so it lowers to the class prefix")),
             "{:?}",
             result.diagnostics
         );
@@ -3066,9 +2852,12 @@ mod tests {
             let hit = result
                 .diagnostics
                 .iter()
-                .find(|diagnostic| diagnostic.contains(&format!("\"{key}\"")))
+                .find(|diagnostic| diagnostic.contains(&format!("`{key}`")))
                 .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
-            assert!(hit.contains("it holds an object"), "{hit}");
+            assert!(
+                hit.contains("holds an object, so it lowers to the class prefix"),
+                "{hit}"
+            );
             // Still emitted: dropping it would be a second behaviour change on
             // a shape the diagnostic already covers.
             assert!(result.code.contains(&format!("{key}:")), "{}", result.code);
@@ -3095,10 +2884,8 @@ mod tests {
             };
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
             assert!(
-                !result
-                    .diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.contains("it holds an object")),
+                !result.diagnostics.iter().any(|diagnostic| diagnostic
+                    .contains("holds an object, so it lowers to the class prefix")),
                 "{source}: {:?}",
                 result.diagnostics
             );
@@ -3126,7 +2913,7 @@ mod tests {
                 result
                     .diagnostics
                     .iter()
-                    .any(|diagnostic| diagnostic.contains("possible style override")),
+                    .any(|diagnostic| diagnostic.contains("can replace the one in the spread")),
                 "{source}"
             );
         }
@@ -3157,7 +2944,7 @@ mod tests {
                 result
                     .diagnostics
                     .iter()
-                    .all(|diagnostic| !diagnostic.contains("possible style override")),
+                    .all(|diagnostic| !diagnostic.contains("can replace the one in the spread")),
                 "{source}"
             );
         }
@@ -3306,9 +3093,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "sz fallback at 1:45: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 45)]);
     }
 
     #[test]
@@ -3332,9 +3120,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "sz fallback at 1:69: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 69)]);
     }
 
     #[test]
@@ -3353,10 +3142,8 @@ mod tests {
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
         assert!(result.metadata.ast_budget_exceeded);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.contains("AST budget exceeded")));
+        assert!(result.diagnostics.iter().any(|diagnostic| diagnostic
+            .contains("The file exceeds the AST budget, and the IR walk stopped mid-file.")));
     }
 
     #[test]
@@ -3440,7 +3227,8 @@ mod tests {
             result
                 .diagnostics
                 .iter()
-                .any(|d| d.contains("unresolvable sz spread")),
+                .any(|d| d
+                    .contains("cannot be resolved at build time and falls back to the runtime")),
             "{:?}",
             result.diagnostics
         );
@@ -3596,9 +3384,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "sz fallback at 1:36: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 36)]);
     }
 
     #[test]
@@ -3623,9 +3412,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "sz fallback at 1:57: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 57)]);
     }
 
     #[test]
@@ -3654,13 +3444,14 @@ mod tests {
             result.diagnostics,
             vec![
                 String::from(
-                    "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                    "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."
                 ),
                 String::from(
-                    "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+                    "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
                 ),
             ]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 59), (1, 43)]);
     }
 
     #[test]
@@ -3684,9 +3475,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "[csszyx] <div> at /repo/src/App.tsx:1:22 carries 2 `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down."
+                "`<div>` carries 2 `sz` attributes; they were merged as `sz={[first, …, last]}`, later wins per property.\n  help: fold them into one `sz` array, so the order is written down."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 22)]);
     }
 
     #[test]
@@ -3708,13 +3500,14 @@ mod tests {
             result.diagnostics,
             vec![
                 String::from(
-                    "[csszyx] <div> at /repo/src/App.tsx:1:23: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card` will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`."
+                    "Class names and `sz` on more than one side of a spread on `<div>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
                 ),
                 String::from(
-                    "[csszyx] <b> at /repo/src/App.tsx:2:21: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so the classes of an earlier `sz` will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={[r.className, c, { … }]}`."
+                    "Class names and `sz` on more than one side of a spread on `<b>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so the classes of an earlier `sz` will not apply there.\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={[r.className, c, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
                 ),
             ]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 23), (2, 21)]);
     }
 
     #[test]
@@ -3750,7 +3543,7 @@ mod tests {
         assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
         assert!(
             result.diagnostics[0].ends_with(
-                "after `{...$rest}`, in the order that should win: `sz={['card', $rest.className, { … }]}`."
+                "after `{...$rest}`, in the order that should win: `sz={['card', $rest.className, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
             ),
             "{:?}",
             result.diagnostics
@@ -3772,7 +3565,7 @@ mod tests {
         assert_eq!(result.diagnostics.len(), 3, "{:?}", result.diagnostics);
         assert!(
             result.diagnostics[0]
-                .ends_with("after `{...p.rest}`, in the order that should win: `sz={['card', p.rest.class, { … }]}`."),
+                .ends_with("after `{...p.rest}`, in the order that should win: `sz={['card', p.rest.class, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."),
             "{:?}",
             result.diagnostics
         );
@@ -3788,7 +3581,7 @@ mod tests {
         );
         assert!(
             result.diagnostics[2].ends_with(
-                "after the spread, in the order that should win: `sz={[`x ${y}`, { … }]}`."
+                "after the spread, in the order that should win: `sz={[`x ${y}`, { … }]}`.\n  note: Vue JSX merges every class, so there every side applies."
             ),
             "{:?}",
             result.diagnostics
@@ -3867,9 +3660,10 @@ mod tests {
         assert_eq!(
             result.diagnostics,
             vec![String::from(
-                "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+                "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
             )]
         );
+        assert_eq!(positions(&result, &file.source), [(1, 33)]);
     }
 
     #[test]
@@ -4200,9 +3994,12 @@ mod tests {
             filename: "/repo/src/Refused.tsx".to_string(),
             source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
         };
-        for table in [
-            r#"{"format":99,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#,
-            "[]",
+        for (table, refused) in [
+            (
+                r#"{"format":99,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#,
+                "The merge table is in format 99, and this engine reads format 1, so",
+            ),
+            ("[]", "The merge table is not one this engine reads ("),
         ] {
             let result = transform_file_with_options(
                 &file,
@@ -4216,11 +4013,16 @@ mod tests {
                 "{}",
                 result.code
             );
-            let diagnostics = result.diagnostics.join("\n");
+            assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+            assert_eq!(
+                result.issues[0].code,
+                crate::transform::DiagnosticCode::MergeClassifierUnavailable
+            );
+            let text = &result.diagnostics[0];
+            assert!(text.starts_with(refused), "{text}");
             assert!(
-                diagnostics.contains("/repo/src/Refused.tsx")
-                    && diagnostics.contains("no sz key was merged"),
-                "{diagnostics}"
+                text.ends_with(", so no sz key was merged with a later key that covers it.\n  help: install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides."),
+                "{text}"
             );
         }
     }
@@ -4547,7 +4349,8 @@ mod tests {
             result
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.contains("[csszyx] parse error in")),
+                .any(|diagnostic| diagnostic
+                    .contains("The engine could not fully parse this file (")),
             "{:?}",
             result.diagnostics
         );
@@ -4608,7 +4411,7 @@ mod tests {
             !result
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.contains("source nesting exceeded")),
+                .any(|diagnostic| diagnostic.contains("Source nesting exceeds")),
             "{:?}",
             result.diagnostics
         );
@@ -4629,10 +4432,8 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(
-            result
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.contains("unsupported dynamic sz attribute")),
+            result.diagnostics.iter().any(|diagnostic| diagnostic
+                .contains("This `sz` attribute has no value, or a JSX element as its value")),
             "{:?}",
             result.diagnostics
         );
@@ -4658,7 +4459,7 @@ mod tests {
         let diagnostics = result.diagnostics.join("\n");
 
         assert!(
-            diagnostics.contains("\"paddng\""),
+            diagnostics.contains("`paddng`"),
             "the typo must still be reported: {diagnostics}"
         );
         assert!(
@@ -4703,7 +4504,7 @@ mod tests {
             !custom
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+                .any(|diagnostic| diagnostic.contains("names a property and holds an object")),
             "{:?}",
             custom.diagnostics
         );
@@ -4722,7 +4523,7 @@ mod tests {
             property
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+                .any(|diagnostic| diagnostic.contains("names a property and holds an object")),
             "{:?}",
             property.diagnostics
         );
@@ -4745,7 +4546,7 @@ mod tests {
         let diagnostics = result.diagnostics.join("\n");
 
         assert!(
-            diagnostics.contains("Unknown property \"colr\""),
+            diagnostics.contains("`colr` is not an sz property."),
             "{diagnostics}"
         );
         assert!(!diagnostics.contains("numeric key"), "{diagnostics}");
@@ -5008,7 +4809,7 @@ mod tests {
         let diagnostics = result.diagnostics.join("\n");
 
         assert!(
-            diagnostics.contains("Unknown property \"pading\""),
+            diagnostics.contains("`pading` is not an sz property."),
             "{diagnostics}"
         );
         assert!(!diagnostics.contains("margn"), "{diagnostics}");
@@ -5069,7 +4870,7 @@ mod tests {
         let diagnostics = result.diagnostics.join("\n");
 
         assert!(
-            diagnostics.contains("Unknown property \"pading\""),
+            diagnostics.contains("`pading` is not an sz property."),
             "{diagnostics}"
         );
     }
@@ -5250,7 +5051,7 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            ["[csszyx] \"contain: size\" at /repo/src/Layers.jsx:1 comes before \"containPaint\" in one sz object, so containPaint replaces it and the contain value styles nothing. A spread override ({ ...base, contain: 'size' }) leaves this order; to override, layer it: sz={[base, { contain: 'size' }]}."]
+            ["`contain: size` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'size' }]}`.\n  note: a spread override (`{ ...base, contain: 'size' }`) keeps this order."]
         );
         let (classes, diagnostics) =
             layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
@@ -5265,8 +5066,8 @@ mod tests {
         assert_eq!(
             diagnostics,
             [
-                "[csszyx] \"contain: paint\" at /repo/src/Layers.jsx:1 is not a contain value. The class \"contain-paint\" it emits belongs to { containPaint: true }: write that key, so it combines with the other groups instead of resetting them. contain takes one of: none, strict, content.",
-                "[csszyx] \"nums: tabular\" at /repo/src/Layers.jsx:1 is not a nums value. The class \"tabular-nums\" it emits belongs to { numSpacing: 'tabular' }: write that key, so it combines with the other groups instead of resetting them. nums takes one of: normal.",
+                "`contain: paint` is not a `contain` value; the class `contain-paint` it emits belongs to `{ containPaint: true }`.\n  help: write `{ containPaint: true }`, so it combines with the other groups instead of resetting them.\n  note: `contain` takes one of: none, strict, content.",
+                "`nums: tabular` is not a `nums` value; the class `tabular-nums` it emits belongs to `{ numSpacing: 'tabular' }`.\n  help: write `{ numSpacing: 'tabular' }`, so it combines with the other groups instead of resetting them.\n  note: `nums` takes one of: normal.",
             ]
         );
     }
@@ -5277,8 +5078,8 @@ mod tests {
         assert_eq!(
             diagnostics,
             [
-                "[csszyx] \"ordinal\" was replaced at /repo/src/Layers.jsx:1. Use { numOrdinal: true } instead, or run `csszyx migrate`.",
-                "[csszyx] \"touchAction: pan-y\" moved to { touchPanY: 'y' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it.",
+                "`ordinal` was replaced, and nothing is emitted for it.\n  help: write `{ numOrdinal: true }` instead, or run `csszyx migrate`.",
+                "`touchAction: pan-y` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'y' }`, or run `csszyx migrate`.",
             ]
         );
     }
@@ -5290,9 +5091,9 @@ mod tests {
         );
         let joined = diagnostics.join("\n");
         for moved in [
-            "\"touch: pan-x\" moved to { touchPanX: 'x' }",
-            "\"touch: pan-up\" moved to { touchPanY: 'up' }",
-            "\"touch: pinch-zoom\" moved to { touchPinchZoom: true }",
+            "`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
+            "`touch: pan-up` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'up' }`, or run `csszyx migrate`.",
+            "`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.\n  help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.",
         ] {
             assert!(joined.contains(moved), "{moved} in {joined}");
         }
@@ -5302,7 +5103,7 @@ mod tests {
         assert!(
             diagnostics
                 .iter()
-                .all(|line| !line.contains("bgg") && !line.contains("\"p\"")),
+                .all(|line| !line.contains("bgg") && !line.contains("`p`")),
             "{diagnostics:?}"
         );
     }
@@ -5310,7 +5111,7 @@ mod tests {
     #[test]
     fn a_runtime_value_beside_the_other_side_of_its_family_is_named() {
         let layered = |key: &str, other: &str, first: &str, second: &str| {
-            format!("[csszyx] \"{key}\" takes a runtime value beside \"{other}\" in one sz object at /repo/src/Layers.jsx:1, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={{[{{ {first}: … }}, {{ {second}: … }}]}}.")
+            format!("`{key}` takes a runtime value beside `{other}` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.\n  help: layer them, later wins: `sz={{[{{ {first}: … }}, {{ {second}: … }}]}}`.")
         };
         for (sz, expected) in [
             (
@@ -5362,7 +5163,7 @@ mod tests {
         let (classes, diagnostics) = run("contain: 'strict', containPaint: true, contain: 'size'");
         assert_eq!(classes, "contain-paint");
         assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-        assert!(diagnostics[0].contains("\"contain: size\" at /repo/src/Dup.jsx:1 comes before"));
+        assert!(diagnostics[0].starts_with("`contain: size` comes before `containPaint`"));
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -5384,19 +5185,19 @@ mod tests {
         let (_, moved) = layers_run("{ touchAction: m ? 'pan-x' : undefined }");
         assert_eq!(
             moved,
-            ["[csszyx] \"touchAction: pan-x\" moved to { touchPanX: 'x' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it."]
+            ["`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.\n  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`."]
         );
         let (_, standing) = layers_run("{ touchAction: m ? 'none' : 'auto' }");
         assert_eq!(
             standing,
-            ["[csszyx] Use the canonical key \"touch\" instead of \"touchAction\" at /repo/src/Layers.jsx:1."]
+            ["`touchAction` is an alias of `touch`, and nothing is emitted for it.\n  help: write `touch` instead of `touchAction`."]
         );
         let (_, runtime) = layers_run("{ touchAction: m ? c : 'pan-y' }");
         assert_eq!(
             runtime,
             [
-                "[csszyx] \"touchAction: pan-y\" moved to { touchPanY: 'y' } at /repo/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it.",
-                "[csszyx] \"touchAction\" was removed and takes a runtime value at /repo/src/Layers.jsx:1: write auto, none, manipulation on touch, and the other values on touchPanX, touchPanY, touchPinchZoom.",
+                "`touchAction: pan-y` moved to `touchPanY`, and nothing is emitted for it.\n  help: write `{ touchPanY: 'y' }`, or run `csszyx migrate`.",
+                "`touchAction` was removed, and it holds a runtime value, so nothing is emitted for it.\n  help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.",
             ]
         );
     }
@@ -5406,7 +5207,7 @@ mod tests {
         let (_, diagnostics) =
             layers_run("[{ p: 1 }, { touchPanX: c ? 'x' : undefined, touch: 'none' }]");
         assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-        assert!(diagnostics[0].contains("\"touchPanX\" takes a runtime value beside \"touch\""));
+        assert!(diagnostics[0].contains("`touchPanX` takes a runtime value beside `touch`"));
         let (_, layered) = layers_run("[{ touch: 'none' }, { touchPanX: c ? 'x' : undefined }]");
         assert!(layered.is_empty(), "{layered:?}");
     }
@@ -5420,8 +5221,16 @@ mod tests {
             .filter(|line| line.contains("comes before"))
             .collect();
         assert_eq!(named.len(), 2, "{diagnostics:?}");
-        assert!(named[0].contains("\"contain: 1\""));
-        assert!(named[1].contains("\"touch: true\""));
+        assert!(
+            named[0].starts_with("`contain: 1` comes before"),
+            "{}",
+            named[0]
+        );
+        assert!(
+            named[1].starts_with("`touch: true` comes before"),
+            "{}",
+            named[1]
+        );
     }
 
     #[test]
@@ -5430,7 +5239,7 @@ mod tests {
         assert_eq!(classes, "touch-pan-left");
         assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
         assert!(
-            diagnostics[0].contains("comes before \"touchPanX\""),
+            diagnostics[0].contains("comes before `touchPanX`"),
             "{diagnostics:?}"
         );
     }
@@ -5447,7 +5256,7 @@ mod tests {
         let (_, diagnostics) = layers_run("{ backgroundColor: c }");
         assert_eq!(
             diagnostics,
-            ["[csszyx] Use the canonical key \"bg\" instead of \"backgroundColor\" at /repo/src/Layers.jsx:1."]
+            ["`backgroundColor` is an alias of `bg`, and nothing is emitted for it.\n  help: write `bg` instead of `backgroundColor`."]
         );
     }
 
@@ -5457,7 +5266,7 @@ mod tests {
             layers_run(sz)
                 .1
                 .iter()
-                .any(|line| line.contains("\"flex\" boolean sugar was removed"))
+                .any(|line| line.contains("`flex` boolean sugar was removed"))
         };
         assert!(sugar("{ flex: c ? 1 : true }"));
         assert!(sugar("{ flex: c ? true : 1 }"));
@@ -5818,32 +5627,32 @@ mod tests {
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
                 r#"className="bg-red-500/[20]!""#,
-                "[csszyx] \"bg: { color: 'red-500/50!', op: '20' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+                "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500!', op: '20' }`.\n  note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
                 r#"className="bg-red-500/20""#,
-                "[csszyx] \"bg: { color: 'red-500/50', op: 20 }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 20 }.",
+                "`bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class uses `op: 20`; the `/50` in `color` is ignored.",
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
                 r#"className="bg-red-500/50""#,
-                "[csszyx] \"bg: { color: 'red-500/50' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 50 }.",
+                "`bg: { color: 'red-500/50' }` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{ color: 'red-500', op: 50 }`.\n  note: the class still applies opacity 50.",
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '20' } }} />;",
                 r#"className="bg-red-500/[20]""#,
-                "[csszyx] \"bg: { color: 'red-500/50', op: '20' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: '20' }.",
+                "`bg: { color: 'red-500/50', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: '20' }`.\n  note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
             ),
             (
                 "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",
                 r#"className="hover:bg-red-500/0.5""#,
-                "[csszyx] \"bg: { color: 'red-500/50', op: 0.5 }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'red-500', op: 0.5 }.",
+                "`bg: { color: 'red-500/50', op: 0.5 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 0.5 }`.\n  note: the class uses `op: 0.5`; the `/50` in `color` is ignored.",
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",
                 r#"className="md:hover:border-blue-600/75""#,
-                "[csszyx] \"borderColor: { color: 'blue-600/75' }\" at /repo/src/App.tsx:1 — a colour object takes its opacity in op, not in color. Write { color: 'blue-600', op: 75 }.",
+                "`borderColor: { color: 'blue-600/75' }` puts the opacity in `color`; a colour object takes it in `op`.\n  help: write `{ color: 'blue-600', op: 75 }`.\n  note: the class still applies opacity 75.",
             ),
         ];
         for (source, class_attr, message) in cases {
@@ -6044,7 +5853,7 @@ mod tests {
         );
         assert!(
             result.diagnostics[0].starts_with(
-                "sz fallback at 2:9: key `md.hover` holds a value only known at runtime and no sz property claims it"
+                "`sz` falls back to the runtime: key `md.hover` holds a value only known at runtime and no sz property claims it"
             ),
             "{:?}",
             result.diagnostics

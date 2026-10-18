@@ -163,8 +163,6 @@ pub struct SzsDiagnosticIr {
     /// Whether it is on a host element, where `szs` has no effect, rather
     /// than a slot map the build could not read.
     pub host_element: bool,
-    /// The rendered message.
-    pub message: String,
 }
 
 /// A `szs` slot-map attribute with every slot compiled.

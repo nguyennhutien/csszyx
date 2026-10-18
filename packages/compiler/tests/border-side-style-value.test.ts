@@ -82,10 +82,14 @@ describe.each(ENGINES)('a style keyword on a side border key (%s)', (_name, engi
         const run = compile(engine, "{ borderB: 'none' }");
 
         expect(run.warnings).toHaveLength(1);
-        expect(run.warnings[0]).toContain('"borderB"');
-        expect(run.warnings[0]).toContain('App.tsx:1');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args, issue.line])).toEqual([
+            ['per-side-border-style', { key: 'borderB', value: 'none' }, 1],
+        ]);
+        expect(run.warnings[0]).toContain('[csszyx] per-side-border-style: /p/App.tsx:1:');
+        expect(run.warnings[0]).toContain("`borderB: 'none'` is dropped");
         // Both ways out: the style for every side, or a width for this one.
-        expect(run.warnings[0]).toContain('borderStyle');
+        expect(run.warnings[0]).toContain("help: use `borderStyle: 'none'` for every side");
+        expect(run.warnings[0]).toContain('a number on `borderB` for the width');
     });
 });
 

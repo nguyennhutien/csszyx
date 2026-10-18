@@ -63,47 +63,71 @@ describe('mask slot member warnings', () => {
     });
     it.each(ENGINES)('%s warns for a top-level typo inside maskLinear', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;";
-        const { warnings } = captureWarnings(engine, tsx);
-        const hit = warnings.find(message => message.includes('maskLinear: unknown field "form"'));
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('nothing is emitted for it');
-        expect(hit).toContain('maskLinear takes { angle, from, to, t, r, b, l, x, y }');
+        const { warnings, result } = captureWarnings(engine, tsx);
+        expect(result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'unknown-field',
+                {
+                    owner: 'maskLinear',
+                    member: 'form',
+                    allowed: ['angle', 'from', 'to', 't', 'r', 'b', 'l', 'x', 'y'],
+                },
+            ],
+        ]);
+        const [hit] = warnings;
+        expect(hit).toContain('`maskLinear` has no field `form`, and nothing is emitted for it.');
+        expect(hit).toContain('help: `maskLinear` takes `{ angle, from, to, t, r, b, l, x, y }`.');
     });
 
     it.each(ENGINES)('%s warns inside a linear edge object', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskLinear: { b: { form: '0%' } } }} />;";
-        const { warnings } = captureWarnings(engine, tsx);
-        const hit = warnings.find(message =>
-            message.includes('maskLinear.b: unknown field "form"'),
-        );
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('maskLinear.b takes { from, to }');
+        const { warnings, result } = captureWarnings(engine, tsx);
+        expect(result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['unknown-field', { owner: 'maskLinear.b', member: 'form', allowed: ['from', 'to'] }],
+        ]);
+        const [hit] = warnings;
+        expect(hit).toContain('`maskLinear.b` has no field `form`');
+        expect(hit).toContain('help: `maskLinear.b` takes `{ from, to }`.');
     });
 
     it.each(ENGINES)('%s rejects a side key on the conic slot', (_lane, engine) => {
         // Sides belong to the linear slot only; conic silently dropped them.
         const tsx = "export const A = () => <div sz={{ maskConic: { t: { from: '0%' } } }} />;";
-        const { warnings } = captureWarnings(engine, tsx);
-        const hit = warnings.find(message => message.includes('maskConic: unknown field "t"'));
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('maskConic takes { angle, from, to }');
+        const { warnings, result } = captureWarnings(engine, tsx);
+        expect(result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'unknown-field',
+                { owner: 'maskConic', member: 't', allowed: ['angle', 'from', 'to'] },
+            ],
+        ]);
+        const [hit] = warnings;
+        expect(hit).toContain('`maskConic` has no field `t`');
+        expect(hit).toContain('help: `maskConic` takes `{ angle, from, to }`.');
     });
 
     it.each(ENGINES)('%s warns for an unknown radial member', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskRadial: { bogus: 1, at: 'top' } }} />;";
-        const { warnings } = captureWarnings(engine, tsx);
-        const hit = warnings.find(message => message.includes('maskRadial: unknown field "bogus"'));
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('maskRadial takes { at, size, shape, from, to }');
+        const { warnings, result } = captureWarnings(engine, tsx);
+        expect(result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'unknown-field',
+                {
+                    owner: 'maskRadial',
+                    member: 'bogus',
+                    allowed: ['at', 'size', 'shape', 'from', 'to'],
+                },
+            ],
+        ]);
+        const [hit] = warnings;
+        expect(hit).toContain('`maskRadial` has no field `bogus`');
+        expect(hit).toContain('help: `maskRadial` takes `{ at, size, shape, from, to }`.');
     });
 
     it.each(ENGINES)('%s stays silent for a fully legal slot', (_lane, engine) => {
         const tsx =
             "export const A = () => <div sz={{ maskLinear: { angle: 45, b: { from: '0%' } } }} />;";
-        const warnings = captureWarnings(engine, tsx).warnings.filter(message =>
-            message.includes('unknown field'),
-        );
-        expect(warnings).toEqual([]);
+        const { result } = captureWarnings(engine, tsx);
+        expect(result.issues?.filter(issue => issue.code === 'unknown-field')).toEqual([]);
     });
 
     // The documented mask-layer rows (`docs/specs/snippets/effects.md`) and

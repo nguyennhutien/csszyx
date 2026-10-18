@@ -30,7 +30,9 @@ describe('a TS assertion at the sz site is unwrapped', () => {
                 const tsx = `export const A = () => <div sz={${expression}} />;`;
                 const run = captureWarnings(engine, tsx);
                 expect(run.className).toBe('p-4 bg-blue-500');
-                expect(run.warnings.filter(w => w.includes('sz fallback at '))).toEqual([]);
+                expect(
+                    (run.result.issues ?? []).filter(issue => issue.code.startsWith('fallback-')),
+                ).toEqual([]);
             });
         }
 
@@ -41,7 +43,12 @@ describe('a TS assertion at the sz site is unwrapped', () => {
             const tsx = 'export const A = () => <div sz={cfg.card as object} />;';
             const run = captureWarnings(engine, tsx);
             expect(run.className).toBeUndefined();
-            expect(run.warnings.join('\n')).toContain('sz fallback at ');
+            expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+                ['fallback-nudge', expect.objectContaining({ site: 'sz' })],
+            ]);
+            expect(run.warnings.join('\n')).toContain(
+                '`sz` falls back to the runtime: expression of type `TSAsExpression` is not statically analyzable.',
+            );
         });
     }
 });

@@ -12,7 +12,6 @@
  * @module sz-key-suggestion
  */
 
-import { szDiagnosticKindOf } from './sz-diagnostic-kind.js';
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_SPECIAL_PROPERTIES,
@@ -139,17 +138,4 @@ function knownSzKeyNames(): ReadonlyArray<readonly [string, string]> {
 export function suggestSzKey(key: string): string | null {
     const maxDistance = Math.min(key.length >= 12 ? 2 : 1, Math.floor(key.length / 3));
     return nearestName(key, knownSzKeyNames(), maxDistance);
-}
-
-/**
- * The key to suggest for an unknown-key diagnostic.
- *
- * @param message - One rendered diagnostic, with or without its tag.
- * @returns The canonical key, or null for another kind or when nothing is near.
- */
-export function szKeySuggestionFor(message: string): string | null {
-    if (szDiagnosticKindOf(message) !== 'unknown-key') return null;
-    // The kind guarantees the message names the key in the first quotes.
-    const start = message.indexOf('"') + 1;
-    return suggestSzKey(message.slice(start, message.indexOf('"', start)));
 }

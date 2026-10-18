@@ -7,7 +7,7 @@ import {
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
-
+import { diagnosticPath, renderEngineDiagnostics } from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -163,6 +163,34 @@ export function isRustTransformAvailable(): boolean {
 }
 
 /**
+ * The options the native binding's `transformBatch` reads.
+ *
+ * @param options Compiler options.
+ * @returns The binding's options.
+ * @internal Read by the diagnostic differential test too.
+ */
+export function nativeTransformOptions(
+    options?: TransformSourceCodeOptions,
+): Parameters<typeof transformBatch>[1] {
+    return {
+        mangleVars: options?.mangleVars === true,
+        mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
+        globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+        rootDir: options?.rootDir,
+        // The node cap is counted by the engine's parser, so the user's
+        // raised `build.astBudgetLimit` has to reach it.
+        astBudget: options?.astBudget,
+        crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
+        // Its own field, not folded into the szv payload: the two
+        // registries share a transport but not a meaning, and the
+        // native side picks different machinery for each.
+        crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
+        classPrefix: options?.classPrefix ?? undefined,
+        mergeTableJson: options?.mergeTable ? JSON.stringify(options.mergeTable) : undefined,
+    };
+}
+
+/**
  * Transform a batch of files through the Rust native engine in one napi call.
  *
  * This is the compiler-level wrapper around `@csszyx/core/native`'s batch API.
@@ -186,25 +214,14 @@ export function transformRustBatch(
                 filename: file.filename ?? `file-${index}.tsx`,
                 source: file.source,
             })),
-            {
-                mangleVars: options?.mangleVars === true,
-                mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
-                globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-                rootDir: options?.rootDir,
-                // The node cap is counted by the engine's parser, so the user's
-                // raised `build.astBudgetLimit` has to reach it.
-                astBudget: options?.astBudget,
-                crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
-                // Its own field, not folded into the szv payload: the two
-                // registries share a transport but not a meaning, and the
-                // native side picks different machinery for each.
-                crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
-                classPrefix: options?.classPrefix ?? undefined,
-                mergeTableJson: options?.mergeTable
-                    ? JSON.stringify(options.mergeTable)
-                    : undefined,
-            },
-        ).map((result, index) => fromNativeResult(result, files[index].source));
+            nativeTransformOptions(options),
+        ).map((result, index) =>
+            fromNativeResult(
+                result,
+                files[index].source,
+                diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+            ),
+        );
     } catch (err) {
         throw asRustUnavailable(err);
     }
@@ -309,9 +326,14 @@ export function normalizeGlobalVarAliases(
  *
  * @param result Native transform result.
  * @param source The source the result was transformed from, to place its spans.
+ * @param file The file's path as a diagnostic names it.
  * @returns Compiler transform result.
  */
-function fromNativeResult(result: NativeTransformResult, source: string): SourceTransformResult {
+function fromNativeResult(
+    result: NativeTransformResult,
+    source: string,
+    file: string,
+): SourceTransformResult {
     const spans = locateEngineSpans(source, result);
     return {
         code: result.code,
@@ -333,7 +355,7 @@ function fromNativeResult(result: NativeTransformResult, source: string): Source
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: result.diagnostics,
+        diagnostics: renderEngineDiagnostics(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [

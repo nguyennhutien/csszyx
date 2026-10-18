@@ -44,10 +44,19 @@ export interface CheckFinding {
     file?: string;
     /** 1-based line, when the finding has one. */
     line?: number;
-    /** What happened, in one sentence. */
+    /** 1-based column in UTF-16 code units, when the finding has a site. */
+    column?: number;
+    /** What happened, in one sentence, with its `help:` and `note:` lines. */
     message: string;
-    /** For an `unknown-key` finding, the known key it most likely misspells. */
+    /**
+     * For an `unknown-key` finding, the known key it most likely misspells.
+     * The same value as `args.suggestion`, kept where version 1 put it.
+     */
     suggestion?: string;
+    /** For an `sz-diagnostic` finding, the values its sentence names, by name. */
+    args?: Readonly<Record<string, unknown>>;
+    /** The page that explains the kind: `https://csszyx.com/e/<kind>`. */
+    url?: string;
     /**
      * How loudly the project reports it, from `csszyx.config`. Never `off`:
      * an `off` finding is not reported. The run fails on `error`, or on what

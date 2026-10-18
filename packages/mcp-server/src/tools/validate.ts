@@ -19,6 +19,7 @@ import {
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
     REPLACED_KEYS,
+    renderUnplacedDiagnostic,
     SUGGESTION_MAP,
     type SzObject,
     transform,
@@ -94,9 +95,8 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
           };
 }
 
-/** Filename the engine attributes diagnostics to; stripped from the messages. */
+/** Filename the engine attributes diagnostics to; no message names it. */
 const PREVIEW_FILE = 'validate.tsx';
-const LOCATION = / at validate\.tsx:\d+/g;
 
 /** One `key: value` entry at the end of a chain of variant keys. */
 interface Leaf {
@@ -163,9 +163,7 @@ function nest(leaf: Leaf): Record<string, unknown> {
 function engineDiagnostics(sz: Record<string, unknown>): string[] {
     try {
         const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
-        return transformSource(source, PREVIEW_FILE).diagnostics.map(message =>
-            String(message).replace(LOCATION, ''),
-        );
+        return (transformSource(source, PREVIEW_FILE).issues ?? []).map(renderUnplacedDiagnostic);
     } catch {
         return [];
     }
@@ -224,12 +222,12 @@ function recordEntryDiagnostics(
     const existing = errors.find(error => error.key === key);
     if (existing) {
         if (emitsNothing && existing.message.endsWith(UNKNOWN_KEY)) {
-            existing.message = diagnostics.join(' ');
+            existing.message = diagnostics.join('\n');
         }
         return true;
     }
     if (!emitsNothing) return false;
-    errors.push({ key, message: diagnostics.join(' ') });
+    errors.push({ key, message: diagnostics.join('\n') });
     return true;
 }
 

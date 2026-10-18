@@ -101,7 +101,7 @@ function isArgType(type) {
  * @param {ReadonlySet<string>} groups - The group ids.
  * @param {string[]} problems - Where problems are collected.
  */
-function validateEntry(entry, groups, problems) {
+function validateEntry(entry, groups, problems, computed = new Map()) {
     const at = `diagnostic ${JSON.stringify(entry.id)}`;
     if (typeof entry.summary !== 'string' || entry.summary.length === 0) {
         problems.push(`${at}: has no summary`);
@@ -153,7 +153,7 @@ function validateEntry(entry, groups, problems) {
         if (!SURFACES.includes(gap)) problems.push(`${at}: gap ${gap} is not a surface`);
         if (entry.surfaces?.[gap]) problems.push(`${at}: lists ${gap} as both a surface and a gap`);
     }
-    validateTemplates(entry, at, problems);
+    validateTemplates(entry, at, problems, computed);
 }
 
 /**
@@ -164,29 +164,65 @@ function validateEntry(entry, groups, problems) {
  * @param {string} at - The entry's label.
  * @param {string[]} problems - Where problems are collected.
  */
-function validateTemplates(entry, at, problems) {
+/**
+ * The values a per-variant template is keyed by: the entry's forms, or the
+ * values of the enum arg it varies by.
+ *
+ * @param {Record<string, any>} entry - The entry.
+ * @returns {string[]} The values.
+ */
+function variantsOf(entry) {
+    if (entry.variesBy === undefined) return entry.forms ?? [];
+    const type = entry.args?.[entry.variesBy]?.type;
+    return Array.isArray(type) ? type.slice(1) : [];
+}
+
+function validateTemplates(entry, at, problems, computed = new Map()) {
     const args = entry.args ?? {};
     const templates = templatesOf(entry);
     for (const { field, form, template } of templates) {
         for (const name of placeholdersOf(template)) {
-            if (!(name in args)) {
+            if (!(name in args) && !computed.has(name)) {
                 problems.push(
-                    `${at}: ${field}${form ? ` (${form})` : ''} names {${name}}, which is not an argument`,
+                    `${at}: ${field}${form ? ` (${form})` : ''} names {${name}}, which is neither an argument nor a computed value`,
                 );
             }
         }
-        if (form !== undefined && !(entry.forms ?? []).includes(form)) {
-            problems.push(`${at}: ${field} has a text for ${form}, which is not one of its forms`);
+        if (form !== undefined && !variantsOf(entry).includes(form)) {
+            problems.push(
+                `${at}: ${field} has a text for ${form}, which is not a value of ${entry.variesBy ?? 'form'}`,
+            );
         }
+    }
+    // A computed value its templates name must not share a name with an arg:
+    // the renderer would print the arg and never compute it.
+    for (const { template } of templates) {
+        for (const name of placeholdersOf(template)) {
+            if (name in args && computed.has(name)) {
+                problems.push(`${at}: {${name}} is both an arg and a computed value`);
+            }
+        }
+    }
+    if (entry.variesBy !== undefined && !Array.isArray(args[entry.variesBy]?.type)) {
+        problems.push(`${at}: varies by ${entry.variesBy}, which is not one of its enum args`);
     }
     const texts = templates.filter(({ field }) => field === 'text');
     if (texts.length === 0) return;
     const required = Object.entries(args)
         .filter(([name, arg]) => !arg.optional && name !== 'form')
         .map(([name]) => name);
+    // An arg is used when a template names it, a computed value a template
+    // names reads it, or it selects the template.
+    const used = new Set(entry.variesBy === undefined ? [] : [entry.variesBy]);
+    for (const { template } of templates) {
+        for (const name of placeholdersOf(template)) {
+            used.add(name);
+            for (const read of computed.get(name)?.reads ?? []) used.add(read);
+        }
+    }
     for (const name of required) {
-        const used = templates.some(({ template }) => placeholdersOf(template).includes(name));
-        if (!used) problems.push(`${at}: required argument ${name} is used by no template`);
+        if (!used.has(name))
+            problems.push(`${at}: required argument ${name} is used by no template`);
     }
 }
 
@@ -227,7 +263,7 @@ export function validateRegistry(input) {
         } else {
             claim(entry.id, 'diagnostic');
         }
-        validateEntry(entry, groups, problems);
+        validateEntry(entry, groups, problems, new Map(Object.entries(input.COMPUTED ?? {})));
     }
     const live = new Set(input.DIAGNOSTICS.map(entry => entry.id));
     for (const removed of input.REMOVED) {
@@ -452,6 +488,13 @@ ${arms}
 pub const DIAGNOSTIC_CODES: [DiagnosticCode; ${codes.length}] = [
 ${all}
 ];
+
+${Object.values(input.CONSTANTS ?? {})
+    .map(
+        ({ rust, type, value }) =>
+            `/// Shared with the renderer, which prints it.\n#[cfg_attr(not(feature = "native-engine"), allow(dead_code))]\npub const ${rust}: ${type} = ${value};`,
+    )
+    .join('\n\n')}
 
 /// The engine's diagnostics, one constructor per code and form, each
 /// returning the code with its named args in registry order.
@@ -680,10 +723,27 @@ export interface SzDiagnosticSpec {
     readonly args?: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
     readonly gaps?: readonly string[];
+    /** The enum arg a per-variant template is keyed by, when it is not \`form\`. */
+    readonly variesBy?: string;
+    /** What the diagnostic says: one template, or one per variant. */
+    readonly text?: SzDiagnosticTemplateText;
+    /** What to do. */
+    readonly help?: SzDiagnosticTemplateText;
+    /** What does not happen, or still holds. */
+    readonly note?: SzDiagnosticTemplateText;
 }
+
+/** A template: one text, or one per variant of the sentence. */
+export type SzDiagnosticTemplateText = string | Readonly<Record<string, string>>;
 
 /** The registry's format, so a reader can refuse one it does not know. */
 export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = ${data.format};
+
+/** Engine limits a sentence names, from the registry the engine reads too. */
+export const SZ_DIAGNOSTIC_CONSTANTS = ${JSON.stringify(Object.fromEntries(Object.entries(input.CONSTANTS ?? {}).map(([name, { value }]) => [name, value])))} as const;
+
+/** The computed values a template may name beside its args. */
+export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ${JSON.stringify(Object.keys(input.COMPUTED ?? {}))};
 
 /** Every live id, in registry order. */
 export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = ${JSON.stringify(data.diagnostics, null, 4)};

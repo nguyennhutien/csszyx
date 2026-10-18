@@ -160,11 +160,7 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
         policy: resolved?.policy,
         limiter,
     });
-    const lines = [
-        ...routed.immediate,
-        ...routed.spread.map(warning => `[csszyx] ${warning}`),
-        ...routed.advisories,
-    ];
+    const lines = [...routed.immediate, ...routed.spread, ...routed.advisories];
     if (emitWarning !== undefined) {
         for (const line of lines) emitWarning(loaderWarning(line));
         return;

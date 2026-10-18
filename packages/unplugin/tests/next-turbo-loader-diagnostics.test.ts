@@ -138,9 +138,10 @@ describe('Next Turbopack loader diagnostics', () => {
     it('warns once about a replaced key, through the loader channel', () => {
         const { emitted, console: lines } = load(REPLACED);
         expect(emitted).toHaveLength(1);
-        expect(emitted[0]).toContain('[csszyx] ');
-        expect(emitted[0]).toContain('src/App.tsx');
-        expect(emitted[0]).toContain('"ordinal" was replaced');
+        // The engine's message carries its own header, once.
+        expect(emitted[0]).toMatch(/^\[csszyx\] removed-key: .*src\/App\.tsx:1:\d+\n/);
+        expect(emitted[0].match(/\[csszyx\]/g)).toHaveLength(1);
+        expect(emitted[0]).toContain('`ordinal` was replaced');
         expect(emitted[0]).toContain('{ numOrdinal: true }');
         expect(lines).toEqual([]);
     });
@@ -189,18 +190,21 @@ describe('Next Turbopack loader diagnostics', () => {
     it('still warns in a production build', () => {
         const { emitted } = load(REPLACED, { mode: 'production' });
         expect(emitted).toHaveLength(1);
-        expect(emitted[0]).toContain('"ordinal" was replaced');
+        expect(emitted[0]).toContain('`ordinal` was replaced');
     }, 60_000);
 
     it('reports an unresolvable spread in production but holds the advisory fallback', () => {
         const production = load(SPREAD, { mode: 'production' });
         expect(production.emitted).toHaveLength(1);
-        expect(production.emitted[0]).toContain('unresolvable sz spread');
+        expect(production.emitted[0]).toMatch(
+            /^\[csszyx\] unresolvable-spread: .*src\/App\.tsx:1:\d+\n/,
+        );
+        expect(production.emitted[0].match(/\[csszyx\]/g)).toHaveLength(1);
 
         // A dev server lists the advisory beside it, as the other lanes do.
         const development = load(SPREAD);
         expect(development.emitted).toHaveLength(2);
-        expect(development.emitted.join('\n')).toContain('sz fallback at');
+        expect(development.emitted.join('\n')).toContain('fallback-nudge: ');
     }, 60_000);
 
     it('falls back to the console once per module when the runner has no channel', () => {
@@ -208,14 +212,16 @@ describe('Next Turbopack loader diagnostics', () => {
         // pipeline to dedupe them, the loader does.
         const run = load(REPLACED, { channel: false, times: 3 });
         expect(run.console).toHaveLength(1);
-        expect(run.console[0]).toContain('"ordinal" was replaced');
+        expect(run.console[0]).toContain('`ordinal` was replaced');
     });
 
     it('prints a console line again once the module source changes, and keeps one version per module', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const report = (source: string): void =>
             reportNextLoaderDiagnostics({
-                diagnostics: ['[csszyx] "ordinal" was replaced at /p/A.tsx:1.'],
+                diagnostics: [
+                    '[csszyx] removed-key: /p/A.tsx:1:1\n  `ordinal` was replaced, and nothing is emitted for it.\n  docs: https://csszyx.com/e/removed-key',
+                ],
                 resourcePath: '/p/A.tsx',
                 source,
                 mode: 'development',
@@ -239,8 +245,17 @@ describe('Next Turbopack loader diagnostics', () => {
         const emitted: string[] = [];
         const run = (source: string): void =>
             reportNextLoaderDiagnostics({
-                diagnostics: ['[csszyx] "ordinal" was replaced at src/App.tsx:1.'],
-                issues: [{ code: 'canonical-key', start: 0, line: 1, column: 1 } as never],
+                diagnostics: [
+                    '[csszyx] removed-key: src/App.tsx:1:1\n  `ordinal` was replaced, and nothing is emitted for it.\n  docs: https://csszyx.com/e/removed-key',
+                ],
+                issues: [
+                    {
+                        code: 'removed-key',
+                        args: { form: 'replaced', key: 'ordinal', replacement: 'numOrdinal: true' },
+                        line: 1,
+                        column: 1,
+                    },
+                ],
                 root,
                 resourcePath: join(root, 'src/App.tsx'),
                 source,
@@ -252,7 +267,7 @@ describe('Next Turbopack loader diagnostics', () => {
         expect(emitted).toHaveLength(1);
         writeFileSync(
             join(root, 'csszyx.config.mjs'),
-            "export default { diagnostics: { rules: { 'canonical-key': 'off' } } };\n",
+            "export default { diagnostics: { rules: { 'removed-key': 'off' } } };\n",
         );
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         run('after');
@@ -269,7 +284,9 @@ describe('Next Turbopack loader diagnostics', () => {
                 mode: 'development',
                 env: {},
             });
-        const finding = ['[csszyx] "ordinal" was replaced at /p/Undo.tsx:1.'];
+        const finding = [
+            '[csszyx] removed-key: /p/Undo.tsx:1:1\n  `ordinal` was replaced, and nothing is emitted for it.\n  docs: https://csszyx.com/e/removed-key',
+        ];
         report('broken', finding);
         report('fixed', []);
         report('broken', finding);

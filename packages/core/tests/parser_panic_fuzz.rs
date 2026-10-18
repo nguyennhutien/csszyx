@@ -193,7 +193,7 @@ mod parser_panic_fuzz {
             result
                 .diagnostics
                 .iter()
-                .any(|d| d.contains("source nesting exceeded")),
+                .any(|d| d.starts_with("Source nesting exceeds 64 levels (found ")),
             "must surface the nesting-depth diagnostic, got: {:?}",
             result.diagnostics
         );
@@ -217,7 +217,7 @@ mod parser_panic_fuzz {
             !results[0]
                 .diagnostics
                 .iter()
-                .any(|d| d.contains("source nesting exceeded")),
+                .any(|d| d.starts_with("Source nesting exceeds")),
             "source below the guard must not trip the nesting diagnostic"
         );
     }

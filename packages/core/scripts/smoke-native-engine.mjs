@@ -305,7 +305,10 @@ function assertNativeEngineTransform(binding) {
   // className and stays at one diagnostic, which is what makes the advisory
   // precise rather than blanket.
   assertIdentifierFallbackDiagnostic(mergeDynamicClass, 75, "merge dynamic class", [
-    `[csszyx] "sz" takes precedence over the runtime "className" on this element at ${path.join(repoRoot, "fixtures", "merge-dynamic-class.tsx")}:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.`,
+    [
+      "class-precedence",
+      "`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.\n  help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.",
+    ],
   ]);
 
   if (!recover.code.includes('data-sz-recover="csr" data-sz-recovery-token="')) {
@@ -332,13 +335,26 @@ function assertNativeEngineTransform(binding) {
   }
 }
 
+// The binding returns the body the engine writes beside each issue's code,
+// offset and args; the compiler renders the header. `column` is 1-based on a
+// one-line ASCII source, so the offset is one less.
 function assertIdentifierFallbackDiagnostic(result, column, label, alsoExpect = []) {
   const expected = [
-    `sz fallback at 1:${column}: identifier \`styles\` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().`,
+    [
+      "fallback-nudge",
+      "`sz` falls back to the runtime: identifier `styles` could not be resolved to a static value.\n  help: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value.",
+    ],
     ...alsoExpect,
   ];
-  if (JSON.stringify(result.diagnostics) !== JSON.stringify(expected)) {
-    fail(`Unexpected ${label} diagnostics: ${result.diagnostics}`);
+  const received = result.diagnostics.map((text, index) => [result.issues?.[index]?.code, text]);
+  if (JSON.stringify(received) !== JSON.stringify(expected)) {
+    fail(`Unexpected ${label} diagnostics: ${JSON.stringify(received)}`);
+  }
+  if (result.issues?.[0]?.start !== column - 1) {
+    fail(`Unexpected ${label} fallback offset: ${JSON.stringify(result.issues?.[0])}`);
+  }
+  if (typeof result.issues?.[0]?.argsJson !== "string") {
+    fail(`Expected ${label} issues to carry argsJson: ${JSON.stringify(result.issues?.[0])}`);
   }
 }
 

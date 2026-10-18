@@ -3065,7 +3065,8 @@ function formatWillChange(value: string): string {
  * reads a generated copy of this table, so both artifacts refuse the same
  * values.
  */
-const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
+/** @internal Read by the diagnostic renderer; not a stable shape. */
+export const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
     display: {
         block: 'block',
         'inline-block': 'inline-block',
@@ -3193,8 +3194,9 @@ const _warnedClosedEnumValues = new Set<string>();
  * @param key - The closed-enum key.
  * @param value - The value outside its set, without the important modifier.
  * @returns The bare utility, before any variant prefix.
+ * @internal Read by the diagnostic renderer too.
  */
-function bareClosedEnumClass(key: string, value: string): string {
+export function bareClosedEnumClass(key: string, value: string): string {
     const affix = CLOSED_ENUM_AFFIXES[key];
     return affix ? `${affix.prefix}${value}${affix.suffix}` : value;
 }

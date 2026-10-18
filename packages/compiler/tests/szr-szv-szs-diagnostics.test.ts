@@ -19,30 +19,76 @@ import {
     SZ_FALLBACK_SZV_SUGGESTION,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
+import { engineMessage } from './engine-message.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 const RUNTIME_IMPORT = "import { szr, szv, dynamic } from '@csszyx/runtime';\n";
 const VUI_IMPORT = "import { Popup } from '@vbd/vui';\n";
 
-/** Sources that must produce exactly one diagnostic, and its opening line. */
-const WARNING_CASES: ReadonlyArray<readonly [string, string, string]> = [
-    ['szr identifier', 'export const a = szr(cfg);', 'szr fallback at 2:22'],
-    ['szr member', 'export const a = szr(cfg.x);', 'szr fallback at 2:22'],
-    ['szr call', 'export const a = szr(mk());', 'szr fallback at 2:22'],
-    ['szr parenthesized call', 'export const a = szr((mk()));', 'szr fallback at 2:23'],
-    ['szr member callee', 'export const a = szr(theme.build());', 'szr fallback at 2:22'],
-    ['szr unreadable callee', 'export const a = szr((c ? f : g)());', 'szr fallback at 2:22'],
+/** What a case must report: the issue's args, and the header position. */
+interface ExpectedFallback {
+    site: 'szr' | 'szv';
+    shape: string;
+    detail: string;
+    path: string;
+    at: string;
+}
+
+/** Sources that must produce exactly one diagnostic, and what it reports. */
+const WARNING_CASES: ReadonlyArray<readonly [string, string, ExpectedFallback]> = [
+    [
+        'szr identifier',
+        'export const a = szr(cfg);',
+        { site: 'szr', shape: 'identifier', detail: 'cfg', path: '', at: '2:22' },
+    ],
+    [
+        'szr member',
+        'export const a = szr(cfg.x);',
+        { site: 'szr', shape: 'member', detail: '', path: '', at: '2:22' },
+    ],
+    [
+        'szr call',
+        'export const a = szr(mk());',
+        { site: 'szr', shape: 'call', detail: 'mk', path: '', at: '2:22' },
+    ],
+    [
+        'szr parenthesized call',
+        'export const a = szr((mk()));',
+        { site: 'szr', shape: 'call', detail: 'mk', path: '', at: '2:23' },
+    ],
+    [
+        'szr member callee',
+        'export const a = szr(theme.build());',
+        { site: 'szr', shape: 'call', detail: 'build', path: '', at: '2:22' },
+    ],
+    [
+        'szr unreadable callee',
+        'export const a = szr((c ? f : g)());',
+        { site: 'szr', shape: 'call', detail: '?', path: '', at: '2:22' },
+    ],
     // A factory the parse saw declared as szv and refused: the message names
     // the factory as what it is and the config position that disqualified,
     // instead of the circular "convert to szv()" call advice.
     [
         'szr call to a disqualified szv factory',
         "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });\nexport const a = szr(t({ c: 'blue' }));",
-        'szr fallback at 3:22: szv factory `t()` did not precompile — its config disqualified at `base.color`',
+        { site: 'szr', shape: 'szv-factory', detail: 't', path: 'base.color', at: '3:22' },
     ],
-    ['szv identifier', 'export const v = szv(cfg);', 'szv catalog at 2:22'],
-    ['szv call', 'export const v = szv(mk());', 'szv catalog at 2:22'],
-    ['szv member', 'export const v = szv(cfg.variants);', 'szv catalog at 2:22'],
+    [
+        'szv identifier',
+        'export const v = szv(cfg);',
+        { site: 'szv', shape: 'identifier', detail: 'cfg', path: '', at: '2:22' },
+    ],
+    [
+        'szv call',
+        'export const v = szv(mk());',
+        { site: 'szv', shape: 'call', detail: 'mk', path: '', at: '2:22' },
+    ],
+    [
+        'szv member',
+        'export const v = szv(cfg.variants);',
+        { site: 'szv', shape: 'member', detail: '', path: '', at: '2:22' },
+    ],
 ];
 
 /** Sources that must stay silent. */
@@ -62,7 +108,10 @@ const SZS_WARNING_SOURCES: ReadonlyArray<readonly [string, string]> = [
     ['call attribute', 'export const A = () => <Popup szs={mk()} />;'],
 ];
 
-type Engine = (source: string, filename?: string) => { diagnostics?: string[] };
+type Engine = (
+    source: string,
+    filename?: string,
+) => { diagnostics?: string[]; issues?: Array<{ code: string; args: object }> };
 
 /**
  * Both artifacts of the one engine. The shared list drops the `auto`
@@ -86,10 +135,30 @@ function diagnosticsFor(engine: Engine, source: string): string[] {
 }
 
 describe.each(LANES)('%s lane', (_lane, engine) => {
-    it.each(WARNING_CASES)('reports %s', (_name, body, expectedOpening) => {
-        const diagnostics = diagnosticsFor(engine, RUNTIME_IMPORT + body);
+    it.each(WARNING_CASES)('reports %s', (_name, body, expected) => {
+        const source = RUNTIME_IMPORT + body;
+        const diagnostics = diagnosticsFor(engine, source);
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain(expectedOpening);
+        // The header names the position, the issue names what was refused.
+        expect(diagnostics[0]).toContain(
+            `[csszyx] fallback-missing-css: /p/t.tsx:${expected.at}\n`,
+        );
+        expect(engine(source, '/p/t.tsx').issues).toMatchObject([
+            {
+                code: 'fallback-missing-css',
+                args: {
+                    site: expected.site,
+                    shape: expected.shape,
+                    detail: expected.detail,
+                    path: expected.path,
+                },
+            },
+        ]);
+        expect(diagnostics[0]).toContain(
+            expected.site === 'szv'
+                ? '`szv` config cannot be read'
+                : '`szr` falls back to the runtime',
+        );
         // Actionable or it is noise.
         expect(diagnostics[0]).toMatch(/szv\(\)|dynamic\(\)|module-level const/);
     });
@@ -100,7 +169,18 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
 
     it.each(SZS_WARNING_SOURCES)('reports an unresolvable szs slot map: %s', (_name, body) => {
         const diagnostics = diagnosticsFor(engine, VUI_IMPORT + body);
-        expect(diagnostics).toEqual([szsUnsupportedDiagnostic('/p/t.tsx')]);
+        expect(diagnostics).toEqual([
+            engineMessage(
+                'szs-slot-map',
+                `/p/t.tsx:2:${body.indexOf('szs=') + 1}`,
+                'A slot value in `szs` could not be read at build time, so no slot classes were compiled.',
+                'help: make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.',
+                'note: the attribute is left unchanged.',
+            ),
+        ]);
+        expect(engine(VUI_IMPORT + body, '/p/t.tsx').issues).toMatchObject([
+            { code: 'szs-slot-map', args: { form: 'unreadable-slot' }, line: 2 },
+        ]);
         // The pointer that was missing before: a genuinely runtime slot value
         // has somewhere to go.
         expect(diagnostics[0]).toContain('dynamic()');

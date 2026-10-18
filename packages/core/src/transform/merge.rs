@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// can meet in one install, and a table the engine would misread is refused
 /// rather than merged on. It is not the runtime's format either — the runtime
 /// reads the table it is shipped, the engine the one it is handed per file.
-pub const MERGE_TABLE_FORMAT: u32 = 1;
+pub use super::generated::diagnostic_codes::MERGE_TABLE_FORMAT;
 
 /// Which classes cover which, for the classes of one file.
 #[derive(Debug, Deserialize)]
@@ -218,20 +218,6 @@ pub enum TableProblem {
     Unreadable(String),
     /// It is in another format than [`MERGE_TABLE_FORMAT`].
     Format(u32),
-}
-
-impl std::fmt::Display for TableProblem {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unreadable(error) => {
-                write!(f, "the merge table is not one this engine reads ({error})")
-            }
-            Self::Format(format) => write!(
-                f,
-                "the merge table is in format {format}, and this engine reads format {MERGE_TABLE_FORMAT}"
-            ),
-        }
-    }
 }
 
 /// What a class is merged under: its signature, or itself when it has none.
@@ -539,7 +525,6 @@ mod tests {
         let error = decode(r#"{"format":2,"signatures":{},"coverage":[]}"#)
             .expect_err("format 2 is not read");
         assert_eq!(error, super::TableProblem::Format(2));
-        assert!(error.to_string().contains("format 2"), "{error}");
     }
 
     #[test]

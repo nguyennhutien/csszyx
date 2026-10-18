@@ -28,7 +28,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const UNKNOWN_LINE = 'Unknown property "workBreak"';
+const UNKNOWN_LINE = '`workBreak` is not an sz property.';
 const LEVELS = 'csszyx.levels.mjs';
 const OFF = 'export default { "unknown-key": "off" };\n';
 const WARN = 'export default { "unknown-key": "warn" };\n';

@@ -1,8 +1,9 @@
 //! The engine's diagnostics: each rendered line beside its code and position.
 //!
-//! The text is for people and stays exactly as it was. A gate, a config rule
-//! or an editor needs to know which kind of problem a line reports and where,
-//! and reading either back out of the English breaks the day a message is
+//! The text is for people: the body the diagnostic registry renders from the
+//! same args, with no position in it (ADR 0031). A gate, a config rule or an
+//! editor needs to know which kind of problem a line reports and where, and
+//! reading either back out of the English breaks the day a message is
 //! reworded. Every diagnostic therefore goes through [`Diagnostics::push_issue`],
 //! which records the [`Issue`] beside the text, so the two lists stay
 //! index-parallel by construction.

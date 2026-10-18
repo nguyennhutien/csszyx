@@ -110,9 +110,13 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
         expect(result.diagnostics.map(d => [d.severity, d.line, d.column])).toEqual([
             ['warning', 2, 3],
         ]);
-        expect(result.diagnostics[0].message).toMatch(
-            /^\[csszyx\] 2:3: Unknown property "foo" in sz prop\. The class/,
-        );
+        const { message } = result.diagnostics[0];
+        expect(message).toMatch(/^\[csszyx\] unknown-key: 2:3\n/);
+        expect(result.diagnostics[0]).toMatchObject({ code: 'unknown-key', args: { key: 'foo' } });
+        expect(message).toContain('`foo` is not an sz property.');
+        // The synthesized module is an implementation detail: its name and its
+        // positions must not reach a template author.
+        expect(message).not.toContain('csszyx-template-sz');
     });
 
     it('maps a position through the offsets of a decoded value', () => {

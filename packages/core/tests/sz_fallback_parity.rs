@@ -1,17 +1,25 @@
 //! Golden wording for the sz runtime-fallback diagnostic matrix.
 //!
-//! Each `fallback_golden_*` expectation was captured — not hand-written — from
-//! the removed Babel lane's `transformSourceCode` on the same source, and the
-//! engine still has to reproduce it byte for byte. The suite holds the ADR 0011
-//! contract: which artifact (native or wasm) a build loads must not change one
-//! byte of the build log. A failure here is an engine regression, not a
-//! wording preference.
+//! Each `fallback_golden_*` source was first captured from the removed Babel
+//! lane's `transformSourceCode`. The reason and the advice still come from that
+//! capture through the shared matrix; the body around them is the one the
+//! diagnostic registry renders (ADR 0031), and the position moved from the text
+//! to the issue's byte offset. The suite holds the ADR 0011 contract: which
+//! artifact (native or wasm) a build loads must not change one byte of the
+//! build log. A failure here is an engine regression, not a wording preference.
 
 #![cfg(feature = "native-engine")]
 // The captured JSX sources legitimately contain `{...}` sequences.
 #![allow(clippy::literal_string_with_formatting_args)]
 
 use csszyx_core::transform::{transform_batch, TransformFile};
+
+/// Where each diagnostic points: a byte offset into the source. The text no
+/// longer carries a position; the consumer turns the offset into a line and a
+/// UTF-16 column.
+fn starts(result: &csszyx_core::transform::TransformResult) -> Vec<u32> {
+    result.issues.iter().map(|issue| issue.start).collect()
+}
 
 fn run(source: &str) -> csszyx_core::transform::TransformResult {
     let file = TransformFile {
@@ -27,109 +35,121 @@ fn run(source: &str) -> csszyx_core::transform::TransformResult {
 fn fallback_golden_member() {
     let result = run("export const A = () => <div sz={cfg.x} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: member expression is not statically resolvable.\n  Suggestion: Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: member expression is not statically resolvable.\n  help: Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_member_parens() {
     let result = run("export const A = () => <div sz={(cfg.x)} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:34: member expression is not statically resolvable.\n  Suggestion: Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: member expression is not statically resolvable.\n  help: Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [33]);
 }
 
 #[test]
 fn fallback_golden_member_ts_as() {
     let result = run("export const A = () => <div sz={cfg.x as object} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: expression of type `TSAsExpression` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: expression of type `TSAsExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_call_named() {
     let result = run("export const A = () => <div sz={makeSz()} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: function call `makeSz()` result is unknown at build time.\n  Suggestion: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic()."),
+            String::from("`sz` falls back to the runtime: function call `makeSz()` result is unknown at build time.\n  help: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_call_member() {
     let result = run("export const A = () => <div sz={theme.build()} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: function call `build()` result is unknown at build time.\n  Suggestion: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic()."),
+            String::from("`sz` falls back to the runtime: function call `build()` result is unknown at build time.\n  help: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_call_computed() {
     let result = run("export const A = () => <div sz={table[key]()} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: function call `key()` result is unknown at build time.\n  Suggestion: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic()."),
+            String::from("`sz` falls back to the runtime: function call `key()` result is unknown at build time.\n  help: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_call_unreadable() {
     let result = run("export const A = ({ c }) => <div sz={(c ? f : g)()} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:38: function call `?()` result is unknown at build time.\n  Suggestion: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic()."),
+            String::from("`sz` falls back to the runtime: function call `?()` result is unknown at build time.\n  help: If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [37]);
 }
 
 #[test]
 fn fallback_golden_other_new() {
     let result = run("export const A = () => <div sz={new Sz()} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:33: expression of type `NewExpression` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: expression of type `NewExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [32]);
 }
 
 #[test]
 fn fallback_golden_other_logical() {
     let result = run("export const A = ({c, o}) => <div sz={c && o} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:39: expression of type `LogicalExpression` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: expression of type `LogicalExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [38]);
 }
 
 #[test]
 fn fallback_golden_other_template() {
     let result = run("export const A = ({ v }) => <div sz={`${v}`} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:38: expression of type `TemplateLiteral` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: expression of type `TemplateLiteral` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [37]);
 }
 
 #[test]
 fn fallback_golden_other_await() {
     let result = run("export const A = async ({ p }) => <div sz={await p} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:44: expression of type `AwaitExpression` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
+            String::from("`sz` falls back to the runtime: expression of type `AwaitExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [43]);
 }
 
 #[test]
 fn fallback_golden_spread_object() {
     let result = run("export const A = ({o}) => <div sz={{ ...o, p: 4 }} />;");
     let expected: Vec<String> = vec![
-            String::from("sz fallback at 1:36: expression of type `ObjectExpression` is not statically analyzable.\n  Suggestion: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic()."),
-            String::from("[csszyx] unresolvable sz spread at 1:36: sz={{ ...x }} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={[x, { ... }]}."),
+            String::from("`sz` falls back to the runtime: expression of type `ObjectExpression` is not statically analyzable.\n  help: Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().\n  note: the runtime `_sz` helper still lowers the value."),
+            String::from("`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime; it may render no styles in production.\n  help: use the array form: `sz={[x, { ... }]}`."),
         ];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    assert_eq!(starts(&result), [35, 35]);
 }
 
 #[test]
@@ -151,10 +171,14 @@ fn columns_count_utf16_units() {
     let result = run(source);
     assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
     assert!(
-        result.diagnostics[0].starts_with("sz fallback at 1:45:"),
+        result.diagnostics[0].starts_with("`sz` falls back to the runtime: "),
         "got: {}",
         result.diagnostics[0]
     );
+    // The engine reports the UTF-8 byte offset (48: four bytes per emoji);
+    // the consumer turns it into UTF-16 column 45.
+    let at = u32::try_from(source.find("p.x").expect("the value")).expect("small");
+    assert_eq!((starts(&result), at), (vec![48], 48));
 }
 
 #[test]
@@ -168,7 +192,9 @@ fn szr_disqualified_szv_factory_names_the_config_path() {
         "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
     ));
     let expected: Vec<String> = vec![String::from(
-        "szr fallback at 3:44: szv factory `t()` did not precompile — its config disqualified at `base.color`.\n  Suggestion: Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().",
+        "`szr` falls back to the runtime: szv factory `t()` did not precompile — its config disqualified at `base.color`.\n  help: Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().\n  note: its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
     )];
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+    // Line 3, column 44.
+    assert_eq!(starts(&result), [175]);
 }

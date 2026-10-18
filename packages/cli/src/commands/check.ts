@@ -15,10 +15,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+    renderSzDiagnosticBody,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    SZ_DIAGNOSTIC_URL_BASE,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
-    szDiagnosticKindOf,
-    szKeySuggestionFor,
+    type SzDiagnosticIssue,
+    szDiagnosticPositionOf,
 } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
 import {
@@ -133,16 +136,33 @@ export interface CheckOptions {
 /** One captured sz diagnostic, with the kind the compiler reads from its code. */
 interface ClassifiedIssue extends SzIssue {
     kind: string;
-    /** The known key an `unknown-key` issue most likely misspells, or null. */
-    suggestion: string | null;
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
 interface SzIssue {
     file: string;
+    /** The sentence, with its `help:` and `note:` lines, and no header. */
     message: string;
-    /** The code the engine gave it; absent only for a result with no codes. */
-    code?: SzDiagnosticCode;
+    code: SzDiagnosticCode;
+    args: Readonly<Record<string, unknown>>;
+    line?: number;
+    column?: number;
+}
+
+/**
+ * Engine diagnostics `check` leaves to the build: a runtime fallback is the
+ * build log's advice about one sz prop, and a parser's own syntax lines sit
+ * under the parse-error summary `check` already reports for the file.
+ *
+ * @param issue - The diagnostic.
+ * @returns Whether `check` lists it.
+ */
+function isCheckedIssue(issue: Pick<SzIssue, 'code' | 'args'>): boolean {
+    if (issue.code === 'fallback-missing-css' || issue.code === 'fallback-nudge') return false;
+    return !(
+        issue.code === 'parse-error' &&
+        (issue.args.form === 'syntax' || issue.args.form === 'panicked')
+    );
 }
 
 /**
@@ -217,23 +237,18 @@ function listedSourceFiles(listed: readonly string[], cwd: string): ListedFiles 
  * @param message - The diagnostic text.
  * @returns The 1-based line, or undefined when the message carries none.
  */
-function lineFromMessage(message: string): number | undefined {
-    const match = /:(\d+)(?::\d+)?\b/.exec(message);
-    return match ? Number(match[1]) : undefined;
-}
-
 /**
  * Group captured diagnostics by project-relative file.
  *
  * @param issues Captured compiler diagnostics.
  * @returns Diagnostics keyed by project-relative file.
  */
-function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
-    const byFile = new Map<string, string[]>();
-    for (const { file, message } of issues) {
-        const messages = byFile.get(file) ?? [];
-        messages.push(message);
-        byFile.set(file, messages);
+function groupIssuesByFile<T extends SzIssue>(issues: T[]): Map<string, T[]> {
+    const byFile = new Map<string, T[]>();
+    for (const issue of issues) {
+        const inFile = byFile.get(issue.file) ?? [];
+        inFile.push(issue);
+        byFile.set(issue.file, inFile);
     }
     return byFile;
 }
@@ -682,28 +697,29 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
  * @param failOn - The quietest level that fails the run.
  */
 function reportIssues(out: Reporter, issues: ClassifiedIssue[], failOn: SzDiagnosticLevel): void {
-    for (const { file, message, kind, suggestion } of issues) {
+    for (const { file, message, kind, args, line, column } of issues) {
+        const suggestion = typeof args.suggestion === 'string' ? args.suggestion : undefined;
         out.push({
             rule: 'sz-diagnostic',
             kind,
             file,
-            line: lineFromMessage(message),
+            ...(line === undefined ? {} : { line, column }),
             message,
-            ...(suggestion === null ? {} : { suggestion }),
+            ...(suggestion === undefined ? {} : { suggestion }),
+            args,
+            url: `${SZ_DIAGNOSTIC_URL_BASE}${kind}`,
         });
     }
-    const suggestionOf = new Map(issues.map(issue => [issue.message, issue.suggestion]));
-    const levelOf = new Map(issues.map(issue => [issue.message, issueLevel(out, issue)]));
     const byFile = groupIssuesByFile(issues);
-    for (const [file, messages] of byFile) {
+    for (const [file, inFile] of byFile) {
         out.warn(file);
-        for (const message of messages) {
+        for (const issue of inFile) {
             // An error reads as it always has; a quieter level says so, since
             // it is the reason the run can still pass.
-            const level = levelOf.get(message);
-            out.info(level === 'error' ? `  ${message}` : `  (${level}) ${message}`);
-            const suggestion = suggestionOf.get(message);
-            if (suggestion) out.info(`    Did you mean "${suggestion}"?`);
+            const level = issueLevel(out, issue);
+            const where = issue.line === undefined ? '' : `${issue.line}:${issue.column} `;
+            const tag = level === 'error' ? '' : `(${level}) `;
+            out.info(`  ${where}${tag}${issue.kind}: ${issue.message.split('\n').join('\n  ')}`);
         }
     }
     const { mark, below } = summaryMark(
@@ -778,23 +794,19 @@ async function collectSzDiagnostics(
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
-        const { diagnostics, codes } = recordFileClasses(
-            source,
-            file,
-            cwd,
-            currentFile,
-            classOrigins,
-            classPrefix,
-        );
-        for (const [index, message] of diagnostics.entries()) {
-            if (message.startsWith('[csszyx]')) {
-                const code = codes[index];
-                issues.push({
-                    file: currentFile,
-                    message: message.replace(/^\[csszyx\]\s*/, ''),
-                    ...(code === undefined ? {} : { code }),
-                });
-            }
+        const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
+        for (const issue of found) {
+            if (!isCheckedIssue(issue)) continue;
+            issues.push({
+                file: currentFile,
+                message: renderSzDiagnosticBody(issue, SZ_DIAGNOSTIC_COMPUTED_VALUES),
+                code: issue.code,
+                args: issue.args as Readonly<Record<string, unknown>>,
+                // A file-wide diagnostic sits at offset 0, which is not a line 1.
+                ...(issue.line === undefined || szDiagnosticPositionOf(issue.code) !== 'site'
+                    ? {}
+                    : { line: issue.line, column: issue.column }),
+            });
         }
     }
     return { issues, classOrigins, pairsByFile };
@@ -823,19 +835,16 @@ function recordFileClasses(
     relativePath: string,
     classOrigins: Map<string, string>,
     classPrefix: string | null,
-): { diagnostics: string[]; codes: Array<SzDiagnosticCode | undefined> } {
+): SzDiagnosticIssue[] {
     try {
         const result = transformSource(source, file, { rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
-        return {
-            diagnostics: result.diagnostics,
-            codes: result.diagnostics.map((_, index) => result.issues?.[index]?.code),
-        };
+        return result.issues ?? [];
     } catch {
         // Unreadable by the engine; see the note above.
-        return { diagnostics: [], codes: [] };
+        return [];
     }
 }
 
@@ -1143,15 +1152,14 @@ function reportSelectedIssues(
     const selected: ClassifiedIssue[] = [];
     let silenced = 0;
     for (const issue of issues) {
-        const kind = szDiagnosticKindOf(issue.message, issue.code);
+        const kind = issue.code;
         if (!wants('sz-diagnostic', kind)) continue;
         // Set `off` in csszyx.config: not reported, and not "left out" by a flag.
         if (out.levelOf({ rule: 'sz-diagnostic', kind, file: issue.file }) === 'off') {
             silenced++;
             continue;
         }
-        const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
-        selected.push({ ...issue, kind, suggestion });
+        selected.push({ ...issue, kind });
     }
     const leftOut = issues.length - selected.length - silenced;
     if (selected.length > 0) {

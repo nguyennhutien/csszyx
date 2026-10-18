@@ -39,7 +39,11 @@ async function jsonFor(
         kind?: string;
         file?: string;
         line?: number;
+        column?: number;
         message: string;
+        args?: Record<string, unknown>;
+        url?: string;
+        suggestion?: string;
     }>;
 }> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -105,7 +109,22 @@ describe('csszyx check --json', () => {
 
         const report = await jsonFor(cwd);
 
-        expect(report.findings.some(entry => entry.rule === 'sz-diagnostic')).toBe(true);
+        expect(report.version).toBe(1);
+        const finding = report.findings.find(entry => entry.rule === 'sz-diagnostic');
+        // The position, the named values and the page come from the issue the
+        // engine returned; `message` is the body, with no header and no docs line.
+        expect(finding).toMatchObject({
+            kind: 'unknown-key',
+            file: 'src/App.tsx',
+            line: 1,
+            column: 35,
+            args: { key: 'nonsenseKey' },
+            url: 'https://csszyx.com/e/unknown-key',
+        });
+        expect(finding?.message).toMatch(/^`nonsenseKey` is not an sz property\.\n/);
+        expect(finding?.message).not.toContain('[csszyx]');
+        expect(finding?.message).not.toContain('docs:');
+        expect(finding?.message).not.toContain('src/App.tsx');
     });
 
     it('carries a dead class, naming the file that emitted it', async () => {
@@ -136,13 +155,11 @@ describe('csszyx check --json', () => {
 });
 
 // `line` is optional in the document, and a consumer has to be able to tell
-// "no position" from "line zero". The engine renders the position into its own
-// message text and this reads it back from there rather than deriving a second
-// answer, so a diagnostic the engine could not place carries none here either.
+// "no position" from "line one". The engine returns the issue's position and the
+// message names it only for a code that has one site; a code that is about the
+// whole file carries none, and this does not give it one.
 describe('csszyx check --json — a diagnostic that names no line', () => {
-    it('omits the line rather than inventing one', async () => {
-        // An `szs` slot map built from a variable: the engine reports the
-        // attribute it left alone, but has no single position to blame.
+    it('gives a diagnostic the engine placed its line and column', async () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <Card szs={slots} />;`,
@@ -151,8 +168,25 @@ describe('csszyx check --json — a diagnostic that names no line', () => {
         const doc = await jsonFor(cwd);
         const finding = doc.findings.find(entry => entry.rule === 'sz-diagnostic');
 
+        expect(finding?.kind).toBe('szs-slot-map');
         expect(finding?.message).toContain('slot');
+        expect(finding?.line).toBe(1);
+        expect(finding?.column).toBe(30);
+    });
+
+    it('omits the line and column rather than inventing them for a whole-file diagnostic', async () => {
+        // Nesting past the parser guard is about the file, not a site in it.
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ p: 4 }} />;\nexport const B = ${'['.repeat(100)}${']'.repeat(100)};\n`,
+        });
+
+        const doc = await jsonFor(cwd);
+        const finding = doc.findings.find(entry => entry.kind === 'nesting-depth');
+
+        expect(finding?.args).toEqual({ depth: 100 });
         expect(finding?.line).toBeUndefined();
+        expect(finding?.column).toBeUndefined();
     });
 });
 
@@ -303,7 +337,11 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         await check({ cwd });
 
-        expect(log.mock.calls.flat().join('\n')).toContain('Did you mean "break"?');
+        const printed = log.mock.calls.flat().join('\n');
+        expect(printed).toMatch(
+            /\n\S* +1:35 unknown-key: `workBreak` is not an sz property\.\n\s+help: did you mean `break`\?/,
+        );
+        expect(printed).not.toContain('Did you mean');
     });
 
     // `parse-error` was on this list until the engine coded its diagnostics:

@@ -6,25 +6,25 @@ import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
 
 const collisionSource =
     'const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;';
-const diagnosticMarker = 'possible style override';
+const diagnosticCode = 'style-override';
 
 /**
- * Each artifact's diagnostics for one source, joined for substring checks.
+ * The code of each issue every artifact reports for one source.
  *
  * @param source - Module source.
- * @returns `[artifact name, joined diagnostics]` per engine artifact.
+ * @returns `[artifact name, issue codes]` per engine artifact.
  */
-function diagnosticsPerEngine(source: string): Array<readonly [string, string]> {
+function codesPerEngine(source: string): Array<readonly [string, string[]]> {
     return ENGINES.map(
         ([name, transform]) =>
-            [name, (transform(source, 'probe.tsx').diagnostics ?? []).join('\n')] as const,
+            [name, (transform(source, 'probe.tsx').issues ?? []).map(issue => issue.code)] as const,
     );
 }
 
 describe('style supplied by a prop spread beside runtime sz values', () => {
     it('every artifact normalizes safe conditional object branches', () => {
-        for (const [name, diagnostics] of diagnosticsPerEngine(collisionSource)) {
-            expect(diagnostics, name).not.toContain(diagnosticMarker);
+        for (const [name, codes] of codesPerEngine(collisionSource)) {
+            expect(codes, name).not.toContain(diagnosticCode);
         }
     });
 
@@ -55,8 +55,8 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
             'const A=({width,key,value})=><div sz={{w:width}} {...{[key]:value}}/>;',
         ],
     ])('keeps the warning for %s', (_, source) => {
-        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
-            expect(diagnostics, name).toContain(diagnosticMarker);
+        for (const [name, codes] of codesPerEngine(source)) {
+            expect(codes, name).toContain(diagnosticCode);
         }
     });
 
@@ -64,7 +64,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
         const source = 'const A=({width,base})=><div sz={{w:width}} {...{style:base,id:"x"}}/>;';
         for (const [, transform] of ENGINES) {
             const result = transform(source, 'probe.tsx');
-            expect((result.diagnostics ?? []).join('\n')).not.toContain(diagnosticMarker);
+            expect((result.issues ?? []).map(issue => issue.code)).not.toContain(diagnosticCode);
             expect(result.code).toMatch(/\.\.\.\(?base\)?/);
             expect(result.code).not.toMatch(/\sstyle=\{\{/);
         }
@@ -81,8 +81,8 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
             'const A=({width})=><div sz={{w:width}}/>;',
         ],
     ])('does not warn when %s', (_, source) => {
-        for (const [name, diagnostics] of diagnosticsPerEngine(source)) {
-            expect(diagnostics, name).not.toContain(diagnosticMarker);
+        for (const [name, codes] of codesPerEngine(source)) {
+            expect(codes, name).not.toContain(diagnosticCode);
         }
     });
 });

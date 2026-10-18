@@ -804,7 +804,7 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
                 limiter,
             });
             for (const line of routed.immediate) console.warn(line);
-            for (const line of routed.spread) console.warn(`[csszyx] ${line}`);
+            for (const line of routed.spread) console.warn(line);
             capFlush.schedule();
         },
     };

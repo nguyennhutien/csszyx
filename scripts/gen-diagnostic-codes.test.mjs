@@ -188,10 +188,45 @@ test('arguments, forms and gaps are checked', () => {
     );
 });
 
+test('a computed value counts the args it reads, and may not share an arg name', () => {
+    const input = registryOf([
+        entry({
+            args: { key: { type: 'string' }, hint: { type: 'string' } },
+            text: '{shown}',
+        }),
+    ]);
+    input.COMPUTED = { shown: { reads: ['key', 'hint'], summary: 'Both.' } };
+    assert.deepEqual(validateRegistry(input), []);
+    input.DIAGNOSTICS[0].args.shown = { type: 'string' };
+    assert.match(
+        validateRegistry(input).join('\n'),
+        /\{shown\} is both an arg and a computed value/,
+    );
+});
+
+test('a template keyed by an arg other than form names that enum arg', () => {
+    const base = {
+        args: { site: { type: ['enum', 'sz', 'szr'] } },
+        variesBy: 'site',
+        text: { sz: 'One.', szr: 'Two.' },
+    };
+    assert.deepEqual(validateRegistry(registryOf([entry(base)])), []);
+    assert.match(
+        validateRegistry(registryOf([entry({ ...base, text: { szv: 'Three.' } })])).join('\n'),
+        /has a text for szv, which is not a value of site/,
+    );
+    assert.match(
+        validateRegistry(
+            registryOf([entry({ ...base, args: { site: { type: 'string' } }, text: 'One.' })]),
+        ).join('\n'),
+        /varies by site, which is not one of its enum args/,
+    );
+});
+
 test('templates may only name arguments, and every required argument is used', () => {
     assert.match(
         validateRegistry(registryOf([entry({ text: 'Unknown "{key}" at {where}' })])).join('\n'),
-        /names \{where\}, which is not an argument/,
+        /names \{where\}, which is neither an argument nor a computed value/,
     );
     assert.match(
         validateRegistry(
@@ -226,7 +261,7 @@ test('templates may only name arguments, and every required argument is used', (
                 }),
             ]),
         ).join('\n'),
-        /text for b, which is not one of its forms/,
+        /text for b, which is not a value of form/,
     );
 });
 

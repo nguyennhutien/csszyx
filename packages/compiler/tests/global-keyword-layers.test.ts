@@ -13,6 +13,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { deepMergeSzObjects, setSzWarnLocation, transform } from '../src/transform-core.js';
+import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -98,9 +99,7 @@ describe('a later layer overrides a key an earlier layer holds', () => {
             // as the static array does. Each layer is lowered, and checked, on
             // its own: in the first one `containPaint` replaces `contain`.
             expect(run.result.code).toContain('_szcn("contain-paint", c && "contain-none")');
-            expect(run.warnings).toEqual([
-                spreadShape('contain', 'strict', 'containPaint', ' at /p/src/Layers.jsx:1'),
-            ]);
+            expect(run.warnings).toEqual([engineSpread('contain', 'strict', 'containPaint', 42)]);
         },
     );
 
@@ -132,6 +131,23 @@ const spreadShape = (global: string, value: string, group: string, at = '') =>
     `replaces it and the ${global} value styles nothing. A spread override ` +
     `({ ...base, ${global}: '${value}' }) leaves this order; to override, layer it: ` +
     `sz={[base, { ${global}: '${value}' }]}.`;
+
+/**
+ * The engine's message for a stand-alone key before one of its groups.
+ * @param global - The stand-alone key.
+ * @param value - Its value.
+ * @param group - The group key written after it.
+ * @param column - The column of the stand-alone key on line 1.
+ * @returns The message.
+ */
+const engineSpread = (global: string, value: string, group: string, column: number) =>
+    engineMessage(
+        'global-before-group',
+        `/p/src/Layers.jsx:1:${column}`,
+        `\`${global}: ${value}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
+        `help: to override the group, layer it: \`sz={[base, { ${global}: '${value}' }]}\`.`,
+        `note: a spread override (\`{ ...base, ${global}: '${value}' }\`) keeps this order.`,
+    );
 
 describe('a stand-alone key written before a group key of its family', () => {
     it('runtime names the shape a spread override leaves, once, in production too', () => {
@@ -179,8 +195,8 @@ describe('a stand-alone key written before a group key of its family', () => {
 
         expect(run.className).toBe('touch-pan-up md:tabular-nums');
         expect(run.warnings).toEqual([
-            spreadShape('touch', 'manipulation', 'touchPanY', ' at /p/src/Layers.jsx:1'),
-            spreadShape('nums', 'normal', 'numSpacing', ' at /p/src/Layers.jsx:1'),
+            engineSpread('touch', 'manipulation', 'touchPanY', 41),
+            engineSpread('nums', 'normal', 'numSpacing', 87),
         ]);
     });
 
@@ -205,9 +221,7 @@ describe('duplicate keys in a .jsx object', () => {
         expect(runtime).toEqual({ contain: 'size', containPaint: true });
         expect(Object.keys(runtime)).toEqual(['contain', 'containPaint']);
         expect(run.className).toBe('contain-paint');
-        expect(run.warnings).toEqual([
-            spreadShape('contain', 'size', 'containPaint', ' at /p/src/Layers.jsx:1'),
-        ]);
+        expect(run.warnings).toEqual([engineSpread('contain', 'size', 'containPaint', 80)]);
     });
 
     it.each(ENGINES)('%s emits only the last value of a repeated keyword key', (_name, engine) => {
@@ -219,8 +233,10 @@ describe('duplicate keys in a .jsx object', () => {
 });
 
 describe('a moved value where the static pass used to miss it', () => {
+    // The sentence names the key it moved to; the help line names the value to write.
     const moved = (value: string, key: string, replacement: string) =>
-        `"touch: ${value}" moved to { ${key}: ${replacement} } at /p/src/Layers.jsx:1`;
+        `\`touch: ${value}\` moved to \`${key}\`, and nothing is emitted for it.\n` +
+        `  help: write \`{ ${key}: ${replacement} }\`, or run \`csszyx migrate\`.`;
 
     it.each(ENGINES)('%s names it in a property-level ternary', (_name, engine) => {
         const run = jsx(
@@ -261,23 +277,31 @@ describe('a moved value where the static pass used to miss it', () => {
 });
 
 describe('a runtime value beside the other side of its family', () => {
-    const layered = (dynamic: string, other: string, first: string, second: string) =>
-        `[csszyx] "${dynamic}" takes a runtime value beside "${other}" in one sz object at ` +
-        "/p/src/Layers.jsx:1, so the build cannot settle them by the object's order: both " +
-        "classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer " +
-        `them, later wins: sz={[{ ${first}: … }, { ${second}: … }]}.`;
+    const layered = (
+        dynamic: string,
+        other: string,
+        first: string,
+        second: string,
+        column: number,
+    ) =>
+        engineMessage(
+            'runtime-family-conflict',
+            `/p/src/Layers.jsx:1:${column}`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.`,
+            `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
+        );
 
     it.each(ENGINES)('%s reports a group key with a runtime value', (_name, engine) => {
         const run = jsx(engine, "{ touch: 'none', touchPanX: c ? 'x' : undefined }");
 
-        expect(run.warnings).toEqual([layered('touchPanX', 'touch', 'touch', 'touchPanX')]);
+        expect(run.warnings).toEqual([layered('touchPanX', 'touch', 'touch', 'touchPanX', 56)]);
     });
 
     it.each(ENGINES)('%s reports a runtime boolean on a group flag', (_name, engine) => {
         const run = jsx(engine, "{ md: { contain: 'strict', containPaint: c } }");
 
         expect(run.warnings).toEqual([
-            layered('containPaint', 'contain', 'contain', 'containPaint'),
+            layered('containPaint', 'contain', 'contain', 'containPaint', 66),
         ]);
     });
 
@@ -285,7 +309,7 @@ describe('a runtime value beside the other side of its family', () => {
         const run = jsx(engine, "{ contain: c ? 'strict' : 'none', containPaint: true }");
 
         expect(run.warnings).toEqual([
-            layered('contain', 'containPaint', 'contain', 'containPaint'),
+            layered('contain', 'containPaint', 'contain', 'containPaint', 41),
         ]);
     });
 
@@ -295,7 +319,7 @@ describe('a runtime value beside the other side of its family', () => {
             "{ numSpacing: m ? 'tabular' : 'proportional', nums: c ? 'normal' : undefined }",
         );
 
-        expect(run.warnings).toEqual([layered('numSpacing', 'nums', 'numSpacing', 'nums')]);
+        expect(run.warnings).toEqual([layered('numSpacing', 'nums', 'numSpacing', 'nums', 41)]);
     });
 
     it.each(ENGINES)('%s stays quiet without the other side', (_name, engine) => {
@@ -314,6 +338,22 @@ describe('a value that belongs to a sibling group', () => {
         `"${bare}" it emits belongs to { ${fix} }: write that key, so it combines with the other ` +
         `groups instead of resetting them. ${key} takes one of: ${values}.`;
 
+    const engineSibling = (
+        key: string,
+        value: string,
+        bare: string,
+        fix: string,
+        values: string,
+        column: number,
+    ) =>
+        engineMessage(
+            'closed-enum-value',
+            `/p/src/Layers.jsx:1:${column}`,
+            `\`${key}: ${value}\` is not a \`${key}\` value; the class \`${bare}\` it emits belongs to \`{ ${fix} }\`.`,
+            `help: write \`{ ${fix} }\`, so it combines with the other groups instead of resetting them.`,
+            `note: \`${key}\` takes one of: ${values}.`,
+        );
+
     it.each(ENGINES)('%s names the group key', (_name, engine) => {
         const run = jsx(
             engine,
@@ -322,21 +362,46 @@ describe('a value that belongs to a sibling group', () => {
 
         expect(run.className).toBe('contain-paint md:tabular-nums lg:contain-inline-size');
         expect(run.warnings).toEqual([
-            sibling(
+            engineSibling(
                 'contain',
                 'paint',
                 'contain-paint',
                 'containPaint: true',
                 'none, strict, content',
+                41,
             ),
-            sibling('nums', 'tabular', 'tabular-nums', "numSpacing: 'tabular'", 'normal'),
-            sibling(
+            engineSibling('nums', 'tabular', 'tabular-nums', "numSpacing: 'tabular'", 'normal', 65),
+            engineSibling(
                 'contain',
                 'inline-size',
                 'contain-inline-size',
                 "containSize: 'inline-size'",
                 'none, strict, content',
+                90,
             ),
+        ]);
+        expect(run.result.issues?.map(issue => issue.args)).toEqual([
+            {
+                form: 'sibling-group',
+                key: 'contain',
+                value: 'paint',
+                groupKey: 'containPaint',
+                groupValue: 'true',
+            },
+            {
+                form: 'sibling-group',
+                key: 'nums',
+                value: 'tabular',
+                groupKey: 'numSpacing',
+                groupValue: 'tabular',
+            },
+            {
+                form: 'sibling-group',
+                key: 'contain',
+                value: 'inline-size',
+                groupKey: 'containSize',
+                groupValue: 'inline-size',
+            },
         ]);
     });
 
@@ -344,9 +409,7 @@ describe('a value that belongs to a sibling group', () => {
         const run = jsx(engine, "{ contain: 'layout', containSize: 'size' }");
 
         expect(run.className).toBe('contain-size');
-        expect(run.warnings).toEqual([
-            spreadShape('contain', 'layout', 'containSize', ' at /p/src/Layers.jsx:1'),
-        ]);
+        expect(run.warnings).toEqual([engineSpread('contain', 'layout', 'containSize', 41)]);
     });
 
     it('runtime names the group key', () => {
@@ -410,8 +473,18 @@ describe('replaced, moved and removed keys print everywhere, once', () => {
         const run = jsx(engine, '{ slashedZero: true }');
 
         expect(run.warnings).toEqual([
-            '[csszyx] "slashedZero" was replaced at /p/src/Layers.jsx:1. Use { numSlashedZero: true } instead, or run `csszyx migrate`.',
+            engineMessage(
+                'removed-key',
+                '/p/src/Layers.jsx:1:41',
+                '`slashedZero` was replaced, and nothing is emitted for it.',
+                'help: write `{ numSlashedZero: true }` instead, or run `csszyx migrate`.',
+            ),
         ]);
+        expect(run.result.issues?.[0]?.args).toEqual({
+            form: 'replaced',
+            key: 'slashedZero',
+            replacement: 'numSlashedZero: true',
+        });
     });
 });
 
@@ -421,7 +494,12 @@ describe('an alias holding a value that moved', () => {
 
         expect(run.className ?? '').toBe('');
         expect(run.warnings).toEqual([
-            '[csszyx] "touchAction: pan-x" moved to { touchPanX: \'x\' } at /p/src/Layers.jsx:1. Run `csszyx migrate` to rewrite it.',
+            engineMessage(
+                'moved-value',
+                '/p/src/Layers.jsx:1:41',
+                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
+            ),
         ]);
     });
 
@@ -462,23 +540,31 @@ describe('a removed key prints everywhere, once', () => {
 });
 
 describe('a family conflict inside an sz array element', () => {
-    const layered = (dynamic: string, other: string, first: string, second: string) =>
-        `[csszyx] "${dynamic}" takes a runtime value beside "${other}" in one sz object at ` +
-        "/p/src/Layers.jsx:1, so the build cannot settle them by the object's order: both " +
-        "classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer " +
-        `them, later wins: sz={[{ ${first}: … }, { ${second}: … }]}.`;
+    const layered = (
+        dynamic: string,
+        other: string,
+        first: string,
+        second: string,
+        column: number,
+    ) =>
+        engineMessage(
+            'runtime-family-conflict',
+            `/p/src/Layers.jsx:1:${column}`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.`,
+            `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
+        );
 
     it.each(ENGINES)('%s names it in one element', (_name, engine) => {
         const run = jsx(engine, "[{ p: 1 }, { touchPanX: c ? 'x' : undefined, touch: 'none' }]");
 
-        expect(run.warnings).toEqual([layered('touchPanX', 'touch', 'touchPanX', 'touch')]);
+        expect(run.warnings).toEqual([layered('touchPanX', 'touch', 'touchPanX', 'touch', 52)]);
     });
 
     it.each(ENGINES)('%s names it under a variant of one element', (_name, engine) => {
         const run = jsx(engine, "[{ md: { contain: 'strict', containPaint: c } }, { p: 1 }]");
 
         expect(run.warnings).toEqual([
-            layered('containPaint', 'contain', 'contain', 'containPaint'),
+            layered('containPaint', 'contain', 'contain', 'containPaint', 67),
         ]);
     });
 
@@ -491,13 +577,18 @@ describe('a family conflict inside an sz array element', () => {
 });
 
 describe('an alias of a stand-alone key with a runtime value', () => {
-    const at = ' at /p/src/Layers.jsx:1';
+    const at = '/p/src/Layers.jsx:1:41';
 
     it.each(ENGINES)('%s names the moved form of a literal branch', (_name, engine) => {
         const run = jsx(engine, "{ touchAction: m ? 'pan-x' : 'auto' }");
 
         expect(run.warnings).toEqual([
-            `[csszyx] "touchAction: pan-x" moved to { touchPanX: 'x' }${at}. Run \`csszyx migrate\` to rewrite it.`,
+            engineMessage(
+                'moved-value',
+                at,
+                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
+            ),
         ]);
     });
 
@@ -507,7 +598,12 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             const run = jsx(engine, "{ touchAction: m ? 'none' : 'auto' }");
 
             expect(run.warnings).toEqual([
-                `[csszyx] Use the canonical key "touch" instead of "touchAction"${at}.`,
+                engineMessage(
+                    'canonical-key',
+                    at,
+                    '`touchAction` is an alias of `touch`, and nothing is emitted for it.',
+                    'help: write `touch` instead of `touchAction`.',
+                ),
             ]);
         },
     );
@@ -516,7 +612,12 @@ describe('an alias of a stand-alone key with a runtime value', () => {
         const run = jsx(engine, '{ touchAction: c }');
 
         expect(run.warnings).toEqual([
-            `[csszyx] "touchAction" was removed and takes a runtime value${at}: write auto, none, manipulation on touch, and the other values on touchPanX, touchPanY, touchPinchZoom.`,
+            engineMessage(
+                'removed-key',
+                at,
+                '`touchAction` was removed, and it holds a runtime value, so nothing is emitted for it.',
+                'help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.',
+            ),
         ]);
     });
 });
@@ -529,8 +630,8 @@ describe('a stand-alone key of any literal type before its group', () => {
         );
 
         expect(run.warnings).toEqual([
-            spreadShape('contain', '1', 'containPaint', ' at /p/src/Layers.jsx:1'),
-            spreadShape('touch', 'true', 'touchPanX', ' at /p/src/Layers.jsx:1'),
+            engineSpread('contain', '1', 'containPaint', 41),
+            engineSpread('touch', 'true', 'touchPanX', 79),
         ]);
     });
 });

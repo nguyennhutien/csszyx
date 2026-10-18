@@ -49,6 +49,8 @@ describe('csszyx_validate', () => {
         expect(data.valid).toBe(true);
         expect(data.warnings).toHaveLength(1);
         expect(data.warnings[0]).toContain('spacing scale');
+        // The synthesized module the object was compiled in is never shown.
+        expect(data.warnings[0]).not.toMatch(/\.tsx:\d/);
         // The interceptor must not leak past the call.
         expect(console.warn).toBe(before);
     });
@@ -126,7 +128,8 @@ describe('csszyx_validate', () => {
             expect(data.valid).toBe(false);
             expect(data.errors).toHaveLength(1);
             expect(data.errors[0].key).toBe('touch');
-            expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
+            expect(data.errors[0].message).toContain('`touch: pan-x` moved to `touchPanX`');
+            expect(data.errors[0].message).toContain("write `{ touchPanX: 'x' }`");
             expect(data.errors[0].message).not.toMatch(/\.tsx:\d/);
         }
     });
@@ -160,7 +163,8 @@ describe('csszyx_validate', () => {
         const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
         const data = JSON.parse(handleValidate({ sz }).content[0].text);
         expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
-        expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
+        expect(data.errors[0].message).toContain('`touch: pan-x` moved to `touchPanX`');
+        expect(data.errors[0].message).toContain("write `{ touchPanX: 'x' }`");
         expect(data.transformError).toBeUndefined();
         expect(data.transformResult.className).toBe(transform(sz as SzObject).className);
     });

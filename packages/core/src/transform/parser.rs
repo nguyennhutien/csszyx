@@ -186,8 +186,7 @@ pub fn parse_source_shell_with_registries(
             issue::parse_error_summary(None, Some(errors.len() as u64)),
             errors.first().map_or(0, |(start, _)| *start),
             format!(
-                "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
-                file.filename,
+                "The engine could not fully parse this file ({} syntax error(s)).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.",
                 errors.len()
             ),
         );
@@ -196,11 +195,8 @@ pub fn parse_source_shell_with_registries(
         errors
             .into_iter()
             .map(|(start, message)| {
-                (
-                    issue::parse_error_syntax(Some(&message), None),
-                    start,
-                    message,
-                )
+                let text = format!("{message}\n  help: fix the syntax at this position.");
+                (issue::parse_error_syntax(Some(&message), None), start, text)
             })
             .collect(),
     );
@@ -704,23 +700,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     fn collect_szs_attribute(&mut self, attr: &JSXAttribute<'_>, is_host: bool) {
         let start = attr.span.start;
         if is_host {
-            let message = format!(
-                "[csszyx] szs at {}: szs has no effect on a host element \u{2014} it maps slot names of a custom component. Attribute left unchanged.",
-                self.ir.filename
-            );
             self.ir.szs_diagnostics.push(SzsDiagnosticIr {
                 start,
                 host_element: true,
-                message,
             });
             return;
         }
         let unsupported_message = SzsDiagnosticIr {
             start,
             host_element: false,
-            message: super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(
-                &self.ir.filename,
-            ),
         };
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
             self.ir.szs_diagnostics.push(unsupported_message);
@@ -5966,7 +5954,7 @@ mod tests {
         let texts = parsed.diagnostics.texts();
         assert!(texts.len() >= 2, "{texts:?}");
         assert!(
-            texts[0].starts_with("[csszyx] parse error in /repo/src/Mixed.tsx"),
+            texts[0].starts_with("The engine could not fully parse this file ("),
             "{texts:?}"
         );
     }
@@ -8491,9 +8479,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_host.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_host.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_host.ir.szs_diagnostics[0]
-            .message
-            .contains("host element"));
+        assert!(parsed_host.ir.szs_diagnostics[0].host_element);
 
         let non_static = "const X = ({ v }) => <Card szs={{ header: v }} />;";
         let parsed_dynamic = parse_source_shell(&TransformFile {
@@ -8502,9 +8488,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_dynamic.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_dynamic.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_dynamic.ir.szs_diagnostics[0]
-            .message
-            .contains("identifier key"));
+        assert!(!parsed_dynamic.ir.szs_diagnostics[0].host_element);
 
         // All-string map: classes collected AND the attribute still renames to
         // `szsc` — the component reads only the compiled prop.
@@ -8556,12 +8540,7 @@ export const C = ({ styles }) => <div sz={styles} />;
             });
             assert!(parsed.ir.szs_attributes.is_empty(), "{source}");
             assert_eq!(parsed.ir.szs_diagnostics.len(), 1, "{source}");
-            assert!(
-                parsed.ir.szs_diagnostics[0]
-                    .message
-                    .contains("Attribute left unchanged"),
-                "{source}"
-            );
+            assert!(!parsed.ir.szs_diagnostics[0].host_element, "{source}");
         }
 
         let source = r#"const X=()=> <Card szs={{ header: { m: -2, opacity: true, content: "a\\b", hover: { p: 1 }, css: { zIndex: 2 } } }} />;"#;

@@ -427,14 +427,24 @@ const fn hoist_skip_reason(reason: CssVariableHoistSkipReason) -> &'static str {
 }
 
 fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
-    let reason = hoist_skip_reason(diagnostic.reason);
-    let suffix = diagnostic
-        .max_depth
-        .map(|max_depth| format!(" (maxDepth {max_depth})"))
-        .unwrap_or_default();
+    let name = &diagnostic.name;
+    let count = diagnostic.usage_count;
+    let text = match diagnostic.reason {
+        CssVariableHoistSkipReason::NoLca => format!(
+            "`mangleVars` did not hoist `{name}` to a component: its {count} usages share no common JSX ancestor."
+        ),
+        CssVariableHoistSkipReason::NonHostAncestor => format!(
+            "`mangleVars` did not hoist `{name}` to a component: the common ancestor of its {count} usages cannot take a `style` prop."
+        ),
+        CssVariableHoistSkipReason::MaxDepth => format!(
+            "`mangleVars` did not hoist `{name}` to a component: one of its {count} usages sits deeper below their common ancestor than `maxDepth` {} allows.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.",
+            diagnostic
+                .max_depth
+                .map_or_else(String::new, |depth| depth.to_string())
+        ),
+    };
     format!(
-        "[csszyx] mangleVars skipped component CSS variable hoist for {} across {} usages: {}{}",
-        diagnostic.name, diagnostic.usage_count, reason, suffix
+        "{text}\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted."
     )
 }
 
@@ -726,17 +736,17 @@ mod tests {
             (
                 "const A=({pad})=><><div sz={{p:pad}}/><span sz={{p:pad}}/></>;",
                 None,
-                "non-host-ancestor",
+                "`mangleVars` did not hoist `--cz` to a component: the common ancestor of its 2 usages cannot take a `style` prop.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
             ),
             (
                 "const A=({pad})=><div sz={{p:pad}}/>; const B=({pad})=><span sz={{p:pad}}/>;",
                 None,
-                "no-lca",
+                "`mangleVars` did not hoist `--cz` to a component: its 2 usages share no common JSX ancestor.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
             ),
             (
                 "const A=({pad})=><section><div><span sz={{p:pad}}/><b sz={{p:pad}}/></div></section>;",
                 Some(0),
-                "max-depth (maxDepth 0)",
+                "`mangleVars` did not hoist `--cz` to a component: one of its 2 usages sits deeper below their common ancestor than `maxDepth` 0 allows.\n  help: raise `production.mangleVarHoistMaxDepth` to hoist it.\n  note: each element that uses it keeps its own scoped variable, and every class is still emitted.",
             ),
         ];
 
@@ -749,7 +759,7 @@ mod tests {
             let result = apply_css_variable_mangling(&ir, source, max_depth);
 
             assert_eq!(result.diagnostics.texts().len(), 1, "{marker}");
-            assert!(result.diagnostics.texts()[0].contains(marker), "{marker}");
+            assert_eq!(result.diagnostics.texts(), [marker]);
             assert!(result
                 .ir
                 .sz_attributes

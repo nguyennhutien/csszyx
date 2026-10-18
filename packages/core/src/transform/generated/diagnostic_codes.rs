@@ -154,6 +154,14 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::ColorSlashOpacity,
 ];
 
+/// Shared with the renderer, which prints it.
+#[cfg_attr(not(feature = "native-engine"), allow(dead_code))]
+pub const MAX_SOURCE_NESTING_DEPTH: usize = 64;
+
+/// Shared with the renderer, which prints it.
+#[cfg_attr(not(feature = "native-engine"), allow(dead_code))]
+pub const MERGE_TABLE_FORMAT: u32 = 1;
+
 /// The engine's diagnostics, one constructor per code and form, each
 /// returning the code with its named args in registry order.
 pub mod issue {

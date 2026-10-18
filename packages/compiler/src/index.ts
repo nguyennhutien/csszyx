@@ -26,6 +26,21 @@ export {
     type SzSettableDiagnosticId,
 } from './diagnostic-codes.generated.js';
 export {
+    type RenderableDiagnostic,
+    renderSzDiagnostic,
+    renderSzDiagnosticBody,
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticComputed,
+    szDiagnosticPositionOf,
+} from './diagnostic-render.js';
+export { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+export {
+    diagnosticPath,
+    renderEngineDiagnostics,
+    renderUnplacedDiagnostic,
+    szDiagnosticKey,
+} from './engine-diagnostics.js';
+export {
     restoreEngineSpans,
     type SourcePosition,
     type StoredEngineSpans,
@@ -90,7 +105,7 @@ export {
 } from './sz-fallback-matrix.js';
 // Export the diagnostic classifiers so the bundler and the CLI route
 // diagnostics through the package that renders their wording.
-export { nearestName, suggestSzKey, szKeySuggestionFor } from './sz-key-suggestion.js';
+export { nearestName, suggestSzKey } from './sz-key-suggestion.js';
 // Export transform-core constants needed by MCP and CLI
 export {
     BOOLEAN_SHORTHANDS,

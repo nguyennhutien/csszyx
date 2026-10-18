@@ -36,11 +36,12 @@ beforeEach(() => {
 describe('property-object warning parity', () => {
     it.each(LANES)('%s warns for a property key holding an object', (_lane, engine, key) => {
         const source = `export const A = () => <div sz={{ ${key}: { bg: 'red-500' } }} />;`;
-        const { warnings } = captureWarnings(engine, source);
-        const hit = warnings.find(message =>
-            message.includes(`"${key}" is a property, not a variant`),
-        );
-        expect(hit, warnings.join('\n')).toBeDefined();
+        const { warnings, result } = captureWarnings(engine, source);
+        expect(result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['property-object', expect.objectContaining({ key })],
+        ]);
+        const [hit] = warnings;
+        expect(hit).toContain(`\`${key}\` names a property and holds an object`);
         expect(hit).toContain('generate no CSS');
     });
 
@@ -50,7 +51,9 @@ describe('property-object warning parity', () => {
         // warning — no cross-call latch for a cache or a re-run to trip over.
         const source = "export const A = () => <div sz={{ mx: { bg: 'red-500' } }} />;";
         const wasm = transformWasm(source, '/p/t.tsx');
-        expect(wasm.diagnostics.some(m => m.includes('"mx" is a property'))).toBe(true);
+        expect(
+            wasm.issues.map(issue => [issue.code, (issue.args as { key?: string }).key]),
+        ).toEqual([['property-object', 'mx']]);
         for (const [name, engine] of ENGINES) {
             expect(engine(source, '/p/t.tsx').diagnostics, name).toEqual(wasm.diagnostics);
         }

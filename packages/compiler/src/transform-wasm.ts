@@ -15,7 +15,7 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
-
+import { diagnosticPath, renderEngineDiagnostics } from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -212,6 +212,29 @@ export function transformWasm(
 }
 
 /**
+ * The options the wasm artifact's `transform_batch_json` reads, in its
+ * snake_case spelling.
+ *
+ * @param options Compiler options.
+ * @returns The options object to serialize.
+ * @internal Read by the diagnostic differential test too.
+ */
+export function wasmTransformOptions(options?: TransformSourceCodeOptions): object {
+    return {
+        mangle_vars: options?.mangleVars === true,
+        mangle_var_hoist_max_depth: options?.mangleVarHoistMaxDepth ?? null,
+        global_var_aliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+        root_dir: options?.rootDir ?? null,
+        ast_budget: options?.astBudget ?? null,
+        cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
+        cross_module_sz_objects_json:
+            encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
+        class_prefix: options?.classPrefix ?? null,
+        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
+    };
+}
+
+/**
  * Transform a batch of files through the wasm engine in one boundary crossing.
  *
  * @param files Source files to transform.
@@ -231,23 +254,18 @@ export function transformWasmBatch(
             source: file.source,
         })),
     );
-    const optionsJson = JSON.stringify({
-        mangle_vars: options?.mangleVars === true,
-        mangle_var_hoist_max_depth: options?.mangleVarHoistMaxDepth ?? null,
-        global_var_aliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-        root_dir: options?.rootDir ?? null,
-        ast_budget: options?.astBudget ?? null,
-        cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
-        cross_module_sz_objects_json:
-            encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
-        class_prefix: options?.classPrefix ?? null,
-        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
-    });
+    const optionsJson = JSON.stringify(wasmTransformOptions(options));
 
     const results = JSON.parse(
         wasm.transform_batch_json(filesJson, optionsJson),
     ) as WasmResultJson[];
-    return results.map((result, index) => fromWasmResult(result, files[index].source));
+    return results.map((result, index) =>
+        fromWasmResult(
+            result,
+            files[index].source,
+            diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+        ),
+    );
 }
 
 /**
@@ -272,9 +290,14 @@ function rawGroup(group: WasmMergeGroup): {
  *
  * @param result Raw wasm transform result.
  * @param source The source the result was transformed from, to place its spans.
+ * @param file The file's path as a diagnostic names it.
  * @returns Compiler transform result.
  */
-function fromWasmResult(result: WasmResultJson, source: string): SourceTransformResult {
+function fromWasmResult(
+    result: WasmResultJson,
+    source: string,
+    file: string,
+): SourceTransformResult {
     const spans = locateEngineSpans(source, {
         issues: result.issues,
         mergeGroups: result.merge_groups.map(rawGroup),
@@ -300,7 +323,7 @@ function fromWasmResult(result: WasmResultJson, source: string): SourceTransform
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: result.diagnostics,
+        diagnostics: renderEngineDiagnostics(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [

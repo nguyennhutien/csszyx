@@ -232,10 +232,11 @@ describe('engine parity for sz fallback diagnostics', () => {
     });
 });
 
-// The classifier reads rendered text, and each engine renders it from its own
-// call site. Asserting against a hand-written message would prove only that the
-// classifier parses that string — these run the real transforms, so an artifact that
-// words its diagnostic differently is caught by the routing that depends on it.
+// The consequence of an engine fallback is its code (`fallback-missing-css` or
+// `fallback-nudge`), which is what `csszyx check` and the bundler route on. The
+// classifier above still reads the runtime lane's text. These run the real
+// transforms, so an artifact that gives a different code is caught by the
+// routing that depends on it.
 describe('engine parity for the sz consequence split', () => {
     const CONSEQUENCE_SOURCES: ReadonlyArray<readonly [string, string, SzFallbackConsequence]> = [
         // An imported binding: a module-level value the compiler tried to read
@@ -268,12 +269,14 @@ describe('engine parity for the sz consequence split', () => {
     for (const [label, source, expected] of CONSEQUENCE_SOURCES) {
         for (const [name, engine] of ENGINES) {
             it(`${name} routes a ${label} fallback to ${expected}`, () => {
-                const fallbacks = captureWarnings(engine, source).warnings.filter(message =>
-                    message.includes('sz fallback at '),
+                const { result } = captureWarnings(engine, source);
+                const fallbacks = (result.issues ?? []).filter(issue =>
+                    issue.code.startsWith('fallback-'),
                 );
                 expect(fallbacks.length).toBeGreaterThan(0);
-                for (const message of fallbacks) {
-                    expect(szFallbackConsequenceOf(message)).toBe(expected);
+                for (const issue of fallbacks) {
+                    expect(issue.code).toBe(`fallback-${expected}`);
+                    expect(issue.args).toMatchObject({ site: 'sz' });
                 }
             });
         }

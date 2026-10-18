@@ -69,23 +69,24 @@ describe('SZ_DIAGNOSTIC_KIND_IDS', () => {
 
 describe.each(ENGINES)('diagnostic kinds — %s', (_name, transform) => {
     it.each(Object.entries(ENGINE_SOURCES))(
-        'reads %s from what the engine renders',
+        'reads %s from the code the engine gives the issue',
         (kind, source) => {
-            const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+            const result = transform(source, '/p/src/A.tsx');
 
-            expect(diagnostics.map(message => szDiagnosticKindOf(message))).toContain(kind);
+            expect((result.issues ?? []).map(issue => issue.code)).toContain(kind);
         },
     );
 
     it.each(Object.entries(ENGINE_SOURCES))(
-        'reads %s from the text as the engine codes it',
+        'names the code of %s in the header of the diagnostic that carries it',
         (_kind, source) => {
             const result = transform(source, '/p/src/A.tsx');
 
+            expect(result.diagnostics?.length).toBe(result.issues?.length);
             for (const [index, message] of (result.diagnostics ?? []).entries()) {
-                const byText = szDiagnosticKindOf(message);
-                if (byText === 'other') continue;
-                expect(byText, message).toBe(result.issues?.[index]?.code);
+                const code = result.issues?.[index]?.code;
+                expect(message.startsWith(`[csszyx] ${code}:`), message).toBe(true);
+                expect(szDiagnosticKindOf(message, code), message).toBe(code);
             }
         },
     );
@@ -134,14 +135,14 @@ describe('a diagnostic with a code', () => {
     });
 });
 
-describe.each(ENGINES)('removed keys in either wording — %s', (_name, transform) => {
+describe.each(ENGINES)('removed keys, sugar or replaced — %s', (_name, transform) => {
     it.each([
         ['sugar', 'export const A = () => <div sz={{ absolute: true }} />;'],
         ['a replaced key', 'export const A = () => <div sz={{ tabularNums: true }} />;'],
     ])('reads removed-key from %s', (_label, source) => {
-        const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+        const issues = transform(source, '/p/src/A.tsx').issues ?? [];
 
-        expect(diagnostics.map(message => szDiagnosticKindOf(message))).toEqual(['removed-key']);
+        expect(issues.map(issue => issue.code)).toEqual(['removed-key']);
     });
 });
 

@@ -58,7 +58,7 @@ it('places a cached diagnostic at its line and column', () => {
     const { code } = createTransformer({ root, cacheRoot }).process(source, file);
 
     expect(code).toContain('// from-cache');
-    const finding = lines.find(line => line.includes('Unknown property'));
+    const finding = lines.find(line => line.includes('is not an sz property.'));
     expect(finding).toContain(`${file}:2:`);
     expect(finding).not.toContain('undefined');
 });

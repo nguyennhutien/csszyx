@@ -7533,9 +7533,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Surface unresolvable-spread warnings to the build log in every
                 // mode (collected during transform). The build log is not the
                 // shipped bundle, so this never leaks paths to end users.
-                for (const warning of state.spreadWarnings) {
-                    emitWarning(`[csszyx] ${warning}`);
-                }
+                for (const warning of state.spreadWarnings) emitWarning(warning);
                 state.spreadWarnings.clear();
                 // Drop prescan results the bundler never asked to transform
                 // (unimported files) — each retains a full transformed-code

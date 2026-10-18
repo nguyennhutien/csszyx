@@ -17,6 +17,9 @@
 
 import MagicString, { type SourceMap } from 'magic-string';
 
+import type { SzDiagnosticCode } from './diagnostic-codes.generated.js';
+import { renderSzDiagnostic } from './diagnostic-render.js';
+import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
 import { findEmittedClassName } from './emitted-class-name.js';
 import { chooseEngine } from './engine-choice.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
@@ -61,8 +64,16 @@ export interface TemplateSzOptions {
 export interface TemplateSzDiagnostic {
     /** `error` when the value got no class; `warning` when it did. */
     severity: 'error' | 'warning';
-    /** The full message, starting `[csszyx] <file>:<line>:<column>:`. */
+    /**
+     * The full message. An engine diagnostic reads `[csszyx] <code>:
+     * <file>:<line>:<column>` then its sentence; one of the template's own,
+     * `[csszyx] <file>:<line>:<column>: <sentence>`.
+     */
     message: string;
+    /** The engine's code, for an engine diagnostic. */
+    code?: SzDiagnosticCode;
+    /** The values its sentence names, for an engine diagnostic. */
+    args?: object;
     /** 1-based line in the template file. */
     line: number;
     /** 1-based column in UTF-16 code units. */
@@ -89,8 +100,6 @@ const SUFFIX = '} />;\n';
  */
 const EMITTED_HEAD = 'export const A = () => <div';
 const EMITTED_TAIL = ' />;\n';
-/** The synthesized module's location inside an engine message. */
-const SYNTHESIZED_LOCATION = / (?:at|in) csszyx-template-sz\.tsx(?::\d+)*/g;
 
 const RUNTIME_VALUE = [
     'this sz value is only known at runtime, and a template has no csszyx runtime to resolve it',
@@ -230,9 +239,23 @@ function lowerTemplateSz(
             lowering.diagnostics.push(place('error', at(Math.max(parseError, 0)), text));
             return;
         }
-        result.diagnostics.forEach((message, issue) => {
-            const text = message.replace(/^\[csszyx\] /, '').replace(SYNTHESIZED_LOCATION, '');
-            lowering.diagnostics.push(place('warning', at(issue), text));
+        // Rendered again for the template file: the lane's message names the
+        // synthesized module and its positions.
+        issues.forEach((issue, index) => {
+            const { line, column } = place('warning', at(index), '');
+            const message = renderSzDiagnostic({
+                diagnostic: { code: issue.code, args: issue.args, line, column },
+                file: options.filename ?? '',
+                computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            });
+            lowering.diagnostics.push({
+                severity: 'warning',
+                message,
+                line,
+                column,
+                code: issue.code,
+                args: issue.args,
+            });
         });
     });
     return lowering;

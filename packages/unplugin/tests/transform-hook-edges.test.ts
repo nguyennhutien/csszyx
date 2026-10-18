@@ -103,7 +103,11 @@ describe('transform hook branch edges', () => {
             path.join(root, 'src/Comp.svelte'),
         )) as { code: string } | null;
         expect(result?.code).toContain('class="foo-4"');
-        expect(warnings.some(w => w.includes('Unknown property "foo"'))).toBe(true);
+        const said = warnings.filter(w => w.includes('`foo` is not an sz property.'));
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain('Comp.svelte:1:');
+        // The synthesized module the value was lowered in is never shown.
+        expect(said[0]).not.toContain('csszyx-template-sz');
     });
 
     it('injects a @source directive into a scoped tailwind entry once a class is discovered', async () => {

@@ -11,8 +11,8 @@ import { transform } from '../src/transform-core.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
 function warnsSpread(source: string): boolean {
-    return transformWasm(source, 'App.tsx').diagnostics.some(d =>
-        d.includes('unresolvable sz spread'),
+    return transformWasm(source, 'App.tsx').issues.some(
+        issue => issue.code === 'unresolvable-spread',
     );
 }
 

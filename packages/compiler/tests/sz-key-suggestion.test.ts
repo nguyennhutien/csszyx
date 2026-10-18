@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { nearestName, suggestSzKey, szKeySuggestionFor } from '../src/sz-key-suggestion.js';
+import { nearestName, suggestSzKey } from '../src/sz-key-suggestion.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 describe('nearestName', () => {
@@ -64,19 +64,20 @@ describe('suggestSzKey', () => {
     });
 });
 
-describe.each(ENGINES)('szKeySuggestionFor — %s', (_name, transform) => {
-    it('reads the key out of the unknown-key diagnostic the engine renders', () => {
+describe.each(ENGINES)('the suggestion on an unknown key — %s', (_name, transform) => {
+    it('goes into the args and the message', () => {
         const source = "export const A = () => <div sz={{ workBreak: 'all' }} />;";
-        const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+        const result = transform(source, '/p/src/A.tsx');
 
-        expect(diagnostics.map(szKeySuggestionFor)).toContain('break');
+        expect(result.issues?.[0]?.args).toEqual({ key: 'workBreak', suggestion: 'break' });
+        expect(result.diagnostics?.[0]).toContain('help: did you mean `break`?');
     });
 
-    it('suggests nothing for a diagnostic of another kind', () => {
-        const source = "export const A = () => <div sz={{ backgroundColor: 'red-500' }} />;";
-        const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+    it('is left out when no known key is near', () => {
+        const source = "export const A = () => <div sz={{ xyzzy: 'all' }} />;";
+        const result = transform(source, '/p/src/A.tsx');
 
-        expect(diagnostics.length).toBeGreaterThan(0);
-        expect(diagnostics.map(szKeySuggestionFor)).toEqual(diagnostics.map(() => null));
+        expect(result.issues?.[0]?.args).toEqual({ key: 'xyzzy' });
+        expect(result.diagnostics?.[0]).toContain('help: check the spelling.');
     });
 });

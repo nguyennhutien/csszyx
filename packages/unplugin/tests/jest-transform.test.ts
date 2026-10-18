@@ -320,18 +320,21 @@ describe('what the transformer reports', () => {
         );
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain('/repo/a.tsx');
-        expect(lines[0]).toContain('"display: bogus"');
+        expect(lines[0]).toContain('closed-enum-value: /repo/a.tsx:1:');
+        expect(lines[0]).toContain('`display: bogus` is not a `display` value.');
     });
 
     it('prints a dead value a cached entry recorded', () => {
         const source = 'export const A = () => <div sz={{ p: 4 }} />;';
         const root = cacheWith('/repo/a.tsx', source, 'built', {
-            diagnostics: ['[csszyx] Unknown property "zzz" in sz prop at src/a.tsx:1.'],
+            diagnostics: [
+                '[csszyx] unknown-key: src/a.tsx:1:1\n  `zzz` is not an sz property.\n  docs: https://csszyx.com/e/unknown-key',
+            ],
         });
         const { lines } = warned(() =>
             createTransformer({ cacheRoot: root }).process(source, '/repo/a.tsx'),
         );
-        expect(lines.join('\n')).toContain('Unknown property "zzz"');
+        expect(lines.join('\n')).toContain('`zzz` is not an sz property.');
     });
 
     // A usage nudge says the runtime path was taken where a compiled one was

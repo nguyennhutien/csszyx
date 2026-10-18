@@ -22,6 +22,97 @@
 export const REGISTRY_FORMAT = 1;
 
 /**
+ * Values a template may name beside its args, each with the args it reads. Each is derived from data both
+ * engines read from one source, or a constant, never by running engine logic
+ * again: the renderer's helper for each lives in
+ * `packages/compiler/src/diagnostic-render-helpers.ts`, and a test there holds
+ * the two lists equal.
+ */
+/**
+ * Engine limits a sentence names. Generated into the Rust engine, which
+ * enforces them, and into the renderer, which prints them: one number.
+ */
+export const CONSTANTS = {
+    /** The deepest source nesting the engine parses; deeper is refused. */
+    maxNestingDepth: { rust: 'MAX_SOURCE_NESTING_DEPTH', type: 'usize', value: 64 },
+    /** The merge table format the engine reads. */
+    mergeTableFormat: { rust: 'MERGE_TABLE_FORMAT', type: 'u32', value: 1 },
+};
+
+export const COMPUTED = {
+    canonical: {
+        reads: ['key'],
+        summary: 'The canonical key of `key` (SUGGESTION_MAP).',
+    },
+    note: {
+        reads: ['key'],
+        summary: 'The migration note of `key` (MIGRATION_NOTES).',
+    },
+    enumAllowed: {
+        reads: ['key'],
+        summary: 'The values closed-enum `key` takes, joined by ", " (CLOSED_ENUM_CLASSES).',
+    },
+    canonicalAllowed: {
+        reads: ['key'],
+        summary:
+            'The values the canonical key of `key` takes, joined by ", " (SUGGESTION_MAP, CLOSED_ENUM_CLASSES).',
+    },
+    bare: {
+        reads: ['key', 'value'],
+        summary: 'The class `key: value` emits without a table (CLOSED_ENUM_AFFIXES).',
+    },
+    movedKey: {
+        reads: ['key', 'value'],
+        summary: 'The key `key: value` moved to (CLOSED_ENUM_VALUE_MOVES, SUGGESTION_MAP).',
+    },
+    movedValue: {
+        reads: ['key', 'value'],
+        summary: 'The value it moved with, as a JS literal: `true` bare, otherwise quoted.',
+    },
+    groups: {
+        reads: ['key'],
+        summary:
+            'The group keys of the canonical key of `key`, joined by ", " (GLOBAL_KEYWORD_GROUPS).',
+    },
+    maxNestingDepth: {
+        reads: [],
+        summary: "The engine's source nesting limit (MAX_SOURCE_NESTING_DEPTH).",
+    },
+    mergeTableFormat: {
+        reads: [],
+        summary: 'The merge table format this engine reads (MERGE_TABLE_FORMAT).',
+    },
+    fallbackReason: {
+        reads: ['shape', 'detail', 'path', 'keyPath'],
+        summary: 'Why the value fell back, from the generated sz fallback matrix for `shape`.',
+    },
+    fallbackSuggestion: {
+        reads: ['shape'],
+        summary: 'What to write instead, from the same matrix.',
+    },
+    earlier: {
+        reads: ['classes', 'szCount', 'szAt'],
+        summary: 'The classes and `sz` of the sides before the last, as a reader names them.',
+    },
+    example: {
+        reads: ['parts'],
+        summary: 'The items of the one `sz` array that replaces them.',
+    },
+    spreadPlace: {
+        reads: ['spread'],
+        summary: 'Where that array goes: after the spread named by `spread`, or "the spread".',
+    },
+    spellingHint: {
+        reads: ['suggestion'],
+        summary: 'A `suggestion` as "did you mean …?", or "check the spelling." without one.',
+    },
+    groupLiteral: {
+        reads: ['groupValue'],
+        summary: '`groupValue` as a JS literal: `true` bare, otherwise quoted.',
+    },
+};
+
+/**
  * @typedef {'off' | 'info' | 'warn' | 'error'} Level
  */
 
@@ -161,6 +252,9 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING, suggestion: OPTIONAL_STRING },
+        text: '`{key}` is not an sz property.',
+        help: "{spellingHint} If the class is intentional, define it with Tailwind's `@utility`.",
+        note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
         sources: [`${ENGINE}:1472`, `${CORE_TS}:4124`],
     },
     {
@@ -169,6 +263,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING },
+        text: '`{key}` is an alias of `{canonical}`, and nothing is emitted for it.',
+        help: 'write `{canonical}` instead of `{key}`.',
         sources: [`${ENGINE}:1461`, `${CORE_TS}:4124`],
     },
     {
@@ -184,6 +280,22 @@ export const DIAGNOSTICS = [
             // prints args in place of the sentence, and the key alone does not
             // say what to write instead.
             replacement: { type: 'string', optional: true },
+        },
+        text: {
+            'runtime-alias':
+                '`{key}` was removed, and it holds a runtime value, so nothing is emitted for it.',
+            'sugar-replaced': '`{key}` was replaced, and nothing is emitted for it.',
+            sugar: '`{key}` boolean sugar was removed, and nothing is emitted for it.',
+            removed: '`{key}` was removed, and nothing is emitted for it.',
+            replaced: '`{key}` was replaced, and nothing is emitted for it.',
+        },
+        help: {
+            'runtime-alias':
+                'write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.',
+            'sugar-replaced': 'write `{ {replacement} }` instead, or run `csszyx migrate`.',
+            sugar: 'write `{ {replacement} }` instead, or run `csszyx migrate`.',
+            removed: '{note}.',
+            replaced: 'write `{ {replacement} }` instead, or run `csszyx migrate`.',
         },
         sources: [
             `${ENGINE}:1140`,
@@ -201,6 +313,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING },
+        text: '`sz` received a numeric key `{key}`, and its value is ignored.',
+        help: 'pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.',
         sources: [`${ENGINE}:1465`, `${CORE_TS}:4124`],
     },
     {
@@ -218,6 +332,30 @@ export const DIAGNOSTICS = [
             // class in, by a search the renderer must not run a second time.
             groupKey: OPTIONAL_STRING,
             groupValue: OPTIONAL_STRING,
+        },
+        text: {
+            'sibling-group':
+                '`{key}: {value}` is not a `{key}` value; the class `{bare}` it emits belongs to `{ {groupKey}: {groupLiteral} }`.',
+            dead: '`{key}: {value}` is not a `{key}` value.',
+            'css-value':
+                "`{key}: '{value}'` is a CSS value; `{key}-{value}` has no Tailwind utility and renders nothing.",
+            'font-style':
+                "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
+            'font-smoothing':
+                "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
+        },
+        help: {
+            'sibling-group':
+                'write `{ {groupKey}: {groupLiteral} }`, so it combines with the other groups instead of resetting them.',
+            dead: 'use one of: {enumAllowed}.',
+            'css-value': "use the short form: `{ {key}: '{suggestion}' }`.",
+            'font-style':
+                "use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: '{value}' }`.",
+            'font-smoothing': "use `'grayscale'` or `'subpixel'`.",
+        },
+        note: {
+            'sibling-group': '`{key}` takes one of: {enumAllowed}.',
+            dead: 'the class `{bare}` is still emitted, and it styles nothing unless a rule of your own matches it.',
         },
         sources: [
             `${ENGINE}:1521`,
@@ -237,6 +375,8 @@ export const DIAGNOSTICS = [
         position: 'site',
         // The value as written is `{color}/{opacity}`, split on its first `/`.
         args: { key: STRING, color: STRING, opacity: STRING },
+        text: "A string cannot carry slash opacity, so `{key}: '{color}/{opacity}'` emits nothing.",
+        help: "use the object form: `{ color: '{color}', op: {opacity} }`.",
         sources: [`${ENGINE}:1549`, 'packages/compiler/src/color-validation.ts:70'],
     },
     {
@@ -245,6 +385,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING, value: STRING },
+        text: "`{key}: {value}` is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS.",
+        help: 'use a quarter step (1.25, 1.5, 1.75) or a unit value (`"{value}rem"`).',
         sources: [`${ENGINE}:883`, `${CORE_TS}:1480`],
     },
     {
@@ -253,6 +395,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { value: STRING },
+        text: "`weight: '{value}'` is a numeric string; Tailwind spells numeric font weights through `--font-weight-*`, so `font-{value}` generates no CSS.",
+        help: 'write `weight: {value}` as a number, which brackets to `font-[{value}]`.',
         sources: [`${ENGINE}:1399`, `${CORE_TS}:1600`],
     },
     {
@@ -261,6 +405,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING, value: STRING },
+        text: "Tailwind has no per-side border style, so `{key}: '{value}'` is dropped and generates no CSS.",
+        help: "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width.",
         sources: [`${ENGINE}:901`, `${CORE_TS}:1563`],
     },
     {
@@ -269,6 +415,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING, nestedKeys: { type: 'string[]', joiner: ', ' } },
+        text: '`{key}` names a property and holds an object `{ {nestedKeys} }`, so it compiles to `{key}:*` classes that match no Tailwind variant and generate no CSS.',
+        help: "move the nested keys up a level; for color opacity, write `{ color: '...', op: ... }`.",
         sources: [`${ENGINE}:921`, `${CORE_TS}:4644`],
     },
     {
@@ -277,6 +425,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false } },
         position: 'site',
         args: { key: STRING },
+        text: '`{key}` holds an object, so it lowers to the class prefix `{key}:` and Tailwind generates no CSS for it; `{key}` is not a variant.',
+        help: 'a `--*` key takes a declaration value; `container` takes `true`.',
         sources: [`${ENGINE}:1494`, `${CORE_TS}:4574`],
     },
     {
@@ -287,6 +437,8 @@ export const DIAGNOSTICS = [
         // `allowed` travels: the mask member tables are not shared data, and
         // picking one means parsing `owner`.
         args: { owner: STRING, member: STRING, allowed: { type: 'string[]', joiner: ', ' } },
+        text: '`{owner}` has no field `{member}`, and nothing is emitted for it.',
+        help: '`{owner}` takes `{ {allowed} }`.',
         sources: [`${ENGINE}:941`, `${CORE_TS}:3803`],
     },
     {
@@ -295,6 +447,9 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {} },
         position: 'site',
         args: { key: STRING },
+        text: '`{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.',
+        help: 'name the values with `szv()`, or use `dynamic()` for open-ended data.',
+        note: 'the class and the variable were dropped, so no other property is styled in its place.',
         sources: [`${ENGINE}:807`],
     },
     {
@@ -303,6 +458,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {} },
         position: 'site',
         args: {},
+        text: '`sz={{ ...x }}` cannot be resolved at build time and falls back to the runtime; it may render no styles in production.',
+        help: 'use the array form: `sz={[x, { ... }]}`.',
         sources: [`${ENGINE}:733`],
     },
     {
@@ -311,6 +468,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {} },
         position: 'site',
         args: {},
+        text: 'This element spreads props that may carry `style`, and `sz` writes its own `style` attribute, which can replace the one in the spread.',
+        help: 'move the spread `style` to an explicit `style` prop, so csszyx merges both values.',
         sources: [`${ENGINE}:759`],
     },
     {
@@ -320,6 +479,19 @@ export const DIAGNOSTICS = [
         position: 'site',
         forms: ['host-element', 'unreadable-slot'],
         args: { form: formArg(['host-element', 'unreadable-slot']) },
+        text: {
+            'host-element':
+                '`szs` has no effect on a host element; it maps the slot names of a custom component.',
+            'unreadable-slot':
+                'A slot value in `szs` could not be read at build time, so no slot classes were compiled.',
+        },
+        help: {
+            'host-element':
+                'remove `szs`, or move it to the custom component whose slots it names.',
+            'unreadable-slot':
+                'make every slot an identifier key with a static object literal (or class string) value; for a value only known at runtime, use `dynamic()` and pass the resulting class string.',
+        },
+        note: 'the attribute is left unchanged.',
         sources: [`${ENGINE}:577`],
     },
     {
@@ -329,6 +501,15 @@ export const DIAGNOSTICS = [
         position: 'site',
         forms: ['non-literal', 'unknown-mode'],
         args: { form: formArg(['non-literal', 'unknown-mode']), mode: OPTIONAL_STRING },
+        text: {
+            'non-literal': '`szRecover` takes only a string literal, `"csr"` or `"dev-only"`.',
+            'unknown-mode': '`szRecover` has an unknown mode `"{mode}"`.',
+        },
+        help: {
+            'non-literal': 'write `szRecover="csr"` or `szRecover="dev-only"`.',
+            'unknown-mode': 'use `"csr"` or `"dev-only"`.',
+        },
+        note: 'no recovery token is emitted for this element.',
         sources: [`${ENGINE}:1698`],
     },
     {
@@ -339,6 +520,8 @@ export const DIAGNOSTICS = [
         defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
         args: {},
+        text: '`sz` takes precedence over the runtime `className` on this element, whatever order the attributes are written in. Overrides a caller passes in that `className` are dropped.',
+        help: 'state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.',
         sources: [`${ENGINE}:1649`],
     },
     {
@@ -349,6 +532,8 @@ export const DIAGNOSTICS = [
         defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
         args: { elementName: STRING, count: NUMBER },
+        text: '`<{elementName}>` carries {count} `sz` attributes; they were merged as `sz={[first, …, last]}`, later wins per property.',
+        help: 'fold them into one `sz` array, so the order is written down.',
         sources: [`${ENGINE}:1350`],
     },
     {
@@ -369,6 +554,9 @@ export const DIAGNOSTICS = [
             spread: OPTIONAL_STRING,
             parts: { type: 'string[]', joiner: ', ' },
         },
+        text: 'Class names and `sz` on more than one side of a spread on `<{elementName}>` stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {earlier} will not apply there.',
+        help: 'write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.',
+        note: 'Vue JSX merges every class, so there every side applies.',
         sources: [`${ENGINE}:1325`],
     },
     {
@@ -385,6 +573,20 @@ export const DIAGNOSTICS = [
             // found by parsing it.
             layerKey: { type: ['enum', 'maskLinear', 'maskRadial', 'maskConic'], optional: true },
         },
+        text: {
+            value: '`{key}: {value}` moved to `{movedKey}`, and nothing is emitted for it.',
+            'mask-layer':
+                "`mask: '{value}'` names a gradient layer, and gradient layers moved to `{layerKey}`; nothing is emitted for it.",
+        },
+        help: {
+            value: 'write `{ {movedKey}: {movedValue} }`, or run `csszyx migrate`.',
+            'mask-layer':
+                'write this layer on `{layerKey}`; `mask` takes a direct mask-image only: `none`, a `url()`, or a CSS variable.',
+        },
+        note: {
+            'mask-layer':
+                'Tailwind composites `mask-image` from one variable per layer, so each layer has its own key.',
+        },
         sources: [`${ENGINE}:1183`, `${ENGINE}:1202`, `${CORE_TS}:3305`, `${CORE_TS}:3979`],
     },
     {
@@ -393,6 +595,9 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: true } },
         position: 'site',
         args: { global: STRING, value: STRING, group: STRING },
+        text: '`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.',
+        help: "to override the group, layer it: `sz={[base, { {global}: '{value}' }]}`.",
+        note: "a spread override (`{ ...base, {global}: '{value}' }`) keeps this order.",
         sources: [`${ENGINE}:1159`, `${CORE_TS}:3335`],
     },
     {
@@ -402,6 +607,11 @@ export const DIAGNOSTICS = [
         position: 'site',
         forms: ['key-first', 'other-first'],
         args: { form: formArg(['key-first', 'other-first']), key: STRING, other: STRING },
+        text: "`{key}` takes a runtime value beside `{other}` in one sz object, so the object's order does not decide between them: both classes can ship, and Tailwind's stylesheet order picks the one that applies.",
+        help: {
+            'key-first': 'layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.',
+            'other-first': 'layer them, later wins: `sz={[{ {other}: … }, { {key}: … }]}`.',
+        },
         sources: [`${ENGINE}:1301`],
     },
     {
@@ -415,6 +625,24 @@ export const DIAGNOSTICS = [
             detail: OPTIONAL_STRING,
             path: OPTIONAL_STRING,
             keyPath: OPTIONAL_STRING,
+        },
+        variesBy: 'site',
+        text: {
+            sz: '`sz` falls back to the runtime: {fallbackReason}.',
+            szr: '`szr` falls back to the runtime: {fallbackReason}.',
+            szv: 'The `szv` config cannot be read at build time: {fallbackReason}.',
+            'sz-variant-key': '`sz` falls back to the runtime: {fallbackReason}.',
+        },
+        help: {
+            sz: '{fallbackSuggestion}',
+            szr: '{fallbackSuggestion}',
+            szv: 'pass the config inline, or as a module-level const object literal.',
+            'sz-variant-key': '{fallbackSuggestion}',
+        },
+        note: {
+            sz: 'its classes were not collected, so Tailwind generates CSS for them only if another source names them.',
+            szr: 'its classes were not collected, so Tailwind generates CSS for them only if another source names them.',
+            szv: 'none of its variant classes are safelisted, so they generate no CSS.',
         },
         sources: [`${ENGINE}:637`, `${ENGINE}:672`, `${ENGINE}:719`],
     },
@@ -431,6 +659,21 @@ export const DIAGNOSTICS = [
             detail: OPTIONAL_STRING,
             path: OPTIONAL_STRING,
         },
+        variesBy: 'site',
+        text: {
+            sz: '`sz` falls back to the runtime: {fallbackReason}.',
+            'sz-array-element':
+                'This `sz` array element is an object literal with a runtime value, so the whole element is deferred to `_szPart` at runtime.',
+        },
+        help: {
+            sz: '{fallbackSuggestion}',
+            'sz-array-element':
+                'use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.',
+        },
+        note: {
+            sz: 'the runtime `_sz` helper still lowers the value.',
+            'sz-array-element': 'its classes are still safelisted, best-effort.',
+        },
         sources: [`${ENGINE}:721`, `${ENGINE}:1671`],
     },
     {
@@ -446,6 +689,14 @@ export const DIAGNOSTICS = [
             error: OPTIONAL_OPAQUE,
             tableFormat: OPTIONAL_NUMBER,
         },
+        text: {
+            unreadable:
+                'The merge table is not one this engine reads ({error}), so no sz key was merged with a later key that covers it.',
+            'format-mismatch':
+                'The merge table is in format {tableFormat}, and this engine reads format {mergeTableFormat}, so no sz key was merged with a later key that covers it.',
+        },
+        help: 'install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.',
+        note: 'every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.',
         sources: [`${ENGINE}:155`],
     },
     {
@@ -463,6 +714,27 @@ export const DIAGNOSTICS = [
             message: OPTIONAL_OPAQUE,
             errorCount: OPTIONAL_NUMBER,
         },
+        text: {
+            syntax: '{message}',
+            summary: 'The engine could not fully parse this file ({errorCount} syntax error(s)).',
+            panicked:
+                'The parser could not recover from a syntax error, so csszyx did not finish lowering this file.',
+            expression: 'This `sz` value could not be parsed as a JavaScript expression.',
+            prescan: 'This file failed to parse, so the prescan skipped it.',
+        },
+        help: {
+            syntax: 'fix the syntax at this position.',
+            summary: 'fix the syntax errors reported for this file.',
+            panicked: 'fix the syntax error reported for this file.',
+            expression: 'write the value as an object literal, such as `{ p: 4 }`.',
+            prescan: 'fix the syntax error, or check that the file extension matches its contents.',
+        },
+        note: {
+            summary: 'the file is left unchanged.',
+            panicked: 'the file is left unchanged.',
+            expression: 'the attribute is left as written, and no class is generated for it.',
+            prescan: 'none of its classes reached the safelist.',
+        },
         sources: [
             'packages/core/src/transform/parser.rs:186',
             'packages/core/src/transform/parser.rs:198',
@@ -478,6 +750,9 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {} },
         position: 'file',
         args: { depth: NUMBER },
+        text: 'Source nesting exceeds {maxNestingDepth} levels (found {depth}).',
+        help: 'flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.',
+        note: 'the file is left unchanged and contributes no classes.',
         sources: [`${ENGINE}:173`],
     },
     {
@@ -486,6 +761,9 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {} },
         position: 'site',
         args: {},
+        text: 'This `sz` attribute has no value, or a JSX element as its value, and the engine reads neither.',
+        help: 'give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.',
+        note: 'the attribute is left as written; the rest of the file is still transformed.',
         sources: [`${ENGINE}:563`],
     },
     {
@@ -498,6 +776,15 @@ export const DIAGNOSTICS = [
         position: 'file',
         forms: ['transform', 'prescan'],
         args: { form: formArg(['transform', 'prescan']) },
+        text: {
+            transform: 'The file exceeds the AST budget, and the IR walk stopped mid-file.',
+            prescan: 'The file exceeds the AST node budget, so the prescan skipped it.',
+        },
+        help: 'raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
+        note: {
+            transform: 'the file is left unchanged and contributes no classes to the safelist.',
+            prescan: 'none of its classes reached the safelist, so their CSS is not generated.',
+        },
         sources: [`${ENGINE}:350`, `${UNPLUGIN}:1204`],
     },
     {
@@ -513,6 +800,19 @@ export const DIAGNOSTICS = [
             reason: { type: ['enum', 'no-lca', 'non-host-ancestor', 'max-depth'] },
             maxDepth: OPTIONAL_NUMBER,
         },
+        variesBy: 'reason',
+        text: {
+            'no-lca':
+                '`mangleVars` did not hoist `{name}` to a component: its {usageCount} usages share no common JSX ancestor.',
+            'non-host-ancestor':
+                '`mangleVars` did not hoist `{name}` to a component: the common ancestor of its {usageCount} usages cannot take a `style` prop.',
+            'max-depth':
+                '`mangleVars` did not hoist `{name}` to a component: one of its {usageCount} usages sits deeper below their common ancestor than `maxDepth` {maxDepth} allows.',
+        },
+        help: {
+            'max-depth': 'raise `production.mangleVarHoistMaxDepth` to hoist it.',
+        },
+        note: 'each element that uses it keeps its own scoped variable, and every class is still emitted.',
         sources: ['packages/core/src/transform/css_var_planner.rs:332'],
     },
     {
@@ -530,6 +830,20 @@ export const DIAGNOSTICS = [
             opacity: STRING,
             important: { type: ['enum', '!'], optional: true },
             op: OPTIONAL_STRING,
+        },
+        text: {
+            'op-given':
+                "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+            'op-absent':
+                "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`.",
+        },
+        help: {
+            'op-given': "write `{ color: '{base}{important}', op: {op} }`.",
+            'op-absent': "write `{ color: '{base}{important}', op: {opacity} }`.",
+        },
+        note: {
+            'op-given': 'the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.',
+            'op-absent': 'the class still applies opacity {opacity}.',
         },
         sources: [`${ENGINE}:1579`, `${CORE_TS}:2794`],
     },

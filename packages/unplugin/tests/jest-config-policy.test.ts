@@ -92,7 +92,7 @@ describe('the jest transform with csszyx.config and no state file', () => {
 
     it('prints a note the config raises', () => {
         expect(jest({ ...project(PRECEDENCE, ATOMIC), source: PRECEDENCE }).join('\n')).toContain(
-            'takes precedence over the runtime "className"',
+            'takes precedence over the runtime `className`',
         );
     });
 
@@ -108,7 +108,7 @@ describe('the jest transform with csszyx.config and no state file', () => {
         const exits = 'process.stderr.write("[csszyx] config side effect\\n");\nprocess.exit(3);\n';
         const lines = jest({ ...project(UNKNOWN, exits), source: UNKNOWN }).join('\n');
         expect(lines).toContain('[csszyx] config side effect');
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
     });
 });
 
@@ -126,7 +126,7 @@ describe('a config that does more than export its levels', () => {
         expect(lines).toContain(
             '[csszyx] jest could not read the levels csszyx.config.mjs sets: the config loader printed no result.',
         );
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
     });
 
     it('stops waiting for a config that never finishes loading', () => {
@@ -137,7 +137,7 @@ describe('a config that does more than export its levels', () => {
         expect(lines).toContain(
             '[csszyx] jest could not read the levels csszyx.config.mjs sets: it did not finish loading within 0.3 s.',
         );
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
     }, 30_000);
 
     it('keeps the defaults when the marked result line does not parse', () => {
@@ -146,7 +146,7 @@ describe('a config that does more than export its levels', () => {
             'process.stdout.write("\\n@@csszyx-jest-config-result@@{\\"state\\":");\nprocess.exit(0);\nexport default {};\n';
         const lines = jest({ ...project(UNKNOWN, cut), source: UNKNOWN }).join('\n');
         expect(lines).toContain('the config loader printed no result.');
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
     });
 
     it('stops reading a config that prints more than a worker keeps', () => {
@@ -156,7 +156,7 @@ describe('a config that does more than export its levels', () => {
             '[csszyx] jest could not read the levels csszyx.config.mjs sets: spawnSync',
         );
         expect(lines).toContain('ENOBUFS');
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
     }, 30_000);
 });
 
@@ -216,7 +216,7 @@ describe('the jest transform with a state file', () => {
         writeFileSync(join(root, 'levels.mjs'), 'export default {};\n');
         writeDiagnosticPolicyState(root, createDiagnosticPolicy(), diagnosticPolicyInputs(root));
         const lines = jest({ root, file, source: UNKNOWN }).join('\n');
-        expect(lines).toContain('Unknown property');
+        expect(lines).toContain('is not an sz property.');
         expect(lines).not.toContain('config loaded');
     });
 
@@ -239,6 +239,8 @@ describe('the jest transform with a state file', () => {
             diagnosticPolicyInputs(root),
         );
         rmSync(join(root, 'csszyx.config.mjs'));
-        expect(jest({ root, file, source: UNKNOWN }).join('\n')).toContain('Unknown property');
+        expect(jest({ root, file, source: UNKNOWN }).join('\n')).toContain(
+            'is not an sz property.',
+        );
     });
 });

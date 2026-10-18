@@ -34,9 +34,14 @@ describe('AST budget guard', () => {
     function expectBudgetTrip(result: ReturnType<typeof transformSource>, filename: string): void {
         expect(result.transformed).toBe(false);
         expect(result.classes.size).toBe(0);
-        expect(result.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(true);
-        expect(result.diagnostics.some(d => d.includes(filename))).toBe(true);
-        expect(result.diagnostics.some(d => d.includes('astBudgetLimit'))).toBe(true);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['ast-budget', { form: 'transform' }],
+        ]);
+        // A file-wide code: the header names the file alone, no line or column.
+        expect(result.diagnostics).toHaveLength(1);
+        expect(result.diagnostics[0]).toContain(`[csszyx] ast-budget: ${filename}\n`);
+        expect(result.diagnostics[0]).toContain('The file exceeds the AST budget');
+        expect(result.diagnostics[0]).toContain('help: raise `build.astBudgetLimit`');
     }
 
     /**
@@ -138,7 +143,8 @@ describe('AST budget guard', () => {
         // Raised budget: transforms.
         const raised = transformSource(source, 'huge.tsx', { astBudget: 100_000 });
         expect(raised.transformed).toBe(true);
-        expect(raised.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(false);
+        expect(raised.issues.some(issue => issue.code === 'ast-budget')).toBe(false);
+        expect(raised.diagnostics.some(d => d.includes('AST budget'))).toBe(false);
     });
 
     it('respects an `astBudget` override lowered below the default', () => {

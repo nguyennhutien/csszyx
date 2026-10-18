@@ -15,7 +15,7 @@
  *
  * @module
  */
-import { szDiagnosticKindOf, szKeySuggestionFor } from '@csszyx/compiler';
+import { type SzDiagnosticCode, szDiagnosticKey, szDiagnosticKindOf } from '@csszyx/compiler';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 
 import type { DiagnosticLimiter } from './diagnostic-limiter.js';
@@ -131,6 +131,11 @@ export interface DiagnosticIssue {
     code: string;
     line: number;
     column: number;
+    /**
+     * The values its sentence names. Present on an engine issue, whose
+     * message the compiler rendered whole, header included.
+     */
+    args?: object;
 }
 
 /** One module's diagnostics, and how this run reports them. */
@@ -160,9 +165,8 @@ export interface TransformDiagnosticsInput {
 /** One transform's diagnostics, sorted into the channels a lane prints them on. */
 export interface RoutedTransformDiagnostics {
     /**
-     * Unresolvable-spread reports, as `<id>:<line>:<column>\n  <message>`
-     * without the prefix. The plugin collects them for the end of the build;
-     * a loader prints them at once.
+     * Unresolvable-spread reports, each a whole message. The plugin collects
+     * them for the end of the build; a loader prints them at once.
      */
     spread: string[];
     /** `warn` and `error` lines, printed now in every mode. */
@@ -186,22 +190,27 @@ const DEFAULT_POLICY = createDiagnosticPolicy();
  * @param diagnostic - The diagnostic and where it was found.
  * @param diagnostic.kind - Its kind.
  * @param diagnostic.level - The level the policy gives it here.
+ * @param diagnostic.coded - Whether the message is an engine message, header included.
  * @param diagnostic.where - `<id>` or `<id>:<line>:<column>`.
  * @param diagnostic.message - The engine's message.
  */
 function pushListedDiagnostic(
     routed: RoutedTransformDiagnostics,
-    diagnostic: { kind: string; level: SzDiagnosticLevel; where: string; message: string },
+    diagnostic: {
+        kind: string;
+        level: SzDiagnosticLevel;
+        where: string;
+        message: string;
+        coded: boolean;
+    },
 ): void {
-    const { kind, level, where, message } = diagnostic;
+    const { kind, level, where, message, coded } = diagnostic;
+    // An engine message carries its own header: `[csszyx] <code>: <where>`.
+    const line = coded ? message : `[csszyx] ${where}\n  ${message}`;
     if (kind === 'unresolvable-spread') {
-        routed.spread.push(`${where}\n  ${message}`);
+        routed.spread.push(line);
         return;
     }
-    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
-    const suggestion = szKeySuggestionFor(message);
-    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
-    const line = `[csszyx] ${where}\n  ${message}${hint}`;
     if (level === 'info') routed.advisories.push(line);
     else routed.immediate.push(line);
 }
@@ -240,12 +249,16 @@ export function routeTransformDiagnostics(
             routed.heldAdvisories++;
             continue;
         }
-        const finding = { id: kind, file, line: issue?.line, column: issue?.column, key: message };
+        const rendered = issue?.args !== undefined;
+        const key = rendered
+            ? szDiagnosticKey({ code: issue.code as SzDiagnosticCode, args: issue.args as never })
+            : message;
+        const finding = { id: kind, file, line: issue?.line, column: issue?.column, key };
         if (limiter?.admit(finding) === false) {
             continue;
         }
         const where = issue === undefined ? id : `${id}:${issue.line}:${issue.column}`;
-        pushListedDiagnostic(routed, { kind, level, where, message });
+        pushListedDiagnostic(routed, { kind, level, where, message, coded: rendered });
     }
     return routed;
 }
