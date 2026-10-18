@@ -145,7 +145,9 @@ aborting, opt in per-element with the `szRecover` JSX attribute.
 1. **Build.** The csszyx unplugin scans every JSX element with `szRecover`
    and tags it with `data-sz-recovery-token="<12-hex>"`. The token is a
    deterministic hash of `${file}:${line}:${col}:${elementType}` — stable
-   across rebuilds, so HMR doesn't churn the manifest.
+   across rebuilds, so HMR doesn't churn the manifest. The mode reaches
+   the DOM as `data-sz-recover="csr"`: React warns in development about a
+   camelCase attribute it does not know, so the build renames it.
 
 2. **SSR HTML.** The unplugin injects a single manifest script into
    `<head>` containing every emitted token:
@@ -168,7 +170,8 @@ aborting, opt in per-element with the `szRecover` JSX attribute.
 
 3. **Hydration.** `@csszyx/runtime/verify` reads the manifest, then
    `verifyRecoveryToken(element, manifest)` matches each element's
-   token against an entry. A valid match permits client recovery for
+   token against an entry, and its `data-sz-recover` against the entry's
+   mode. A valid match permits client recovery for
    that subtree; an unknown token rejects.
 
 ### `csr` vs `dev-only`

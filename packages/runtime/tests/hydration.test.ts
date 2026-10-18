@@ -160,7 +160,7 @@ describe('attemptCSRRecovery', () => {
     it('should fail when recovery is disabled', () => {
         disableCSRRecovery();
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const result = attemptCSRRecovery(element);
         expect(result).toBe(false);
@@ -175,7 +175,7 @@ describe('attemptCSRRecovery', () => {
     it('should succeed with csr mode', () => {
         enableCSRRecovery();
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const error: HydrationError = {
             type: 'checksum_mismatch',
@@ -192,7 +192,7 @@ describe('attemptCSRRecovery', () => {
     it('should decrement the aborted count on recovery', () => {
         enableCSRRecovery();
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         abortHydration(element, {
             type: 'checksum_mismatch',
@@ -208,7 +208,7 @@ describe('attemptCSRRecovery', () => {
     it('should remove abort markers', () => {
         enableCSRRecovery();
         element.setAttribute('data-sz-recovery-token', 'token1');
-        element.setAttribute('szRecover', 'csr');
+        element.setAttribute('data-sz-recover', 'csr');
 
         const error: HydrationError = {
             type: 'checksum_mismatch',

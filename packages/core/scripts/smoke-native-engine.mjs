@@ -308,7 +308,7 @@ function assertNativeEngineTransform(binding) {
     `[csszyx] "sz" takes precedence over the runtime "className" on this element at ${path.join(repoRoot, "fixtures", "merge-dynamic-class.tsx")}:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.`,
   ]);
 
-  if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {
+  if (!recover.code.includes('data-sz-recover="csr" data-sz-recovery-token="')) {
     fail(`Unexpected recovery code: ${recover.code}`);
   }
   if (recover.metadata?.transformed !== true) {
