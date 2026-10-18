@@ -5,6 +5,8 @@ import {
     transformRust,
     transformWasm,
 } from '@csszyx/compiler/engine';
+import type { ResolvedCrossModuleEntries } from './cross-module-registry.js';
+import { withCrossModuleStatics } from './next-cross-module.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,
@@ -27,6 +29,35 @@ export interface NextSourceTransformInput {
     pluginVersion: string;
     compilerVersion: string;
     astBudget?: number;
+}
+
+/**
+ * The compiler options a Next lane lowers one module with. The loader and the
+ * prebuild both build them here: the prebuild's transform is cached and the
+ * loader reads it back, so options that differ between them would serve the
+ * loader output it did not ask for.
+ *
+ * `rootDir` names each diagnostic's file from the project root, as the Vite
+ * and webpack lanes do; without it the header carried the absolute path.
+ *
+ * @param input - What the module is lowered with.
+ * @param input.base - The lane's own compiler options.
+ * @param input.statics - The cross-module values the module reads.
+ * @param input.classPrefix - The project's Tailwind prefix, or null for none.
+ * @param input.root - The project root.
+ * @returns The options.
+ */
+export function nextCompilerOptions(input: {
+    base: TransformSourceCodeOptions | undefined;
+    statics: ResolvedCrossModuleEntries;
+    classPrefix: string | null;
+    root: string;
+}): TransformSourceCodeOptions {
+    return {
+        ...withCrossModuleStatics(input.base, input.statics),
+        classPrefix: input.classPrefix,
+        rootDir: input.root,
+    };
 }
 
 /** Result of one source transform plus cache metadata for loader diagnostics. */

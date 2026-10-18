@@ -170,17 +170,31 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
 }
 
 /**
- * A warning Turbopack reports as the message alone.
- *
- * The runner serializes the stack it is given and Next prints it, so a stack
- * would point every csszyx warning at csszyx's own source.
- *
- * @param message - The warning text.
- * @returns An error carrying the message and no stack frames.
+ * Where Next's `: ` goes back in: after a header's `[csszyx] <code>`, or at
+ * the end of a first line that has none, dropping a colon there.
  */
-function loaderWarning(message: string): Error {
-    const warning = new Error(message);
-    warning.name = 'CsszyxWarning';
-    warning.stack = `${warning.name}: ${message}`;
+const HEADER = /^([^\n]*?)(?:: |:?(?=\n|$))/;
+
+/**
+ * A warning Turbopack reports as the line alone.
+ *
+ * Turbopack's runner hands Next the error's `name`, `message` and the frames
+ * it parses out of `stack`, and Next prints `name: message`, then each frame
+ * as `[at …]` (measured on Next 16.3.8). So the line is split where Next joins
+ * it again: the header's `[csszyx] <code>` is the name and the rest is the
+ * message, and Next prints the line as written instead of a class name in
+ * front of it. A first line with no code, such as a file heading, ends with
+ * the `: ` Next adds. The stack is empty: a stack line ending in `:line:col`,
+ * as a header does, reads as a frame, and Next echoed the header as one.
+ *
+ * @param line - The warning text.
+ * @returns An error that prints as the line, with no stack frames.
+ */
+function loaderWarning(line: string): Error {
+    // Every line matches: the second branch can match at the first line's end.
+    const header = HEADER.exec(line) as RegExpExecArray;
+    const warning = new Error(line.slice(header[0].length));
+    warning.name = header[1] as string;
+    warning.stack = '';
     return warning;
 }

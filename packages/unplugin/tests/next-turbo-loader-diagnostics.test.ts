@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { SzDiagnosticIssue } from '@csszyx/compiler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { writeDiagnosticPolicyState } from '../src/csszyx-config-file.js';
@@ -99,7 +100,13 @@ function load(
         files?: Record<string, string>;
         state?: boolean;
     } = {},
-): { root: string; emitted: string[]; console: string[]; dependencies: string[] } {
+): {
+    root: string;
+    emitted: string[];
+    warnings: Error[];
+    console: string[];
+    dependencies: string[];
+} {
     const { mode = 'development', env = {}, channel = true, times = 1, files = {} } = run;
     const { root, page } = project(source);
     for (const [name, text] of Object.entries(files)) writeFileSync(join(root, name), text);
@@ -111,6 +118,7 @@ function load(
         runNextPrebuild({ files: [page], explicitRoot: root, cwd: root, ...loaderOptions });
     }
     const emitted: string[] = [];
+    const warnings: Error[] = [];
     const dependencies: string[] = [];
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const context: NextTurboLoaderContext = {
@@ -125,7 +133,12 @@ function load(
         ...(channel
             ? {
                   emitWarning: (warning: Error | string) => {
-                      emitted.push(warning instanceof Error ? warning.message : warning);
+                      if (typeof warning === 'string') {
+                          emitted.push(warning);
+                          return;
+                      }
+                      warnings.push(warning);
+                      emitted.push(asNextPrints(warning));
                   },
               }
             : {}),
@@ -134,16 +147,37 @@ function load(
         expect(nextTurboLoader.call(context, source)).toContain('export const App');
     }
     const lines = warn.mock.calls.map(call => String(call[0])).filter(l => l.includes('[csszyx]'));
-    return { root, emitted, console: lines, dependencies };
+    return { root, emitted, warnings, console: lines, dependencies };
+}
+
+/**
+ * A loader warning as Next 16 prints it: Turbopack's runner hands Next the
+ * error's `name`, `message` and the frames it parses out of `stack`, and Next
+ * prints `name: message`, then each frame as `[at …]` (measured on Next
+ * 16.3.8). A stack line ending in `:line:col` reads as a frame.
+ *
+ * @param warning - What the loader emitted.
+ * @returns The printed text.
+ */
+function asNextPrints(warning: Error): string {
+    const frames = (warning.stack ?? '')
+        .split('\n')
+        .filter(line => /:\d+:\d+\)?$/.test(line))
+        .map(line => `    [at ${line.trim()}]`);
+    return [`${warning.name}: ${warning.message}`, ...frames].join('\n');
 }
 
 describe('Next Turbopack loader diagnostics', () => {
     it('warns once about a replaced key, through the loader channel', () => {
-        const { emitted, console: lines } = load(REPLACED);
+        const { emitted, warnings, console: lines } = load(REPLACED);
         expect(emitted).toHaveLength(1);
-        // The engine's message carries its own header, once.
-        expect(emitted[0]).toMatch(/^\[csszyx\] removed-key: .*src\/App\.tsx:1:\d+\n/);
+        // The engine's message carries its own header, once, naming the file
+        // from the project root as the Vite and webpack lanes do.
+        expect(emitted[0]).toMatch(/^\[csszyx\] removed-key: src\/App\.tsx:1:\d+\n/);
         expect(emitted[0].match(/\[csszyx\]/g)).toHaveLength(1);
+        // No line of the stack reads as a frame, so Next echoes nothing.
+        expect(emitted[0]).not.toContain('[at ');
+        expect(warnings[0]?.stack).toBe('');
         expect(emitted[0]).toContain('`ordinal` was replaced');
         expect(emitted[0]).toContain('{ numOrdinal: true }');
         expect(lines).toEqual([]);
@@ -194,13 +228,16 @@ describe('Next Turbopack loader diagnostics', () => {
         const { emitted } = load(REPLACED, { mode: 'production' });
         expect(emitted).toHaveLength(1);
         expect(emitted[0]).toContain('`ordinal` was replaced');
+        // The prebuild lowered the module first and cached it: the loader's
+        // hit names the file as its own run would.
+        expect(emitted[0]).toMatch(/^\[csszyx\] removed-key: src\/App\.tsx:1:\d+\n/);
     }, 60_000);
 
     it('reports an unresolvable spread in production but holds the advisory fallback', () => {
         const production = load(SPREAD, { mode: 'production' });
         expect(production.emitted).toHaveLength(1);
         expect(production.emitted[0]).toMatch(
-            /^\[csszyx\] unresolvable-spread: .*src\/App\.tsx:1:\d+\n/,
+            /^\[csszyx\] unresolvable-spread: src\/App\.tsx:1:\d+\n/,
         );
         expect(production.emitted[0].match(/\[csszyx\]/g)).toHaveLength(1);
 
@@ -209,6 +246,38 @@ describe('Next Turbopack loader diagnostics', () => {
         expect(development.emitted).toHaveLength(2);
         expect(development.emitted.join('\n')).toContain('fallback-nudge: ');
     }, 60_000);
+
+    it('splits each line where Next joins it again, so it prints the line as written', () => {
+        const warnings: Error[] = [];
+        const report = (line: string, issues?: SzDiagnosticIssue[]): void =>
+            reportNextLoaderDiagnostics({
+                diagnostics: [line],
+                issues,
+                resourcePath: '/p/Split.tsx',
+                source: line,
+                mode: 'development',
+                env: {},
+                emitWarning: warning => warnings.push(warning as Error),
+            });
+        report(
+            '[csszyx] numeric-key: /p/Split.tsx:1:1\n  `sz` received a numeric key `0`, and its value is ignored.',
+            [{ code: 'numeric-key', args: { key: '0' }, line: 1, column: 1 } as SzDiagnosticIssue],
+        );
+        report('[csszyx] a line from before the codes');
+        expect(warnings.map(warning => [warning.name, warning.message, warning.stack])).toEqual([
+            [
+                '[csszyx] numeric-key',
+                '/p/Split.tsx:1:1\n  `sz` received a numeric key `0`, and its value is ignored.',
+                '',
+            ],
+            // A line with no code sits under a heading naming its file.
+            ['[csszyx] /p/Split.tsx', '\n  [csszyx] a line from before the codes', ''],
+        ]);
+        expect(warnings.map(warning => asNextPrints(warning))).toEqual([
+            '[csszyx] numeric-key: /p/Split.tsx:1:1\n  `sz` received a numeric key `0`, and its value is ignored.',
+            '[csszyx] /p/Split.tsx: \n  [csszyx] a line from before the codes',
+        ]);
+    });
 
     it('falls back to the console once per module when the runner has no channel', () => {
         // Next compiles one module once per layer it is used in; with no issue
