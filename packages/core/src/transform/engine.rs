@@ -348,10 +348,6 @@ fn transform_static_classes_with_options(
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
 
-    if parsed.panicked {
-        diagnostics.push_issue(issue::parse_error_panicked(None, None), 0);
-    }
-
     // Runtime helper flags for downstream import-injection, mirroring the
     // the JavaScript pipeline pipeline so caches built against one producer stay valid for the
     // other. sz arrays compose through `szcn` (later-wins per property group),
@@ -2820,11 +2816,9 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(
-            lines(&result)[0],
-            r#"parse-error {"form":"summary","errorCount":1}"#
-        );
-        assert!(lines(&result)[1].starts_with(r#"parse-error {"form":"syntax","message":"#));
+        let diagnostics = lines(&result);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].starts_with(r#"parse-error {"form":"syntax","message":"#));
         assert!(result.classes.is_empty());
         assert!(!result.metadata.transformed);
     }
@@ -4047,12 +4041,9 @@ mod tests {
         );
         assert!(!result.metadata.transformed);
         assert!(!result.code.contains("className"));
-        assert!(
-            lines(&result)
-                .iter()
-                .any(|diagnostic| diagnostic.starts_with(r#"parse-error {"form":"summary","#)),
-            "{:?}",
-            lines(&result)
+        assert_eq!(
+            lines(&result),
+            [r#"parse-error {"form":"syntax","message":"Unexpected token"}"#]
         );
     }
 

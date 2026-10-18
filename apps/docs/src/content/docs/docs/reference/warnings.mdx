@@ -1312,7 +1312,7 @@ These are informational and always print to stderr, once.
 | --- |
 | `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` |
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] parse-error: csszyx could not parse this file (syntax errors: {errorCount}).` — help: `fix the syntax errors reported for this file.` — note: `the file is left unchanged.` |
+| `[csszyx] parse-error: {message}` — help: `fix the syntax at this position.` — note: `the file is left unchanged.` One per syntax error, carrying the parser's message at the place it points to. |
 
 <Aside type="note" title="What a parser fallback costs">
 Parse speed, and nothing else. The build lane's two artifacts are one engine

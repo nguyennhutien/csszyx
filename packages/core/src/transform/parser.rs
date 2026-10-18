@@ -173,26 +173,7 @@ pub fn parse_source_shell_with_registries(
         visitor.ast_budget_exceeded
     };
 
-    let errors = parse_errors(&parsed);
-    let mut diagnostics = Diagnostics::default();
-    if !errors.is_empty() || parsed.panicked {
-        // A file the parser rejects contributes nothing (or only fragments) to
-        // the safelist, and unlike the JavaScript engines there is no Babel fallback on
-        // the native path — so make the skip observable. The bundler plugin
-        // promotes this marker to a build warning when the file yielded no
-        // classes, instead of letting the classes die silently under
-        // Tailwind `source(none)`.
-        diagnostics.push_issue(
-            issue::parse_error_summary(None, Some(errors.len() as u64)),
-            errors.first().map_or(0, |(start, _)| *start),
-        );
-    }
-    diagnostics.extend(
-        errors
-            .into_iter()
-            .map(|(start, message)| (issue::parse_error_syntax(Some(&message), None), start))
-            .collect(),
-    );
+    let diagnostics = parse_error_diagnostics(parse_errors(&parsed), parsed.panicked);
     ParsedSourceShell {
         ir,
         diagnostics,
@@ -200,6 +181,36 @@ pub fn parse_source_shell_with_registries(
         ast_budget_exceeded,
         timings,
     }
+}
+
+/// The issues of a file the parser rejected: one per syntax error, carrying
+/// the parser's message at the place it points to.
+///
+/// A file the parser rejects contributes nothing (or only fragments) to the
+/// safelist, and the native path has no fallback parser, so the skip must be
+/// observable: the bundler plugin promotes it to a build warning when the file
+/// yielded no classes, instead of letting them die silently under Tailwind
+/// `source(none)`. The generic summary stands in only for errors that carry no
+/// message, and `panicked` only for a parser that stopped with none at all.
+pub(crate) fn parse_error_diagnostics(errors: Vec<(u32, String)>, panicked: bool) -> Diagnostics {
+    let mut diagnostics = Diagnostics::default();
+    let count = errors.len() as u64;
+    let mut unnamed_at = None;
+    for (start, message) in errors {
+        if message.is_empty() {
+            unnamed_at.get_or_insert(start);
+        } else {
+            diagnostics.push_issue(issue::parse_error_syntax(Some(&message), None), start);
+        }
+    }
+    if diagnostics.is_empty() {
+        if let Some(start) = unnamed_at {
+            diagnostics.push_issue(issue::parse_error_summary(None, Some(count)), start);
+        } else if panicked {
+            diagnostics.push_issue(issue::parse_error_panicked(None, None), 0);
+        }
+    }
+    diagnostics
 }
 
 /// Every parse failure of one parse, each at its first label (the place oxc
@@ -5946,17 +5957,13 @@ mod tests {
 
         assert!(!parsed.panicked, "the fixture must be a recovered parse");
         let issues = parsed.diagnostics.issues();
-        assert!(issues.len() >= 2, "{issues:?}");
-        let summary = format!(r#"{{"form":"summary","errorCount":{}}}"#, issues.len() - 1);
-        assert_eq!(
-            (issues[0].code, issues[0].args.to_json()),
-            (crate::transform::DiagnosticCode::ParseError, summary),
-            "{issues:?}"
-        );
-        assert!(issues[1..].iter().all(|issue| issue
-            .args
-            .to_json()
-            .starts_with(r#"{"form":"syntax","message":"#)));
+        assert!(!issues.is_empty(), "{issues:?}");
+        assert!(issues.iter().all(|issue| issue.code
+            == crate::transform::DiagnosticCode::ParseError
+            && issue
+                .args
+                .to_json()
+                .starts_with(r#"{"form":"syntax","message":"#)));
     }
 
     #[test]
@@ -9214,5 +9221,38 @@ export const C = ({ styles }) => <div sz={styles} />;
         let parts = &parsed.ir.sz_attributes[0].array_parts;
         assert!(parts[0].condition_span.is_some(), "&& IS a guard");
         assert_eq!(parts[0].classes, ["p-8"]);
+    }
+
+    /// One issue per syntax error with its message; the summary only for
+    /// errors with none, and `panicked` only for a parser that stopped with
+    /// no error at all.
+    #[test]
+    fn parse_error_diagnostics_name_each_error_once() {
+        let codes = |errors: Vec<(u32, String)>, panicked: bool| {
+            super::parse_error_diagnostics(errors, panicked)
+                .into_issues()
+                .into_iter()
+                .map(|issue| (issue.start, issue.args.to_json()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            codes(
+                vec![(3, "a".into()), (4, String::new()), (9, "b".into())],
+                true
+            ),
+            [
+                (3, r#"{"form":"syntax","message":"a"}"#.to_string()),
+                (9, r#"{"form":"syntax","message":"b"}"#.to_string()),
+            ]
+        );
+        assert_eq!(
+            codes(vec![(4, String::new()), (7, String::new())], false),
+            [(4, r#"{"form":"summary","errorCount":2}"#.to_string())]
+        );
+        assert_eq!(
+            codes(Vec::new(), true),
+            [(0, r#"{"form":"panicked"}"#.to_string())]
+        );
+        assert!(codes(Vec::new(), false).is_empty());
     }
 }

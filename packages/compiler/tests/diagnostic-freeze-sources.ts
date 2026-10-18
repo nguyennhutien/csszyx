@@ -13,9 +13,9 @@
  * already renders the variant, the entry reuses that source rather than
  * keeping a second copy of it.
  *
- * Most sources render exactly one issue. The exception renders a fixed
- * companion the engine always emits beside the variant: every `parse-error`
- * form comes with the summary line and the oxc message.
+ * Every source renders exactly one issue. A syntax error renders the parser's
+ * message alone: the summary and `panicked` forms stand in only where the
+ * parser gives no message, which no source reaches, so they have no entry.
  *
  * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */
@@ -72,9 +72,9 @@ export const FREEZE_SOURCES: ReadonlyArray<FreezeSource> = [
     shared('ast-budget', 'exceeded'),
     {
         code: 'parse-error',
-        variant: 'panicked',
-        // An error oxc cannot recover from sets its `panicked` flag: no Rust
-        // panic is involved.
+        variant: 'syntax-unrecoverable',
+        // An error oxc cannot recover from sets its `panicked` flag, and still
+        // carries a message: no Rust panic is involved.
         source: `${PARSED}const broken = ;`,
     },
     shared('unsupported-dynamic-sz', 'unsupported'),
@@ -181,13 +181,7 @@ export const FREEZE_SOURCES: ReadonlyArray<FreezeSource> = [
         variant: 'unknown-mode',
         source: 'export const A = () => <div szRecover="ssr" sz={{ p: 4 }} />;',
     },
-    {
-        code: 'parse-error',
-        variant: 'summary',
-        // A recoverable error: summary and oxc message, without `panicked`.
-        source: `${PARSED}return 1;`,
-    },
-    { code: 'parse-error', variant: 'oxc', source: `${PARSED}return 1;` },
+    { code: 'parse-error', variant: 'syntax', source: `${PARSED}return 1;` },
     shared('mangle-vars-hoist-skipped', 'hoist-skipped'),
     {
         code: 'mangle-vars-hoist-skipped',

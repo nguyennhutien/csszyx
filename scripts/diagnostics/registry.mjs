@@ -723,6 +723,7 @@ export const DIAGNOSTICS = [
             prescan: 'fix the syntax error, or check that the file extension matches its contents.',
         },
         note: {
+            syntax: 'the file is left unchanged.',
             summary: 'the file is left unchanged.',
             panicked: 'the file is left unchanged.',
             expression: 'the attribute is left as written, and no class is generated for it.',

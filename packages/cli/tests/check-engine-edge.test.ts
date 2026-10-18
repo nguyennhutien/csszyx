@@ -103,12 +103,12 @@ describe('csszyx check engine edges', () => {
         expect(process.exitCode).toBe(1);
     });
 
-    it('lists a file it could not parse once, by its summary', async () => {
+    it('lists a file it could not parse once, by its first syntax error', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-        // The parser's own lines sit under the summary; only the summary is a finding.
+        // The build log names every syntax error; a broken file is one finding.
         const cwd = projectWith({
             'src/Broken.tsx':
-                'export const A = ({ c }) => <div sz={{ p: c ? 4 : 2 }} />;\nconst broken = ;',
+                'export const A = ({ c }) => <div sz={{ p: c ? 4 : 2 }} />;\nreturn 1;\nreturn 2;',
         });
 
         await check({ cwd, json: true });
@@ -118,7 +118,14 @@ describe('csszyx check engine edges', () => {
             (finding: { kind: string }) => finding.kind === 'parse-error',
         );
         expect(parseErrors).toHaveLength(1);
-        expect(parseErrors[0].args).toMatchObject({ form: 'summary' });
+        expect(parseErrors[0]).toMatchObject({
+            line: 2,
+            column: 1,
+            args: {
+                form: 'syntax',
+                message: "A 'return' statement can only be used within a function body.",
+            },
+        });
     });
 
     it('reads a result without issues as a file with no findings', async () => {

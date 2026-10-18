@@ -151,21 +151,25 @@ interface SzIssue {
 }
 
 /**
- * Engine diagnostics `check` leaves to the build: a fallback whose classes
- * were still collected is the build log's advice about one sz prop, and a
- * parser's own syntax lines sit under the parse-error summary `check` already
- * reports for the file. A fallback whose classes were never collected
- * (`fallback-missing-css`) is listed: those classes have no CSS.
+ * The engine diagnostics of one file that `check` lists. It leaves two to the
+ * build log: a fallback whose classes were still collected, which is advice
+ * about one sz prop, and every syntax error after a file's first, since a file
+ * that does not parse is one finding however many errors it holds. A fallback
+ * whose classes were never collected (`fallback-missing-css`) is listed: those
+ * classes have no CSS.
  *
- * @param issue - The diagnostic.
- * @returns Whether `check` lists it.
+ * @param issues - The diagnostics of one file.
+ * @returns The ones `check` lists, in order.
  */
-function isCheckedIssue(issue: Pick<SzIssue, 'code' | 'args'>): boolean {
-    if (issue.code === 'fallback-nudge') return false;
-    return !(
-        issue.code === 'parse-error' &&
-        (issue.args.form === 'syntax' || issue.args.form === 'panicked')
-    );
+function checkedIssues<T extends Pick<SzIssue, 'code'>>(issues: readonly T[]): T[] {
+    let parseErrorListed = false;
+    return issues.filter(issue => {
+        if (issue.code === 'fallback-nudge') return false;
+        if (issue.code !== 'parse-error') return true;
+        if (parseErrorListed) return false;
+        parseErrorListed = true;
+        return true;
+    });
 }
 
 /**
@@ -816,8 +820,7 @@ async function collectSzDiagnostics(
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
         const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
-        for (const issue of found) {
-            if (!isCheckedIssue(issue)) continue;
+        for (const issue of checkedIssues(found)) {
             issues.push({
                 file: currentFile,
                 message: renderSzDiagnosticBody(issue, SZ_DIAGNOSTIC_COMPUTED_VALUES),

@@ -63,18 +63,8 @@
     },
     {
         "code": "parse-error",
-        "variant": "panicked",
+        "variant": "syntax-unrecoverable",
         "issues": [
-            {
-                "code": "parse-error",
-                "line": 2,
-                "column": 16,
-                "args": {
-                    "form": "summary",
-                    "errorCount": 1
-                },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
-            },
             {
                 "code": "parse-error",
                 "line": 2,
@@ -83,16 +73,7 @@
                     "form": "syntax",
                     "message": "Unexpected token"
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  Unexpected token\n  help: fix the syntax at this position.\n  docs: https://csszyx.com/e/parse-error"
-            },
-            {
-                "code": "parse-error",
-                "line": 1,
-                "column": 1,
-                "args": {
-                    "form": "panicked"
-                },
-                "text": "[csszyx] parse-error: src/freeze.tsx:1:1\n  The parser stopped at a syntax error it could not recover from.\n  help: fix the syntax error reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:16\n  Unexpected token\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             }
         ]
     },
@@ -799,18 +780,8 @@
     },
     {
         "code": "parse-error",
-        "variant": "summary",
+        "variant": "syntax",
         "issues": [
-            {
-                "code": "parse-error",
-                "line": 2,
-                "column": 1,
-                "args": {
-                    "form": "summary",
-                    "errorCount": 1
-                },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
-            },
             {
                 "code": "parse-error",
                 "line": 2,
@@ -819,33 +790,7 @@
                     "form": "syntax",
                     "message": "A 'return' statement can only be used within a function body."
                 },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  A 'return' statement can only be used within a function body.\n  help: fix the syntax at this position.\n  docs: https://csszyx.com/e/parse-error"
-            }
-        ]
-    },
-    {
-        "code": "parse-error",
-        "variant": "oxc",
-        "issues": [
-            {
-                "code": "parse-error",
-                "line": 2,
-                "column": 1,
-                "args": {
-                    "form": "summary",
-                    "errorCount": 1
-                },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  csszyx could not parse this file (syntax errors: 1).\n  help: fix the syntax errors reported for this file.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
-            },
-            {
-                "code": "parse-error",
-                "line": 2,
-                "column": 1,
-                "args": {
-                    "form": "syntax",
-                    "message": "A 'return' statement can only be used within a function body."
-                },
-                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  A 'return' statement can only be used within a function body.\n  help: fix the syntax at this position.\n  docs: https://csszyx.com/e/parse-error"
+                "text": "[csszyx] parse-error: src/freeze.tsx:2:1\n  A 'return' statement can only be used within a function body.\n  help: fix the syntax at this position.\n  note: the file is left unchanged.\n  docs: https://csszyx.com/e/parse-error"
             }
         ]
     },
