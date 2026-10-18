@@ -29,6 +29,9 @@ on:
       - 'pnpm-lock.yaml'
       - 'turbo.json'
       - 'scripts/build-cf-pages.sh'
+      # The registry every /e/<code> page is generated from.
+      - 'scripts/diagnostics/**'
+      - 'scripts/gen-diagnostic-codes.mjs'
       - 'rust-toolchain.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'

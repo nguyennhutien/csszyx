@@ -29,9 +29,11 @@ function positionOf(source: string, index: number): { line: number; column: numb
 
 describe('SZ_DIAGNOSTIC_CODES', () => {
     it('has an engine-diagnosed source for every code the engine renders', () => {
-        expect([...CODE_SOURCES.map(([code]) => code), ...ORACLE_CODES].sort()).toEqual(
-            [...SZ_DIAGNOSTIC_CODES].sort(),
-        );
+        expect(CODE_SOURCES.map(([code]) => code).sort()).toEqual([...SZ_DIAGNOSTIC_CODES].sort());
+    });
+
+    it('leaves the oracle’s ids out of the engine codes', () => {
+        for (const code of ORACLE_CODES) expect(SZ_DIAGNOSTIC_CODES).not.toContain(code);
     });
 });
 

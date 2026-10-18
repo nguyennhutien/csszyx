@@ -51,12 +51,9 @@ describe('the recommended preset', () => {
         expect(policy.levelOf({ rule: 'dead-class', kind: 'prefix-disagreement' })).toBe('error');
     });
 
-    it('reports the merge audit as info and the className vocabulary not at all', () => {
+    it('reports the merge audit as info', () => {
         expect(policy.levelOf({ rule: 'merge-covered-key' })).toBe('info');
         expect(policy.levelOf({ rule: 'merge-covered-class' })).toBe('info');
-        expect(policy.levelOf({ rule: 'custom-class' })).toBe('off');
-        expect(policy.levelOf({ rule: 'unknown-class' })).toBe('off');
-        expect(policy.levelOf({ rule: 'classname-expression-merge' })).toBe('off');
     });
 });
 
@@ -68,8 +65,6 @@ describe('the atomic preset', () => {
         expect(policy.levelOf({ rule: 'sz-diagnostic', kind: 'duplicate-sz' })).toBe('warn');
         expect(policy.levelOf({ rule: 'sz-diagnostic', kind: 'fallback-nudge' })).toBe('warn');
         expect(policy.levelOf({ rule: 'merge-covered-key' })).toBe('warn');
-        expect(policy.levelOf({ rule: 'custom-class' })).toBe('warn');
-        expect(policy.levelOf({ rule: 'classname-expression-merge' })).toBe('info');
         expect(policy.levelOf({ rule: 'sz-diagnostic', kind: 'unknown-key' })).toBe('error');
     });
 });
@@ -143,13 +138,26 @@ describe('the rule id vocabulary', () => {
                 ...SZ_DIAGNOSTIC_PASS_IDS,
                 ...SZ_DIAGNOSTIC_CODES,
                 'prefix-disagreement',
-                'custom-class',
-                'unknown-class',
-                'classname-expression-merge',
+                'unsigned-value',
                 'other',
             ]),
         );
         expect(new Set(SZ_DIAGNOSTIC_RULE_IDS).size).toBe(SZ_DIAGNOSTIC_RULE_IDS.length);
+    });
+
+    it('drops the className vocabulary ids no pass ever reported', () => {
+        // Never in a release: a config naming one gets the unknown-id problem.
+        for (const id of ['custom-class', 'unknown-class', 'classname-expression-merge']) {
+            expect(SZ_DIAGNOSTIC_RULE_IDS).not.toContain(id);
+        }
+        expect(
+            readCsszyxFileConfig({ diagnostics: { rules: { 'custom-class': 'warn' } } }).problems,
+        ).toEqual([
+            expect.objectContaining({
+                severity: 'error',
+                message: expect.stringContaining('`custom-class` is not a rule id'),
+            }),
+        ]);
     });
 });
 

@@ -56,7 +56,7 @@
     "gen:sz-fallback-matrix": "node --import tsx/esm scripts/gen-sz-fallback-matrix.mjs",
     "gen:sz-fallback-matrix:check": "node --import tsx/esm scripts/gen-sz-fallback-matrix.mjs --check",
     "gen:diagnostic-codes": "node scripts/gen-diagnostic-codes.mjs",
-    "gen:diagnostic-codes:check": "node scripts/gen-diagnostic-codes.mjs --check",
+    "gen:diagnostic-codes:check": "node --test scripts/gen-diagnostic-codes.test.mjs scripts/check-diagnostic-pages.test.mjs && node scripts/gen-diagnostic-codes.mjs --check",
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
     "check:tailwind-versions": "node --import tsx/esm --test scripts/check-tailwind-versions.test.mjs && node --import tsx/esm scripts/check-tailwind-versions.mjs",
     "check:tracked-symlinks": "node --test scripts/validate-tracked-symlinks.test.mjs && node scripts/validate-tracked-symlinks.mjs",
