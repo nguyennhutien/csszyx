@@ -1183,7 +1183,7 @@ fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnos
 fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
         let bare = super::lower::bare_closed_enum_class(key, value);
-        if let Some((group_key, group_value)) = sibling_group_of(key, &bare) {
+        if let Some((group_key, group_value)) = super::lower::sibling_group_of(key, &bare) {
             let issue = issue::closed_enum_value_sibling_group(
                 key,
                 value,
@@ -1230,27 +1230,6 @@ fn push_color_slash_opacity_diagnostics(
         );
         out.push_issue(issue, *offset);
     }
-}
-
-/// The group key and value whose class a stand-alone key's stray value emits:
-/// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
-/// Mirrors `siblingGroupOf` in the TypeScript core.
-///
-/// Returns the group key and the value to write on it; `true` for a boolean
-/// group, written bare.
-fn sibling_group_of(key: &str, bare: &str) -> Option<(&'static str, &'static str)> {
-    let groups = super::generated::tables::global_keyword_groups(key)?;
-    groups.split(' ').find_map(|group| {
-        let values = super::generated::tables::closed_enum_values(group).unwrap_or_default();
-        values
-            .split(", ")
-            .find(|value| super::generated::tables::closed_enum_class(group, value) == Some(bare))
-            .map(|value| (group, value))
-            .or_else(|| {
-                (super::generated::tables::boolean_class(group) == Some(bare))
-                    .then_some((group, "true"))
-            })
-    })
 }
 
 /// Advisory for an element carrying both `sz` and a non-literal `className`.
@@ -4738,14 +4717,33 @@ mod tests {
         }
     }
 
+    /// A group's value written on the stand-alone key is named as that
+    /// group's value even where a later group replaces it: layering it would
+    /// keep the same wrong key.
     #[test]
-    fn a_stand_alone_keyword_before_its_group_is_named() {
-        let (classes, diagnostics) =
-            layers_run("{ contain: 'strict', containPaint: true, contain: 'size' }");
+    fn a_group_value_before_a_group_is_named_as_the_group_value() {
+        let (classes, diagnostics) = layers_run("{ contain: 'size!', containPaint: true }");
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"size","group":"containPaint"}"#]
+            [concat!(
+                r#"closed-enum-value {"form":"sibling-group","key":"contain","value":"size","#,
+                r#""groupKey":"containSize","groupValue":"size"}"#
+            )]
+        );
+        let (classes, diagnostics) = layers_run("{ containSize: 'size', containPaint: true }");
+        assert_eq!(classes, "contain-size contain-paint");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn a_stand_alone_keyword_before_its_group_is_named() {
+        let (classes, diagnostics) =
+            layers_run("{ contain: 'strict', containPaint: true, contain: 'none' }");
+        assert_eq!(classes, "contain-paint");
+        assert_eq!(
+            diagnostics,
+            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
         );
         let (classes, diagnostics) =
             layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
@@ -4850,11 +4848,11 @@ mod tests {
             });
             (result.classes.join(" "), lines(&result))
         };
-        let (classes, diagnostics) = run("contain: 'strict', containPaint: true, contain: 'size'");
+        let (classes, diagnostics) = run("contain: 'strict', containPaint: true, contain: 'none'");
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"size","group":"containPaint"}"#]
+            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
         );
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
@@ -5091,7 +5089,7 @@ mod tests {
             ),
             (
                 DiagnosticCode::GlobalBeforeGroup,
-                "<div sz={{ contain: 'size', containPaint: true }} />".into(),
+                "<div sz={{ contain: 'strict', containPaint: true }} />".into(),
                 TransformOptions::default(),
             ),
             (

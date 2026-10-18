@@ -372,10 +372,10 @@
                 "column": 35,
                 "args": {
                     "global": "contain",
-                    "value": "size",
+                    "value": "strict",
                     "group": "containPaint"
                 },
-                "text": "[csszyx] global-before-group: src/freeze.tsx:1:35\n  `contain: size` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'size' }]}`.\n  note: a spread such as `{ ...base, contain: 'size' }` keeps the same key order, so it does not fix this.\n  docs: https://csszyx.com/e/global-before-group"
+                "text": "[csszyx] global-before-group: src/freeze.tsx:1:35\n  `contain: strict` comes before `containPaint` in one sz object, so `containPaint` replaces it and the `contain` value styles nothing.\n  help: to override the group, layer it: `sz={[base, { contain: 'strict' }]}`.\n  note: a spread such as `{ ...base, contain: 'strict' }` keeps the same key order, so it does not fix this.\n  docs: https://csszyx.com/e/global-before-group"
             }
         ]
     },
@@ -629,7 +629,7 @@
                     "groupKey": "numFigure",
                     "groupValue": "oldstyle"
                 },
-                "text": "[csszyx] closed-enum-value: src/freeze.tsx:1:35\n  `nums: oldstyle` is not a `nums` value; the class `oldstyle-nums` it emits belongs to `{ numFigure: 'oldstyle' }`.\n  help: write `{ numFigure: 'oldstyle' }`, so it combines with the other groups instead of resetting them.\n  note: `nums` takes one of: normal.\n  docs: https://csszyx.com/e/closed-enum-value"
+                "text": "[csszyx] closed-enum-value: src/freeze.tsx:1:35\n  `nums: oldstyle` is not a `nums` value; its class `oldstyle-nums` belongs to `{ numFigure: 'oldstyle' }`.\n  help: write `{ numFigure: 'oldstyle' }`, so it combines with the other groups instead of resetting them.\n  note: `nums` takes one of: normal.\n  docs: https://csszyx.com/e/closed-enum-value"
             }
         ]
     },

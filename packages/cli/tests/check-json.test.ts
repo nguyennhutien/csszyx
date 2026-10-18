@@ -225,7 +225,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': [
                 "export const A = () => <div sz={{ touchAction: 'pan-y' }} />;",
-                "export const B = () => <div sz={{ contain: 'size', containPaint: true }} />;",
+                "export const B = () => <div sz={{ contain: 'none', containPaint: true }} />;",
             ].join('\n'),
         });
 

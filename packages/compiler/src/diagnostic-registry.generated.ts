@@ -213,7 +213,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": {
-            "sibling-group": "`{key}: {value}` is not a `{key}` value; the class `{bare}` it emits belongs to `{ {groupKey}: {groupLiteral} }`.",
+            "sibling-group": "`{key}: {value}` is not a `{key}` value; its class `{bare}` belongs to `{ {groupKey}: {groupLiteral} }`.",
             "dead": "`{key}: {value}` is not a `{key}` value.",
             "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` generates no CSS.",
             "font-style": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",

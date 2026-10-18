@@ -209,19 +209,19 @@ describe('a stand-alone key written before a group key of its family', () => {
 });
 
 describe('duplicate keys in a .jsx object', () => {
-    // `{ contain: 'strict', containPaint: true, contain: 'size' }` is, in
-    // JavaScript, `{ contain: 'size', containPaint: true }`: the first place,
+    // `{ contain: 'strict', containPaint: true, contain: 'none' }` is, in
+    // JavaScript, `{ contain: 'none', containPaint: true }`: the first place,
     // the last value. The model then lets `containPaint`, written after it,
     // replace `contain`.
     it.each(ENGINES)('%s reads the last value at the first place', (_name, engine) => {
-        const run = jsx(engine, "{ contain: 'strict', containPaint: true, contain: 'size' }");
+        const run = jsx(engine, "{ contain: 'strict', containPaint: true, contain: 'none' }");
         // JSON reads a repeated key as an object literal does.
-        const runtime = JSON.parse('{"contain":"strict","containPaint":true,"contain":"size"}');
+        const runtime = JSON.parse('{"contain":"strict","containPaint":true,"contain":"none"}');
 
-        expect(runtime).toEqual({ contain: 'size', containPaint: true });
+        expect(runtime).toEqual({ contain: 'none', containPaint: true });
         expect(Object.keys(runtime)).toEqual(['contain', 'containPaint']);
         expect(run.className).toBe('contain-paint');
-        expect(run.warnings).toEqual([engineSpread('contain', 'size', 'containPaint', 80)]);
+        expect(run.warnings).toEqual([engineSpread('contain', 'none', 'containPaint', 80)]);
     });
 
     it.each(ENGINES)('%s emits only the last value of a repeated keyword key', (_name, engine) => {
@@ -366,7 +366,7 @@ describe('a value that belongs to a sibling group', () => {
         engineMessage(
             'closed-enum-value',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${key}: ${value}\` is not a \`${key}\` value; the class \`${bare}\` it emits belongs to \`{ ${fix} }\`.`,
+            `\`${key}: ${value}\` is not a \`${key}\` value; its class \`${bare}\` belongs to \`{ ${fix} }\`.`,
             `help: write \`{ ${fix} }\`, so it combines with the other groups instead of resetting them.`,
             `note: \`${key}\` takes one of: ${values}.`,
         );
@@ -422,11 +422,43 @@ describe('a value that belongs to a sibling group', () => {
         ]);
     });
 
-    it.each(ENGINES)('%s does not claim a class the later group replaced', (_name, engine) => {
-        const run = jsx(engine, "{ contain: 'layout', containSize: 'size' }");
+    // Replaced by a later group, the value still belongs to a group of its
+    // own: layering it, as the order report would say, leaves the same wrong
+    // key, so the report names the group key, and claims no emitted class.
+    it.each(ENGINES)(
+        '%s names the group key of a value a later group replaced',
+        (_name, engine) => {
+            const run = jsx(engine, "{ contain: 'layout', containSize: 'size' }");
 
-        expect(run.className).toBe('contain-size');
-        expect(run.warnings).toEqual([engineSpread('contain', 'layout', 'containSize', 41)]);
+            expect(run.className).toBe('contain-size');
+            expect(run.warnings).toEqual([
+                engineSibling(
+                    'contain',
+                    'layout',
+                    'contain-layout',
+                    'containLayout: true',
+                    'none, strict, content',
+                    41,
+                ),
+            ]);
+        },
+    );
+
+    it.each(ENGINES)('%s gives help that compiles clean', (_name, engine) => {
+        const written = jsx(engine, "{ contain: 'size', containPaint: true }");
+        expect(written.result.issues?.map(issue => issue.args)).toEqual([
+            {
+                form: 'sibling-group',
+                key: 'contain',
+                value: 'size',
+                groupKey: 'containSize',
+                groupValue: 'size',
+            },
+        ]);
+
+        const fixed = jsx(engine, "{ containSize: 'size', containPaint: true }");
+        expect(fixed.className).toBe('contain-size contain-paint');
+        expect(fixed.warnings).toEqual([]);
     });
 
     it('runtime names the group key', () => {

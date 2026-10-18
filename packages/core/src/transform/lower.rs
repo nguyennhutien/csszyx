@@ -648,6 +648,12 @@ pub(crate) fn collect_globals_before_groups(
         // Any literal, spelled as JavaScript's `String()` spells it; an object
         // there is a different mistake, which its own report names.
         let value = match &global.value {
+            // Named as the group value it is, by the dead-value pass.
+            StaticSzValue::String(value)
+                if is_stray_group_value(&global.key, value.strip_suffix('!').unwrap_or(value)) =>
+            {
+                continue;
+            }
             StaticSzValue::String(value) => value.clone(),
             StaticSzValue::Number(value) => value.to_string(),
             StaticSzValue::Boolean(value) => value.to_string(),
@@ -716,6 +722,48 @@ pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
     )
 }
 
+/// The group key and value whose class a stand-alone key's stray value emits:
+/// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
+/// Mirrors `siblingGroupOf` in the TypeScript core.
+///
+/// Returns the group key and the value to write on it; `true` for a boolean
+/// group, written bare.
+#[cfg(feature = "native-engine")]
+pub(crate) fn sibling_group_of(key: &str, bare: &str) -> Option<(&'static str, &'static str)> {
+    let groups = super::generated::tables::global_keyword_groups(key)?;
+    groups.split(' ').find_map(|group| {
+        let values = super::generated::tables::closed_enum_values(group).unwrap_or_default();
+        values
+            .split(", ")
+            .find(|value| super::generated::tables::closed_enum_class(group, value) == Some(bare))
+            .map(|value| (group, value))
+            .or_else(|| {
+                (super::generated::tables::boolean_class(group) == Some(bare))
+                    .then_some((group, "true"))
+            })
+    })
+}
+
+/// Whether a stand-alone key's value is no value of its own but the class of
+/// one of its groups: `contain: 'size'` is `{ containSize: 'size' }`.
+///
+/// Such a value is reported as that group's value wherever it stands, and a
+/// group written after it does not make it an order mistake: layering it, as
+/// the order report advises, keeps the same wrong key.
+#[cfg(feature = "native-engine")]
+fn is_stray_group_value(key: &str, value: &str) -> bool {
+    is_dead_enum_value(key, value)
+        && sibling_group_of(key, &bare_closed_enum_class(key, value)).is_some()
+}
+
+/// Whether a closed-enum key takes no such value, even as one moved away.
+#[cfg(feature = "native-engine")]
+fn is_dead_enum_value(key: &str, value: &str) -> bool {
+    super::generated::tables::is_closed_enum_key(key)
+        && super::generated::tables::closed_enum_class(key, value).is_none()
+        && super::generated::tables::closed_enum_value_move(key, value).is_none()
+}
+
 /// Collect closed-enum keys whose value is not in their set, for the diagnostic.
 ///
 /// `display`, `position`, `visibility` and `isolation` spell their value as the
@@ -732,16 +780,20 @@ pub(crate) fn collect_dead_enum_values(
 ) {
     // A value its object settles away is not lowered, so it is not named
     // either, as the runtime does not name it.
-    let settled = settle_global_keywords(object).skipped;
+    let settlement = settle_global_keywords(object);
     for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
-            StaticSzValue::String(value) if !settled.contains(&index) => {
+            StaticSzValue::String(value) => {
                 let base = value.strip_suffix('!').unwrap_or(value);
-                if super::generated::tables::is_closed_enum_key(&property.key)
-                    && super::generated::tables::closed_enum_class(&property.key, base).is_none()
-                    && super::generated::tables::closed_enum_value_move(&property.key, base)
-                        .is_none()
-                {
+                // A stray group value a later group replaced is still named,
+                // since it is that value, not its place, that is wrong.
+                let named = !settlement.skipped.contains(&index)
+                    || (settlement
+                        .replaced
+                        .iter()
+                        .any(|(replaced, _)| std::ptr::eq(*replaced, property))
+                        && is_stray_group_value(&property.key, base));
+                if named && is_dead_enum_value(&property.key, base) {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
             }
@@ -3381,6 +3433,23 @@ mod tests {
             vec![("display", "bogus")],
             "a variant hides nothing: {out:?}"
         );
+    }
+
+    /// A `.jsx` object may write a key twice, and JavaScript keeps the last
+    /// value, so the value it overwrote is never named, even a group's value
+    /// that a later group would have named as stray.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_skips_the_value_a_repeated_key_overwrote() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("contain", StaticSzValue::String("size".to_string())),
+                property("contain", StaticSzValue::String("strict".to_string())),
+            ],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert!(out.is_empty(), "{out:?}");
     }
 
     /// The colour-opacity shape is skipped for BOTH of its reasons at once.
