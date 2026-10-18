@@ -186,3 +186,40 @@ fn szr_disqualified_szv_factory_names_the_config_path() {
     // Line 3, column 44.
     assert_eq!(starts(&result), [175]);
 }
+
+/// The szr report names the argument it could not read, so the `sz` value
+/// that is that szr call gets no nudge; a readable szr argument, or an
+/// unreadable one elsewhere in the file, leaves the nudge for the value.
+#[test]
+fn fallback_golden_szr_as_sz_value() {
+    let result = run("export const A = ({ t }) => <div sz={szr(t(1))} />;");
+    assert_eq!(
+        lines(&result),
+        [r#"fallback-missing-css {"site":"szr","shape":"call","detail":"t","path":""}"#],
+        "code was: {}",
+        result.code
+    );
+    let nudge = r#"fallback-nudge {"site":"sz","shape":"call","detail":"szr","path":""}"#;
+    let missing = r#"fallback-missing-css {"site":"szr","shape":"call","detail":"t","path":""}"#;
+    for (source, expected) in [
+        (
+            "export const A = () => <div sz={szr({ p: 4 })} />;",
+            vec![nudge],
+        ),
+        (
+            "const a = szr(t(1));\nexport const A = () => <div sz={szr({ p: 4 })} />;",
+            vec![missing, nudge],
+        ),
+        (
+            "export const A = () => <div sz={szr({ p: 4 })} />;\nconst a = szr(t(1));",
+            vec![nudge, missing],
+        ),
+    ] {
+        let result = run(source);
+        let mut got = lines(&result);
+        got.sort();
+        let mut want: Vec<String> = expected.iter().map(ToString::to_string).collect();
+        want.sort();
+        assert_eq!(got, want, "{source}");
+    }
+}

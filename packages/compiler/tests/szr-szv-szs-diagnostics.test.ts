@@ -41,6 +41,13 @@ const WARNING_CASES: ReadonlyArray<readonly [string, string, ExpectedFallback]> 
         'export const a = szr(cfg);',
         { site: 'szr', shape: 'identifier', detail: 'cfg', path: '', at: '2:22' },
     ],
+    // The szr report names the argument it could not read; a nudge for the
+    // `sz` value would tell the author to convert the szr call to szv().
+    [
+        'szr call as an sz value',
+        'export const A = ({ t }) => <div sz={szr(t(1))} />;',
+        { site: 'szr', shape: 'call', detail: 't', path: '', at: '2:42' },
+    ],
     [
         'szr member',
         'export const a = szr(cfg.x);',

@@ -629,6 +629,18 @@ fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
         let Some(diagnostic) = &attr.runtime_fallback_diagnostic else {
             continue;
         };
+        // `sz={szr(t(…))}`: the szr report names the argument it could not
+        // read, and a nudge for the same value would advise converting the
+        // szr call itself to szv().
+        if diagnostic.kind == RuntimeFallbackKindIr::Call
+            && diagnostic.detail == "szr"
+            && ir.site_fallbacks.iter().any(|fallback| {
+                fallback.site == super::SzFallbackSiteIr::Szr
+                    && (attr.value_span.start..attr.value_span.end).contains(&fallback.offset)
+            })
+        {
+            continue;
+        }
         let kind = match diagnostic.kind {
             RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
