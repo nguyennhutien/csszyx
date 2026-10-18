@@ -355,7 +355,17 @@ export const SIZE_BUDGETS = [
         // build; 580,859 as this script measures it). The args alone had
         // cost 6,506; the sentences, their position lookups and the fallback
         // reason tables they read were 12,072. ~300 bytes of headroom.
-        maxGzipBytes: 581_200,
+        //
+        // Raised from 581,200 on 2026-10-18: six diagnostic fixes from the
+        // DX review of ADR 0031 cost 1,210 gzip bytes, 580,852 to 582,062 as
+        // this script measures the un-optimized nodejs parser build, same
+        // machine. Most of it is the three `closed-enum-value` forms the
+        // engine now reports, with the alignment tables they read (+484), and
+        // naming a group value before its group as the group's (+407); the
+        // fast path counting a bare `sz` (+200), the dropped family conflict
+        // (+186) and the szr nudge (+90) are the rest, less 157 from one
+        // issue per syntax error and the spread notice alone.
+        maxGzipBytes: 582_400,
     },
 ];
 
