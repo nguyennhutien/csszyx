@@ -7,7 +7,11 @@ import { COMPUTED } from '../../../scripts/diagnostics/registry.mjs';
 import { casingProblems, PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagnostic-codes.mjs';
 import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
 import { SZ_DIAGNOSTIC_COMPUTED } from '../src/diagnostic-registry.generated.js';
-import { renderSzDiagnostic, renderSzDiagnosticBody } from '../src/diagnostic-render.js';
+import {
+    renderSzDiagnostic,
+    renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
+} from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
 import {
     diagnosticPath,
@@ -20,6 +24,47 @@ import { SZ_FALLBACK_KINDS } from '../src/sz-fallback-matrix.js';
 import { MIGRATION_NOTES } from '../src/transform-core.js';
 
 const computed = SZ_DIAGNOSTIC_COMPUTED_VALUES;
+
+describe('renderSzDiagnosticParts', () => {
+    it('returns each part bare, for a sink to lay out', () => {
+        expect(
+            renderSzDiagnosticParts({ code: 'canonical-key', args: { key: 'padding' } }, computed),
+        ).toEqual({
+            text: '`padding` is an alias of `p`, and nothing is emitted for it.',
+            help: 'write `p`.',
+            docs: 'https://csszyx.com/e/canonical-key',
+        });
+        expect(
+            renderSzDiagnosticParts({ code: 'runtime-value', args: { key: 'gridArea' } }, computed),
+        ).toEqual({
+            text: '`gridArea` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.',
+            help: 'name the values with `szv()`, or use `dynamic()` for open-ended data.',
+            note: 'no class or variable is emitted for `gridArea`.',
+            docs: 'https://csszyx.com/e/runtime-value',
+        });
+    });
+
+    it('leaves out a field the code has no template for', () => {
+        const noNote = renderSzDiagnosticParts({ code: 'unresolvable-spread', args: {} }, computed);
+        expect(Object.keys(noNote)).toEqual(['text', 'help', 'docs']);
+        const noHelp = renderSzDiagnosticParts(
+            {
+                code: 'mangle-vars-hoist-skipped',
+                args: { name: '--cz', usageCount: 2, reason: 'no-lca' },
+            },
+            computed,
+        );
+        expect(Object.keys(noHelp)).toEqual(['text', 'note', 'docs']);
+    });
+
+    it('lays the terminal body out from the same parts', () => {
+        const diagnostic = { code: 'runtime-value', args: { key: 'gridArea' } } as const;
+        const { text, help, note } = renderSzDiagnosticParts(diagnostic, computed);
+        expect(renderSzDiagnosticBody(diagnostic, computed)).toBe(
+            `${text}\n  help: ${help}\n  note: ${note}`,
+        );
+    });
+});
 
 describe('renderSzDiagnostic', () => {
     it('heads a site diagnostic with its code and place, and ends with its page', () => {

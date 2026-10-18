@@ -29,8 +29,10 @@ export {
     type RenderableDiagnostic,
     renderSzDiagnostic,
     renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_URL_BASE,
     type SzDiagnosticComputed,
+    type SzDiagnosticParts,
     szDiagnosticPositionOf,
 } from './diagnostic-render.js';
 export { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';

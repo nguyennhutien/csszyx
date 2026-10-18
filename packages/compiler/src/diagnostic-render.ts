@@ -2,7 +2,9 @@
  * The one renderer of the engine's diagnostics (ADR 0031).
  *
  * The engine reports each diagnostic as a code, a byte offset and named args;
- * the sentence is the registry's template, filled here. A message reads:
+ * the sentence is the registry's template, filled here. A sink that lays the
+ * parts out itself reads `renderSzDiagnosticParts`; in a terminal a message
+ * reads:
  *
  * ```text
  * [csszyx] unknown-key: src/App.tsx:12:9
@@ -114,16 +116,33 @@ function fill(
 }
 
 /**
- * The body of a diagnostic: its text, then `help:` and `note:` lines.
+ * A diagnostic's parts, each bare: the sentence, the advice and the note
+ * after their labels, and the code's page. Layout belongs to the sink: the
+ * terminal indents and labels them, `csszyx check --json` and the MCP server
+ * hand them over as fields.
+ */
+export interface SzDiagnosticParts {
+    /** The main sentence. */
+    text: string;
+    /** What to do, as one clause; absent when the code has no advice. */
+    help?: string;
+    /** What happened to the output, as one clause; absent when there is none. */
+    note?: string;
+    /** The code's page: `https://csszyx.com/e/<code>`. */
+    docs: string;
+}
+
+/**
+ * Render a diagnostic's parts from its code's templates.
  *
  * @param diagnostic - The diagnostic.
  * @param computed - The helpers for computed values.
- * @returns The body, its continuation lines indented by two spaces.
+ * @returns The parts; `help` and `note` only when the code has them.
  */
-export function renderSzDiagnosticBody(
+export function renderSzDiagnosticParts(
     diagnostic: Pick<RenderableDiagnostic, 'code' | 'args'>,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
-): string {
+): SzDiagnosticParts {
     const template = specOf(diagnostic.code);
     const args = diagnostic.args as Readonly<Record<string, ArgValue>>;
     const joiners = joinersOf(template);
@@ -134,8 +153,40 @@ export function renderSzDiagnosticBody(
     };
     const help = part('help');
     const note = part('note');
+    return {
+        text: part('text') ?? '',
+        ...(help === undefined ? {} : { help }),
+        ...(note === undefined ? {} : { note }),
+        docs: `${SZ_DIAGNOSTIC_URL_BASE}${diagnostic.code}`,
+    };
+}
+
+/**
+ * The body of a diagnostic as a terminal prints it: its text, then `help:`
+ * and `note:` lines.
+ *
+ * @param diagnostic - The diagnostic.
+ * @param computed - The helpers for computed values.
+ * @returns The body, its continuation lines indented by two spaces.
+ */
+export function renderSzDiagnosticBody(
+    diagnostic: Pick<RenderableDiagnostic, 'code' | 'args'>,
+    computed: Readonly<Record<string, SzDiagnosticComputed>>,
+): string {
+    return terminalBody(renderSzDiagnosticParts(diagnostic, computed));
+}
+
+/**
+ * The terminal layout of a body: the text, then each labelled part, two
+ * spaces in.
+ *
+ * @param parts - The parts.
+ * @returns The body.
+ */
+function terminalBody(parts: SzDiagnosticParts): string {
+    const { text, help, note } = parts;
     return [
-        part('text') ?? '',
+        text,
         ...(help === undefined ? [] : [`help: ${help}`]),
         ...(note === undefined ? [] : [`note: ${note}`]),
     ].join('\n  ');
@@ -187,9 +238,6 @@ export function renderSzDiagnostic(options: {
     const where = whereOf(diagnostic, file);
     const header =
         where === '' ? `[csszyx] ${diagnostic.code}:` : `[csszyx] ${diagnostic.code}: ${where}`;
-    return [
-        header,
-        renderSzDiagnosticBody(diagnostic, computed),
-        `docs: ${SZ_DIAGNOSTIC_URL_BASE}${diagnostic.code}`,
-    ].join('\n  ');
+    const parts = renderSzDiagnosticParts(diagnostic, computed);
+    return [header, terminalBody(parts), `docs: ${parts.docs}`].join('\n  ');
 }

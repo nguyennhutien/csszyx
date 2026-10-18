@@ -1661,8 +1661,11 @@ a commit gate must never give. Separators are normalised first, so a hook that
 hands over `src\App.tsx` on Windows checks that file rather than reporting a
 clean result for a name that exists nowhere.
 
-The JSON document is `{ "version": 1, "findings": [...] }`, one entry per
-finding:
+The JSON document is
+`{ "$schema": "https://csszyx.com/schemas/check-v2.json", "version": 2, "findings": [...] }`,
+one entry per finding. The [schema](https://csszyx.com/schemas/check-v2.json)
+describes every field; validate against it when a later step depends on the
+shape.
 
 ```json
 {
@@ -1671,6 +1674,29 @@ finding:
   "line": 12,
   "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets.",
   "kind": "sibling-keyword",
+  "level": "error"
+}
+```
+
+An `sz-diagnostic` finding carries the main sentence as `message`, and the
+clauses the terminal prints after `help:` and `note:` as `help` and `note`,
+each left out when the diagnostic has none. None of the three holds a line
+break or a label. `column` is 1-based, in UTF-16 code units; `args` holds the
+values the sentence names; `url` is the kind's page.
+
+```json
+{
+  "rule": "sz-diagnostic",
+  "kind": "unknown-key",
+  "file": "src/App.tsx",
+  "line": 1,
+  "column": 35,
+  "message": "`workBreak` is not an sz property.",
+  "help": "write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.",
+  "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility.",
+  "suggestion": "break",
+  "args": { "key": "workBreak", "suggestion": "break" },
+  "url": "https://csszyx.com/e/unknown-key",
   "level": "error"
 }
 ```
@@ -1709,14 +1735,16 @@ every diagnostic its kind, so `other` never comes back for one; it is kept
 only as an id `--rule` still accepts. Every other pass repeats its `rule`,
 but for two kinds of `dead-class`: `unsigned-value`, a dead class whose sign
 the project's Tailwind serves no negative for, and `prefix-disagreement`.
-Runtime fallback notes (`fallback-missing-css`, `fallback-nudge`) and the
-`mangleVars` hoist note (`mangle-vars-hoist-skipped`) are not `check` findings,
-so they never appear here.
+`fallback-missing-css` is listed too: its classes were never collected, so
+they have no CSS. The fallback that still collected its classes
+(`fallback-nudge`) and the `mangleVars` hoist note
+(`mangle-vars-hoist-skipped`) are not `check` findings, so they never appear
+here.
 
 An `unknown-key` finding also carries `suggestion` when one known key is a
 single edit away — two for a key of twelve letters or more — and the prose
-report, the build and the dev server print `Did you mean "{key}"?` under the
-diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
+report, the build and the dev server print ``help: write `{key}` if you meant it``
+under the diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
 suggests its canonical key, so `workBreak` suggests `break`. Nothing is
 rewritten, and a key with no single near match gets no suggestion, so a class a
 project serves with `@utility` is not second-guessed.

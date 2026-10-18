@@ -11,6 +11,8 @@
  * every time it was.
  */
 
+import { stripVTControlCharacters } from 'node:util';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type CheckOptions, check } from '../src/commands/check.js';
@@ -33,6 +35,7 @@ async function jsonFor(
     cwd: string,
     options: Omit<CheckOptions, 'cwd' | 'json'> = {},
 ): Promise<{
+    $schema: string;
     version: number;
     findings: Array<{
         rule: string;
@@ -41,6 +44,8 @@ async function jsonFor(
         line?: number;
         column?: number;
         message: string;
+        help?: string;
+        note?: string;
         args?: Record<string, unknown>;
         url?: string;
         suggestion?: string;
@@ -62,7 +67,9 @@ describe('csszyx check --json', () => {
 
         const report = await jsonFor(cwd);
 
-        expect(report.version).toBe(1);
+        expect(report.version).toBe(2);
+        expect(report.$schema).toBe('https://csszyx.com/schemas/check-v2.json');
+        expect(Object.keys(report)).toEqual(['$schema', 'version', 'findings']);
         expect(report.findings).toEqual([]);
         expect(process.exitCode).toBeUndefined();
     });
@@ -109,22 +116,40 @@ describe('csszyx check --json', () => {
 
         const report = await jsonFor(cwd);
 
-        expect(report.version).toBe(1);
+        expect(report.version).toBe(2);
         const finding = report.findings.find(entry => entry.rule === 'sz-diagnostic');
         // The position, the named values and the page come from the issue the
-        // engine returned; `message` is the body, with no header and no docs line.
-        expect(finding).toMatchObject({
+        // engine returned; `message` is the main sentence alone, and `help`
+        // and `note` are their own fields, with no label and no layout.
+        expect(finding).toEqual({
+            rule: 'sz-diagnostic',
             kind: 'unknown-key',
             file: 'src/App.tsx',
             line: 1,
             column: 35,
+            message: '`nonsenseKey` is not an sz property.',
+            help: "check the spelling; for a custom utility, define it with Tailwind's `@utility`.",
+            note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
             args: { key: 'nonsenseKey' },
             url: 'https://csszyx.com/e/unknown-key',
+            level: 'error',
         });
-        expect(finding?.message).toMatch(/^`nonsenseKey` is not an sz property\.\n/);
-        expect(finding?.message).not.toContain('[csszyx]');
-        expect(finding?.message).not.toContain('docs:');
-        expect(finding?.message).not.toContain('src/App.tsx');
+    });
+
+    it('leaves out `help` and `note` when the code has none', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ padding: 4 }} />;`,
+        });
+
+        const report = await jsonFor(cwd);
+        const finding = report.findings.find(entry => entry.kind === 'canonical-key');
+
+        expect(finding?.message).toBe(
+            '`padding` is an alias of `p`, and nothing is emitted for it.',
+        );
+        expect(finding?.help).toBe('write `p`.');
+        expect(finding).not.toHaveProperty('note');
     });
 
     it('carries a dead class, naming the file that emitted it', async () => {
@@ -337,10 +362,21 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         await check({ cwd });
 
-        const printed = log.mock.calls.flat().join('\n');
-        expect(printed).toMatch(
-            /\n\S* +1:35 unknown-key: `workBreak` is not an sz property\.\n\s+help: write `break` if you meant it;/,
+        // A CI runner gets colours, which close after the last line.
+        const printed = stripVTControlCharacters(log.mock.calls.flat().join('\n'));
+        const lines = printed.split('\n');
+        const at = lines.findIndex(line => line.includes('1:35 unknown-key:'));
+        const [head = '', help = '', note = ''] = lines.slice(at, at + 3);
+        expect(head).toMatch(/^\S* {3}1:35 unknown-key: `workBreak` is not an sz property\.$/);
+        // Each labelled line sits under the place, once: the parts come bare
+        // and the report indents them, so nothing is indented twice.
+        expect(help).toBe(
+            "    help: write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.",
         );
+        expect(note).toBe(
+            '    note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
+        );
+        expect(help.indexOf('help:')).toBe(head.indexOf('1:35'));
         expect(printed).not.toContain('Did you mean');
     });
 

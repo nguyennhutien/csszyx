@@ -9,7 +9,8 @@
         // The corpus suites replay pinned component snapshots from the repo root,
         // outside this package. `inputs` is package-scoped, so without the
         // `$TURBO_ROOT$` entries turbo replays a cached pass over an edited
-        // corpus instead of re-running against it.
+        // corpus instead of re-running against it. The `check --json` schema
+        // test reads the schema the docs site publishes, for the same reason.
         "test": {
             "dependsOn": ["^build", "build"],
             "outputs": ["coverage/**"],
@@ -19,6 +20,7 @@
                 "test/**",
                 "*.config.js",
                 "*.config.ts",
+                "$TURBO_ROOT$/apps/docs/public/schemas/**",
                 "$TURBO_ROOT$/scripts/corpus/**",
                 "$TURBO_ROOT$/scripts/corpus-combo/**"
             ]

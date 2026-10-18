@@ -76,6 +76,8 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`mergeClassAttributes` removed](#the-adapters-read-templates-with-vues-and-sveltes-parsers) | an import that no longer resolves | `tsc`, the bundler | you |
 | [A template string without `${}`](#a-template-string-without-a-substitution-is-static) | `` { p: `4` } `` emits `p-4` | your snapshots | nothing |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
+| [`check --json` version 2](#check---json-writes-version-2-with-help-and-note-as-fields) | `"version": 2`; `message` holds no `help:` line | your CI parser | you |
+| [MCP `csszyx_validate` fields](#check---json-writes-version-2-with-help-and-note-as-fields) | each warning is an object, not a string | your MCP client | you |
 | [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
 | [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
@@ -927,6 +929,41 @@ csszyx check --ignore-rule parse-error --ignore-rule ast-budget
 
 `--rule other` is still accepted. The full list is under
 [Running it in CI](/docs/reference/warnings/#running-it-in-ci).
+
+## check --json writes version 2, with help and note as fields
+
+In version 1 an `sz-diagnostic` finding's `message` held the sentence followed
+by the terminal's layout: `"\n  help: …"` and `"\n  note: …"` lines, indented
+for a terminal. A consumer that wanted the advice had to cut the string apart.
+Version 2 hands over the parts:
+
+| Field | Version 1 | Version 2 |
+| --- | --- | --- |
+| `version` | `1` | `2` |
+| `$schema` | absent | `https://csszyx.com/schemas/check-v2.json` |
+| `message` | the sentence, then `help:` and `note:` lines | the main sentence alone |
+| `help` | inside `message` | its own field, without the `help: ` label; absent when there is none |
+| `note` | inside `message` | its own field, without the `note: ` label; absent when there is none |
+
+`rule`, `kind`, `file`, `line`, `column`, `suggestion`, `args`, `url` and
+`level` are unchanged. A finding of any other pass never had `help` or `note`,
+so only its `version` changes. The human report prints what it printed before.
+
+**The edit.** Read `help` and `note` where you split `message`, and accept
+`version: 2`:
+
+```js
+// before
+const [sentence, ...rest] = finding.message.split('\n');
+// after
+const { message: sentence, help, note } = finding;
+```
+
+The MCP server's `csszyx_validate` tool changed the same way. Each entry of
+`warnings` was a rendered message string; it is now an object with `code`,
+`message`, `help`, `note` and `url`. An entry of `errors` that the engine
+explains carries the same fields beside `key`, one entry per diagnostic, where
+it used to join the rendered messages into `message`.
 
 ## csszyx.config sets how loudly each finding is reported
 

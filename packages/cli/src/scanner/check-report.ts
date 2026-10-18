@@ -46,8 +46,12 @@ export interface CheckFinding {
     line?: number;
     /** 1-based column in UTF-16 code units, when the finding has a site. */
     column?: number;
-    /** What happened, in one sentence, with its `help:` and `note:` lines. */
+    /** What happened, in one sentence: the main sentence alone, with no layout. */
     message: string;
+    /** For an `sz-diagnostic` finding, what to do, as the clause after `help:`. */
+    help?: string;
+    /** For an `sz-diagnostic` finding, what happened to the output, after `note:`. */
+    note?: string;
     /**
      * For an `unknown-key` finding, the known key it most likely misspells.
      * The same value as `args.suggestion`, kept where version 1 put it.
@@ -69,10 +73,22 @@ export interface CheckFinding {
 export type FindingInput = Omit<CheckFinding, 'kind' | 'level'> &
     Partial<Pick<CheckFinding, 'kind'>>;
 
-/** The document `--json` writes. */
+/** Where the JSON Schema of the document `--json` writes is published. */
+export const CHECK_REPORT_SCHEMA = 'https://csszyx.com/schemas/check-v2.json';
+
+/**
+ * The document `--json` writes.
+ *
+ * Version 2 split an `sz-diagnostic` finding's `message` into the main
+ * sentence, `help` and `note`: in version 1 the message held the terminal's
+ * `\n  help:` layout, and a consumer had to cut it apart by a rule written
+ * nowhere.
+ */
 export interface CheckReport {
+    /** The JSON Schema this document follows. */
+    $schema: typeof CHECK_REPORT_SCHEMA;
     /** Bumped when a consumer would have to change to keep reading this. */
-    version: 1;
+    version: 2;
     findings: CheckFinding[];
 }
 
@@ -152,6 +168,10 @@ export function createReporter(
  * @returns The document, ready to print.
  */
 export function renderJsonReport(reporter: Reporter): string {
-    const report: CheckReport = { version: 1, findings: [...reporter.findings] };
+    const report: CheckReport = {
+        $schema: CHECK_REPORT_SCHEMA,
+        version: 2,
+        findings: [...reporter.findings],
+    };
     return JSON.stringify(report, null, 2);
 }

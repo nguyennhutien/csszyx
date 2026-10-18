@@ -9,6 +9,10 @@
  * every call — the console warnings the runtime transform prints are deduped
  * per process and muted in production, and are not read.
  *
+ * Each engine diagnostic comes as its parts — `code`, the main sentence as
+ * `message`, `help`, `note` and `url` — the same fields `csszyx check --json`
+ * writes, so a caller reads advice without cutting a terminal layout apart.
+ *
  * Example: { padding: 4 } → error "Unknown prop 'padding'. Use 'p' instead."
  */
 
@@ -19,8 +23,10 @@ import {
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
     REPLACED_KEYS,
-    renderUnplacedDiagnostic,
+    renderSzDiagnosticParts,
     SUGGESTION_MAP,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    type SzDiagnosticCode,
     type SzDiagnosticIssue,
     type SzObject,
     transform,
@@ -40,8 +46,25 @@ export const validateSchema = z.object({
 /** Validated input type for the csszyx_validate tool. */
 export type ValidateInput = z.infer<typeof validateSchema>;
 
-/** A single validation error for an sz prop key. */
-interface ValidationError {
+/** One engine diagnostic, as its parts. */
+interface ToolDiagnostic {
+    /** The diagnostic id. */
+    code: SzDiagnosticCode;
+    /** The main sentence. */
+    message: string;
+    /** What to do, when the code says. */
+    help?: string;
+    /** What happened to the output, when the code says. */
+    note?: string;
+    /** The code's page. */
+    url: string;
+}
+
+/**
+ * A single validation error for an sz prop key: the key check's own message,
+ * or the engine diagnostic that explains why the entry emits nothing.
+ */
+interface ValidationError extends Partial<Omit<ToolDiagnostic, 'message'>> {
     key: string;
     message: string;
     suggestion?: string;
@@ -151,6 +174,22 @@ function nest(leaf: Leaf): Record<string, unknown> {
 }
 
 /**
+ * One engine diagnostic as its parts, with no place: the module it was
+ * lowered in is this tool's own.
+ *
+ * @param issue The diagnostic.
+ * @returns Its parts.
+ */
+function toolDiagnostic(issue: SzDiagnosticIssue): ToolDiagnostic {
+    const { text, help, note, docs } = renderSzDiagnosticParts(
+        issue,
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    );
+    // An absent part stays `undefined`, which the JSON leaves out.
+    return { code: issue.code, message: text, help, note, url: docs };
+}
+
+/**
  * The engine's diagnostics for an sz object, location removed.
  *
  * JSON is a JavaScript expression, so the object goes into the source with
@@ -161,12 +200,12 @@ function nest(leaf: Leaf): Record<string, unknown> {
  * @param sz The object to compile.
  * @returns The diagnostics.
  */
-function engineDiagnostics(sz: Record<string, unknown>): string[] {
+function engineDiagnostics(sz: Record<string, unknown>): ToolDiagnostic[] {
     try {
         const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
         // Both engine artifacts always report the issue list.
         const { issues } = transformSource(source, PREVIEW_FILE);
-        return (issues as SzDiagnosticIssue[]).map(renderUnplacedDiagnostic);
+        return (issues as SzDiagnosticIssue[]).map(toolDiagnostic);
     } catch {
         return [];
     }
@@ -206,31 +245,33 @@ function emitsNoClass(leaf: Leaf): boolean {
 }
 
 /**
- * File one entry's diagnostics: an entry that emits nothing is an error, and
- * an entry the key check already rejected keeps its error, with the
- * compiler's note in place of "unknown key" when the key was removed.
+ * File one entry's diagnostics: an entry that emits nothing is an error, one
+ * per diagnostic, and an entry the key check already rejected keeps its
+ * error, replaced by the compiler's diagnostics in place of "unknown key"
+ * when the key was removed.
  *
  * @param key The entry's dotted path.
- * @param diagnostics The engine's messages for it.
+ * @param diagnostics The engine's diagnostics for it.
  * @param emitsNothing Whether it emits no class.
  * @param errors Key-level errors so far, mutated in place.
- * @returns Whether the messages now belong to an error, not a warning.
+ * @returns Whether the diagnostics now belong to an error, not a warning.
  */
 function recordEntryDiagnostics(
     key: string,
-    diagnostics: string[],
+    diagnostics: ToolDiagnostic[],
     emitsNothing: boolean,
     errors: ValidationError[],
 ): boolean {
-    const existing = errors.find(error => error.key === key);
-    if (existing) {
-        if (emitsNothing && existing.message.endsWith(UNKNOWN_KEY)) {
-            existing.message = diagnostics.join('\n');
+    const keyed = diagnostics.map(diagnostic => ({ key, ...diagnostic }));
+    const existing = errors.findIndex(error => error.key === key);
+    if (existing !== -1) {
+        if (emitsNothing && (errors[existing] as ValidationError).message.endsWith(UNKNOWN_KEY)) {
+            errors.splice(existing, 1, ...keyed);
         }
         return true;
     }
     if (!emitsNothing) return false;
-    errors.push({ key, message: diagnostics.join('\n') });
+    errors.push(...keyed);
     return true;
 }
 
@@ -241,9 +282,10 @@ function recordEntryDiagnostics(
  * @param errors Key-level errors so far, mutated in place.
  * @returns The warnings.
  */
-function diagnoseEntries(sz: Record<string, unknown>, errors: ValidationError[]): string[] {
+function diagnoseEntries(sz: Record<string, unknown>, errors: ValidationError[]): ToolDiagnostic[] {
+    // A diagnostic is compared by its parts, as one string.
     const errorMessages = new Set<string>();
-    const warnings: string[] = [];
+    const warnings = new Map<string, ToolDiagnostic>();
     for (const leaf of leaves(sz)) {
         const diagnostics = engineDiagnostics(nest(leaf));
         if (diagnostics.length === 0) continue;
@@ -253,14 +295,17 @@ function diagnoseEntries(sz: Record<string, unknown>, errors: ValidationError[])
             emitsNoClass(leaf),
             errors,
         );
-        if (recorded) for (const message of diagnostics) errorMessages.add(message);
+        if (recorded) {
+            for (const diagnostic of diagnostics) errorMessages.add(JSON.stringify(diagnostic));
+        }
     }
     // Diagnostics about the object as a whole (a stand-alone key beside its
     // groups) belong to no one entry, so they are read off the full object.
-    for (const message of engineDiagnostics(sz)) {
-        if (!errorMessages.has(message) && !warnings.includes(message)) warnings.push(message);
+    for (const diagnostic of engineDiagnostics(sz)) {
+        const id = JSON.stringify(diagnostic);
+        if (!errorMessages.has(id)) warnings.set(id, diagnostic);
     }
-    return warnings;
+    return [...warnings.values()];
 }
 
 /**

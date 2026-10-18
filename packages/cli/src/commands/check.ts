@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-    renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_URL_BASE,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
@@ -142,8 +142,12 @@ interface ClassifiedIssue extends SzIssue {
 /** One captured sz diagnostic, with the project-relative file it came from. */
 interface SzIssue {
     file: string;
-    /** The sentence, with its `help:` and `note:` lines, and no header. */
+    /** The main sentence, with no header. */
     message: string;
+    /** The clause after `help:`, when the code has one. */
+    help?: string;
+    /** The clause after `note:`, when the code has one. */
+    note?: string;
     code: SzDiagnosticCode;
     args: Readonly<Record<string, unknown>>;
     line?: number;
@@ -703,14 +707,17 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
  * @returns The finding, its suggestion mirrored where version 1 put it.
  */
 function findingOf(issue: ClassifiedIssue): FindingInput {
-    const { file, message, kind, args, line, column } = issue;
+    const { file, message, help, note, kind, args, line, column } = issue;
     const suggestion = typeof args.suggestion === 'string' ? args.suggestion : undefined;
     return {
         rule: 'sz-diagnostic',
         kind,
         file,
         ...(line === undefined ? {} : { line, column }),
+        // An absent part stays `undefined`, which the JSON leaves out.
         message,
+        help,
+        note,
         ...(suggestion === undefined ? {} : { suggestion }),
         args,
         url: `${SZ_DIAGNOSTIC_URL_BASE}${kind}`,
@@ -718,19 +725,41 @@ function findingOf(issue: ClassifiedIssue): FindingInput {
 }
 
 /**
+ * How far a labelled line of the prose report sits in: under the place, past
+ * the reporter's icon and the two spaces the first line starts with.
+ */
+const CONTINUATION = '    ';
+
+/**
  * One captured diagnostic as a line of the prose report.
  *
  * An error reads as it always has; a quieter level says so, since it is the
- * reason the run can still pass.
+ * reason the run can still pass. The parts arrive bare, so the report lays
+ * out its own `help:` and `note:` lines, each indented once.
  *
  * @param issue - The diagnostic.
  * @param level - The level the project gives it.
- * @returns The line, its continuation lines indented under it.
+ * @returns The line, its labelled lines under the place.
  */
 function issueLine(issue: ClassifiedIssue, level: SzDiagnosticLevel): string {
     const where = issue.line === undefined ? '' : `${issue.line}:${issue.column} `;
     const tag = level === 'error' ? '' : `(${level}) `;
-    return `  ${where}${tag}${issue.kind}: ${issue.message.split('\n').join('\n  ')}`;
+    return [
+        `  ${where}${tag}${issue.kind}: ${issue.message}`,
+        ...labelled('help', issue.help),
+        ...labelled('note', issue.note),
+    ].join('\n');
+}
+
+/**
+ * One labelled line of the prose report, or none when the part is absent.
+ *
+ * @param label - The label.
+ * @param value - The part.
+ * @returns The line, in a list of its own.
+ */
+function labelled(label: 'help' | 'note', value: string | undefined): string[] {
+    return value === undefined ? [] : [`${CONTINUATION}${label}: ${value}`];
 }
 
 /**
@@ -821,9 +850,15 @@ async function collectSzDiagnostics(
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
         const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
         for (const issue of checkedIssues(found)) {
+            const { text, help, note } = renderSzDiagnosticParts(
+                issue,
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            );
             issues.push({
                 file: currentFile,
-                message: renderSzDiagnosticBody(issue, SZ_DIAGNOSTIC_COMPUTED_VALUES),
+                message: text,
+                help,
+                note,
                 code: issue.code,
                 args: issue.args as Readonly<Record<string, unknown>>,
                 // A file-wide diagnostic sits at offset 0, which is not a line 1.
