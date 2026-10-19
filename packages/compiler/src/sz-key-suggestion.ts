@@ -48,7 +48,9 @@ export function nearestName(
         // unchanged and keeps a long generated key from costing a full row
         // per candidate.
         if (Math.abs(name.length - key.length) > maxDistance) continue;
-        const distance = editDistance(lower, name.toLowerCase());
+        // Bounded by the best so far: a name that cannot beat it, or tie it,
+        // within budget is settled as soon as its rows say so.
+        const distance = editDistance(lower, name.toLowerCase(), Math.min(best, maxDistance));
         if (distance < best) {
             best = distance;
             targets.clear();
@@ -61,13 +63,19 @@ export function nearestName(
 }
 
 /**
- * Optimal string alignment distance: Levenshtein plus adjacent transpositions.
+ * Optimal string alignment distance: Levenshtein plus adjacent transpositions,
+ * given up once it is known to exceed a bound.
+ *
+ * A cell is never below the smallest cell of the row above it (a
+ * transposition from two rows back is matched by the diagonal through the row
+ * between), so once a whole row is past the bound the distance is too.
  *
  * @param a - First string.
  * @param b - Second string.
- * @returns The number of edits between them.
+ * @param bound - The largest distance the caller can use.
+ * @returns The number of edits between them, or `bound + 1` when it is larger.
  */
-function editDistance(a: string, b: string): number {
+function editDistance(a: string, b: string, bound: number): number {
     // Three rows, because a transposition looks two rows back.
     let twoBack: number[] = [];
     let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
@@ -84,6 +92,7 @@ function editDistance(a: string, b: string): number {
             }
             current.push(distance);
         }
+        if (Math.min(...current) > bound) return bound + 1;
         twoBack = previous;
         previous = current;
     }
@@ -136,6 +145,19 @@ function knownSzKeyNames(): ReadonlyArray<readonly [string, string]> {
  * suggestSzKey('workBreak'); // 'break'
  */
 export function suggestSzKey(key: string): string | null {
+    const known = suggestions.get(key);
+    if (known !== undefined) return known;
     const maxDistance = Math.min(key.length >= 12 ? 2 : 1, Math.floor(key.length / 3));
-    return nearestName(key, knownSzKeyNames(), maxDistance);
+    const suggestion = nearestName(key, knownSzKeyNames(), maxDistance);
+    // A build reports one typo in every file that repeats it; the answer is
+    // the same each time. Bounded, so a long dev session cannot grow it.
+    if (suggestions.size >= SUGGESTION_MEMO_LIMIT) suggestions.clear();
+    suggestions.set(key, suggestion);
+    return suggestion;
 }
+
+/** How many answers {@link suggestSzKey} keeps before it starts again. */
+const SUGGESTION_MEMO_LIMIT = 4096;
+
+/** The answers {@link suggestSzKey} has given, by key. */
+const suggestions = new Map<string, string | null>();
