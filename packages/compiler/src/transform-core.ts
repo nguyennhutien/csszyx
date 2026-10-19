@@ -7,11 +7,6 @@
  */
 
 import {
-    bareClosedEnumClass,
-    CLOSED_ENUM_CLASSES,
-    CLOSED_ENUM_VALUE_MOVES,
-} from './closed-enum-tables.js';
-import {
     __resetStringColorOpacityWarnings,
     isDroppedSlashOpacity,
     warnStringColorOpacity,
@@ -62,6 +57,20 @@ export {
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+
+// Imported here, below the `export … from` block, on purpose: an app bundle
+// places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
+// at the first import of either, and that has to come after
+// `sz-capabilities.generated.js` (its own chunk, see `tsdown.config.mjs`), so
+// PROPERTY_MAP follows the per-key capability rows that repeat its keys and
+// gzip finds them close by. At the top of the import list, where the import
+// sort puts it, the browser entry measured 136 bytes larger gzipped (16,561
+// against 16,425). `tests/browser-chunk-order.test.ts` holds the order.
+import {
+    bareClosedEnumClass,
+    CLOSED_ENUM_CLASSES,
+    CLOSED_ENUM_VALUE_MOVES,
+} from './closed-enum-tables.js';
 
 /**
  * Represents a value in the sz object.

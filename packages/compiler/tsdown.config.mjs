@@ -47,6 +47,19 @@ export default defineBuild([
     {
         ...shared,
         format: ['esm'],
+        // The per-key capability table in a chunk of its own, so an app bundle
+        // can place it before the key tables' chunk, which the engine entries
+        // share; next to it PROPERTY_MAP gzips smaller, and without the group
+        // the browser entry measured 214 bytes larger (16,639 against 16,425).
+        // The order comes from the imports in `src/transform-core.ts`.
+        outputOptions: {
+            ...shared.outputOptions,
+            codeSplitting: {
+                groups: [
+                    { name: 'sz-capabilities', test: /sz-capabilities\.generated/ },
+                ],
+            },
+        },
         entry: {
             ...RUNTIME_ENTRIES,
             index: 'src/index.ts',
