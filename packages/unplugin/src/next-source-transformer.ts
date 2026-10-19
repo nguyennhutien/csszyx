@@ -1,10 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import type { SourceTransformResult, TransformSourceCodeOptions } from '@csszyx/compiler';
-import {
-    ensureRustTransformAvailable,
-    transformRust,
-    transformWasm,
-} from '@csszyx/compiler/engine';
+import { ensureRustTransformAvailable } from '@csszyx/compiler/engine';
+import { transformRustUnrendered, transformWasmUnrendered } from '@csszyx/compiler/internal';
 import type { ResolvedCrossModuleEntries } from './cross-module-registry.js';
 import { withCrossModuleStatics } from './next-cross-module.js';
 import { normalizePathSeparators } from './path-normalization.js';
@@ -286,12 +283,12 @@ function runNextSourceTransform(
     const compilerOptions = input.compilerOptions;
     if (input.parserMode === 'rust') {
         return {
-            result: transformRust(input.source, filename, compilerOptions),
+            result: transformRustUnrendered(input.source, filename, compilerOptions),
             producer: 'rust',
         };
     }
     return {
-        result: transformWasm(input.source, filename, compilerOptions),
+        result: transformWasmUnrendered(input.source, filename, compilerOptions),
         producer: 'wasm',
     };
 }

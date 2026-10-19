@@ -13,6 +13,8 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { renderEngineDiagnostic } from '@csszyx/compiler/internal';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -32,6 +34,7 @@ import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
 import {
     channelOfLevel,
     codedWarning,
+    hasFindings,
     routeTransformDiagnostics,
     type TransformDiagnosticsInput,
 } from '../src/transform-diagnostics.js';
@@ -818,5 +821,81 @@ describe('where a file emits each class', () => {
         expect([...szClassSites('src/A.tsx', ['p-4'], {})]).toEqual([
             ['p-4', { file: 'src/A.tsx' }],
         ]);
+    });
+});
+
+describe('hasFindings', () => {
+    it('counts a rendered message, or an issue left to render, and nothing else', () => {
+        expect(hasFindings(['[csszyx] x'], undefined)).toBe(true);
+        expect(hasFindings([], [{ code: 'unknown-key' }])).toBe(true);
+        expect(hasFindings([], [])).toBe(false);
+        expect(hasFindings([], undefined)).toBe(false);
+    });
+});
+
+describe('an engine result left unrendered', () => {
+    /**
+     * An unknown key as the unrendered transform reports it: no message, and
+     * no suggestion until something renders it.
+     *
+     * @returns A fresh issue.
+     */
+    function unrenderedIssue() {
+        return { code: 'unknown-key', args: { key: 'workBreak' } as object, line: 3, column: 7 };
+    }
+
+    it('renders a listed finding whole, its suggestion included, as the compiler does', () => {
+        const issue = unrenderedIssue();
+        const routed = route({ issues: [issue], diagnosticFile: 'src/A.tsx' });
+
+        expect(routed.immediate).toEqual([
+            renderEngineDiagnostic(unrenderedIssue() as never, 'src/A.tsx'),
+        ]);
+        expect(routed.immediate[0]).toMatch(
+            /^\[csszyx\] unknown-key: src\/A\.tsx:3:7\n.*\n {2}help: write `break` if you meant it;/,
+        );
+        expect(issue.args).toEqual({ key: 'workBreak', suggestion: 'break' });
+    });
+
+    it('renders against the file it is routed under when the result names none', () => {
+        const routed = route({ issues: [unrenderedIssue()], file: 'src/B.tsx' });
+
+        expect(routed.immediate[0]).toMatch(/^\[csszyx\] unknown-key: src\/B\.tsx:3:7\n/);
+    });
+
+    it('renders nothing it holds back and only counts it', () => {
+        const issue = unrenderedIssue();
+        const routed = route({
+            issues: [issue],
+            diagnosticFile: 'src/A.tsx',
+            holdInfo: true,
+            policy: createDiagnosticPolicy({ rules: { 'unknown-key': 'info' } }),
+        });
+
+        expect(routed).toEqual({ spread: [], immediate: [], advisories: [], heldAdvisories: 1 });
+        expect(issue.args).toEqual({ key: 'workBreak' });
+    });
+
+    it('renders nothing under quiet: true', () => {
+        const issue = unrenderedIssue();
+        const routed = route({ issues: [issue], diagnosticFile: 'src/A.tsx', quiet: 'all' });
+
+        expect(routed).toEqual({ spread: [], immediate: [], advisories: [], heldAdvisories: 0 });
+        expect(issue.args).toEqual({ key: 'workBreak' });
+    });
+
+    it('renders nothing the limiter has already listed, and keys it as the rendered one', () => {
+        const limiter = createDiagnosticLimiter();
+        limiter.version('src/A.tsx', 'one');
+        const rendered = { ...unrenderedIssue(), args: { key: 'workBreak', suggestion: 'break' } };
+        expect(
+            route({ diagnostics: [ENGINE_UNKNOWN], issues: [rendered], limiter }).immediate,
+        ).toHaveLength(1);
+        const issue = unrenderedIssue();
+
+        expect(route({ issues: [issue], diagnosticFile: 'src/A.tsx', limiter }).immediate).toEqual(
+            [],
+        );
+        expect(issue.args).toEqual({ key: 'workBreak' });
     });
 });

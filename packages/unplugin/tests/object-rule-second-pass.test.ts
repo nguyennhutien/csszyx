@@ -9,18 +9,18 @@
  */
 import { join } from 'node:path';
 
-import * as compiler from '@csszyx/compiler/engine';
+import * as compiler from '@csszyx/compiler/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
 import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
-vi.mock('@csszyx/compiler/engine', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
+vi.mock('@csszyx/compiler/internal', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/internal')>();
     return {
         ...actual,
-        transformRust: vi.fn(actual.transformRust),
-        transformWasm: vi.fn(actual.transformWasm),
+        transformRustUnrendered: vi.fn(actual.transformRustUnrendered),
+        transformWasmUnrendered: vi.fn(actual.transformWasmUnrendered),
     };
 });
 
@@ -35,7 +35,7 @@ afterEach(() => {
  * @returns The count across both artifacts.
  */
 function tablePasses(): number {
-    return [compiler.transformRust, compiler.transformWasm]
+    return [compiler.transformRustUnrendered, compiler.transformWasmUnrendered]
         .flatMap(engine => vi.mocked(engine).mock.calls)
         .filter(call => (call[2] as { mergeTable?: unknown } | undefined)?.mergeTable !== undefined)
         .length;

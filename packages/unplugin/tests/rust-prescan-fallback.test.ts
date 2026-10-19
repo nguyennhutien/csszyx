@@ -17,11 +17,12 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@csszyx/compiler/engine', async importOriginal => {
-    const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
+// The build lanes call the unrendered batch.
+vi.mock('@csszyx/compiler/internal', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/internal')>();
     return {
         ...actual,
-        transformRustBatch: () => {
+        transformRustBatchUnrendered: () => {
             throw new Error('simulated batch failure');
         },
     };

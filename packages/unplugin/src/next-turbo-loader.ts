@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import type { SourceTransformResult } from '@csszyx/compiler';
+import { diagnosticFileOf } from '@csszyx/compiler/internal';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     callsSzcn as callsMergeHelper,
@@ -268,6 +269,7 @@ export function runNextTurboLoader(
     reportNextLoaderDiagnostics({
         diagnostics: lowered.diagnostics,
         issues: lowered.issues,
+        diagnosticFile: diagnosticFileOf(lowered),
         root: context.root,
         resourcePath: loaderContext.resourcePath,
         source,

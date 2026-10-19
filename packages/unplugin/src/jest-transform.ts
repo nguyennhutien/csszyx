@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { VERSION as compilerVersion, type SourceTransformResult } from '@csszyx/compiler';
-import { transformSource } from '@csszyx/compiler/engine';
+import { transformSourceUnrendered } from '@csszyx/compiler/internal';
 
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
@@ -60,7 +60,11 @@ import {
 import { normalizePathSeparators } from './path-normalization.js';
 import { syncLaneDiagnosticPolicy } from './sync-lane-policy.js';
 import { restoreCachedSpans } from './transform-cache.js';
-import { type DiagnosticIssue, routeTransformDiagnostics } from './transform-diagnostics.js';
+import {
+    type DiagnosticIssue,
+    hasFindings,
+    routeTransformDiagnostics,
+} from './transform-diagnostics.js';
 
 /** The compiled output and what it needs, as both sources shape it. */
 interface CompiledFile extends NextRuntimeImportUsage {
@@ -68,6 +72,8 @@ interface CompiledFile extends NextRuntimeImportUsage {
     transformed?: unknown;
     diagnostics?: unknown;
     issues?: unknown;
+    /** The path an unrendered issue's header names; absent from a rendered result. */
+    diagnosticFile?: unknown;
     mergeGroups?: unknown;
     mergeOverrides?: unknown;
 }
@@ -626,7 +632,7 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     : mergedWithSettledTable(
                           first,
                           mergeTable =>
-                              transformSource(sourceText, sourcePath, {
+                              transformSourceUnrendered(sourceText, sourcePath, {
                                   classPrefix: prefix,
                                   mergeTable,
                               }),
@@ -643,7 +649,9 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     ),
                 };
             }
-            const first = transformSource(sourceText, sourcePath, { classPrefix: prefix });
+            const first = transformSourceUnrendered(sourceText, sourcePath, {
+                classPrefix: prefix,
+            });
             const result = withTable(first) ?? first;
             report(sourcePath, sourceText, result);
             return {
@@ -717,7 +725,7 @@ interface JestProject {
     report(
         sourcePath: string,
         sourceText: string,
-        result: Pick<CompiledFile, 'diagnostics' | 'issues'>,
+        result: Pick<CompiledFile, 'diagnostics' | 'issues' | 'diagnosticFile'>,
     ): void;
 }
 
@@ -779,19 +787,22 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
             index.find(normalizePathSeparators(sourcePath), sourceText, prefix),
         classPrefix,
         report(sourcePath, sourceText, result) {
-            const { diagnostics, issues } = result;
+            const { diagnostics, issues, diagnosticFile } = result;
             const file = path.relative(root, sourcePath).split(path.sep).join('/');
             // Every version, clean ones too: an undo back to a version that
             // had findings must read as an edit, not as the version already said.
             limiter.version(file, createHash('sha256').update(sourceText).digest('hex'));
-            if (!Array.isArray(diagnostics) || diagnostics.length === 0) return;
+            const messages = Array.isArray(diagnostics) ? diagnostics.map(String) : [];
+            const found = Array.isArray(issues) ? (issues as DiagnosticIssue[]) : undefined;
+            if (!hasFindings(messages, found)) return;
             // A test run is no place for `info`: under jest the runtime path
             // renders the same classes, so advice about how they got there is
             // the bundler's business. `warn` and `error` are what this lane
             // exists to surface.
             const routed = routeTransformDiagnostics({
-                diagnostics: diagnostics.map(String),
-                issues: Array.isArray(issues) ? (issues as DiagnosticIssue[]) : undefined,
+                diagnostics: messages,
+                issues: found,
+                diagnosticFile: typeof diagnosticFile === 'string' ? diagnosticFile : undefined,
                 id: sourcePath,
                 file,
                 quiet: 'off',

@@ -35,6 +35,7 @@ import {
 import { syncLaneDiagnosticPolicy } from './sync-lane-policy.js';
 import {
     type DiagnosticIssue,
+    hasFindings,
     resolveQuietMode,
     routeTransformDiagnostics,
     shouldHoldAdvisories,
@@ -42,10 +43,12 @@ import {
 
 /** What the loader needs to print one run's diagnostics. */
 export interface NextLoaderDiagnosticsInput {
-    /** The engine's diagnostics for the module, in order. */
+    /** The engine's diagnostics for the module, in order; empty when unrendered. */
     diagnostics: readonly string[];
     /** The code and position of each, index-parallel to `diagnostics`. */
     issues?: ReadonlyArray<DiagnosticIssue | undefined>;
+    /** The path an unrendered issue's header names (`diagnosticFile` of the result). */
+    diagnosticFile?: string;
     /** The project root, where the policy state file and `overrides` are read from. */
     root?: string;
     /** The module path, named in every line. */
@@ -134,7 +137,7 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
         file ?? input.resourcePath,
         createHash('sha256').update(input.source).digest('hex'),
     );
-    if (input.diagnostics.length === 0) return;
+    if (!hasFindings(input.diagnostics, input.issues)) return;
     const resolved = root === undefined ? undefined : policyFor(root);
     // Turbopack keeps a module's issues until the loader runs it again, so a
     // module with findings depends on where its levels come from: the file a
@@ -153,6 +156,7 @@ export function reportNextLoaderDiagnostics(input: NextLoaderDiagnosticsInput): 
     const routed = routeTransformDiagnostics({
         diagnostics: input.diagnostics,
         issues: input.issues,
+        diagnosticFile: input.diagnosticFile,
         id: input.resourcePath,
         file,
         quiet,

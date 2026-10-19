@@ -352,6 +352,37 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         expect(unknown?.suggestion).toBe('break');
     });
 
+    it('suggests a key for every unknown key it lists, past any build log cap', async () => {
+        // A build lists ten findings of one id and counts the rest, and renders
+        // only those ten; the check lists all of them, each with its suggestion.
+        const typos: Record<string, string> = {
+            workBreak: 'break',
+            pading: 'p',
+            dispaly: 'display',
+            fontWieght: 'weight',
+            hovr: 'hover',
+            bacgroundColor: 'bg',
+            gpa: 'gap',
+        };
+        const files: Record<string, string> = { 'src/app.css': '@import "tailwindcss";' };
+        for (const [index, key] of [...Object.keys(typos), ...Object.keys(typos)].entries()) {
+            files[`src/F${index}.tsx`] = `export const A = () => <div sz={{ ${key}: 'all' }} />;`;
+        }
+        const cwd = tailwindProject(files);
+
+        const report = await jsonFor(cwd);
+        const unknown = report.findings.filter(entry => entry.kind === 'unknown-key') as Array<{
+            key?: string;
+            args?: { key: string };
+            suggestion?: string;
+        }>;
+
+        expect(unknown).toHaveLength(14);
+        for (const finding of unknown) {
+            expect(finding.suggestion).toBe(typos[finding.args?.key ?? '']);
+        }
+    });
+
     it('prints the suggestion under the diagnostic in the prose report', async () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',

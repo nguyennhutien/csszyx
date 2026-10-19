@@ -210,6 +210,13 @@ describe('Next Turbopack loader diagnostics', () => {
         expect(dependencies).not.toContain(join(root, 'csszyx.config.ts'));
     });
 
+    it('names the key an unknown key misspells, through the loader channel', () => {
+        const { emitted } = load("export const App = () => <p sz={{ workBreak: 'all' }} />;\n");
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0]).toMatch(/^\[csszyx\] unknown-key: src\/App\.tsx:1:\d+\n/);
+        expect(emitted[0]).toContain('help: write `break` if you meant it;');
+    });
+
     it('warns about nothing for a clean source', () => {
         const { emitted, console: lines } = load(CLEAN);
         expect(emitted).toEqual([]);

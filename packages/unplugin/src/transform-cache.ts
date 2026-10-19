@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
 import {
     type CssVariableMangleValue,
     restoreEngineSpans,
@@ -10,6 +9,7 @@ import {
     storeEngineSpans,
     type TokenData,
 } from '@csszyx/compiler';
+import { diagnosticFileOf } from '@csszyx/compiler/internal';
 
 // 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
 // resurrect it as `undefined`, and the injection would then route a file's
@@ -37,7 +37,10 @@ import {
 // class by its file alone on every cache hit.
 // 21: each stored issue keeps its named `args`; a schema-20 entry would replay
 // issues with empty args, and a report reading the key from them gets none.
-const CACHE_SCHEMA_VERSION = 21;
+// 22: the build lanes cache their transform unrendered: no message text, and
+// the path each issue's header names (`diagnosticFile`), so a report renders
+// only what it prints; a schema-21 entry holds the text of every message.
+const CACHE_SCHEMA_VERSION = 22;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -71,6 +74,8 @@ interface SerializedTransformResult {
     diagnostics: string[];
     /** Absent from an entry whose result carried none. */
     issues?: StoredEngineSpans['issues'];
+    /** The path an unrendered issue's header names; absent for a rendered result. */
+    diagnosticFile?: string;
     recoveryTokens: Array<[string, TokenData]>;
     cssVariableMap: Array<[string, CssVariableMangleValue]>;
 }
@@ -417,9 +422,21 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         // Offsets, not positions: see schema 19.
         ...storeEngineSpans(result),
         diagnostics: [...result.diagnostics],
+        ...diagnosticFileField(diagnosticFileOf(result)),
         recoveryTokens: [...result.recoveryTokens],
         cssVariableMap: [...(result.cssVariableMap ?? new Map())],
     };
+}
+
+/**
+ * The `diagnosticFile` field of an entry or a result: present only when its
+ * issues are unrendered.
+ *
+ * @param file - The path, or `undefined` for a rendered result.
+ * @returns The field to spread.
+ */
+function diagnosticFileField(file: string | undefined): { diagnosticFile?: string } {
+    return file === undefined ? {} : { diagnosticFile: file };
 }
 
 /**
@@ -440,6 +457,7 @@ function deserializeResult(
         // An entry from before the field reads as one list of every class.
         ...restoreCachedSpans(result, source),
         diagnostics: [...result.diagnostics],
+        ...diagnosticFileField(result.diagnosticFile),
         recoveryTokens: new Map(result.recoveryTokens),
         cssVariableMap: new Map(result.cssVariableMap ?? []),
     };

@@ -13,7 +13,7 @@
 import path from 'node:path';
 
 import type { SourceTransformResult } from '@csszyx/compiler';
-import { transformSource } from '@csszyx/compiler/engine';
+import { transformSourceUnrendered } from '@csszyx/compiler/internal';
 import type { ContentScanner } from '@csszyx/tailwind-oracle';
 
 import { type MergeSignature, removedByMerge, removedByOverride } from './merge-signature.js';
@@ -81,7 +81,9 @@ export function auditMerges(input: {
     // as the build reads every source before it merges.
     const sources = new SourceHookRegistry(() => input.scanner ?? null);
     const firstPasses = input.files.map(file => {
-        const first = transformSource(file.source, file.path, { classPrefix: input.classPrefix });
+        const first = transformSourceUnrendered(file.source, file.path, {
+            classPrefix: input.classPrefix,
+        });
         sources.readText(file.path, file.source, path.extname(file.path).slice(1));
         sources.readLowered(file.path, first.classes);
         return { file, first };

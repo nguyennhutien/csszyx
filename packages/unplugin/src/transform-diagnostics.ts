@@ -22,8 +22,10 @@ import {
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_URL_BASE,
     type SzDiagnosticCode,
+    type SzDiagnosticIssue,
     szDiagnosticKey,
 } from '@csszyx/compiler';
+import { renderEngineDiagnostic } from '@csszyx/compiler/internal';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 
 import type { DiagnosticLimiter } from './diagnostic-limiter.js';
@@ -161,20 +163,29 @@ export interface DiagnosticIssue {
     column: number;
     /**
      * The values its sentence names. Present on an engine issue, whose
-     * message the compiler rendered whole, header included.
+     * message is rendered whole by the compiler, header included.
      */
     args?: object;
 }
 
 /** One module's diagnostics, and how this run reports them. */
 export interface TransformDiagnosticsInput {
-    /** The engine's diagnostics for the module, in order. */
+    /**
+     * The engine's diagnostics for the module, in order. Empty for a result
+     * of the unrendered transform, whose issues are rendered here, and only
+     * the ones listed.
+     */
     diagnostics: readonly string[];
     /**
      * The code and position of each, index-parallel. A diagnostic without one
      * is a finding of the `sz-diagnostic` pass, of no narrower kind.
      */
     issues?: ReadonlyArray<DiagnosticIssue | undefined>;
+    /**
+     * The path the header of an unrendered issue names, as the compiler gave
+     * it (`diagnosticFile` of the result); {@link file} when absent.
+     */
+    diagnosticFile?: string;
     /** The module identifier the lines name. */
     id: string;
     /** The file relative to the project root, for `overrides` and the dedupe. */
@@ -187,6 +198,21 @@ export interface TransformDiagnosticsInput {
     policy?: DiagnosticPolicy;
     /** The lane's dedupe record and cap; every line is listed when omitted. */
     limiter?: DiagnosticLimiter;
+}
+
+/**
+ * Whether a result reports anything: a rendered message, or an issue left for
+ * the router to render.
+ *
+ * @param diagnostics - The rendered messages; empty for an unrendered result.
+ * @param issues - The issues, when the result carries them.
+ * @returns True when there is something to route.
+ */
+export function hasFindings(
+    diagnostics: readonly unknown[],
+    issues: readonly unknown[] | undefined,
+): boolean {
+    return diagnostics.length > 0 || (issues !== undefined && issues.length > 0);
 }
 
 /** One transform's diagnostics, sorted into the channels a lane prints them on. */
@@ -269,8 +295,12 @@ export function routeTransformDiagnostics(
         advisories: [],
         heldAdvisories: 0,
     };
-    for (const [index, message] of diagnostics.entries()) {
+    // An unrendered result carries issues and no messages; a rendered one,
+    // one message per issue.
+    const count = Math.max(diagnostics.length, issues?.length ?? 0);
+    for (let index = 0; index < count; index++) {
         const issue = issues?.[index];
+        const message = diagnostics[index];
         const kind = issue?.code ?? SZ_DIAGNOSTIC_PASS;
         const level = policy.levelOf({ rule: SZ_DIAGNOSTIC_PASS, kind, file: input.file });
         const channel = channelOfLevel(level, quiet, holdInfo);
@@ -279,16 +309,23 @@ export function routeTransformDiagnostics(
             routed.heldAdvisories++;
             continue;
         }
-        const rendered = issue?.args !== undefined;
-        const key = rendered
+        const coded = issue?.args !== undefined;
+        // The args, never the wording, so a message not rendered yet has the
+        // same key as the one it will render to.
+        const key = coded
             ? szDiagnosticKey({ code: issue.code as SzDiagnosticCode, args: issue.args as never })
-            : message;
+            : (message as string);
         const finding = { id: kind, file, line: issue?.line, column: issue?.column, key };
         if (limiter?.admit(finding) === false) {
             continue;
         }
         const where = issue === undefined ? id : `${id}:${issue.line}:${issue.column}`;
-        pushListedDiagnostic(routed, { kind, level, where, message, coded: rendered });
+        // Rendered only now that it is listed: a build lists a handful of its
+        // findings and counts or drops the rest.
+        const text =
+            message ??
+            renderEngineDiagnostic(issue as SzDiagnosticIssue, input.diagnosticFile ?? file);
+        pushListedDiagnostic(routed, { kind, level, where, message: text, coded });
     }
     return routed;
 }

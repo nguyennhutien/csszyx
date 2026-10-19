@@ -16,11 +16,15 @@ import {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     isWasmTransformAvailable,
-    transformRust,
-    transformRustBatch,
-    transformWasm,
 } from '@csszyx/compiler/engine';
-import { reportTemplateSzDiagnostics, resolveParserMode } from '@csszyx/compiler/internal';
+import {
+    diagnosticFileOf,
+    reportTemplateSzDiagnostics,
+    resolveParserMode,
+    transformRustBatchUnrendered,
+    transformRustUnrendered,
+    transformWasmUnrendered,
+} from '@csszyx/compiler/internal';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
@@ -247,6 +251,7 @@ import {
 import {
     channelOfLevel,
     codedWarning,
+    hasFindings,
     type QuietMode,
     resolveQuietMode,
     routeTransformDiagnostics,
@@ -4296,7 +4301,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // host, so misconfigured environments fail loudly instead of
             // producing output from a lane users were not expecting.
             return {
-                result: transformRust(source, effectiveFilename, compilerOptions),
+                result: transformRustUnrendered(source, effectiveFilename, compilerOptions),
                 cacheable: true,
             };
         }
@@ -4304,7 +4309,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // wasm load failure mid-build is a broken installation, not a reason
         // to switch engines silently.
         return {
-            result: transformWasm(source, effectiveFilename, compilerOptions),
+            result: transformWasmUnrendered(source, effectiveFilename, compilerOptions),
             cacheable: true,
         };
     }
@@ -4495,7 +4500,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         cacheRoot: string,
         results: Map<string, SourceTransformResult>,
     ): void {
-        const batchResults = transformRustBatch(
+        const batchResults = transformRustBatchUnrendered(
             misses.map(file => ({ filename: file.effectiveFilename, source: file.content })),
             compilerOptions,
         );
@@ -6780,7 +6785,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Every version, clean ones too: an undo back to a version that had
         // findings must read as an edit, not as the version already said.
         diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
-        if (result.diagnostics.length === 0) return;
+        if (!hasFindings(result.diagnostics, result.issues)) return;
         // A watch rebuild keeps this module, and with it the levels it was
         // reported at, unless it depends on the files the levels come from:
         // an edit to one lowers it again, and its findings are said again.
@@ -6789,6 +6794,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const routed = routeTransformDiagnostics({
             diagnostics: result.diagnostics,
             issues: result.issues,
+            diagnosticFile: diagnosticFileOf(result),
             id,
             file: relative,
             quiet,
