@@ -37,58 +37,129 @@ type ArgValue = string | number | readonly string[];
 export type SzDiagnosticComputed = (args: Readonly<Record<string, ArgValue>>) => string;
 
 /**
- * How each list arg of an entry joins when its sentence names it.
- *
- * @param spec - The entry.
- * @returns The joiners, by arg.
+ * A template split at its placeholders once: text, then each placeholder's
+ * name followed by the text after it — `[text, name, text, name, text]`.
  */
-function joinersOf(spec: SzDiagnosticTemplate): Readonly<Record<string, string>> {
-    const joiners: Record<string, string> = {};
-    for (const [name, arg] of Object.entries(spec.args)) {
-        if (arg.joiner !== undefined) joiners[name] = arg.joiner;
-    }
-    return joiners;
+type Segments = readonly string[];
+
+/** A field's segments: one list, or one per variant. */
+type CompiledField = Segments | Readonly<Record<string, Segments>>;
+
+/** An entry's fields split into segments, and its list joiners. */
+interface CompiledTemplate {
+    joiners: Readonly<Record<string, string>>;
+    text?: CompiledField;
+    help?: CompiledField;
+    note?: CompiledField;
 }
 
 /**
- * The template of one field for the issue's form.
- *
- * @param text - The field: one template, or one per form.
- * @param form - The issue's form, when its code has forms.
- * @returns The template, or `undefined` when the form has none.
+ * Each entry compiled on its first use, by the entry object itself: the
+ * registry's own, or a copy a bundle carries (the editor extension's).
  */
-function templateFor(
-    text: SzDiagnosticTemplateText | undefined,
-    form: ArgValue | undefined,
-): string | undefined {
-    if (text === undefined || typeof text === 'string') return text;
-    return typeof form === 'string' ? text[form] : undefined;
-}
+const COMPILED = new WeakMap<SzDiagnosticTemplate, CompiledTemplate>();
 
 /**
- * Fill a template in one pass, so an arg that itself holds `{x}` is printed as
- * written and never expanded.
+ * Split a template at its placeholders.
  *
  * @param template - The template.
+ * @returns Its segments.
+ */
+function segmentsOf(template: string): Segments {
+    const segments: string[] = [];
+    let last = 0;
+    // PLACEHOLDER is global, so `matchAll` reads every placeholder in order.
+    for (const match of template.matchAll(PLACEHOLDER)) {
+        segments.push(template.slice(last, match.index), match[1] as string);
+        last = match.index + match[0].length;
+    }
+    segments.push(template.slice(last));
+    return segments;
+}
+
+/**
+ * A field split into segments: one template, or one per variant.
+ *
+ * @param text - The field.
+ * @returns Its segments, or `undefined` when the entry has no such field.
+ */
+function compileField(text: SzDiagnosticTemplateText | undefined): CompiledField | undefined {
+    if (text === undefined) return undefined;
+    if (typeof text === 'string') return segmentsOf(text);
+    const byVariant: Record<string, Segments> = {};
+    for (const [variant, template] of Object.entries(text))
+        byVariant[variant] = segmentsOf(template);
+    return byVariant;
+}
+
+/**
+ * An entry compiled: its fields split, and how each list arg joins.
+ *
+ * @param spec - The entry.
+ * @returns It compiled, once per entry.
+ */
+function compiledOf(spec: SzDiagnosticTemplate): CompiledTemplate {
+    let compiled = COMPILED.get(spec);
+    if (compiled === undefined) {
+        const joiners: Record<string, string> = {};
+        for (const [name, arg] of Object.entries(spec.args)) {
+            if (arg.joiner !== undefined) joiners[name] = arg.joiner;
+        }
+        compiled = {
+            joiners,
+            text: compileField(spec.text),
+            help: compileField(spec.help),
+            note: compileField(spec.note),
+        };
+        COMPILED.set(spec, compiled);
+    }
+    return compiled;
+}
+
+/**
+ * The segments of one field for the issue's form.
+ *
+ * @param field - The field: one list, or one per form.
+ * @param form - The issue's form, when its code has forms.
+ * @returns The segments, or `undefined` when the form has none.
+ */
+function segmentsFor(
+    field: CompiledField | undefined,
+    form: ArgValue | undefined,
+): Segments | undefined {
+    if (field === undefined || Array.isArray(field)) return field as Segments | undefined;
+    return typeof form === 'string'
+        ? (field as Readonly<Record<string, Segments>>)[form]
+        : undefined;
+}
+
+/**
+ * Fill a template's segments in one pass, so an arg that itself holds `{x}`
+ * is printed as written and never expanded.
+ *
+ * @param segments - The template, split.
  * @param args - The issue's args.
  * @param joiners - How each list arg joins.
  * @param computed - The helpers for computed values.
  * @returns The text.
  */
 function fill(
-    template: string,
+    segments: Segments,
     args: Readonly<Record<string, ArgValue>>,
     joiners: Readonly<Record<string, string>>,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): string {
-    // PLACEHOLDER is global, so `replace` fills every placeholder in one pass.
-    return template.replace(PLACEHOLDER, (_: string, name: string) => {
+    let text = segments[0] as string;
+    for (let index = 1; index < segments.length; index += 2) {
+        const name = segments[index] as string;
         const value = args[name];
         // The generator requires every list arg to declare its joiner.
-        if (Array.isArray(value)) return value.join(joiners[name]);
-        if (value !== undefined) return String(value);
-        return computed[name]?.(args) ?? '';
-    });
+        if (Array.isArray(value)) text += value.join(joiners[name]);
+        else if (value !== undefined) text += String(value);
+        else text += computed[name]?.(args) ?? '';
+        text += segments[index + 1] as string;
+    }
+    return text;
 }
 
 /**
@@ -122,11 +193,13 @@ export function fillSzDiagnosticTemplate(
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): SzDiagnosticParts {
     const args = diagnostic.args as Readonly<Record<string, ArgValue>>;
-    const joiners = joinersOf(template);
+    const compiled = compiledOf(template);
     const variant = args[template.variesBy ?? 'form'];
     const part = (field: 'text' | 'help' | 'note'): string | undefined => {
-        const text = templateFor(template[field], variant);
-        return text === undefined ? undefined : fill(text, args, joiners, computed);
+        const segments = segmentsFor(compiled[field], variant);
+        return segments === undefined
+            ? undefined
+            : fill(segments, args, compiled.joiners, computed);
     };
     const help = part('help');
     const note = part('note');

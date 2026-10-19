@@ -109,12 +109,10 @@ export function renderSzDiagnosticBody(
  * @returns The body.
  */
 function terminalBody(parts: SzDiagnosticParts): string {
-    const { text, help, note } = parts;
-    return [
-        text,
-        ...(help === undefined ? [] : [`help: ${help}`]),
-        ...(note === undefined ? [] : [`note: ${note}`]),
-    ].join('\n  ');
+    let body = parts.text;
+    if (parts.help !== undefined) body += `\n  help: ${parts.help}`;
+    if (parts.note !== undefined) body += `\n  note: ${parts.note}`;
+    return body;
 }
 
 /**
@@ -164,5 +162,5 @@ export function renderSzDiagnostic(options: {
     const header =
         where === '' ? `[csszyx] ${diagnostic.code}:` : `[csszyx] ${diagnostic.code}: ${where}`;
     const parts = renderSzDiagnosticParts(diagnostic, computed);
-    return [header, terminalBody(parts), `docs: ${parts.docs}`].join('\n  ');
+    return `${header}\n  ${terminalBody(parts)}\n  docs: ${parts.docs}`;
 }
