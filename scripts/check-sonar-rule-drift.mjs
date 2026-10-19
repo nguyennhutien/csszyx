@@ -73,6 +73,11 @@ const FOREIGN_RULES = new Map([
     ['S9383', '@typescript-eslint/no-floating-promises'],
     ['S7503', 'require-await'],
     ['S9382', 'no-await-in-loop'],
+    // Reported on #387; on the same code the local rules flag the same lines
+    // with the same sentences. Unicorn's rule of that name checks regexes
+    // only, so S6557's `s[0] === 'x'` is typescript-eslint's.
+    ['S6557', '@typescript-eslint/prefer-string-starts-ends-with'],
+    ['S7758', 'unicorn/prefer-code-point'],
 ]);
 
 /**

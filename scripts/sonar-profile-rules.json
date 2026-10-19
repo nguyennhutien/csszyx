@@ -879,6 +879,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6557",
+            "rule": "@typescript-eslint/prefer-string-starts-ends-with",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6564",
             "rule": "sonarjs/redundant-type-aliases",
             "scope": "MAIN"
@@ -926,6 +931,11 @@
         {
             "key": "typescript:S7639",
             "rule": "sonarjs/review-blockchain-mnemonic",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7758",
+            "rule": "unicorn/prefer-code-point",
             "scope": "MAIN"
         },
         {
