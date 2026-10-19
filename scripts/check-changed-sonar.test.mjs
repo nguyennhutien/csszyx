@@ -1,15 +1,21 @@
 // Unit tests for the changed-line Sonar gate.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import {
+    canaryLinter,
     ignoredIssues,
     isIgnored,
     isSonarTest,
     newDiagnostics,
     rulesToRun,
+    TYPED_CANARY,
+    typedCanaryProblem,
+    typescriptCopies,
 } from './check-changed-sonar.mjs';
+import { PROFILE_RULES_FILE } from './check-sonar-rule-drift.mjs';
 
 const PROFILE = {
     format: 1,
@@ -111,5 +117,48 @@ describe('what counts as new', () => {
         const line = 'function a(x: string | number) {';
         const other = finding(1, line, 'sonarjs/deprecation');
         assert.deepEqual(newDiagnostics([finding(1, line), other], [finding(1, line)]), [other]);
+    });
+});
+
+describe('the type-aware profile rules can see types', () => {
+    // sonarjs compares type flags with the `typescript` it loads; a second
+    // copy numbers them differently and the rules go silent (#387).
+    it('loads the same typescript as the parser that builds the program', () => {
+        const copies = typescriptCopies();
+        assert.equal(copies.sonarjs, copies.parser);
+    });
+
+    it('reports the canary, whose rule the profile runs', async () => {
+        const profile = JSON.parse(readFileSync(PROFILE_RULES_FILE, 'utf8'));
+        assert.ok(rulesToRun(profile, false).has(TYPED_CANARY.rule));
+        const eslint = await canaryLinter();
+        const [result] = await eslint.lintText(TYPED_CANARY.source, {
+            filePath: TYPED_CANARY.file,
+        });
+        assert.deepEqual(
+            result.messages.map(message => [message.ruleId, message.line]),
+            [[TYPED_CANARY.rule, 2]],
+        );
+        assert.equal(await typedCanaryProblem(eslint), null);
+    });
+
+    it('says the canary did not parse rather than blame the copies', async () => {
+        const { ESLint } = await import('eslint');
+        // No parser: espree, which cannot read a type annotation.
+        const plain = new ESLint({
+            overrideConfigFile: true,
+            overrideConfig: [{ files: ['**/*.ts'], rules: {} }],
+        });
+        assert.match(
+            (await typedCanaryProblem(plain)) ?? '',
+            /did not parse, so it proves nothing: Parsing error/,
+        );
+    });
+
+    it('fails, naming both copies, when the rules cannot see types', async () => {
+        // No program: what any copy mismatch looks like to the rule.
+        const problem = await typedCanaryProblem(await canaryLinter(null));
+        assert.match(problem ?? '', /did not report a deliberate violation/);
+        assert.ok(problem?.includes(typescriptCopies().parser));
     });
 });
