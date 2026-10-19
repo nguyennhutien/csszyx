@@ -8,6 +8,7 @@ import { casingProblems, PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagno
 import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
 import { SZ_DIAGNOSTIC_COMPUTED } from '../src/diagnostic-registry.generated.js';
 import {
+    isSzDiagnosticId,
     renderSzDiagnostic,
     renderSzDiagnosticBody,
     renderSzDiagnosticParts,
@@ -324,6 +325,26 @@ describe('szDiagnosticKey', () => {
         ).toBe(szDiagnosticKey({ code: 'property-object', args: { key: 'p', nestedKeys: ['x'] } }));
         expect(szDiagnosticKey({ code: 'unknown-key', args: { key: 'a' } })).not.toBe(
             szDiagnosticKey({ code: 'unknown-key', args: { key: 'b' } }),
+        );
+    });
+});
+
+describe('isSzDiagnosticId', () => {
+    it('knows every live id on any surface, and nothing else', () => {
+        expect(isSzDiagnosticId('unknown-key')).toBe(true);
+        expect(isSzDiagnosticId('hydration-aborted')).toBe(true);
+        expect(isSzDiagnosticId('sz-diagnostic')).toBe(false);
+        expect(isSzDiagnosticId('CSSZYX_NATIVE_UNAVAILABLE')).toBe(false);
+    });
+
+    it('renders a template of an id the engine does not report', () => {
+        expect(
+            renderSzDiagnosticBody(
+                { code: 'config-id-not-settable', args: { id: 'internal-error' } },
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            ),
+        ).toMatch(
+            /^`internal-error` is printed to the console or thrown, .*\n {2}help: remove it;/,
         );
     });
 });

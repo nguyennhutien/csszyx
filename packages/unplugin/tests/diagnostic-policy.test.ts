@@ -6,7 +6,11 @@
  * side learned a new id. These pin the presets, the precedence and the
  * validation the config file goes through.
  */
-import { SZ_DIAGNOSTIC_CODES } from '@csszyx/compiler';
+import {
+    renderSzDiagnosticBody,
+    SZ_DIAGNOSTIC_CODES,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+} from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -232,6 +236,35 @@ describe('readCsszyxFileConfig', () => {
         expect(read.config.preset).toBe('recommended');
     });
 
+    it('names an id whose level csszyx.config cannot set, with what rules can set', () => {
+        // A runtime line and a thrown error: real ids, which no level reaches.
+        const read = readCsszyxFileConfig({
+            diagnostics: {
+                rules: { 'hydration-aborted': 'off', 'dead-class': 'warn' },
+                overrides: [{ files: 'src/**', rules: { 'internal-error': 'warn' } }],
+            },
+        });
+        const notSettable = (id: string, path: string) => ({
+            severity: 'error',
+            path,
+            message: renderSzDiagnosticBody(
+                { code: 'config-id-not-settable', args: { id } },
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            ),
+        });
+        expect(read.problems).toEqual([
+            notSettable('hydration-aborted', 'diagnostics.rules'),
+            notSettable('internal-error', 'diagnostics.overrides[0].rules'),
+        ]);
+        expect(read.problems[0]?.message).toBe(
+            '`hydration-aborted` is printed to the console or thrown, so `csszyx.config` sets no level for it.\n' +
+                '  help: remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.',
+        );
+        // The entry is dropped; the rest of the config still applies.
+        expect(read.config.rules).toEqual({ 'dead-class': 'warn' });
+        expect(read.config.overrides[0]?.rules).toEqual({});
+    });
+
     it('names an id with no near match without a guess', () => {
         expect(
             readCsszyxFileConfig({ diagnostics: { rules: { zzzzzz: 'off' } } }).problems,
@@ -421,6 +454,20 @@ describe('diagnosticConfigProblemsMessage', () => {
                 'Each one is ignored; the rest of the file applies.\n' +
                 `  help: ${CONFIG_HELP}`,
         );
+    });
+
+    it("sets a problem's own help line under its bullet", () => {
+        const message = diagnosticConfigProblemsMessage('csszyx.config.ts', [
+            {
+                severity: 'error',
+                path: 'diagnostics.rules',
+                message: '`x` sets nothing.\n  help: remove it.',
+            },
+        ]);
+        expect(message.split('\n').slice(1, 3)).toEqual([
+            '  - (error) diagnostics.rules: `x` sets nothing.',
+            '    help: remove it.',
+        ]);
     });
 
     it('says the whole file was not applied when it did not load, naming the file once', () => {

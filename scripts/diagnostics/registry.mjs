@@ -1635,7 +1635,9 @@ export const DIAGNOSTICS = [
         surfaces: { runtime: { production: false } },
         position: 'file',
         args: { id: STRING },
-        sources: [],
+        text: '`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.',
+        help: 'remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.',
+        sources: [`${POLICY}:336`],
     },
     {
         id: 'removed-rule-id',

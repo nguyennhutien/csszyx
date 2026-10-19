@@ -19,7 +19,7 @@
  * @module diagnostic-render
  */
 
-import type { SzDiagnosticCode } from './diagnostic-codes.generated.js';
+import type { SzDiagnosticCode, SzDiagnosticId } from './diagnostic-codes.generated.js';
 import { PLACEHOLDER } from './diagnostic-placeholder.js';
 import {
     SZ_DIAGNOSTIC_REGISTRY,
@@ -33,13 +33,23 @@ const SPECS: ReadonlyMap<string, SzDiagnosticSpec> = new Map(
 );
 
 /**
- * The registry entry of a code the engine reported.
+ * The registry entry of a live id.
  *
- * @param code - The code.
+ * @param code - The id.
  * @returns Its entry.
  */
-function specOf(code: SzDiagnosticCode): SzDiagnosticSpec {
+function specOf(code: SzDiagnosticId): SzDiagnosticSpec {
     return SPECS.get(code) as SzDiagnosticSpec;
+}
+
+/**
+ * Whether a string is a live diagnostic id, on any surface.
+ *
+ * @param id - Any string, such as an id a user wrote.
+ * @returns True for an id the registry lists as live.
+ */
+export function isSzDiagnosticId(id: string): id is SzDiagnosticId {
+    return SPECS.has(id);
 }
 
 /**
@@ -50,7 +60,7 @@ function specOf(code: SzDiagnosticCode): SzDiagnosticSpec {
  */
 function joinersOf(spec: SzDiagnosticSpec): Readonly<Record<string, string>> {
     const joiners: Record<string, string> = {};
-    // The generator requires every engine id to declare its args.
+    // The generator requires every id with a template to declare its args.
     for (const [name, arg] of Object.entries(spec.args as NonNullable<SzDiagnosticSpec['args']>)) {
         if (arg.joiner !== undefined) joiners[name] = arg.joiner;
     }
@@ -69,6 +79,12 @@ export interface RenderableDiagnostic {
     args: object;
     line?: number;
     column?: number;
+}
+
+/** Any live id with its args: what the template renderer reads. */
+export interface IdentifiedDiagnostic {
+    code: SzDiagnosticId;
+    args: object;
 }
 
 /** A value computed from an issue's args, by a helper over shared data. */
@@ -140,7 +156,7 @@ export interface SzDiagnosticParts {
  * @returns The parts; `help` and `note` only when the code has them.
  */
 export function renderSzDiagnosticParts(
-    diagnostic: Pick<RenderableDiagnostic, 'code' | 'args'>,
+    diagnostic: IdentifiedDiagnostic,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): SzDiagnosticParts {
     const template = specOf(diagnostic.code);
@@ -170,7 +186,7 @@ export function renderSzDiagnosticParts(
  * @returns The body, its continuation lines indented by two spaces.
  */
 export function renderSzDiagnosticBody(
-    diagnostic: Pick<RenderableDiagnostic, 'code' | 'args'>,
+    diagnostic: IdentifiedDiagnostic,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): string {
     return terminalBody(renderSzDiagnosticParts(diagnostic, computed));

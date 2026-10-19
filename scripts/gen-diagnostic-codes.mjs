@@ -218,6 +218,9 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
     }
     if (entry.surfaces?.engine && entry.args === undefined) {
         problems.push(`${at}: an engine id declares its args, \`{}\` for none`);
+    } else if (entry.args === undefined && templatesOf(entry).length > 0) {
+        // The renderer reads the args of every id it fills a template for.
+        problems.push(`${at}: an id with a template declares its args, \`{}\` for none`);
     }
     const args = entry.args ?? {};
     for (const [name, arg] of Object.entries(args)) {

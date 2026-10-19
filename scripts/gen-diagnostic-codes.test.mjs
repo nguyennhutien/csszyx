@@ -220,6 +220,17 @@ test('an engine id has a place and declared args, and a list arg its joiner', ()
     );
 });
 
+test('an id the renderer fills a template for declares its args', () => {
+    const runtime = { surfaces: { runtime: { production: false } }, position: 'none' };
+    assert.match(
+        validateRegistry(
+            registryOf([entry({ ...runtime, args: undefined, text: 'Nothing to name.' })]),
+        ).join('\n'),
+        /an id with a template declares its args/,
+    );
+    assert.deepEqual(validateRegistry(registryOf([entry({ ...runtime, args: undefined })])), []);
+});
+
 test('a template keyed by an arg other than form names that enum arg', () => {
     const base = {
         args: { site: { type: ['enum', 'sz', 'szr'] } },

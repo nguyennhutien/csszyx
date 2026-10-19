@@ -49,7 +49,10 @@
  * @module diagnostic-policy
  */
 import {
+    isSzDiagnosticId,
     nearestName,
+    renderSzDiagnosticBody,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_DEFAULT_LEVELS,
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
@@ -314,6 +317,27 @@ function didYouMean(id: string): string {
 }
 
 /**
+ * Why an id `rules` cannot use sets nothing.
+ *
+ * A live id that only the runtime prints or a call throws is a real id, so
+ * it is named as one whose level cannot be set rather than as a typo:
+ * `rules` reaches the engine's diagnostics and the passes of `csszyx check`
+ * only. Anything else is taken for a misspelling.
+ *
+ * @param id - The id as written.
+ * @returns The problem's message.
+ */
+function unknownIdMessage(id: string): string {
+    if (isSzDiagnosticId(id)) {
+        return renderSzDiagnosticBody(
+            { code: 'config-id-not-settable', args: { id } },
+            SZ_DIAGNOSTIC_COMPUTED_VALUES,
+        );
+    }
+    return `\`${id}\` is not a rule id${didYouMean(id) || '.'}`;
+}
+
+/**
  * Keep the valid entries of a `rules` object, recording each invalid one.
  *
  * @param value - The `rules` value as written.
@@ -334,11 +358,7 @@ function readRules(
     }
     for (const [id, level] of Object.entries(value)) {
         if (!KNOWN_IDS.has(id)) {
-            problems.push({
-                severity: 'error',
-                path: at,
-                message: `\`${id}\` is not a rule id${didYouMean(id) || '.'}`,
-            });
+            problems.push({ severity: 'error', path: at, message: unknownIdMessage(id) });
         } else if (!SZ_DIAGNOSTIC_LEVELS.includes(level as SzDiagnosticLevel)) {
             problems.push({
                 severity: 'error',
@@ -629,11 +649,13 @@ export function diagnosticConfigProblemsMessage(
     problems: readonly DiagnosticConfigProblem[],
 ): string {
     // A problem with the file itself is already named by the header.
-    const lines = problems.map(problem =>
-        problem.path === file
-            ? `  - (${problem.severity}) ${problem.message}`
-            : `  - (${problem.severity}) ${problem.path}: ${problem.message}`,
-    );
+    // A problem's own `help:` line sits under its bullet.
+    const lines = problems.map(problem => {
+        const message = problem.message.replaceAll('\n', '\n  ');
+        return problem.path === file
+            ? `  - (${problem.severity}) ${message}`
+            : `  - (${problem.severity}) ${problem.path}: ${message}`;
+    });
     const outcome = problems.some(problem => problem.fileIgnored === true)
         ? 'The file is not applied, so every finding keeps its default level.'
         : 'Each one is ignored; the rest of the file applies.';

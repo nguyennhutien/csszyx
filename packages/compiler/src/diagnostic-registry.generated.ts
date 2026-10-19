@@ -2482,7 +2482,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "id": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.",
+        "help": "remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only."
     },
     {
         "id": "removed-rule-id",
