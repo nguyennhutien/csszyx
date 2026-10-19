@@ -20,9 +20,14 @@ describe('suppressedAdvisoryMessage', () => {
         expect(suppressedAdvisoryMessage(-1)).toBeNull();
     });
 
-    it('agrees with itself on number', () => {
-        expect(suppressedAdvisoryMessage(1)).toContain('1 info note not listed');
-        expect(suppressedAdvisoryMessage(3)).toContain('3 info notes not listed');
+    it('is headed by its own code, with the count in its sentence', () => {
+        expect(suppressedAdvisoryMessage(3)).toBe(
+            '[csszyx] diagnostics-held:\n' +
+                '  This build held back 3 finding(s) at `info` and listed none of them.\n' +
+                '  help: run a development build to see each one with its file and position.\n' +
+                '  note: they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`.\n' +
+                '  docs: https://csszyx.com/e/diagnostics-held',
+        );
     });
 
     // The count is every `info` finding a build holds back, and two of the
@@ -47,7 +52,7 @@ describe('suppressedAdvisoryMessage', () => {
     // dead class: its styles are not there, so the line must not say they are.
     it('counts a finding the config set to info without calling it handled', () => {
         const message = suppressedAdvisoryMessage(3) ?? '';
-        expect(message).toContain('any finding csszyx.config sets to info');
+        expect(message).toContain('any finding `csszyx.config` sets to `info`');
         expect(message).not.toContain('the styles are there');
     });
 });

@@ -1297,6 +1297,9 @@ export const DIAGNOSTICS = [
             id: OPTIONAL_STRING,
             count: OPTIONAL_NUMBER,
         },
+        // The per-id line is headed by the capped id, not by this one, so a
+        // grep for that id finds it: `[csszyx] <id>: +<count> more not listed`.
+        help: { 'per-id': '`csszyx check --rule {id}` lists every one.' },
         sources: [
             'packages/unplugin/src/diagnostic-limiter.ts:84',
             'packages/runtime/src/dev-warn.ts:47',
@@ -1601,6 +1604,14 @@ export const DIAGNOSTICS = [
         position: 'file',
         forms: ['partly-applied', 'not-applied'],
         args: { form: formArg(['partly-applied', 'not-applied']), count: NUMBER },
+        // The problems are listed between the text and the help, one per line.
+        text: {
+            'partly-applied':
+                'This file has {count} problem(s); each one is ignored, and the rest of the file applies.',
+            'not-applied':
+                'This file has {count} problem(s), and it is not applied, so every finding keeps its default level.',
+        },
+        help: 'https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.',
         sources: [
             `${POLICY}:674`,
             'packages/unplugin/src/sync-lane-policy.ts:250',
@@ -1773,6 +1784,9 @@ export const DIAGNOSTICS = [
         surfaces: { runtime: { production: false } },
         position: 'none',
         args: { count: NUMBER },
+        text: 'This build held back {count} finding(s) at `info` and listed none of them.',
+        help: 'run a development build to see each one with its file and position.',
+        note: 'they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`.',
         sources: ['packages/unplugin/src/transform-diagnostics.ts:96'],
     },
     {

@@ -996,10 +996,11 @@ export default defineConfig({
 Every build start and every `csszyx check` run now prints:
 
 ```text
-[csszyx] csszyx.config.ts has 1 problem(s):
+[csszyx] config-invalid: csszyx.config.ts
+  This file has 1 problem(s); each one is ignored, and the rest of the file applies.
   - (warning) development: `development` is not read from this file; plugin options belong in the bundler config.
-Each one is ignored; the rest of the file applies.
   help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.
+  docs: https://csszyx.com/e/config-invalid
 ```
 
 `csszyx check` still passes. In a project without TypeScript, `init` wrote the

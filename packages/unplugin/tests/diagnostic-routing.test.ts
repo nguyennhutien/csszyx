@@ -31,6 +31,7 @@ import {
 import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
 import {
     channelOfLevel,
+    codedWarning,
     routeTransformDiagnostics,
     type TransformDiagnosticsInput,
 } from '../src/transform-diagnostics.js';
@@ -73,6 +74,23 @@ function route(input: Partial<TransformDiagnosticsInput>) {
         ...input,
     });
 }
+
+describe('codedWarning', () => {
+    it('reads the code from the first token on the first line, wherever it sits', () => {
+        expect(codedWarning(`[plugin csszyx:pre] ${ENGINE_UNKNOWN}`)).toEqual({
+            message: `[plugin csszyx:pre] ${ENGINE_UNKNOWN}`,
+            code: 'unknown-key',
+            url: 'https://csszyx.com/e/unknown-key',
+        });
+    });
+
+    it('hands a line with no code over as written', () => {
+        expect(codedWarning(`[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}`)).toBe(
+            `[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}`,
+        );
+        expect(codedWarning('')).toBe('');
+    });
+});
 
 describe('the engine code decides the channel, not the wording', () => {
     it('lists a diagnostic whose code is unknown-key even when its text reads like a spread', () => {
@@ -288,7 +306,7 @@ describe('dedupe and the cap', () => {
         expect(limiter.pending).toBe(true);
         expect(limiter.flush()).toEqual([capOverflowMessage('unknown-key', 3)]);
         expect(capOverflowMessage('unknown-key', 3)).toBe(
-            '[csszyx] +3 more unknown-key — help: `csszyx check --rule unknown-key` lists every one.',
+            '[csszyx] unknown-key: +3 more not listed\n  help: `csszyx check --rule unknown-key` lists every one.',
         );
         // The cap is per start or build: a flush opens the next one.
         expect(limiter.pending).toBe(false);
@@ -363,11 +381,11 @@ describe('dedupe and the cap', () => {
         const limiter = createDiagnosticLimiter(0);
         limiter.admit({ id: 'dead-class', file: 'f', key: 'one' });
         limiter.admit({ id: 'dead-class', file: 'f', key: 'two' });
-        limiter.admit({ id: 'other', file: 'f', key: 'one' });
+        limiter.admit({ id: 'unknown-key', file: 'f', key: 'one' });
         limiter.retain('dead-class', [{ id: 'dead-class', file: 'f', key: 'two' }]);
         expect(limiter.flush()).toEqual([
             capOverflowMessage('dead-class', 1),
-            capOverflowMessage('other', 1),
+            capOverflowMessage('unknown-key', 1),
         ]);
     });
 

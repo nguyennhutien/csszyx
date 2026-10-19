@@ -98,10 +98,12 @@ describe('the jest transform with csszyx.config and no state file', () => {
 
     it('prints the config problems once per worker, in the text the other lanes print', () => {
         const lines = jest({ ...project(UNKNOWN, MISSPELT), source: UNKNOWN, transformers: 2 });
-        const problems = lines.filter(line => line.includes('csszyx.config.mjs has 1 problem(s)'));
+        const problems = lines.filter(line =>
+            line.includes('[csszyx] config-invalid: csszyx.config.mjs'),
+        );
         expect(problems).toHaveLength(1);
         expect(problems[0]).toContain('unknown-keyy');
-        expect(problems[0]).toContain('Each one is ignored; the rest of the file applies.');
+        expect(problems[0]).toContain('each one is ignored, and the rest of the file applies.');
     });
 
     it('passes on what the child printed and keeps the defaults when it does not finish', () => {

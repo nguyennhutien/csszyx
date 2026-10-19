@@ -53,6 +53,7 @@ import {
     isSzDiagnosticId,
     nearestName,
     renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_DEFAULT_LEVELS,
     SZ_DIAGNOSTIC_GROUP_IDS,
@@ -679,30 +680,37 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
 }
 
 /**
- * Render a config file's problems as one warning.
+ * Render a config file's problems as one `config-invalid` message: the
+ * registry's sentence, each problem on its own line, then the help.
  *
  * @param file - The config file, as the user would name it.
  * @param problems - Its problems; at least one.
- * @returns The text, `[csszyx]`-prefixed.
+ * @returns The message, `[csszyx] config-invalid:`-headed.
  */
 export function diagnosticConfigProblemsMessage(
     file: string,
     problems: readonly DiagnosticConfigProblem[],
 ): string {
-    // A problem with the file itself is already named by the header.
-    // A problem's own `help:` line sits under its bullet.
+    // A problem with the file itself is already named by the header; a
+    // problem's own `help:` line sits under its bullet.
     const lines = problems.map(problem => {
         const message = problem.message.replaceAll('\n', '\n  ');
         return problem.path === file
-            ? `  - (${problem.severity}) ${message}`
-            : `  - (${problem.severity}) ${problem.path}: ${message}`;
+            ? `- (${problem.severity}) ${message}`
+            : `- (${problem.severity}) ${problem.path}: ${message}`;
     });
-    const outcome = problems.some(problem => problem.fileIgnored === true)
-        ? 'The file is not applied, so every finding keeps its default level.'
-        : 'Each one is ignored; the rest of the file applies.';
-    return (
-        `[csszyx] ${file} has ${problems.length} problem(s):\n${lines.join('\n')}\n${outcome}\n` +
-        '  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; ' +
-        'a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.'
+    const form = problems.some(problem => problem.fileIgnored === true)
+        ? 'not-applied'
+        : 'partly-applied';
+    const { text, help, docs } = renderSzDiagnosticParts(
+        { code: 'config-invalid', args: { form, count: problems.length } },
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
     );
+    return [
+        `[csszyx] config-invalid: ${file}`,
+        text,
+        ...lines,
+        `help: ${help}`,
+        `docs: ${docs}`,
+    ].join('\n  ');
 }

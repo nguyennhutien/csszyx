@@ -22,6 +22,8 @@
  * @module
  */
 
+import { renderSzDiagnosticBody, SZ_DIAGNOSTIC_COMPUTED_VALUES } from '@csszyx/compiler';
+
 /** Lines one id lists per start or build before the rest are only counted. */
 export const DIAGNOSTIC_LINE_CAP = 10;
 
@@ -74,14 +76,20 @@ export interface DiagnosticLimiter {
 }
 
 /**
- * The line that closes a capped id.
+ * The line that closes a capped id: headed by that id, so a search for it
+ * finds the count too, with the registry's `diagnostics-capped` help under it.
  *
  * @param id - The rule or kind id.
  * @param count - How many findings of it were not listed.
- * @returns The line, `[csszyx]`-prefixed.
+ * @returns The message, `[csszyx] <id>:`-headed.
  */
 export function capOverflowMessage(id: string, count: number): string {
-    return `[csszyx] +${count} more ${id} — help: \`csszyx check --rule ${id}\` lists every one.`;
+    // The per-id form has no sentence of its own, so its body opens on the help line.
+    const body = renderSzDiagnosticBody(
+        { code: 'diagnostics-capped', args: { form: 'per-id', id, count } },
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    );
+    return `[csszyx] ${id}: +${count} more not listed${body}`;
 }
 
 /** What was listed for one file, and for which version of it. */

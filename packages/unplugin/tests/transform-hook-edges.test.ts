@@ -17,7 +17,7 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-type Ctx = { warn: (m: string) => void; error: (m: string) => void };
+type Ctx = { warn: (m: unknown) => void; error: (m: string) => void };
 
 interface Booted {
     root: string;
@@ -94,10 +94,27 @@ describe('transform hook branch edges', () => {
         );
     });
 
+    it('hands an info finding to the bundler with its code and page beside the line', async () => {
+        const { root, ctx, transform } = await boot();
+        const warnings: unknown[] = [];
+        ctx.warn = message => warnings.push(message);
+        await transform(
+            'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
+            path.join(root, 'src/A.tsx'),
+        );
+        expect(warnings).toEqual([
+            {
+                message: expect.stringMatching(/^\[csszyx\] class-precedence: src\/A\.tsx:1:/),
+                code: 'class-precedence',
+                url: 'https://csszyx.com/e/class-precedence',
+            },
+        ]);
+    });
+
     it('passes a template sz warning to the bundler', async () => {
         const { root, ctx, transform } = await boot();
         const warnings: string[] = [];
-        ctx.warn = message => warnings.push(message);
+        ctx.warn = message => warnings.push((message as { message: string }).message);
         const result = (await transform(
             '<div sz={{ foo: 4 }}></div>',
             path.join(root, 'src/Comp.svelte'),

@@ -485,11 +485,12 @@ describe('diagnosticConfigProblemsMessage', () => {
             { severity: 'warning', path: 'development', message: 'is not read.' },
         ]);
         expect(message).toBe(
-            '[csszyx] csszyx.config.ts has 2 problem(s):\n' +
+            '[csszyx] config-invalid: csszyx.config.ts\n' +
+                '  This file has 2 problem(s); each one is ignored, and the rest of the file applies.\n' +
                 '  - (error) diagnostics.rules: `x` is not a rule id.\n' +
                 '  - (warning) development: is not read.\n' +
-                'Each one is ignored; the rest of the file applies.\n' +
-                `  help: ${CONFIG_HELP}`,
+                `  help: ${CONFIG_HELP}\n` +
+                '  docs: https://csszyx.com/e/config-invalid',
         );
     });
 
@@ -501,7 +502,7 @@ describe('diagnosticConfigProblemsMessage', () => {
                 message: '`x` sets nothing.\n  help: remove it.',
             },
         ]);
-        expect(message.split('\n').slice(1, 3)).toEqual([
+        expect(message.split('\n').slice(2, 4)).toEqual([
             '  - (error) diagnostics.rules: `x` sets nothing.',
             '    help: remove it.',
         ]);
@@ -517,10 +518,11 @@ describe('diagnosticConfigProblemsMessage', () => {
             },
         ]);
         expect(message).toBe(
-            '[csszyx] csszyx.config.mjs has 1 problem(s):\n' +
+            '[csszyx] config-invalid: csszyx.config.mjs\n' +
+                '  This file has 1 problem(s), and it is not applied, so every finding keeps its default level.\n' +
                 '  - (error) could not be loaded: Unexpected token\n' +
-                'The file is not applied, so every finding keeps its default level.\n' +
-                `  help: ${CONFIG_HELP}`,
+                `  help: ${CONFIG_HELP}\n` +
+                '  docs: https://csszyx.com/e/config-invalid',
         );
     });
 });

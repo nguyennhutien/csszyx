@@ -69,7 +69,7 @@ describe('the plugin reading csszyx.config', () => {
         await invokeHook(vitePlugin(), 'configResolved', { root, command: 'build' });
 
         const said = warn.mock.calls.map(call => call.join(' ')).join('\n');
-        expect(said).toContain('csszyx.config.mjs has 1 problem(s)');
+        expect(said).toContain('[csszyx] config-invalid: csszyx.config.mjs');
         expect(said).toContain('did you mean `dead-class`?');
     });
 

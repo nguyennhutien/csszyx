@@ -17,7 +17,13 @@
  *
  * @module
  */
-import { type SzDiagnosticCode, szDiagnosticKey } from '@csszyx/compiler';
+import {
+    renderSzDiagnostic,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticCode,
+    szDiagnosticKey,
+} from '@csszyx/compiler';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 
 import type { DiagnosticLimiter } from './diagnostic-limiter.js';
@@ -68,7 +74,7 @@ export function shouldHoldAdvisories(
 }
 
 /**
- * Build the one-line disclosure that the fallback list above is partial.
+ * Build the disclosure that the fallback list above is partial.
  *
  * Four of the five `sz`-site fallback kinds never print in a production build,
  * so a log can list the `szr` fallbacks it found and silently hold every
@@ -77,29 +83,49 @@ export function shouldHoldAdvisories(
  * count that was short by half for exactly this reason, and only caught it by
  * reading sources instead.
  *
- * Suppression is the right default; implying zero is not. One line costs
- * nothing and keeps the difference visible.
+ * Suppression is the right default; implying zero is not. One message costs
+ * nothing and keeps the difference visible. Its wording is the registry's
+ * `diagnostics-held`: the count is every finding held at `info` — the
+ * advisories csszyx handled, and any finding the config lowered to `info`,
+ * such as a dead class, whose styles are NOT there.
  *
  * @param count - `info` findings the build declined to list.
- * @returns The disclosure, or null when nothing was held back.
+ * @returns The message, or null when nothing was held back.
  */
 export function suppressedAdvisoryMessage(count: number): string | null {
     if (count <= 0) return null;
-    // Count and noun interpolate together so the sentence after them is one
-    // unbroken literal: the docs-sync gate matches verbatim runs, and a
-    // placeholder in the middle splits the run it is trying to match.
-    //
-    // The noun is "info note", not "sz fallback" or "advisory": the count is
-    // every finding held at `info` — the advisories csszyx handled, two of
-    // whose three kinds never touch an sz prop, and any finding the config
-    // lowered to `info`, such as a dead class, whose styles are NOT there.
-    const held = count === 1 ? '1 info note' : `${count} info notes`;
-    return (
-        `[csszyx] ${held} not listed above: the advisories csszyx handled — a fallback at an sz ` +
-        'prop, a className whose precedence over sz is unstated, or a variable hoist the planner ' +
-        'declined — and any finding csszyx.config sets to info. A production build counts them ' +
-        'instead of listing them; a development build prints each one with its file and position.'
-    );
+    return renderSzDiagnostic({
+        diagnostic: { code: 'diagnostics-held', args: { count } },
+        file: '',
+        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    });
+}
+
+/** The first `[csszyx] <code>:` on a message's first line names its code. */
+const CODE_TOKEN = /\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*):/;
+
+/** A warning as Rollup and Vite take one: the line, its code and its page. */
+export interface CodedWarning {
+    message: string;
+    code: string;
+    url: string;
+}
+
+/**
+ * A message as a bundler's `this.warn` takes it: with its code and page beside
+ * the text when it carries a `[csszyx] <code>:` token, so a tool reading the
+ * log object has them without parsing the line. A message with no token is
+ * handed over as written.
+ *
+ * @param message - One rendered message.
+ * @returns The warning.
+ */
+export function codedWarning(message: string): string | CodedWarning {
+    const [firstLine = ''] = message.split('\n', 1);
+    const header = CODE_TOKEN.exec(firstLine);
+    if (header === null) return message;
+    const code = header[1] as string;
+    return { message, code, url: `${SZ_DIAGNOSTIC_URL_BASE}${code}` };
 }
 
 /** Where one finding at a level goes. */

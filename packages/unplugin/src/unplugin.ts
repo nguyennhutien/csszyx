@@ -246,6 +246,7 @@ import {
 } from './transform-cache.js';
 import {
     channelOfLevel,
+    codedWarning,
     type QuietMode,
     resolveQuietMode,
     routeTransformDiagnostics,
@@ -7415,7 +7416,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         ? undefined
                         : (file: string) => this.addWatchFile(file);
                 const output = hasSzProp
-                    ? transformSzSource(code, id, message => this.warn(message), watch)
+                    ? transformSzSource(
+                          code,
+                          id,
+                          message => this.warn(codedWarning(message)),
+                          watch,
+                      )
                     : unchangedPreTransform(code);
                 if (!hasSzProp && shouldProcessSource(id)) {
                     recordFileVarMangleEntries(state, id, []);
