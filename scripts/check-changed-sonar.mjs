@@ -25,6 +25,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { isSonarScoped } from './check-changed-complexity.mjs';
@@ -170,6 +171,62 @@ async function lint(eslint, ruleKeys, file, source) {
 }
 
 /**
+ * A violation of a profile rule that reads types, linted before the change.
+ *
+ * Such a rule compares a type's flags with the `typescript` it loads itself.
+ * When that copy is not the one typescript-eslint built the program with, the
+ * flags are numbered differently and the rule reports nothing, so this gate
+ * printed "nothing new" while SonarCloud raised S2301 on #387. The canary
+ * turns that silence into a failure, whatever its cause.
+ */
+export const TYPED_CANARY = {
+    rule: 'sonarjs/no-selector-parameter',
+    // Any file in `tsconfig.eslint.json`: its text is replaced, its place
+    // gives the program.
+    file: 'packages/compiler/src/index.ts',
+    source:
+        'export function pick(a: string, upper: boolean): string {\n' +
+        '    return upper ? a.toUpperCase() : a.toLowerCase();\n' +
+        '}\n',
+};
+
+/**
+ * The `typescript` each side of a type-aware sonarjs rule loads.
+ *
+ * @param from - Where to resolve the packages from.
+ * @returns The resolved file of each copy.
+ */
+export function typescriptCopies(from = import.meta.url) {
+    const require = createRequire(from);
+    const sonarjs = createRequire(require.resolve('eslint-plugin-sonarjs'));
+    const parser = createRequire(require.resolve('@typescript-eslint/parser'));
+    return { sonarjs: sonarjs.resolve('typescript'), parser: parser.resolve('typescript') };
+}
+
+/**
+ * Fail unless the type-aware rules report on the canary.
+ *
+ * @param eslint - The source-file linter, carrying the profile's rules.
+ * @returns Null when the canary is reported, the failure to print otherwise.
+ */
+export async function typedCanaryProblem(eslint) {
+    const [result] = await eslint.lintText(TYPED_CANARY.source, { filePath: TYPED_CANARY.file });
+    if ((result?.messages ?? []).some(message => message.ruleId === TYPED_CANARY.rule)) {
+        return null;
+    }
+    const copies = typescriptCopies();
+    return (
+        `[sonar] ${TYPED_CANARY.rule} did not report a deliberate violation, so every ` +
+        'profile rule that reads types is silent here and its findings would reach only ' +
+        'SonarCloud.\n' +
+        `  eslint-plugin-sonarjs loads ${copies.sonarjs}\n` +
+        `  @typescript-eslint/parser loads ${copies.parser}\n` +
+        'Two copies number type flags differently; the override in pnpm-workspace.yaml ' +
+        'keeps them one.'
+    );
+}
+
+/**
  * Report every profile finding this change introduces.
  *
  * @param base - Revision to compare against.
@@ -206,6 +263,11 @@ async function main(base) {
         return { eslint, ruleKeys };
     };
     const linters = { main: linterFor(false), test: linterFor(true) };
+    const canary = await typedCanaryProblem(linters.main.eslint);
+    if (canary !== null) {
+        console.error(canary);
+        return 1;
+    }
 
     console.log(
         `[sonar] checking ${files.length} changed file(s) against ${linters.main.ruleKeys.size} ` +

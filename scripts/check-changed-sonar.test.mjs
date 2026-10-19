@@ -1,6 +1,7 @@
 // Unit tests for the changed-line Sonar gate.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import {
@@ -9,7 +10,11 @@ import {
     isSonarTest,
     newDiagnostics,
     rulesToRun,
+    TYPED_CANARY,
+    typedCanaryProblem,
+    typescriptCopies,
 } from './check-changed-sonar.mjs';
+import { PROFILE_RULES_FILE } from './check-sonar-rule-drift.mjs';
 
 const PROFILE = {
     format: 1,
@@ -111,5 +116,57 @@ describe('what counts as new', () => {
         const line = 'function a(x: string | number) {';
         const other = finding(1, line, 'sonarjs/deprecation');
         assert.deepEqual(newDiagnostics([finding(1, line), other], [finding(1, line)]), [other]);
+    });
+});
+
+describe('the type-aware profile rules can see types', () => {
+    // sonarjs compares type flags with the `typescript` it loads; a second
+    // copy numbers them differently and the rules go silent (#387).
+    it('loads the same typescript as the parser that builds the program', () => {
+        const copies = typescriptCopies();
+        assert.equal(copies.sonarjs, copies.parser);
+    });
+
+    it('reports the canary, whose rule the profile runs', async () => {
+        const profile = JSON.parse(readFileSync(PROFILE_RULES_FILE, 'utf8'));
+        assert.ok(rulesToRun(profile, false).has(TYPED_CANARY.rule));
+        const { ESLint } = await import('eslint');
+        const eslint = new ESLint({
+            overrideConfig: [
+                { files: ['packages/**/*.ts'], rules: { [TYPED_CANARY.rule]: 'error' } },
+            ],
+        });
+        const [result] = await eslint.lintText(TYPED_CANARY.source, {
+            filePath: TYPED_CANARY.file,
+        });
+        assert.deepEqual(
+            result.messages
+                .filter(message => message.ruleId === TYPED_CANARY.rule)
+                .map(m => m.line),
+            [2],
+        );
+        assert.equal(await typedCanaryProblem(eslint), null);
+    });
+
+    it('fails, naming both copies, when the rules cannot see types', async () => {
+        const { ESLint } = await import('eslint');
+        const { default: parser } = await import('@typescript-eslint/parser');
+        const { default: sonarjs } = await import('eslint-plugin-sonarjs');
+        // The parser with no program: what any copy mismatch looks like to
+        // the rule, without the repository's other type-aware rules.
+        const blind = new ESLint({
+            overrideConfigFile: true,
+            overrideConfig: [
+                {
+                    files: ['**/*.ts'],
+                    languageOptions: { parser },
+                    plugins: { sonarjs },
+                    rules: { [TYPED_CANARY.rule]: 'error' },
+                },
+            ],
+        });
+        const problem = await typedCanaryProblem(blind);
+        assert.match(problem ?? '', /did not report a deliberate violation/);
+        assert.ok(problem?.includes(typescriptCopies().parser));
     });
 });
