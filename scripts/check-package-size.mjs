@@ -195,7 +195,10 @@ export const SIZE_BUDGETS = [
         // from the code that repeats their keys; the capability table now
         // builds into a chunk of its own, imported ahead of them (see
         // `packages/compiler/tsdown.config.mjs`), and the budget was not
-        // raised.
+        // raised. 17,125 the same day once the property category map joined
+        // that chunk ahead of the capability rows: it had stayed in the
+        // lowering's chunk, after the tables, which cost `./browser` 89 to 115
+        // bytes in each bundler measured (esbuild, Vite, Rollup).
         maxGzipBytes: 17_360,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
@@ -209,7 +212,8 @@ export const SIZE_BUDGETS = [
             // hints, the unjudged colour strings and the production mask
             // warning (+377, see the union), so raised from 16,220. 16,425
             // once the tables moved to leaf modules, 2026-10-19 (-8; 16,584
-            // in the chunk order that put them first, see the union).
+            // in the chunk order that put them first, see the union), and
+            // 16,332 with the category map ahead of them, the same day.
             './browser': 16_600,
             './sz-limits': 650,
             './keyword-families': 1_000,
