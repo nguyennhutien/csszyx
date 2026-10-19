@@ -54,6 +54,24 @@ function sampleOf(type: SzDiagnosticSpec['args'][string]['type'], k: number): un
 }
 
 /**
+ * The k-th sample of every arg of an entry, and the same without its optional
+ * args.
+ *
+ * @param spec - The entry.
+ * @param k - The sample index.
+ * @returns Both arg sets.
+ */
+function samplePair(spec: SzDiagnosticSpec, k: number): Array<Record<string, unknown>> {
+    const args: Record<string, unknown> = {};
+    const required: Record<string, unknown> = {};
+    for (const [name, arg] of Object.entries(spec.args)) {
+        args[name] = sampleOf(arg.type, k + name.length);
+        if (!arg.optional) required[name] = args[name];
+    }
+    return [args, required];
+}
+
+/**
  * Arg sets for one entry: for each value of the arg its sentence varies by
  * (or one pass when none), several samples, each also without its optional args.
  *
@@ -64,21 +82,13 @@ function argSets(spec: SzDiagnosticSpec): Array<Record<string, unknown>> {
     const by = spec.variesBy ?? 'form';
     const byType = spec.args[by]?.type;
     const variants = Array.isArray(byType) ? byType.slice(1) : [undefined];
-    const sets: Array<Record<string, unknown>> = [];
-    for (const variant of variants) {
-        for (let k = 0; k < STRINGS.length; k++) {
-            const args: Record<string, unknown> = {};
-            for (const [name, arg] of Object.entries(spec.args))
-                args[name] = sampleOf(arg.type, k + name.length);
-            if (variant !== undefined) args[by] = variant;
-            sets.push(args);
-            const required = { ...args };
-            for (const [name, arg] of Object.entries(spec.args))
-                if (arg.optional) delete required[name];
-            sets.push(required);
-        }
-    }
-    return sets;
+    return variants.flatMap(variant =>
+        STRINGS.flatMap((_, k) =>
+            samplePair(spec, k).map(args =>
+                variant === undefined ? args : { ...args, [by]: variant },
+            ),
+        ),
+    );
 }
 
 /**
