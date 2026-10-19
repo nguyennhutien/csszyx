@@ -30,6 +30,14 @@ import { buildSync } from 'esbuild';
  * install-size question that method answered is the wasm budget's job, the
  * one artifact where package weight is what users pay.
  *
+ * The same bundles are measured a second time with Vite (`vite` on each
+ * app-bundle budget, `checkViteBudgets`), the bundler most apps ship csszyx
+ * with. Totals differ from esbuild's by 0.1 to 3 percent (the runtime most,
+ * 15,686 against 16,170 on 2026-10-19), and where a module lands moves gzip
+ * by tens of bytes, which the two bundlers do not lay out alike: the same day
+ * a chunk-order change measured 8 bytes under its baseline in esbuild and 19
+ * over in Vite. The lane adds ~0.35 s to the gate (17 Vite builds).
+ *
  * Every app-bundle budget carries two kinds of ceiling. `maxGzipBytes` caps
  * the union of its entries — what an app that imports all of them ships, and
  * the bundle whose console messages are checked. `entryBudgets` caps each
@@ -97,6 +105,20 @@ export const SIZE_BUDGETS = [
             './split': 8_450,
             './merge': 1_400,
         },
+        // The same bundles built by Vite (see `checkViteBudgets`), measured
+        // 2026-10-19: 15,686, then 15,376 / 464 / 1,362 / 515 / 8,059 / 996.
+        // Each the usual ~300 above, rounded up to 50.
+        vite: {
+            maxGzipBytes: 16_000,
+            entryBudgets: {
+                '.': 15_700,
+                './lite': 800,
+                './core': 1_700,
+                './lowering': 850,
+                './split': 8_400,
+                './merge': 1_300,
+            },
+        },
         // Each one reports csszyx's own output as wrong, an integrity check
         // failing, or prints only because the app turned `debug` on (ADR
         // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
@@ -135,6 +157,8 @@ export const SIZE_BUDGETS = [
         maxGzipBytes: 10_950,
         // Measured 2026-10-08: 10,358 / 7,897.
         entryBudgets: { '.': 10_650, './react': 8_200 },
+        // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
+        vite: { maxGzipBytes: 11_000, entryBudgets: { '.': 10_700, './react': 8_100 } },
     },
     {
         name: '@csszyx/compiler browser app bundle',
@@ -220,6 +244,23 @@ export const SIZE_BUDGETS = [
             './bool-class': 650,
             './color-var': 550,
             './spacing-var': 1_000,
+        },
+        // Built by Vite, measured 2026-10-19: 17,151, then 16,323 / 384 /
+        // 705 / 401 / 300 / 729. This lane is why it exists: when the key
+        // tables moved to leaf modules, esbuild measured `./browser` 8 bytes
+        // under the layout before the move and Vite 19 over (16,413 against
+        // 16,394), the union 2 under and 27 over; the category map moving
+        // ahead of the tables brought both lanes under.
+        vite: {
+            maxGzipBytes: 17_500,
+            entryBudgets: {
+                './browser': 16_650,
+                './sz-limits': 700,
+                './keyword-families': 1_050,
+                './bool-class': 750,
+                './color-var': 600,
+                './spacing-var': 1_050,
+            },
         },
         // Each one reports a class the transform did not emit (ADR 0011), so
         // they print in production and in the browser, once each; only
@@ -561,6 +602,56 @@ export function appBundle(entryPaths, packageDir) {
     return result.outputFiles[0].text;
 }
 
+/** The id of the entry module the Vite lane bundles from. */
+const VITE_ENTRY = '\0csszyx-size-gate-entry';
+
+/** Bundle a package's export entries the way a Vite app ships them: `vite
+ * build` with no config of its own, so its defaults (Rolldown, the Oxc
+ * minifier, the default browser target) decide, and the same inputs as
+ * {@link appBundle}: every entry imported as a namespace and kept reachable,
+ * `process.env.NODE_ENV` defined as production, and the other `@csszyx/*`
+ * packages and the peer dependencies left external. A build error rejects.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {Promise<string[]>} the code of every chunk the build emits
+ */
+export async function viteAppBundle(entryPaths, packageDir) {
+    const { build } = await import('vite');
+    const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    const external = ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})];
+    // An app's entry exports nothing, so a namespace has to be used to stay.
+    const contents = entryPaths
+        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
+        .concat(`globalThis.__csszyxSizeGate = [${entryPaths.map((_, i) => `e${i}`).join(', ')}];`)
+        .join('\n');
+    // One output, so one result: a watcher or a list would fail on `.output`.
+    const { output } = await build({
+        configFile: false,
+        root: packageDir,
+        publicDir: false,
+        logLevel: 'silent',
+        mode: 'production',
+        define: { 'process.env.NODE_ENV': '"production"' },
+        plugins: [
+            {
+                name: 'csszyx-size-gate-entry',
+                resolveId: id => (id === VITE_ENTRY ? id : null),
+                load: id => (id === VITE_ENTRY ? contents : null),
+            },
+        ],
+        build: {
+            write: false,
+            modulePreload: false,
+            rollupOptions: {
+                input: VITE_ENTRY,
+                external: id => external.some(name => id === name || id.startsWith(`${name}/`)),
+            },
+        },
+    });
+    return output.filter(file => file.type === 'chunk').map(chunk => chunk.code);
+}
+
 /** Console calls whose first argument opens with a string literal: the
  * method, then the text up to the first interpolation or quote. Ordered
  * alternation and a negated class keep the scan linear on minified input. */
@@ -649,6 +740,27 @@ export function gzipTotalBytes(filePaths) {
     return total;
 }
 
+/** A function that records one measurement against its ceiling, into
+ * `results`, and a failure with the raise-and-explain message when it is over.
+ *
+ * @param {Array<{ name: string, files: string[], gzipBytes: number, maxGzipBytes: number, ok: boolean }>} results measurements so far
+ * @param {string[]} failures failure messages so far
+ * @returns {(name: string, files: string[], gzipBytes: number, maxGzipBytes: number) => void} the recorder
+ */
+function recorder(results, failures) {
+    return (name, files, gzipBytes, maxGzipBytes) => {
+        const ok = gzipBytes <= maxGzipBytes;
+        results.push({ name, files, gzipBytes, maxGzipBytes, ok });
+        if (!ok) {
+            failures.push(
+                `${name}: ${gzipBytes} gzip bytes exceeds the ${maxGzipBytes}-byte budget ` +
+                    `(+${gzipBytes - maxGzipBytes}). If the growth is intentional, raise the ` +
+                    'budget in scripts/check-package-size.mjs and say why in the PR.',
+            );
+        }
+    };
+}
+
 /** Measure every budget target and compare against its ceiling. A target
  * whose package or entries are missing is a failure, not a pass — a green
  * result must always mean "measured and under budget", never "nothing there
@@ -662,18 +774,7 @@ export function gzipTotalBytes(filePaths) {
 export function checkBudgets(budgets, rootDir) {
     const results = [];
     const failures = [];
-    /** Record one measurement against its ceiling. */
-    const record = (name, files, gzipBytes, maxGzipBytes) => {
-        const ok = gzipBytes <= maxGzipBytes;
-        results.push({ name, files, gzipBytes, maxGzipBytes, ok });
-        if (!ok) {
-            failures.push(
-                `${name}: ${gzipBytes} gzip bytes exceeds the ${maxGzipBytes}-byte budget ` +
-                    `(+${gzipBytes - maxGzipBytes}). If the growth is intentional, raise the ` +
-                    'budget in scripts/check-package-size.mjs and say why in the PR.',
-            );
-        }
-    };
+    const record = recorder(results, failures);
     for (const budget of budgets) {
         const target = path.join(rootDir, budget.target);
         let files;
@@ -753,9 +854,69 @@ export function checkBudgets(budgets, rootDir) {
     return { results, failures };
 }
 
-function main() {
+/** Measure the app-bundle budgets that carry a `vite` field with Vite, the
+ * union and each entry, against the ceilings in that field. Rolldown lays
+ * modules out and names identifiers its own way, and the bytes a layout
+ * change costs in a Vite build need not show in an esbuild one. A target that
+ * is missing or fails to build is a failure, as in {@link checkBudgets}.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @returns {Promise<{ results: Array<{ name: string, files: string[], gzipBytes: number, maxGzipBytes: number, ok: boolean }>, failures: string[] }>} measurements and failure messages
+ */
+export async function checkViteBudgets(budgets, rootDir) {
+    const results = [];
+    const failures = [];
+    const record = recorder(results, failures);
+    /** Gzip each chunk at a fixed level and sum them. */
+    const gzipChunks = chunks =>
+        chunks.reduce((total, code) => total + gzipSync(code, { level: 9 }).length, 0);
+    for (const budget of budgets) {
+        if (budget.kind !== 'app-bundle' || budget.vite === undefined) continue;
+        const name = `${budget.name} (Vite)`;
+        const target = path.join(rootDir, budget.target);
+        const ceilings = budget.vite.entryBudgets ?? {};
+        try {
+            const files = listExportEntries(target, budget.excludeSubpaths);
+            if (files.length === 0) {
+                throw new Error(`no runtime export entries in ${budget.target}/package.json`);
+            }
+            const gzipBytes = gzipChunks(await viteAppBundle(files, target));
+            const entries = listExportSubpaths(target, budget.excludeSubpaths);
+            for (const problem of entryBudgetProblems(
+                entries.map(({ subpath }) => subpath),
+                ceilings,
+            )) {
+                failures.push(
+                    `${name}: ${problem}. Each runtime export gets its own Vite ceiling.`,
+                );
+            }
+            const entryMeasurements = [];
+            for (const { subpath, file } of entries) {
+                if (!Object.hasOwn(ceilings, subpath)) continue;
+                entryMeasurements.push([
+                    subpath,
+                    file,
+                    gzipChunks(await viteAppBundle([file], target)),
+                ]);
+            }
+            record(name, files, gzipBytes, budget.vite.maxGzipBytes);
+            for (const [subpath, file, entryBytes] of entryMeasurements) {
+                record(`${name} \`${subpath}\``, [file], entryBytes, ceilings[subpath]);
+            }
+        } catch (error) {
+            failures.push(`${name}: ${error.message} — run \`pnpm build\` first?`);
+        }
+    }
+    return { results, failures };
+}
+
+async function main() {
     const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const { results, failures } = checkBudgets(SIZE_BUDGETS, rootDir);
+    const vite = await checkViteBudgets(SIZE_BUDGETS, rootDir);
+    results.push(...vite.results);
+    failures.push(...vite.failures);
     for (const result of results) {
         const headroom = result.maxGzipBytes - result.gzipBytes;
         console.log(
@@ -770,5 +931,5 @@ function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    main();
+    await main();
 }

@@ -9,6 +9,7 @@ import { gzipSync } from 'node:zlib';
 import {
     appBundle,
     checkBudgets,
+    checkViteBudgets,
     entryBudgetProblems,
     gzipTotalBytes,
     isRuntimeArtifact,
@@ -16,6 +17,7 @@ import {
     listExportSubpaths,
     nodeEntryFiles,
     SIZE_BUDGETS,
+    viteAppBundle,
 } from './check-package-size.mjs';
 
 /** Create a throwaway directory tree from a { relativePath: content } map.
@@ -398,6 +400,18 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
             assert.ok(Number.isInteger(ceiling) && ceiling > 0);
             assert.ok(ceiling <= budget.maxGzipBytes, `${budget.name}: ${ceiling}`);
         }
+        // Vite prices the same bundles: the union and every entry the
+        // esbuild lane prices, each under a ceiling of its own.
+        assert.ok(Number.isInteger(budget.vite?.maxGzipBytes), `${budget.name} has no Vite budget`);
+        assert.deepEqual(
+            Object.keys(budget.vite.entryBudgets ?? {}).sort(),
+            Object.keys(budget.entryBudgets).sort(),
+            `${budget.name} (Vite)`,
+        );
+        for (const ceiling of Object.values(budget.vite.entryBudgets)) {
+            assert.ok(Number.isInteger(ceiling) && ceiling > 0);
+            assert.ok(ceiling <= budget.vite.maxGzipBytes, `${budget.name} (Vite): ${ceiling}`);
+        }
         // Read from `package.json` itself, not through the helper under test:
         // every subpath whose import target is JS, minus the exclusions.
         const manifest = JSON.parse(
@@ -610,6 +624,137 @@ test('a node-entry budget fails over its limit, or on a subpath the package lack
         const missing = checkBudgets(engineBudget({ subpath: './nope' }), root);
         assert.equal(missing.failures.length, 1);
         assert.match(missing.failures[0], /no export subpath `\.\/nope` in thing/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** Vite ceilings over the fixture package's two entries.
+ * @param {number} [ceiling] every ceiling
+ * @returns {{ maxGzipBytes: number, entryBudgets: Record<string, number> }} the `vite` field
+ */
+function viteCeilings(ceiling = 100_000) {
+    return { maxGzipBytes: ceiling, entryBudgets: { '.': ceiling, './heavy': ceiling } };
+}
+
+test('the Vite lane measures each app bundle the way a Vite app ships it', async () => {
+    // Same package name in two roots, so the two builds differ only by the warning.
+    const withDevRoot = makeFixture(appPackage('thing', true));
+    const noDevRoot = makeFixture(appPackage('thing', false));
+    try {
+        const budget = appBudget('thing', { vite: viteCeilings() });
+        const withDev = await checkViteBudgets(budget, withDevRoot);
+        const noDev = await checkViteBudgets(budget, noDevRoot);
+        assert.deepEqual([withDev.failures, noDev.failures], [[], []]);
+        assert.deepEqual(
+            withDev.results.map(r => r.name),
+            ['thing app (Vite)', 'thing app (Vite) `.`', 'thing app (Vite) `./heavy`'],
+        );
+        // `@csszyx/other` does not exist, so it stayed external; the warning
+        // folded out; and the namespace import kept every export.
+        const code = (
+            await viteAppBundle(withDev.results[0].files, path.join(withDevRoot, 'packages/thing'))
+        ).join('\n');
+        assert.ok(!code.includes('dev-note'), 'the development warning shipped');
+        assert.ok(code.includes('entry-399'), 'the exported table was shaken out');
+        assert.match(code, /@csszyx\/other/);
+        const gap = Math.abs(withDev.results[0].gzipBytes - noDev.results[0].gzipBytes);
+        assert.ok(gap <= 8, `gzip differs by ${gap}`);
+        assert.ok(withDev.results.every(r => r.ok && r.gzipBytes > 0));
+    } finally {
+        rmSync(withDevRoot, { recursive: true, force: true });
+        rmSync(noDevRoot, { recursive: true, force: true });
+    }
+});
+
+test('the Vite lane leaves peer dependencies external and skips budgets without it', async () => {
+    const root = makeFixture({
+        ...appPackage('thing', false),
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            peerDependencies: { 'peer-lib': '>=1' },
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs':
+            "export { peer } from 'peer-lib';\nexport { deep } from 'peer-lib/deep';\n",
+    });
+    try {
+        // `peer-lib` is not installed; bundling it in would fail the build.
+        const vite = { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } };
+        const { failures, results } = await checkViteBudgets(appBudget('thing', { vite }), root);
+        assert.deepEqual(failures, []);
+        assert.equal(results.length, 2);
+        // A budget with no `vite` field, or another kind, is the esbuild lane's alone.
+        assert.deepEqual(await checkViteBudgets(appBudget('thing'), root), {
+            results: [],
+            failures: [],
+        });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a Vite ceiling fails over its limit, and a Vite entry needs a budget', async () => {
+    const root = makeFixture(appPackage('thing', false));
+    try {
+        const over = await checkViteBudgets(appBudget('thing', { vite: viteCeilings(8) }), root);
+        assert.equal(over.failures.length, 3);
+        assert.match(
+            over.failures[0],
+            /thing app \(Vite\): \d+ gzip bytes exceeds the 8-byte budget/,
+        );
+        assert.match(over.failures[0], /raise the/);
+        const unpriced = await checkViteBudgets(
+            appBudget('thing', { vite: { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } } }),
+            root,
+        );
+        assert.equal(unpriced.failures.length, 1);
+        assert.match(
+            unpriced.failures[0],
+            /thing app \(Vite\): export `\.\/heavy` has no entry budget/,
+        );
+        const none = await checkViteBudgets(
+            appBudget('thing', { vite: { maxGzipBytes: 100_000 } }),
+            root,
+        );
+        assert.equal(none.failures.length, 2);
+        assert.equal(none.results.length, 1);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('an app bundle Vite cannot build fails instead of passing silently', async () => {
+    const root = makeFixture({
+        ...appPackage('thing', false),
+        'packages/thing/dist/index.mjs': "export { gone } from './missing.mjs';\n",
+    });
+    try {
+        const { failures } = await checkViteBudgets(
+            appBudget('thing', { vite: viteCeilings() }),
+            root,
+        );
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /thing app \(Vite\): .*missing\.mjs/s);
+        const absent = await checkViteBudgets(appBudget('absent', { vite: viteCeilings() }), root);
+        assert.equal(absent.failures.length, 1);
+        assert.match(absent.failures[0], /absent app \(Vite\)/);
+        const typesOnly = makeFixture({
+            'packages/typesonly/package.json': JSON.stringify({
+                name: 'typesonly',
+                exports: { '.': { import: { types: './dist/index.d.mts' } } },
+            }),
+        });
+        try {
+            const empty = await checkViteBudgets(
+                appBudget('typesonly', { vite: viteCeilings() }),
+                typesOnly,
+            );
+            assert.equal(empty.failures.length, 1);
+            assert.match(empty.failures[0], /typesonly app \(Vite\): no runtime export entries/);
+        } finally {
+            rmSync(typesOnly, { recursive: true, force: true });
+        }
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
