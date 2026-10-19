@@ -218,6 +218,26 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
             }
         }
     }
+    const production = entry.surfaces?.runtime?.production;
+    if (entry.surfaces?.runtime && typeof production !== 'boolean' && !Array.isArray(production)) {
+        problems.push(`${at}: runtime production is true, false or a list of forms`);
+    }
+    if (Array.isArray(production)) {
+        if (production.length === 0) {
+            problems.push(`${at}: lists no production form; write \`production: false\``);
+        }
+        for (const form of production) {
+            if (!(entry.forms ?? []).includes(form)) {
+                problems.push(
+                    `${at}: prints in production for form ${form}, which is not one of its forms`,
+                );
+            }
+        }
+    }
+    const thrownInProduction = entry.surfaces?.error?.production;
+    if (thrownInProduction !== undefined && typeof thrownInProduction !== 'boolean') {
+        problems.push(`${at}: error production is true or false`);
+    }
     if (!POSITIONS.includes(entry.position)) {
         problems.push(`${at}: position must be one of ${POSITIONS.join(', ')}`);
     }
@@ -820,8 +840,8 @@ export interface SzDiagnosticSpec {
     readonly surfaces: {
         readonly engine?: Record<string, never>;
         readonly check?: { readonly group: string };
-        readonly runtime?: { readonly production: boolean };
-        readonly error?: { readonly classes?: readonly string[] };
+        readonly runtime?: { readonly production: boolean | readonly string[] };
+        readonly error?: { readonly classes?: readonly string[]; readonly production?: boolean };
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';

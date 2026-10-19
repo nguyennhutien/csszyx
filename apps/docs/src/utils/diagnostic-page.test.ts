@@ -71,6 +71,21 @@ describe('the /e/<code> pages', () => {
         expect(surfaceSentences(thrown, LANDED)).toEqual(['It is thrown as an error whose `code` is this id.']);
     });
 
+    it('name the forms a production bundle prints, and a throw only development reaches', () => {
+        const some = { ...entry, surfaces: { runtime: { production: ['a'] } } };
+        expect(surfaceSentences(some)).toEqual([
+            'It is printed to the console. A production browser bundle prints its `a` form only.',
+        ]);
+        expect(renderDiagnosticPage(some, { shipped: LANDED })).toContain('prints them as JSON');
+        const devOnly = { ...entry, surfaces: { error: { production: false } } };
+        expect(surfaceSentences(devOnly)).toEqual([
+            'It is thrown as an error by a development build; a production build does not throw it.',
+        ]);
+        expect(surfaceSentences(devOnly, LANDED)).toEqual([
+            'It is thrown as an error whose `code` is this id, by a development build; a production build does not throw it.',
+        ]);
+    });
+
     it('say a level reaches neither a console line nor a thrown error', () => {
         const note = 'It does not change a console line';
         expect(renderDiagnosticPage(entry)).toContain(note);

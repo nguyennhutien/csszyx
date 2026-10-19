@@ -23,8 +23,8 @@ export interface SzDiagnosticSpec {
     readonly surfaces: {
         readonly engine?: Record<string, never>;
         readonly check?: { readonly group: string };
-        readonly runtime?: { readonly production: boolean };
-        readonly error?: { readonly classes?: readonly string[] };
+        readonly runtime?: { readonly production: boolean | readonly string[] };
+        readonly error?: { readonly classes?: readonly string[]; readonly production?: boolean };
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';

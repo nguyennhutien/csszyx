@@ -156,6 +156,45 @@ test('surfaces, groups, levels and positions are checked', () => {
     );
 });
 
+test('a console line prints in production for all forms, none, or the forms it lists', () => {
+    const runtime = production =>
+        entry({
+            surfaces: { runtime: { production } },
+            position: 'none',
+            forms: ['a', 'b'],
+            args: { form: { type: ['enum', 'a', 'b'] } },
+        });
+    assert.deepEqual(validateRegistry(registryOf([runtime(['b'])])), []);
+    assert.match(
+        validateRegistry(registryOf([runtime(['c'])])).join('\n'),
+        /prints in production for form c, which is not one of its forms/,
+    );
+    assert.match(
+        validateRegistry(registryOf([runtime([])])).join('\n'),
+        /lists no production form; write `production: false`/,
+    );
+    assert.match(
+        validateRegistry(registryOf([runtime('yes')])).join('\n'),
+        /runtime production is true, false or a list of forms/,
+    );
+    assert.match(
+        validateRegistry(
+            registryOf([entry({ surfaces: { runtime: { production: ['a'] } }, position: 'none' })]),
+        ).join('\n'),
+        /prints in production for form a, which is not one of its forms/,
+    );
+});
+
+test('a throw states whether a production build reaches it', () => {
+    const thrown = error => entry({ surfaces: { error }, position: 'none' });
+    assert.deepEqual(validateRegistry(registryOf([thrown({ production: false })])), []);
+    assert.deepEqual(validateRegistry(registryOf([thrown({})])), []);
+    assert.match(
+        validateRegistry(registryOf([thrown({ production: 'no' })])).join('\n'),
+        /error production is true or false/,
+    );
+});
+
 test('arguments, forms and gaps are checked', () => {
     assert.match(
         validateRegistry(registryOf([entry({ args: { Key: { type: 'string' } } })])).join('\n'),

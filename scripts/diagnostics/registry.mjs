@@ -147,12 +147,15 @@ export const COMPUTED = {
  *   reported by `csszyx check` under the `sz-diagnostic` group; that is
  *   implied, not written as `check`.
  * @property {{ group: string }} [check] - A non-engine `csszyx check` pass reports it as a kind of this group.
- * @property {{ production: boolean }} [runtime] - Printed to the console: by the
- *   runtime, dynamic or compiler browser entries, or by a Node build/CLI.
- *   `production` is true when it prints in a production browser build today;
- *   it is always false for a Node-only line.
- * @property {{ classes?: string[] }} [error] - Thrown. `classes` names the csszyx
- *   error classes that carry it today; a bare `Error`/`TypeError` is not listed.
+ * @property {{ production: boolean | string[] }} [runtime] - Printed to the
+ *   console: by the runtime, dynamic or compiler browser entries, or by a Node
+ *   build/CLI. `production` is true when it prints in a production browser
+ *   build, or the forms that do when only some of them do; it is always false
+ *   for a Node-only line.
+ * @property {{ classes?: string[], production?: boolean }} [error] - Thrown.
+ *   `classes` names the csszyx error classes that carry it today; a bare
+ *   `Error`/`TypeError` is not listed. `production: false` marks a throw that
+ *   only a development build reaches; absent, a production build throws it too.
  */
 
 /**

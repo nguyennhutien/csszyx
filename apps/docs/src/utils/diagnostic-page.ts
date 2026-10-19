@@ -25,8 +25,8 @@ export interface DiagnosticEntry {
     surfaces: {
         engine?: Record<string, never>;
         check?: { group: string };
-        runtime?: { production: boolean };
-        error?: { classes?: string[] };
+        runtime?: { production: boolean | string[] };
+        error?: { classes?: string[]; production?: boolean };
     };
     defaults?: { recommended: string; atomic: string };
     position: 'site' | 'file' | 'none';
@@ -112,14 +112,26 @@ export function surfaceSentences(entry: DiagnosticEntry, shipped: Shipped = SHIP
     if (entry.surfaces.check) {
         out.push(`\`csszyx check\` reports it in its \`${entry.surfaces.check.group}\` pass.`);
     }
-    if (entry.surfaces.runtime) {
+    const production = entry.surfaces.runtime?.production;
+    if (Array.isArray(production)) {
+        const forms = production.map(form => `\`${form}\``).join(', ');
         out.push(
-            entry.surfaces.runtime.production
+            `It is printed to the console. A production browser bundle prints its ${forms} form${production.length > 1 ? 's' : ''} only.`,
+        );
+    } else if (entry.surfaces.runtime) {
+        out.push(
+            production
                 ? 'It is printed to the console, by a production browser bundle too.'
                 : 'It is printed to the console. A production browser bundle leaves it out.',
         );
     }
-    if (entry.surfaces.error) {
+    if (entry.surfaces.error?.production === false) {
+        out.push(
+            shipped.errorCode
+                ? 'It is thrown as an error whose `code` is this id, by a development build; a production build does not throw it.'
+                : 'It is thrown as an error by a development build; a production build does not throw it.',
+        );
+    } else if (entry.surfaces.error) {
         out.push(shipped.errorCode ? 'It is thrown as an error whose `code` is this id.' : 'It is thrown as an error.');
     }
     for (const gap of entry.gaps ?? []) {
