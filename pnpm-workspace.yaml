@@ -30,6 +30,14 @@ packages:
 # against `<4.3.2`, `sharp` at `<0.35.0` against `<0.35.4`. Re-check by comparing
 # `pnpm audit` against this list, not by reading the list alone.
 overrides:
+  # Not an advisory. The Sonar rules that read types compare a type's flags with
+  # the `typescript` they load themselves, and the lockfile gave
+  # eslint-plugin-sonarjs the 5.9 the playgrounds use while typescript-eslint
+  # built the program with the root 6.0, which numbers the flags differently:
+  # S2301 and every other such rule stayed silent locally and SonarCloud
+  # reported them on the pull request. `scripts/check-changed-sonar.test.mjs`
+  # fails when the two load different copies again.
+  "eslint-plugin-sonarjs>typescript": "$typescript"
   "@azure/msal-node@>=5.1.0 <5.4.1": "^5.4.1"
   "@hono/node-server@<2.0.5": "^2.0.5"
   "brace-expansion@^1": "^1.1.21"
