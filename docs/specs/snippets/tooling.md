@@ -102,7 +102,7 @@ IntelliSense, hover, and diagnostics for `sz` props. Supports JSX, TSX, JS, TS, 
 **Settings:**
 
 - `csszyx.completions` (default: `auto`) — `auto` | `extension` | `off` (see plugin section)
-- `csszyx.enableDiagnostics` (default: `true`) — toggle unknown-prop warnings
+- `csszyx.enableDiagnostics` (default: `true`) — toggle the warnings for sz keys the build reports
 - `csszyx.enableHover` (default: `true`) — toggle hover preview
 
 **Build:** esbuild → `dist/extension.js` (CJS, bundles `@csszyx/tooling-metadata` + `@csszyx/compiler/browser`); ships `@csszyx/ts-plugin` as a packed dependency for the tsserver-plugin contribution.

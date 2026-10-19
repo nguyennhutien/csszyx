@@ -2044,14 +2044,12 @@ look at. Production is unaffected; no warning is emitted there at all.
 
 ## Editor diagnostics
 
-The VS Code extension reports key problems as squiggles, with its own shorter
-wording. Turn them off with `csszyx.enableDiagnostics: false`.
-
-| Message |
-| --- |
-| `'{key}' was removed: {note}.` |
-| `Unknown sz prop '{key}'. Did you mean '{suggestion}'?` |
-| `Unknown sz prop '{key}'. See https://csszyx.com/docs/sz-props for valid props.` |
+The VS Code extension reports a key no table knows as a squiggle, with the
+code the build gives it — [`removed-key`](#keys), [`canonical-key`](#keys),
+`numeric-key` or `unknown-key` — and the same sentence, `help:` and `note:` the
+build prints, filled from the same templates. The code in the Problems panel
+links to its `https://csszyx.com/e/<code>` page. Turn them off with
+`csszyx.enableDiagnostics: false`.
 
 The TypeScript plugin emits no diagnostics — it provides completions and hover
 only. See [TypeScript Autocomplete](/docs/typescript-plugin/) and

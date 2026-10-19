@@ -20,12 +20,18 @@
  */
 
 import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
-import { PLACEHOLDER } from './diagnostic-placeholder.js';
+import { SZ_DIAGNOSTIC_REGISTRY, type SzDiagnosticSpec } from './diagnostic-registry.generated.js';
 import {
-    SZ_DIAGNOSTIC_REGISTRY,
-    type SzDiagnosticSpec,
-    type SzDiagnosticTemplateText,
-} from './diagnostic-registry.generated.js';
+    fillSzDiagnosticTemplate,
+    type SzDiagnosticComputed,
+    type SzDiagnosticParts,
+} from './diagnostic-template.js';
+
+export {
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticComputed,
+    type SzDiagnosticParts,
+} from './diagnostic-template.js';
 
 /** Every id's entry, by id. */
 const SPECS: ReadonlyMap<string, SzDiagnosticSpec> = new Map(
@@ -52,27 +58,6 @@ export function isSzDiagnosticId(id: string): id is SzDiagnosticId {
     return SPECS.has(id);
 }
 
-/**
- * How each list arg of an entry joins when its sentence names it.
- *
- * @param spec - The entry.
- * @returns The joiners, by arg.
- */
-function joinersOf(spec: SzDiagnosticSpec): Readonly<Record<string, string>> {
-    const joiners: Record<string, string> = {};
-    // The generator requires every id with a template to declare its args.
-    for (const [name, arg] of Object.entries(spec.args as NonNullable<SzDiagnosticSpec['args']>)) {
-        if (arg.joiner !== undefined) joiners[name] = arg.joiner;
-    }
-    return joiners;
-}
-
-/** Where every code's page lives; the code is appended. */
-export const SZ_DIAGNOSTIC_URL_BASE = 'https://csszyx.com/e/';
-
-/** One arg value, as the wire carries it. */
-type ArgValue = string | number | readonly string[];
-
 /** A diagnostic to render: what it reports and what it names. */
 export interface RenderableDiagnostic {
     code: SzDiagnosticId;
@@ -87,67 +72,6 @@ export interface IdentifiedDiagnostic {
     args: object;
 }
 
-/** A value computed from an issue's args, by a helper over shared data. */
-export type SzDiagnosticComputed = (args: Readonly<Record<string, ArgValue>>) => string;
-
-/**
- * The template of one field for the issue's form.
- *
- * @param text - The field: one template, or one per form.
- * @param form - The issue's form, when its code has forms.
- * @returns The template, or `undefined` when the form has none.
- */
-function templateFor(
-    text: SzDiagnosticTemplateText | undefined,
-    form: ArgValue | undefined,
-): string | undefined {
-    if (text === undefined || typeof text === 'string') return text;
-    return typeof form === 'string' ? text[form] : undefined;
-}
-
-/**
- * Fill a template in one pass, so an arg that itself holds `{x}` is printed as
- * written and never expanded.
- *
- * @param template - The template.
- * @param args - The issue's args.
- * @param joiners - How each list arg joins.
- * @param computed - The helpers for computed values.
- * @returns The text.
- */
-function fill(
-    template: string,
-    args: Readonly<Record<string, ArgValue>>,
-    joiners: Readonly<Record<string, string>>,
-    computed: Readonly<Record<string, SzDiagnosticComputed>>,
-): string {
-    // PLACEHOLDER is global, so `replace` fills every placeholder in one pass.
-    return template.replace(PLACEHOLDER, (_: string, name: string) => {
-        const value = args[name];
-        // The generator requires every list arg to declare its joiner.
-        if (Array.isArray(value)) return value.join(joiners[name]);
-        if (value !== undefined) return String(value);
-        return computed[name]?.(args) ?? '';
-    });
-}
-
-/**
- * A diagnostic's parts, each bare: the sentence, the advice and the note
- * after their labels, and the code's page. Layout belongs to the sink: the
- * terminal indents and labels them, `csszyx check --json` and the MCP server
- * hand them over as fields.
- */
-export interface SzDiagnosticParts {
-    /** The main sentence. */
-    text: string;
-    /** What to do, as one clause; absent when the code has no advice. */
-    help?: string;
-    /** What happened to the output, as one clause; absent when there is none. */
-    note?: string;
-    /** The code's page: `https://csszyx.com/e/<code>`. */
-    docs: string;
-}
-
 /**
  * Render a diagnostic's parts from its code's templates.
  *
@@ -159,22 +83,7 @@ export function renderSzDiagnosticParts(
     diagnostic: IdentifiedDiagnostic,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): SzDiagnosticParts {
-    const template = specOf(diagnostic.code);
-    const args = diagnostic.args as Readonly<Record<string, ArgValue>>;
-    const joiners = joinersOf(template);
-    const variant = args[template.variesBy ?? 'form'];
-    const part = (field: 'text' | 'help' | 'note'): string | undefined => {
-        const text = templateFor(template[field], variant);
-        return text === undefined ? undefined : fill(text, args, joiners, computed);
-    };
-    const help = part('help');
-    const note = part('note');
-    return {
-        text: part('text') ?? '',
-        ...(help === undefined ? {} : { help }),
-        ...(note === undefined ? {} : { note }),
-        docs: `${SZ_DIAGNOSTIC_URL_BASE}${diagnostic.code}`,
-    };
+    return fillSzDiagnosticTemplate(specOf(diagnostic.code), diagnostic, computed);
 }
 
 /**

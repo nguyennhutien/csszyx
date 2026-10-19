@@ -9,6 +9,11 @@
  */
 
 export type { SourceMap } from 'magic-string';
+export {
+    fillSzDiagnosticTemplate,
+    type SzDiagnosticTemplate,
+} from './diagnostic-template.js';
+export { SZ_EDITOR_DIAGNOSTIC_TEMPLATES } from './editor-diagnostic-templates.generated.js';
 export { type EmittedClassName, findEmittedClassName } from './emitted-class-name.js';
 export {
     isParserMode,

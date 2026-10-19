@@ -51,12 +51,15 @@ the compiler uses at build time — what you see is exactly what ships.
 
 ### Diagnostics
 
-Unknown prop keys are flagged as warnings in the Problems panel and underlined
-in the editor. When the key is close to a known prop, a suggestion is shown.
+A key no table knows is flagged as a warning in the Problems panel and
+underlined in the editor, with the code and the words the build uses for it:
+an alias names its canonical key, a removed key what replaced it, and a typo
+the key it most likely means. The code links to its page on
+`https://csszyx.com/e/<code>`.
 
 ```
-Unknown sz prop 'padding'. Did you mean 'p'?
-Unknown sz prop 'color'. Did you mean 'text'?
+`padding` is an alias of `p`, and nothing is emitted for it.
+help: write `p`.
 ```
 
 Diagnostics run immediately on file open/save and with a 300 ms debounce while
@@ -83,7 +86,7 @@ pnpm build
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `csszyx.completions` | `"auto"` | Who provides `sz` completions. `auto`: the bundled `@csszyx/ts-plugin` handles TypeScript/JavaScript, the extension handles HTML. `extension`: disable the plugin, extension provides all languages. `off`: no `sz` completions |
-| `csszyx.enableDiagnostics` | `true` | Show unknown-prop warnings |
+| `csszyx.enableDiagnostics` | `true` | Show warnings for sz keys the build reports |
 | `csszyx.enableHover` | `true` | Show hover preview |
 
 Changing `csszyx.completions` takes effect immediately — the extension

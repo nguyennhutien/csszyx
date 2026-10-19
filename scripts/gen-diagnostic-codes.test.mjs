@@ -8,8 +8,10 @@ import test from 'node:test';
 import * as registry from './diagnostics/registry.mjs';
 import {
     casingProblems,
+    EDITOR_IDS,
     placeholdersOf,
     publicData,
+    renderEditorTemplates,
     renderRegistryModule,
     renderRust,
     renderTypeScript,
@@ -435,5 +437,18 @@ test('the registry check applies the casing rule to every field and form', () =>
             ]),
         ).join('\n'),
         /note \(b\): .*second sentence/,
+    );
+});
+
+test('the editor module carries the editor ids only, each as the registry words it', () => {
+    const source = renderEditorTemplates(registry);
+    for (const id of EDITOR_IDS) {
+        const { text } = registry.DIAGNOSTICS.find(entry => entry.id === id);
+        assert.ok(source.includes(JSON.stringify(text, null, 4).split('\n')[0]), id);
+    }
+    assert.ok(!source.includes('"dead-class"'));
+    assert.throws(
+        () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
+        /editor id unknown-key is not in the registry/,
     );
 });
