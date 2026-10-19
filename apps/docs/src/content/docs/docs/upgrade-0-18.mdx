@@ -57,17 +57,18 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`sz` covers a `className` class](#sz-removes-a-classname-class-it-covers) | `className="card pb-2" sz={{ p: 4 }}` emits `card p-4` | the merge audit | you |
 | [A spread splits the class names](#class-names-on-either-side-of-a-spread-no-longer-merge) | `spread-split-class` warning; Svelte `attribute_duplicate` | the build, `csszyx check` | you |
 | [`szcn` merges on compiled CSS](#szcn-merges-only-what-compiled-css-proves) | `szcn` keeps or drops different classes | dev warning | you |
-| [`font-variant-numeric` keys](#font-variant-numeric-takes-one-key-per-group) | `"tabularNums" was replaced` | the build, `csszyx check` | `migrate --keys-only` |
-| [`touch-action` keys, `contain`](#touch-action-takes-one-key-per-group-contain-gains-keys) | `"touch: pan-x" moved to` | the build, `csszyx check` | `migrate --keys-only` |
+| [`font-variant-numeric` keys](#font-variant-numeric-takes-one-key-per-group) | `[csszyx] removed-key:` on `tabularNums` | the build, `csszyx check` | `migrate --keys-only` |
+| [`touch-action` keys, `contain`](#touch-action-takes-one-key-per-group-contain-gains-keys) | `[csszyx] moved-value:` on `touch: pan-x` | the build, `csszyx check` | `migrate --keys-only` |
 | [`szv()` returns `SzProps`](#szv-returns-szprops-and-checks-every-row) | type errors in `szv` rows | `tsc` | you |
 | [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
-| [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-eight-exports) | an import that no longer resolves | `tsc`, the bundler | you |
+| [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-nine-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find package '@csszyx/core'` | `tsc`, the bundler, the import of `@csszyx/compiler/engine` | you |
 | [Engine at the compiler's version](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `engine-version-skew` | the first engine call | you |
 | [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
 | [Core in Node only](#csszyxcore-runs-in-node-only-and-verifymanglemapintegrity-is-gone) | `verifyMangleMapIntegrity` not exported; `Could not resolve "@csszyx/core"` in a browser build | `tsc`, the bundler | you |
+| [`@csszyx/core/native` results](#csszyxcorenative-returns-codes-instead-of-sentences) | no `diagnostics` on a result; `rootDir` not accepted | `tsc` | you |
 | [ES modules only](#csszyxunplugin-and-csszyxcompiler-ship-es-modules-only) | `TS1471` or `TS1479` in a CommonJS TypeScript file | `tsc` | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
@@ -75,6 +76,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Framework parsers](#the-adapters-read-templates-with-vues-and-sveltes-parsers) | `Svelte cannot parse this file` on `sz="{ p: 4 }"`; Vue 3.5 and Svelte 5 required | the build | you |
 | [`mergeClassAttributes` removed](#the-adapters-read-templates-with-vues-and-sveltes-parsers) | an import that no longer resolves | `tsc`, the bundler | you |
 | [A template string without `${}`](#a-template-string-without-a-substitution-is-static) | `` { p: `4` } `` emits `p-4` | your snapshots | nothing |
+| [Build-log diagnostics](#every-sz-diagnostic-in-the-build-log-changes-shape) | `[csszyx] unknown-key: src/Card.tsx:3:16` where 0.17 printed `Unknown property "bgg"` | your log filters | you |
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`check --json` version 2](#check---json-writes-version-2-with-help-and-note-as-fields) | `"version": 2`; `message` holds no `help:` line | your CI parser | you |
 | [MCP `csszyx_validate` fields](#check---json-writes-version-2-with-help-and-note-as-fields) | each warning is an object, not a string | your MCP client | you |
@@ -83,8 +85,8 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
-| [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `string slash opacity is not supported` | the build, `csszyx check` | you |
-| [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `takes its opacity in op, not in color` | the build, `csszyx check` | you |
+| [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
+| [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -263,8 +265,11 @@ unchanged.
 **What you see.** The build prints this in every mode, production included:
 
 ```text
-[csszyx] <div> at src/Card.tsx:1:36: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card pb-2` will not apply there (Vue JSX merges every class instead).
+[csszyx] spread-split-class: src/Card.tsx:1:36
+  `<div>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so `card pb-2` will not apply there.
   help: write them in one `sz` array after `{...rest}`, in the order that should win: `sz={['card pb-2', rest.className, { … }]}`.
+  note: in Vue JSX every class is merged, so every side applies there.
+  docs: https://csszyx.com/e/spread-split-class
 ```
 
 **The edit.** Write everything in one `sz` array after the spread, in the order that
@@ -368,7 +373,10 @@ combine:
 in production too:
 
 ```text
-[csszyx] "tabularNums" was replaced at src/Table.tsx:4. Use { numSpacing: 'tabular' } instead, or run `csszyx migrate`.
+[csszyx] removed-key: src/Table.tsx:4:17
+  `tabularNums` was replaced, and nothing is emitted for it.
+  help: write `{ numSpacing: 'tabular' }` instead, or run `csszyx migrate`.
+  docs: https://csszyx.com/e/removed-key
 ```
 
 **The edit.** `csszyx migrate --keys-only` rewrites them, including a ternary of
@@ -405,7 +413,10 @@ replacement, in a ternary and inside any variant as well as at the top of the
 object:
 
 ```text
-[csszyx] "touch: pan-x" moved to { touchPanX: 'x' } at src/Map.tsx:3. Run `csszyx migrate` to rewrite it.
+[csszyx] moved-value: src/Map.tsx:3:16
+  `touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.
+  help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.
+  docs: https://csszyx.com/e/moved-value
 ```
 
 **The edit.** `csszyx migrate --keys-only` rewrites it, also under the old alias
@@ -541,7 +552,7 @@ The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it.
 
-## @csszyx/compiler renames one error and drops eight exports
+## @csszyx/compiler renames one error and drops nine exports
 
 The error `transformRust` throws when the native engine cannot load is now
 `RustTransformUnavailableError`, the counterpart of `WasmTransformUnavailableError`.
@@ -591,6 +602,24 @@ const kind = szDiagnosticKindOf(result.diagnostics[0]);
 // after
 const kind = result.issues?.[0]?.code;
 ```
+
+`szKeySuggestionFor` is gone for the same reason: it read the misspelt key out
+of an `Unknown property` sentence. An `unknown-key` issue carries the key it
+most likely misspells in `args.suggestion`, absent when no key is near.
+
+```ts
+// before
+import { szKeySuggestionFor } from "@csszyx/compiler";
+const key = szKeySuggestionFor(result.diagnostics[0]);
+
+// after
+import type { SzIssue } from "@csszyx/compiler";
+const issue = result.issues?.[0] as SzIssue | undefined;
+const key = issue?.code === "unknown-key" ? issue.args.suggestion : undefined;
+```
+
+`CsszyxCompiler`, the tenth removed name, is covered under
+[the engine move](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own).
 
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it. Code that compared
@@ -737,6 +766,21 @@ resolve it:
 ✘ [ERROR] Could not resolve "@csszyx/core"          (esbuild)
 "." is not exported under the conditions ["module", "browser", "production", "import"] from package …/@csszyx/core          (Vite)
 ```
+
+## @csszyx/core/native returns codes instead of sentences
+
+This concerns code that calls the native binding `@csszyx/core/native`
+directly; the csszyx packages are already updated. A `transformBatch` result
+no longer carries `diagnostics`, the rendered sentences. Each entry of its new
+`issues` field is `{ code, start, argsJson }`: the diagnostic's code, its byte
+offset in the source, and the JSON object of the values it names.
+`@csszyx/compiler` renders the sentence from those. The `rootDir` option, which
+only shortened the file path inside a sentence, is no longer accepted.
+
+**The edit.** Call `transformRust` or `transformSource` from
+`@csszyx/compiler/engine` instead. Their result holds the rendered
+`diagnostics` and an `issues` entry with `code`, `args`, `line` and `column`
+for each.
 
 ## @csszyx/unplugin and @csszyx/compiler ship ES modules only
 
@@ -922,6 +966,33 @@ variable:
 The same holds in an `szs` slot, an `szv` config, and an object another module
 imports. A template string with a `${}` substitution is unchanged.
 
+## Every sz diagnostic in the build log changes shape
+
+Each diagnostic the engine reports for an `sz` prop now prints a header with its
+code and position, then the sentence, `help:`, `note:` and `docs:` lines
+indented by two spaces. Most sentences are reworded:
+
+```text
+# 0.17
+[csszyx] Unknown property "bgg" in sz prop at src/Card.tsx:3. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.
+
+# 0.18
+[csszyx] unknown-key: src/Card.tsx:3:16
+  `bgg` is not an sz property.
+  help: write `bg` if you meant it; for a custom utility, define it with Tailwind's `@utility`.
+  note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.
+  docs: https://csszyx.com/e/unknown-key
+```
+
+**You are affected** when a CI step, a log filter or a test greps the build
+output for 0.17 wording, such as `Unknown property` or `sz fallback at`. Those
+strings no longer appear.
+
+**The edit.** Match the code in the header, for example `[csszyx] unknown-key:`.
+The codes are the ids `csszyx check --rule` takes, and they stay fixed when a
+sentence is reworded. `csszyx check --json` gives the same code as `kind`, with
+the position in `line` and `column`.
+
 ## check --json no longer reports other for engine diagnostics
 
 `csszyx check --json` read each diagnostic's `kind` from its wording, so families
@@ -929,8 +1000,11 @@ added since then came out as `other`. The kind now comes from the engine's code,
 and an engine diagnostic is never `other`. The new kinds are `moved-value`,
 `global-before-group`, `runtime-family-conflict`, `merge-classifier-unavailable`,
 `parse-error`, `nesting-depth`, `unsupported-dynamic-sz` and `ast-budget`. The
-TypeScript type `SzDiagnosticKindId` from `@csszyx/compiler` names every one, so
-an exhaustive `switch` over it needs the new cases.
+`kind` of an `sz-diagnostic` finding is the engine's code. The TypeScript type
+`SzDiagnosticCode` from `@csszyx/compiler` names every code, and
+`SZ_DIAGNOSTIC_CODES` lists them, in place of `SzDiagnosticKindId` and
+`SZ_DIAGNOSTIC_KIND_IDS`, which are removed. A finding of another pass has its
+rule as its `kind`, as before.
 
 **The edit.** A CI filter, `--rule` or `--ignore-rule` that selected `other` must
 name the new ids:
@@ -962,10 +1036,31 @@ Version 2 hands over the parts:
 | `message` | the sentence, then `help:` and `note:` lines | the main sentence alone |
 | `help` | inside `message` | its own field, without the `help: ` label; absent when there is none |
 | `note` | inside `message` | its own field, without the `note: ` label; absent when there is none |
+| `line` | the first `:<number>` found in `message`, or absent | the engine's position of the finding; absent for a diagnostic about the whole file |
+| `column` | absent | 1-based, in UTF-16 code units, beside `line` |
+| `args` | absent | the values the sentence names, by name, such as `{ "key": "bgg", "suggestion": "bg" }` |
+| `url` | absent | the page that explains the kind, `https://csszyx.com/e/<kind>` |
+| `level` | absent | `info`, `warn` or `error`, from [`csszyx.config`](#csszyx-check-fails-only-on-error-findings) |
 
-`rule`, `kind`, `file`, `line`, `column`, `suggestion`, `args`, `url` and
-`level` are unchanged. A finding of any other pass never had `help` or `note`,
-so only its `version` changes. The human report prints what it printed before.
+`rule`, `kind`, `file` and `suggestion` keep their meaning. A finding of any
+other pass never had `help`, `note`, `column`, `args` or `url`, so only its
+`version` and `level` change. The JSON Schema is published at
+[`/schemas/check-v2.json`](https://csszyx.com/schemas/check-v2.json).
+
+With `--json`, stdout carries only the JSON document. Warnings about
+the run itself, such as `removed-rule-id` for `--rule other`, and errors such
+as an unknown rule id, go to stderr. A step that pipes stdout into a JSON parser
+keeps working when the run warns.
+
+The human report changed too. Each finding prints as its line and column, its
+level when it is not `error`, its kind and the sentence, with `help:` and
+`note:` lines under it:
+
+```text
+src/Card.tsx
+  1:48 (info) class-precedence: `sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.
+    help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.
+```
 
 **The edit.** Read `help` and `note` where you split `message`, and accept
 `version: 2`:
@@ -1087,8 +1182,8 @@ export const Card = (props) => <div className={props.className} sz={{ p: 4 }} />
 
 ```text
 src/Card.tsx
-  (info) "sz" takes precedence over the runtime "className" on this element at src/Card.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.
-  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.
+  1:48 (info) class-precedence: `sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.
+    help: state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.
 
 ! 1 sz issue(s) in 1 file(s); 1 below --fail-on error, which do not fail the run.
 ```
@@ -1211,9 +1306,10 @@ reports the key under the kind `fallback-missing-css`, an `error`, printed in
 production too:
 
 ```text
-[csszyx] src/Card.tsx:3:28
-  sz fallback at 3:28: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.
-  Suggestion: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.
+[csszyx] fallback-missing-css: src/Card.tsx:3:22
+  `sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.
+  help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.
+  docs: https://csszyx.com/e/fallback-missing-css
 ```
 
 **You are affected** when an `sz` object holds a runtime value under a variant
@@ -1235,8 +1331,16 @@ Fix the spelling of a key that was meant as a property. The full matrix is in
 A colour key takes its opacity in the object form, so `{ bg: 'red-500/50' }` has
 always emitted nothing. 0.17 said so only in the browser, in development. The
 build now names it under the kind `slash-opacity-string`, an `error` under
-`recommended`, and the runtime prints the same line once per value, in
-production too:
+`recommended`:
+
+```text
+[csszyx] slash-opacity-string: src/Card.tsx:3:16
+  `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.
+  help: use the object form: `{ color: 'red-500', op: 50 }`.
+  docs: https://csszyx.com/e/slash-opacity-string
+```
+
+The runtime prints its own one-line warning once per value, in production too:
 
 ```text
 [csszyx] "bg: 'red-500/50'" at src/Card.tsx:3 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 50 }.
