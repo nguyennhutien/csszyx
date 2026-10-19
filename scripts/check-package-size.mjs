@@ -46,6 +46,13 @@ import { buildSync } from 'esbuild';
  * bundle that holds every message the package can print, and because the
  * entries' headrooms add up: each entry can grow ~300 bytes and still pass.
  *
+ * A fourth kind prices code that never reaches a browser but runs at the
+ * start of every build: `kind: 'node-entry'` sums the gzip bytes of the files
+ * a Node process loads when it imports one export subpath, the entry and every
+ * file it reaches through a static import. Node compiles each of them whole
+ * before the first call returns, so a heavy import added to a build-time
+ * entry is start-up time for every build, dev server and CLI run.
+ *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
  * Crossing one is a one-line change to the number below plus a sentence in the
@@ -377,6 +384,28 @@ export const SIZE_BUDGETS = [
         // issue per syntax error and the spread notice alone.
         maxGzipBytes: 582_400,
     },
+    // What Node loads for the two entries the build tools import: the engine
+    // calls and the diagnostic renderer, which reads the diagnostic registry
+    // and the key tables. Measured 2026-10-19 from a fresh process, p50 of 30
+    // each: importing `./engine` took 1.76 ms at 6,631 gzip bytes, 4.69 ms
+    // once the renderer pulled the whole browser lowering in for its tables
+    // (49,614), and 3.61 ms after the tables moved to their own module
+    // (30,115). `./internal` measured 33,093 the same day. Budgets the usual
+    // ~300 above the measurement.
+    {
+        name: '@csszyx/compiler `./engine`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './engine',
+        maxGzipBytes: 30_400,
+    },
+    {
+        name: '@csszyx/compiler `./internal`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './internal',
+        maxGzipBytes: 33_400,
+    },
 ];
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
@@ -548,6 +577,40 @@ export function messageProblems(printed, allowed) {
     return problems;
 }
 
+/** The files a Node process loads when it imports one entry: the entry and
+ * every file it reaches through a static `import` or `export … from`, read
+ * from esbuild's metafile. A dynamic `import()` loads only when it runs, so
+ * it is not followed, and other packages and Node builtins are left out.
+ *
+ * @param {string} entryFile absolute entry file
+ * @returns {string[]} absolute file paths, sorted
+ */
+export function nodeEntryFiles(entryFile) {
+    const dir = path.dirname(entryFile);
+    const { metafile } = buildSync({
+        entryPoints: [entryFile],
+        absWorkingDir: dir,
+        bundle: true,
+        write: false,
+        metafile: true,
+        format: 'esm',
+        platform: 'node',
+        packages: 'external',
+        logLevel: 'silent',
+    });
+    const seen = new Set();
+    const queue = [path.relative(dir, entryFile)];
+    while (queue.length > 0) {
+        const file = queue.pop();
+        if (seen.has(file)) continue;
+        seen.add(file);
+        for (const { path: target, kind, external } of metafile.inputs[file].imports) {
+            if (kind === 'import-statement' && !external) queue.push(target);
+        }
+    }
+    return [...seen].map(file => path.resolve(dir, file)).sort();
+}
+
 /** Sum the gzip size of each file, compressed independently at a fixed level
  * so the total is stable across runs and machines.
  *
@@ -593,7 +656,19 @@ export function checkBudgets(budgets, rootDir) {
         let gzipBytes;
         const entryMeasurements = [];
         try {
-            if (budget.kind === 'file') {
+            if (budget.kind === 'node-entry') {
+                const entry = listExportSubpaths(target).find(
+                    ({ subpath }) => subpath === budget.subpath,
+                );
+                if (entry === undefined) {
+                    const { name } = JSON.parse(
+                        readFileSync(path.join(target, 'package.json'), 'utf8'),
+                    );
+                    throw new Error(`no export subpath \`${budget.subpath}\` in ${name}`);
+                }
+                files = nodeEntryFiles(entry.file);
+                gzipBytes = gzipTotalBytes(files);
+            } else if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
                 // bundle, but its absence is still a failure, never a pass.
                 statSync(target);

@@ -14,6 +14,7 @@ import {
     isRuntimeArtifact,
     listExportEntries,
     listExportSubpaths,
+    nodeEntryFiles,
     SIZE_BUDGETS,
 } from './check-package-size.mjs';
 
@@ -346,12 +347,12 @@ test('a file budget whose artifact is missing fails instead of passing silently'
     }
 });
 
-test('committed budgets cover the four user-shipped surfaces', () => {
+test('committed budgets cover the user-shipped surfaces and the engine entries', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 4);
+    assert.equal(SIZE_BUDGETS.length, 6);
     for (const budget of SIZE_BUDGETS) {
-        assert.ok(['app-bundle', 'file'].includes(budget.kind));
+        assert.ok(['app-bundle', 'file', 'node-entry'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
         assert.ok(!path.isAbsolute(budget.target), 'targets are repo-relative');
     }
@@ -366,6 +367,17 @@ test('committed budgets cover the four user-shipped surfaces', () => {
     assert.deepEqual(compiler?.excludeSubpaths, ['.', './engine', './internal', './migrate']);
     assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
+    // The two entries the build tools import are priced by what Node loads.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.kind === 'node-entry').map(budget => [
+            budget.target,
+            budget.subpath,
+        ]),
+        [
+            ['packages/compiler', './engine'],
+            ['packages/compiler', './internal'],
+        ],
+    );
     // Every app bundle prices each entry on its own, no entry ceiling is
     // looser than the union it is part of, and the priced entries are
     // exactly the package's real runtime exports minus the exclusions.
@@ -523,5 +535,73 @@ test('a new export that is not excluded must get an entry budget', () => {
     } finally {
         rmSync(before, { recursive: true, force: true });
         rmSync(after, { recursive: true, force: true });
+    }
+});
+
+/** A package whose `./engine` reaches two files by static import, one other
+ * package, a Node builtin, and a large file it loads only through `import()`.
+ * @returns {Record<string, string>} fixture file map
+ */
+function enginePackage() {
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: {
+                './engine': { types: './dist/engine.d.mts', default: './dist/engine.mjs' },
+            },
+        }),
+        'packages/thing/dist/engine.mjs':
+            "import { a } from './a.mjs';\nimport { readFileSync } from 'node:fs';\n" +
+            "import { b } from 'other-pkg';\n" +
+            "export const run = () => import('./lazy.mjs').then(m => m.x + a + b + readFileSync);\n",
+        'packages/thing/dist/a.mjs': "export { c as a } from './c.mjs';\n",
+        'packages/thing/dist/c.mjs': 'export const c = 1;\n',
+        'packages/thing/dist/lazy.mjs': `export const x = ${JSON.stringify(DEV_TEXT)};\n`,
+    };
+}
+
+/** One node-entry budget over the fixture's `./engine`.
+ * @param {Partial<typeof SIZE_BUDGETS[number]>} [extra] extra budget fields
+ * @returns {typeof SIZE_BUDGETS} a one-entry budget list
+ */
+function engineBudget(extra = {}) {
+    return [
+        {
+            name: 'thing engine',
+            kind: 'node-entry',
+            target: 'packages/thing',
+            subpath: './engine',
+            maxGzipBytes: 100_000,
+            ...extra,
+        },
+    ];
+}
+
+test('node-entry budgets count every file a static import loads, and no lazy one', () => {
+    const root = makeFixture(enginePackage());
+    const dist = path.join(root, 'packages/thing/dist');
+    const loaded = ['a.mjs', 'c.mjs', 'engine.mjs'].map(file => path.join(dist, file));
+    try {
+        assert.deepEqual(nodeEntryFiles(path.join(dist, 'engine.mjs')), loaded);
+        const { failures, results } = checkBudgets(engineBudget(), root);
+        assert.deepEqual(failures, []);
+        assert.deepEqual(results[0].files, loaded);
+        assert.equal(results[0].gzipBytes, gzipTotalBytes(loaded));
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry budget fails over its limit, or on a subpath the package lacks', () => {
+    const root = makeFixture(enginePackage());
+    try {
+        const over = checkBudgets(engineBudget({ maxGzipBytes: 8 }), root);
+        assert.equal(over.failures.length, 1);
+        assert.match(over.failures[0], /thing engine: \d+ gzip bytes exceeds the 8-byte budget/);
+        const missing = checkBudgets(engineBudget({ subpath: './nope' }), root);
+        assert.equal(missing.failures.length, 1);
+        assert.match(missing.failures[0], /no export subpath `\.\/nope` in thing/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
     }
 });
