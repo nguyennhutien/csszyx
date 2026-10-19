@@ -328,6 +328,14 @@ describe('szDiagnosticKey', () => {
         );
     });
 
+    it('keys an absent optional arg apart from a present one', () => {
+        const args = { elementName: 'div', classes: ['a'], szCount: 1, szAt: 0, parts: ['x'] };
+
+        expect(szDiagnosticKey({ code: 'spread-split-class', args })).not.toBe(
+            szDiagnosticKey({ code: 'spread-split-class', args: { ...args, spread: 'props' } }),
+        );
+    });
+
     it("is the same before and after rendering fills an unknown key's suggestion", () => {
         expect(
             szDiagnosticKey({
