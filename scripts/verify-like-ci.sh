@@ -280,6 +280,13 @@ node scripts/check-changed-sonar.mjs
 echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."
 pnpm check:package-size
 
+# Allocations of the engine's diagnostic path, counted as V8 young-generation
+# collections of fixed workloads against a clean control: they repeat run to
+# run, so a budget rather than a timing. Reads the compiler dist the build
+# above wrote and the host native addon.
+echo "[verify-like-ci] Diagnostic cost gate (scavenge ratios of fixed workloads)..."
+pnpm check:diagnostic-cost
+
 echo "[verify-like-ci] Wasm-lane smoke (real vite build through both engine artifacts)..."
 bash scripts/smoke-wasm-lane.sh
 

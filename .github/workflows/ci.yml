@@ -903,6 +903,14 @@ jobs:
           pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler
           pnpm check:package-size
 
+      # Allocations of the engine's diagnostic path, counted as V8
+      # young-generation collections of fixed workloads against a clean
+      # control: they repeat run to run for one Node version, so a budget
+      # rather than a timing. Reads the compiler dist built for the step above
+      # and the host native addon built at the start of this job.
+      - name: Diagnostic cost gate
+        run: pnpm check:diagnostic-cost
+
   # Aggregator. Always runs. Branch protection should require this single
   # check rather than the individual jobs above — those may be legitimately
   # skipped (no relevant changes), and gating each separately would block
