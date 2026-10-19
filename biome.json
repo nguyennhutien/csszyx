@@ -56,7 +56,8 @@
             "!apps/docs/src/styles/landing.css",
             "!**/*.generated.ts",
             "!**/tests/generated",
-            "!packages/core/tests/fixtures"
+            "!packages/core/tests/fixtures",
+            "!packages/compiler/tests/fixtures/diagnostic-freeze.json"
         ]
     },
     "formatter": {

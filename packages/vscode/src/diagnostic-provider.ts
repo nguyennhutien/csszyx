@@ -1,5 +1,5 @@
 /**
- * Diagnostic provider — reports unknown sz prop keys as warnings.
+ * Diagnostic provider — reports the sz keys the build would report.
  *
  * Runs on document open and after a 300ms debounce on content changes.
  * Only activates when `csszyx.enableDiagnostics` is true (default: true).
@@ -12,9 +12,21 @@
  *   - Arbitrary variant keys ([&:hover], ...)
  *   - `css` (arbitrary CSS escape hatch)
  *
- * When an unknown key matches SUGGESTION_MAP, the warning includes a hint.
+ * Removed boolean sugar set to `true` (`flex: true`, `tabularNums: true`) is
+ * reported even when the key is also a property, as the build reports it.
+ * Any other key gets the code the engine gives it — `removed-key`,
+ * `canonical-key`, `numeric-key` or `unknown-key` — with the args the
+ * engine would carry, and its message is filled from the registry's
+ * templates, so the editor and the build say the same words and link the
+ * same `/e/<code>` page.
  */
 
+import { SZ_DIAGNOSTIC_COMPUTED_VALUES, suggestSzKey } from '@csszyx/compiler';
+import { REMOVED_BOOLEAN_SUGAR, REPLACED_KEYS } from '@csszyx/compiler/browser';
+import {
+    fillSzDiagnosticTemplate,
+    SZ_EDITOR_DIAGNOSTIC_TEMPLATES,
+} from '@csszyx/compiler/internal';
 import * as vscode from 'vscode';
 
 import {
@@ -73,20 +85,105 @@ function isValidKey(key: string): boolean {
     return VALID_KEYS.has(key) || key.startsWith('['); // [&:hover] arbitrary variants
 }
 
+/** A key the build reports, as the engine names it. */
+export interface KeyIssue {
+    code: keyof typeof SZ_EDITOR_DIAGNOSTIC_TEMPLATES;
+    args: Readonly<Record<string, string>>;
+}
+
 /**
- * Build one unknown-key diagnostic within an sz expression.
+ * A number, the mark of an array or spread passed as an sz object: digits,
+ * with an optional fraction of digits (`is_numeric_key` in the engine).
+ */
+const NUMERIC_KEY = /^\d+(?:\.\d+)?$/;
+
+/**
+ * The engine's verdict on removed boolean sugar: a sugar key set to literally
+ * `true` emits no class whether or not a table knows the key (`flex` is also a
+ * property), so it is asked before any other check.
+ *
+ * @param key - The key.
+ * @param value - Its parsed value.
+ * @returns Its code and args, or `undefined` when the key is not sugar set to `true`.
+ */
+function removedSugarIssue(key: string, value: unknown): KeyIssue | undefined {
+    const removed = value === true ? REMOVED_BOOLEAN_SUGAR[key] : undefined;
+    if (removed === undefined) return undefined;
+    return {
+        code: 'removed-key',
+        args: {
+            form: REPLACED_KEYS.has(key) ? 'sugar-replaced' : 'sugar',
+            key,
+            replacement: `${removed.key}: '${removed.value}'`,
+        },
+    };
+}
+
+/**
+ * The engine's verdict on a key, in the engine's order: removed boolean sugar,
+ * a removed key, a flag that was replaced, an alias, a number, or a key that
+ * may still be a project's own utility.
+ *
+ * @param key - The key.
+ * @param value - Its parsed value; only `true` can make it removed sugar.
+ * @returns Its code and args.
+ */
+export function keyIssue(key: string, value?: unknown): KeyIssue {
+    const sugar = removedSugarIssue(key, value);
+    if (sugar !== undefined) return sugar;
+    if (MIGRATION_NOTES[key] !== undefined) {
+        return { code: 'removed-key', args: { form: 'removed', key } };
+    }
+    const canonical = SUGGESTION_MAP[key];
+    if (canonical !== undefined && REPLACED_KEYS.has(key)) {
+        return {
+            code: 'removed-key',
+            args: { form: 'replaced', key, replacement: `${canonical}: true` },
+        };
+    }
+    if (canonical !== undefined) return { code: 'canonical-key', args: { key } };
+    if (NUMERIC_KEY.test(key)) return { code: 'numeric-key', args: { key } };
+    const suggestion = suggestSzKey(key);
+    return { code: 'unknown-key', args: suggestion === null ? { key } : { key, suggestion } };
+}
+
+/**
+ * A key's message as the editor shows it: the sentence, then the `help:` and
+ * `note:` lines a terminal prints under it.
+ *
+ * @param issue - The key's code and args.
+ * @returns The message and the code's page.
+ */
+export function keyIssueMessage(issue: KeyIssue): { message: string; docs: string } {
+    const { text, help, note, docs } = fillSzDiagnosticTemplate(
+        SZ_EDITOR_DIAGNOSTIC_TEMPLATES[issue.code],
+        issue,
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    );
+    const labelled = [
+        ['help', help],
+        ['note', note],
+    ].filter((part): part is [string, string] => part[1] !== undefined);
+    const lines = [text, ...labelled.map(([label, part]) => `${label}: ${part}`)];
+    return { message: lines.join('\n'), docs };
+}
+
+/**
+ * Build the diagnostic for one key the build reports, within an sz expression.
  *
  * @param document Document being validated.
  * @param expressionSource Original sz expression source.
  * @param startOffset Expression start offset.
- * @param key Unknown key.
+ * @param key The sz key.
+ * @param value The key's parsed value.
  * @returns Diagnostic or null when the key location cannot be found.
  */
-function createUnknownKeyDiagnostic(
+function createKeyDiagnostic(
     document: vscode.TextDocument,
     expressionSource: string,
     startOffset: number,
     key: string,
+    value: unknown,
 ): vscode.Diagnostic | null {
     const keyPattern = new RegExp(String.raw`\b${escapeRegex(key)}\s*:`);
     const localMatch = keyPattern.exec(expressionSource);
@@ -98,27 +195,11 @@ function createUnknownKeyDiagnostic(
         document.positionAt(absOffset),
         document.positionAt(absOffset + key.length),
     );
-    const note = MIGRATION_NOTES[key];
-    const suggestion = SUGGESTION_MAP[key];
-    let message: string;
-    if (note) {
-        // A removed key with a SHAPE replacement reads wrong through the
-        // did-you-mean template ("Did you mean 'maskLinear / maskRadial /
-        // maskConic with { from }'?") — say what happened instead.
-        message = `'${key}' was removed: ${note}.`;
-    } else if (suggestion) {
-        message = `Unknown sz prop '${key}'. Did you mean '${suggestion}'?`;
-    } else {
-        message = `Unknown sz prop '${key}'. See https://csszyx.com/docs/sz-props for valid props.`;
-    }
+    const issue = keyIssue(key, value);
+    const { message, docs } = keyIssueMessage(issue);
     const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
     diagnostic.source = DIAGNOSTIC_SOURCE;
-    if (note || suggestion) {
-        diagnostic.code = {
-            value: 'unknown-prop',
-            target: vscode.Uri.parse('https://csszyx.com/docs/migrate'),
-        };
-    }
+    diagnostic.code = { value: issue.code, target: vscode.Uri.parse(docs) };
     return diagnostic;
 }
 
@@ -145,15 +226,16 @@ export function validateDocument(
         const obj = parseObjectLiteralSafe(evalSrc);
         if (!obj) continue;
 
-        for (const key of Object.keys(obj)) {
-            if (isValidKey(key)) {
+        for (const [key, value] of Object.entries(obj)) {
+            if (isValidKey(key) && removedSugarIssue(key, value) === undefined) {
                 continue;
             }
-            const diagnostic = createUnknownKeyDiagnostic(
+            const diagnostic = createKeyDiagnostic(
                 document,
                 text.slice(startOffset, startOffset + objText.length),
                 startOffset,
                 key,
+                value,
             );
             if (diagnostic) {
                 diagnostics.push(diagnostic);

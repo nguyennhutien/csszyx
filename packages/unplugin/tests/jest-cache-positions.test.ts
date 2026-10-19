@@ -13,6 +13,7 @@ import { join } from 'node:path';
 
 import { VERSION as compilerVersion } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
+import { transformSourceUnrendered } from '@csszyx/compiler/internal';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { createTransformer } from '../src/jest-transform.js';
@@ -58,7 +59,43 @@ it('places a cached diagnostic at its line and column', () => {
     const { code } = createTransformer({ root, cacheRoot }).process(source, file);
 
     expect(code).toContain('// from-cache');
-    const finding = lines.find(line => line.includes('Unknown property'));
+    const finding = lines.find(line => line.includes('is not an sz property.'));
     expect(finding).toContain(`${file}:2:`);
     expect(finding).not.toContain('undefined');
+});
+
+it('replays a finding the build cached unrendered, rendered whole with its suggestion', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-jest-cache-unrendered-')));
+    roots.push(root);
+    vi.spyOn(process, 'cwd').mockReturnValue(root);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    writeFileSync(join(root, 'package.json'), '{ "name": "app" }\n');
+    const file = join(root, 'src/A.tsx');
+    const source = "export const A = () => (\n    <div sz={{ workBreak: 'all' }} />\n);\n";
+    writeFileSync(file, source);
+    const cacheRoot = join(root, '.csszyx/cache/transform');
+    const result = transformSourceUnrendered(source, file, { rootDir: root });
+    writeTransformCache(
+        cacheRoot,
+        {
+            pluginVersion: 'test',
+            compilerVersion,
+            parserMode: 'rust',
+            producer: 'rust',
+            filename: file,
+            source,
+        },
+        { ...result, code: `${result.code}\n// from-cache` },
+    );
+    const lines: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        lines.push(args.map(String).join(' '));
+    });
+
+    const { code } = createTransformer({ root, cacheRoot }).process(source, file);
+
+    expect(code).toContain('// from-cache');
+    const finding = lines.find(line => line.includes('is not an sz property.'));
+    expect(finding).toMatch(/^\[csszyx\] unknown-key: src\/A\.tsx:2:\d+\n/);
+    expect(finding).toContain('help: write `break` if you meant it;');
 });

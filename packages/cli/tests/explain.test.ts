@@ -53,7 +53,7 @@ describe('explain', () => {
         const lines = capture();
         explain('{ foo: 4 }');
         expect(lines[0]).toBe('foo-4');
-        expect(lines[1]).toMatch(/Unknown property "foo"/);
+        expect(lines[1]).toContain('`foo` is not an sz property.');
         expect(process.exitCode).toBeUndefined();
     });
 
@@ -62,7 +62,7 @@ describe('explain', () => {
         explain('{ ...props }');
         expect(lines).toHaveLength(1);
         expect(lines[0]).toMatch(/^✗ Could not explain sz: the build emits no classes for it/);
-        expect(lines[0]).toMatch(/unresolvable sz spread/);
+        expect(lines[0]).toContain('[csszyx] unresolvable-spread');
         expect(process.exitCode).toBe(1);
     });
 

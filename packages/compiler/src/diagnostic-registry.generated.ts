@@ -28,13 +28,30 @@ export interface SzDiagnosticSpec {
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';
-    readonly args?: Readonly<Record<string, SzDiagnosticArgSpec>>;
+    readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
     readonly gaps?: readonly string[];
+    /** The enum arg a per-variant template is keyed by, when it is not `form`. */
+    readonly variesBy?: string;
+    /** What the diagnostic says: one template, or one per variant. */
+    readonly text?: SzDiagnosticTemplateText;
+    /** What to do. */
+    readonly help?: SzDiagnosticTemplateText;
+    /** What does not happen, or still holds. */
+    readonly note?: SzDiagnosticTemplateText;
 }
+
+/** A template: one text, or one per variant of the sentence. */
+export type SzDiagnosticTemplateText = string | Readonly<Record<string, string>>;
 
 /** The registry's format, so a reader can refuse one it does not know. */
 export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = 1;
+
+/** Engine limits a sentence names, from the registry the engine reads too. */
+export const SZ_DIAGNOSTIC_CONSTANTS = {"maxNestingDepth":64,"mergeTableFormat":1} as const;
+
+/** The computed values a template may name beside its args. */
+export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral"];
 
 /** Every live id, in registry order. */
 export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
@@ -56,7 +73,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        }
+        },
+        "text": "`{key}` is not an sz property.",
+        "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
+        "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
     },
     {
         "id": "canonical-key",
@@ -71,11 +91,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "key": {
                 "type": "string"
-            },
-            "canonical": {
-                "type": "string"
             }
-        }
+        },
+        "text": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
+        "help": "write `{canonical}`."
     },
     {
         "id": "removed-key",
@@ -112,6 +131,20 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "text": {
+            "runtime-alias": "`{key}` was removed, and nothing is emitted for its runtime value.",
+            "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
+            "sugar": "The boolean shorthand `{key}` was removed, and nothing is emitted for it.",
+            "removed": "`{key}` was removed, and nothing is emitted for it.",
+            "replaced": "`{key}` was replaced, and nothing is emitted for it."
+        },
+        "help": {
+            "runtime-alias": "write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.",
+            "sugar-replaced": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
+            "sugar": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
+            "removed": "{note}.",
+            "replaced": "write `{ {replacement} }` instead, or run `csszyx migrate`."
         }
     },
     {
@@ -128,7 +161,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`sz` received a numeric key `{key}`, and its value is ignored.",
+        "help": "pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
     },
     {
         "id": "closed-enum-value",
@@ -167,7 +202,33 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "suggestion": {
                 "type": "string",
                 "optional": true
+            },
+            "groupKey": {
+                "type": "string",
+                "optional": true
+            },
+            "groupValue": {
+                "type": "string",
+                "optional": true
             }
+        },
+        "text": {
+            "sibling-group": "`{key}: {value}` is not a `{key}` value; its class `{bare}` belongs to `{ {groupKey}: {groupLiteral} }`.",
+            "dead": "`{key}: {value}` is not a `{key}` value.",
+            "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` generates no CSS.",
+            "font-style": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
+            "font-smoothing": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it."
+        },
+        "help": {
+            "sibling-group": "write `{ {groupKey}: {groupLiteral} }`, so it combines with the other groups instead of resetting them.",
+            "dead": "use one of: {enumAllowed}.",
+            "css-value": "use the short form: `{ {key}: '{suggestion}' }`.",
+            "font-style": "use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: '{value}' }`.",
+            "font-smoothing": "use `'grayscale'` or `'subpixel'`."
+        },
+        "note": {
+            "sibling-group": "`{key}` takes one of: {enumAllowed}.",
+            "dead": "the class `{bare}` is still emitted, and it styles nothing unless a rule of your own matches it."
         }
     },
     {
@@ -184,10 +245,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             },
-            "value": {
+            "color": {
+                "type": "string"
+            },
+            "opacity": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
+        "help": "use the object form: `{ color: '{color}', op: {opacity} }`."
     },
     {
         "id": "off-scale-value",
@@ -206,7 +272,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "value": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class generates no CSS.",
+        "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
     },
     {
         "id": "numeric-font-weight",
@@ -222,7 +290,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "value": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`weight: '{value}'` is a numeric string, so `font-{value}` generates no CSS.",
+        "help": "write `weight: {value}` as a number; it emits `font-[{value}]`."
     },
     {
         "id": "per-side-border-style",
@@ -241,7 +311,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "value": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
+        "help": "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."
     },
     {
         "id": "property-object",
@@ -261,7 +333,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string[]",
                 "joiner": ", "
             }
-        }
+        },
+        "text": "`{key}` is a property, and its object `{ {nestedKeys} }` emits `{key}:*` classes that match no Tailwind variant and generate no CSS.",
+        "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
     },
     {
         "id": "non-variant-object",
@@ -277,7 +351,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{key}` is not a variant, so its object emits `{key}:` classes that generate no CSS.",
+        "help": "a `--*` key takes a declaration value; `container` takes `true`."
     },
     {
         "id": "unknown-field",
@@ -295,8 +371,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "member": {
                 "type": "string"
+            },
+            "allowed": {
+                "type": "string[]",
+                "joiner": ", "
             }
-        }
+        },
+        "text": "`{owner}` has no field `{member}`, and nothing is emitted for it.",
+        "help": "`{owner}` takes `{ {allowed} }`."
     },
     {
         "id": "runtime-value",
@@ -309,7 +391,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.",
+        "help": "name the values with `szv()`, or use `dynamic()` for open-ended data.",
+        "note": "no class or variable is emitted for `{key}`."
     },
     {
         "id": "unresolvable-spread",
@@ -318,7 +403,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "engine": {}
         },
         "position": "site",
-        "args": {}
+        "args": {},
+        "text": "This `sz` object spreads a value the build cannot read, so the object falls back to the runtime and may render no styles in production.",
+        "help": "use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`."
     },
     {
         "id": "style-override",
@@ -327,7 +414,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "engine": {}
         },
         "position": "site",
-        "args": {}
+        "args": {},
+        "text": "This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.",
+        "help": "move the spread `style` to an explicit `style` prop, so csszyx merges both values."
     },
     {
         "id": "szs-slot-map",
@@ -348,7 +437,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "unreadable-slot"
                 ]
             }
-        }
+        },
+        "text": {
+            "host-element": "`szs` has no effect on a host element; it maps the slot names of a custom component.",
+            "unreadable-slot": "A slot value in `szs` could not be read at build time, so no slot classes were compiled."
+        },
+        "help": {
+            "host-element": "remove `szs`, or move it to the custom component whose slots it names.",
+            "unreadable-slot": "write every slot as an identifier key with a static object literal or class string; for a value known only at runtime, pass the class string `dynamic()` returns."
+        },
+        "note": "the attribute is left unchanged."
     },
     {
         "id": "sz-recover",
@@ -373,7 +471,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        }
+        },
+        "text": {
+            "non-literal": "`szRecover` takes only a string literal.",
+            "unknown-mode": "`szRecover` has an unknown mode `\"{mode}\"`."
+        },
+        "help": {
+            "non-literal": "write `szRecover=\"csr\"` or `szRecover=\"dev-only\"`.",
+            "unknown-mode": "use `\"csr\"` or `\"dev-only\"`."
+        },
+        "note": "no `data-sz-recovery-token` is written for this element."
     },
     {
         "id": "class-precedence",
@@ -386,7 +493,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "atomic": "warn"
         },
         "position": "site",
-        "args": {}
+        "args": {},
+        "text": "`sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.",
+        "help": "state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
     },
     {
         "id": "duplicate-sz",
@@ -406,7 +515,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        }
+        },
+        "text": "`<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.",
+        "help": "fold them into one `sz` array, so the order is written down."
     },
     {
         "id": "spread-split-class",
@@ -419,14 +530,28 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "elementName": {
                 "type": "string"
             },
-            "earlier": {
+            "classes": {
                 "type": "string[]",
                 "joiner": " and "
             },
-            "example": {
-                "type": "string"
+            "szCount": {
+                "type": "number"
+            },
+            "szAt": {
+                "type": "number"
+            },
+            "spread": {
+                "type": "string",
+                "optional": true
+            },
+            "parts": {
+                "type": "string[]",
+                "joiner": ", "
             }
-        }
+        },
+        "text": "`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.",
+        "help": "write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.",
+        "note": "in Vue JSX every class is merged, so every side applies there."
     },
     {
         "id": "moved-value",
@@ -455,7 +580,24 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "value": {
                 "type": "string"
+            },
+            "layerKey": {
+                "type": [
+                    "enum",
+                    "maskLinear",
+                    "maskRadial",
+                    "maskConic"
+                ],
+                "optional": true
             }
+        },
+        "text": {
+            "value": "`{key}: {value}` moved to `{movedKey}`, and nothing is emitted for it.",
+            "mask-layer": "`mask: '{value}'` names a gradient layer, which moved to `{layerKey}`, and nothing is emitted for it."
+        },
+        "help": {
+            "value": "write `{ {movedKey}: {movedValue} }`, or run `csszyx migrate`.",
+            "mask-layer": "write this layer on `{layerKey}`; `mask` takes only `none`, a `url()` or a CSS variable."
         }
     },
     {
@@ -478,7 +620,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "group": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.",
+        "help": "to override the group, layer it: `sz={[base, { {global}: '{value}' }]}`.",
+        "note": "a spread such as `{ ...base, {global}: '{value}' }` keeps the same key order, so it does not fix this."
     },
     {
         "id": "runtime-family-conflict",
@@ -505,6 +650,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "other": {
                 "type": "string"
             }
+        },
+        "text": "`{key}` takes a runtime value beside `{other}` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.",
+        "help": {
+            "key-first": "layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.",
+            "other-first": "layer them, later wins: `sz={[{ {other}: … }, { {key}: … }]}`."
         }
     },
     {
@@ -549,6 +699,24 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "variesBy": "site",
+        "text": {
+            "sz": "`sz` falls back to the runtime: {fallbackReason}.",
+            "szr": "`szr` falls back to the runtime: {fallbackReason}.",
+            "szv": "The `szv` config cannot be read at build time: {fallbackReason}.",
+            "sz-variant-key": "`sz` falls back to the runtime: {fallbackReason}."
+        },
+        "help": {
+            "sz": "{fallbackSuggestion}",
+            "szr": "{fallbackSuggestion}",
+            "szv": "pass the config inline, or as a module-level const object literal.",
+            "sz-variant-key": "{fallbackSuggestion}"
+        },
+        "note": {
+            "sz": "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
+            "szr": "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
+            "szv": "none of its variant classes were collected, so they generate no CSS."
         }
     },
     {
@@ -591,6 +759,19 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "variesBy": "site",
+        "text": {
+            "sz": "`sz` falls back to the runtime: {fallbackReason}.",
+            "sz-array-element": "This `sz` array element is an object literal with a runtime value, so the whole element is resolved at runtime."
+        },
+        "help": {
+            "sz": "{fallbackSuggestion}",
+            "sz-array-element": "use finite literal ternary branches where you can, or move the runtime values to `dynamic()`."
+        },
+        "note": {
+            "sz": "the runtime still turns the value into classes.",
+            "sz-array-element": "its classes are still collected, best-effort."
         }
     },
     {
@@ -625,7 +806,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "number",
                 "optional": true
             }
-        }
+        },
+        "text": {
+            "unreadable": "The merge table is not one this engine reads ({error}), so no sz key was merged with a later key that covers it.",
+            "format-mismatch": "The merge table is in format {tableFormat}, and this engine reads format {mergeTableFormat}, so no sz key was merged with a later key that covers it."
+        },
+        "help": "install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.",
+        "note": "every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides."
     },
     {
         "id": "parse-error",
@@ -669,6 +856,27 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "number",
                 "optional": true
             }
+        },
+        "text": {
+            "syntax": "Syntax error: {parserMessage}.",
+            "summary": "This file could not be parsed (syntax errors: {errorCount}).",
+            "panicked": "The parser stopped at a syntax error it could not recover from.",
+            "expression": "This `sz` value could not be parsed as a JavaScript expression.",
+            "prescan": "This file failed to parse, so the build collected no classes from it."
+        },
+        "help": {
+            "syntax": "fix the syntax at this position.",
+            "summary": "fix the syntax errors reported for this file.",
+            "panicked": "fix the syntax error reported for this file.",
+            "expression": "write the value as an object literal, such as `{ p: 4 }`.",
+            "prescan": "fix the syntax error, or check that the file extension matches its contents."
+        },
+        "note": {
+            "syntax": "the file is left unchanged.",
+            "summary": "the file is left unchanged.",
+            "panicked": "the file is left unchanged.",
+            "expression": "the attribute is left as written, and no class is generated for it.",
+            "prescan": "its classes generate no CSS unless another source names them."
         }
     },
     {
@@ -682,7 +890,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "depth": {
                 "type": "number"
             }
-        }
+        },
+        "text": "Source nesting exceeds {maxNestingDepth} levels (found {depth}).",
+        "help": "flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.",
+        "note": "the file is left unchanged and contributes no classes."
     },
     {
         "id": "unsupported-dynamic-sz",
@@ -691,7 +902,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "engine": {}
         },
         "position": "site",
-        "args": {}
+        "args": {},
+        "text": "This `sz` attribute has no value, or a JSX element as its value.",
+        "help": "give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.",
+        "note": "the attribute is left as written; the rest of the file is still transformed."
     },
     {
         "id": "ast-budget",
@@ -715,6 +929,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "prescan"
                 ]
             }
+        },
+        "text": {
+            "transform": "The file exceeds the AST node budget.",
+            "prescan": "The file exceeds the AST node budget, so the build collected no classes from it."
+        },
+        "help": "raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.",
+        "note": {
+            "transform": "the file is left unchanged, and none of its classes are collected.",
+            "prescan": "their CSS is not generated unless another source names them."
         }
     },
     {
@@ -747,7 +970,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "number",
                 "optional": true
             }
-        }
+        },
+        "variesBy": "reason",
+        "text": {
+            "no-lca": "`mangleVars` did not hoist `{name}`: its {usageCount} usages share no common JSX ancestor.",
+            "non-host-ancestor": "`mangleVars` did not hoist `{name}`: the common ancestor of its {usageCount} usages cannot take a `style` prop.",
+            "max-depth": "`mangleVars` did not hoist `{name}`: one of its {usageCount} usages sits more than {maxDepth} levels below their common ancestor."
+        },
+        "help": {
+            "max-depth": "raise `production.mangleVarHoistMaxDepth` to hoist it."
+        },
+        "note": "each element that uses it keeps its own scoped variable, and every class is still emitted."
     },
     {
         "id": "color-slash-opacity",
@@ -758,18 +991,55 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "production": false
             }
         },
+        "defaults": {
+            "recommended": "info",
+            "atomic": "warn"
+        },
         "position": "site",
+        "forms": [
+            "op-given",
+            "op-absent"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "op-given",
+                    "op-absent"
+                ]
+            },
             "key": {
                 "type": "string"
             },
-            "color": {
+            "base": {
                 "type": "string"
+            },
+            "opacity": {
+                "type": "string"
+            },
+            "important": {
+                "type": [
+                    "enum",
+                    "!"
+                ],
+                "optional": true
             },
             "op": {
                 "type": "string",
                 "optional": true
             }
+        },
+        "text": {
+            "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+            "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
+        },
+        "help": {
+            "op-given": "write `{ color: '{base}{important}', op: {op} }`.",
+            "op-absent": "write `{ color: '{base}{important}', op: {opacity} }`."
+        },
+        "note": {
+            "op-given": "the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.",
+            "op-absent": "the class still applies opacity {opacity}."
         }
     },
     {
@@ -807,16 +1077,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             }
         }
-    },
-    {
-        "id": "other",
-        "summary": "An engine diagnostic the text matcher could not name, from a lane that drops its code.",
-        "surfaces": {
-            "check": {
-                "group": "sz-diagnostic"
-            }
-        },
-        "position": "site"
     },
     {
         "id": "prefix-disagreement",
@@ -1668,6 +1928,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "number",
                 "optional": true
             }
+        },
+        "help": {
+            "per-id": "`csszyx check --rule {id}` lists every one."
         }
     },
     {
@@ -2166,7 +2429,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        }
+        },
+        "text": {
+            "partly-applied": "This file has {count} problem(s); each one is ignored, and the rest of the file applies.",
+            "not-applied": "This file has {count} problem(s), and it is not applied, so every finding keeps its default level."
+        },
+        "help": "https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved."
     },
     {
         "id": "unknown-rule-id",
@@ -2212,7 +2480,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "id": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.",
+        "help": "remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only."
     },
     {
         "id": "removed-rule-id",
@@ -2223,7 +2493,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "file",
+        "forms": [
+            "replaced",
+            "removed"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "replaced",
+                    "removed"
+                ]
+            },
             "id": {
                 "type": "string"
             },
@@ -2231,6 +2512,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "text": "`{id}` is no longer reported, so a level or a selection naming it applies to nothing.",
+        "help": {
+            "replaced": "name `{replacedBy}` instead, which reports what `{id}` did.",
+            "removed": "remove it."
         }
     },
     {
@@ -2445,7 +2731,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        }
+        },
+        "text": "This build held back {count} finding(s) at `info` and listed none of them.",
+        "help": "run a development build to see each one with its file and position.",
+        "note": "they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`."
     },
     {
         "id": "merge-covered-held",

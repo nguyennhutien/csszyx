@@ -9,86 +9,29 @@ pub(crate) mod tables;
 #[cfg(test)]
 mod sz_fallback_matrix_tests {
     use super::sz_fallback_matrix::{
-        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind, SZ_FALLBACK_UNKNOWN_CALLEE,
+        sz_site_fallback_misses_css, SzFallbackKind, SZ_FALLBACK_UNKNOWN_CALLEE,
     };
-
-    /// Every kind, so a new variant cannot be added without extending these.
-    const ALL_KINDS: [SzFallbackKind; 6] = [
-        SzFallbackKind::Call,
-        SzFallbackKind::Identifier,
-        SzFallbackKind::Import,
-        SzFallbackKind::Member,
-        SzFallbackKind::Other,
-        SzFallbackKind::SzvFactory,
-    ];
-
-    #[test]
-    fn reasons_carrying_a_detail_substitute_it() {
-        assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Call, "makeSz", ""),
-            "function call `makeSz()` result is unknown at build time"
-        );
-        assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Identifier, "cardSz", ""),
-            "identifier `cardSz` could not be resolved to a static value"
-        );
-        assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Other, "ConditionalExpression", ""),
-            "expression of type `ConditionalExpression` is not statically analyzable"
-        );
-    }
-
-    #[test]
-    fn a_reason_without_a_placeholder_ignores_the_detail() {
-        assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Member, "ignored", "ignored"),
-            "member expression is not statically resolvable"
-        );
-    }
-
-    #[test]
-    fn no_kind_leaks_the_placeholder() {
-        // A brace surviving into output means the generator escaped wrongly and
-        // the reader would see `{detail}` in their build log.
-        for kind in ALL_KINDS {
-            let reason = sz_fallback_reason(kind, "x", "p");
-            assert!(!reason.contains("{detail}"), "{reason}");
-            assert!(!reason.contains("{path}"), "{reason}");
-            assert!(!reason.contains('{'), "{reason}");
-            assert!(!reason.contains('}'), "{reason}");
-        }
-    }
-
-    #[test]
-    fn every_kind_points_at_a_concrete_next_step() {
-        for kind in ALL_KINDS {
-            let suggestion = sz_fallback_suggestion(kind);
-            assert!(
-                suggestion.contains("szv()") || suggestion.contains("dynamic()"),
-                "{suggestion}"
-            );
-        }
-    }
-
-    #[test]
-    fn kinds_do_not_share_wording() {
-        // Two arms rendering the same text would make the classification
-        // pointless and hide a copy-paste slip in the matrix.
-        let reasons: Vec<String> = ALL_KINDS
-            .iter()
-            .map(|kind| sz_fallback_reason(*kind, "detail", "path"))
-            .collect();
-        for (index, reason) in reasons.iter().enumerate() {
-            assert!(
-                !reasons[index + 1..].contains(reason),
-                "duplicate reason: {reason}"
-            );
-        }
-    }
 
     #[test]
     fn the_unknown_callee_stand_in_matches_the_typescript_matrix() {
         assert_eq!(SZ_FALLBACK_UNKNOWN_CALLEE, "?");
+    }
+
+    /// Only a value whose classes nothing collected reports missing CSS at
+    /// an `sz` site; every other kind still lowers through `_sz` at runtime.
+    #[test]
+    fn only_an_import_or_a_variant_costs_an_sz_site_its_classes() {
+        for (kind, misses) in [
+            (SzFallbackKind::Call, false),
+            (SzFallbackKind::Identifier, false),
+            (SzFallbackKind::Import, true),
+            (SzFallbackKind::Member, false),
+            (SzFallbackKind::Other, false),
+            (SzFallbackKind::SzvFactory, false),
+            (SzFallbackKind::Variant, true),
+        ] {
+            assert_eq!(sz_site_fallback_misses_css(kind), misses, "{kind:?}");
+        }
     }
 }
 
@@ -240,11 +183,11 @@ mod diagnostic_table_tests {
     #[test]
     fn every_removed_key_carries_its_migration_note() {
         for (key, note) in [
-            ("maskFrom", "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }"),
-            ("maskTo", "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
-            ("maskVia", "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
-            ("maskShape", "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
-            ("fontVariant", "font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""),
+            ("maskFrom", "write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"),
+            ("maskTo", "write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"),
+            ("maskVia", "write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop"),
+            ("maskShape", "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"),
+            ("fontVariant", "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"),
         ] {
             assert_eq!(key_migration_note(key), Some(note), "note for {key}");
         }

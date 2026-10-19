@@ -15,7 +15,13 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
-
+import {
+    diagnosticPath,
+    type EngineDiagnosticFieldsOf,
+    renderedDiagnosticFields,
+    type UnrenderedTransformResult,
+    unrenderedDiagnosticFields,
+} from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -47,8 +53,7 @@ interface WasmResultJson {
     merge_groups: WasmMergeGroup[];
     single_class_groups: WasmMergeGroup[];
     merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
-    diagnostics: string[];
-    issues: Array<{ code: string; start: number }>;
+    issues: Array<{ code: string; start: number; args: object }>;
     recovery_tokens: Array<{
         token: string;
         mode: 'csr' | 'dev-only';
@@ -203,12 +208,80 @@ export function transformWasm(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
+    return transformWasmOne(source, filename, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformWasm} with every diagnostic left for the caller to render:
+ * `diagnostics` is empty, and each issue renders with
+ * `renderEngineDiagnostic(issue, result.diagnosticFile)`.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @returns Transform result.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function transformWasmUnrendered(
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult {
+    return transformWasmOne(
+        source,
+        filename,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult;
+}
+
+/**
+ * One file through the wasm engine.
+ *
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns Transform result.
+ */
+function transformWasmOne(
+    source: string,
+    filename: string | undefined,
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     // Mirrors transformRust: an unnamed single file is `<anonymous>`.
-    const [result] = transformWasmBatch([{ filename: filename ?? '<anonymous>', source }], options);
+    const [result] = runWasmBatch(
+        [{ filename: filename ?? '<anonymous>', source }],
+        options,
+        fields,
+    );
     if (!result) {
         throw new WasmTransformUnavailableError('wasm transform returned no result');
     }
     return result;
+}
+
+/**
+ * The options the wasm artifact's `transform_batch_json` reads, in its
+ * snake_case spelling.
+ *
+ * @param options Compiler options.
+ * @returns The options object to serialize.
+ */
+function wasmTransformOptions(options?: TransformSourceCodeOptions): object {
+    return {
+        mangle_vars: options?.mangleVars === true,
+        mangle_var_hoist_max_depth: options?.mangleVarHoistMaxDepth ?? null,
+        global_var_aliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+        ast_budget: options?.astBudget ?? null,
+        cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
+        cross_module_sz_objects_json:
+            encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
+        class_prefix: options?.classPrefix ?? null,
+        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
+    };
 }
 
 /**
@@ -223,6 +296,22 @@ export function transformWasmBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
+    return runWasmBatch(files, options, renderedDiagnosticFields);
+}
+
+/**
+ * A batch through the wasm engine in one boundary crossing.
+ *
+ * @param files Source files to transform.
+ * @param options Compiler options, normalized exactly like the napi lane.
+ * @param fields How to fill the diagnostic fields.
+ * @returns One transform result per input file, in input order.
+ */
+function runWasmBatch(
+    files: readonly TransformRustFile[],
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult[] {
     const wasm = requireParserWasm();
 
     const filesJson = JSON.stringify(
@@ -231,23 +320,19 @@ export function transformWasmBatch(
             source: file.source,
         })),
     );
-    const optionsJson = JSON.stringify({
-        mangle_vars: options?.mangleVars === true,
-        mangle_var_hoist_max_depth: options?.mangleVarHoistMaxDepth ?? null,
-        global_var_aliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-        root_dir: options?.rootDir ?? null,
-        ast_budget: options?.astBudget ?? null,
-        cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
-        cross_module_sz_objects_json:
-            encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
-        class_prefix: options?.classPrefix ?? null,
-        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
-    });
+    const optionsJson = JSON.stringify(wasmTransformOptions(options));
 
     const results = JSON.parse(
         wasm.transform_batch_json(filesJson, optionsJson),
     ) as WasmResultJson[];
-    return results.map((result, index) => fromWasmResult(result, files[index].source));
+    return results.map((result, index) =>
+        fromWasmResult(
+            result,
+            files[index].source,
+            diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+            fields,
+        ),
+    );
 }
 
 /**
@@ -272,9 +357,16 @@ function rawGroup(group: WasmMergeGroup): {
  *
  * @param result Raw wasm transform result.
  * @param source The source the result was transformed from, to place its spans.
+ * @param file The file's path as a diagnostic names it.
+ * @param fields How to fill the diagnostic fields.
  * @returns Compiler transform result.
  */
-function fromWasmResult(result: WasmResultJson, source: string): SourceTransformResult {
+function fromWasmResult(
+    result: WasmResultJson,
+    source: string,
+    file: string,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     const spans = locateEngineSpans(source, {
         issues: result.issues,
         mergeGroups: result.merge_groups.map(rawGroup),
@@ -300,7 +392,7 @@ function fromWasmResult(result: WasmResultJson, source: string): SourceTransform
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: result.diagnostics,
+        ...fields(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [

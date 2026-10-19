@@ -90,22 +90,23 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
         const unknown = explainSz('{ foo: 4 }', engine);
         expect(unknown.className).toBe('foo-4');
         expect(unknown.diagnostics).toHaveLength(1);
-        expect(unknown.diagnostics[0]).toMatch(/^\[csszyx\] Unknown property "foo" in sz prop\./);
+        expect(unknown.diagnostics[0]).toMatch(/^\[csszyx\] unknown-key\b/);
+        expect(unknown.diagnostics[0]).toContain('`foo` is not an sz property.');
         expect(unknown.diagnostics[0]).not.toMatch(/\.tsx|\d:\d/);
 
         const numeric = explainSz('{ 4: 1 }', engine);
         expect(numeric.className).toBe('');
-        expect(numeric.diagnostics[0]).toMatch(/numeric key "4"/);
+        expect(numeric.diagnostics[0]).toContain('`sz` received a numeric key `4`');
     });
 
     it.each([
-        ['{ p: [4] }', /not statically analyzable/],
-        ['{ p: [1, , 2] }', /not statically analyzable/],
-        ['{ ...props }', /unresolvable sz spread|not statically analyzable/],
-        ['{ [key]: 4 }', /not statically analyzable/],
-        ['{ go() {} }', /not statically analyzable/],
+        ['{ p: [4] }', /cannot be read at build time/],
+        ['{ p: [1, , 2] }', /cannot be read at build time/],
+        ['{ ...props }', /unresolvable-spread|cannot be read at build time/],
+        ['{ [key]: 4 }', /cannot be read at build time/],
+        ['{ go() {} }', /cannot be read at build time/],
         ['someVar', /`someVar` could not be resolved/],
-        ['42', /not statically analyzable/],
+        ['42', /cannot be read at build time/],
     ])('%s is left to the runtime, as the build leaves it', (sz, reason) => {
         expect(() => buildClassName(engine, sz)).toThrow(/left .* to the runtime/);
         expect(() => explainSz(sz, engine)).toThrow(ExplainParseError);

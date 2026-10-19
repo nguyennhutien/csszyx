@@ -40,7 +40,7 @@ function table(file: string, name: string): Record<string, Record<string, string
     );
 }
 
-const closedEnumClasses = table('transform-core.ts', 'CLOSED_ENUM_CLASSES');
+const closedEnumClasses = table('closed-enum-tables.ts', 'CLOSED_ENUM_CLASSES');
 const globalKeywordGroups = table('keyword-families.ts', 'GLOBAL_KEYWORD_GROUPS');
 
 /** Every closed-enum key with each value it accepts, and each boolean group flag. */

@@ -14,6 +14,8 @@ import {
     restoreEngineSpans,
     storeEngineSpans,
 } from '../src/engine-spans.js';
+import { transformRust } from '../src/transform-rust.js';
+import { RUST_LANE } from './engine-parity-harness.js';
 
 /**
  * The UTF-8 byte offset of a UTF-16 index.
@@ -62,6 +64,23 @@ describe('createByteOffsetLocator', () => {
         }
     });
 
+    it('counts a lone half of a pair as the three bytes of the U+FFFD written for it', () => {
+        // The native binding encodes the source as UTF-8 with each unpaired
+        // surrogate replaced by U+FFFD, as TextEncoder does, so either half on
+        // its own is three bytes before the key the engine points at.
+        const source = 'a\uDC00\uDC00 b\uD800 c\n\uDC00d 􏰀 X';
+        const locate = createByteOffsetLocator(source);
+        for (const marker of ['b', 'c', 'd', 'X']) {
+            const index = source.indexOf(marker);
+            const before = source.slice(0, index).split('\n');
+
+            expect(locate(byteOffsetOf(source, index)), marker).toEqual({
+                line: before.length,
+                column: (before.at(-1) ?? '').length + 1,
+            });
+        }
+    });
+
     it('places an offset past the end at the end', () => {
         expect(createByteOffsetLocator('ab\ncd')(99)).toEqual({ line: 2, column: 3 });
     });
@@ -88,11 +107,44 @@ describe('createByteOffsetLocator', () => {
     });
 });
 
+describe('a lone surrogate before a diagnostic', () => {
+    // Only the native artifact reaches the locator with such a source: the
+    // wasm artifact's JSON boundary refuses an unpaired surrogate escape and
+    // throws before any position is read.
+    it.skipIf(!RUST_LANE)("leaves the native lane's column on the key", () => {
+        // Not named `source`: the extracted parity corpus feeds every such
+        // declaration to both artifacts, and the wasm one would throw on it.
+        const authored =
+            'export const A = () => <div title="\uDC00\uDC00" sz={{ wrokBreak: 1 }} />;\n';
+        const issue = transformRust(authored, 'src/a.tsx').issues?.find(
+            entry => entry.code === 'unknown-key',
+        );
+
+        expect(issue && { line: issue.line, column: issue.column }).toEqual({
+            line: 1,
+            column: authored.indexOf('wrokBreak') + 1,
+        });
+    });
+});
+
 describe('locateEngineSpans', () => {
+    it('reads the args of either artifact: an object, or the JSON the native binding writes', () => {
+        const spans = (issue: object) =>
+            locateEngineSpans('x', {
+                issues: [issue as never],
+                mergeGroups: [],
+                mergeOverrides: [],
+            }).issues[0]?.args;
+        expect(spans({ code: 'unknown-key', start: 0, argsJson: '{"key":"k"}' })).toEqual({
+            key: 'k',
+        });
+        expect(spans({ code: 'style-override', start: 0 })).toEqual({});
+    });
+
     it('reads each span at its offset, and only when asked', () => {
         const source = 'x\ny';
         const located = locateEngineSpans(source, {
-            issues: [{ code: 'unknown-key', start: 2 }],
+            issues: [{ code: 'unknown-key', start: 2, args: { key: 'k' } }],
             mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
             singleClassGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-2'] }],
             mergeOverrides: [{ start: 2, base: ['a'], over: ['b'] }],
@@ -100,7 +152,7 @@ describe('locateEngineSpans', () => {
 
         // Read through JSON: a position is an accessor, not an own field.
         expect(JSON.parse(JSON.stringify(located))).toEqual({
-            issues: [{ code: 'unknown-key', line: 2, column: 1 }],
+            issues: [{ code: 'unknown-key', args: { key: 'k' }, line: 2, column: 1 }],
             mergeGroups: [
                 {
                     keys: ['m', 'p'],
@@ -120,8 +172,10 @@ describe('locateEngineSpans', () => {
         expect(located.mergeGroups[0]?.positions[0]?.column).toBe(1);
         expect(located.mergeOverrides[0]?.line).toBe(2);
         expect(JSON.parse(JSON.stringify(located.issues))).toEqual([
-            { code: 'unknown-key', line: 2, column: 1 },
+            { code: 'unknown-key', args: { key: 'k' }, line: 2, column: 1 },
         ]);
+        // An own field, so a spread or a cache clone keeps it.
+        expect({ ...located.issues[0] }.args).toEqual({ key: 'k' });
         // Each class's place survives a cache write as plain fields.
         expect(JSON.parse(JSON.stringify(located.mergeGroups[0]?.positions))).toEqual([
             { line: 1, column: 1 },
@@ -187,7 +241,7 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
     }
 
     const raw = {
-        issues: [{ code: 'unknown-key', start: 2 }],
+        issues: [{ code: 'unknown-key', start: 2, args: { key: 'k' } }],
         mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
         singleClassGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-2'] }],
         mergeOverrides: [{ start: 2, base: ['a'], over: ['b'] }],

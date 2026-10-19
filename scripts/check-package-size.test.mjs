@@ -9,12 +9,16 @@ import { gzipSync } from 'node:zlib';
 import {
     appBundle,
     checkBudgets,
+    checkViteBudgets,
     entryBudgetProblems,
     gzipTotalBytes,
     isRuntimeArtifact,
     listExportEntries,
     listExportSubpaths,
+    moduleOrderProblems,
+    nodeEntryFiles,
     SIZE_BUDGETS,
+    viteAppBundle,
 } from './check-package-size.mjs';
 
 /** Create a throwaway directory tree from a { relativePath: content } map.
@@ -346,18 +350,44 @@ test('a file budget whose artifact is missing fails instead of passing silently'
     }
 });
 
-test('committed budgets cover the four user-shipped surfaces', () => {
+test('committed budgets cover the user-shipped surfaces and the engine entries', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
+    // A budget's module order is checked only where its entries are measured.
+    for (const budget of SIZE_BUDGETS.filter(b => b.moduleOrder)) {
+        for (const subpath of Object.keys(budget.moduleOrder)) {
+            assert.ok(
+                Object.hasOwn(budget.entryBudgets ?? {}, subpath),
+                `${budget.name} ${subpath}`,
+            );
+            assert.ok(
+                Object.hasOwn(budget.vite?.entryBudgets ?? {}, subpath),
+                `${budget.name} ${subpath}`,
+            );
+        }
+    }
+    assert.deepEqual(
+        SIZE_BUDGETS.find(b => b.target === 'packages/compiler')?.moduleOrder?.['./browser'],
+        ['per-key-rows-', 'closed-enum-tables-'],
+    );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 4);
+    assert.equal(SIZE_BUDGETS.length, 7);
     for (const budget of SIZE_BUDGETS) {
-        assert.ok(['app-bundle', 'file'].includes(budget.kind));
+        assert.ok(['app-bundle', 'file', 'node-entry'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
         assert.ok(!path.isAbsolute(budget.target), 'targets are repo-relative');
     }
     assert.ok(
         SIZE_BUDGETS.some(budget => budget.kind === 'file' && budget.target.includes('pkg-parser')),
         'the parser wasm artifact must stay under a byte ceiling',
+    );
+    // The VS Code extension bundles the compiler's source into one file, so
+    // a heavy import in the compiler grows what every editor install loads.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.target.startsWith('packages/vscode/')).map(budget => [
+            budget.kind,
+            budget.target,
+        ]),
+        [['file', 'packages/vscode/dist/extension.js']],
     );
     // The compiler leaves out only its build-time code, `.`, `./engine`,
     // `./internal` and `./migrate`; everything else it exports ships to the
@@ -366,6 +396,17 @@ test('committed budgets cover the four user-shipped surfaces', () => {
     assert.deepEqual(compiler?.excludeSubpaths, ['.', './engine', './internal', './migrate']);
     assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
+    // The two entries the build tools import are priced by what Node loads.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.kind === 'node-entry').map(budget => [
+            budget.target,
+            budget.subpath,
+        ]),
+        [
+            ['packages/compiler', './engine'],
+            ['packages/compiler', './internal'],
+        ],
+    );
     // Every app bundle prices each entry on its own, no entry ceiling is
     // looser than the union it is part of, and the priced entries are
     // exactly the package's real runtime exports minus the exclusions.
@@ -376,6 +417,18 @@ test('committed budgets cover the four user-shipped surfaces', () => {
         for (const ceiling of ceilings) {
             assert.ok(Number.isInteger(ceiling) && ceiling > 0);
             assert.ok(ceiling <= budget.maxGzipBytes, `${budget.name}: ${ceiling}`);
+        }
+        // Vite prices the same bundles: the union and every entry the
+        // esbuild lane prices, each under a ceiling of its own.
+        assert.ok(Number.isInteger(budget.vite?.maxGzipBytes), `${budget.name} has no Vite budget`);
+        assert.deepEqual(
+            Object.keys(budget.vite.entryBudgets ?? {}).sort(),
+            Object.keys(budget.entryBudgets).sort(),
+            `${budget.name} (Vite)`,
+        );
+        for (const ceiling of Object.values(budget.vite.entryBudgets)) {
+            assert.ok(Number.isInteger(ceiling) && ceiling > 0);
+            assert.ok(ceiling <= budget.vite.maxGzipBytes, `${budget.name} (Vite): ${ceiling}`);
         }
         // Read from `package.json` itself, not through the helper under test:
         // every subpath whose import target is JS, minus the exclusions.
@@ -523,5 +576,267 @@ test('a new export that is not excluded must get an entry budget', () => {
     } finally {
         rmSync(before, { recursive: true, force: true });
         rmSync(after, { recursive: true, force: true });
+    }
+});
+
+/** A package whose `./engine` reaches two files by static import, one other
+ * package, a Node builtin, and a large file it loads only through `import()`.
+ * @returns {Record<string, string>} fixture file map
+ */
+function enginePackage() {
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: {
+                './engine': { types: './dist/engine.d.mts', default: './dist/engine.mjs' },
+            },
+        }),
+        'packages/thing/dist/engine.mjs':
+            "import { a } from './a.mjs';\nimport { readFileSync } from 'node:fs';\n" +
+            "import { b } from 'other-pkg';\n" +
+            "export const run = () => import('./lazy.mjs').then(m => m.x + a + b + readFileSync);\n",
+        'packages/thing/dist/a.mjs': "export { c as a } from './c.mjs';\n",
+        'packages/thing/dist/c.mjs': 'export const c = 1;\n',
+        'packages/thing/dist/lazy.mjs': `export const x = ${JSON.stringify(DEV_TEXT)};\n`,
+    };
+}
+
+/** One node-entry budget over the fixture's `./engine`.
+ * @param {Partial<typeof SIZE_BUDGETS[number]>} [extra] extra budget fields
+ * @returns {typeof SIZE_BUDGETS} a one-entry budget list
+ */
+function engineBudget(extra = {}) {
+    return [
+        {
+            name: 'thing engine',
+            kind: 'node-entry',
+            target: 'packages/thing',
+            subpath: './engine',
+            maxGzipBytes: 100_000,
+            ...extra,
+        },
+    ];
+}
+
+test('node-entry budgets count every file a static import loads, and no lazy one', () => {
+    const root = makeFixture(enginePackage());
+    const dist = path.join(root, 'packages/thing/dist');
+    const loaded = ['a.mjs', 'c.mjs', 'engine.mjs'].map(file => path.join(dist, file));
+    try {
+        assert.deepEqual(nodeEntryFiles(path.join(dist, 'engine.mjs')), loaded);
+        const { failures, results } = checkBudgets(engineBudget(), root);
+        assert.deepEqual(failures, []);
+        assert.deepEqual(results[0].files, loaded);
+        assert.equal(results[0].gzipBytes, gzipTotalBytes(loaded));
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry budget fails over its limit, or on a subpath the package lacks', () => {
+    const root = makeFixture(enginePackage());
+    try {
+        const over = checkBudgets(engineBudget({ maxGzipBytes: 8 }), root);
+        assert.equal(over.failures.length, 1);
+        assert.match(over.failures[0], /thing engine: \d+ gzip bytes exceeds the 8-byte budget/);
+        const missing = checkBudgets(engineBudget({ subpath: './nope' }), root);
+        assert.equal(missing.failures.length, 1);
+        assert.match(missing.failures[0], /no export subpath `\.\/nope` in thing/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** Vite ceilings over the fixture package's two entries.
+ * @param {number} [ceiling] every ceiling
+ * @returns {{ maxGzipBytes: number, entryBudgets: Record<string, number> }} the `vite` field
+ */
+function viteCeilings(ceiling = 100_000) {
+    return { maxGzipBytes: ceiling, entryBudgets: { '.': ceiling, './heavy': ceiling } };
+}
+
+test('the Vite lane measures each app bundle the way a Vite app ships it', async () => {
+    // Same package name in two roots, so the two builds differ only by the warning.
+    const withDevRoot = makeFixture(appPackage('thing', true));
+    const noDevRoot = makeFixture(appPackage('thing', false));
+    try {
+        const budget = appBudget('thing', { vite: viteCeilings() });
+        const withDev = await checkViteBudgets(budget, withDevRoot);
+        const noDev = await checkViteBudgets(budget, noDevRoot);
+        assert.deepEqual([withDev.failures, noDev.failures], [[], []]);
+        assert.deepEqual(
+            withDev.results.map(r => r.name),
+            ['thing app (Vite)', 'thing app (Vite) `.`', 'thing app (Vite) `./heavy`'],
+        );
+        // `@csszyx/other` does not exist, so it stayed external; the warning
+        // folded out; and the namespace import kept every export.
+        const code = (
+            await viteAppBundle(withDev.results[0].files, path.join(withDevRoot, 'packages/thing'))
+        ).join('\n');
+        assert.ok(!code.includes('dev-note'), 'the development warning shipped');
+        assert.ok(code.includes('entry-399'), 'the exported table was shaken out');
+        assert.match(code, /@csszyx\/other/);
+        const gap = Math.abs(withDev.results[0].gzipBytes - noDev.results[0].gzipBytes);
+        assert.ok(gap <= 8, `gzip differs by ${gap}`);
+        assert.ok(withDev.results.every(r => r.ok && r.gzipBytes > 0));
+    } finally {
+        rmSync(withDevRoot, { recursive: true, force: true });
+        rmSync(noDevRoot, { recursive: true, force: true });
+    }
+});
+
+test('the Vite lane leaves peer dependencies external and skips budgets without it', async () => {
+    const root = makeFixture({
+        ...appPackage('thing', false),
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            peerDependencies: { 'peer-lib': '>=1' },
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs':
+            "export { peer } from 'peer-lib';\nexport { deep } from 'peer-lib/deep';\n",
+    });
+    try {
+        // `peer-lib` is not installed; bundling it in would fail the build.
+        const vite = { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } };
+        const { failures, results } = await checkViteBudgets(appBudget('thing', { vite }), root);
+        assert.deepEqual(failures, []);
+        assert.equal(results.length, 2);
+        // A budget with no `vite` field, or another kind, is the esbuild lane's alone.
+        assert.deepEqual(await checkViteBudgets(appBudget('thing'), root), {
+            results: [],
+            failures: [],
+        });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a Vite ceiling fails over its limit, and a Vite entry needs a budget', async () => {
+    const root = makeFixture(appPackage('thing', false));
+    try {
+        const over = await checkViteBudgets(appBudget('thing', { vite: viteCeilings(8) }), root);
+        assert.equal(over.failures.length, 3);
+        assert.match(
+            over.failures[0],
+            /thing app \(Vite\): \d+ gzip bytes exceeds the 8-byte budget/,
+        );
+        assert.match(over.failures[0], /raise the/);
+        const unpriced = await checkViteBudgets(
+            appBudget('thing', { vite: { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } } }),
+            root,
+        );
+        assert.equal(unpriced.failures.length, 1);
+        assert.match(
+            unpriced.failures[0],
+            /thing app \(Vite\): export `\.\/heavy` has no entry budget/,
+        );
+        const none = await checkViteBudgets(
+            appBudget('thing', { vite: { maxGzipBytes: 100_000 } }),
+            root,
+        );
+        assert.equal(none.failures.length, 2);
+        assert.equal(none.results.length, 1);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('an app bundle Vite cannot build fails instead of passing silently', async () => {
+    const root = makeFixture({
+        ...appPackage('thing', false),
+        'packages/thing/dist/index.mjs': "export { gone } from './missing.mjs';\n",
+    });
+    try {
+        const { failures } = await checkViteBudgets(
+            appBudget('thing', { vite: viteCeilings() }),
+            root,
+        );
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /thing app \(Vite\): .*missing\.mjs/s);
+        const absent = await checkViteBudgets(appBudget('absent', { vite: viteCeilings() }), root);
+        assert.equal(absent.failures.length, 1);
+        assert.match(absent.failures[0], /absent app \(Vite\)/);
+        const typesOnly = makeFixture({
+            'packages/typesonly/package.json': JSON.stringify({
+                name: 'typesonly',
+                exports: { '.': { import: { types: './dist/index.d.mts' } } },
+            }),
+        });
+        try {
+            const empty = await checkViteBudgets(
+                appBudget('typesonly', { vite: viteCeilings() }),
+                typesOnly,
+            );
+            assert.equal(empty.failures.length, 1);
+            assert.match(empty.failures[0], /typesonly app \(Vite\): no runtime export entries/);
+        } finally {
+            rmSync(typesOnly, { recursive: true, force: true });
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a module order names the files that must come first, by name prefix', () => {
+    const ids = ['/p/dist/rows-AB12.mjs', '/p/dist/tables-CD34.mjs', '/p/dist/core.mjs'];
+    assert.deepEqual(moduleOrderProblems(ids, ['rows-', 'tables-']), []);
+    assert.deepEqual(moduleOrderProblems(ids, ['tables-', 'rows-']), [
+        'bundles `rows-` before `tables-`',
+    ]);
+    assert.deepEqual(moduleOrderProblems(ids, ['rows-', 'gone-']), [
+        'bundles no module whose file name starts with `gone-`',
+    ]);
+});
+
+/** A package whose one entry imports `a.mjs`, then `b.mjs`.
+ * @returns {Record<string, string>} fixture files
+ */
+function orderedPackage() {
+    return {
+        'packages/ordered/package.json': JSON.stringify({
+            name: 'ordered',
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/ordered/dist/index.mjs':
+            "import { a } from './a.mjs';\nimport { b } from './b.mjs';\nexport const both = a + b;\n",
+        'packages/ordered/dist/a.mjs': "export const a = 'first-module';\n",
+        'packages/ordered/dist/b.mjs': "export const b = 'second-module';\n",
+    };
+}
+
+test('an entry whose bundle lays modules out against its order fails in both lanes', async () => {
+    const root = makeFixture(orderedPackage());
+    try {
+        const budget = (order, extra = {}) =>
+            appBudget('ordered', {
+                entryBudgets: { '.': 100_000 },
+                vite: { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } },
+                moduleOrder: order,
+                ...extra,
+            });
+        const kept = budget({ '.': ['a.', 'b.'] });
+        assert.deepEqual(checkBudgets(kept, root).failures, []);
+        assert.deepEqual((await checkViteBudgets(kept, root)).failures, []);
+
+        const swapped = budget({ '.': ['b.', 'a.'] });
+        for (const failures of [
+            checkBudgets(swapped, root).failures,
+            (await checkViteBudgets(swapped, root)).failures,
+        ]) {
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /`\.` bundles `a\.` before `b\.`/);
+        }
+
+        const unknown = budget({ './gone': ['a.'] });
+        for (const failures of [
+            checkBudgets(unknown, root).failures,
+            (await checkViteBudgets(unknown, root)).failures,
+        ]) {
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /`\.\/gone` has a module order but no export/);
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true });
     }
 });

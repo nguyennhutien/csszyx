@@ -55,8 +55,11 @@ describe.each(ENGINES)('a runtime value Tailwind cannot read (%s)', (_name, engi
         const run = compile(engine, '{ textAlign: v }');
 
         expect(run.warnings).toHaveLength(1);
-        expect(run.warnings[0]).toContain('"textAlign"');
-        expect(run.warnings[0]).toContain('App.tsx:1');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['runtime-value', expect.objectContaining({ key: 'textAlign' })],
+        ]);
+        expect(run.warnings[0]).toContain('[csszyx] runtime-value: /p/App.tsx:1:');
+        expect(run.warnings[0]).toContain('`textAlign` cannot take a runtime value');
         expect(run.warnings[0]).toContain('szv()');
     });
 

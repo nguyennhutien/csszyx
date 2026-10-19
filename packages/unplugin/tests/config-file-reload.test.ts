@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 const UNKNOWN = "export const A = () => <div sz={{ workBreak: 'all' }} />;\n";
-const UNKNOWN_LINE = 'Unknown property "workBreak"';
+const UNKNOWN_LINE = '`workBreak` is not an sz property.';
 const UNKNOWN_OFF = 'export default { diagnostics: { rules: { "unknown-key": "off" } } };\n';
 const UNKNOWN_WARN = 'export default { diagnostics: { rules: { "unknown-key": "warn" } } };\n';
 const DEAD_OFF = 'export default { diagnostics: { rules: { "dead-class": "off" } } };\n';

@@ -47,13 +47,13 @@ const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
 describe('describeSzFallback', () => {
     it('substitutes the detail into every reason that asks for one', () => {
         expect(describeSzFallback('call', 'makeSz').reason).toBe(
-            'function call `makeSz()` result is unknown at build time',
+            'function call `makeSz()` returns a value unknown at build time',
         );
         expect(describeSzFallback('identifier', 'cardSz').reason).toBe(
             'identifier `cardSz` could not be resolved to a static value',
         );
         expect(describeSzFallback('other', 'ConditionalExpression').reason).toBe(
-            'expression of type `ConditionalExpression` is not statically analyzable',
+            'expression of type `ConditionalExpression` cannot be read at build time',
         );
     });
 
@@ -75,7 +75,7 @@ describe('describeSzFallback', () => {
         // The caller decides what to print when a name is unreadable; the
         // matrix must not silently substitute a fallback of its own.
         expect(describeSzFallback('call').reason).toBe(
-            'function call `()` result is unknown at build time',
+            'function call `()` returns a value unknown at build time',
         );
     });
 
@@ -208,7 +208,7 @@ describe('engine parity for sz fallback diagnostics', () => {
         const tsx = 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;';
         for (const [name, diagnostics] of diagnosticsPerEngine(tsx)) {
             expect(diagnostics[0], name).toContain(
-                `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` result is unknown`,
+                `function call \`${SZ_FALLBACK_UNKNOWN_CALLEE}()\` returns a value unknown`,
             );
         }
     });
@@ -232,10 +232,11 @@ describe('engine parity for sz fallback diagnostics', () => {
     });
 });
 
-// The classifier reads rendered text, and each engine renders it from its own
-// call site. Asserting against a hand-written message would prove only that the
-// classifier parses that string — these run the real transforms, so an artifact that
-// words its diagnostic differently is caught by the routing that depends on it.
+// The consequence of an engine fallback is its code (`fallback-missing-css` or
+// `fallback-nudge`), which is what `csszyx check` and the bundler route on. The
+// classifier above still reads the runtime lane's text. These run the real
+// transforms, so an artifact that gives a different code is caught by the
+// routing that depends on it.
 describe('engine parity for the sz consequence split', () => {
     const CONSEQUENCE_SOURCES: ReadonlyArray<readonly [string, string, SzFallbackConsequence]> = [
         // An imported binding: a module-level value the compiler tried to read
@@ -268,12 +269,14 @@ describe('engine parity for the sz consequence split', () => {
     for (const [label, source, expected] of CONSEQUENCE_SOURCES) {
         for (const [name, engine] of ENGINES) {
             it(`${name} routes a ${label} fallback to ${expected}`, () => {
-                const fallbacks = captureWarnings(engine, source).warnings.filter(message =>
-                    message.includes('sz fallback at '),
+                const { result } = captureWarnings(engine, source);
+                const fallbacks = (result.issues ?? []).filter(issue =>
+                    issue.code.startsWith('fallback-'),
                 );
                 expect(fallbacks.length).toBeGreaterThan(0);
-                for (const message of fallbacks) {
-                    expect(szFallbackConsequenceOf(message)).toBe(expected);
+                for (const issue of fallbacks) {
+                    expect(issue.code).toBe(`fallback-${expected}`);
+                    expect(issue.args).toMatchObject({ site: 'sz' });
                 }
             });
         }

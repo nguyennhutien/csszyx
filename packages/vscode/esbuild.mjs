@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const watch = process.argv.includes('--watch');
+const COMPILER_SRC = path.resolve(import.meta.dirname, '../compiler/src') + path.sep;
 
 /** @type {import('esbuild').BuildOptions} */
 const options = {
@@ -32,7 +33,10 @@ const options = {
         setup(build) {
             build.onResolve({ filter: /\.js$/ }, args => {
                 const tsPath = path.resolve(args.resolveDir, args.path.replace(/\.js$/, '.ts'));
-                if (fs.existsSync(tsPath)) return { path: tsPath };
+                // A path a plugin resolves loses its package's `sideEffects`
+                // flag; @csszyx/compiler declares `false`, which is what lets
+                // an import from its index keep only the modules it uses.
+                if (fs.existsSync(tsPath)) return { path: tsPath, sideEffects: !tsPath.startsWith(COMPILER_SRC) };
             });
         },
     }],

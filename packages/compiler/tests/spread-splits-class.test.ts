@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { type EngineMergeTable, szDiagnosticKindOf } from '../src/index.js';
+import type { EngineMergeTable } from '../src/index.js';
 import { ENGINES, normalizeEmit } from './engine-parity-harness.js';
 
 /** `p` covers `pb`. */
@@ -32,7 +32,12 @@ function transformElement(element: string, mergeTable?: EngineMergeTable) {
     const source = `export const A = ({ c, n, r }) => ${element};`;
     return ENGINES.map(([name, transform]) => {
         const result = transform(source, 'a.tsx', mergeTable ? { mergeTable } : {});
-        return { name, code: normalizeEmit(result.code ?? ''), diagnostics: result.diagnostics };
+        return {
+            name,
+            code: normalizeEmit(result.code ?? ''),
+            diagnostics: result.diagnostics,
+            issues: result.issues ?? [],
+        };
     });
 }
 
@@ -134,26 +139,35 @@ describe('a class name and sz on either side of a spread', () => {
     });
 
     it('says the class name no longer applies, in production too', () => {
-        for (const { name, diagnostics } of transformElement(
+        for (const { name, diagnostics, issues } of transformElement(
             '<div className="card pb-2" {...r} sz={{ p: 4 }} />',
         )) {
-            const split = diagnostics.filter(
-                message => szDiagnosticKindOf(message) === 'spread-split-class',
-            );
-            expect(split, name).toHaveLength(1);
-            expect(split[0], name).toContain('<div>');
-            expect(split[0], name).toContain('`card pb-2` will not apply');
+            expect(
+                issues.map(issue => issue.code),
+                name,
+            ).toEqual(['spread-split-class']);
+            expect(issues[0]?.args, name).toMatchObject({
+                elementName: 'div',
+                classes: ['card pb-2'],
+                szCount: 0,
+                spread: 'r',
+            });
+            expect(diagnostics, name).toHaveLength(1);
+            expect(diagnostics[0], name).toContain('[csszyx] spread-split-class: a.tsx:1:');
+            expect(diagnostics[0], name).toContain('`<div>`');
+            expect(diagnostics[0], name).toContain('`card pb-2` will not apply');
         }
     });
 
     it('names every earlier side, and does not call two sz on two sides a duplicate', () => {
-        for (const { name, diagnostics } of transformElement(
+        for (const { name, diagnostics, issues } of transformElement(
             '<div className="card" sz={{ p: 4 }} {...r} sz={{ m: 2 }} />',
         )) {
             expect(
-                diagnostics.map(message => szDiagnosticKindOf(message)),
+                issues.map(issue => issue.code),
                 name,
             ).toEqual(['spread-split-class']);
+            expect(issues[0]?.args, name).toMatchObject({ classes: ['card'], szCount: 1 });
             expect(diagnostics[0], name).toContain(
                 '`card` and the classes of an earlier `sz` will not apply',
             );
@@ -165,10 +179,10 @@ describe('a class name and sz on either side of a spread', () => {
         ['<div className="card pb-2" sz={{ p: 4 }} {...r} />', 'className="card pb-2 p-4"'],
         ['<div className="a" {...r} className="b" />', 'className="a" {...r} className="b"'],
     ])('%s still merges when no spread stands between', (element, expected) => {
-        for (const { name, code, diagnostics } of transformElement(element)) {
+        for (const { name, code, issues } of transformElement(element)) {
             expect(code, name).toContain(expected);
             expect(
-                diagnostics.filter(message => szDiagnosticKindOf(message) === 'spread-split-class'),
+                issues.filter(issue => issue.code === 'spread-split-class'),
                 name,
             ).toEqual([]);
         }

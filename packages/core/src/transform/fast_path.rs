@@ -299,17 +299,35 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
     }
 }
 
+/// Every `sz` attribute in the file, with a value or without one: a bare
+/// `<span sz />` is not lowered here, so it must make the count disagree and
+/// send the file to the parser, which reports it.
 fn count_sz_attributes(source: &str) -> usize {
     let mut count = 0;
     let mut search_from = 0;
-    while let Some(relative_start) = source[search_from..].find("sz=") {
+    while let Some(relative_start) = source[search_from..].find("sz") {
         let index = search_from + relative_start;
-        if is_attribute_boundary(source, index) {
+        if (source[index + 2..].starts_with('=') && is_attribute_boundary(source, index))
+            || is_bare_sz_attribute(source, index)
+        {
             count += 1;
         }
-        search_from = index + 3;
+        search_from = index + 2;
     }
     count
+}
+
+/// Whether the `sz` at `index` is an attribute with no value: the name ends
+/// there, and what follows reads as the end of the tag or another attribute.
+/// Text that only looks so (`a sz b` in JSX text) costs the file the parser
+/// path, never a wrong transform.
+fn is_bare_sz_attribute(source: &str, index: usize) -> bool {
+    let rest = &source[index + 2..];
+    is_attribute_boundary(source, index)
+        && rest.starts_with(|ch: char| ch.is_whitespace() || ch == '/' || ch == '>')
+        && rest
+            .trim_start()
+            .starts_with(|ch: char| ch == '/' || ch == '>' || ch == '{' || ch.is_alphabetic())
 }
 
 fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<StaticSzObject> {
@@ -1119,5 +1137,40 @@ mod tests {
             .map(|property| property.span.start)
             .collect();
         assert_eq!(starts, [11, 19, 27]);
+    }
+
+    /// A bare `sz` beside a static one sends the file to the parser, which
+    /// reports it; a name that only starts with `sz`, or an `sz` written
+    /// before `=` or inside an expression, does not count as one.
+    #[test]
+    fn a_bare_sz_attribute_needs_the_parser() {
+        let triage = |source: &str| {
+            triage_source(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            })
+        };
+        for bare in [
+            "<div sz={{ p: 4 }}><span sz /></div>",
+            "<div sz={{ p: 4 }}><span sz/></div>",
+            "<div sz={{ p: 4 }}><span sz></span></div>",
+            "<div sz={{ p: 4 }}><span sz\n  id=\"a\" /></div>",
+            "<div sz={{ p: 4 }}><span sz {...rest} /></div>",
+        ] {
+            assert!(
+                matches!(triage(bare), FastPathTriage::NeedsParser(_)),
+                "{bare}"
+            );
+        }
+        for not_bare in [
+            "<div sz={{ p: 4 }}><span szLabel /></div>",
+            "<div sz={{ p: 4 }} title={a.sz} />",
+            "<div sz={{ p: 4 }} hidden={sz ? 1 : 0} />",
+        ] {
+            assert!(
+                matches!(triage(not_bare), FastPathTriage::StaticIr(_)),
+                "{not_bare}"
+            );
+        }
     }
 }

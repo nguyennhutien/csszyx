@@ -11,10 +11,9 @@
  * file pins the decisions by example, so a failure names one.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-
-import { szDiagnosticKindOf } from '../src/sz-diagnostic-kind.js';
 import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { szDiagnosticKindOf } from './helpers/runtime-warning-kind.js';
 
 /** What one lane wrote for an sz object, and the kinds it reported. */
 interface LaneResult {

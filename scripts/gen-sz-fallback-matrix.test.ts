@@ -8,11 +8,9 @@ import {
     SZ_SITE_MISSING_CSS_KINDS,
 } from '../packages/compiler/src/sz-fallback-matrix.js';
 import {
-    escapeRustFormat,
     escapeRustString,
     GENERATED_PATH,
     generateMatrixSource,
-    renderReasonArm,
     renderRust,
     variantName,
 } from './gen-sz-fallback-matrix.mjs';
@@ -34,40 +32,31 @@ describe('sz fallback matrix generation', () => {
         assert.equal(variantName('call'), 'Call');
     });
 
-    it('emits one match arm per kind, for both reason and suggestion', () => {
+    it('emits every kind, and lists exactly the ones that cost an sz site its classes', () => {
         const source = renderRust();
         for (const kind of SZ_FALLBACK_KINDS) {
             const variant = variantName(kind);
-            // Once in each of the two match statements, and once more in the
-            // `sz_site_fallback_misses_css` list when the kind costs its classes.
+            // Named only in `sz_site_fallback_misses_css`, and only when the
+            // kind costs its classes.
             const occurrences = source.split(`SzFallbackKind::${variant}`).length - 1;
-            const expected = SZ_SITE_MISSING_CSS_KINDS.has(kind) ? 3 : 2;
-            assert.equal(occurrences, expected, `${kind} should appear in both match statements`);
+            const expected = SZ_SITE_MISSING_CSS_KINDS.has(kind) ? 1 : 0;
+            assert.equal(occurrences, expected, `${kind} misses-css membership`);
             assert.ok(source.includes(`    ${variant},`), `${kind} should be an enum variant`);
         }
     });
 
-    it('carries every suggestion through verbatim', () => {
+    it('carries no sentence: the compiler renders every one', () => {
+        // The engine reports codes and args (ADR 0031); a reason or a
+        // suggestion in the Rust copy would be wording nobody reads.
         const source = renderRust();
         for (const kind of SZ_FALLBACK_KINDS) {
             assert.ok(
-                source.includes(SZ_FALLBACK_MATRIX[kind].suggestion),
-                `${kind} suggestion should survive generation unchanged`,
+                !source.includes(SZ_FALLBACK_MATRIX[kind].suggestion),
+                `${kind} suggestion should not be generated`,
             );
         }
-    });
-
-    it('renders a detail-carrying reason as an inline format argument', () => {
-        // `call` interpolates; a plain String::from would drop the name.
-        assert.match(renderReasonArm('call'), /^format!\(".*\{detail\}.*"\)$/);
-    });
-
-    it('renders a detail-free reason without formatting machinery', () => {
-        // `member` has nothing to interpolate; format! would only cost work.
-        assert.equal(
-            renderReasonArm('member'),
-            `String::from("${SZ_FALLBACK_MATRIX.member.reason}")`,
-        );
+        assert.ok(!source.includes('fn sz_fallback_reason'));
+        assert.ok(!source.includes('fn sz_fallback_suggestion'));
     });
 
     it('escapes quotes and backslashes for a Rust string literal', () => {
@@ -76,24 +65,6 @@ describe('sz fallback matrix generation', () => {
         // Backslash first, then quote — escaping in the other order would
         // double-escape the backslash it just inserted.
         assert.equal(escapeRustString('\\"'), '\\\\\\"');
-    });
-
-    it('escapes braces so a literal brace cannot become a format argument', () => {
-        assert.equal(escapeRustFormat('a {b} c'), 'a {{b}} c');
-        assert.equal(escapeRustFormat('{}'), '{{}}');
-    });
-
-    it('refuses a reason that repeats the placeholder', () => {
-        // The Rust renderer supplies one inline argument; a second placeholder
-        // would compile but reference an argument that is not there.
-        const original = SZ_FALLBACK_MATRIX.other.reason;
-        const mutable = SZ_FALLBACK_MATRIX as unknown as Record<string, { reason: string }>;
-        mutable.other.reason = '{detail} and {detail}';
-        try {
-            assert.throws(() => renderReasonArm('other'), /repeats/);
-        } finally {
-            mutable.other.reason = original;
-        }
     });
 
     it('marks the output as generated so nobody edits it by hand', () => {

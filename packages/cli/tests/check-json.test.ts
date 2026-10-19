@@ -11,6 +11,8 @@
  * every time it was.
  */
 
+import { stripVTControlCharacters } from 'node:util';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type CheckOptions, check } from '../src/commands/check.js';
@@ -33,13 +35,20 @@ async function jsonFor(
     cwd: string,
     options: Omit<CheckOptions, 'cwd' | 'json'> = {},
 ): Promise<{
+    $schema: string;
     version: number;
     findings: Array<{
         rule: string;
         kind?: string;
         file?: string;
         line?: number;
+        column?: number;
         message: string;
+        help?: string;
+        note?: string;
+        args?: Record<string, unknown>;
+        url?: string;
+        suggestion?: string;
     }>;
 }> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -58,7 +67,9 @@ describe('csszyx check --json', () => {
 
         const report = await jsonFor(cwd);
 
-        expect(report.version).toBe(1);
+        expect(report.version).toBe(2);
+        expect(report.$schema).toBe('https://csszyx.com/schemas/check-v2.json');
+        expect(Object.keys(report)).toEqual(['$schema', 'version', 'findings']);
         expect(report.findings).toEqual([]);
         expect(process.exitCode).toBeUndefined();
     });
@@ -105,7 +116,40 @@ describe('csszyx check --json', () => {
 
         const report = await jsonFor(cwd);
 
-        expect(report.findings.some(entry => entry.rule === 'sz-diagnostic')).toBe(true);
+        expect(report.version).toBe(2);
+        const finding = report.findings.find(entry => entry.rule === 'sz-diagnostic');
+        // The position, the named values and the page come from the issue the
+        // engine returned; `message` is the main sentence alone, and `help`
+        // and `note` are their own fields, with no label and no layout.
+        expect(finding).toEqual({
+            rule: 'sz-diagnostic',
+            kind: 'unknown-key',
+            file: 'src/App.tsx',
+            line: 1,
+            column: 35,
+            message: '`nonsenseKey` is not an sz property.',
+            help: "check the spelling; for a custom utility, define it with Tailwind's `@utility`.",
+            note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
+            args: { key: 'nonsenseKey' },
+            url: 'https://csszyx.com/e/unknown-key',
+            level: 'error',
+        });
+    });
+
+    it('leaves out `help` and `note` when the code has none', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ padding: 4 }} />;`,
+        });
+
+        const report = await jsonFor(cwd);
+        const finding = report.findings.find(entry => entry.kind === 'canonical-key');
+
+        expect(finding?.message).toBe(
+            '`padding` is an alias of `p`, and nothing is emitted for it.',
+        );
+        expect(finding?.help).toBe('write `p`.');
+        expect(finding).not.toHaveProperty('note');
     });
 
     it('carries a dead class, naming the file that emitted it', async () => {
@@ -136,13 +180,11 @@ describe('csszyx check --json', () => {
 });
 
 // `line` is optional in the document, and a consumer has to be able to tell
-// "no position" from "line zero". The engine renders the position into its own
-// message text and this reads it back from there rather than deriving a second
-// answer, so a diagnostic the engine could not place carries none here either.
+// "no position" from "line one". The engine returns the issue's position and the
+// message names it only for a code that has one site; a code that is about the
+// whole file carries none, and this does not give it one.
 describe('csszyx check --json — a diagnostic that names no line', () => {
-    it('omits the line rather than inventing one', async () => {
-        // An `szs` slot map built from a variable: the engine reports the
-        // attribute it left alone, but has no single position to blame.
+    it('gives a diagnostic the engine placed its line and column', async () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': `export const A = () => <Card szs={slots} />;`,
@@ -151,8 +193,25 @@ describe('csszyx check --json — a diagnostic that names no line', () => {
         const doc = await jsonFor(cwd);
         const finding = doc.findings.find(entry => entry.rule === 'sz-diagnostic');
 
+        expect(finding?.kind).toBe('szs-slot-map');
         expect(finding?.message).toContain('slot');
+        expect(finding?.line).toBe(1);
+        expect(finding?.column).toBe(30);
+    });
+
+    it('omits the line and column rather than inventing them for a whole-file diagnostic', async () => {
+        // Nesting past the parser guard is about the file, not a site in it.
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ p: 4 }} />;\nexport const B = ${'['.repeat(100)}${']'.repeat(100)};\n`,
+        });
+
+        const doc = await jsonFor(cwd);
+        const finding = doc.findings.find(entry => entry.kind === 'nesting-depth');
+
+        expect(finding?.args).toEqual({ depth: 100 });
         expect(finding?.line).toBeUndefined();
+        expect(finding?.column).toBeUndefined();
     });
 });
 
@@ -191,7 +250,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
             'src/app.css': '@import "tailwindcss";',
             'src/App.tsx': [
                 "export const A = () => <div sz={{ touchAction: 'pan-y' }} />;",
-                "export const B = () => <div sz={{ contain: 'size', containPaint: true }} />;",
+                "export const B = () => <div sz={{ contain: 'none', containPaint: true }} />;",
             ].join('\n'),
         });
 
@@ -293,6 +352,37 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         expect(unknown?.suggestion).toBe('break');
     });
 
+    it('suggests a key for every unknown key it lists, past any build log cap', async () => {
+        // A build lists ten findings of one id and counts the rest, and renders
+        // only those ten; the check lists all of them, each with its suggestion.
+        const typos: Record<string, string> = {
+            workBreak: 'break',
+            pading: 'p',
+            dispaly: 'display',
+            fontWieght: 'weight',
+            hovr: 'hover',
+            bacgroundColor: 'bg',
+            gpa: 'gap',
+        };
+        const files: Record<string, string> = { 'src/app.css': '@import "tailwindcss";' };
+        for (const [index, key] of [...Object.keys(typos), ...Object.keys(typos)].entries()) {
+            files[`src/F${index}.tsx`] = `export const A = () => <div sz={{ ${key}: 'all' }} />;`;
+        }
+        const cwd = tailwindProject(files);
+
+        const report = await jsonFor(cwd);
+        const unknown = report.findings.filter(entry => entry.kind === 'unknown-key') as Array<{
+            key?: string;
+            args?: { key: string };
+            suggestion?: string;
+        }>;
+
+        expect(unknown).toHaveLength(14);
+        for (const finding of unknown) {
+            expect(finding.suggestion).toBe(typos[finding.args?.key ?? '']);
+        }
+    });
+
     it('prints the suggestion under the diagnostic in the prose report', async () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";',
@@ -303,7 +393,22 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         await check({ cwd });
 
-        expect(log.mock.calls.flat().join('\n')).toContain('Did you mean "break"?');
+        // A CI runner gets colours, which close after the last line.
+        const printed = stripVTControlCharacters(log.mock.calls.flat().join('\n'));
+        const lines = printed.split('\n');
+        const at = lines.findIndex(line => line.includes('1:35 unknown-key:'));
+        const [head = '', help = '', note = ''] = lines.slice(at, at + 3);
+        expect(head).toMatch(/^\S* {3}1:35 unknown-key: `workBreak` is not an sz property\.$/);
+        // Each labelled line sits under the place, once: the parts come bare
+        // and the report indents them, so nothing is indented twice.
+        expect(help).toBe(
+            "    help: write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.",
+        );
+        expect(note).toBe(
+            '    note: the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
+        );
+        expect(help.indexOf('help:')).toBe(head.indexOf('1:35'));
+        expect(printed).not.toContain('Did you mean');
     });
 
     // `parse-error` was on this list until the engine coded its diagnostics:
@@ -324,6 +429,27 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
             expect(log.mock.calls.flat().join('\n')).toContain(`"${id}"`);
         },
     );
+
+    it('accepts a removed id such as other, naming the id that replaced it', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': PRECEDENCE_AND_TYPO,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, ignoreRule: ['other'] });
+        const printed = log.mock.calls.flat().join('\n');
+
+        // Still accepted, as the 0.18 upgrade guide says: it now selects nothing.
+        expect(printed).toContain(
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                '  help: name `sz-diagnostic` instead, which reports what `other` did.\n' +
+                '  docs: https://csszyx.com/e/removed-rule-id',
+        );
+        expect(printed).toContain('unknown-key');
+        expect(process.exitCode).toBe(1);
+    });
 
     it('does not call a run clean when its only issues were left out', async () => {
         const cwd = tailwindProject({
@@ -444,5 +570,84 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     it('is not part of a run that does not name it', async () => {
         const report = await jsonFor(tailwindProject(files));
         expect(report.findings.filter(finding => finding.rule.startsWith('merge-'))).toEqual([]);
+    });
+});
+
+describe('csszyx check --json — what the run says about itself', () => {
+    // A message about the run rather than a finding has no place in the
+    // document, and dropping it left a gate that checks nothing exiting 0, or
+    // one that fails exiting 1 with no reason anywhere in the CI log.
+    const files = {
+        'src/app.css': '@import "tailwindcss";',
+        'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+    };
+
+    /**
+     * Run in JSON mode and keep both streams apart.
+     *
+     * @param options - Options for the run besides the root and the format.
+     * @returns What reached stdout and what reached stderr.
+     */
+    async function streamsFor(
+        options: Omit<CheckOptions, 'cwd' | 'json'>,
+    ): Promise<{ stdout: string; stderr: string }> {
+        const cwd = tailwindProject(files);
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ ...options, cwd, json: true });
+        const joined = (spy: typeof log) => spy.mock.calls.map(call => call.join(' ')).join('\n');
+        return { stdout: joined(log), stderr: joined(error) };
+    }
+
+    it('warns on stderr that a removed id selects nothing, and keeps stdout the document', async () => {
+        const { stdout, stderr } = await streamsFor({ rule: ['other'] });
+
+        expect(stderr).toContain(
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                '  help: name `sz-diagnostic` instead, which reports what `other` did.',
+        );
+        const report = JSON.parse(stdout);
+        expect(report).toEqual({
+            $schema: 'https://csszyx.com/schemas/check-v2.json',
+            version: 2,
+            findings: [],
+        });
+    });
+
+    it('names an unknown id on stderr, and writes no document', async () => {
+        const { stdout, stderr } = await streamsFor({ rule: ['bogus'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain(
+            '✖ "bogus" is not a rule or a diagnostic kind, so it would select nothing.',
+        );
+    });
+
+    it('names a --fail-on that is not a level on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ failOn: 'fatal' as 'error' });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('✖ --fail-on "fatal" is not a level');
+    });
+
+    it('names a directory that does not exist on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ dir: 'nowhere' });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('✖ "nowhere" does not exist under');
+    });
+
+    it('lists the files that could not be read on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ files: ['src/Missing.tsx'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('Files that could not be read:');
+        expect(stderr).toContain('  src/Missing.tsx');
+        expect(stderr).toContain('✖ 1 listed file(s) could not be read');
     });
 });

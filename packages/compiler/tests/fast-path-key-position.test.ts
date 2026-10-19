@@ -13,10 +13,13 @@ import { ENGINES } from './engine-parity-harness.js';
 describe.each(ENGINES)('fast-path key positions — %s', (_name, transform) => {
     it('reports a key on a later line of the object on that line', () => {
         const source = 'export const A = () => <div sz={{\n  p: 4,\n  xyzzy: 4,\n}} />;';
-        const diagnostics = transform(source, '/p/src/A.tsx').diagnostics ?? [];
+        const result = transform(source, '/p/src/A.tsx');
 
-        expect(diagnostics).toEqual([
-            expect.stringContaining('Unknown property "xyzzy" in sz prop at /p/src/A.tsx:3.'),
+        expect(
+            result.issues?.map(issue => [issue.code, issue.args, issue.line, issue.column]),
+        ).toEqual([['unknown-key', { key: 'xyzzy' }, 3, 3]]);
+        expect(result.diagnostics).toEqual([
+            expect.stringMatching(/^\[csszyx\] unknown-key: \/p\/src\/A\.tsx:3:3\n/),
         ]);
     });
 });

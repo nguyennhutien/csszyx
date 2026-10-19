@@ -7,12 +7,16 @@ import test from 'node:test';
 
 import * as registry from './diagnostics/registry.mjs';
 import {
+    casingProblems,
+    EDITOR_IDS,
     placeholdersOf,
     publicData,
+    renderEditorTemplates,
     renderRegistryModule,
     renderRust,
     renderTypeScript,
     settableIds,
+    snakeName,
     validateRegistry,
     variantName,
 } from './gen-diagnostic-codes.mjs';
@@ -187,10 +191,69 @@ test('arguments, forms and gaps are checked', () => {
     );
 });
 
+test('a computed value counts the args it reads, and may not share an arg name', () => {
+    const input = registryOf([
+        entry({
+            args: { key: { type: 'string' }, hint: { type: 'string' } },
+            text: '{shown}.',
+        }),
+    ]);
+    input.COMPUTED = { shown: { reads: ['key', 'hint'], summary: 'Both.' } };
+    assert.deepEqual(validateRegistry(input), []);
+    input.DIAGNOSTICS[0].args.shown = { type: 'string' };
+    assert.match(
+        validateRegistry(input).join('\n'),
+        /\{shown\} is both an arg and a computed value/,
+    );
+});
+
+test('an engine id has a place and declared args, and a list arg its joiner', () => {
+    assert.match(
+        validateRegistry(registryOf([entry({ position: 'none' })])).join('\n'),
+        /never at no place/,
+    );
+    assert.match(
+        validateRegistry(registryOf([entry({ args: undefined })])).join('\n'),
+        /declares its args/,
+    );
+    assert.match(
+        validateRegistry(registryOf([entry({ args: { keys: { type: 'string[]' } } })])).join('\n'),
+        /list argument keys declares no joiner/,
+    );
+});
+
+test('every id declares its args, a runtime one too', () => {
+    const runtime = { surfaces: { runtime: { production: false } }, position: 'none' };
+    assert.match(
+        validateRegistry(registryOf([entry({ ...runtime, args: undefined })])).join('\n'),
+        /declares its args/,
+    );
+    assert.deepEqual(validateRegistry(registryOf([entry({ ...runtime, args: {} })])), []);
+});
+
+test('a template keyed by an arg other than form names that enum arg', () => {
+    const base = {
+        args: { site: { type: ['enum', 'sz', 'szr'] } },
+        variesBy: 'site',
+        text: { sz: 'One.', szr: 'Two.' },
+    };
+    assert.deepEqual(validateRegistry(registryOf([entry(base)])), []);
+    assert.match(
+        validateRegistry(registryOf([entry({ ...base, text: { szv: 'Three.' } })])).join('\n'),
+        /has a text for szv, which is not a value of site/,
+    );
+    assert.match(
+        validateRegistry(
+            registryOf([entry({ ...base, args: { site: { type: 'string' } }, text: 'One.' })]),
+        ).join('\n'),
+        /varies by site, which is not one of its enum args/,
+    );
+});
+
 test('templates may only name arguments, and every required argument is used', () => {
     assert.match(
         validateRegistry(registryOf([entry({ text: 'Unknown "{key}" at {where}' })])).join('\n'),
-        /names \{where\}, which is not an argument/,
+        /names \{where\}, which is neither an argument nor a computed value/,
     );
     assert.match(
         validateRegistry(
@@ -208,8 +271,8 @@ test('templates may only name arguments, and every required argument is used', (
             registryOf([
                 entry({
                     args: { key: { type: 'string' }, hint: { type: 'string', optional: true } },
-                    text: 'Unknown "{key}" in { p: 4 }',
-                    help: 'Did you mean "{hint}"?',
+                    text: 'Unknown "{key}" in { p: 4 }.',
+                    help: 'did you mean "{hint}"?',
                 }),
             ]),
         ),
@@ -225,7 +288,7 @@ test('templates may only name arguments, and every required argument is used', (
                 }),
             ]),
         ).join('\n'),
-        /text for b, which is not one of its forms/,
+        /text for b, which is not a value of form/,
     );
 });
 
@@ -239,6 +302,47 @@ test('the Rust enum carries only what the engine emits', () => {
     assert.doesNotMatch(rust, /ThemeCollision/);
     assert.match(rust, /\[DiagnosticCode; 1\]/);
     assert.equal(variantName('mangle-vars-hoist-skipped'), 'MangleVarsHoistSkipped');
+});
+
+test('each engine form gets a constructor that names its args in registry order', () => {
+    const input = registryOf([
+        entry({
+            id: 'mangle-vars-hoist-skipped',
+            forms: ['a', 'b'],
+            args: {
+                form: { type: ['enum', 'a', 'b'] },
+                name: { type: 'string' },
+                usageCount: { type: 'number' },
+                reason: { type: ['enum', 'no-lca', 'max-depth'] },
+                maxDepth: { type: 'number', optional: true },
+                parts: { type: 'string[]', joiner: ', ' },
+            },
+        }),
+        entry({ id: 'style-override', args: {} }),
+    ]);
+    const rust = renderRust(input);
+    assert.match(
+        rust,
+        /pub fn mangle_vars_hoist_skipped_a\(name: &str, usage_count: u64, reason: &'static str, max_depth: Option<u64>, parts: Vec<String>\)/,
+    );
+    assert.match(rust, /pub fn mangle_vars_hoist_skipped_b\(/);
+    assert.match(
+        rust,
+        /Args::default\(\)\.text\("form", "a"\)\.text\("name", name\)\.count\("usageCount", usage_count\)/,
+    );
+    assert.match(rust, /debug_assert!\(\["no-lca", "max-depth"\]\.contains\(&reason\)\);/);
+    assert.match(rust, /\.optional_count\("maxDepth", max_depth\)\.list\("parts", parts\)/);
+    assert.match(
+        rust,
+        /pub fn style_override\(\) -> \(DiagnosticCode, Args\) \{\n\(DiagnosticCode::StyleOverride, Args::default\(\)\)/,
+    );
+    assert.equal(snakeName('usageCount'), 'usage_count');
+    const ts = renderTypeScript(input);
+    assert.match(
+        ts,
+        /'mangle-vars-hoist-skipped': \{ readonly form: 'a' \| 'b'; readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' \| 'max-depth'; readonly maxDepth\?: number; readonly parts: readonly string\[\]; \};/,
+    );
+    assert.match(ts, /'style-override': \{ {2}\};/);
 });
 
 test('the TypeScript ids follow the registry', () => {
@@ -273,4 +377,76 @@ test('the Node registry module carries the public data and no review metadata', 
     const data = publicData(input);
     assert.equal(data.diagnostics[0].sources, undefined);
     assert.ok(renderRegistryModule(input).includes(JSON.stringify(data.diagnostics, null, 4)));
+});
+
+test('a sentence starts upper-case or with a code span, and ends with a period', () => {
+    assert.deepEqual(casingProblems('text', '`{key}` is not an sz property.'), []);
+    assert.deepEqual(casingProblems('text', 'This `sz` value is unread.'), []);
+    assert.deepEqual(casingProblems('text', '{reason}.', new Set(['reason'])), []);
+    assert.match(casingProblems('text', 'csszyx could not parse it.').join('\n'), /upper-case/);
+    assert.match(casingProblems('text', 'This is unread').join('\n'), /does not end with a period/);
+    // An arg is third-party text: its casing is not the template's.
+    assert.match(casingProblems('text', '{message}.').join('\n'), /upper-case/);
+});
+
+test('help and note are one lower-case clause, further advice after `;`', () => {
+    const help = "check the spelling; for a custom utility, define it with Tailwind's `@utility`.";
+    assert.deepEqual(casingProblems('help', help), []);
+    assert.deepEqual(casingProblems('note', '`szs` is left unchanged.'), []);
+    assert.deepEqual(casingProblems('help', '{hint}; or not.', new Set(['hint'])), []);
+    // A period inside a code span or a number ends no sentence.
+    assert.deepEqual(casingProblems('help', 'use `a. B` or `1.5`; in Vue JSX, `x`.'), []);
+    assert.match(casingProblems('help', 'Check the spelling.').join('\n'), /lower-case/);
+    // A proper noun may sit anywhere but at the start.
+    assert.match(casingProblems('note', 'Vue JSX merges every class.').join('\n'), /lower-case/);
+    assert.match(
+        casingProblems('help', 'check the spelling. For a utility, use `@utility`.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling. Tailwind serves it.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling? Then rebuild.').join('\n'),
+        /second sentence/,
+    );
+    assert.match(
+        casingProblems('help', 'check the spelling; For a utility, use it.').join('\n'),
+        /after `;`/,
+    );
+    assert.match(casingProblems('help', '{key} is wrong.').join('\n'), /lower-case/);
+});
+
+test('the registry check applies the casing rule to every field and form', () => {
+    assert.match(
+        validateRegistry(registryOf([entry({ text: 'unknown `{key}`.' })])).join('\n'),
+        /diagnostic "unknown-key": text: starts/,
+    );
+    assert.match(
+        validateRegistry(
+            registryOf([
+                entry({
+                    forms: ['a', 'b'],
+                    args: { key: { type: 'string' }, form: { type: ['enum', 'a', 'b'] } },
+                    text: { a: 'Unknown `{key}`.', b: 'Unknown `{key}`.' },
+                    note: { b: 'Fine. Then not.' },
+                }),
+            ]),
+        ).join('\n'),
+        /note \(b\): .*second sentence/,
+    );
+});
+
+test('the editor module carries the editor ids only, each as the registry words it', () => {
+    const source = renderEditorTemplates(registry);
+    for (const id of EDITOR_IDS) {
+        const { text } = registry.DIAGNOSTICS.find(entry => entry.id === id);
+        assert.ok(source.includes(JSON.stringify(text, null, 4).split('\n')[0]), id);
+    }
+    assert.ok(!source.includes('"dead-class"'));
+    assert.throws(
+        () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
+        /editor id unknown-key is not in the registry/,
+    );
 });

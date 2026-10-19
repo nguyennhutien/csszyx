@@ -1,5 +1,11 @@
 /**
- * Which kind of problem a rendered diagnostic reports.
+ * Which kind of problem a rendered diagnostic reports — a test helper.
+ *
+ * It was public API until 0.18.0. Every bundler lane and `csszyx check` now
+ * read the engine's code, so nothing in the package classifies text any more;
+ * the runtime channel's console warnings still carry no code, and the suites
+ * that compare them with the engine's codes read their kind here until the
+ * runtime reports codes of its own (ADR 0031 PR C), when this file goes.
  *
  * A consumer that treats kinds differently — a CI gate that fails on a typo'd
  * key and not on a precedence note, a build that holds advice back in
@@ -11,11 +17,14 @@
  * its tests, so a reworded message fails here rather than in someone's
  * pipeline.
  *
- * @module sz-diagnostic-kind
+ * @module runtime-warning-kind
  */
 
-import { SZ_DIAGNOSTIC_CODES, type SzDiagnosticCode } from './diagnostic-codes.generated.js';
-import { szFallbackConsequenceOf } from './sz-fallback-matrix.js';
+import {
+    SZ_DIAGNOSTIC_CODES,
+    type SzDiagnosticCode,
+} from '../../src/diagnostic-codes.generated.js';
+import { szFallbackConsequenceOf } from '../../src/sz-fallback-matrix.js';
 
 /** The tag every `[csszyx]` diagnostic starts with. */
 const TAG = '[csszyx] ';
@@ -31,8 +40,10 @@ interface KindMatcher {
 }
 
 /**
- * A kind `csszyx check` can report: an engine code, or `other` for a message
- * with no code that no text matcher accepts.
+ * A kind this module names: an engine code, or `other` for a message with no
+ * code that no text matcher accepts. `other` is no longer a kind `csszyx
+ * check` or a bundler lane reports, since every lane keeps the engine's code;
+ * `rules` and `--rule` accept it only with a `removed-rule-id` warning.
  */
 export type SzDiagnosticKindId = SzDiagnosticCode | 'other';
 

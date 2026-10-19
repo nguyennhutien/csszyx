@@ -30,6 +30,14 @@ import { buildSync } from 'esbuild';
  * install-size question that method answered is the wasm budget's job, the
  * one artifact where package weight is what users pay.
  *
+ * The same bundles are measured a second time with Vite (`vite` on each
+ * app-bundle budget, `checkViteBudgets`), the bundler most apps ship csszyx
+ * with. Totals differ from esbuild's by 0.1 to 3 percent (the runtime most,
+ * 15,686 against 16,170 on 2026-10-19), and where a module lands moves gzip
+ * by tens of bytes, which the two bundlers do not lay out alike: the same day
+ * a chunk-order change measured 8 bytes under its baseline in esbuild and 19
+ * over in Vite. The lane adds ~0.35 s to the gate (17 Vite builds).
+ *
  * Every app-bundle budget carries two kinds of ceiling. `maxGzipBytes` caps
  * the union of its entries — what an app that imports all of them ships, and
  * the bundle whose console messages are checked. `entryBudgets` caps each
@@ -45,6 +53,13 @@ import { buildSync } from 'esbuild';
  * this file that it never reaches a browser. The union stays because it is the one
  * bundle that holds every message the package can print, and because the
  * entries' headrooms add up: each entry can grow ~300 bytes and still pass.
+ *
+ * A fourth kind prices code that never reaches a browser but runs at the
+ * start of every build: `kind: 'node-entry'` sums the gzip bytes of the files
+ * a Node process loads when it imports one export subpath, the entry and every
+ * file it reaches through a static import. Node compiles each of them whole
+ * before the first call returns, so a heavy import added to a build-time
+ * entry is start-up time for every build, dev server and CLI run.
  *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
@@ -90,6 +105,20 @@ export const SIZE_BUDGETS = [
             './split': 8_450,
             './merge': 1_400,
         },
+        // The same bundles built by Vite (see `checkViteBudgets`), measured
+        // 2026-10-19: 15,686, then 15,376 / 464 / 1,362 / 515 / 8,059 / 996.
+        // Each the usual ~300 above, rounded up to 50.
+        vite: {
+            maxGzipBytes: 16_000,
+            entryBudgets: {
+                '.': 15_700,
+                './lite': 800,
+                './core': 1_700,
+                './lowering': 850,
+                './split': 8_400,
+                './merge': 1_300,
+            },
+        },
         // Each one reports csszyx's own output as wrong, an integrity check
         // failing, or prints only because the app turned `debug` on (ADR
         // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
@@ -128,6 +157,8 @@ export const SIZE_BUDGETS = [
         maxGzipBytes: 10_950,
         // Measured 2026-10-08: 10,358 / 7,897.
         entryBudgets: { '.': 10_650, './react': 8_200 },
+        // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
+        vite: { maxGzipBytes: 11_000, entryBudgets: { '.': 10_700, './react': 8_100 } },
     },
     {
         name: '@csszyx/compiler browser app bundle',
@@ -179,6 +210,19 @@ export const SIZE_BUDGETS = [
         // now report it (`moved-value`); the side and decoration colour keys
         // take the generic lowering instead of a copy of it. Budget the usual
         // ~300 above.
+        //
+        // 17,191 on 2026-10-19 after the key and closed-enum tables moved out
+        // of `transform-core.ts` into two leaf modules (so the engine entries
+        // load the tables without the lowering): 2 under the 17,193 before.
+        // The move first measured 17,364, because the bundle placed the two
+        // table modules' chunk at the top, more than gzip's 32 KB window away
+        // from the code that repeats their keys; the capability table now
+        // builds into a chunk of its own, imported ahead of them (see
+        // `packages/compiler/tsdown.config.mjs`), and the budget was not
+        // raised. 17,125 the same day once the property category map joined
+        // that chunk ahead of the capability rows: it had stayed in the
+        // lowering's chunk, after the tables, which cost `./browser` 89 to 115
+        // bytes in each bundler measured (esbuild, Vite, Rollup).
         maxGzipBytes: 17_360,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
@@ -190,13 +234,42 @@ export const SIZE_BUDGETS = [
             // 15,920 once the runtime stopped judging a sign (ADR 0022), the
             // same day, so lowered from 16,300; 16,297 with the variable type
             // hints, the unjudged colour strings and the production mask
-            // warning (+377, see the union), so raised from 16,220.
+            // warning (+377, see the union), so raised from 16,220. 16,425
+            // once the tables moved to leaf modules, 2026-10-19 (-8; 16,584
+            // in the chunk order that put them first, see the union), and
+            // 16,332 with the category map ahead of them, the same day.
             './browser': 16_600,
             './sz-limits': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
             './color-var': 550,
             './spacing-var': 1_000,
+        },
+        // The capability rows (with the category map) have to be laid out
+        // before the key and closed-enum tables' chunk, in both lanes: with
+        // the tables first, `./browser` measured 16,561 gzip bytes against
+        // 16,425 in esbuild, under its budget, so only the order shows the
+        // drift. A bundler upgrade that stops laying chunks out in
+        // first-import order fails here, not in
+        // `packages/compiler/tests/browser-chunk-order.test.ts`, which reads
+        // the source.
+        moduleOrder: { './browser': ['per-key-rows-', 'closed-enum-tables-'] },
+        // Built by Vite, measured 2026-10-19: 17,151, then 16,323 / 384 /
+        // 705 / 401 / 300 / 729. This lane is why it exists: when the key
+        // tables moved to leaf modules, esbuild measured `./browser` 8 bytes
+        // under the layout before the move and Vite 19 over (16,413 against
+        // 16,394), the union 2 under and 27 over; the category map moving
+        // ahead of the tables brought both lanes under.
+        vite: {
+            maxGzipBytes: 17_500,
+            entryBudgets: {
+                './browser': 16_650,
+                './sz-limits': 700,
+                './keyword-families': 1_050,
+                './bool-class': 750,
+                './color-var': 600,
+                './spacing-var': 1_050,
+            },
         },
         // Each one reports a class the transform did not emit (ADR 0011), so
         // they print in production and in the browser, once each; only
@@ -347,7 +420,65 @@ export const SIZE_BUDGETS = [
         // and refuses an option it does not know, which costs 362 gzip bytes:
         // 585,425 at the branch base, 585,787 after, un-optimized nodejs
         // parser build, same machine.
-        maxGzipBytes: 586_100,
+        //
+        // Lowered from 586,100 on 2026-10-18 (ADR 0031): every issue carries its
+        // named args and the engine no longer writes sentences, which the
+        // compiler renders from the diagnostic registry. 583,410 at main
+        // bd3f3f33, 577,844 after (gzip -9 of the un-optimized nodejs parser
+        // build; 580,859 as this script measures it). The args alone had
+        // cost 6,506; the sentences, their position lookups and the fallback
+        // reason tables they read were 12,072. ~300 bytes of headroom.
+        //
+        // Raised from 581,200 on 2026-10-18: six diagnostic fixes from the
+        // DX review of ADR 0031 cost 1,210 gzip bytes, 580,852 to 582,062 as
+        // this script measures the un-optimized nodejs parser build, same
+        // machine. Most of it is the three `closed-enum-value` forms the
+        // engine now reports, with the alignment tables they read (+484), and
+        // naming a group value before its group as the group's (+407); the
+        // fast path counting a bare `sz` (+200), the dropped family conflict
+        // (+186) and the szr nudge (+90) are the rest, less 157 from one
+        // issue per syntax error and the spread notice alone.
+        maxGzipBytes: 582_400,
+    },
+    // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
+    // bundles from the compiler's source, unminified, and that every editor
+    // with the extension loads at activation. It had no ceiling, so a heavy
+    // import in the compiler grew it unseen. Measured 2026-10-19, gzip -9 of
+    // `dist/extension.js` (raw bytes in brackets): 46,531 [195,793] at main
+    // bd3f3f33, 51,219 [211,264] on `feat/0.18.0-diagnostic-render`. Most of
+    // the 4,688 is the extension reporting each sz key with the code and
+    // words of the diagnostic registry (+3,864, 62704628); the bit-parallel
+    // typo search (+215), the template segments (+289), the tables moving to
+    // leaf modules (+186) and smaller steps are the rest (per-commit deltas
+    // from a worktree build, whose module path comments differ, so only the
+    // deltas carry over). Budget the usual ~300 above.
+    {
+        name: '@csszyx/vscode extension bundle',
+        kind: 'file',
+        target: 'packages/vscode/dist/extension.js',
+        maxGzipBytes: 51_500,
+    },
+    // What Node loads for the two entries the build tools import: the engine
+    // calls and the diagnostic renderer, which reads the diagnostic registry
+    // and the key tables. Measured 2026-10-19 from a fresh process, p50 of 30
+    // each: importing `./engine` took 1.76 ms at 6,631 gzip bytes, 4.69 ms
+    // once the renderer pulled the whole browser lowering in for its tables
+    // (49,614), and 3.61 ms after the tables moved to their own module
+    // (30,115). `./internal` measured 33,093 the same day. Budgets the usual
+    // ~300 above the measurement.
+    {
+        name: '@csszyx/compiler `./engine`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './engine',
+        maxGzipBytes: 30_400,
+    },
+    {
+        name: '@csszyx/compiler `./internal`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './internal',
+        maxGzipBytes: 33_400,
     },
 ];
 
@@ -460,6 +591,18 @@ export function entryBudgetProblems(shipped, budgeted) {
  * @returns {string} the minified production bundle
  */
 export function appBundle(entryPaths, packageDir) {
+    return appBuild(entryPaths, packageDir).code;
+}
+
+/** The esbuild app build behind {@link appBundle}, with the bundle's modules
+ * in the order it lays them out (esbuild's metafile lists an output's inputs
+ * in that order).
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {{ code: string, moduleIds: string[] }} the bundle and its modules in order
+ */
+function appBuild(entryPaths, packageDir) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     const contents = entryPaths
         .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
@@ -473,11 +616,132 @@ export function appBundle(entryPaths, packageDir) {
         platform: 'browser',
         minify: true,
         treeShaking: true,
+        metafile: true,
         external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
         define: { 'process.env.NODE_ENV': '"production"' },
         logLevel: 'silent',
     });
-    return result.outputFiles[0].text;
+    const [output] = Object.values(result.metafile.outputs);
+    return {
+        code: result.outputFiles[0].text,
+        moduleIds: Object.keys(output.inputs).map(id => path.resolve(packageDir, id)),
+    };
+}
+
+/** Where a budget's `moduleOrder` is broken: each prefix names the first
+ * module whose file name starts with it, and those modules must be laid out in
+ * the listed order. Gzip finds a repeat only within 32 KB, so a table placed
+ * far from the code that spells the same keys costs bytes no line of source
+ * shows (see the compiler's budget).
+ *
+ * @param {string[]} moduleIds module paths in bundle order
+ * @param {string[]} prefixes file-name prefixes, in the order required
+ * @returns {string[]} one problem per prefix with no module or out of order
+ */
+export function moduleOrderProblems(moduleIds, prefixes) {
+    const names = moduleIds.map(id => path.basename(id));
+    const problems = [];
+    let previous;
+    for (const prefix of prefixes) {
+        const at = names.findIndex(name => name.startsWith(prefix));
+        if (at === -1) {
+            problems.push(`bundles no module whose file name starts with \`${prefix}\``);
+            continue;
+        }
+        if (previous !== undefined && at < previous.at) {
+            problems.push(`bundles \`${prefix}\` before \`${previous.prefix}\``);
+        }
+        previous = { prefix, at };
+    }
+    return problems;
+}
+
+/** The failures of a budget's `moduleOrder` for one lane.
+ *
+ * @param {{ name: string, moduleOrder?: Record<string, string[]> }} budget the budget
+ * @param {string} name the lane's budget name
+ * @param {Array<{ subpath: string }>} entries the package's export entries
+ * @param {Map<string, string[]>} modulesBySubpath each measured entry's modules in bundle order
+ * @returns {string[]} failure messages
+ */
+function moduleOrderFailures(budget, name, entries, modulesBySubpath) {
+    const failures = [];
+    for (const [subpath, prefixes] of Object.entries(budget.moduleOrder ?? {})) {
+        if (!entries.some(entry => entry.subpath === subpath)) {
+            failures.push(`${name}: \`${subpath}\` has a module order but no export`);
+            continue;
+        }
+        for (const problem of moduleOrderProblems(modulesBySubpath.get(subpath) ?? [], prefixes)) {
+            failures.push(
+                `${name}: \`${subpath}\` ${problem}. The order keeps tables within gzip's ` +
+                    'reach of the code that repeats their keys; restore it in the import order ' +
+                    'or the chunk groups before moving the budget.',
+            );
+        }
+    }
+    return failures;
+}
+
+/** The id of the entry module the Vite lane bundles from. */
+const VITE_ENTRY = '\0csszyx-size-gate-entry';
+
+/** Bundle a package's export entries the way a Vite app ships them: `vite
+ * build` with no config of its own, so its defaults (Rolldown, the Oxc
+ * minifier, the default browser target) decide, and the same inputs as
+ * {@link appBundle}: every entry imported as a namespace and kept reachable,
+ * `process.env.NODE_ENV` defined as production, and the other `@csszyx/*`
+ * packages and the peer dependencies left external. A build error rejects.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {Promise<string[]>} the code of every chunk the build emits
+ */
+export async function viteAppBundle(entryPaths, packageDir) {
+    return (await viteAppBuild(entryPaths, packageDir)).map(chunk => chunk.code);
+}
+
+/** The Vite build behind {@link viteAppBundle}.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
+ */
+async function viteAppBuild(entryPaths, packageDir) {
+    const { build } = await import('vite');
+    const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    const external = ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})];
+    // An app's entry exports nothing, so a namespace has to be used to stay.
+    const contents = entryPaths
+        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
+        .concat(`globalThis.__csszyxSizeGate = [${entryPaths.map((_, i) => `e${i}`).join(', ')}];`)
+        .join('\n');
+    // One output, so one result: a watcher or a list would fail on `.output`.
+    const { output } = await build({
+        configFile: false,
+        root: packageDir,
+        publicDir: false,
+        logLevel: 'silent',
+        mode: 'production',
+        define: { 'process.env.NODE_ENV': '"production"' },
+        plugins: [
+            {
+                name: 'csszyx-size-gate-entry',
+                resolveId: id => (id === VITE_ENTRY ? id : null),
+                load: id => (id === VITE_ENTRY ? contents : null),
+            },
+        ],
+        build: {
+            write: false,
+            modulePreload: false,
+            rollupOptions: {
+                input: VITE_ENTRY,
+                external: id => external.some(name => id === name || id.startsWith(`${name}/`)),
+            },
+        },
+    });
+    return output
+        .filter(file => file.type === 'chunk')
+        .map(chunk => ({ code: chunk.code, moduleIds: chunk.moduleIds }));
 }
 
 /** Console calls whose first argument opens with a string literal: the
@@ -520,6 +784,40 @@ export function messageProblems(printed, allowed) {
     return problems;
 }
 
+/** The files a Node process loads when it imports one entry: the entry and
+ * every file it reaches through a static `import` or `export … from`, read
+ * from esbuild's metafile. A dynamic `import()` loads only when it runs, so
+ * it is not followed, and other packages and Node builtins are left out.
+ *
+ * @param {string} entryFile absolute entry file
+ * @returns {string[]} absolute file paths, sorted
+ */
+export function nodeEntryFiles(entryFile) {
+    const dir = path.dirname(entryFile);
+    const { metafile } = buildSync({
+        entryPoints: [entryFile],
+        absWorkingDir: dir,
+        bundle: true,
+        write: false,
+        metafile: true,
+        format: 'esm',
+        platform: 'node',
+        packages: 'external',
+        logLevel: 'silent',
+    });
+    const seen = new Set();
+    const queue = [path.relative(dir, entryFile)];
+    while (queue.length > 0) {
+        const file = queue.pop();
+        if (seen.has(file)) continue;
+        seen.add(file);
+        for (const { path: target, kind, external } of metafile.inputs[file].imports) {
+            if (kind === 'import-statement' && !external) queue.push(target);
+        }
+    }
+    return [...seen].map(file => path.resolve(dir, file)).sort();
+}
+
 /** Sum the gzip size of each file, compressed independently at a fixed level
  * so the total is stable across runs and machines.
  *
@@ -532,6 +830,27 @@ export function gzipTotalBytes(filePaths) {
         total += gzipSync(readFileSync(filePath), { level: 9 }).length;
     }
     return total;
+}
+
+/** A function that records one measurement against its ceiling, into
+ * `results`, and a failure with the raise-and-explain message when it is over.
+ *
+ * @param {Array<{ name: string, files: string[], gzipBytes: number, maxGzipBytes: number, ok: boolean }>} results measurements so far
+ * @param {string[]} failures failure messages so far
+ * @returns {(name: string, files: string[], gzipBytes: number, maxGzipBytes: number) => void} the recorder
+ */
+function recorder(results, failures) {
+    return (name, files, gzipBytes, maxGzipBytes) => {
+        const ok = gzipBytes <= maxGzipBytes;
+        results.push({ name, files, gzipBytes, maxGzipBytes, ok });
+        if (!ok) {
+            failures.push(
+                `${name}: ${gzipBytes} gzip bytes exceeds the ${maxGzipBytes}-byte budget ` +
+                    `(+${gzipBytes - maxGzipBytes}). If the growth is intentional, raise the ` +
+                    'budget in scripts/check-package-size.mjs and say why in the PR.',
+            );
+        }
+    };
 }
 
 /** Measure every budget target and compare against its ceiling. A target
@@ -547,25 +866,26 @@ export function gzipTotalBytes(filePaths) {
 export function checkBudgets(budgets, rootDir) {
     const results = [];
     const failures = [];
-    /** Record one measurement against its ceiling. */
-    const record = (name, files, gzipBytes, maxGzipBytes) => {
-        const ok = gzipBytes <= maxGzipBytes;
-        results.push({ name, files, gzipBytes, maxGzipBytes, ok });
-        if (!ok) {
-            failures.push(
-                `${name}: ${gzipBytes} gzip bytes exceeds the ${maxGzipBytes}-byte budget ` +
-                    `(+${gzipBytes - maxGzipBytes}). If the growth is intentional, raise the ` +
-                    'budget in scripts/check-package-size.mjs and say why in the PR.',
-            );
-        }
-    };
+    const record = recorder(results, failures);
     for (const budget of budgets) {
         const target = path.join(rootDir, budget.target);
         let files;
         let gzipBytes;
         const entryMeasurements = [];
         try {
-            if (budget.kind === 'file') {
+            if (budget.kind === 'node-entry') {
+                const entry = listExportSubpaths(target).find(
+                    ({ subpath }) => subpath === budget.subpath,
+                );
+                if (entry === undefined) {
+                    const { name } = JSON.parse(
+                        readFileSync(path.join(target, 'package.json'), 'utf8'),
+                    );
+                    throw new Error(`no export subpath \`${budget.subpath}\` in ${name}`);
+                }
+                files = nodeEntryFiles(entry.file);
+                gzipBytes = gzipTotalBytes(files);
+            } else if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
                 // bundle, but its absence is still a failure, never a pass.
                 statSync(target);
@@ -600,13 +920,20 @@ export function checkBudgets(budgets, rootDir) {
                                 '(measured alone, ~300 bytes of headroom) in `entryBudgets`.',
                         );
                     }
+                    const modulesBySubpath = new Map();
                     for (const { subpath, file } of entries) {
                         if (!Object.hasOwn(budget.entryBudgets, subpath)) continue;
-                        const entryBytes = gzipSync(appBundle([file], target), {
-                            level: 9,
-                        }).length;
-                        entryMeasurements.push([subpath, file, entryBytes]);
+                        const { code, moduleIds } = appBuild([file], target);
+                        modulesBySubpath.set(subpath, moduleIds);
+                        entryMeasurements.push([
+                            subpath,
+                            file,
+                            gzipSync(code, { level: 9 }).length,
+                        ]);
                     }
+                    failures.push(
+                        ...moduleOrderFailures(budget, budget.name, entries, modulesBySubpath),
+                    );
                 }
             }
         } catch (error) {
@@ -626,9 +953,76 @@ export function checkBudgets(budgets, rootDir) {
     return { results, failures };
 }
 
-function main() {
+/** Measure the app-bundle budgets that carry a `vite` field with Vite, the
+ * union and each entry, against the ceilings in that field. Rolldown lays
+ * modules out and names identifiers its own way, and the bytes a layout
+ * change costs in a Vite build need not show in an esbuild one. A target that
+ * is missing or fails to build is a failure, as in {@link checkBudgets}.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @returns {Promise<{ results: Array<{ name: string, files: string[], gzipBytes: number, maxGzipBytes: number, ok: boolean }>, failures: string[] }>} measurements and failure messages
+ */
+export async function checkViteBudgets(budgets, rootDir) {
+    const results = [];
+    const failures = [];
+    const record = recorder(results, failures);
+    /** Gzip each chunk at a fixed level and sum them. */
+    const gzipChunks = chunks =>
+        chunks.reduce((total, code) => total + gzipSync(code, { level: 9 }).length, 0);
+    for (const budget of budgets) {
+        if (budget.kind !== 'app-bundle' || budget.vite === undefined) continue;
+        const name = `${budget.name} (Vite)`;
+        const target = path.join(rootDir, budget.target);
+        const ceilings = budget.vite.entryBudgets ?? {};
+        try {
+            const files = listExportEntries(target, budget.excludeSubpaths);
+            if (files.length === 0) {
+                throw new Error(`no runtime export entries in ${budget.target}/package.json`);
+            }
+            const gzipBytes = gzipChunks(await viteAppBundle(files, target));
+            const entries = listExportSubpaths(target, budget.excludeSubpaths);
+            for (const problem of entryBudgetProblems(
+                entries.map(({ subpath }) => subpath),
+                ceilings,
+            )) {
+                failures.push(
+                    `${name}: ${problem}. Each runtime export gets its own Vite ceiling.`,
+                );
+            }
+            const entryMeasurements = [];
+            const modulesBySubpath = new Map();
+            for (const { subpath, file } of entries) {
+                if (!Object.hasOwn(ceilings, subpath)) continue;
+                const chunks = await viteAppBuild([file], target);
+                modulesBySubpath.set(
+                    subpath,
+                    chunks.flatMap(chunk => chunk.moduleIds),
+                );
+                entryMeasurements.push([
+                    subpath,
+                    file,
+                    gzipChunks(chunks.map(chunk => chunk.code)),
+                ]);
+            }
+            failures.push(...moduleOrderFailures(budget, name, entries, modulesBySubpath));
+            record(name, files, gzipBytes, budget.vite.maxGzipBytes);
+            for (const [subpath, file, entryBytes] of entryMeasurements) {
+                record(`${name} \`${subpath}\``, [file], entryBytes, ceilings[subpath]);
+            }
+        } catch (error) {
+            failures.push(`${name}: ${error.message} — run \`pnpm build\` first?`);
+        }
+    }
+    return { results, failures };
+}
+
+async function main() {
     const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const { results, failures } = checkBudgets(SIZE_BUDGETS, rootDir);
+    const vite = await checkViteBudgets(SIZE_BUDGETS, rootDir);
+    results.push(...vite.results);
+    failures.push(...vite.failures);
     for (const result of results) {
         const headroom = result.maxGzipBytes - result.gzipBytes;
         console.log(
@@ -643,5 +1037,5 @@ function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    main();
+    await main();
 }

@@ -7,7 +7,13 @@ import {
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
-
+import {
+    diagnosticPath,
+    type EngineDiagnosticFieldsOf,
+    renderedDiagnosticFields,
+    type UnrenderedTransformResult,
+    unrenderedDiagnosticFields,
+} from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -61,10 +67,57 @@ export function transformRust(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
+    return transformRustOne(source, filename, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformRust} with every diagnostic left for the caller to render:
+ * `diagnostics` is empty, and each issue renders with
+ * `renderEngineDiagnostic(issue, result.diagnosticFile)`.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @returns Transform result.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
+ */
+export function transformRustUnrendered(
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult {
+    return transformRustOne(
+        source,
+        filename,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult;
+}
+
+/**
+ * One file through the native engine.
+ *
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns Transform result.
+ */
+function transformRustOne(
+    source: string,
+    filename: string | undefined,
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     // The single-file path names an unnamed module `<anonymous>` — the same
     // answer the shared JS channel always gave — while the BATCH default stays
     // index-based so recovery tokens keep unique per-file inputs.
-    const [result] = transformRustBatch([{ filename: filename ?? '<anonymous>', source }], options);
+    const [result] = runNativeBatch(
+        [{ filename: filename ?? '<anonymous>', source }],
+        options,
+        fields,
+    );
     if (!result) {
         throw new RustTransformUnavailableError('native transform returned no result');
     }
@@ -163,6 +216,32 @@ export function isRustTransformAvailable(): boolean {
 }
 
 /**
+ * The options the native binding's `transformBatch` reads.
+ *
+ * @param options Compiler options.
+ * @returns The binding's options.
+ */
+function nativeTransformOptions(
+    options?: TransformSourceCodeOptions,
+): Parameters<typeof transformBatch>[1] {
+    return {
+        mangleVars: options?.mangleVars === true,
+        mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
+        globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+        // The node cap is counted by the engine's parser, so the user's
+        // raised `build.astBudgetLimit` has to reach it.
+        astBudget: options?.astBudget,
+        crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
+        // Its own field, not folded into the szv payload: the two
+        // registries share a transport but not a meaning, and the
+        // native side picks different machinery for each.
+        crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
+        classPrefix: options?.classPrefix ?? undefined,
+        mergeTableJson: options?.mergeTable ? JSON.stringify(options.mergeTable) : undefined,
+    };
+}
+
+/**
  * Transform a batch of files through the Rust native engine in one napi call.
  *
  * This is the compiler-level wrapper around `@csszyx/core/native`'s batch API.
@@ -179,6 +258,43 @@ export function transformRustBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
+    return runNativeBatch(files, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformRustBatch} with every diagnostic left for the caller to
+ * render; see {@link transformRustUnrendered}.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param files Source files to transform.
+ * @param options Compiler options.
+ * @returns One transform result per input file, in input order.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
+ */
+export function transformRustBatchUnrendered(
+    files: readonly TransformRustFile[],
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult[] {
+    return runNativeBatch(
+        files,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult[];
+}
+
+/**
+ * A batch through the native engine, in one napi call.
+ *
+ * @param files Source files to transform.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns One transform result per input file, in input order.
+ */
+function runNativeBatch(
+    files: readonly TransformRustFile[],
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult[] {
     try {
         checkNativeEngine();
         return transformBatch(
@@ -186,25 +302,15 @@ export function transformRustBatch(
                 filename: file.filename ?? `file-${index}.tsx`,
                 source: file.source,
             })),
-            {
-                mangleVars: options?.mangleVars === true,
-                mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
-                globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
-                rootDir: options?.rootDir,
-                // The node cap is counted by the engine's parser, so the user's
-                // raised `build.astBudgetLimit` has to reach it.
-                astBudget: options?.astBudget,
-                crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
-                // Its own field, not folded into the szv payload: the two
-                // registries share a transport but not a meaning, and the
-                // native side picks different machinery for each.
-                crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
-                classPrefix: options?.classPrefix ?? undefined,
-                mergeTableJson: options?.mergeTable
-                    ? JSON.stringify(options.mergeTable)
-                    : undefined,
-            },
-        ).map((result, index) => fromNativeResult(result, files[index].source));
+            nativeTransformOptions(options),
+        ).map((result, index) =>
+            fromNativeResult(
+                result,
+                files[index].source,
+                diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+                fields,
+            ),
+        );
     } catch (err) {
         throw asRustUnavailable(err);
     }
@@ -309,9 +415,16 @@ export function normalizeGlobalVarAliases(
  *
  * @param result Native transform result.
  * @param source The source the result was transformed from, to place its spans.
+ * @param file The file's path as a diagnostic names it.
+ * @param fields How to fill the diagnostic fields.
  * @returns Compiler transform result.
  */
-function fromNativeResult(result: NativeTransformResult, source: string): SourceTransformResult {
+function fromNativeResult(
+    result: NativeTransformResult,
+    source: string,
+    file: string,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     const spans = locateEngineSpans(source, result);
     return {
         code: result.code,
@@ -333,7 +446,7 @@ function fromNativeResult(result: NativeTransformResult, source: string): Source
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: result.diagnostics,
+        ...fields(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [

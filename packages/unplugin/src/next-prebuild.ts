@@ -3,15 +3,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { JsonLike } from './next-cache-identity.js';
-import {
-    configWithImportedStaticSz,
-    resolveNextCrossModule,
-    withCrossModuleStatics,
-} from './next-cross-module.js';
+import { configWithImportedStaticSz, resolveNextCrossModule } from './next-cross-module.js';
 import type { NextLaneOptions } from './next-lane-options.js';
 import { readPackageVersion } from './next-package-version.js';
 import { NEXT_PREBUILD_LOCK_COMMAND, writeNextSafelistShard } from './next-safelist-state.js';
-import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
+import {
+    type NextSourceTransformOutput,
+    nextCompilerOptions,
+    transformNextSource,
+} from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
 import { assertRuntimeMatchesPlugin } from './runtime-version.js';
@@ -191,10 +191,12 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
             source,
             filename,
             parserMode: options.parserMode ?? 'rust',
-            compilerOptions: {
-                ...withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+            compilerOptions: nextCompilerOptions({
+                base: options.compilerOptions,
+                statics: crossModule.statics,
                 classPrefix: prefix.prefix,
-            },
+                root: context.root,
+            }),
             cacheRoot,
             pluginVersion: csszyxVersion,
             compilerVersion,

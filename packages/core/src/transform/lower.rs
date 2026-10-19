@@ -597,10 +597,10 @@ pub(crate) fn collect_owned_key_variant_objects(
 }
 
 /// Collect closed-key values that moved onto their group's own key, as the
-/// key, the value, the key and value that replaced them, and the offset.
+/// key, the value and the offset.
 ///
 /// `touch: 'pan-x'` is `touchPanX: 'x'` now; the lowering emits nothing for
-/// it, and this names the replacement. Descends wherever the lowering does,
+/// it, and the diagnostic names the replacement from the key and the value. Descends wherever the lowering does,
 /// parametric variants (`group`, `data`, …) included, so a moved value is
 /// named in every place it can be written; a value a later key of its object
 /// replaced is left out, as the runtime leaves it out.
@@ -610,14 +610,8 @@ pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedV
     for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
             StaticSzValue::String(value) if !settled.contains(&index) => {
-                if let Some((key, replacement)) = moved_value(&property.key, value) {
-                    out.push((
-                        property.key.clone(),
-                        value.clone(),
-                        key,
-                        replacement,
-                        property.span.start,
-                    ));
+                if moved_value(&property.key, value).is_some() {
+                    out.push((property.key.clone(), value.clone(), property.span.start));
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -654,6 +648,12 @@ pub(crate) fn collect_globals_before_groups(
         // Any literal, spelled as JavaScript's `String()` spells it; an object
         // there is a different mistake, which its own report names.
         let value = match &global.value {
+            // Named as the group value it is, by the dead-value pass.
+            StaticSzValue::String(value)
+                if is_stray_group_value(&global.key, value.strip_suffix('!').unwrap_or(value)) =>
+            {
+                continue;
+            }
             StaticSzValue::String(value) => value.clone(),
             StaticSzValue::Number(value) => value.to_string(),
             StaticSzValue::Boolean(value) => value.to_string(),
@@ -696,9 +696,9 @@ fn for_each_sz_object_in(
     }
 }
 
-/// A moved value: key, value, replacing key, replacing value, offset.
+/// A moved value: key, value, offset.
 #[cfg(feature = "native-engine")]
-pub(crate) type MovedValue = (String, String, &'static str, &'static str, u32);
+pub(crate) type MovedValue = (String, String, u32);
 
 /// Keys whose objects hold parameters or values, not sz properties.
 #[cfg(feature = "native-engine")]
@@ -722,6 +722,79 @@ pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
     )
 }
 
+/// The group key and value whose class a stand-alone key's stray value emits:
+/// `contain: 'paint'` emits `contain-paint`, the class of `{ containPaint: true }`.
+/// Mirrors `siblingGroupOf` in the TypeScript core.
+///
+/// Returns the group key and the value to write on it; `true` for a boolean
+/// group, written bare.
+#[cfg(feature = "native-engine")]
+pub(crate) fn sibling_group_of(key: &str, bare: &str) -> Option<(&'static str, &'static str)> {
+    let groups = super::generated::tables::global_keyword_groups(key)?;
+    groups.split(' ').find_map(|group| {
+        let values = super::generated::tables::closed_enum_values(group).unwrap_or_default();
+        values
+            .split(", ")
+            .find(|value| super::generated::tables::closed_enum_class(group, value) == Some(bare))
+            .map(|value| (group, value))
+            .or_else(|| {
+                (super::generated::tables::boolean_class(group) == Some(bare))
+                    .then_some((group, "true"))
+            })
+    })
+}
+
+/// Whether a stand-alone key's value is no value of its own but the class of
+/// one of its groups: `contain: 'size'` is `{ containSize: 'size' }`.
+///
+/// Such a value is reported as that group's value wherever it stands, and a
+/// group written after it does not make it an order mistake: layering it, as
+/// the order report advises, keeps the same wrong key.
+#[cfg(feature = "native-engine")]
+fn is_stray_group_value(key: &str, value: &str) -> bool {
+    is_dead_enum_value(key, value)
+        && sibling_group_of(key, &bare_closed_enum_class(key, value)).is_some()
+}
+
+/// Whether a closed-enum key takes no such value, even as one moved away.
+#[cfg(feature = "native-engine")]
+fn is_dead_enum_value(key: &str, value: &str) -> bool {
+    super::generated::tables::is_closed_enum_key(key)
+        && super::generated::tables::closed_enum_class(key, value).is_none()
+        && super::generated::tables::closed_enum_value_move(key, value).is_none()
+}
+
+/// A value no closed-enum table holds that still has no Tailwind class: the
+/// values the runtime lane names beside the closed sets.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnclassedValue {
+    /// A CSS longhand on an alignment key, with the short form to write; its
+    /// class is still emitted, and generates no CSS.
+    CssValue(&'static str),
+    /// A `fontStyle` other than `italic` and `normal`; nothing is emitted.
+    FontStyle,
+    /// A `fontSmoothing` other than `grayscale` and `subpixel`; nothing is
+    /// emitted.
+    FontSmoothing,
+}
+
+/// Which [`UnclassedValue`] a key's value is, if any. The font modes mirror
+/// the lowering's own match on them.
+#[cfg(feature = "native-engine")]
+pub(crate) fn unclassed_value(key: &str, value: &str) -> Option<UnclassedValue> {
+    match key {
+        "fontStyle" => (!matches!(value, "italic" | "normal")).then_some(UnclassedValue::FontStyle),
+        "fontSmoothing" => {
+            (!matches!(value, "grayscale" | "subpixel")).then_some(UnclassedValue::FontSmoothing)
+        }
+        _ if super::generated::tables::is_alignment_key(key) => {
+            super::generated::tables::alignment_css_value_hint(value).map(UnclassedValue::CssValue)
+        }
+        _ => None,
+    }
+}
+
 /// Collect closed-enum keys whose value is not in their set, for the diagnostic.
 ///
 /// `display`, `position`, `visibility` and `isolation` spell their value as the
@@ -738,15 +811,22 @@ pub(crate) fn collect_dead_enum_values(
 ) {
     // A value its object settles away is not lowered, so it is not named
     // either, as the runtime does not name it.
-    let settled = settle_global_keywords(object).skipped;
+    let settlement = settle_global_keywords(object);
     for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
-            StaticSzValue::String(value) if !settled.contains(&index) => {
+            StaticSzValue::String(value) => {
                 let base = value.strip_suffix('!').unwrap_or(value);
-                if super::generated::tables::is_closed_enum_key(&property.key)
-                    && super::generated::tables::closed_enum_class(&property.key, base).is_none()
-                    && super::generated::tables::closed_enum_value_move(&property.key, base)
-                        .is_none()
+                // A stray group value a later group replaced is still named,
+                // since it is that value, not its place, that is wrong.
+                let named = !settlement.skipped.contains(&index)
+                    || (settlement
+                        .replaced
+                        .iter()
+                        .any(|(replaced, _)| std::ptr::eq(*replaced, property))
+                        && is_stray_group_value(&property.key, base));
+                if named
+                    && (is_dead_enum_value(&property.key, base)
+                        || unclassed_value(&property.key, base).is_some())
                 {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
@@ -885,12 +965,12 @@ fn is_mask_slot_member(name: &str, base: &[&str], accepts_sides: bool) -> bool {
 /// Only runs when a member is already known to be wrong, so the allocation
 /// stays off the path every correct mask slot takes.
 #[cfg(feature = "native-engine")]
-fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> String {
-    let mut names: Vec<&str> = base.to_vec();
+fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> Vec<String> {
+    let mut names: Vec<String> = base.iter().map(|name| (*name).to_string()).collect();
     if accepts_sides {
-        names.extend(MASK_SIDES);
+        names.extend(MASK_SIDES.iter().map(|side| (*side).to_string()));
     }
-    names.join(", ")
+    names
 }
 
 /// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
@@ -907,7 +987,7 @@ const MASK_EDGE_MEMBERS: [&str; 2] = ["from", "to"];
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_unknown_mask_slot_members(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, String, u32)>,
+    out: &mut Vec<(String, String, Vec<String>, u32)>,
 ) {
     for property in &object.properties {
         let StaticSzValue::Object(nested) = &property.value else {
@@ -938,7 +1018,10 @@ pub(crate) fn collect_unknown_mask_slot_members(
                     out.push((
                         format!("{}.{}", property.key, entry.key),
                         edge_entry.key.clone(),
-                        MASK_EDGE_MEMBERS.join(", "),
+                        MASK_EDGE_MEMBERS
+                            .iter()
+                            .map(|member| (*member).to_string())
+                            .collect(),
                         edge_entry.span.start,
                     ));
                 }
@@ -954,7 +1037,7 @@ pub(crate) fn collect_unknown_mask_slot_members(
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_property_object_values(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
+    out: &mut Vec<(String, Vec<String>, u32)>,
 ) {
     for property in &object.properties {
         let StaticSzValue::Object(nested) = &property.value else {
@@ -982,9 +1065,8 @@ pub(crate) fn collect_property_object_values(
                 .properties
                 .iter()
                 .take(3)
-                .map(|p| p.key.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
+                .map(|p| p.key.clone())
+                .collect::<Vec<_>>();
             out.push((property.key.clone(), nested_keys, property.span.start));
             continue;
         }
@@ -3387,6 +3469,23 @@ mod tests {
         );
     }
 
+    /// A `.jsx` object may write a key twice, and JavaScript keeps the last
+    /// value, so the value it overwrote is never named, even a group's value
+    /// that a later group would have named as stray.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_skips_the_value_a_repeated_key_overwrote() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("contain", StaticSzValue::String("size".to_string())),
+                property("contain", StaticSzValue::String("strict".to_string())),
+            ],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert!(out.is_empty(), "{out:?}");
+    }
+
     /// The colour-opacity shape is skipped for BOTH of its reasons at once.
     ///
     /// `{ bg: { color: 'red-500', opacity: 50 } }` is one declaration written as
@@ -4789,13 +4888,16 @@ mod tests {
                 ),
             ],
         };
-        let mut out: Vec<(String, String, u32)> = Vec::new();
+        let mut out: Vec<(String, Vec<String>, u32)> = Vec::new();
         super::collect_property_object_values(&object, &mut out);
-        let found: Vec<(&str, &str)> = out
+        let found: Vec<(&str, String)> = out
             .iter()
-            .map(|(k, n, _)| (k.as_str(), n.as_str()))
+            .map(|(k, n, _)| (k.as_str(), n.join(", ")))
             .collect();
-        assert_eq!(found, [("p", "bg"), ("shadow", "op")]);
+        assert_eq!(
+            found,
+            [("p", "bg".to_string()), ("shadow", "op".to_string())]
+        );
     }
 
     #[test]
@@ -5386,7 +5488,7 @@ mod tests {
         };
         let mut out = Vec::new();
         super::collect_unknown_mask_slot_members(&branch, &mut out);
-        assert_eq!(out[0].2, "angle, from, to, t, r, b, l, x, y");
+        assert_eq!(out[0].2.join(", "), "angle, from, to, t, r, b, l, x, y");
     }
     #[cfg(feature = "native-engine")]
     #[test]

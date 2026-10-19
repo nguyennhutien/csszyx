@@ -47,7 +47,7 @@ function refusals(
             .map(String)
             // Only the precompile verdict; an unknown key also draws the ordinary
             // unknown-property warning, which is a different question.
-            .filter(message => message.includes('did not precompile'))
+            .filter(message => message.includes('could not be compiled'))
     );
 }
 

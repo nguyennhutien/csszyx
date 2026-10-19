@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
+import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -92,7 +93,10 @@ describe('font-variant-numeric keys', () => {
         expect(code).toContain('__szBoolClass(c, "numSlashedZero", "slashed-zero")');
         expect(code).toContain('c ? "tabular-nums"');
         expect(code).not.toContain('--_sz-num-figure');
-        expect(run.warnings.join('\n')).toContain('"numFigure" cannot take a runtime value');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['runtime-value', expect.objectContaining({ key: 'numFigure' })],
+        ]);
+        expect(run.warnings.join('\n')).toContain('`numFigure` cannot take a runtime value');
     });
 
     it.each(ENGINES)('%s names the new key for every spelling it replaces', (_name, engine) => {
@@ -105,19 +109,56 @@ describe('font-variant-numeric keys', () => {
         const warnings = run.warnings.join('\n');
 
         expect(run.className ?? '').toBe('');
-        expect(warnings).toContain('"tabularNums" was replaced');
-        expect(warnings).toContain("Use { numSpacing: 'tabular' }");
-        // These were canonical keys, not sugar; the sugar wording misnamed them.
+        // These were canonical keys, not sugar: the form says `replaced` or
+        // `sugar-replaced` (`removed` for `fontVariant`), never `sugar`, and
+        // carries what to write.
+        const byKey = Object.fromEntries(
+            (run.result.issues ?? []).map(issue => [(issue.args as { key: string }).key, issue]),
+        );
+        expect(Object.keys(byKey).sort()).toEqual(
+            [
+                'fontVariant',
+                'liningNums',
+                'ordinal',
+                'slashedZero',
+                'stackedFractions',
+                'tabularNums',
+            ].sort(),
+        );
+        expect(Object.values(byKey).every(issue => issue.code === 'removed-key')).toBe(true);
+        expect(byKey.tabularNums?.args).toEqual({
+            form: 'sugar-replaced',
+            key: 'tabularNums',
+            replacement: "numSpacing: 'tabular'",
+        });
+        expect(byKey.liningNums?.args).toMatchObject({
+            form: 'sugar-replaced',
+            replacement: "numFigure: 'lining'",
+        });
+        expect(byKey.stackedFractions?.args).toMatchObject({
+            form: 'sugar-replaced',
+            replacement: "numFraction: 'stacked'",
+        });
+        expect(byKey.ordinal?.args).toMatchObject({
+            form: 'replaced',
+            replacement: 'numOrdinal: true',
+        });
+        expect(byKey.slashedZero?.args).toMatchObject({
+            form: 'replaced',
+            replacement: 'numSlashedZero: true',
+        });
+        expect(byKey.fontVariant?.args).toMatchObject({ form: 'removed' });
+        expect(byKey.ordinal).toMatchObject({ line: 2 });
+        expect(warnings).toContain('`tabularNums` was replaced');
+        expect(warnings).toContain("help: write `{ numSpacing: 'tabular' }` instead");
         expect(warnings).not.toContain('boolean sugar');
-        expect(warnings).toContain("Use { numFigure: 'lining' }");
-        expect(warnings).toContain("Use { numFraction: 'stacked' }");
+        expect(warnings).toContain("help: write `{ numFigure: 'lining' }` instead");
+        expect(warnings).toContain("help: write `{ numFraction: 'stacked' }` instead");
+        expect(warnings).toContain('[csszyx] removed-key: /p/t.tsx:2:87\n  `ordinal` was replaced');
         expect(warnings).toContain(
-            '"ordinal" was replaced at /p/t.tsx:2. Use { numOrdinal: true }',
+            '[csszyx] removed-key: /p/t.tsx:2:102\n  `slashedZero` was replaced',
         );
-        expect(warnings).toContain(
-            '"slashedZero" was replaced at /p/t.tsx:2. Use { numSlashedZero: true }',
-        );
-        expect(warnings).toContain('"fontVariant" was removed');
+        expect(warnings).toContain('`fontVariant` was removed');
     });
 
     // `normal` stands alone in the CSS grammar, so the object's order settles
@@ -133,7 +174,16 @@ describe('font-variant-numeric keys', () => {
         // `nums` before a group of its family is dead code, and the shape a
         // spread override leaves; it is named.
         expect(run.warnings).toEqual([
-            '[csszyx] "nums: normal" at /p/t.tsx:1 comes before "numOrdinal" in one sz object, so numOrdinal replaces it and the nums value styles nothing. A spread override ({ ...base, nums: \'normal\' }) leaves this order; to override, layer it: sz={[base, { nums: \'normal\' }]}.',
+            engineMessage(
+                'global-before-group',
+                '/p/t.tsx:1:78',
+                '`nums: normal` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.',
+                "help: to override the group, layer it: `sz={[base, { nums: 'normal' }]}`.",
+                "note: a spread such as `{ ...base, nums: 'normal' }` keeps the same key order, so it does not fix this.",
+            ),
+        ]);
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['global-before-group', { global: 'nums', value: 'normal', group: 'numOrdinal' }],
         ]);
     });
 

@@ -13,6 +13,8 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { renderEngineDiagnostic } from '@csszyx/compiler/internal';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -31,6 +33,8 @@ import {
 import { createDiagnosticPolicy } from '../src/diagnostic-policy.js';
 import {
     channelOfLevel,
+    codedWarning,
+    hasFindings,
     routeTransformDiagnostics,
     type TransformDiagnosticsInput,
 } from '../src/transform-diagnostics.js';
@@ -44,6 +48,18 @@ const UNKNOWN_KEY =
 const PRECEDENCE =
     '[csszyx] "sz" takes precedence over the runtime "className" on this element at src/A.tsx:4, whatever order the attributes are written.';
 const SPREAD = '[csszyx] unresolvable sz spread at 5:9: sz={{ ...x }} cannot be resolved.';
+
+/** An unknown-key message as the compiler renders it: header, text, help, note, docs. */
+const ENGINE_UNKNOWN =
+    "[csszyx] unknown-key: src/A.tsx:3:7\n  `workBreak` is not an sz property.\n  help: write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.\n  docs: https://csszyx.com/e/unknown-key";
+const ENGINE_SPREAD =
+    '[csszyx] unresolvable-spread: src/A.tsx:5:9\n  `sz={{ ...x }}` cannot be resolved at build time.\n  docs: https://csszyx.com/e/unresolvable-spread';
+const UNKNOWN_ISSUE = {
+    code: 'unknown-key',
+    args: { key: 'workBreak', suggestion: 'break' },
+    line: 3,
+    column: 7,
+};
 
 /**
  * Route one module's diagnostics with the defaults a dev build has.
@@ -62,6 +78,23 @@ function route(input: Partial<TransformDiagnosticsInput>) {
     });
 }
 
+describe('codedWarning', () => {
+    it('reads the code from the first token on the first line, wherever it sits', () => {
+        expect(codedWarning(`[plugin csszyx:pre] ${ENGINE_UNKNOWN}`)).toEqual({
+            message: `[plugin csszyx:pre] ${ENGINE_UNKNOWN}`,
+            code: 'unknown-key',
+            url: 'https://csszyx.com/e/unknown-key',
+        });
+    });
+
+    it('hands a line with no code over as written', () => {
+        expect(codedWarning(`[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}`)).toBe(
+            `[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}`,
+        );
+        expect(codedWarning('')).toBe('');
+    });
+});
+
 describe('the engine code decides the channel, not the wording', () => {
     it('lists a diagnostic whose code is unknown-key even when its text reads like a spread', () => {
         const message = '[csszyx] unresolvable sz spread lookalike written by a key note';
@@ -78,8 +111,48 @@ describe('the engine code decides the channel, not the wording', () => {
             diagnostics: ['[csszyx] reworded spread note'],
             issues: [{ code: 'unresolvable-spread', line: 5, column: 9 }],
         });
-        expect(routed.spread).toEqual(['/p/src/A.tsx:5:9\n  [csszyx] reworded spread note']);
+        expect(routed.spread).toEqual([
+            '[csszyx] /p/src/A.tsx:5:9\n  [csszyx] reworded spread note',
+        ]);
         expect(routed.immediate).toEqual([]);
+    });
+
+    it('prints an engine message as it is, with no second header', () => {
+        // An issue carrying `args` was rendered whole by the compiler, header
+        // included; the router adds nothing in front of it.
+        const routed = route({
+            diagnostics: [ENGINE_UNKNOWN],
+            issues: [UNKNOWN_ISSUE],
+        });
+        expect(routed.immediate).toEqual([ENGINE_UNKNOWN]);
+        expect(ENGINE_UNKNOWN.match(/\[csszyx\]/g)).toHaveLength(1);
+    });
+
+    it('holds a whole spread message on the spread channel, with no second header', () => {
+        const routed = route({
+            diagnostics: [ENGINE_SPREAD],
+            issues: [{ code: 'unresolvable-spread', args: {}, line: 5, column: 9 }],
+        });
+        expect(routed.spread).toEqual([ENGINE_SPREAD]);
+        expect(routed.immediate).toEqual([]);
+    });
+
+    it('keys the limiter by the issue args, not by the message', () => {
+        // The same finding with a reworded message is still the same site; a
+        // different `key` at the same position is another finding.
+        const limiter = createDiagnosticLimiter();
+        limiter.version('src/A.tsx', 'one');
+        expect(
+            route({ diagnostics: [ENGINE_UNKNOWN], issues: [UNKNOWN_ISSUE], limiter }).immediate,
+        ).toHaveLength(1);
+        expect(
+            route({ diagnostics: [`${ENGINE_UNKNOWN} reworded`], issues: [UNKNOWN_ISSUE], limiter })
+                .immediate,
+        ).toEqual([]);
+        const other = { ...UNKNOWN_ISSUE, args: { key: 'workGap' } };
+        expect(
+            route({ diagnostics: [ENGINE_UNKNOWN], issues: [other], limiter }).immediate,
+        ).toHaveLength(1);
     });
 
     it('treats a budget skip as an error by its code', () => {
@@ -110,11 +183,24 @@ describe('the engine code decides the channel, not the wording', () => {
         expect(routed.advisories).toEqual([`[csszyx] /p/src/A.tsx:4:2\n  ${PRECEDENCE}`]);
     });
 
+    it('levels a line with no code by its pass alone, never by its wording', () => {
+        // The text reads as an unknown key, and an `unknown-key` level does not
+        // reach it: only the pass's own id does, which is what replaced `other`.
+        const keyOff = createDiagnosticPolicy({ rules: { 'unknown-key': 'off' } });
+        expect(route({ diagnostics: [UNKNOWN_KEY], policy: keyOff }).immediate).toHaveLength(1);
+        const passOff = createDiagnosticPolicy({ rules: { 'sz-diagnostic': 'off' } });
+        expect(route({ diagnostics: [UNKNOWN_KEY], policy: passOff }).immediate).toEqual([]);
+        // The cap counts it under the pass, so its closing line names an id `--rule` takes.
+        const limiter = createDiagnosticLimiter(0);
+        route({ diagnostics: [UNKNOWN_KEY], limiter });
+        expect(limiter.flush().join('\n')).toContain('sz-diagnostic');
+    });
+
     it('reads the wording only for a line that carries no code', () => {
         const routed = route({ diagnostics: [UNKNOWN_KEY], holdInfo: true });
-        expect(routed.immediate).toEqual([
-            `[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}\n  Did you mean "break"?`,
-        ]);
+        // No code, no args: the message is the whole record, so it is listed
+        // under the module's own header and nothing is derived from it.
+        expect(routed.immediate).toEqual([`[csszyx] /p/src/A.tsx\n  ${UNKNOWN_KEY}`]);
     });
 });
 
@@ -223,7 +309,7 @@ describe('dedupe and the cap', () => {
         expect(limiter.pending).toBe(true);
         expect(limiter.flush()).toEqual([capOverflowMessage('unknown-key', 3)]);
         expect(capOverflowMessage('unknown-key', 3)).toBe(
-            '[csszyx] +3 more unknown-key — help: `csszyx check --rule unknown-key` lists every one.',
+            '[csszyx] unknown-key: +3 more not listed\n  help: `csszyx check --rule unknown-key` lists every one.',
         );
         // The cap is per start or build: a flush opens the next one.
         expect(limiter.pending).toBe(false);
@@ -298,11 +384,11 @@ describe('dedupe and the cap', () => {
         const limiter = createDiagnosticLimiter(0);
         limiter.admit({ id: 'dead-class', file: 'f', key: 'one' });
         limiter.admit({ id: 'dead-class', file: 'f', key: 'two' });
-        limiter.admit({ id: 'other', file: 'f', key: 'one' });
+        limiter.admit({ id: 'unknown-key', file: 'f', key: 'one' });
         limiter.retain('dead-class', [{ id: 'dead-class', file: 'f', key: 'two' }]);
         expect(limiter.flush()).toEqual([
             capOverflowMessage('dead-class', 1),
-            capOverflowMessage('other', 1),
+            capOverflowMessage('unknown-key', 1),
         ]);
     });
 
@@ -735,5 +821,81 @@ describe('where a file emits each class', () => {
         expect([...szClassSites('src/A.tsx', ['p-4'], {})]).toEqual([
             ['p-4', { file: 'src/A.tsx' }],
         ]);
+    });
+});
+
+describe('hasFindings', () => {
+    it('counts a rendered message, or an issue left to render, and nothing else', () => {
+        expect(hasFindings(['[csszyx] x'], undefined)).toBe(true);
+        expect(hasFindings([], [{ code: 'unknown-key' }])).toBe(true);
+        expect(hasFindings([], [])).toBe(false);
+        expect(hasFindings([], undefined)).toBe(false);
+    });
+});
+
+describe('an engine result left unrendered', () => {
+    /**
+     * An unknown key as the unrendered transform reports it: no message, and
+     * no suggestion until something renders it.
+     *
+     * @returns A fresh issue.
+     */
+    function unrenderedIssue() {
+        return { code: 'unknown-key', args: { key: 'workBreak' } as object, line: 3, column: 7 };
+    }
+
+    it('renders a listed finding whole, its suggestion included, as the compiler does', () => {
+        const issue = unrenderedIssue();
+        const routed = route({ issues: [issue], diagnosticFile: 'src/A.tsx' });
+
+        expect(routed.immediate).toEqual([
+            renderEngineDiagnostic(unrenderedIssue() as never, 'src/A.tsx'),
+        ]);
+        expect(routed.immediate[0]).toMatch(
+            /^\[csszyx\] unknown-key: src\/A\.tsx:3:7\n.*\n {2}help: write `break` if you meant it;/,
+        );
+        expect(issue.args).toEqual({ key: 'workBreak', suggestion: 'break' });
+    });
+
+    it('renders against the file it is routed under when the result names none', () => {
+        const routed = route({ issues: [unrenderedIssue()], file: 'src/B.tsx' });
+
+        expect(routed.immediate[0]).toMatch(/^\[csszyx\] unknown-key: src\/B\.tsx:3:7\n/);
+    });
+
+    it('renders nothing it holds back and only counts it', () => {
+        const issue = unrenderedIssue();
+        const routed = route({
+            issues: [issue],
+            diagnosticFile: 'src/A.tsx',
+            holdInfo: true,
+            policy: createDiagnosticPolicy({ rules: { 'unknown-key': 'info' } }),
+        });
+
+        expect(routed).toEqual({ spread: [], immediate: [], advisories: [], heldAdvisories: 1 });
+        expect(issue.args).toEqual({ key: 'workBreak' });
+    });
+
+    it('renders nothing under quiet: true', () => {
+        const issue = unrenderedIssue();
+        const routed = route({ issues: [issue], diagnosticFile: 'src/A.tsx', quiet: 'all' });
+
+        expect(routed).toEqual({ spread: [], immediate: [], advisories: [], heldAdvisories: 0 });
+        expect(issue.args).toEqual({ key: 'workBreak' });
+    });
+
+    it('renders nothing the limiter has already listed, and keys it as the rendered one', () => {
+        const limiter = createDiagnosticLimiter();
+        limiter.version('src/A.tsx', 'one');
+        const rendered = { ...unrenderedIssue(), args: { key: 'workBreak', suggestion: 'break' } };
+        expect(
+            route({ diagnostics: [ENGINE_UNKNOWN], issues: [rendered], limiter }).immediate,
+        ).toHaveLength(1);
+        const issue = unrenderedIssue();
+
+        expect(route({ issues: [issue], diagnosticFile: 'src/A.tsx', limiter }).immediate).toEqual(
+            [],
+        );
+        expect(issue.args).toEqual({ key: 'workBreak' });
     });
 });

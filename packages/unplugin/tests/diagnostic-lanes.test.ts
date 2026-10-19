@@ -133,40 +133,44 @@ async function vite(input: {
 describe('the Vite lane', () => {
     it('lists an unknown key with its file and line by default', async () => {
         const lines = await vite({ source: UNKNOWN });
-        const said = lines.filter(line => line.includes('Unknown property "workBreak"'));
+        const said = lines.filter(line => line.includes('`workBreak` is not an sz property.'));
         expect(said).toHaveLength(1);
         expect(said[0]).toMatch(/src\/A\.tsx:1:\d+\n/);
     }, 60_000);
 
     it('prints nothing for a kind the config sets to off', async () => {
         const lines = await vite({ source: UNKNOWN, config: OFF });
-        expect(lines.join('\n')).not.toContain('Unknown property');
+        expect(lines.join('\n')).not.toContain('`workBreak` is not an sz property.');
     }, 60_000);
 
     it('lists a note the atomic preset raises, in a production build', async () => {
         vi.stubEnv('NODE_ENV', 'production');
         const lines = await vite({ source: PRECEDENCE, config: ATOMIC });
-        expect(lines.join('\n')).toContain('takes precedence over the runtime "className"');
+        expect(lines.join('\n')).toContain('wins over the runtime `className`');
         expect(lines.join('\n')).not.toContain('not listed above');
     }, 60_000);
 
     it('counts that note instead of listing it under the recommended preset', async () => {
         vi.stubEnv('NODE_ENV', 'production');
         const lines = await vite({ source: PRECEDENCE });
-        expect(lines.join('\n')).not.toContain('takes precedence over the runtime "className"');
+        expect(lines.join('\n')).not.toContain('wins over the runtime `className`');
     }, 60_000);
 
     it('lists a site once while the file is unchanged, and again once it is edited', async () => {
         const edited = `${UNKNOWN}// edited\n`;
         const lines = await vite({ source: UNKNOWN, command: 'serve', edits: [UNKNOWN, edited] });
-        expect(lines.filter(line => line.includes('Unknown property "workBreak"'))).toHaveLength(2);
+        expect(
+            lines.filter(line => line.includes('`workBreak` is not an sz property.')),
+        ).toHaveLength(2);
     }, 60_000);
 
     it('lists a site again when an undo brings back what an edit fixed', async () => {
         // The undone file is byte-identical to the first version, so only a
         // version recorded for the clean edit in between tells them apart.
         const lines = await vite({ source: UNKNOWN, command: 'serve', edits: [CLEAN, UNKNOWN] });
-        expect(lines.filter(line => line.includes('Unknown property "workBreak"'))).toHaveLength(2);
+        expect(
+            lines.filter(line => line.includes('`workBreak` is not an sz property.')),
+        ).toHaveLength(2);
     }, 60_000);
 });
 
@@ -198,7 +202,7 @@ describe('the webpack lane', () => {
         });
         await Promise.all(compiles);
         await plugin.transform.call(context, UNKNOWN, file);
-        expect(lines.join('\n')).not.toContain('Unknown property');
+        expect(lines.join('\n')).not.toContain('`workBreak` is not an sz property.');
     }, 60_000);
 });
 
@@ -270,7 +274,9 @@ function runTurbopackLoader(input: {
 
 describe('the Turbopack loader', () => {
     it('reads the level next prebuild resolved into .csszyx', () => {
-        expect(turbopack({ source: UNKNOWN }).join('\n')).toContain('Unknown property');
+        expect(turbopack({ source: UNKNOWN }).join('\n')).toContain(
+            '`workBreak` is not an sz property.',
+        );
         expect(turbopack({ source: UNKNOWN, policy: { rules: { 'unknown-key': 'off' } } })).toEqual(
             [],
         );
@@ -290,7 +296,7 @@ describe('the Turbopack loader', () => {
         writeDiagnosticPolicyState(root, (await loadDiagnosticPolicy(root)).policy, inputs);
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(runTurbopackLoader({ root, file, source: UNKNOWN }).join('\n')).toContain(
-            'Unknown property',
+            '`workBreak` is not an sz property.',
         );
         writeFileSync(join(root, 'levels.mjs'), 'export default { "unknown-key": "off" };\n');
         const later = new Date(Date.now() + 60_000);
@@ -305,7 +311,7 @@ describe('the Turbopack loader', () => {
         const { root, file } = project(UNKNOWN, OFF);
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(runTurbopackLoader({ root, file, source: UNKNOWN }).join('\n')).toContain(
-            'Unknown property',
+            '`workBreak` is not an sz property.',
         );
     });
 });
@@ -335,7 +341,7 @@ describe('the jest transform', () => {
 
     it('prints it once the policy raises it', () => {
         expect(jest(PRECEDENCE, { preset: 'atomic' }).join('\n')).toContain(
-            'takes precedence over the runtime "className"',
+            'wins over the runtime `className`',
         );
     });
 
@@ -347,11 +353,13 @@ describe('the jest transform', () => {
         });
         const transformer = createTransformer({ root, cacheRoot: join(root, 'no-cache') });
         for (const source of [UNKNOWN, CLEAN, UNKNOWN]) transformer.process(source, file);
-        expect(lines.filter(line => line.includes('Unknown property'))).toHaveLength(2);
+        expect(
+            lines.filter(line => line.includes('`workBreak` is not an sz property.')),
+        ).toHaveLength(2);
     });
 
     it('drops a kind the policy sets to off', () => {
-        expect(jest(UNKNOWN).join('\n')).toContain('Unknown property');
+        expect(jest(UNKNOWN).join('\n')).toContain('`workBreak` is not an sz property.');
         expect(jest(UNKNOWN, { rules: { 'unknown-key': 'off' } })).toEqual([]);
     });
 });

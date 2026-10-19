@@ -19,7 +19,7 @@ import {
     type DiagnosticPolicy,
     SZ_DIAGNOSTIC_PASS_IDS,
 } from '@csszyx/unplugin/diagnostics';
-import { colors, printHeader, printInfo, printSuccess, printWarn } from '../utils/terminal-ui.js';
+import { colors, icons, printHeader, printInfo, printSuccess } from '../utils/terminal-ui.js';
 
 /**
  * Every pass that produces findings, by its stable id. The list is the
@@ -44,10 +44,23 @@ export interface CheckFinding {
     file?: string;
     /** 1-based line, when the finding has one. */
     line?: number;
-    /** What happened, in one sentence. */
+    /** 1-based column in UTF-16 code units, when the finding has a site. */
+    column?: number;
+    /** What happened, in one sentence: the main sentence alone, with no layout. */
     message: string;
-    /** For an `unknown-key` finding, the known key it most likely misspells. */
+    /** For an `sz-diagnostic` finding, what to do, as the clause after `help:`. */
+    help?: string;
+    /** For an `sz-diagnostic` finding, what happened to the output, after `note:`. */
+    note?: string;
+    /**
+     * For an `unknown-key` finding, the known key it most likely misspells.
+     * The same value as `args.suggestion`, kept where version 1 put it.
+     */
     suggestion?: string;
+    /** For an `sz-diagnostic` finding, the values its sentence names, by name. */
+    args?: Readonly<Record<string, unknown>>;
+    /** The page that explains the kind: `https://csszyx.com/e/<kind>`. */
+    url?: string;
     /**
      * How loudly the project reports it, from `csszyx.config`. Never `off`:
      * an `off` finding is not reported. The run fails on `error`, or on what
@@ -60,10 +73,22 @@ export interface CheckFinding {
 export type FindingInput = Omit<CheckFinding, 'kind' | 'level'> &
     Partial<Pick<CheckFinding, 'kind'>>;
 
-/** The document `--json` writes. */
+/** Where the JSON Schema of the document `--json` writes is published. */
+export const CHECK_REPORT_SCHEMA = 'https://csszyx.com/schemas/check-v2.json';
+
+/**
+ * The document `--json` writes.
+ *
+ * Version 2 split an `sz-diagnostic` finding's `message` into the main
+ * sentence, `help` and `note`: in version 1 the message held the terminal's
+ * `\n  help:` layout, and a consumer had to cut it apart by a rule written
+ * nowhere.
+ */
 export interface CheckReport {
+    /** The JSON Schema this document follows. */
+    $schema: typeof CHECK_REPORT_SCHEMA;
     /** Bumped when a consumer would have to change to keep reading this. */
-    version: 1;
+    version: 2;
     findings: CheckFinding[];
 }
 
@@ -73,6 +98,18 @@ export interface Reporter {
     info(text: string): void;
     warn(text: string): void;
     success(text: string): void;
+    /**
+     * A note about the run itself, not about a finding: a pass skipped, and
+     * why. Printed like `info`; in `--json` it goes to stderr, since the
+     * document has no place for it and dropping it hides why a gate passed.
+     */
+    runInfo(text: string): void;
+    /**
+     * A warning or a failure about the run itself, such as an id that selects
+     * nothing. Printed like `warn`; in `--json` it goes to stderr, so a run
+     * that fails or checks nothing still says why in the CI log.
+     */
+    runWarn(text: string): void;
     /**
      * Record a finding at its level. Always collected, whatever the mode. A
      * finding with no kind is its rule; one the policy sets `off` is dropped.
@@ -94,13 +131,14 @@ export interface Reporter {
  * `!` when it does not — is printed without the glyph in front of it.
  *
  * @param text - The warning, possibly starting with newlines and a mark.
+ * @param line - Writes one line: `console.log`, or `console.error` for stderr.
  */
-function printMarked(text: string): void {
+function printMarked(text: string, line: (text?: string) => void = console.log): void {
     const body = text.replace(/^\n+/, '');
-    for (let blank = text.length - body.length; blank > 0; blank--) console.log();
-    if (body.startsWith('\u2716')) console.log(colors.error(body));
-    else if (body.startsWith('! ')) console.log(colors.warn(body));
-    else printWarn(body);
+    for (let blank = text.length - body.length; blank > 0; blank--) line();
+    if (body.startsWith('\u2716')) line(colors.error(body));
+    else if (body.startsWith('! ')) line(colors.warn(body));
+    else line(colors.warn(`${icons.warn} ${body}`));
 }
 
 /**
@@ -125,6 +163,8 @@ export function createReporter(
         info: say(printInfo),
         warn: say(printMarked),
         success: say(printSuccess),
+        runInfo: json ? text => console.error(colors.info(`${icons.info} ${text}`)) : printInfo,
+        runWarn: json ? text => printMarked(text, console.error) : text => printMarked(text),
         push: finding => {
             const level = levelOf(finding);
             if (level === 'off') return;
@@ -143,6 +183,10 @@ export function createReporter(
  * @returns The document, ready to print.
  */
 export function renderJsonReport(reporter: Reporter): string {
-    const report: CheckReport = { version: 1, findings: [...reporter.findings] };
+    const report: CheckReport = {
+        $schema: CHECK_REPORT_SCHEMA,
+        version: 2,
+        findings: [...reporter.findings],
+    };
     return JSON.stringify(report, null, 2);
 }

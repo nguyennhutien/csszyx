@@ -11,14 +11,14 @@
  * The key now goes to the runtime the way an sz array element does
  * (`_szPart`), so the runtime lowering styles it, and the static rest still
  * lowers at build time. Its classes are never collected, so the build reports
- * `fallback-missing-css` at the key, in the `sz fallback` wording of an
- * unreadable `sz={s}`.
+ * `fallback-missing-css` at the key, in the wording of an unreadable `sz={s}`.
  *
  * Probes: `council2-ce/probe*.mjs` (`local-nested`, `chain-flat`, `ns-hover`).
  */
 import { describe, expect, it } from 'vitest';
 
 import { transform as runtimeTransform } from '../src/transform-core.js';
+import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 const REGISTRY = { './base': { base: { pb: 2, p: 4 } } };
@@ -64,9 +64,14 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
 
         expect(issuesOf(run)).toEqual([['fallback-missing-css', 1, source.indexOf('hover') + 1]]);
         expect(run.warnings).toHaveLength(1);
+        expect(run.result.issues?.[0]?.args).toEqual({ site: 'sz-variant-key', keyPath: 'hover' });
         expect(run.warnings[0]).toBe(
-            `sz fallback at 1:${source.indexOf('hover') + 1}: key \`hover\` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected.\n` +
-                '  Suggestion: If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().',
+            engineMessage(
+                'fallback-missing-css',
+                `/p/App.tsx:1:${source.indexOf('hover') + 1}`,
+                '`sz` falls back to the runtime: key `hover` holds a value only known at runtime and no sz property claims it, so its classes were never collected.',
+                'help: if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.',
+            ),
         );
     });
 
@@ -88,7 +93,9 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
         expect(run.result.code).toContain(`_szcn("m-1", _szPart({ md: { hover: ${chain} } }))`);
         expect(run.result.code).not.toContain('--_sz-md-hover');
         expect(issuesOf(run)).toEqual([['fallback-missing-css', 2, 9]]);
-        expect(run.warnings[0]).toContain('sz fallback at 2:9: key `md.hover` holds');
+        expect(run.result.issues?.[0]?.args).toMatchObject({ keyPath: 'md.hover' });
+        expect(run.warnings[0]).toContain('[csszyx] fallback-missing-css: /p/App.tsx:2:9\n');
+        expect(run.warnings[0]).toContain('key `md.hover` holds');
     });
 
     it('defers a conditional with one absent branch under a variant', () => {
@@ -141,6 +148,7 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
         expect(run.result.code).toContain('className={_szcn("m-1", _szPart({ tablet: x }))}');
         expect(run.result.code).not.toContain('--_sz-tablet');
         expect(issuesOf(run)).toEqual([['fallback-missing-css', 1, source.indexOf('tablet') + 1]]);
+        expect(run.result.issues?.[0]?.args).toEqual({ site: 'sz-variant-key', keyPath: 'tablet' });
         expect(run.warnings[0]).toContain('key `tablet` holds');
     });
 
@@ -152,11 +160,12 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
         const run = compile(engine, source);
 
         expect(issuesOf(run)).toEqual([['fallback-missing-css', 1, source.indexOf('tablt') + 1]]);
+        expect(run.result.issues?.[0]?.args).toEqual({ site: 'sz-variant-key', keyPath: 'tablt' });
         expect(run.warnings[0]).toContain(
             ': key `tablt` holds a value only known at runtime and no sz property claims it',
         );
         expect(run.warnings[0]).not.toContain('variant key');
-        expect(run.warnings[0]).toContain('if it is meant as an sz property, check its spelling');
+        expect(run.warnings[0]).toContain('if it is an sz property, check its spelling');
     });
 
     it('defers a project variant nested under a built-in one, and a conditional under it', () => {
@@ -168,10 +177,9 @@ describe.each(ENGINES)('a runtime value under a variant key (%s)', (_name, engin
             'className={_szcn("m-1", _szPart({ md: { "desktop-sm": x } }), _szPart({ wqhd: c ? x : null }))}',
         );
         expect(run.result.code).not.toContain('--_sz-');
-        expect(run.warnings.map(text => /: key `([^`]*)` holds/.exec(text)?.[1])).toEqual([
-            'md.desktop-sm',
-            'wqhd',
-        ]);
+        expect(
+            run.result.issues?.map(issue => (issue.args as { keyPath?: string }).keyPath),
+        ).toEqual(['md.desktop-sm', 'wqhd']);
     });
 
     // @extracted-corpus-source-column

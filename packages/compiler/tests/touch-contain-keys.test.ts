@@ -81,7 +81,13 @@ describe('touch-action and contain keys', () => {
             'contain-inline',
             'contain-strickt',
         ]);
-        expect(run.warnings.join('\n')).toContain('touchPanX takes one of: x, left, right');
+        const issues = run.result.issues ?? [];
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['closed-enum-value', { form: 'dead', key: 'touchPanX', value: 'lft' }],
+            ['closed-enum-value', { form: 'dead', key: 'containSize', value: 'inline' }],
+            ['closed-enum-value', { form: 'dead', key: 'contain', value: 'strickt' }],
+        ]);
+        expect(run.warnings[0]).toContain('help: use one of: x, left, right.');
     });
 
     it.each(ENGINES)('%s takes a runtime boolean on a single-keyword group', (_name, engine) => {
@@ -93,7 +99,10 @@ describe('touch-action and contain keys', () => {
 
         expect(code).toContain('__szBoolClass(c, "touchPinchZoom", "touch-pinch-zoom")');
         expect(code).toContain('__szBoolClass(c, "containPaint", "contain-paint")');
-        expect(run.warnings.join('\n')).toContain('"containSize" cannot take a runtime value');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['runtime-value', expect.objectContaining({ key: 'containSize' })],
+        ]);
+        expect(run.warnings.join('\n')).toContain('`containSize` cannot take a runtime value');
     });
 
     it.each(ENGINES)('%s names the group key for a touch value that moved', (_name, engine) => {
@@ -104,8 +113,14 @@ describe('touch-action and contain keys', () => {
         const warnings = run.warnings.join('\n');
 
         expect(run.className ?? '').toBe('');
-        expect(warnings).toContain('"touch: pan-x" moved to { touchPanX: \'x\' }');
-        expect(warnings).toContain('"touch: pinch-zoom" moved to { touchPinchZoom: true }');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['moved-value', { form: 'value', key: 'touch', value: 'pan-x' }],
+            ['moved-value', { form: 'value', key: 'touch', value: 'pinch-zoom' }],
+        ]);
+        expect(warnings).toContain('`touch: pan-x` moved to `touchPanX`');
+        expect(warnings).toContain("help: write `{ touchPanX: 'x' }`");
+        expect(warnings).toContain('`touch: pinch-zoom` moved to `touchPinchZoom`');
+        expect(warnings).toContain('help: write `{ touchPinchZoom: true }`');
     });
 
     it('runtime names the group key for a touch value that moved', () => {
@@ -176,9 +191,15 @@ describe('touch-action and contain keys', () => {
                 const run = captureWarnings(engine, source);
                 expect(run.className, source).toBe(expected);
                 expect(
-                    run.warnings.map(message => /"([^"]+)"/.exec(message)?.[1]),
+                    (run.result.issues ?? []).map(issue => {
+                        const { global, value } = issue.args as { global: string; value: string };
+                        return issue.code === 'global-before-group'
+                            ? `${global}: ${value}`
+                            : issue.code;
+                    }),
                     source,
                 ).toEqual(named);
+                expect(run.warnings.length, source).toBe(named.length);
             }
         },
     );

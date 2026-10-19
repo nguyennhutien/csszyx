@@ -1,7 +1,7 @@
 use super::diagnostics::Diagnostics;
 #[cfg(target_arch = "wasm32")]
 use super::engine::Instant;
-use super::generated::diagnostic_codes::DiagnosticCode;
+use super::generated::diagnostic_codes::issue;
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
@@ -173,31 +173,7 @@ pub fn parse_source_shell_with_registries(
         visitor.ast_budget_exceeded
     };
 
-    let errors = parse_errors(&parsed);
-    let mut diagnostics = Diagnostics::default();
-    if !errors.is_empty() || parsed.panicked {
-        // A file the parser rejects contributes nothing (or only fragments) to
-        // the safelist, and unlike the JavaScript engines there is no Babel fallback on
-        // the native path — so make the skip observable. The bundler plugin
-        // promotes this marker to a build warning when the file yielded no
-        // classes, instead of letting the classes die silently under
-        // Tailwind `source(none)`.
-        diagnostics.push_issue(
-            DiagnosticCode::ParseError,
-            errors.first().map_or(0, |(start, _)| *start),
-            format!(
-                "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
-                file.filename,
-                errors.len()
-            ),
-        );
-    }
-    diagnostics.extend(
-        errors
-            .into_iter()
-            .map(|(start, message)| (DiagnosticCode::ParseError, start, message))
-            .collect(),
-    );
+    let diagnostics = parse_error_diagnostics(parse_errors(&parsed), parsed.panicked);
     ParsedSourceShell {
         ir,
         diagnostics,
@@ -205,6 +181,36 @@ pub fn parse_source_shell_with_registries(
         ast_budget_exceeded,
         timings,
     }
+}
+
+/// The issues of a file the parser rejected: one per syntax error, carrying
+/// the parser's message at the place it points to.
+///
+/// A file the parser rejects contributes nothing (or only fragments) to the
+/// safelist, and the native path has no fallback parser, so the skip must be
+/// observable: the bundler plugin promotes it to a build warning when the file
+/// yielded no classes, instead of letting them die silently under Tailwind
+/// `source(none)`. The generic summary stands in only for errors that carry no
+/// message, and `panicked` only for a parser that stopped with none at all.
+pub fn parse_error_diagnostics(errors: Vec<(u32, String)>, panicked: bool) -> Diagnostics {
+    let mut diagnostics = Diagnostics::default();
+    let count = errors.len() as u64;
+    let mut unnamed_at = None;
+    for (start, message) in errors {
+        if message.is_empty() {
+            unnamed_at.get_or_insert(start);
+        } else {
+            diagnostics.push_issue(issue::parse_error_syntax(Some(&message), None), start);
+        }
+    }
+    if diagnostics.is_empty() {
+        if let Some(start) = unnamed_at {
+            diagnostics.push_issue(issue::parse_error_summary(None, Some(count)), start);
+        } else if panicked {
+            diagnostics.push_issue(issue::parse_error_panicked(None, None), 0);
+        }
+    }
+    diagnostics
 }
 
 /// Every parse failure of one parse, each at its first label (the place oxc
@@ -596,15 +602,6 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Markdown code span around text that may itself hold a backtick.
-fn code_span(text: &str) -> String {
-    if text.contains('`') {
-        format!("`` {text} ``")
-    } else {
-        format!("`{text}`")
-    }
-}
-
 /// Classify one JSX spread whose object branches can absorb generated style vars.
 fn safe_style_spread_from_attribute(spread: &JSXSpreadAttribute<'_>) -> Option<SafeStyleSpreadIr> {
     let expression = unwrap_expression(&spread.argument);
@@ -698,20 +695,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     fn collect_szs_attribute(&mut self, attr: &JSXAttribute<'_>, is_host: bool) {
         let start = attr.span.start;
         if is_host {
-            let message = format!(
-                "[csszyx] szs at {}: szs has no effect on a host element \u{2014} it maps slot names of a custom component. Attribute left unchanged.",
-                self.ir.filename
-            );
-            self.ir
-                .szs_diagnostics
-                .push(SzsDiagnosticIr { start, message });
+            self.ir.szs_diagnostics.push(SzsDiagnosticIr {
+                start,
+                host_element: true,
+            });
             return;
         }
         let unsupported_message = SzsDiagnosticIr {
             start,
-            message: super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(
-                &self.ir.filename,
-            ),
+            host_element: false,
         };
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
             self.ir.szs_diagnostics.push(unsupported_message);
@@ -1174,7 +1166,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     None => (class.value.clone(), format!("'{}'", class.value)),
                 };
                 if is_earlier {
-                    earlier.push(code_span(&label));
+                    earlier.push(label);
                 }
                 parts.push(part);
             }
@@ -1186,30 +1178,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 }
             }
         }
-        if let Some(position) = sz_position {
-            let named = if earlier_sz == 1 {
-                "the classes of an earlier `sz`".to_string()
-            } else {
-                format!("the classes of {earlier_sz} earlier `sz`")
-            };
-            earlier.insert(position, named);
-        }
         if let (Some(index), Some(spread)) = (spread_part, &spread) {
             parts[index] = format!("{spread}.{attribute}");
         }
-        parts.push("{ … }".to_string());
-        let after = spread.map_or_else(
-            || "the spread".to_string(),
-            |text| format!("`{{...{text}}}`"),
-        );
         self.ir.spread_split_classes.push(SpreadSplitClassIr {
             element_name: element_name.to_string(),
             span: TextSpan { start, end: start },
-            earlier,
-            example: format!(
-                "after {after}, in the order that should win: `sz={{[{}]}}`",
-                parts.join(", ")
-            ),
+            classes: earlier,
+            sz_count: earlier_sz,
+            sz_at: sz_position.unwrap_or(0),
+            spread,
+            parts,
         });
     }
 
@@ -4853,6 +4832,16 @@ fn record_dynamic_group_conflicts(
     partial: &mut PartialSzObject,
     dynamic_family_keys: &[(String, TextSpan)],
 ) {
+    // A dropped key ships no class, so it has no stylesheet order to lose.
+    let dynamic_family_keys: Vec<&(String, TextSpan)> = dynamic_family_keys
+        .iter()
+        .filter(|(_, span)| {
+            !partial
+                .dropped_dynamic_keys
+                .iter()
+                .any(|dropped| dropped.span.start == span.start)
+        })
+        .collect();
     if dynamic_family_keys.is_empty() {
         return;
     }
@@ -5967,12 +5956,14 @@ mod tests {
         let parsed = parse_source_shell(&file);
 
         assert!(!parsed.panicked, "the fixture must be a recovered parse");
-        let texts = parsed.diagnostics.texts();
-        assert!(texts.len() >= 2, "{texts:?}");
-        assert!(
-            texts[0].starts_with("[csszyx] parse error in /repo/src/Mixed.tsx"),
-            "{texts:?}"
-        );
+        let issues = parsed.diagnostics.issues();
+        assert!(!issues.is_empty(), "{issues:?}");
+        assert!(issues.iter().all(|issue| issue.code
+            == crate::transform::DiagnosticCode::ParseError
+            && issue
+                .args
+                .to_json()
+                .starts_with(r#"{"form":"syntax","message":"#)));
     }
 
     #[test]
@@ -8495,9 +8486,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_host.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_host.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_host.ir.szs_diagnostics[0]
-            .message
-            .contains("host element"));
+        assert!(parsed_host.ir.szs_diagnostics[0].host_element);
 
         let non_static = "const X = ({ v }) => <Card szs={{ header: v }} />;";
         let parsed_dynamic = parse_source_shell(&TransformFile {
@@ -8506,9 +8495,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert_eq!(parsed_dynamic.ir.szs_attributes.len(), 0);
         assert_eq!(parsed_dynamic.ir.szs_diagnostics.len(), 1);
-        assert!(parsed_dynamic.ir.szs_diagnostics[0]
-            .message
-            .contains("identifier key"));
+        assert!(!parsed_dynamic.ir.szs_diagnostics[0].host_element);
 
         // All-string map: classes collected AND the attribute still renames to
         // `szsc` — the component reads only the compiled prop.
@@ -8560,12 +8547,7 @@ export const C = ({ styles }) => <div sz={styles} />;
             });
             assert!(parsed.ir.szs_attributes.is_empty(), "{source}");
             assert_eq!(parsed.ir.szs_diagnostics.len(), 1, "{source}");
-            assert!(
-                parsed.ir.szs_diagnostics[0]
-                    .message
-                    .contains("Attribute left unchanged"),
-                "{source}"
-            );
+            assert!(!parsed.ir.szs_diagnostics[0].host_element, "{source}");
         }
 
         let source = r#"const X=()=> <Card szs={{ header: { m: -2, opacity: true, content: "a\\b", hover: { p: 1 }, css: { zIndex: 2 } } }} />;"#;
@@ -9239,5 +9221,38 @@ export const C = ({ styles }) => <div sz={styles} />;
         let parts = &parsed.ir.sz_attributes[0].array_parts;
         assert!(parts[0].condition_span.is_some(), "&& IS a guard");
         assert_eq!(parts[0].classes, ["p-8"]);
+    }
+
+    /// One issue per syntax error with its message; the summary only for
+    /// errors with none, and `panicked` only for a parser that stopped with
+    /// no error at all.
+    #[test]
+    fn parse_error_diagnostics_name_each_error_once() {
+        let codes = |errors: Vec<(u32, String)>, panicked: bool| {
+            super::parse_error_diagnostics(errors, panicked)
+                .into_issues()
+                .into_iter()
+                .map(|issue| (issue.start, issue.args.to_json()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            codes(
+                vec![(3, "a".into()), (4, String::new()), (9, "b".into())],
+                true
+            ),
+            [
+                (3, r#"{"form":"syntax","message":"a"}"#.to_string()),
+                (9, r#"{"form":"syntax","message":"b"}"#.to_string()),
+            ]
+        );
+        assert_eq!(
+            codes(vec![(4, String::new()), (7, String::new())], false),
+            [(4, r#"{"form":"summary","errorCount":2}"#.to_string())]
+        );
+        assert_eq!(
+            codes(Vec::new(), true),
+            [(0, r#"{"form":"panicked"}"#.to_string())]
+        );
+        assert!(codes(Vec::new(), false).is_empty());
     }
 }

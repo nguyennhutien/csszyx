@@ -22,16 +22,55 @@ import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
+import {
+    BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
+    KNOWN_VARIANTS,
+    MIGRATION_NOTES,
+    PROPERTY_MAP,
+    SUGGESTION_MAP,
+} from './sz-key-tables.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
 
+// The tables the diagnostic renderer reads too live in leaf modules, so the
+// engine entries load them without this module. Re-exported here and below so
+// the browser entry and the package root keep every name where it was.
+export {
+    bareClosedEnumClass,
+    CLOSED_ENUM_CLASSES,
+    CLOSED_ENUM_VALUE_MOVES,
+} from './closed-enum-tables.js';
 // Re-exported so callers of this module keep one name for the family merge
 // helpers; the runtime's `szv` merge imports them from their own light subpath,
 // `@csszyx/compiler/keyword-families`, which carries no property tables.
 export { keysDisplacedBy, keysSettledAway } from './keyword-families.js';
+// The key vocabulary, re-exported for the reason the closed-enum tables are.
+export {
+    BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
+    KNOWN_VARIANTS,
+    MIGRATION_NOTES,
+    PROPERTY_MAP,
+    SUGGESTION_MAP,
+} from './sz-key-tables.js';
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+
+// Imported here, below the `export … from` block, on purpose: an app bundle
+// places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
+// at the first import of either, and that has to come after
+// `property-types.js` and `sz-capabilities.generated.js` (their own chunk, see
+// `tsdown.config.mjs`), so PROPERTY_MAP follows the per-key rows that repeat
+// its keys and gzip finds them close by. At the top of the import list, where
+// the import sort puts it, the browser entry measured 136 bytes larger gzipped
+// (16,561 against 16,425). `tests/browser-chunk-order.test.ts` holds the order.
+import {
+    bareClosedEnumClass,
+    CLOSED_ENUM_CLASSES,
+    CLOSED_ENUM_VALUE_MOVES,
+} from './closed-enum-tables.js';
 
 /**
  * Represents a value in the sz object.
@@ -179,383 +218,6 @@ export interface ReadonlySzObject {
 }
 
 // ============================================================================
-// PROPERTY_MAP: Maps sz prop names to Tailwind utility prefixes
-// ============================================================================
-export const PROPERTY_MAP: Record<string, string> = {
-    // Background
-    bg: 'bg',
-    bgAttach: 'bg',
-    bgClip: 'bg-clip',
-    bgImg: 'bg',
-    bgOrigin: 'bg-origin',
-    bgPos: 'bg',
-    bgRepeat: 'bg',
-    bgSize: 'bg',
-
-    // Gradient color stops
-    from: 'from',
-    via: 'via',
-    to: 'to',
-
-    // Border Radius
-    rounded: 'rounded',
-    roundedT: 'rounded-t',
-    roundedR: 'rounded-r',
-    roundedB: 'rounded-b',
-    roundedL: 'rounded-l',
-    roundedTl: 'rounded-tl',
-    roundedTr: 'rounded-tr',
-    roundedBl: 'rounded-bl',
-    roundedBr: 'rounded-br',
-    roundedS: 'rounded-s',
-    roundedE: 'rounded-e',
-    roundedSs: 'rounded-ss',
-    roundedSe: 'rounded-se',
-    roundedEs: 'rounded-es',
-    roundedEe: 'rounded-ee',
-
-    // Border
-    border: 'border',
-    borderColor: 'border',
-    borderStyle: 'border',
-    borderT: 'border-t',
-    borderTColor: 'border-t',
-    borderR: 'border-r',
-    borderRColor: 'border-r',
-    borderB: 'border-b',
-    borderBColor: 'border-b',
-    borderL: 'border-l',
-    borderLColor: 'border-l',
-    borderX: 'border-x',
-    borderXColor: 'border-x',
-    borderY: 'border-y',
-    borderYColor: 'border-y',
-    borderS: 'border-s',
-    borderE: 'border-e',
-    borderBs: 'border-bs',
-    borderBe: 'border-be',
-
-    // Divide
-    divideX: 'divide-x',
-    divideY: 'divide-y',
-    divideColor: 'divide',
-    divideStyle: 'divide',
-
-    // Outline
-    outline: 'outline',
-    outlineColor: 'outline',
-    outlineOffset: 'outline-offset',
-    outlineStyle: 'outline',
-
-    // Ring (v4: outset ring + inset ring)
-    ring: 'ring',
-    ringColor: 'ring',
-    ringOffset: 'ring-offset',
-    ringOffsetColor: 'ring-offset',
-    insetRing: 'inset-ring',
-    insetRingColor: 'inset-ring',
-
-    // Spacing (canonical shorthand only)
-    p: 'p',
-    pt: 'pt',
-    pr: 'pr',
-    pb: 'pb',
-    pl: 'pl',
-    px: 'px',
-    py: 'py',
-    ps: 'ps',
-    pe: 'pe',
-    pbs: 'pbs',
-    pbe: 'pbe',
-
-    m: 'm',
-    mt: 'mt',
-    mr: 'mr',
-    mb: 'mb',
-    ml: 'ml',
-    mx: 'mx',
-    my: 'my',
-    ms: 'ms',
-    me: 'me',
-    mbs: 'mbs',
-    mbe: 'mbe',
-
-    // Space between
-    spaceX: 'space-x',
-    spaceY: 'space-y',
-
-    // Sizing (canonical shorthand only)
-    w: 'w',
-    minW: 'min-w',
-    maxW: 'max-w',
-    h: 'h',
-    minH: 'min-h',
-    maxH: 'max-h',
-    size: 'size',
-    blockSize: 'block',
-    minBlockSize: 'min-block',
-    maxBlockSize: 'max-block',
-    inlineSize: 'inline',
-    minInlineSize: 'min-inline',
-    maxInlineSize: 'max-inline',
-
-    // Layout
-    aspect: 'aspect',
-    columns: 'columns',
-    breakAfter: 'break-after',
-    breakBefore: 'break-before',
-    breakInside: 'break-inside',
-    boxDecoration: 'box-decoration',
-    box: 'box',
-    float: 'float',
-    clear: 'clear',
-    isolation: 'isolation',
-    objectFit: 'object',
-    objectPos: 'object',
-    overflowX: 'overflow-x',
-    overflowY: 'overflow-y',
-    overscroll: 'overscroll',
-    overscrollX: 'overscroll-x',
-    overscrollY: 'overscroll-y',
-    z: 'z',
-    position: 'position',
-    display: 'display',
-
-    // Inset
-    inset: 'inset',
-    insetX: 'inset-x',
-    insetY: 'inset-y',
-    top: 'top',
-    right: 'right',
-    bottom: 'bottom',
-    left: 'left',
-    // `start-*` / `end-*`, not `inset-s-*` / `inset-e-*`: the latter exist from
-    // Tailwind 4.2 only, the former are served with the same CSS on every v4
-    // (ADR 0023, one release serves 4.0 → latest).
-    start: 'start',
-    end: 'end',
-    insetS: 'start',
-    insetE: 'end',
-    insetBs: 'inset-bs',
-    insetBe: 'inset-be',
-
-    // Visibility
-    visibility: 'visibility',
-
-    // Typography
-    color: 'text',
-    text: 'text',
-    weight: 'font',
-    fontFamily: 'font',
-    fontStretch: 'font-stretch',
-    // fontStyle/fontSmoothing are emitted by closed direct-output handlers; the
-    // prefix here only marks them as known props (diagnostics, editor tooling).
-    fontStyle: 'font-style',
-    fontSmoothing: 'font-smoothing',
-    textAlign: 'text',
-    decoration: 'decoration',
-    decorationColor: 'decoration',
-    decorationStyle: 'decoration',
-    decorationThickness: 'decoration',
-    underlineOffset: 'underline-offset',
-    textTransform: 'text',
-    textOverflow: 'text',
-    textWrap: 'text',
-    wrap: 'wrap',
-    indent: 'indent',
-    align: 'align',
-    whitespace: 'whitespace',
-    break: 'break',
-    hyphens: 'hyphens',
-    content: 'content',
-    leading: 'leading',
-    tracking: 'tracking',
-    lineClamp: 'line-clamp',
-    fontFeatures: 'font-features',
-    list: 'list',
-    listPos: 'list',
-    listImg: 'list-image',
-
-    // Flex & Grid
-    basis: 'basis',
-    // `flex` is the flex shorthand (flex: 1 → flex-1, flex: 'auto' → flex-auto).
-    // The `flex: true` display sugar was removed (use display: 'flex').
-    flex: 'flex',
-    flexDir: 'flex',
-    flexWrap: 'flex',
-    grow: 'grow',
-    shrink: 'shrink',
-    order: 'order',
-    items: 'items',
-    self: 'self',
-    justify: 'justify',
-    justifyItems: 'justify-items',
-    justifySelf: 'justify-self',
-    placeContent: 'place-content',
-    placeItems: 'place-items',
-    placeSelf: 'place-self',
-    gap: 'gap',
-    gapX: 'gap-x',
-    gapY: 'gap-y',
-
-    // Grid
-    gridCols: 'grid-cols',
-    gridRows: 'grid-rows',
-    col: 'col',
-    colSpan: 'col-span',
-    colStart: 'col-start',
-    colEnd: 'col-end',
-    row: 'row',
-    rowSpan: 'row-span',
-    rowStart: 'row-start',
-    rowEnd: 'row-end',
-    gridFlow: 'grid-flow',
-    autoCols: 'auto-cols',
-    autoRows: 'auto-rows',
-
-    // Effects
-    shadow: 'shadow',
-    shadowColor: 'shadow',
-    insetShadow: 'inset-shadow',
-    insetShadowColor: 'inset-shadow',
-    textShadow: 'text-shadow',
-    textShadowColor: 'text-shadow',
-    opacity: 'opacity',
-    mixBlend: 'mix-blend',
-    bgBlend: 'bg-blend',
-
-    // Filters
-    filter: 'filter',
-    backdropFilter: 'backdrop-filter',
-    blur: 'blur',
-    brightness: 'brightness',
-    contrast: 'contrast',
-    dropShadow: 'drop-shadow',
-    dropShadowColor: 'drop-shadow',
-    grayscale: 'grayscale',
-    hueRotate: 'hue-rotate',
-    invert: 'invert',
-    saturate: 'saturate',
-    sepia: 'sepia',
-    backdropBlur: 'backdrop-blur',
-    backdropBrightness: 'backdrop-brightness',
-    backdropContrast: 'backdrop-contrast',
-    backdropGrayscale: 'backdrop-grayscale',
-    backdropHueRotate: 'backdrop-hue-rotate',
-    backdropInvert: 'backdrop-invert',
-    backdropOpacity: 'backdrop-opacity',
-    backdropSaturate: 'backdrop-saturate',
-    backdropSepia: 'backdrop-sepia',
-
-    // Transforms
-    scale: 'scale',
-    scaleX: 'scale-x',
-    scaleY: 'scale-y',
-    scaleZ: 'scale-z',
-    rotate: 'rotate',
-    rotateX: 'rotate-x',
-    rotateY: 'rotate-y',
-    rotateZ: 'rotate-z',
-    translate: 'translate',
-    translateX: 'translate-x',
-    translateY: 'translate-y',
-    translateZ: 'translate-z',
-    skewX: 'skew-x',
-    skewY: 'skew-y',
-    origin: 'origin',
-    backface: 'backface',
-    perspective: 'perspective',
-    perspectiveOrigin: 'perspective-origin',
-    transformStyle: 'transform',
-    transform: 'transform',
-
-    // Transitions & Animation
-    transition: 'transition',
-    transitionBehavior: 'transition',
-    duration: 'duration',
-    ease: 'ease',
-    delay: 'delay',
-    animate: 'animate',
-    animationDelay: 'animation-delay', // animation-delay — distinct from transition delay
-
-    // Masks
-    mask: 'mask',
-    maskSize: 'mask-size',
-    maskPos: 'mask-position',
-    maskRepeat: 'mask-repeat',
-    maskClip: 'mask-clip',
-    maskOrigin: 'mask-origin',
-
-    // Interactivity
-    cursor: 'cursor',
-    caret: 'caret',
-    pointerEvents: 'pointer-events',
-    fieldSizing: 'field-sizing',
-    scheme: 'scheme',
-    resize: 'resize',
-    scroll: 'scroll',
-    scrollM: 'scroll-m',
-    scrollMt: 'scroll-mt',
-    scrollMr: 'scroll-mr',
-    scrollMb: 'scroll-mb',
-    scrollMl: 'scroll-ml',
-    scrollMs: 'scroll-ms',
-    scrollMe: 'scroll-me',
-    scrollMx: 'scroll-mx',
-    scrollMy: 'scroll-my',
-    scrollP: 'scroll-p',
-    scrollPt: 'scroll-pt',
-    scrollPr: 'scroll-pr',
-    scrollPb: 'scroll-pb',
-    scrollPl: 'scroll-pl',
-    scrollPs: 'scroll-ps',
-    scrollPe: 'scroll-pe',
-    scrollPx: 'scroll-px',
-    scrollPy: 'scroll-py',
-    scrollPbs: 'scroll-pbs',
-    scrollPbe: 'scroll-pbe',
-    scrollMbs: 'scroll-mbs',
-    scrollMbe: 'scroll-mbe',
-    snapAlign: 'snap',
-    snapStop: 'snap',
-    snapType: 'snap',
-    touch: 'touch',
-    select: 'select',
-    willChange: 'will-change',
-    appearance: 'appearance',
-    accent: 'accent',
-    forcedColorAdjust: 'forced-color-adjust',
-
-    // SVG
-    fill: 'fill',
-    stroke: 'stroke',
-    strokeWidth: 'stroke',
-
-    // Tables
-    borderCollapse: 'border',
-    borderSpacing: 'border-spacing',
-    borderSpacingX: 'border-spacing-x',
-    borderSpacingY: 'border-spacing-y',
-    tableLayout: 'table',
-    caption: 'caption',
-
-    // Overflow
-    overflow: 'overflow',
-
-    // Scrollbar (v4.3)
-    scrollbar: 'scrollbar',
-    scrollbarThumb: 'scrollbar-thumb',
-    scrollbarTrack: 'scrollbar-track',
-    scrollbarGutter: 'scrollbar-gutter',
-
-    // Zoom (v4.3)
-    zoom: 'zoom',
-
-    // Tab Size (v4.3)
-    tabSize: 'tab',
-};
-
-// ============================================================================
 // CSS_VAR_TYPE_HINTS: the type a variable value takes in front, per sz key
 // ============================================================================
 /**
@@ -625,145 +287,6 @@ function typedVariableValue(rawKey: string, value: string): string | null {
     if (value.startsWith('var(')) return `[${hint}:${normalizeArbitraryValue(value)}]`;
     return null;
 }
-
-// ============================================================================
-// SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
-// This is exported for the MCP server so AI can guide users accurately.
-// ============================================================================
-/**
- * Removed keys whose replacement is a SHAPE, not another key name. These need
- * their own sentence: rendering them through the SUGGESTION_MAP template would
- * print the prose as if it were a key ("Use the canonical key "maskLinear /
- * maskRadial / maskConic with { from }" …").
- */
-export const MIGRATION_NOTES: Record<string, string> = {
-    // Mask gradient stops moved onto the layer that owns them: Tailwind has no
-    // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
-    maskFrom:
-        'the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }',
-    maskTo: 'the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }',
-    maskVia:
-        'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
-    maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
-    // One key could hold one keyword, while CSS combines one per group.
-    fontVariant:
-        'font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: "normal"',
-};
-
-export const SUGGESTION_MAP: Record<string, string> = {
-    // font-variant-numeric single-keyword groups joined the `num*` family (0.18.0)
-    ordinal: 'numOrdinal',
-    slashedZero: 'numSlashedZero',
-    // Background
-    backgroundColor: 'bg',
-    backgroundImage: 'bgImg',
-    backgroundSize: 'bgSize',
-    backgroundPosition: 'bgPos',
-    backgroundRepeat: 'bgRepeat',
-    bgAttachment: 'bgAttach',
-    bgImage: 'bgImg',
-    // Border Radius
-    borderRadius: 'rounded',
-    borderTopLeftRadius: 'roundedTl',
-    borderTopRightRadius: 'roundedTr',
-    borderBottomLeftRadius: 'roundedBl',
-    borderBottomRightRadius: 'roundedBr',
-    // Border
-    borderWidth: 'border',
-    // Spacing
-    padding: 'p',
-    paddingTop: 'pt',
-    paddingRight: 'pr',
-    paddingBottom: 'pb',
-    paddingLeft: 'pl',
-    paddingX: 'px',
-    paddingY: 'py',
-    margin: 'm',
-    marginTop: 'mt',
-    marginRight: 'mr',
-    marginBottom: 'mb',
-    marginLeft: 'ml',
-    marginX: 'mx',
-    marginY: 'my',
-    // Sizing
-    width: 'w',
-    height: 'h',
-    minWidth: 'minW',
-    maxWidth: 'maxW',
-    minHeight: 'minH',
-    maxHeight: 'maxH',
-    // Layout
-    aspectRatio: 'aspect',
-    boxSizing: 'box',
-    boxDecorationBreak: 'boxDecoration',
-    objectPosition: 'objectPos',
-    zIndex: 'z',
-    // Typography
-    font: 'weight (for font-weight) or fontFamily (for family)',
-    fontWeight: 'weight',
-    fontSize: 'text',
-    textDecoration: 'decoration',
-    textDecorationColor: 'decorationColor',
-    textDecorationStyle: 'decorationStyle',
-    textDecorationThickness: 'decorationThickness',
-    textUnderlineOffset: 'underlineOffset',
-    lineHeight: 'leading',
-    letterSpacing: 'tracking',
-    textIndent: 'indent',
-    verticalAlign: 'align',
-    wordBreak: 'break',
-    overflowWrap: 'wrap',
-    listStyleType: 'list',
-    listStylePosition: 'listPos',
-    listStyleImage: 'listImg',
-    listStyle: 'list',
-    listPosition: 'listPos',
-    listImage: 'listImg',
-    // Flex & Grid
-    flexBasis: 'basis',
-    flexDirection: 'flexDir',
-    flexGrow: 'grow',
-    flexShrink: 'shrink',
-    alignItems: 'items',
-    alignSelf: 'self',
-    justifyContent: 'justify',
-    gridTemplateColumns: 'gridCols',
-    gridTemplateRows: 'gridRows',
-    gridColumn: 'col',
-    gridRow: 'row',
-    gridAutoFlow: 'gridFlow',
-    gridAutoColumns: 'autoCols',
-    gridAutoRows: 'autoRows',
-    // Effects
-    boxShadow: 'shadow',
-    mixBlendMode: 'mixBlend',
-    backgroundBlendMode: 'bgBlend',
-    // Transitions
-    transitionProperty: 'transition',
-    transitionDuration: 'duration',
-    transitionTimingFunction: 'ease',
-    transitionDelay: 'delay',
-    animation: 'animate',
-    transformOrigin: 'origin',
-    // Interactivity
-    caretColor: 'caret',
-    accentColor: 'accent',
-    scrollBehavior: 'scroll',
-    scrollMargin: 'scrollM',
-    scrollPadding: 'scrollP',
-    scrollSnapAlign: 'snapAlign',
-    scrollSnapStop: 'snapStop',
-    scrollSnapType: 'snapType',
-    touchAction: 'touch',
-    userSelect: 'select',
-    captionSide: 'caption',
-    // Scrollbar (v4.3)
-    scrollbarColor: 'scrollbarThumb (thumb color) or scrollbarTrack (track color)',
-    scrollbarWidth: 'scrollbar',
-    // Boolean remaps
-    flexWrapReverse: "flexWrap: 'wrap-reverse'",
-    flexNowrap: "flexWrap: 'nowrap'",
-};
 
 // ============================================================================
 // VARIANT_MAP: Maps camelCase variant names to kebab-case
@@ -849,136 +372,6 @@ export const SPECIAL_VARIANTS: Set<string> = new Set([
 ]);
 
 // ============================================================================
-// KNOWN_VARIANTS: All known variant names for disambiguation
-// ============================================================================
-export const KNOWN_VARIANTS: Set<string> = new Set([
-    // Responsive
-    'sm',
-    'md',
-    'lg',
-    'xl',
-    '2xl',
-    // Container queries
-    '@sm',
-    '@md',
-    '@lg',
-    '@xl',
-    '@2xl',
-    // Dark mode
-    'dark',
-    'light',
-    // Print/Media
-    'print',
-    'portrait',
-    'landscape',
-    // Motion
-    'motion-reduce',
-    'motion-safe',
-    'motionReduce',
-    'motionSafe',
-    // Contrast
-    'contrast-more',
-    'contrast-less',
-    'contrastMore',
-    'contrastLess',
-    // States
-    'hover',
-    'focus',
-    'focus-within',
-    'focus-visible',
-    'focusWithin',
-    'focusVisible',
-    'active',
-    'visited',
-    'target',
-    'disabled',
-    'enabled',
-    'checked',
-    'indeterminate',
-    'default',
-    'required',
-    'valid',
-    'invalid',
-    'in-range',
-    'out-of-range',
-    'inRange',
-    'outOfRange',
-    'placeholder-shown',
-    'placeholderShown',
-    'autofill',
-    'read-only',
-    'readOnly',
-    // Structure
-    'first',
-    'last',
-    'only',
-    'odd',
-    'even',
-    'empty',
-    'first-of-type',
-    'last-of-type',
-    'only-of-type',
-    'firstOfType',
-    'lastOfType',
-    'onlyOfType',
-    'first-child',
-    'last-child',
-    'only-child',
-    'firstChild',
-    'lastChild',
-    'onlyChild',
-    // Pseudo-elements
-    'before',
-    'after',
-    'placeholder',
-    'file',
-    'marker',
-    'selection',
-    'first-line',
-    'first-letter',
-    'firstLine',
-    'firstLetter',
-    'backdrop',
-    // Pointer
-    'pointer-fine',
-    'pointer-coarse',
-    'pointer-none',
-    'pointerFine',
-    'pointerCoarse',
-    'pointerNone',
-    // Any-pointer (v4.1)
-    'any-pointer-fine',
-    'any-pointer-coarse',
-    'any-pointer-none',
-    'anyPointerFine',
-    'anyPointerCoarse',
-    'anyPointerNone',
-    // Form validation (v4.1)
-    'user-valid',
-    'user-invalid',
-    'userValid',
-    'userInvalid',
-    // Details / inverted-colors (v4.1)
-    'details-content',
-    'detailsContent',
-    'inverted-colors',
-    'invertedColors',
-    // Noscript (v4.1)
-    'noscript',
-    // Forced-colors media variant
-    'forced-colors',
-    'forcedColors',
-    // Starting-style + inert state variants
-    'starting',
-    'inert',
-    // Open
-    'open',
-    // RTL/LTR
-    'ltr',
-    'rtl',
-]);
-
-// ============================================================================
 // ARIA_STATES: Standard aria boolean states (vs arbitrary aria-[*] syntax)
 // ============================================================================
 const ARIA_STATES = new Set([
@@ -996,91 +389,6 @@ const ARIA_STATES = new Set([
     'live',
     'atomic',
     'modal',
-]);
-
-// ============================================================================
-// BOOLEAN_SHORTHANDS: Properties that map directly when value is true
-// ============================================================================
-// Canonical keys lowered by dedicated branches rather than PROPERTY_MAP. This
-// table feeds native and editor-tooling generation so valid-key diagnostics and
-// completions cannot drift from the compiler.
-export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
-    'css',
-    'maskLinear',
-    'maskRadial',
-    'maskConic',
-    'alignContent',
-    'fromPos',
-    'viaPos',
-    'toPos',
-    'maskComposite',
-    'maskMode',
-    'maskType',
-    'snapStrictness',
-    // font-variant-numeric, one key per group of its grammar (CLOSED_ENUM_CLASSES)
-    'nums',
-    'numFigure',
-    'numSpacing',
-    'numFraction',
-    // touch-action and contain, one key per group (CLOSED_ENUM_CLASSES); `touch`
-    // itself is a PROPERTY_MAP key
-    'touchPanX',
-    'touchPanY',
-    'contain',
-    'containSize',
-]);
-
-// Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
-// value-alias of a single mutually-exclusive CSS property: composite utilities
-// (truncate, srOnly), single-keyword groups of an additive property
-// (numOrdinal, numSlashedZero), default-or-value toggles (grow/ring/blur — true means the default,
-// a value means a specific one), plugin components (container/prose), and
-// directional reverse flags. Value-alias sugar for display/position/visibility/
-// isolation/text-transform/font-style/text-decoration-line/font-smoothing was
-// removed — those are written with their canonical key (see REMOVED_BOOLEAN_SUGAR).
-export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
-    // Typography (composite — no single-property canonical form)
-    'truncate',
-    // Public text-overflow boolean spellings retained alongside textOverflow.
-    'textEllipsis',
-    'textClip',
-    // Flexbox (grow/shrink only — flexWrap uses string values)
-    'grow',
-    'shrink',
-    // Filters (default values)
-    'blur',
-    'grayscale',
-    'invert',
-    'sepia',
-    'backdropBlur',
-    'backdropGrayscale',
-    'backdropInvert',
-    'backdropSepia',
-    // Misc
-    'container',
-    'prose',
-    'proseInvert',
-    'srOnly',
-    'notSrOnly',
-    // font-variant-numeric groups with a single keyword; the two-keyword groups
-    // are closed enums (numFigure/numSpacing/numFraction) so one object cannot
-    // set both keywords of a group.
-    'numOrdinal',
-    'numSlashedZero',
-    // the single-keyword groups of touch-action and contain
-    'touchPinchZoom',
-    'containLayout',
-    'containPaint',
-    'containStyle',
-    // Divide/Space reverse
-    'divideXReverse',
-    'divideYReverse',
-    'spaceXReverse',
-    'spaceYReverse',
-    // Ring (v3 future)
-    'ring',
-    // Outline
-    'outline',
 ]);
 
 // ============================================================================
@@ -3050,123 +2358,6 @@ function formatWillChange(value: string): string {
 }
 
 /**
- * Keys whose value set is closed, mapped value → the utility it emits.
- *
- * These four spell their value as the BARE Tailwind utility (`flex`,
- * `absolute`, `invisible`), which is what made an unrecognised value dangerous
- * rather than merely dead: `{ display: 'bogus' }` used to emit the class
- * `bogus`, a single unprefixed word of exactly the shape a project's own
- * component CSS is made of, so the typo could match a rule that was never meant
- * for it. CSS closes all four value sets, so the typo is decidable here and the
- * class is dropped instead — the same answer `textTransform` and `fontStyle`
- * already give.
- *
- * Source of truth for the members: `docs/specs/snippets/layout.md`. The engine
- * reads a generated copy of this table, so both artifacts refuse the same
- * values.
- */
-const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
-    display: {
-        block: 'block',
-        'inline-block': 'inline-block',
-        inline: 'inline',
-        flex: 'flex',
-        'inline-flex': 'inline-flex',
-        grid: 'grid',
-        'inline-grid': 'inline-grid',
-        contents: 'contents',
-        table: 'table',
-        'inline-table': 'inline-table',
-        'table-caption': 'table-caption',
-        'table-cell': 'table-cell',
-        'table-column': 'table-column',
-        'table-column-group': 'table-column-group',
-        'table-footer-group': 'table-footer-group',
-        'table-header-group': 'table-header-group',
-        'table-row-group': 'table-row-group',
-        'table-row': 'table-row',
-        'flow-root': 'flow-root',
-        'list-item': 'list-item',
-        none: 'hidden',
-    },
-    position: {
-        static: 'static',
-        fixed: 'fixed',
-        absolute: 'absolute',
-        relative: 'relative',
-        sticky: 'sticky',
-    },
-    visibility: {
-        visible: 'visible',
-        hidden: 'invisible',
-        collapse: 'collapse',
-    },
-    isolation: {
-        isolate: 'isolate',
-        auto: 'isolation-auto',
-    },
-    // font-variant-numeric, one key per group of `normal | [ <figure> ||
-    // <spacing> || <fraction> || ordinal || slashed-zero ]`. Each group is one
-    // Tailwind variable, so two keywords of a group override and different
-    // groups combine. Source of truth: `docs/specs/snippets/typography.md`.
-    nums: { normal: 'normal-nums' },
-    numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
-    numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
-    numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
-    // touch-action: `auto | none | [ pan-x… || pan-y… || pinch-zoom ] |
-    // manipulation`. `touch` holds the keywords that stand alone. Source of
-    // truth: `docs/specs/snippets/interactivity.md`.
-    touch: { auto: 'touch-auto', none: 'touch-none', manipulation: 'touch-manipulation' },
-    touchPanX: { x: 'touch-pan-x', left: 'touch-pan-left', right: 'touch-pan-right' },
-    touchPanY: { y: 'touch-pan-y', up: 'touch-pan-up', down: 'touch-pan-down' },
-    // contain: `none | strict | content | [ size|inline-size || layout || style
-    // || paint ]`. Source of truth: `docs/specs/snippets/layout.md`.
-    contain: { none: 'contain-none', strict: 'contain-strict', content: 'contain-content' },
-    containSize: { size: 'contain-size', 'inline-size': 'contain-inline-size' },
-};
-
-/**
- * What a closed-enum key wraps around a value outside its table.
- *
- * `display`/`position`/`visibility` spell their value as the bare utility, so
- * a typo goes out verbatim. The other keys' utilities carry a fixed part, and
- * keeping it on a typo keeps the class clear of a project's own CSS names:
- * `numSpacing: 'tabulr'` ships `tabulr-nums`, not `tabulr`. The engine reads a
- * generated copy, so both artifacts emit the same class.
- */
-const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> = {
-    isolation: { prefix: 'isolation-', suffix: '' },
-    nums: { prefix: '', suffix: '-nums' },
-    numFigure: { prefix: '', suffix: '-nums' },
-    numSpacing: { prefix: '', suffix: '-nums' },
-    numFraction: { prefix: '', suffix: '-fractions' },
-    touch: { prefix: 'touch-', suffix: '' },
-    touchPanX: { prefix: 'touch-pan-', suffix: '' },
-    touchPanY: { prefix: 'touch-pan-', suffix: '' },
-    contain: { prefix: 'contain-', suffix: '' },
-    containSize: { prefix: 'contain-', suffix: '' },
-};
-
-/**
- * Values a closed key took until a group got its own key, keyed
- * `<key>:<value>`, with the key and value that replaced them.
- *
- * A moved value emits no class and names its replacement, as a removed key
- * does. A replacement value of `'true'` is the boolean flag. The engine reads
- * a generated copy (`closed_enum_value_move`), and `csszyx migrate` rewrites
- * with it.
- */
-export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', string>> = {
-    'touch:pan-x': { key: 'touchPanX', value: 'x' },
-    'touch:pan-left': { key: 'touchPanX', value: 'left' },
-    'touch:pan-right': { key: 'touchPanX', value: 'right' },
-    'touch:pan-y': { key: 'touchPanY', value: 'y' },
-    'touch:pan-up': { key: 'touchPanY', value: 'up' },
-    'touch:pan-down': { key: 'touchPanY', value: 'down' },
-    'touch:pinch-zoom': { key: 'touchPinchZoom', value: 'true' },
-};
-
-/**
  * The same tables as maps, for the lookup.
  *
  * A bracket read on the object literal answers for `constructor` and
@@ -3182,22 +2373,6 @@ const CLOSED_ENUM_LOOKUP: ReadonlyMap<string, ReadonlyMap<string, string>> = new
 
 /** Closed-enum key/value pairs already warned about, so a re-render cannot spam. */
 const _warnedClosedEnumValues = new Set<string>();
-
-/**
- * The class a closed-enum key emits for a value outside its table.
- *
- * The value keeps its key's fixed part (`CLOSED_ENUM_AFFIXES`), or goes out
- * verbatim on the keys whose value IS the class. The class is emitted on
- * purpose: it is what makes the typo findable in the DOM when no diagnostic
- * reaches it.
- * @param key - The closed-enum key.
- * @param value - The value outside its set, without the important modifier.
- * @returns The bare utility, before any variant prefix.
- */
-function bareClosedEnumClass(key: string, value: string): string {
-    const affix = CLOSED_ENUM_AFFIXES[key];
-    return affix ? `${affix.prefix}${value}${affix.suffix}` : value;
-}
 
 /**
  * Warns when a closed-enum key carries a value CSS does not define for it.

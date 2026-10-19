@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES } from './engine-parity-harness.js';
+import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
 
 const RUNTIME_IMPORT = "import { szv } from '@csszyx/runtime';\n";
 
@@ -30,10 +30,7 @@ const RUNTIME_IMPORT = "import { szv } from '@csszyx/runtime';\n";
  * @param body - Module body, appended to the runtime import.
  * @returns Reported diagnostics.
  */
-function diagnosticsFor(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
-    body: string,
-): string[] {
+function diagnosticsFor(engine: ParityEngine, body: string): string[] {
     return (engine(RUNTIME_IMPORT + body, '/p/t.tsx').diagnostics ?? [])
         .map(String)
         .filter(message => !message.includes('Tip: run'));
@@ -52,8 +49,18 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('szv factory `t()` did not precompile');
+        expect(diagnostics[0]).toContain('szv factory `t()` could not be compiled');
         expect(diagnostics[0]).toContain('base.color');
+        const { issues } = engine(
+            `${RUNTIME_IMPORT}${DISQUALIFIED_FACTORY}export const A = () => <div sz={t({ c: 'blue' })} />;`,
+            '/p/t.tsx',
+        );
+        expect(issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'fallback-nudge',
+                { site: 'sz', shape: 'szv-factory', detail: 't', path: 'base.color' },
+            ],
+        ]);
     });
 
     it('stops telling an szv author to convert to szv', () => {
@@ -63,7 +70,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics[0]).not.toContain('convert to szv()');
-        expect(diagnostics[0]).not.toContain('result is unknown at build time');
+        expect(diagnostics[0]).not.toContain('returns a value unknown at build time');
     });
 
     it('reads the same at both positions, because it is the same cause', () => {
@@ -78,11 +85,21 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
             `${DISQUALIFIED_FACTORY}export const a = szr(t({ c: 'blue' }));`,
         );
 
-        // Strip only the site-and-position prefix; what follows is the cause
-        // and the advice, and those are what must match.
-        const cause = (message: string) => message.replace(/^sz\w* fallback at \d+:\d+: /, '');
+        // Strip the header, the site name and what the site costs (the code, the
+        // note and the docs link differ: an `szr` argument is never collected,
+        // an `sz` attribute is still lowered by the runtime). What stays is the
+        // cause and the advice, and those are what must match.
+        const cause = (message: string) =>
+            message
+                .split('\n')
+                .slice(1)
+                .filter(line => !line.startsWith('  note:') && !line.startsWith('  docs:'))
+                .join('\n')
+                .replace(/^ {2}`sz\w*` falls back to the runtime: /, '');
         expect(cause(attribute[0])).toBe(cause(szr[0]));
         expect(cause(attribute[0])).not.toBe(attribute[0]);
+        expect(attribute[0]).toContain('`sz` falls back to the runtime');
+        expect(szr[0]).toContain('`szr` falls back to the runtime');
     });
 
     it('names the factory when the attribute precedes the declaration', () => {
@@ -94,7 +111,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         );
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('szv factory `t()` did not precompile');
+        expect(diagnostics[0]).toContain('szv factory `t()` could not be compiled');
     });
 });
 
@@ -103,7 +120,9 @@ describe.each(ENGINES)('what must keep reading as a generic call (%s)', (_name, 
         const diagnostics = diagnosticsFor(engine, 'export const A = () => <div sz={mk()} />;');
 
         expect(diagnostics).toHaveLength(1);
-        expect(diagnostics[0]).toContain('function call `mk()` result is unknown at build time');
+        expect(diagnostics[0]).toContain(
+            'function call `mk()` returns a value unknown at build time',
+        );
         expect(diagnostics[0]).not.toContain('szv factory');
     });
 
@@ -117,7 +136,7 @@ describe.each(ENGINES)('what must keep reading as a generic call (%s)', (_name, 
         );
 
         for (const message of diagnostics) {
-            expect(message).not.toContain('szv factory `t()` did not precompile');
+            expect(message).not.toContain('szv factory `t()` could not be compiled');
         }
     });
 });

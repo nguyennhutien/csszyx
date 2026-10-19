@@ -65,7 +65,7 @@ export const CODE_SOURCES: ReadonlyArray<
     ['moved-value', "export const A = () => <div sz={{ touchAction: 'pan-y' }} />;"],
     [
         'global-before-group',
-        "export const A = () => <div sz={{ contain: 'size', containPaint: true }} />;",
+        "export const A = () => <div sz={{ contain: 'strict', containPaint: true }} />;",
     ],
     [
         'runtime-family-conflict',

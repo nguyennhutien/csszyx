@@ -10,12 +10,22 @@
  * there without a word. One router, so a lane cannot drift from the others by
  * forgetting a branch.
  *
- * The router reads the engine's code for each diagnostic, never its wording;
- * the text is consulted only for a line that carries no code.
+ * The router reads the engine's code for each diagnostic, never its wording.
+ * A line that carries no code is levelled by its pass, `sz-diagnostic`, alone:
+ * guessing a kind from the text named the ones it could not read `other`, an
+ * id no lane reports since every lane keeps the engine's code.
  *
  * @module
  */
-import { szDiagnosticKindOf, szKeySuggestionFor } from '@csszyx/compiler';
+import {
+    renderSzDiagnostic,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticCode,
+    type SzDiagnosticIssue,
+    szDiagnosticKey,
+} from '@csszyx/compiler';
+import { renderEngineDiagnostic } from '@csszyx/compiler/internal';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 
 import type { DiagnosticLimiter } from './diagnostic-limiter.js';
@@ -66,7 +76,7 @@ export function shouldHoldAdvisories(
 }
 
 /**
- * Build the one-line disclosure that the fallback list above is partial.
+ * Build the disclosure that the fallback list above is partial.
  *
  * Four of the five `sz`-site fallback kinds never print in a production build,
  * so a log can list the `szr` fallbacks it found and silently hold every
@@ -75,29 +85,49 @@ export function shouldHoldAdvisories(
  * count that was short by half for exactly this reason, and only caught it by
  * reading sources instead.
  *
- * Suppression is the right default; implying zero is not. One line costs
- * nothing and keeps the difference visible.
+ * Suppression is the right default; implying zero is not. One message costs
+ * nothing and keeps the difference visible. Its wording is the registry's
+ * `diagnostics-held`: the count is every finding held at `info` — the
+ * advisories csszyx handled, and any finding the config lowered to `info`,
+ * such as a dead class, whose styles are NOT there.
  *
  * @param count - `info` findings the build declined to list.
- * @returns The disclosure, or null when nothing was held back.
+ * @returns The message, or null when nothing was held back.
  */
 export function suppressedAdvisoryMessage(count: number): string | null {
     if (count <= 0) return null;
-    // Count and noun interpolate together so the sentence after them is one
-    // unbroken literal: the docs-sync gate matches verbatim runs, and a
-    // placeholder in the middle splits the run it is trying to match.
-    //
-    // The noun is "info note", not "sz fallback" or "advisory": the count is
-    // every finding held at `info` — the advisories csszyx handled, two of
-    // whose three kinds never touch an sz prop, and any finding the config
-    // lowered to `info`, such as a dead class, whose styles are NOT there.
-    const held = count === 1 ? '1 info note' : `${count} info notes`;
-    return (
-        `[csszyx] ${held} not listed above: the advisories csszyx handled — a fallback at an sz ` +
-        'prop, a className whose precedence over sz is unstated, or a variable hoist the planner ' +
-        'declined — and any finding csszyx.config sets to info. A production build counts them ' +
-        'instead of listing them; a development build prints each one with its file and position.'
-    );
+    return renderSzDiagnostic({
+        diagnostic: { code: 'diagnostics-held', args: { count } },
+        file: '',
+        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    });
+}
+
+/** The first `[csszyx] <code>:` on a message's first line names its code. */
+const CODE_TOKEN = /\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*):/;
+
+/** A warning as Rollup and Vite take one: the line, its code and its page. */
+export interface CodedWarning {
+    message: string;
+    code: string;
+    url: string;
+}
+
+/**
+ * A message as a bundler's `this.warn` takes it: with its code and page beside
+ * the text when it carries a `[csszyx] <code>:` token, so a tool reading the
+ * log object has them without parsing the line. A message with no token is
+ * handed over as written.
+ *
+ * @param message - One rendered message.
+ * @returns The warning.
+ */
+export function codedWarning(message: string): string | CodedWarning {
+    const [firstLine = ''] = message.split('\n', 1);
+    const header = CODE_TOKEN.exec(firstLine);
+    if (header === null) return message;
+    const code = header[1] as string;
+    return { message, code, url: `${SZ_DIAGNOSTIC_URL_BASE}${code}` };
 }
 
 /** Where one finding at a level goes. */
@@ -131,18 +161,31 @@ export interface DiagnosticIssue {
     code: string;
     line: number;
     column: number;
+    /**
+     * The values its sentence names. Present on an engine issue, whose
+     * message is rendered whole by the compiler, header included.
+     */
+    args?: object;
 }
 
 /** One module's diagnostics, and how this run reports them. */
 export interface TransformDiagnosticsInput {
-    /** The engine's diagnostics for the module, in order. */
+    /**
+     * The engine's diagnostics for the module, in order. Empty for a result
+     * of the unrendered transform, whose issues are rendered here, and only
+     * the ones listed.
+     */
     diagnostics: readonly string[];
     /**
      * The code and position of each, index-parallel. A diagnostic without one
-     * (a cache entry from before codes, a line the runtime lowering shares
-     * wording with) is classified by its text.
+     * is a finding of the `sz-diagnostic` pass, of no narrower kind.
      */
     issues?: ReadonlyArray<DiagnosticIssue | undefined>;
+    /**
+     * The path the header of an unrendered issue names, as the compiler gave
+     * it (`diagnosticFile` of the result); {@link file} when absent.
+     */
+    diagnosticFile?: string;
     /** The module identifier the lines name. */
     id: string;
     /** The file relative to the project root, for `overrides` and the dedupe. */
@@ -157,12 +200,26 @@ export interface TransformDiagnosticsInput {
     limiter?: DiagnosticLimiter;
 }
 
+/**
+ * Whether a result reports anything: a rendered message, or an issue left for
+ * the router to render.
+ *
+ * @param diagnostics - The rendered messages; empty for an unrendered result.
+ * @param issues - The issues, when the result carries them.
+ * @returns True when there is something to route.
+ */
+export function hasFindings(
+    diagnostics: readonly unknown[],
+    issues: readonly unknown[] | undefined,
+): boolean {
+    return diagnostics.length > 0 || (issues !== undefined && issues.length > 0);
+}
+
 /** One transform's diagnostics, sorted into the channels a lane prints them on. */
 export interface RoutedTransformDiagnostics {
     /**
-     * Unresolvable-spread reports, as `<id>:<line>:<column>\n  <message>`
-     * without the prefix. The plugin collects them for the end of the build;
-     * a loader prints them at once.
+     * Unresolvable-spread reports, each a whole message. The plugin collects
+     * them for the end of the build; a loader prints them at once.
      */
     spread: string[];
     /** `warn` and `error` lines, printed now in every mode. */
@@ -172,6 +229,9 @@ export interface RoutedTransformDiagnostics {
     /** How many `info` findings the run held back instead of listing. */
     heldAdvisories: number;
 }
+
+/** The pass every engine diagnostic belongs to, and the kind of one with no code. */
+const SZ_DIAGNOSTIC_PASS = 'sz-diagnostic';
 
 /** The policy a caller that names none gets, built once. */
 const DEFAULT_POLICY = createDiagnosticPolicy();
@@ -186,22 +246,27 @@ const DEFAULT_POLICY = createDiagnosticPolicy();
  * @param diagnostic - The diagnostic and where it was found.
  * @param diagnostic.kind - Its kind.
  * @param diagnostic.level - The level the policy gives it here.
+ * @param diagnostic.coded - Whether the message is an engine message, header included.
  * @param diagnostic.where - `<id>` or `<id>:<line>:<column>`.
  * @param diagnostic.message - The engine's message.
  */
 function pushListedDiagnostic(
     routed: RoutedTransformDiagnostics,
-    diagnostic: { kind: string; level: SzDiagnosticLevel; where: string; message: string },
+    diagnostic: {
+        kind: string;
+        level: SzDiagnosticLevel;
+        where: string;
+        message: string;
+        coded: boolean;
+    },
 ): void {
-    const { kind, level, where, message } = diagnostic;
+    const { kind, level, where, message, coded } = diagnostic;
+    // An engine message carries its own header: `[csszyx] <code>: <where>`.
+    const line = coded ? message : `[csszyx] ${where}\n  ${message}`;
     if (kind === 'unresolvable-spread') {
-        routed.spread.push(`${where}\n  ${message}`);
+        routed.spread.push(line);
         return;
     }
-    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
-    const suggestion = szKeySuggestionFor(message);
-    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
-    const line = `[csszyx] ${where}\n  ${message}${hint}`;
     if (level === 'info') routed.advisories.push(line);
     else routed.immediate.push(line);
 }
@@ -230,22 +295,37 @@ export function routeTransformDiagnostics(
         advisories: [],
         heldAdvisories: 0,
     };
-    for (const [index, message] of diagnostics.entries()) {
+    // An unrendered result carries issues and no messages; a rendered one,
+    // one message per issue.
+    const count = Math.max(diagnostics.length, issues?.length ?? 0);
+    for (let index = 0; index < count; index++) {
         const issue = issues?.[index];
-        const kind = issue?.code ?? szDiagnosticKindOf(message);
-        const level = policy.levelOf({ rule: 'sz-diagnostic', kind, file: input.file });
+        const message = diagnostics[index];
+        const kind = issue?.code ?? SZ_DIAGNOSTIC_PASS;
+        const level = policy.levelOf({ rule: SZ_DIAGNOSTIC_PASS, kind, file: input.file });
         const channel = channelOfLevel(level, quiet, holdInfo);
         if (channel === 'drop') continue;
         if (channel === 'held') {
             routed.heldAdvisories++;
             continue;
         }
-        const finding = { id: kind, file, line: issue?.line, column: issue?.column, key: message };
+        const coded = issue?.args !== undefined;
+        // The args, never the wording, so a message not rendered yet has the
+        // same key as the one it will render to.
+        const key = coded
+            ? szDiagnosticKey({ code: issue.code as SzDiagnosticCode, args: issue.args as never })
+            : (message as string);
+        const finding = { id: kind, file, line: issue?.line, column: issue?.column, key };
         if (limiter?.admit(finding) === false) {
             continue;
         }
         const where = issue === undefined ? id : `${id}:${issue.line}:${issue.column}`;
-        pushListedDiagnostic(routed, { kind, level, where, message });
+        // Rendered only now that it is listed: a build lists a handful of its
+        // findings and counts or drops the rest.
+        const text =
+            message ??
+            renderEngineDiagnostic(issue as SzDiagnosticIssue, input.diagnosticFile ?? file);
+        pushListedDiagnostic(routed, { kind, level, where, message: text, coded });
     }
     return routed;
 }

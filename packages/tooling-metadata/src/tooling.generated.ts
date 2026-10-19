@@ -600,11 +600,11 @@ export const MASK_SIDES = [
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = {
-    "maskFrom": "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }",
-    "maskTo": "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }",
-    "maskVia": "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic",
-    "maskShape": "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }",
-    "fontVariant": "font-variant-numeric takes one key per group — numFigure, numSpacing, numFraction, numOrdinal, numSlashedZero, and nums: \"normal\""
+    "maskFrom": "write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`",
+    "maskTo": "write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`",
+    "maskVia": "write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop",
+    "maskShape": "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`",
+    "fontVariant": "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"
 } as const;
 /** sz keys whose utility accepts a negative value (`{ mt: '-4' }` → `-mt-4`).
  * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind

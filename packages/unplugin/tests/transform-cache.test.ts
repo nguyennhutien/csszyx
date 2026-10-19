@@ -3,6 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { transformWasm } from '@csszyx/compiler/engine';
+import {
+    diagnosticFileOf,
+    renderEngineDiagnostic,
+    transformWasmUnrendered,
+} from '@csszyx/compiler/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { emittedClassSites } from '../src/dead-class.js';
 import {
@@ -158,7 +163,8 @@ describe('transform cache', () => {
         ) as { result: Record<string, unknown> };
         expect(JSON.stringify(stored.result)).not.toMatch(/"line"|"column"|"positions"/);
         expect(stored.result.issues).toEqual([
-            { code: 'unknown-key', start: source.indexOf('xyzzy') },
+            // The args travel with the offset, so a cache hit reads the key back.
+            { code: 'unknown-key', start: source.indexOf('xyzzy'), args: { key: 'xyzzy' } },
         ]);
 
         const cached = readTransformCache(cacheRoot, spannedInput);
@@ -268,8 +274,30 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":20');
+        expect(content).toContain('"version":22');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
+    });
+
+    it('keeps an unrendered result unrendered: no message text, the issues and their file', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const source = "export const A = () => <div sz={{ workBreak: 'all' }} />;\n";
+        const keyInput = input({ source, filename: '/repo/src/A.tsx' });
+        const lazy = transformWasmUnrendered(source, '/repo/src/A.tsx', { rootDir: '/repo' });
+        writeTransformCache(cacheRoot, keyInput, lazy);
+
+        const { key } = createTransformCacheKey(keyInput);
+        const entry = JSON.parse(
+            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
+        ) as { result: { diagnostics: string[]; diagnosticFile?: string } };
+        expect(entry.result.diagnostics).toEqual([]);
+        expect(entry.result.diagnosticFile).toBe('src/A.tsx');
+
+        const cached = readTransformCache(cacheRoot, keyInput);
+        expect(cached?.diagnostics).toEqual([]);
+        const file = diagnosticFileOf(cached as CacheableTransformResult) as string;
+        expect(cached?.issues?.map(issue => renderEngineDiagnostic(issue, file))).toEqual(
+            transformWasm(source, '/repo/src/A.tsx', { rootDir: '/repo' }).diagnostics,
+        );
     });
 
     it('rejects an entry written under an older cache schema', () => {

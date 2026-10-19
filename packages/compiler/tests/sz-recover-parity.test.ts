@@ -18,41 +18,59 @@
 import { describe, expect, it } from 'vitest';
 
 import { transformSource, transformWasm } from '../src/engine.js';
+import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
-const NON_LITERAL =
-    '[csszyx] szRecover at /p/t.tsx: only string-literal values ("csr" | "dev-only") are ' +
-    'supported. Dynamic values disable token emission for this element.';
+const NON_LITERAL = engineMessage(
+    'sz-recover',
+    '/p/t.tsx:1:37',
+    '`szRecover` takes only a string literal.',
+    'help: write `szRecover="csr"` or `szRecover="dev-only"`.',
+    'note: no `data-sz-recovery-token` is written for this element.',
+);
 
-const UNKNOWN_MODE =
-    '[csszyx] szRecover at /p/t.tsx: unknown mode "ssr" — expected "csr" or "dev-only". ' +
-    'Token emission skipped.';
+const UNKNOWN_MODE = engineMessage(
+    'sz-recover',
+    '/p/t.tsx:1:29',
+    '`szRecover` has an unknown mode `"ssr"`.',
+    'help: use `"csr"` or `"dev-only"`.',
+    'note: no `data-sz-recovery-token` is written for this element.',
+);
 
 describe('szRecover diagnostics are identical on every engine', () => {
     it('reports a dynamic value as the wrong value SHAPE', () => {
         const tsx = 'export const A = ({ mode }) => <div szRecover={mode}>x</div>;';
         for (const [name, engine] of ENGINES) {
-            const { warnings } = captureWarnings(engine, tsx);
+            const { warnings, result } = captureWarnings(engine, tsx);
             expect(warnings, name).toContain(NON_LITERAL);
+            expect(
+                result.issues?.map(issue => [issue.code, issue.args]),
+                name,
+            ).toEqual([['sz-recover', { form: 'non-literal' }]]);
         }
     });
 
     it('reports a misspelled mode by NAME, so the typo is visible', () => {
         const tsx = 'export const A = () => <div szRecover="ssr">x</div>;';
         for (const [name, engine] of ENGINES) {
-            const { warnings } = captureWarnings(engine, tsx);
+            const { warnings, result } = captureWarnings(engine, tsx);
             expect(warnings, name).toContain(UNKNOWN_MODE);
+            expect(
+                result.issues?.map(issue => [issue.code, issue.args]),
+                name,
+            ).toEqual([['sz-recover', { form: 'unknown-mode', mode: 'ssr' }]]);
         }
     });
 
     it.each(['csr', 'dev-only'])('stays silent for the supported mode %s', mode => {
         const tsx = `export const A = () => <div szRecover="${mode}">x</div>;`;
         for (const [name, engine] of ENGINES) {
-            const { warnings } = captureWarnings(engine, tsx);
+            const { warnings, result } = captureWarnings(engine, tsx);
             expect(
-                warnings.filter(message => message.includes('szRecover')),
+                (result.issues ?? []).filter(issue => issue.code === 'sz-recover'),
                 name,
             ).toEqual([]);
+            expect(warnings, name).toEqual([]);
         }
     });
 
@@ -99,10 +117,10 @@ describe('szRecover diagnostics are identical on every engine', () => {
             ['wasm', transformWasm],
         ] as const) {
             const recovery = engine(tsx).diagnostics.filter(message =>
-                message.includes('szRecover'),
+                message.startsWith('[csszyx] sz-recover:'),
             );
             expect(recovery, name).toHaveLength(1);
-            expect(recovery[0], name).toContain('szRecover at <anonymous>:');
+            expect(recovery[0], name).toContain('[csszyx] sz-recover: <anonymous>:1:');
         }
     });
 });

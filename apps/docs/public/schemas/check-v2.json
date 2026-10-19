@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csszyx.com/schemas/check-v2.json",
+  "title": "csszyx check --json, version 2",
+  "description": "The document `csszyx check --json` writes to stdout: one finding per problem, each at the level the project gives it.",
+  "type": "object",
+  "required": ["$schema", "version", "findings"],
+  "properties": {
+    "$schema": {
+      "description": "This schema's URL.",
+      "const": "https://csszyx.com/schemas/check-v2.json"
+    },
+    "version": {
+      "description": "Bumped when a consumer would have to change to keep reading the document.",
+      "const": 2
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["rule", "kind", "message", "level"],
+      "properties": {
+        "rule": {
+          "description": "The pass that produced the finding, as `--rule` and `rules` name it.",
+          "enum": [
+            "sz-diagnostic",
+            "dead-class",
+            "broken-opacity",
+            "sibling-keyword",
+            "theme-collision",
+            "merge-covered-key",
+            "merge-covered-class"
+          ]
+        },
+        "kind": {
+          "description": "What was found. For `sz-diagnostic` it is the diagnostic id, such as `unknown-key`; for every other pass it repeats the rule, or names a run-level problem of the pass.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "file": {
+          "description": "Project-relative file, with `/` separators.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "description": "1-based column, in UTF-16 code units.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "message": {
+          "description": "The main sentence, with no header, label or line break.",
+          "type": "string"
+        },
+        "help": {
+          "description": "What to do: the clause a terminal prints after `help:`. Absent when the finding has none.",
+          "type": "string"
+        },
+        "note": {
+          "description": "What happened to the output: the clause a terminal prints after `note:`. Absent when the finding has none.",
+          "type": "string"
+        },
+        "suggestion": {
+          "description": "For `unknown-key`, the known key it most likely misspells; the same value as `args.suggestion`.",
+          "type": "string"
+        },
+        "args": {
+          "description": "For an `sz-diagnostic` finding, the values its sentence names, by name. The page at `url` lists them.",
+          "type": "object"
+        },
+        "url": {
+          "description": "The page that explains the kind.",
+          "type": "string",
+          "pattern": "^https://csszyx\\.com/e/[a-z0-9-]+$"
+        },
+        "level": {
+          "description": "How loudly the project reports it. The run fails on `error`, or on what `--fail-on` names.",
+          "enum": ["info", "warn", "error"]
+        }
+      }
+    }
+  }
+}

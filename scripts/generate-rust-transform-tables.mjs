@@ -59,6 +59,12 @@ function readTables() {
         const core = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
         );
+        const keyTables = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/sz-key-tables.ts'),
+        );
+        const closedEnums = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/closed-enum-tables.ts'),
+        );
         const families = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/keyword-families.ts'),
         );
@@ -73,12 +79,12 @@ function readTables() {
         );
 
         return {
-            propertyMap: core.stringObject('PROPERTY_MAP'),
+            propertyMap: keyTables.stringObject('PROPERTY_MAP'),
             variantMap: core.stringObject('VARIANT_MAP'),
             booleanToClass: core.stringObject('BOOLEAN_TO_CLASS'),
-            booleanShorthands: core.stringSet('BOOLEAN_SHORTHANDS'),
+            booleanShorthands: keyTables.stringSet('BOOLEAN_SHORTHANDS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
-            knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
+            knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
             fractionSupportedProps: core.stringSet('FRACTION_SUPPORTED_PROPS'),
@@ -90,15 +96,17 @@ function readTables() {
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
             removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
             replacedKeys: core.stringSet('REPLACED_KEYS'),
-            knownVariants: core.stringSet('KNOWN_VARIANTS'),
+            knownVariants: keyTables.stringSet('KNOWN_VARIANTS'),
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
-            suggestionMap: core.stringObject('SUGGESTION_MAP'),
+            suggestionMap: keyTables.stringObject('SUGGESTION_MAP'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
-            migrationNotes: core.stringObject('MIGRATION_NOTES'),
-            closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
-            closedEnumAffixes: core.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
-            closedEnumValueMoves: core.objectOfStringObjects('CLOSED_ENUM_VALUE_MOVES'),
+            alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
+            alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
+            migrationNotes: keyTables.stringObject('MIGRATION_NOTES'),
+            closedEnumClasses: closedEnums.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
+            closedEnumAffixes: closedEnums.objectOfStringObjects('CLOSED_ENUM_AFFIXES'),
+            closedEnumValueMoves: closedEnums.objectOfStringObjects('CLOSED_ENUM_VALUE_MOVES'),
             globalKeywordGroups: families.objectOfStringObjects('GLOBAL_KEYWORD_GROUPS'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
@@ -164,6 +172,8 @@ function renderRust({
     specialVariants,
     suggestionMap,
     cssVarTypeHints,
+    alignmentKeys,
+    alignmentCssValueHints,
     migrationNotes,
     closedEnumClasses,
     closedEnumAffixes,
@@ -207,6 +217,25 @@ ${renderMatchArms(suggestionMap)}
 pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
     match key {
 ${renderMatchArms(cssVarTypeHints)}
+        _ => None,
+    }
+}
+
+/// Returns true when a key takes csszyx's short alignment values
+/// (\`start\`, \`between\`), not the CSS longhand. Mirrors \`ALIGNMENT_KEYS\`.
+pub(crate) fn is_alignment_key(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(alignmentKeys)}
+    )
+}
+
+/// The short form of a CSS longhand alignment value, whose class on an
+/// alignment key Tailwind has no utility for. Mirrors
+/// \`ALIGNMENT_CSS_VALUE_HINT\`.
+pub(crate) fn alignment_css_value_hint(value: &str) -> Option<&'static str> {
+    match value {
+${renderMatchArms(alignmentCssValueHints)}
         _ => None,
     }
 }

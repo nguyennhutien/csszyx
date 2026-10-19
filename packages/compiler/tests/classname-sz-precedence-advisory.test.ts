@@ -35,7 +35,7 @@ const PREAMBLE = "import { szcn } from 'csszyx';\n";
  *
  * @param engine - Engine entry under test.
  * @param element - The JSX element source.
- * @returns Diagnostics mentioning the precedence advisory.
+ * @returns The precedence advisories, whole.
  */
 function advisories(
     engine: (source: string, filename?: string) => { diagnostics?: string[] },
@@ -44,7 +44,7 @@ function advisories(
     const source = `${PREAMBLE}export const W = ({ className }) => ${element};`;
     return (engine(source, '/p/W.tsx').diagnostics ?? [])
         .map(String)
-        .filter(message => message.includes('takes precedence over'));
+        .filter(message => message.startsWith('[csszyx] class-precedence:'));
 }
 
 describe.each(ENGINES)('className and sz on one element (%s)', (_name, engine) => {
@@ -52,7 +52,9 @@ describe.each(ENGINES)('className and sz on one element (%s)', (_name, engine) =
         const messages = advisories(engine, '<div className={className} sz={{ my: 2 }} />');
 
         expect(messages).toHaveLength(1);
-        expect(messages[0]).toContain('/p/W.tsx:2');
+        // Reported where the forwarded `className` value is written.
+        expect(messages[0]).toContain('[csszyx] class-precedence: /p/W.tsx:2:53\n');
+        expect(messages[0]).toContain('`sz` wins over the runtime `className`');
         // Both intents, because the compiler cannot know which one is meant.
         expect(messages[0]).toContain('sz={[{ … }, className]}');
         expect(messages[0]).toContain('sz={[className, { … }]}');
@@ -76,7 +78,13 @@ describe.each(ENGINES)('className and sz on one element (%s)', (_name, engine) =
         // ordering rule the compiler does not honour.
         const first = advisories(engine, '<div className={className} sz={{ my: 2 }} />');
         const second = advisories(engine, '<div sz={{ my: 2 }} className={className} />');
-        expect(second).toEqual(first);
+        // The header names the `className` value, which moves with the order
+        // the attributes are written in; the line, the sentence and the advice
+        // are the same.
+        const body = (messages: string[]) => messages.map(message => message.split('\n').slice(1));
+        expect(second).toHaveLength(1);
+        expect(body(second)).toEqual(body(first));
+        expect(second[0]).toContain('[csszyx] class-precedence: /p/W.tsx:2:68\n');
     });
 
     it('stays silent once the precedence is stated — consumer wins', () => {

@@ -12,15 +12,20 @@ const compilerMock = vi.hoisted(() => ({
 
 vi.mock('@csszyx/compiler/engine', async importOriginal => {
     const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
+    return { ...actual, ensureRustTransformAvailable: vi.fn() };
+});
+
+// The build lanes call the unrendered transforms.
+vi.mock('@csszyx/compiler/internal', async importOriginal => {
+    const actual = await importOriginal<typeof import('@csszyx/compiler/internal')>();
     return {
         ...actual,
-        ensureRustTransformAvailable: vi.fn(),
-        transformRustBatch: compilerMock.transformRustBatch,
+        transformRustBatchUnrendered: compilerMock.transformRustBatch,
         // Delegates unless a case installs its own behaviour, so the files
         // that compile go through the real engine.
-        transformRust: (source: string, filename: string, options: unknown) =>
+        transformRustUnrendered: (source: string, filename: string, options: unknown) =>
             compilerMock.transformRust.getMockImplementation() === undefined
-                ? (actual.transformRust as (s: string, f: string, o: unknown) => unknown)(
+                ? (actual.transformRustUnrendered as (s: string, f: string, o: unknown) => unknown)(
                       source,
                       filename,
                       options,

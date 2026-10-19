@@ -67,8 +67,16 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
 
         // As plain data: the position is an accessor, which `toEqual` does not read.
         expect(JSON.parse(JSON.stringify(result.issues))).toEqual([
-            { code: 'unknown-key', ...positionOf(source, source.indexOf('xyzzy')) },
-            { code: 'closed-enum-value', ...positionOf(source, source.indexOf('display')) },
+            {
+                code: 'unknown-key',
+                args: { key: 'xyzzy' },
+                ...positionOf(source, source.indexOf('xyzzy')),
+            },
+            {
+                code: 'closed-enum-value',
+                args: { form: 'dead', key: 'display', value: 'bogus' },
+                ...positionOf(source, source.indexOf('display')),
+            },
         ]);
     });
 
@@ -79,7 +87,7 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
         );
 
         expect(JSON.parse(JSON.stringify(result.issues))).toEqual([
-            { code: 'nesting-depth', line: 1, column: 1 },
+            { code: 'nesting-depth', args: { depth: 70 }, line: 1, column: 1 },
         ]);
     });
 

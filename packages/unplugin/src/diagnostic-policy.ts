@@ -49,11 +49,17 @@
  * @module diagnostic-policy
  */
 import {
+    type IdentifiedDiagnostic,
+    isSzDiagnosticId,
     nearestName,
+    renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_DEFAULT_LEVELS,
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzRemovedDiagnosticId,
 } from '@csszyx/compiler';
 import type {
     CsszyxFileConfig,
@@ -96,7 +102,36 @@ export const SZ_DIAGNOSTIC_RULE_IDS: readonly SzDiagnosticRuleId[] = [
     ...(Object.keys(SZ_REMOVED_DIAGNOSTIC_IDS) as SzDiagnosticRuleId[]),
 ];
 
-const KNOWN_IDS: ReadonlySet<string> = new Set(SZ_DIAGNOSTIC_RULE_IDS);
+const SETTABLE_IDS: ReadonlySet<string> = new Set(SZ_SETTABLE_DIAGNOSTIC_IDS);
+
+const REMOVED_IDS: ReadonlySet<string> = new Set(Object.keys(SZ_REMOVED_DIAGNOSTIC_IDS));
+
+/**
+ * Whether an id is one a release shipped and csszyx no longer reports.
+ *
+ * @param id - Any id, as a user wrote it.
+ * @returns True for a tombstoned rule or kind id.
+ */
+export function isRemovedRuleId(id: string): id is SzRemovedDiagnosticId {
+    return REMOVED_IDS.has(id);
+}
+
+/**
+ * The diagnostic for a removed id: it sets nothing, and the id that replaced
+ * it, if any, is the one to name.
+ *
+ * @param id - A removed id.
+ * @param replacedBy - The live id that reports what it did, if one does.
+ * @returns The `removed-rule-id` diagnostic.
+ */
+export function removedRuleIdDiagnostic(
+    id: string,
+    replacedBy: string | undefined,
+): IdentifiedDiagnostic {
+    const args =
+        replacedBy === undefined ? { form: 'removed', id } : { form: 'replaced', id, replacedBy };
+    return { code: 'removed-rule-id', args };
+}
 
 /**
  * Where `recommended` and `atomic` differ from `error`, from the registry.
@@ -307,10 +342,31 @@ function isStringList(value: unknown): value is string[] {
 function didYouMean(id: string): string {
     const near = nearestName(
         id,
-        SZ_DIAGNOSTIC_RULE_IDS.map(known => [known, known] as const),
+        SZ_SETTABLE_DIAGNOSTIC_IDS.map(known => [known, known] as const),
         Math.max(1, Math.floor(id.length / 4)),
     );
     return near === null ? '' : ` — did you mean \`${near}\`?`;
+}
+
+/**
+ * Why an id `rules` cannot use sets nothing.
+ *
+ * A live id that only the runtime prints or a call throws is a real id, so
+ * it is named as one whose level cannot be set rather than as a typo:
+ * `rules` reaches the engine's diagnostics and the passes of `csszyx check`
+ * only. Anything else is taken for a misspelling.
+ *
+ * @param id - The id as written.
+ * @returns The problem's message.
+ */
+function unknownIdMessage(id: string): string {
+    if (isSzDiagnosticId(id)) {
+        return renderSzDiagnosticBody(
+            { code: 'config-id-not-settable', args: { id } },
+            SZ_DIAGNOSTIC_COMPUTED_VALUES,
+        );
+    }
+    return `\`${id}\` is not a rule id${didYouMean(id) || '.'}`;
 }
 
 /**
@@ -333,12 +389,18 @@ function readRules(
         return rules;
     }
     for (const [id, level] of Object.entries(value)) {
-        if (!KNOWN_IDS.has(id)) {
+        if (isRemovedRuleId(id)) {
+            // Shipped once, so a config naming it keeps loading; it sets nothing.
             problems.push({
-                severity: 'error',
+                severity: 'warning',
                 path: at,
-                message: `\`${id}\` is not a rule id${didYouMean(id) || '.'}`,
+                message: renderSzDiagnosticBody(
+                    removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]),
+                    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+                ),
             });
+        } else if (!SETTABLE_IDS.has(id)) {
+            problems.push({ severity: 'error', path: at, message: unknownIdMessage(id) });
         } else if (!SZ_DIAGNOSTIC_LEVELS.includes(level as SzDiagnosticLevel)) {
             problems.push({
                 severity: 'error',
@@ -618,28 +680,37 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
 }
 
 /**
- * Render a config file's problems as one warning.
+ * Render a config file's problems as one `config-invalid` message: the
+ * registry's sentence, each problem on its own line, then the help.
  *
  * @param file - The config file, as the user would name it.
  * @param problems - Its problems; at least one.
- * @returns The text, `[csszyx]`-prefixed.
+ * @returns The message, `[csszyx] config-invalid:`-headed.
  */
 export function diagnosticConfigProblemsMessage(
     file: string,
     problems: readonly DiagnosticConfigProblem[],
 ): string {
-    // A problem with the file itself is already named by the header.
-    const lines = problems.map(problem =>
-        problem.path === file
-            ? `  - (${problem.severity}) ${problem.message}`
-            : `  - (${problem.severity}) ${problem.path}: ${problem.message}`,
+    // A problem with the file itself is already named by the header; a
+    // problem's own `help:` line sits under its bullet.
+    const lines = problems.map(problem => {
+        const message = problem.message.replaceAll('\n', '\n  ');
+        return problem.path === file
+            ? `- (${problem.severity}) ${message}`
+            : `- (${problem.severity}) ${problem.path}: ${message}`;
+    });
+    const form = problems.some(problem => problem.fileIgnored === true)
+        ? 'not-applied'
+        : 'partly-applied';
+    const { text, help, docs } = renderSzDiagnosticParts(
+        { code: 'config-invalid', args: { form, count: problems.length } },
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
     );
-    const outcome = problems.some(problem => problem.fileIgnored === true)
-        ? 'The file is not applied, so every finding keeps its default level.'
-        : 'Each one is ignored; the rest of the file applies.';
-    return (
-        `[csszyx] ${file} has ${problems.length} problem(s):\n${lines.join('\n')}\n${outcome}\n` +
-        '  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; ' +
-        'a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.'
-    );
+    return [
+        `[csszyx] config-invalid: ${file}`,
+        text,
+        ...lines,
+        `help: ${help}`,
+        `docs: ${docs}`,
+    ].join('\n  ');
 }

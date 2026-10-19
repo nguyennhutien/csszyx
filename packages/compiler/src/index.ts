@@ -18,6 +18,7 @@ export {
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzDiagnosticArgsByCode,
     type SzDiagnosticCode,
     type SzDiagnosticGroupId,
     type SzDiagnosticId,
@@ -25,10 +26,30 @@ export {
     type SzSettableDiagnosticId,
 } from './diagnostic-codes.generated.js';
 export {
+    type IdentifiedDiagnostic,
+    isSzDiagnosticId,
+    type RenderableDiagnostic,
+    renderSzDiagnostic,
+    renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticComputed,
+    type SzDiagnosticParts,
+    szDiagnosticPositionOf,
+} from './diagnostic-render.js';
+export { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+export {
+    diagnosticPath,
+    renderEngineDiagnostics,
+    renderUnplacedDiagnostic,
+    szDiagnosticKey,
+} from './engine-diagnostics.js';
+export {
     restoreEngineSpans,
     type SourcePosition,
     type StoredEngineSpans,
     type SzDiagnosticIssue,
+    type SzIssue,
     type SzMergeGroup,
     type SzMergeOverride,
     storeEngineSpans,
@@ -77,18 +98,12 @@ export {
 } from './recovery.js';
 export { sortStrings } from './sort.js';
 export {
-    isAdvisorySzDiagnostic,
-    SZ_DIAGNOSTIC_KIND_IDS,
-    type SzDiagnosticKindId,
-    szDiagnosticKindOf,
-} from './sz-diagnostic-kind.js';
-export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
 } from './sz-fallback-matrix.js';
 // Export the diagnostic classifiers so the bundler and the CLI route
 // diagnostics through the package that renders their wording.
-export { nearestName, suggestSzKey, szKeySuggestionFor } from './sz-key-suggestion.js';
+export { nearestName, suggestSzKey } from './sz-key-suggestion.js';
 // Export transform-core constants needed by MCP and CLI
 export {
     BOOLEAN_SHORTHANDS,

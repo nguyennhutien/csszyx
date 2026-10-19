@@ -9,7 +9,17 @@
  */
 
 export type { SourceMap } from 'magic-string';
+export {
+    fillSzDiagnosticTemplate,
+    type SzDiagnosticTemplate,
+} from './diagnostic-template.js';
+export { SZ_EDITOR_DIAGNOSTIC_TEMPLATES } from './editor-diagnostic-templates.generated.js';
 export { type EmittedClassName, findEmittedClassName } from './emitted-class-name.js';
+export {
+    diagnosticFileOf,
+    renderEngineDiagnostic,
+    type UnrenderedTransformResult,
+} from './engine-diagnostics.js';
 export {
     isParserMode,
     type ParserMode,
@@ -33,3 +43,6 @@ export {
     type TemplateSzValue,
     transformTemplateFile,
 } from './template-sz.js';
+export { transformRustBatchUnrendered, transformRustUnrendered } from './transform-rust.js';
+export { transformSourceUnrendered } from './transform-select.js';
+export { transformWasmUnrendered } from './transform-wasm.js';

@@ -10,12 +10,10 @@ use crate::encoder::encode;
 
 use super::{
     css_var_hoist_planner::{
-        plan_component_variable_hoists_with_diagnostics, CssVariableHoistDiagnostic,
-        CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistSkipReason,
-        CssVariableHoistUsage,
+        plan_component_variable_hoists_with_diagnostics, CssVariableHoistNode,
+        CssVariableHoistOptions, CssVariableHoistSkipReason, CssVariableHoistUsage,
     },
     diagnostics::Diagnostics,
-    generated::diagnostic_codes::DiagnosticCode,
     lower::dynamic_css_var_class,
     CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
 };
@@ -329,9 +327,13 @@ pub fn apply_css_variable_mangling(
                 let (_, attr_index, prop_index) = locations[diagnostic.first_usage_id];
                 let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
                 (
-                    DiagnosticCode::MangleVarsHoistSkipped,
+                    super::generated::diagnostic_codes::issue::mangle_vars_hoist_skipped(
+                        &diagnostic.name,
+                        diagnostic.usage_count as u64,
+                        hoist_skip_reason(diagnostic.reason),
+                        diagnostic.max_depth.map(|depth| depth as u64),
+                    ),
                     prop.expression_span.start,
-                    format_hoist_skip_diagnostic(diagnostic),
                 )
             })
             .collect(),
@@ -413,20 +415,13 @@ fn extract_quoted_custom_property_keys(expression: &str) -> Vec<String> {
     names
 }
 
-fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
-    let reason = match diagnostic.reason {
+/// The `reason` arg of a hoist skip, as the diagnostic names it.
+const fn hoist_skip_reason(reason: CssVariableHoistSkipReason) -> &'static str {
+    match reason {
         CssVariableHoistSkipReason::NoLca => "no-lca",
         CssVariableHoistSkipReason::NonHostAncestor => "non-host-ancestor",
         CssVariableHoistSkipReason::MaxDepth => "max-depth",
-    };
-    let suffix = diagnostic
-        .max_depth
-        .map(|max_depth| format!(" (maxDepth {max_depth})"))
-        .unwrap_or_default();
-    format!(
-        "[csszyx] mangleVars skipped component CSS variable hoist for {} across {} usages: {}{}",
-        diagnostic.name, diagnostic.usage_count, reason, suffix
-    )
+    }
 }
 
 fn push_variable_map(map: &mut Vec<CssVariableMapEntry>, original: &str, mangled: &str) {
@@ -717,17 +712,17 @@ mod tests {
             (
                 "const A=({pad})=><><div sz={{p:pad}}/><span sz={{p:pad}}/></>;",
                 None,
-                "non-host-ancestor",
+                r#"{"name":"--cz","usageCount":2,"reason":"non-host-ancestor"}"#,
             ),
             (
                 "const A=({pad})=><div sz={{p:pad}}/>; const B=({pad})=><span sz={{p:pad}}/>;",
                 None,
-                "no-lca",
+                r#"{"name":"--cz","usageCount":2,"reason":"no-lca"}"#,
             ),
             (
                 "const A=({pad})=><section><div><span sz={{p:pad}}/><b sz={{p:pad}}/></div></section>;",
                 Some(0),
-                "max-depth (maxDepth 0)",
+                r#"{"name":"--cz","usageCount":2,"reason":"max-depth","maxDepth":0}"#,
             ),
         ];
 
@@ -739,8 +734,13 @@ mod tests {
             .ir;
             let result = apply_css_variable_mangling(&ir, source, max_depth);
 
-            assert_eq!(result.diagnostics.texts().len(), 1, "{marker}");
-            assert!(result.diagnostics.texts()[0].contains(marker), "{marker}");
+            let issues = result.diagnostics.issues();
+            assert_eq!(issues.len(), 1, "{marker}");
+            assert_eq!(
+                issues[0].code,
+                crate::transform::DiagnosticCode::MangleVarsHoistSkipped
+            );
+            assert_eq!(issues[0].args.to_json(), marker);
             assert!(result
                 .ir
                 .sz_attributes

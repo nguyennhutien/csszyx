@@ -4,7 +4,8 @@
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ p: 4, bg: \"red-500\", display: \"flex\" }} />;",
@@ -13,7 +14,8 @@
       "flex",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ m: -2, gap: \"1/2\" }} />;",
@@ -21,21 +23,24 @@
       "-m-2",
       "gap-[1/2]"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ w: \"280px minmax(0,1fr)\" }} />;",
     "classes": [
       "w-[280px_minmax(0,1fr)]"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ display: \"flex\" }} />;",
     "classes": [
       "flex"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ md: { display: \"flex\" }, p: 6 }} />;",
@@ -43,42 +48,48 @@
       "md:flex",
       "p-6"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ hover: { bg: \"blue-600\" } }} />;",
     "classes": [
       "hover:bg-blue-600"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ group: { hover: { color: \"white\" } } }} />;",
     "classes": [
       "group-hover:text-white"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ supports: { \"display:grid\": { display: \"grid\" } } }} />;",
     "classes": [
       "supports-[display:grid]:grid"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ bg: { color: \"blue-500\", op: 20 } }} />;",
     "classes": [
       "bg-blue-500/20"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ p: pad }} />;",
     "classes": [
       "p-(--_sz-p)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ p: 4, m: gap }} />;",
@@ -86,7 +97,8 @@
       "m-(--_sz-m)",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={cond ? { p: 4 } : { m: 2 }} />;",
@@ -94,7 +106,8 @@
       "m-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ on }) => <div sz={(on ? { p: 2 } : { p: 4 }) as const} />;",
@@ -102,7 +115,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ on }) => <div sz={(on ? { p: 2 } : { p: 4 }) satisfies object} />;",
@@ -110,7 +124,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ on }) => <div sz={(on ? { p: 2 } : { p: 4 })!} />;",
@@ -118,7 +133,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const STYLE = (on ? { p: 2 } : { p: 4 }) as const; const A = () => <div sz={STYLE} />;",
@@ -126,7 +142,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const STYLE = ((on ? { p: 2 } : { p: 4 }) as const)!; const A = () => <div sz={STYLE} />;",
@@ -134,7 +151,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div className=\"flex gap-2\" sz={{ p: 4 }} />;",
@@ -144,17 +162,20 @@
     "rawClassNames": [
       "flex",
       "gap-2"
-    ]
+    ],
+    "issues": []
   },
   {
     "source": "const A = () => <div className=\"sport-neon p-4\" />;",
     "classes": [],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div className={`a ${x}`} />;",
     "classes": [],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => (<section><span sz={{ m: 2 }} /><p sz={{ p: 1, text: \"sm\" }} /></section>);",
@@ -163,28 +184,32 @@
       "p-1",
       "text-sm"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <Card sz={{ p: 4 }} />;",
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ p: 4 }}>{/* sz={{ m: 9 }} in a comment */}</div>;",
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div title=\"sz={{ z: 9 }}\" sz={{ p: 4 }} />;",
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ \"before:content\": \"''\", before: { p: 1 } }} />;",
@@ -192,7 +217,16 @@
       "before:content-''",
       "before:p-1"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": [
+      {
+        "code": "unknown-key",
+        "start": 27,
+        "args": {
+          "key": "before:content"
+        }
+      }
+    ]
   },
   {
     "source": "const A = () => <div sz={{ rounded: \"lg\", border: 2, shadow: \"md\" }} />;",
@@ -201,14 +235,16 @@
       "rounded-lg",
       "shadow-md"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ forcedColors: { borderColor: \"gray\" } }} />;",
     "classes": [
       "forced-colors:border-gray"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;",
@@ -216,7 +252,8 @@
       "inert:opacity-50",
       "starting:opacity-0"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ width, flex }) => <div sz={{ w: width, flex: typeof flex === \"number\" ? flex : undefined }} />;",
@@ -224,7 +261,8 @@
       "flex-(--_sz-flex)",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ width, flex, cond }) => <div sz={{ w: width, h: \"max\", flex: cond ? flex : undefined }} />;",
@@ -233,14 +271,16 @@
       "h-max",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ flex, cond }) => <div sz={{ flex: cond ? flex : undefined }} />;",
     "classes": [
       "flex-(--_sz-flex)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ width, flex }) => <div sz={{ w: width, flex }} />;",
@@ -248,28 +288,32 @@
       "flex-(--_sz-flex)",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};",
     "classes": [
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "/** example: <svg sz={{ fill: \"red-500\" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;",
     "classes": [
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;",
     "classes": [
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ isImage }) => <div sz={{ whitespace: isImage ? \"nowrap\" : (\"wrap\" as any) }} />;",
@@ -277,7 +321,8 @@
       "whitespace-nowrap",
       "whitespace-wrap"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;",
@@ -286,7 +331,8 @@
       "p-4",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;",
@@ -294,7 +340,8 @@
       "hover:w-(--_sz-hover-w)",
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;",
@@ -303,14 +350,16 @@
       "p-2",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ f, on }) => <div sz={{ md: { flex: on ? f : undefined } }} />;",
     "classes": [
       "md:flex-(--_sz-md-flex)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, f, on }) => <div className=\"x\" sz={{ w: w, flex: on ? f : undefined }} />;",
@@ -320,7 +369,8 @@
     ],
     "rawClassNames": [
       "x"
-    ]
+    ],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;",
@@ -330,7 +380,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b, c }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3, h: c ? \"max\" : \"full\" }} />;",
@@ -342,7 +393,8 @@
       "p-2",
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b }) => <div className=\"x\" sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;",
@@ -354,7 +406,8 @@
     ],
     "rawClassNames": [
       "x"
-    ]
+    ],
+    "issues": []
   },
   {
     "source": "const A = ({ w, a, b }) => <div sz={{ w: w, h: \"max\", p: a ? 2 : undefined, m: b ? 4 : undefined }} />;",
@@ -364,7 +417,8 @@
       "p-2",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b }) => <div sz={{ hover: { p: a ? 1 : 2 }, m: b ? 4 : undefined }} />;",
@@ -373,7 +427,8 @@
       "hover:p-2",
       "m-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b }) => <div sz={{ bg: { color: \"black\", op: a ? 30 : 100 }, p: b ? 2 : undefined }} />;",
@@ -382,7 +437,8 @@
       "bg-black/30",
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ a, b }) => <div sz={{ p: a ? 2 : undefined, m: b ? 4 : undefined }} />;",
@@ -390,7 +446,8 @@
       "m-4",
       "p-2"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ x, y, a, b }) => <div sz={{ p: a ? x : undefined, m: b ? y : undefined }} />;",
@@ -398,7 +455,8 @@
       "m-(--_sz-m)",
       "p-(--_sz-p)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, f, on, big }) => <div sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;",
@@ -408,7 +466,8 @@
       "p-8",
       "w-(--_sz-w)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = ({ w, f, on, big }) => <div className=\"x\" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;",
@@ -420,74 +479,96 @@
     ],
     "rawClassNames": [
       "x"
-    ]
+    ],
+    "issues": []
   },
   {
     "source": "const x = 4; const A = () => <div sz={{ p: x }} />;",
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const c = \"red-500\"; const A = () => <div sz={{ bg: c }} />;",
     "classes": [
       "bg-red-500"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const c = \"red-500\"; const A = () => <div sz={{ hover: { bg: c } }} />;",
     "classes": [
       "hover:bg-red-500"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => { const x = 4; return <div sz={{ p: x }} />; };",
     "classes": [
       "p-4"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const k = \"p\"; const A = () => <div sz={{ [k]: 4 }} />;",
     "classes": [],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": [
+      {
+        "code": "fallback-nudge",
+        "start": 40,
+        "args": {
+          "site": "sz",
+          "shape": "other",
+          "detail": "ObjectExpression",
+          "path": ""
+        }
+      }
+    ]
   },
   {
     "source": "const L = { z: 10 } as const; const A = () => <div sz={{ z: L.z }} />;",
     "classes": [
       "z-10"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const T = { c: { brand: \"blue-500\" } } as const; const A = () => <div sz={{ bg: T.c.brand }} />;",
     "classes": [
       "bg-blue-500"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const L = { z: 10 } as const; const A = ({ k }) => <div sz={{ z: L[k] }} />;",
     "classes": [
       "z-(--_sz-z)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const L = { z: 10 } as const; const A = () => <div sz={{ z: L.missing }} />;",
     "classes": [
       "z-(--_sz-z)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   },
   {
     "source": "const A = () => <div sz={{ z: LATER.z }} />; const LATER = { z: 10 } as const;",
     "classes": [
       "z-(--_sz-z)"
     ],
-    "rawClassNames": []
+    "rawClassNames": [],
+    "issues": []
   }
 ]

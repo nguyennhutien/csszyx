@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { transformRust, transformWasm } from '../src/engine.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from '../src/index.js';
 
+import { engineMessage } from './engine-message.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -152,9 +153,20 @@ describe('CSS variable system config contract', () => {
         );
         expect(result.code).not.toContain('--cz');
         expect(result.classes).toEqual(new Set(['p-(--sz)']));
-        expect(result.diagnostics).toContain(
-            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: non-host-ancestor',
-        );
+        expect(result.diagnostics).toEqual([
+            engineMessage(
+                'mangle-vars-hoist-skipped',
+                'mangle-vars-component-boundary.tsx:1:46',
+                '`mangleVars` did not hoist `--cz`: the common ancestor of its 2 usages cannot take a `style` prop.',
+                'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
+            ),
+        ]);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'mangle-vars-hoist-skipped',
+                { name: '--cz', usageCount: 2, reason: 'non-host-ancestor' },
+            ],
+        ]);
     });
 
     it('merges hoisted vars into an existing ancestor style expression', () => {
@@ -184,15 +196,26 @@ describe('CSS variable system config contract', () => {
 
         expect(defaultDepth.code).not.toContain('<section style={{"--cz"');
         expect(defaultDepth.code).toContain('className="p-(--sz)"');
-        expect(defaultDepth.diagnostics).toContain(
-            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: max-depth (maxDepth 5)',
-        );
+        expect(defaultDepth.diagnostics).toEqual([
+            engineMessage(
+                'mangle-vars-hoist-skipped',
+                'mangle-vars-default-depth.tsx:1:81',
+                '`mangleVars` did not hoist `--cz`: one of its 2 usages sits more than 5 levels below their common ancestor.',
+                'help: raise `production.mangleVarHoistMaxDepth` to hoist it.',
+                'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
+            ),
+        ]);
+        expect(defaultDepth.issues.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'mangle-vars-hoist-skipped',
+                { name: '--cz', usageCount: 2, reason: 'max-depth', maxDepth: 5 },
+            ],
+        ]);
         expect(deeper.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(deeper.code).toContain('<span className="p-(--cz)" />');
         expect(deeper.code).toContain('<button className="p-(--cz)" />');
-        expect(deeper.diagnostics).not.toContain(
-            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: max-depth (maxDepth 5)',
-        );
+        expect(deeper.issues.map(issue => issue.code)).not.toContain('mangle-vars-hoist-skipped');
+        expect(deeper.diagnostics).toEqual([]);
     });
 
     it('does not reuse user-authored CSS custom property names', () => {
@@ -243,9 +266,20 @@ describe('CSS variable system config contract', () => {
             '<span className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).not.toContain('--cz');
-        expect(result.diagnostics).toContain(
-            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: non-host-ancestor',
-        );
+        expect(result.diagnostics).toEqual([
+            engineMessage(
+                'mangle-vars-hoist-skipped',
+                'mangle-vars-fragment-boundary.tsx:1:42',
+                '`mangleVars` did not hoist `--cz`: the common ancestor of its 2 usages cannot take a `style` prop.',
+                'note: each element that uses it keeps its own scoped variable, and every class is still emitted.',
+            ),
+        ]);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'mangle-vars-hoist-skipped',
+                { name: '--cz', usageCount: 2, reason: 'non-host-ancestor' },
+            ],
+        ]);
     });
 
     it('applies mangleVars on the Rust path when native support is available', () => {

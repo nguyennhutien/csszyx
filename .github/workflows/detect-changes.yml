@@ -230,6 +230,8 @@ jobs:
               - 'packages/compiler/src/types/**'
               - 'packages/compiler/src/index.ts'
               - 'packages/compiler/src/transform-core.ts'
+              - 'packages/compiler/src/sz-key-tables.ts'
+              - 'packages/compiler/src/closed-enum-tables.ts'
               - 'scripts/check-szv-type-cost.mjs'
               - 'scripts/check-szv-type-cost.test.mjs'
               - '.github/workflows/ci.yml'

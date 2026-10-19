@@ -68,7 +68,7 @@ describe('advisory fallbacks in a dev server', () => {
         process.env.NODE_ENV = 'production';
         try {
             const warnings = await warningsFromDevServer();
-            expect(warnings.join('\n')).toContain('sz fallback');
+            expect(warnings.join('\n')).toContain('fallback-nudge');
         } finally {
             if (before === undefined) delete process.env.NODE_ENV;
             else process.env.NODE_ENV = before;
@@ -77,13 +77,13 @@ describe('advisory fallbacks in a dev server', () => {
 
     it('lists a fallback in an ordinary dev server', async () => {
         const warnings = await warningsFromDevServer();
-        expect(warnings.join('\n')).toContain('sz fallback');
+        expect(warnings.join('\n')).toContain('fallback-nudge');
     }, 60_000);
 
     // Asking for a calmer log is a decision about this list, and it holds in a
     // dev server exactly as it does in a build.
     it('holds the list back when a quiet mode asked for it', async () => {
         const warnings = await warningsFromDevServer('nudges');
-        expect(warnings.join('\n')).not.toContain('sz fallback');
+        expect(warnings.join('\n')).not.toContain('fallback-nudge');
     }, 60_000);
 });

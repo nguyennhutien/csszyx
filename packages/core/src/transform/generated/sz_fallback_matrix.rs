@@ -5,9 +5,8 @@
 
 /// Shape of an unresolved sz expression, as far as the guidance is concerned.
 ///
-/// Mirrors `SzFallbackKind` in the TypeScript matrix. Each engine classifies
-/// its own node type into one of these, so the wording below stays free of any
-/// one parser's node vocabulary.
+/// Mirrors `SzFallbackKind` in the TypeScript matrix, which words each one;
+/// the engine classifies its own node type into one of these.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SzFallbackKind {
     Call,
@@ -22,42 +21,6 @@ pub(crate) enum SzFallbackKind {
 /// Stand-in name for a callee with no statically readable name.
 pub(crate) const SZ_FALLBACK_UNKNOWN_CALLEE: &str = "?";
 
-/// Why the expression could not be resolved at build time.
-///
-/// # Arguments
-/// * `kind` - Classified shape of the expression.
-/// * `detail` - Callee name, identifier name, or node type. Ignored by kinds
-///   whose reason carries no placeholder.
-/// * `path` - Config position, dot-joined. Only the `SzvFactory` kind reads it.
-pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str, path: &str) -> String {
-    let _ = (detail, path);
-    match kind {
-        SzFallbackKind::Call => format!("function call `{detail}()` result is unknown at build time"),
-        SzFallbackKind::Identifier => format!("identifier `{detail}` could not be resolved to a static value"),
-        SzFallbackKind::Import => format!("imported binding `{detail}` could not be read at build time"),
-        SzFallbackKind::Member => String::from("member expression is not statically resolvable"),
-        SzFallbackKind::Other => format!("expression of type `{detail}` is not statically analyzable"),
-        SzFallbackKind::SzvFactory => format!("szv factory `{detail}()` did not precompile — its config disqualified at `{path}`"),
-        SzFallbackKind::Variant => format!("key `{detail}` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected"),
-    }
-}
-
-/// What the author should do instead.
-///
-/// # Arguments
-/// * `kind` - Classified shape of the expression.
-pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str {
-    match kind {
-        SzFallbackKind::Call => "If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().",
-        SzFallbackKind::Identifier => "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
-        SzFallbackKind::Import => "Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().",
-        SzFallbackKind::Member => "Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
-        SzFallbackKind::Other => "Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
-        SzFallbackKind::SzvFactory => "Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().",
-        SzFallbackKind::Variant => "If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().",
-    }
-}
-
 /// Whether an unread `sz` value of this kind also cost its classes — the
 /// split `szFallbackConsequenceOf` draws for the `sz` site. Such a fallback
 /// reports `fallback-missing-css`; the others `fallback-nudge`.
@@ -66,53 +29,4 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
 /// * `kind` - Classified shape of the expression.
 pub(crate) const fn sz_site_fallback_misses_css(kind: SzFallbackKind) -> bool {
     matches!(kind, SzFallbackKind::Import | SzFallbackKind::Variant)
-}
-
-/// Construct that produced a build-time-unresolvable diagnostic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SzFallbackSite {
-    Szr,
-    Szv,
-}
-
-/// The `szs` slot-map diagnostic, matching the TypeScript lanes byte for byte.
-///
-/// # Arguments
-/// * `filename` - Source file, as the engine names it.
-pub(crate) fn szs_unsupported_diagnostic(filename: &str) -> String {
-    format!("[csszyx] szs at {filename}: a slot value could not be read at build time, so no slot classes were compiled. Attribute left unchanged.
-  Suggestion: Every slot must be an identifier key with a static object literal (or class string) value. For a value only known at runtime, use dynamic() and pass the resulting class string.")
-}
-
-/// Render one complete diagnostic line, matching the TypeScript lanes byte for
-/// byte (site label, reason, consequence and advice all come from the shared
-/// matrix).
-///
-/// # Arguments
-/// * `site` - Which construct hit the failure.
-/// * `position` - `line:column`, 1-based.
-/// * `kind` - Classified shape of the expression.
-/// * `detail` - Callee name, identifier name, or node type.
-/// * `path` - Config position, dot-joined. Only the `SzvFactory` kind reads it.
-pub(crate) fn format_sz_fallback_diagnostic(
-    site: SzFallbackSite,
-    position: &str,
-    kind: SzFallbackKind,
-    detail: &str,
-    path: &str,
-) -> String {
-    let reason = sz_fallback_reason(kind, detail, path);
-    match site {
-        SzFallbackSite::Szr => {
-            let suggestion = sz_fallback_suggestion(kind);
-            format!(
-                "szr fallback at {position}: {reason}.
-  Suggestion: {suggestion}"
-            )
-        }
-        SzFallbackSite::Szv => {
-            format!("szv catalog at {position}: {reason}.
-  Suggestion: Pass the config inline, or as a module-level const object literal. A computed or spread config cannot be read at build time, so none of its variant classes are safelisted and they generate no CSS.")
-        }
-    }
 }

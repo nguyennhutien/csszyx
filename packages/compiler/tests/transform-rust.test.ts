@@ -97,7 +97,12 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
         expect(result.transformed).toBe(false);
         expect(result.classes.size).toBe(0);
         expect(result.rawClassNames.size).toBe(0);
-        expect([...result.diagnostics].some(d => d.includes('AST budget exceeded'))).toBe(true);
+        expect(result.issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['ast-budget', { form: 'transform' }],
+        ]);
+        expect([...result.diagnostics]).toEqual([
+            expect.stringMatching(/^\[csszyx\] ast-budget: \/repo\/src\/Big\.tsx\n/),
+        ]);
     });
 
     it('honours options.astBudget end to end (build.astBudgetLimit reaches the native parser)', () => {
@@ -110,12 +115,15 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
         }
         expect(result.classes.has('mx-0')).toBe(true);
         expect(result.classes.has('my-4')).toBe(true);
-        expect([...result.diagnostics].some(d => d.includes('AST budget exceeded'))).toBe(false);
+        expect(result.issues.some(issue => issue.code === 'ast-budget')).toBe(false);
     });
 
     it('the wasm artifact obeys the same budget knob', () => {
         const tripped = transformWasm(bigSource, '/repo/src/Big.tsx');
-        expect(tripped.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(true);
+        expect(tripped.issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['ast-budget', { form: 'transform' }],
+        ]);
+        expect(tripped.diagnostics[0]).toMatch(/^\[csszyx\] ast-budget: \/repo\/src\/Big\.tsx\n/);
         expect(tripped.classes.size).toBe(0);
         const raised = transformWasm(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
         expect(raised.classes.has('mx-0')).toBe(true);

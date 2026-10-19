@@ -107,7 +107,8 @@ async function main() {
     // copy is stale, so comparing against the TypeScript source compares against
     // what the engine runs.
     const core = readTableSource(`${ROOT}packages/compiler/src/transform-core.ts`);
-    const prefixes = Object.fromEntries(core.stringObject('PROPERTY_MAP'));
+    const keyTables = readTableSource(`${ROOT}packages/compiler/src/sz-key-tables.ts`);
+    const prefixes = Object.fromEntries(keyTables.stringObject('PROPERTY_MAP'));
     const hints = Object.fromEntries(core.stringObject('CSS_VAR_TYPE_HINTS'));
     // A boolean-only key never reaches the css-var lane — its runtime value
     // goes through `__szBoolClass` — so it is hostile in the same sense and

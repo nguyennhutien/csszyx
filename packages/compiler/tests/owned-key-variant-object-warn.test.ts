@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
+import { ENGINES, type EngineParityResult, type ParityEngine } from './engine-parity-harness.js';
 
 /** sz shapes whose outer key csszyx owns, and cannot mean a variant. */
 const REPORTED: ReadonlyArray<readonly [string, string]> = [
@@ -56,31 +56,37 @@ const silent = ENGINES.flatMap(([lane, engine]) =>
     SILENT.map(([what, sz]) => ({ lane, engine, what, sz })),
 );
 
-/** The marker every object-in-variant-position diagnostic carries. */
-const MARKER = 'it holds an object';
+/** The code every object-in-variant-position diagnostic carries. */
+const CODE = 'non-variant-object';
 
 /**
  * Emit one sz object through one engine artifact.
  *
  * @param engine - The artifact under test.
  * @param sz - The sz object source, as written in JSX.
- * @returns The emitted className and the result's diagnostics.
+ * @returns The emitted className, the result's diagnostics and its issues.
  */
-function run(engine: ParityEngine, sz: string): { emitted: string; diagnostics: string[] } {
+function run(
+    engine: ParityEngine,
+    sz: string,
+): { emitted: string; diagnostics: string[]; issues: NonNullable<EngineParityResult['issues']> } {
     const result = engine(`export const A = () => <div sz={${sz}} />;`, 'owned-key.tsx');
     return {
         emitted: /className="([^"]*)"/.exec(result.code ?? '')?.[1] ?? '',
         diagnostics: result.diagnostics ?? [],
+        issues: result.issues ?? [],
     };
 }
 
 describe('csszyx-owned keys holding an object', () => {
     it.each(reported)('$lane names $key', ({ engine, key, sz }) => {
-        const { diagnostics } = run(engine, sz);
-        const hit = diagnostics.find(
-            message => message.includes(`"${key}"`) && message.includes(MARKER),
+        const { diagnostics, issues } = run(engine, sz);
+        const named = issues.filter(
+            issue => issue.code === CODE && (issue.args as { key?: string }).key === key,
         );
-        expect(hit, diagnostics.join('\n')).toBeDefined();
+        expect(named, diagnostics.join('\n')).toHaveLength(1);
+        const index = issues.indexOf(named[0] as (typeof issues)[number]);
+        expect(diagnostics[index]).toContain(`\`${key}\` is not a variant, so its object emits`);
     });
 
     it.each(reported)('$lane still emits the $key prefix', ({ engine, key, sz }) => {
@@ -88,6 +94,6 @@ describe('csszyx-owned keys holding an object', () => {
     });
 
     it.each(silent)('$lane stays silent for $what', ({ engine, sz }) => {
-        expect(run(engine, sz).diagnostics.filter(m => m.includes(MARKER))).toEqual([]);
+        expect(run(engine, sz).issues.filter(issue => issue.code === CODE)).toEqual([]);
     });
 });

@@ -81,20 +81,20 @@ function count(lines: string[], marker: string): number {
 describe('key and value diagnostics through the plugin', () => {
     it('prints each of them exactly once in a production run', async () => {
         const lines = await consoleWarnings();
-        expect(count(lines, 'Unknown property "zzz"')).toBe(1);
-        expect(count(lines, '"display: bogus"')).toBe(1);
-        expect(count(lines, '"--v-x"')).toBe(1);
+        expect(count(lines, '`zzz` is not an sz property.')).toBe(1);
+        expect(count(lines, '`display: bogus` is not a `display` value.')).toBe(1);
+        expect(count(lines, '`--v-x` is not a variant, so its object emits')).toBe(1);
     }, 60_000);
 
     it('still prints them under quiet: nudges', async () => {
         const lines = await consoleWarnings('nudges');
-        expect(count(lines, '"display: bogus"')).toBe(1);
+        expect(count(lines, '`display: bogus` is not a `display` value.')).toBe(1);
     }, 60_000);
 
     it('holds them back only under quiet: all', async () => {
         const lines = await consoleWarnings('all');
-        expect(count(lines, 'Unknown property "zzz"')).toBe(0);
-        expect(count(lines, '"display: bogus"')).toBe(0);
-        expect(count(lines, '"--v-x"')).toBe(0);
+        expect(count(lines, '`zzz` is not an sz property.')).toBe(0);
+        expect(count(lines, '`display: bogus` is not a `display` value.')).toBe(0);
+        expect(count(lines, '`--v-x` is not a variant, so its object emits')).toBe(0);
     }, 60_000);
 });

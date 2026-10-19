@@ -332,7 +332,7 @@ mod tests {
             {"filename":"/b.tsx","source":"export const B = () => <div className=\"x\" />;"}
         ]"#;
         let options = r#"{"mangle_vars":false,"mangle_var_hoist_max_depth":null,
-            "global_var_aliases":[],"root_dir":null,"ast_budget":null,
+            "global_var_aliases":[],"ast_budget":null,
             "cross_module_statics_json":null,"cross_module_sz_objects_json":null}"#;
 
         let json = transform_batch_json(files, options).expect("engine is available");

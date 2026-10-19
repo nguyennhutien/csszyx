@@ -6,7 +6,11 @@
  * side learned a new id. These pin the presets, the precedence and the
  * validation the config file goes through.
  */
-import { SZ_DIAGNOSTIC_CODES } from '@csszyx/compiler';
+import {
+    renderSzDiagnosticBody,
+    SZ_DIAGNOSTIC_CODES,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+} from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -15,6 +19,7 @@ import {
     diagnosticConfigProblemsMessage,
     isAtLeastLevel,
     readCsszyxFileConfig,
+    removedRuleIdDiagnostic,
     SZ_DIAGNOSTIC_PASS_IDS,
     SZ_DIAGNOSTIC_RULE_IDS,
 } from '../src/diagnostic-policy.js';
@@ -29,6 +34,8 @@ describe('the recommended preset', () => {
             ['fallback-nudge', 'info'],
             ['merge-classifier-unavailable', 'warn'],
             ['mangle-vars-hoist-skipped', 'info'],
+            // The class still applies the opacity: a note on the spelling.
+            ['color-slash-opacity', 'info'],
         ]);
         for (const code of SZ_DIAGNOSTIC_CODES) {
             expect([code, policy.levelOf({ rule: 'sz-diagnostic', kind: code })]).toEqual([
@@ -230,6 +237,71 @@ describe('readCsszyxFileConfig', () => {
         expect(read.config.preset).toBe('recommended');
     });
 
+    it('names an id whose level csszyx.config cannot set, with what rules can set', () => {
+        // A runtime line and a thrown error: real ids, which no level reaches.
+        const read = readCsszyxFileConfig({
+            diagnostics: {
+                rules: { 'hydration-aborted': 'off', 'dead-class': 'warn' },
+                overrides: [{ files: 'src/**', rules: { 'internal-error': 'warn' } }],
+            },
+        });
+        const notSettable = (id: string, path: string) => ({
+            severity: 'error',
+            path,
+            message: renderSzDiagnosticBody(
+                { code: 'config-id-not-settable', args: { id } },
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            ),
+        });
+        expect(read.problems).toEqual([
+            notSettable('hydration-aborted', 'diagnostics.rules'),
+            notSettable('internal-error', 'diagnostics.overrides[0].rules'),
+        ]);
+        expect(read.problems[0]?.message).toBe(
+            '`hydration-aborted` is printed to the console or thrown, so `csszyx.config` sets no level for it.\n' +
+                '  help: remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.',
+        );
+        // The entry is dropped; the rest of the config still applies.
+        expect(read.config.rules).toEqual({ 'dead-class': 'warn' });
+        expect(read.config.overrides[0]?.rules).toEqual({});
+    });
+
+    it('warns about a removed id, naming the id that replaced it, and drops the entry', () => {
+        const read = readCsszyxFileConfig({
+            diagnostics: { rules: { other: 'off', 'dead-class': 'warn' } },
+        });
+        expect(read.problems).toEqual([
+            {
+                severity: 'warning',
+                path: 'diagnostics.rules',
+                message:
+                    '`other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                    '  help: name `sz-diagnostic` instead, which reports what `other` did.',
+            },
+        ]);
+        expect(read.config.rules).toEqual({ 'dead-class': 'warn' });
+    });
+
+    it('names no replacement for a removed id nothing replaced', () => {
+        expect(
+            renderSzDiagnosticBody(
+                removedRuleIdDiagnostic('gone', undefined),
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            ),
+        ).toBe(
+            '`gone` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                '  help: remove it.',
+        );
+    });
+
+    it('guesses only an id whose level can be set', () => {
+        // `othr` is one letter from `other`, which is removed: no level reaches
+        // it, so it is never offered.
+        expect(readCsszyxFileConfig({ diagnostics: { rules: { othr: 'off' } } }).problems).toEqual([
+            { severity: 'error', path: 'diagnostics.rules', message: '`othr` is not a rule id.' },
+        ]);
+    });
+
     it('names an id with no near match without a guess', () => {
         expect(
             readCsszyxFileConfig({ diagnostics: { rules: { zzzzzz: 'off' } } }).problems,
@@ -413,12 +485,27 @@ describe('diagnosticConfigProblemsMessage', () => {
             { severity: 'warning', path: 'development', message: 'is not read.' },
         ]);
         expect(message).toBe(
-            '[csszyx] csszyx.config.ts has 2 problem(s):\n' +
+            '[csszyx] config-invalid: csszyx.config.ts\n' +
+                '  This file has 2 problem(s); each one is ignored, and the rest of the file applies.\n' +
                 '  - (error) diagnostics.rules: `x` is not a rule id.\n' +
                 '  - (warning) development: is not read.\n' +
-                'Each one is ignored; the rest of the file applies.\n' +
-                `  help: ${CONFIG_HELP}`,
+                `  help: ${CONFIG_HELP}\n` +
+                '  docs: https://csszyx.com/e/config-invalid',
         );
+    });
+
+    it("sets a problem's own help line under its bullet", () => {
+        const message = diagnosticConfigProblemsMessage('csszyx.config.ts', [
+            {
+                severity: 'error',
+                path: 'diagnostics.rules',
+                message: '`x` sets nothing.\n  help: remove it.',
+            },
+        ]);
+        expect(message.split('\n').slice(2, 4)).toEqual([
+            '  - (error) diagnostics.rules: `x` sets nothing.',
+            '    help: remove it.',
+        ]);
     });
 
     it('says the whole file was not applied when it did not load, naming the file once', () => {
@@ -431,10 +518,11 @@ describe('diagnosticConfigProblemsMessage', () => {
             },
         ]);
         expect(message).toBe(
-            '[csszyx] csszyx.config.mjs has 1 problem(s):\n' +
+            '[csszyx] config-invalid: csszyx.config.mjs\n' +
+                '  This file has 1 problem(s), and it is not applied, so every finding keeps its default level.\n' +
                 '  - (error) could not be loaded: Unexpected token\n' +
-                'The file is not applied, so every finding keeps its default level.\n' +
-                `  help: ${CONFIG_HELP}`,
+                `  help: ${CONFIG_HELP}\n` +
+                '  docs: https://csszyx.com/e/config-invalid',
         );
     });
 });

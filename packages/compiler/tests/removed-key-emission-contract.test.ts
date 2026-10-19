@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
-import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { captureWarnings, ENGINES, type EngineParityResult } from './engine-parity-harness.js';
+
+/**
+ * The code and key of each issue an engine reported.
+ *
+ * @param issues - A result's issues.
+ * @returns One `[code, key]` pair per issue.
+ */
+function keysOf(issues: EngineParityResult['issues']) {
+    return (issues ?? []).map(issue => [issue.code, (issue.args as { key?: string }).key]);
+}
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -53,9 +63,15 @@ describe('removed sz key emission contract', () => {
             const run = captureWarnings(engine, source);
 
             expect(run.className).toBe('custom-thing-active');
-            expect(run.warnings.join('\n')).toContain('canonical key "p"');
-            expect(run.warnings.join('\n')).toContain('"maskFrom" was removed');
-            expect(run.warnings.join('\n')).toContain('Unknown property "customThing"');
+            expect(keysOf(run.result.issues)).toEqual([
+                ['canonical-key', 'padding'],
+                ['canonical-key', 'fontSize'],
+                ['removed-key', 'maskFrom'],
+                ['unknown-key', 'customThing'],
+            ]);
+            expect(run.warnings.join('\n')).toContain('`padding` is an alias of `p`');
+            expect(run.warnings.join('\n')).toContain('`maskFrom` was removed');
+            expect(run.warnings.join('\n')).toContain('`customThing` is not an sz property');
         },
     );
 
@@ -71,8 +87,12 @@ describe('removed sz key emission contract', () => {
         expect(run.className).toBe('bg-red-500');
         expect(code).not.toContain('--_sz-hover-padding');
         expect(code).not.toContain('--_sz-font-size');
-        expect(run.warnings.join('\n')).toContain('canonical key "p"');
-        expect(run.warnings.join('\n')).toContain('canonical key "text"');
+        expect(keysOf(run.result.issues)).toEqual([
+            ['canonical-key', 'padding'],
+            ['canonical-key', 'fontSize'],
+        ]);
+        expect(run.warnings.join('\n')).toContain('`padding` is an alias of `p`');
+        expect(run.warnings.join('\n')).toContain('`fontSize` is an alias of `text`');
     });
 
     it.each(ENGINES)('%s keeps inactive removed keys silent', (_name, engine) => {
@@ -82,7 +102,8 @@ describe('removed sz key emission contract', () => {
         );
 
         expect(run.className ?? '').toBe('');
-        expect(run.warnings.join('\n')).not.toContain('canonical key');
+        expect(keysOf(run.result.issues)).toEqual([]);
+        expect(run.warnings.join('\n')).not.toContain('is an alias of');
     });
 
     // Removed boolean sugar under a ternary or with a runtime value used to
@@ -99,10 +120,18 @@ describe('removed sz key emission contract', () => {
 
         expect(code).not.toContain('--_sz-isolate');
         expect(code).not.toContain('isolate-(');
-        expect(warnings).toContain('"absolute" boolean sugar was removed');
-        expect(warnings).toContain("Use { position: 'absolute' }");
-        expect(warnings).toContain('"isolate" boolean sugar was removed');
-        expect(warnings).toContain('"flex" boolean sugar was removed');
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'removed-key',
+                { form: 'sugar', key: 'absolute', replacement: "position: 'absolute'" },
+            ],
+            ['removed-key', { form: 'sugar', key: 'isolate', replacement: "isolation: 'isolate'" }],
+            ['removed-key', { form: 'sugar', key: 'flex', replacement: "display: 'flex'" }],
+        ]);
+        expect(warnings).toContain('The boolean shorthand `absolute` was removed');
+        expect(warnings).toContain("help: write `{ position: 'absolute' }` instead");
+        expect(warnings).toContain('The boolean shorthand `isolate` was removed');
+        expect(warnings).toContain('The boolean shorthand `flex` was removed');
         expect(code).toContain('p-4');
     });
 
@@ -113,6 +142,7 @@ describe('removed sz key emission contract', () => {
         );
 
         expect(run.result.code ?? '').toContain('flex-(--_sz-flex)');
+        expect(run.result.issues ?? []).toEqual([]);
         expect(run.warnings.join('\n')).not.toContain('boolean sugar was removed');
     });
 

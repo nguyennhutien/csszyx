@@ -18,7 +18,7 @@
  * No eval is used: the engine reads the literal as source, never executes it.
  */
 
-import type { SourceTransformResult } from '@csszyx/compiler';
+import { renderUnplacedDiagnostic, type SourceTransformResult } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
 import { findEmittedClassName } from '@csszyx/compiler/internal';
 
@@ -45,18 +45,6 @@ const FILENAME = 'sz.tsx';
 const PREFIX = 'export const A = () => <div sz={';
 const SUFFIX = '} />;\n';
 
-/** A position inside the synthesized module {@link FILENAME}, meaningless to the user. */
-const SYNTHESIZED_LOCATION = / at (?:sz\.tsx:|\d+:)\d+/g;
-
-/**
- * Drop the synthesized module's location from an engine message.
- * @param message - One engine diagnostic.
- * @returns The message without positions into the synthesized module.
- */
-function withoutLocation(message: string): string {
-    return message.replace(SYNTHESIZED_LOCATION, '');
-}
-
 /**
  * Read the className attribute the engine wrote on the synthesized element.
  * @param code - The engine's output for the synthesized module.
@@ -80,7 +68,9 @@ export function explainSz(input: string, engine: ExplainEngine = transformSource
     if (result.issues?.some(issue => issue.code === 'parse-error')) {
         throw new ExplainParseError('could not be parsed as a JavaScript expression');
     }
-    const diagnostics = result.diagnostics.map(withoutLocation);
+    // Rendered without a place: the synthesized module's file and positions
+    // mean nothing to the reader.
+    const diagnostics = (result.issues ?? []).map(renderUnplacedDiagnostic);
     if (result.code.match(/ (?:className|sz)=[{"]/g)?.length !== 1) {
         throw new ExplainParseError('the input is not one sz expression');
     }

@@ -88,6 +88,18 @@ Input:  { padding: 4 }
 Output: error — "Unknown prop 'padding'. Use 'p' instead."
 ```
 
+A problem the compiler reports comes as fields, the same ones `csszyx check
+--json` writes: `code`, `message` (the main sentence), `help`, `note` (each
+left out when there is none) and `url`.
+
+```
+Input:  { p: 1.3 }
+Output: warnings: [{ code: "off-scale-value",
+                     message: "`p: 1.3` is not on Tailwind's spacing scale, so the class generates no CSS.",
+                     help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'1.3rem'`.",
+                     url: "https://csszyx.com/e/off-scale-value" }]
+```
+
 ### `csszyx_lookup`
 
 Look up how a CSS property or keyword maps to an sz key. Accepts CSS property

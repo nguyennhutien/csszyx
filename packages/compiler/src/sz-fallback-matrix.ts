@@ -74,29 +74,29 @@ export const SZ_FALLBACK_PATH_PLACEHOLDER = '{path}';
  */
 export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTemplate>> = {
     call: {
-        reason: 'function call `{detail}()` result is unknown at build time',
+        reason: 'function call `{detail}()` returns a value unknown at build time',
         suggestion:
-            'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().',
+            'for static variants, convert it to `szv()`; for runtime data, use `dynamic()`.',
     },
     identifier: {
         reason: 'identifier `{detail}` could not be resolved to a static value',
         suggestion:
-            "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
+            'make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
     },
     import: {
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
-            'Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
     },
     member: {
         reason: 'member expression is not statically resolvable',
         suggestion:
-            'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'extract the value to a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
     },
     other: {
-        reason: 'expression of type `{detail}` is not statically analyzable',
+        reason: 'expression of type `{detail}` cannot be read at build time',
         suggestion:
-            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'use a literal sz object or a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
     },
     // The one kind that names WHERE qualification failed instead of what the
     // expression looked like. `szr(t(...))` where `t` is an szv the build saw
@@ -104,9 +104,9 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     // szv()" — which is circular for an author already writing one, and it
     // named the factory while hiding the position that actually disqualified.
     'szv-factory': {
-        reason: 'szv factory `{detail}()` did not precompile — its config disqualified at `{path}`',
+        reason: 'szv factory `{detail}()` could not be compiled: its config fails at `{path}`',
         suggestion:
-            'Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().',
+            'make every variant value at that path a static sz object literal with canonical keys and non-overlapping branches; for runtime data use `dynamic()`.',
     },
     // One KEY of an otherwise compiled sz object: a variant (`hover`,
     // `md: { hover }`) holding a value the build cannot read. The key goes to
@@ -119,9 +119,9 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     // how the key was treated, never that it IS a variant, so it stays true
     // for both, and the suggestion covers both readings.
     variant: {
-        reason: 'key `{detail}` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected',
+        reason: 'key `{detail}` holds a value only known at runtime and no sz property claims it, so its classes were never collected',
         suggestion:
-            'If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.',
     },
 };
 

@@ -31,6 +31,11 @@ import type {
     SourceTransformResult,
     TransformSourceCodeOptions,
 } from '../src/index.js';
+import {
+    transformRustUnrendered,
+    transformWasmUnrendered,
+    type UnrenderedTransformResult,
+} from '../src/internal.js';
 
 /** The result surface parity assertions read, common to both artifacts. */
 export interface EngineParityResult {
@@ -105,6 +110,25 @@ export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
     ['wasm', transformWasm as ParityEngine],
     ...(RUST_LANE ? ([['rust', transformRust as ParityEngine]] as const) : []),
 ];
+
+/** One artifact's transform that leaves its diagnostics for the caller to render. */
+export type UnrenderedEngine = (
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+) => UnrenderedTransformResult;
+
+/**
+ * Each artifact's unrendered transform beside its rendering one, as the
+ * build lanes call it; wasm alone only under {@link WASM_ONLY_ENV}.
+ */
+export const UNRENDERED_ENGINES: ReadonlyArray<readonly [string, ParityEngine, UnrenderedEngine]> =
+    [
+        ['wasm', transformWasm as ParityEngine, transformWasmUnrendered],
+        ...(RUST_LANE
+            ? ([['rust', transformRust as ParityEngine, transformRustUnrendered]] as const)
+            : []),
+    ];
 
 /** One module-link scanner: the same question the transform table asks, for links. */
 export type LinkScanner = (

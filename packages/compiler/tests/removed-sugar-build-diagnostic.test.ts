@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES } from './engine-parity-harness.js';
+import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
 
 /**
  * Compile one sz prop and return its diagnostics.
@@ -25,12 +25,23 @@ import { ENGINES } from './engine-parity-harness.js';
  * @param prop - The sz prop source, without the braces.
  * @returns The diagnostic strings.
  */
-function diagnose(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
-    prop: string,
-): string[] {
+function diagnose(engine: ParityEngine, prop: string): string[] {
     const source = `export const A = () => <div sz={{ ${prop} }} />;`;
     return (engine(source, '/p/App.tsx').diagnostics ?? []).map(String);
+}
+
+/**
+ * Compile one sz prop and return the arguments of its `removed-key` issues.
+ *
+ * @param engine - Engine entry under test.
+ * @param prop - The sz prop source, without the braces.
+ * @returns The args of each `removed-key` issue.
+ */
+function removedKeys(engine: ParityEngine, prop: string): object[] {
+    const source = `export const A = () => <div sz={{ ${prop} }} />;`;
+    return (engine(source, '/p/App.tsx').issues ?? [])
+        .filter(issue => issue.code === 'removed-key')
+        .map(issue => issue.args);
 }
 
 describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engine) => {
@@ -38,15 +49,21 @@ describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engin
         const messages = diagnose(engine, 'underline: true');
 
         expect(messages).toHaveLength(1);
-        expect(messages[0]).toContain('"underline"');
+        expect(removedKeys(engine, 'underline: true')).toEqual([
+            { form: 'sugar', key: 'underline', replacement: "decoration: 'underline'" },
+        ]);
+        expect(messages[0]).toContain('The boolean shorthand `underline` was removed');
         expect(messages[0]).toContain("{ decoration: 'underline' }");
-        expect(messages[0]).toContain('/p/App.tsx:1');
+        expect(messages[0]).toContain('[csszyx] removed-key: /p/App.tsx:1:');
     });
 
     it('reports a display shorthand with its own replacement', () => {
         const messages = diagnose(engine, 'flex: true');
 
         expect(messages).toHaveLength(1);
+        expect(removedKeys(engine, 'flex: true')).toEqual([
+            { form: 'sugar', key: 'flex', replacement: "display: 'flex'" },
+        ]);
         expect(messages[0]).toContain("{ display: 'flex' }");
     });
 
@@ -70,6 +87,9 @@ describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engin
         const messages = diagnose(engine, 'hover: { italic: true }');
 
         expect(messages).toHaveLength(1);
+        expect(removedKeys(engine, 'hover: { italic: true }')).toEqual([
+            { form: 'sugar', key: 'italic', replacement: "fontStyle: 'italic'" },
+        ]);
         expect(messages[0]).toContain("{ fontStyle: 'italic' }");
     });
 
@@ -87,11 +107,28 @@ describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engin
             '        <span sz={{ italic: true }} />\n' +
             '    </div>\n' +
             ');';
-        const messages = (engine(source, '/p/App.tsx').diagnostics ?? []).map(String);
+        const result = engine(source, '/p/App.tsx');
+        const messages = (result.diagnostics ?? []).map(String);
 
         expect(messages).toHaveLength(2);
-        expect(messages.some(m => m.includes('"underline"') && m.includes(':2'))).toBe(true);
-        expect(messages.some(m => m.includes('"italic"') && m.includes(':3'))).toBe(true);
+        expect(
+            result.issues?.map(issue => [(issue.args as { key: string }).key, issue.line]),
+        ).toEqual([
+            ['underline', 2],
+            ['italic', 3],
+        ]);
+        expect(
+            messages.some(
+                m =>
+                    m.startsWith('[csszyx] removed-key: /p/App.tsx:2:') &&
+                    m.includes('`underline`'),
+            ),
+        ).toBe(true);
+        expect(
+            messages.some(
+                m => m.startsWith('[csszyx] removed-key: /p/App.tsx:3:') && m.includes('`italic`'),
+            ),
+        ).toBe(true);
     });
 
     it('keeps reporting the canonical replacement for a key that reads like a variant', () => {

@@ -42,6 +42,14 @@ function comparable(result: SourceTransformResult): unknown {
         classes: [...result.classes].sort(),
         rawClassNames: [...result.rawClassNames].sort(),
         diagnostics: result.diagnostics,
+        // Each issue whole: its code, its position, and every named arg, in
+        // the order the wire carries them.
+        issues: (result.issues ?? []).map(issue => ({
+            code: issue.code,
+            line: issue.line,
+            column: issue.column,
+            args: JSON.stringify(issue.args),
+        })),
         recoveryTokens: [...result.recoveryTokens.entries()],
         cssVariableMap: [...result.cssVariableMap.entries()],
     };
@@ -136,5 +144,17 @@ describe('transform-wasm lane', () => {
             "export const R = () => <><Card szRecover='csr' sz={{ p: 4 }} /><Panel szRecover='dev-only' /></>;",
         );
         expect(wasm).toEqual(native);
+    });
+});
+
+describe('the wasm lane names a file the caller left unnamed', () => {
+    it('by its place in the batch', async () => {
+        const { transformWasmBatch } = await import('../src/transform-wasm.js');
+        const [result] = transformWasmBatch([
+            { source: 'export const A = () => <div sz={{ xyzzy: 1 }} />;' },
+        ]);
+        expect(result?.diagnostics[0]?.split('\n')[0]).toBe(
+            '[csszyx] unknown-key: file-0.tsx:1:35',
+        );
     });
 });

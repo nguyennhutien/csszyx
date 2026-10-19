@@ -25,6 +25,9 @@ import { pathToFileURL } from 'node:url';
  */
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
+/** Where the engine diagnostics' templates live. */
+const DIAGNOSTIC_REGISTRY = 'scripts/diagnostics/registry.mjs';
+
 const DOC_PATH = 'apps/docs/src/content/docs/docs/reference/warnings.mdx';
 
 /** Minimum words for a `[csszyx]`-prefixed inline span to count as a message. */
@@ -318,7 +321,8 @@ export function isFullyComposed(normalized, haystack) {
  * notion the other repo gates use.
  *
  * @param repositoryRoot Absolute path to the repository root.
- * @returns Repository-relative paths of TypeScript and Rust sources.
+ * @returns Repository-relative paths of TypeScript and Rust sources, and the
+ *          diagnostic registry.
  */
 export function listSourceFiles(repositoryRoot) {
     const output = execFileSync('git', ['ls-files', 'packages/*/src/**'], {
@@ -326,7 +330,11 @@ export function listSourceFiles(repositoryRoot) {
         encoding: 'utf8',
         maxBuffer: 32 * 1024 * 1024,
     });
-    return output.split('\n').filter(file => /\.(ts|tsx|rs)$/.test(file) && !/\.d\.ts$/.test(file));
+    const sources = output
+        .split('\n')
+        .filter(file => /\.(ts|tsx|rs)$/.test(file) && !/\.d\.ts$/.test(file));
+    // The engine's sentences are the registry's templates (ADR 0031).
+    return [...sources, DIAGNOSTIC_REGISTRY];
 }
 
 /**

@@ -68,8 +68,14 @@ describe('safelist scan robustness', () => {
                 const result = transformRust(broken, 'Broken.tsx');
                 expect(result.classes.size).toBe(0);
                 expect(
-                    result.diagnostics.some(d => d.includes('[csszyx] parse error in ')),
+                    result.issues.some(issue => issue.code === 'parse-error'),
                     'the parse failure must be observable, not a silent empty scan',
+                ).toBe(true);
+                expect(
+                    result.diagnostics.some(d =>
+                        d.startsWith('[csszyx] parse-error: Broken.tsx:1:'),
+                    ),
+                    'the message must carry the code and the position',
                 ).toBe(true);
             },
         );

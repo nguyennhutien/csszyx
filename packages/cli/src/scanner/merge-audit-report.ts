@@ -53,7 +53,7 @@ export async function reportMergeAudit(
         }));
     } catch (error) {
         const reason = String(error instanceof Error ? error.message : error).split('\n')[0];
-        out.warn(`Merge audit skipped: ${reason}`);
+        out.runWarn(`Merge audit skipped: ${reason}`);
         return;
     }
     const files = await Promise.all(

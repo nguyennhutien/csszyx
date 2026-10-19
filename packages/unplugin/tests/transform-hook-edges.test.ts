@@ -17,7 +17,7 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-type Ctx = { warn: (m: string) => void; error: (m: string) => void };
+type Ctx = { warn: (m: unknown) => void; error: (m: string) => void };
 
 interface Booted {
     root: string;
@@ -94,16 +94,37 @@ describe('transform hook branch edges', () => {
         );
     });
 
+    it('hands an info finding to the bundler with its code and page beside the line', async () => {
+        const { root, ctx, transform } = await boot();
+        const warnings: unknown[] = [];
+        ctx.warn = message => warnings.push(message);
+        await transform(
+            'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
+            path.join(root, 'src/A.tsx'),
+        );
+        expect(warnings).toEqual([
+            {
+                message: expect.stringMatching(/^\[csszyx\] class-precedence: src\/A\.tsx:1:/),
+                code: 'class-precedence',
+                url: 'https://csszyx.com/e/class-precedence',
+            },
+        ]);
+    });
+
     it('passes a template sz warning to the bundler', async () => {
         const { root, ctx, transform } = await boot();
         const warnings: string[] = [];
-        ctx.warn = message => warnings.push(message);
+        ctx.warn = message => warnings.push((message as { message: string }).message);
         const result = (await transform(
             '<div sz={{ foo: 4 }}></div>',
             path.join(root, 'src/Comp.svelte'),
         )) as { code: string } | null;
         expect(result?.code).toContain('class="foo-4"');
-        expect(warnings.some(w => w.includes('Unknown property "foo"'))).toBe(true);
+        const said = warnings.filter(w => w.includes('`foo` is not an sz property.'));
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain('Comp.svelte:1:');
+        // The synthesized module the value was lowered in is never shown.
+        expect(said[0]).not.toContain('csszyx-template-sz');
     });
 
     it('injects a @source directive into a scoped tailwind entry once a class is discovered', async () => {

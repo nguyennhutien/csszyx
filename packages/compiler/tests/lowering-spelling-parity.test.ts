@@ -9,10 +9,10 @@
  * and the native engine must write the same bytes and report the same kinds.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { szDiagnosticKindOf } from '../src/sz-diagnostic-kind.js';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
+import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { szDiagnosticKindOf } from './helpers/runtime-warning-kind.js';
 
 /** What one lane wrote for an sz object, and the kinds it reported. */
 interface LaneResult {
@@ -296,7 +296,17 @@ describe('the slash opacity diagnostic', () => {
         'supported, and nothing is emitted for it. Use object form: ' +
         "{ color: 'red-500', op: 50 }.";
 
-    it.each(ENGINES)('%s renders the runtime text, bang removed', (_name, engine) => {
+    // The engine's text is the registry's; the runtime's is the sentence above.
+    // The wording converges when the runtime lane moves to the registry, so the
+    // two are compared on the facts both name: the key, the colour and the opacity.
+    const engineExpected = engineMessage(
+        'slash-opacity-string',
+        '/p/src/Spelling.jsx:1:33',
+        "`bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.",
+        "help: use the object form: `{ color: 'red-500', op: 50 }`.",
+    );
+
+    it.each(ENGINES)('%s renders the registry text, bang removed', (_name, engine) => {
         const run = captureWarnings(
             engine,
             "export const A = () => <p sz={{ bg: 'red-500/50!', p: 2 }} />;",
@@ -304,7 +314,10 @@ describe('the slash opacity diagnostic', () => {
         );
 
         expect(run.className).toBe('p-2');
-        expect(run.warnings).toEqual([expected]);
+        expect(run.warnings).toEqual([engineExpected]);
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            ['slash-opacity-string', { key: 'bg', color: 'red-500', opacity: '50' }],
+        ]);
     });
 
     it('the runtime prints the same text once, in production too', () => {
@@ -376,14 +389,28 @@ describe.each(LANES)('a slash opacity in a colour object — %s', (_name, lower)
 });
 
 describe('the colour-object slash opacity diagnostic', () => {
-    const withOp =
+    // The engine renders from the registry, the runtime from its own sentence;
+    // the wording converges in the runtime PR, so the engine tests below pin the
+    // registry text and the facts in `issue.args`.
+    const runtimeWithOp =
         `[csszyx] "bg: { color: 'red-500/50', op: 20 }" at /p/src/Spelling.jsx:1 — a colour ` +
         "object takes its opacity in op, not in color. Write { color: 'red-500', op: 20 }.";
-    const withoutOp =
-        `[csszyx] "bg: { color: 'red-500/50' }" at /p/src/Spelling.jsx:1 — a colour object ` +
-        "takes its opacity in op, not in color. Write { color: 'red-500', op: 50 }.";
+    const withOp = engineMessage(
+        'color-slash-opacity',
+        '/p/src/Spelling.jsx:1:33',
+        "`bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+        "help: write `{ color: 'red-500', op: 20 }`.",
+        'note: the class uses `op: 20`; the `/50` in `color` is ignored.',
+    );
+    const withoutOp = engineMessage(
+        'color-slash-opacity',
+        '/p/src/Spelling.jsx:1:33',
+        "`bg: { color: 'red-500/50' }` puts the opacity in `color`; a colour object takes it in `op`.",
+        "help: write `{ color: 'red-500', op: 50 }`.",
+        'note: the class still applies opacity 50.',
+    );
 
-    it.each(ENGINES)('%s renders the runtime text', (_name, engine) => {
+    it.each(ENGINES)('%s renders the registry text', (_name, engine) => {
         const run = captureWarnings(
             engine,
             "export const A = () => <p sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
@@ -392,6 +419,12 @@ describe('the colour-object slash opacity diagnostic', () => {
 
         expect(run.className).toBe('bg-red-500/20');
         expect(run.warnings).toEqual([withOp]);
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'color-slash-opacity',
+                { form: 'op-given', key: 'bg', base: 'red-500', opacity: '50', op: '20' },
+            ],
+        ]);
     });
 
     it.each(ENGINES)('%s names the opacity it read from color', (_name, engine) => {
@@ -403,6 +436,12 @@ describe('the colour-object slash opacity diagnostic', () => {
 
         expect(run.className).toBe('bg-red-500/50');
         expect(run.warnings).toEqual([withoutOp]);
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'color-slash-opacity',
+                { form: 'op-absent', key: 'bg', base: 'red-500', opacity: '50' },
+            ],
+        ]);
     });
 
     it.each(ENGINES)(
@@ -415,9 +454,22 @@ describe('the colour-object slash opacity diagnostic', () => {
             );
 
             expect(run.warnings).toEqual([
-                `[csszyx] "bg: { color: 'red-500/50!', op: '20' }" at /p/src/Spelling.jsx:1 — a ` +
-                    "colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+                engineMessage(
+                    'color-slash-opacity',
+                    '/p/src/Spelling.jsx:1:33',
+                    "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                    "help: write `{ color: 'red-500!', op: '20' }`.",
+                    "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                ),
             ]);
+            expect(run.result.issues?.[0]?.args).toEqual({
+                form: 'op-given',
+                key: 'bg',
+                base: 'red-500',
+                opacity: '50',
+                important: '!',
+                op: "'20'",
+            });
         },
     );
 
@@ -451,7 +503,7 @@ describe('the colour-object slash opacity diagnostic', () => {
             );
             transform({ bg: { color: 'red-500/50', op: 20 } });
 
-            expect(warn.mock.calls).toEqual([[withOp]]);
+            expect(warn.mock.calls).toEqual([[runtimeWithOp]]);
         } finally {
             setSzWarnLocation(undefined);
             warn.mockRestore();
@@ -514,7 +566,9 @@ describe('the mask layer diagnostic', () => {
         'layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or ' +
         'a CSS variable.';
 
-    it.each(ENGINES)('%s renders the runtime text, bang removed', (_name, engine) => {
+    // The wording converges with the runtime's in the runtime PR; until then the
+    // engine's text is the registry's and the facts are pinned in `issue.args`.
+    it.each(ENGINES)('%s renders the registry text, bang removed', (_name, engine) => {
         const run = captureWarnings(
             engine,
             "export const A = () => <p sz={{ mask: 'linear-45!', p: 2 }} />;",
@@ -522,8 +576,20 @@ describe('the mask layer diagnostic', () => {
         );
 
         expect(run.className).toBe('p-2');
-        expect(run.warnings).toEqual([expected]);
-        expect(run.result.issues?.map(issue => issue.code)).toEqual(['moved-value']);
+        expect(run.warnings).toEqual([
+            engineMessage(
+                'moved-value',
+                '/p/src/Spelling.jsx:1:33',
+                "`mask: 'linear-45'` names a gradient layer, which moved to `maskLinear`, and nothing is emitted for it.",
+                'help: write this layer on `maskLinear`; `mask` takes only `none`, a `url()` or a CSS variable.',
+            ),
+        ]);
+        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'moved-value',
+                { form: 'mask-layer', key: 'mask', value: 'linear-45', layerKey: 'maskLinear' },
+            ],
+        ]);
     });
 
     it('the runtime prints the same text once, in production too', () => {

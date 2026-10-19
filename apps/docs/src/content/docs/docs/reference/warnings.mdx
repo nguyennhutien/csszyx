@@ -31,7 +31,7 @@ The most common build message has a fixed shape:
 ```text
 [csszyx] {module}:12:9
   sz fallback at 12:9: identifier `cardStyles` could not be resolved to a static value.
-  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().
+  Suggestion: make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.
 ```
 
 | Part | Meaning |
@@ -143,8 +143,12 @@ on a dev server, in one burst of compiles — the rest are counted and one line
 closes them:
 
 ```text
-[csszyx] +{count} more {id} — help: `csszyx check --rule {id}` lists every one.
+[csszyx] {id}: +{count} more not listed
+  help: `csszyx check --rule {id}` lists every one.
 ```
+
+The line is headed by the capped id itself, so a search for `[csszyx] unknown-key:`
+finds the count beside the ten it lists ([`diagnostics-capped`](https://csszyx.com/e/diagnostics-capped)).
 
 A build prints it at its end; a dev server, the loader and jest print it once
 the burst of compiles that produced them has paused for a second, or as the
@@ -206,13 +210,13 @@ type:
 
 | Kind | Reason | Suggestion |
 | --- | --- | --- |
-| `call` | ``function call `{detail}()` result is unknown at build time`` | `If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().` |
-| `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `szv-factory` | ``szv factory `{detail}()` did not precompile — its config disqualified at `{path}` `` | `Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().` |
-| `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `variant` | ``key `{detail}` holds a value only known at runtime and no sz property claims it, so the runtime lowers it and its classes were never collected`` | `If the key is a variant, give it a static sz object literal, or a two-branch c ? { … } : { … }; if it is meant as an sz property, check its spelling. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `call` | ``function call `{detail}()` returns a value unknown at build time`` | ``for static variants, convert it to `szv()`; for runtime data, use `dynamic()`.`` |
+| `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | ``make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
+| `import` | ``imported binding `{detail}` could not be read at build time`` | ``export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
+| `member` | `member expression is not statically resolvable` | ``extract the value to a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
+| `szv-factory` | ``szv factory `{detail}()` could not be compiled: its config fails at `{path}` `` | ``make every variant value at that path a static sz object literal with canonical keys and non-overlapping branches; for runtime data use `dynamic()`.`` |
+| `other` | ``expression of type `{detail}` cannot be read at build time`` | ``use a literal sz object or a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
+| `variant` | ``key `{detail}` holds a value only known at runtime and no sz property claims it, so its classes were never collected`` | ``if the key is a variant, give it a static sz object literal or a two-branch `c ? { … } : { … }`; if it is an sz property, check its spelling; for runtime values use `dynamic()`.`` |
 
 For `variant`, `{detail}` is the key path from the top of the object
 (`md.hover`), and the position is the key's. The rest of the object still
@@ -263,15 +267,15 @@ barrel is followed and does not report. The other cause is
 
 | Message | Class | Fix |
 | --- | --- | --- |
-| `[csszyx] unresolvable sz spread at {line}:{col}: sz={{ ...x }} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={[x, { ... }]}.` | missing output | Use the array form. |
-| `sz array element at {line}:{col}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).` — suggestion: `use finite literal ternary branches when possible, or move truly runtime values to dynamic().` | nudge | Optional. Prefer literal ternary branches. |
-| `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
-| `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
-| `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
-| `[csszyx] "sz" takes precedence over the runtime "className" on this element at {filename}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.` — suggestion: `state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.` | nudge | State the order in one `sz` array. Either rewrite silences it. |
-| ``[csszyx] <{tag}> at {filename}:{line}:{col}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {earlier} will not apply there (Vue JSX merges every class instead).`` — help: ``write them in one `sz` array {example}.`` | missing output | `{earlier}` names what the sides before the last hold: a class name's value, or the classes of an `sz`. `{example}` is built from the element: where to put the array (after the spread, named when it is a plain name) and what goes in it — its class values, the spread's `className` or `class` as you wrote it, and your `sz` objects, such as ``after `{...rest}`, in the order that should win: `sz={['card', rest.className, { … }]}` ``. A spread may carry a class name of its own, so csszyx merges class names and `sz` only on the same side of one; each side becomes one class name where its `sz` stood, and the platform decides between them. Write everything in one `sz` array after the spread, in the order that should win. Vue JSX merges every `class` instead, so there all apply. In a Svelte component the two `class` attributes stop the build with Svelte's `attribute_duplicate: Attributes need to be unique`; the Svelte adapter compiles only an `sz` object, so there write `{...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}` — class and `sz` on the same side after the spread. |
-| ``[csszyx] <{tag}> at {filename}:{line}:{col} carries {n} `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.`` — suggestion: `fold them into one sz array so the order is written down.` | nudge | Write one `sz` array. Nothing was dropped: every `sz` compiled, later wins per property, an authored `className` stays first. |
-| `[csszyx] {filename}: the merge table is in format {n}, and this engine reads format {m}, so no sz key was merged with a later one it covers.` — or `…the merge table is not one this engine reads ({error})…` when the file itself is unreadable — + `help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run csszyx next prebuild.` + ``note: every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.`` | correctness | The plugin and the engine come from different csszyx releases, or `.csszyx/merge-table.json` was truncated or hand-edited. Align the `@csszyx/*` versions; under Turbopack, write the table again with `csszyx next prebuild`. |
+| ``[csszyx] unresolvable-spread: This `sz` object spreads a value the build cannot read, so the object falls back to the runtime and may render no styles in production.`` — help: ``use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.`` | missing output | Use the array form. |
+| ``[csszyx] fallback-nudge: This `sz` array element is an object literal with a runtime value, so the whole element is resolved at runtime.`` — help: ``use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.`` — note: `its classes are still collected, best-effort.` | nudge | Optional. Prefer literal ternary branches. |
+| ``[csszyx] style-override: This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.`` — help: ``move the spread `style` to an explicit `style` prop, so csszyx merges both values.`` | nudge | Pass `style` explicitly so both values merge. |
+| ``[csszyx] sz-recover: `szRecover` takes only a string literal.`` — help: ``write `szRecover="csr"` or `szRecover="dev-only"`.`` — note: ``no `data-sz-recovery-token` is written for this element.`` | nudge | Use a literal. |
+| ``[csszyx] sz-recover: `szRecover` has an unknown mode `"{mode}"`.`` — help: ``use `"csr"` or `"dev-only"`.`` — note: ``no `data-sz-recovery-token` is written for this element.`` | nudge | Use `"csr"` or `"dev-only"`. |
+| ``[csszyx] class-precedence: `sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.`` — help: ``state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.`` | nudge | State the order in one `sz` array. Either rewrite silences it. |
+| ``[csszyx] spread-split-class: `<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.`` — help: ``write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.`` — note: `in Vue JSX every class is merged, so every side applies there.` | missing output | `{earlier}` names what the sides before the last hold: a class name's value, or the classes of an `sz`. `{example}` is built from the element: where to put the array (after the spread, named when it is a plain name) and what goes in it — its class values, the spread's `className` or `class` as you wrote it, and your `sz` objects, such as ``after `{...rest}`, in the order that should win: `sz={['card', rest.className, { … }]}` ``. A spread may carry a class name of its own, so csszyx merges class names and `sz` only on the same side of one; each side becomes one class name where its `sz` stood, and the platform decides between them. Write everything in one `sz` array after the spread, in the order that should win. Vue JSX merges every `class` instead, so there all apply. In a Svelte component the two `class` attributes stop the build with Svelte's `attribute_duplicate: Attributes need to be unique`; the Svelte adapter compiles only an `sz` object, so there write `{...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}` — class and `sz` on the same side after the spread. |
+| ``[csszyx] duplicate-sz: `<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.`` — help: ``fold them into one `sz` array, so the order is written down.`` | nudge | Write one `sz` array. Nothing was dropped: every `sz` compiled, later wins per property, an authored `className` stays first. |
+| `[csszyx] merge-classifier-unavailable: The merge table is in format {tableFormat}, and this engine reads format {mergeTableFormat}, so no sz key was merged with a later key that covers it.` — help: ``install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.`` — note: ``every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.`` | correctness | The plugin and the engine come from different csszyx releases, or `.csszyx/merge-table.json` was truncated or hand-edited. Align the `@csszyx/*` versions; under Turbopack, write the table again with `csszyx next prebuild`. |
 
 `correctness` is a third class beside the two above: every class is present, but
 they are not the ones a correct build emits. Like missing output it prints in
@@ -293,7 +297,11 @@ finding, not only the fallbacks. That includes a finding your config lowered to
 "not listed", not as "handled":
 
 ```text
-[csszyx] {n} info notes not listed above: the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding csszyx.config sets to info. A production build counts them instead of listing them; a development build prints each one with its file and position.
+[csszyx] diagnostics-held:
+  This build held back {count} finding(s) at `info` and listed none of them.
+  help: run a development build to see each one with its file and position.
+  note: they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`.
+  docs: https://csszyx.com/e/diagnostics-held
 ```
 
 Run a development build to see each one with its file and position. In CI, run
@@ -340,7 +348,8 @@ in an sz array. A property shared by both branches is reported once at its sourc
 two separate declarations are still reported separately. Both branches are checked
 because either may be used. The diagnostics do not change the emitted classes.
 
-An unresolved spread still reports its runtime fallback. That warning is not a
+An unresolved spread reports `unresolvable-spread` in place of the fallback
+nudge, since both name the same site. That warning is not a
 certificate that the literal keys beside it are valid: complete key/value checking
 of unresolved objects is not supported yet.
 
@@ -350,7 +359,7 @@ of unresolved objects is not supported yet.
 | --- | --- |
 | `[csszyx] Unknown property "{key}" in sz prop{ at LOC}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.` | The class *is* in the DOM — grep for it. |
 | `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. **every mode.** |
-| `[csszyx] "{key}" was removed and takes a runtime value at {LOC}: write {values} on {canonical}, and the other values on {groups}.` | Build only. An alias of a stand-alone key (`touchAction: c`) whose value the build cannot read: some values stand alone, others moved to group keys. A literal branch that moved is named as a moved value instead, and an alias whose every literal stands alone gets the canonical-key row. |
+| ``[csszyx] removed-key: `{key}` was removed, and it holds a runtime value, so nothing is emitted for it.`` — help: ``write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.`` | Build only. An alias of a stand-alone key (`touchAction: c`) whose value the build cannot read: some values stand alone, others moved to group keys. A literal branch that moved is named as a moved value instead, and an alias whose every literal stands alone gets the canonical-key row. |
 | `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
 | `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
 | `[csszyx] "{rawKey}" boolean sugar was removed{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **every mode.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |
@@ -407,9 +416,9 @@ look at. Production is unaffected.
 | `[csszyx] "{key}: {value}" moved to { {newKey}: {newValue} }{ at LOC}. Run ``csszyx migrate`` to rewrite it.` | A `touch` value that became its group's own key (`touch: 'pan-x'` is `touchPanX: 'x'`), also when written on the old alias (`touchAction: 'pan-x'`). **every mode.** The class is not emitted. The build names it wherever it is written: in a ternary, under any variant, `group`, `peer`, `data`, `aria`, `has` and `not` included, and in a conditional object branch. |
 | `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" it emits belongs to { {groupKey}: {groupValue} }: write that key, so it combines with the other groups instead of resetting them. {key} takes one of: {values}.` | A stand-alone key holding a value of one of its groups (`contain: 'paint'`, `nums: 'tabular'`). The class it names styles, but as a stand-alone value it resets the group keys written before it. See [one key per group](#one-key-per-group). |
 | `[csszyx] "{key}: {value}"{ at LOC} comes before "{group}" in one sz object, so {group} replaces it and the {key} value styles nothing. A spread override ({ ...base, {key}: '{value}' }) leaves this order; to override, layer it: sz={[base, { {key}: '{value}' }]}.` | **every mode.** See [one key per group](#one-key-per-group). |
-| `[csszyx] "{key}" takes a runtime value beside "{other}" in one sz object at {LOC}, so the build cannot settle them by the object's order: both classes can ship, and Tailwind's stylesheet order picks the one that applies. Layer them, later wins: sz={[{ {first}: … }, { {second}: … }]}.` | Build only. See [one key per group](#one-key-per-group). |
+| ``[csszyx] runtime-family-conflict: `{key}` takes a runtime value beside `{other}` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`` — help: ``layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.`` | Build only. See [one key per group](#one-key-per-group). |
 | `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.` | The class *is* emitted. Only `--*` and `container` are reported — see below. |
-| `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
+| ``[csszyx] runtime-value: `{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.`` — help: ``name the values with `szv()`, or use `dynamic()` for open-ended data.`` — note: ``no class or variable is emitted for `{key}`.`` | Build only — a *literal* on the same key is unaffected. See below. |
 | `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
 
 #### Closed keys name a value outside their set
@@ -544,7 +553,7 @@ safelist that Tailwind generated no rule for.
 ```
 
 ```text
-[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.
+[csszyx] runtime-value: `{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.
 ```
 
 The sibling keys survive — only the one property is dropped, and the `style`
@@ -782,13 +791,15 @@ not cover `text-wrap`.
 | Message | Kind |
 | --- | --- |
 | `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, ``  - `{key}` is read from `{movedTo}`, not from the plugin options`` (for `diagnostics`), or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
-| `[csszyx] {file} has {n} problem(s):` followed by one line per problem — `  - ({severity}) {path}: {what}`, or `  - ({severity}) {what}` for the file as a whole, where `{severity}` is `error` or `warning`: an id that is not a rule id, with the id it most likely means; a level, preset or shape the file cannot use; a misspelt `diagnostics` key; a key of `diagnostics` written at the top level; an override glob that can never match; or a plugin option written in the file, which only the bundler config is read for — then `Each one is ignored; the rest of the file applies.`, or `The file is not applied, so every finding keeps its default level.` when it did not load, exported nothing to read, or holds no `diagnostics` beside a key that belongs there, and last ``  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.`` | Warning, once per build; `csszyx check` prints it too and exits 1 unless every problem is a plugin option in the file or the old `csszyx init` template below. [`csszyx.config`](/docs/reference/config/#csszyxconfig) explains each field. |
+| `[csszyx] config-invalid: {file}`, then ``This file has {count} problem(s); each one is ignored, and the rest of the file applies.``, or ``This file has {count} problem(s), and it is not applied, so every finding keeps its default level.`` when it did not load, exported nothing to read, or holds no `diagnostics` beside a key that belongs there, then one line per problem — `  - ({severity}) {path}: {what}`, or `  - ({severity}) {what}` for the file as a whole, where `{severity}` is `error` or `warning`: an id that is not a rule id, with the id it most likely means; an id whose level the file cannot set; an id csszyx no longer reports; a level, preset or shape the file cannot use; a misspelt `diagnostics` key; a key of `diagnostics` written at the top level; an override glob that can never match; or a plugin option written in the file, which only the bundler config is read for — and last — help: ``https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.`` | Warning, once per build; `csszyx check` prints it too and exits 1 unless every problem is a plugin option in the file, an id csszyx no longer reports, or the old `csszyx init` template below. [`csszyx.config`](/docs/reference/config/#csszyxconfig) explains each field. |
 | `[csszyx] {file} changed: read its levels again, recompiled every module and reloaded the page.` | Printed by a Vite dev server, once per save, creation or deletion of `csszyx.config` or of a module it imports (`{file}` names the file saved), whatever `quiet` says. The server read the file again, printed its problems if it has any, and compiled every module so each finding is listed again at the level the file now gives it. Nothing to do. |
 | `could not be loaded: {reason}` | One line of the warning above, for the file as a whole. The config file threw, or has a syntax error. `{reason}` is the first line of the error, ending in ` (at {file}:{line}:{column})` when the error names a place in the file. |
 | ``. `{file}` holds TypeScript syntax; rename it to `{name}`.`` | Ends `could not be loaded: {reason}` when a `.js` or `.mjs` config fails on a syntax error and holds a type annotation, a type import or another TypeScript-only form. `{name}` is `csszyx.config.ts` in a `"type": "module"` package and `csszyx.config.mts` elsewhere. |
 | `{n} config error(s) in {file}, which fail the run.` | The last line of `csszyx check`, marked `✖`, when the warning above has an `error` problem; on stderr under `--json`. The run exits 1 whatever the findings. |
 | ``has no default export; write `export default defineConfig({ … })`.`` | One line of the warning above, for the file as a whole: it loaded and exported nothing to read, such as `export const config = defineConfig({ … })`. `csszyx check` exits 1. |
 | ``default export: `{key}` is not read — did you mean `{near}`?`` | One line of the warning above: a top-level key one or two letters from `diagnostics`, which `{near}` names. Every level under it would fall back to the defaults, so `csszyx check` exits 1. |
+| ``diagnostics.rules: `{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.`` — help: ``remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.`` | One line of the warning above, [`config-id-not-settable`](https://csszyx.com/e/config-id-not-settable), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`: a real id, of a line the runtime prints or an error a call throws, which no level reaches. `rules` sets the engine's diagnostics and the passes of `csszyx check`. The entry is dropped; `csszyx check` exits 1. |
+| ``diagnostics.rules: `{id}` is no longer reported, so a level or a selection naming it applies to nothing.`` — help: ``name `{replacedBy}` instead, which reports what `{id}` did.`` or ``remove it.`` | One line of the warning above, [`removed-rule-id`](https://csszyx.com/e/removed-rule-id), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`, when the id is one a release shipped and csszyx no longer reports, such as `other` (`{replacedBy}` is `sz-diagnostic`). The entry is dropped; it is a warning, so `csszyx check` does not exit 1 for it. `csszyx check --rule` and `--ignore-rule` print the same text as its own `[csszyx] removed-rule-id:` warning and go on, selecting nothing for it. |
 | ``default export: `{key}` is not read at the top level — did you mean `diagnostics.{key}`?`` | One line of the warning above: `rules`, `preset`, `allow` or `overrides` written beside `diagnostics` instead of inside it, as an ESLint flat config has them. `csszyx check` exits 1. |
 | ``can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with `..`.`` | One line of the warning above, after the glob, under `diagnostics.overrides[{i}].files`: a glob starting with `/` or a drive letter, or holding a `..` segment. A backslash reads as `/` and `./` is dropped first, so `src\legacy` matches and `./../src` is refused. The glob is dropped; `csszyx check` exits 1. |
 | ``could not be loaded and is ignored: it is the file `csszyx init` 0.17 and earlier wrote, which nothing read. Replace it with `export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` from `csszyx`, or delete it. Load error: {reason}`` | One line of the warning above, in place of `could not be loaded` when the file has the shape of that template, whatever its quotes, spacing, semicolons and comments, and sets no `diagnostics`: the `csszyx.config.js` it wrote in TypeScript syntax into a JavaScript project. `csszyx check` does not exit 1 for it. |
@@ -1311,7 +1322,7 @@ These are informational and always print to stderr, once.
 | --- |
 | `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` |
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
+| `[csszyx] parse-error: Syntax error: {message}.` — help: `fix the syntax at this position.` — note: `the file is left unchanged.` One per syntax error, carrying the parser's message at the place it points to. A file whose `sz` values are all flat static objects, such as `sz={{ p: 4 }}`, takes a fast path that lowers them without parsing the file, so csszyx reports no syntax error in it: the bundler or `tsc` does. |
 
 <Aside type="note" title="What a parser fallback costs">
 Parse speed, and nothing else. The build lane's two artifacts are one engine
@@ -1325,8 +1336,8 @@ lanes it described.
 | Message | Kind |
 | --- | --- |
 | **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
-| `[csszyx] {filename}: source nesting exceeded {max} levels (found {n}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)` | Native engine |
-| ``[csszyx] AST budget exceeded in {filename}: the IR walk stopped mid-file, so the file was left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` or split the file.`` | Native engine |
+| `[csszyx] nesting-depth: Source nesting exceeds {maxNestingDepth} levels (found {depth}).` — help: ``flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.`` — note: `the file is left unchanged and contributes no classes.` | Native engine |
+| `[csszyx] ast-budget: The file exceeds the AST node budget.` — help: ``raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.`` — note: `the file is left unchanged, and none of its classes are collected.` | Native engine |
 
 ## Mangling
 
@@ -1660,8 +1671,11 @@ a commit gate must never give. Separators are normalised first, so a hook that
 hands over `src\App.tsx` on Windows checks that file rather than reporting a
 clean result for a name that exists nowhere.
 
-The JSON document is `{ "version": 1, "findings": [...] }`, one entry per
-finding:
+The JSON document is
+`{ "$schema": "https://csszyx.com/schemas/check-v2.json", "version": 2, "findings": [...] }`,
+one entry per finding. The [schema](https://csszyx.com/schemas/check-v2.json)
+describes every field; validate against it when a later step depends on the
+shape.
 
 ```json
 {
@@ -1670,6 +1684,29 @@ finding:
   "line": 12,
   "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets.",
   "kind": "sibling-keyword",
+  "level": "error"
+}
+```
+
+An `sz-diagnostic` finding carries the main sentence as `message`, and the
+clauses the terminal prints after `help:` and `note:` as `help` and `note`,
+each left out when the diagnostic has none. None of the three holds a line
+break or a label. `column` is 1-based, in UTF-16 code units; `args` holds the
+values the sentence names; `url` is the kind's page.
+
+```json
+{
+  "rule": "sz-diagnostic",
+  "kind": "unknown-key",
+  "file": "src/App.tsx",
+  "line": 1,
+  "column": 35,
+  "message": "`workBreak` is not an sz property.",
+  "help": "write `break` if you meant it; for a custom utility, define it with Tailwind's `@utility`.",
+  "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility.",
+  "suggestion": "break",
+  "args": { "key": "workBreak", "suggestion": "break" },
+  "url": "https://csszyx.com/e/unknown-key",
   "level": "error"
 }
 ```
@@ -1705,17 +1742,20 @@ csszyx check --rule merge-covered-key --rule merge-covered-class
 `runtime-family-conflict`, `merge-classifier-unavailable`, `parse-error`,
 `nesting-depth`, `unsupported-dynamic-sz` or `ast-budget`. The engine gives
 every diagnostic its kind, so `other` never comes back for one; it is kept
-only as an id `--rule` still accepts. Every other pass repeats its `rule`,
+only as an id `--rule`, `--ignore-rule` and `rules` still accept, with a
+warning. Every other pass repeats its `rule`,
 but for two kinds of `dead-class`: `unsigned-value`, a dead class whose sign
 the project's Tailwind serves no negative for, and `prefix-disagreement`.
-Runtime fallback notes (`fallback-missing-css`, `fallback-nudge`) and the
-`mangleVars` hoist note (`mangle-vars-hoist-skipped`) are not `check` findings,
-so they never appear here.
+`fallback-missing-css` is listed too: its classes were never collected, so
+they have no CSS. The fallback that still collected its classes
+(`fallback-nudge`) and the `mangleVars` hoist note
+(`mangle-vars-hoist-skipped`) are not `check` findings, so they never appear
+here.
 
 An `unknown-key` finding also carries `suggestion` when one known key is a
 single edit away — two for a key of twelve letters or more — and the prose
-report, the build and the dev server print `Did you mean "{key}"?` under the
-diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
+report, the build and the dev server print ``help: write `{key}` if you meant it``
+under the diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
 suggests its canonical key, so `workBreak` suggests `break`. Nothing is
 rewritten, and a key with no single near match gets no suggestion, so a class a
 project serves with `@utility` is not second-guessed.
@@ -2004,14 +2044,12 @@ look at. Production is unaffected; no warning is emitted there at all.
 
 ## Editor diagnostics
 
-The VS Code extension reports key problems as squiggles, with its own shorter
-wording. Turn them off with `csszyx.enableDiagnostics: false`.
-
-| Message |
-| --- |
-| `'{key}' was removed: {note}.` |
-| `Unknown sz prop '{key}'. Did you mean '{suggestion}'?` |
-| `Unknown sz prop '{key}'. See https://csszyx.com/docs/sz-props for valid props.` |
+The VS Code extension reports a key no table knows as a squiggle, with the
+code the build gives it — [`removed-key`](#keys), [`canonical-key`](#keys),
+`numeric-key` or `unknown-key` — and the same sentence, `help:` and `note:` the
+build prints, filled from the same templates. The code in the Problems panel
+links to its `https://csszyx.com/e/<code>` page. Turn them off with
+`csszyx.enableDiagnostics: false`.
 
 The TypeScript plugin emits no diagnostics — it provides completions and hover
 only. See [TypeScript Autocomplete](/docs/typescript-plugin/) and

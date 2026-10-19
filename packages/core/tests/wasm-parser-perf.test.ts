@@ -74,7 +74,6 @@ const OPTIONS_JSON = JSON.stringify({
     mangle_vars: false,
     mangle_var_hoist_max_depth: null,
     global_var_aliases: [],
-    root_dir: null,
     ast_budget: null,
     cross_module_statics_json: null,
     cross_module_sz_objects_json: null,

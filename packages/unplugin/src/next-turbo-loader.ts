@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import type { SourceTransformResult } from '@csszyx/compiler';
+import { diagnosticFileOf } from '@csszyx/compiler/internal';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     callsSzcn as callsMergeHelper,
@@ -19,7 +20,6 @@ import {
     configWithImportedStaticSz,
     normalizeProviderPaths,
     resolveNextCrossModule,
-    withCrossModuleStatics,
 } from './next-cross-module.js';
 import {
     readNextGenerationManifest,
@@ -38,6 +38,7 @@ import {
 import {
     type NextSourceTransformInput,
     type NextSourceTransformOutput,
+    nextCompilerOptions,
     transformNextSource,
 } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
@@ -241,10 +242,12 @@ export function runNextTurboLoader(
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
-        compilerOptions: {
-            ...withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+        compilerOptions: nextCompilerOptions({
+            base: options.compilerOptions,
+            statics: crossModule.statics,
             classPrefix: prefix.prefix,
-        },
+            root: context.root,
+        }),
         cacheRoot: resolveTransformCacheDir(
             context.root,
             path.relative(context.root, context.cacheDir),
@@ -266,6 +269,7 @@ export function runNextTurboLoader(
     reportNextLoaderDiagnostics({
         diagnostics: lowered.diagnostics,
         issues: lowered.issues,
+        diagnosticFile: diagnosticFileOf(lowered),
         root: context.root,
         resourcePath: loaderContext.resourcePath,
         source,

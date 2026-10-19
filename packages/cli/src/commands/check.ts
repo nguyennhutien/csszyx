@@ -15,10 +15,15 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+    renderSzDiagnostic,
+    renderSzDiagnosticParts,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    SZ_DIAGNOSTIC_URL_BASE,
+    SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
-    szDiagnosticKindOf,
-    szKeySuggestionFor,
+    type SzDiagnosticIssue,
+    szDiagnosticPositionOf,
 } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
 import {
@@ -44,13 +49,16 @@ import {
     diagnosticConfigProblemsMessage,
     hoistedSignUtility,
     isAtLeastLevel,
+    isRemovedRuleId,
     loadDiagnosticPolicy,
+    removedRuleIdDiagnostic,
     unsignedClass,
 } from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
 import {
     type CheckRule,
     createReporter,
+    type FindingInput,
     type Reporter,
     renderJsonReport,
 } from '../scanner/check-report.js';
@@ -133,16 +141,43 @@ export interface CheckOptions {
 /** One captured sz diagnostic, with the kind the compiler reads from its code. */
 interface ClassifiedIssue extends SzIssue {
     kind: string;
-    /** The known key an `unknown-key` issue most likely misspells, or null. */
-    suggestion: string | null;
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
 interface SzIssue {
     file: string;
+    /** The main sentence, with no header. */
     message: string;
-    /** The code the engine gave it; absent only for a result with no codes. */
-    code?: SzDiagnosticCode;
+    /** The clause after `help:`, when the code has one. */
+    help?: string;
+    /** The clause after `note:`, when the code has one. */
+    note?: string;
+    code: SzDiagnosticCode;
+    args: Readonly<Record<string, unknown>>;
+    line?: number;
+    column?: number;
+}
+
+/**
+ * The engine diagnostics of one file that `check` lists. It leaves two to the
+ * build log: a fallback whose classes were still collected, which is advice
+ * about one sz prop, and every syntax error after a file's first, since a file
+ * that does not parse is one finding however many errors it holds. A fallback
+ * whose classes were never collected (`fallback-missing-css`) is listed: those
+ * classes have no CSS.
+ *
+ * @param issues - The diagnostics of one file.
+ * @returns The ones `check` lists, in order.
+ */
+function checkedIssues<T extends Pick<SzIssue, 'code'>>(issues: readonly T[]): T[] {
+    let parseErrorListed = false;
+    return issues.filter(issue => {
+        if (issue.code === 'fallback-nudge') return false;
+        if (issue.code !== 'parse-error') return true;
+        if (parseErrorListed) return false;
+        parseErrorListed = true;
+        return true;
+    });
 }
 
 /**
@@ -217,23 +252,18 @@ function listedSourceFiles(listed: readonly string[], cwd: string): ListedFiles 
  * @param message - The diagnostic text.
  * @returns The 1-based line, or undefined when the message carries none.
  */
-function lineFromMessage(message: string): number | undefined {
-    const match = /:(\d+)(?::\d+)?\b/.exec(message);
-    return match ? Number(match[1]) : undefined;
-}
-
 /**
  * Group captured diagnostics by project-relative file.
  *
  * @param issues Captured compiler diagnostics.
  * @returns Diagnostics keyed by project-relative file.
  */
-function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
-    const byFile = new Map<string, string[]>();
-    for (const { file, message } of issues) {
-        const messages = byFile.get(file) ?? [];
-        messages.push(message);
-        byFile.set(file, messages);
+function groupIssuesByFile<T extends SzIssue>(issues: T[]): Map<string, T[]> {
+    const byFile = new Map<string, T[]>();
+    for (const issue of issues) {
+        const inFile = byFile.get(issue.file) ?? [];
+        inFile.push(issue);
+        byFile.set(issue.file, inFile);
     }
     return byFile;
 }
@@ -378,7 +408,7 @@ function reportDeadClasses(
 
     const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
     if (!hadEntries) {
-        out.info(
+        out.runInfo(
             'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
                 'there is no design system to ask which classes are real.',
         );
@@ -397,14 +427,14 @@ function reportDeadClasses(
         // them produced an oracle, so each has something to say about why, and
         // a project whose stylesheets fail for different reasons is exactly the
         // one where hearing only the first sends the user to the wrong file.
-        out.info(`Dead-class check skipped: ${skipped.join('; ')}.`);
+        out.runInfo(`Dead-class check skipped: ${skipped.join('; ')}.`);
         // A stylesheet that will not compile is a broken project, not an absent
         // one, and passing it quietly is how a check stays green for months
         // after it stopped running. An environment with nothing to ask — no
         // Tailwind, a version without a design system — still passes: failing
         // there would break every consumer who does not build with one.
         if (stylesheetFailed) {
-            out.warn(
+            out.runWarn(
                 '\n✖ The dead-class check did not run. Its stylesheet is part of this project, ' +
                     'so this is reported as a failure rather than a skip — otherwise a check ' +
                     'that never runs is indistinguishable from one that found nothing.',
@@ -675,6 +705,68 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
 }
 
 /**
+ * One captured diagnostic as a machine-readable finding.
+ *
+ * @param issue - The diagnostic.
+ * @returns The finding, its suggestion mirrored where version 1 put it.
+ */
+function findingOf(issue: ClassifiedIssue): FindingInput {
+    const { file, message, help, note, kind, args, line, column } = issue;
+    const suggestion = typeof args.suggestion === 'string' ? args.suggestion : undefined;
+    return {
+        rule: 'sz-diagnostic',
+        kind,
+        file,
+        ...(line === undefined ? {} : { line, column }),
+        // An absent part stays `undefined`, which the JSON leaves out.
+        message,
+        help,
+        note,
+        ...(suggestion === undefined ? {} : { suggestion }),
+        args,
+        url: `${SZ_DIAGNOSTIC_URL_BASE}${kind}`,
+    };
+}
+
+/**
+ * How far a labelled line of the prose report sits in: under the place, past
+ * the reporter's icon and the two spaces the first line starts with.
+ */
+const CONTINUATION = '    ';
+
+/**
+ * One captured diagnostic as a line of the prose report.
+ *
+ * An error reads as it always has; a quieter level says so, since it is the
+ * reason the run can still pass. The parts arrive bare, so the report lays
+ * out its own `help:` and `note:` lines, each indented once.
+ *
+ * @param issue - The diagnostic.
+ * @param level - The level the project gives it.
+ * @returns The line, its labelled lines under the place.
+ */
+function issueLine(issue: ClassifiedIssue, level: SzDiagnosticLevel): string {
+    const where = issue.line === undefined ? '' : `${issue.line}:${issue.column} `;
+    const tag = level === 'error' ? '' : `(${level}) `;
+    return [
+        `  ${where}${tag}${issue.kind}: ${issue.message}`,
+        ...labelled('help', issue.help),
+        ...labelled('note', issue.note),
+    ].join('\n');
+}
+
+/**
+ * One labelled line of the prose report, or none when the part is absent.
+ *
+ * @param label - The label.
+ * @param value - The part.
+ * @returns The line, in a list of its own.
+ */
+function labelled(label: 'help' | 'note', value: string | undefined): string[] {
+    return value === undefined ? [] : [`${CONTINUATION}${label}: ${value}`];
+}
+
+/**
  * Print captured diagnostics, each at its level.
  *
  * @param out - Where this pass sends its prose and its findings.
@@ -682,29 +774,11 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
  * @param failOn - The quietest level that fails the run.
  */
 function reportIssues(out: Reporter, issues: ClassifiedIssue[], failOn: SzDiagnosticLevel): void {
-    for (const { file, message, kind, suggestion } of issues) {
-        out.push({
-            rule: 'sz-diagnostic',
-            kind,
-            file,
-            line: lineFromMessage(message),
-            message,
-            ...(suggestion === null ? {} : { suggestion }),
-        });
-    }
-    const suggestionOf = new Map(issues.map(issue => [issue.message, issue.suggestion]));
-    const levelOf = new Map(issues.map(issue => [issue.message, issueLevel(out, issue)]));
+    for (const issue of issues) out.push(findingOf(issue));
     const byFile = groupIssuesByFile(issues);
-    for (const [file, messages] of byFile) {
+    for (const [file, inFile] of byFile) {
         out.warn(file);
-        for (const message of messages) {
-            // An error reads as it always has; a quieter level says so, since
-            // it is the reason the run can still pass.
-            const level = levelOf.get(message);
-            out.info(level === 'error' ? `  ${message}` : `  (${level}) ${message}`);
-            const suggestion = suggestionOf.get(message);
-            if (suggestion) out.info(`    Did you mean "${suggestion}"?`);
-        }
+        for (const issue of inFile) out.info(issueLine(issue, issueLevel(out, issue)));
     }
     const { mark, below } = summaryMark(
         issues.map(issue => issueLevel(out, issue)),
@@ -778,23 +852,24 @@ async function collectSzDiagnostics(
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
-        const { diagnostics, codes } = recordFileClasses(
-            source,
-            file,
-            cwd,
-            currentFile,
-            classOrigins,
-            classPrefix,
-        );
-        for (const [index, message] of diagnostics.entries()) {
-            if (message.startsWith('[csszyx]')) {
-                const code = codes[index];
-                issues.push({
-                    file: currentFile,
-                    message: message.replace(/^\[csszyx\]\s*/, ''),
-                    ...(code === undefined ? {} : { code }),
-                });
-            }
+        const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
+        for (const issue of checkedIssues(found)) {
+            const { text, help, note } = renderSzDiagnosticParts(
+                issue,
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            );
+            issues.push({
+                file: currentFile,
+                message: text,
+                help,
+                note,
+                code: issue.code,
+                args: issue.args as Readonly<Record<string, unknown>>,
+                // A file-wide diagnostic sits at offset 0, which is not a line 1.
+                ...(issue.line === undefined || szDiagnosticPositionOf(issue.code) !== 'site'
+                    ? {}
+                    : { line: issue.line, column: issue.column }),
+            });
         }
     }
     return { issues, classOrigins, pairsByFile };
@@ -823,19 +898,16 @@ function recordFileClasses(
     relativePath: string,
     classOrigins: Map<string, string>,
     classPrefix: string | null,
-): { diagnostics: string[]; codes: Array<SzDiagnosticCode | undefined> } {
+): SzDiagnosticIssue[] {
     try {
         const result = transformSource(source, file, { rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
-        return {
-            diagnostics: result.diagnostics,
-            codes: result.diagnostics.map((_, index) => result.issues?.[index]?.code),
-        };
+        return result.issues ?? [];
     } catch {
         // Unreadable by the engine; see the note above.
-        return { diagnostics: [], codes: [] };
+        return [];
     }
 }
 
@@ -1012,7 +1084,7 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
     } else {
         refusal = `"${dir}" does not exist under ${cwd}, so there is nothing to check.`;
     }
-    out.warn(`\u2716 ${refusal}`);
+    out.runWarn(`\u2716 ${refusal}`);
     process.exitCode = 1;
     return null;
 }
@@ -1056,7 +1128,7 @@ async function resolveScanFiles(
         }
     } catch (err) {
         s?.fail('File scan failed');
-        out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
+        out.runWarn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 1;
         return null;
     }
@@ -1064,9 +1136,9 @@ async function resolveScanFiles(
 
     if (missing.length === 0) return files;
 
-    out.warn('Files that could not be read:');
-    for (const file of missing) out.info(`  ${file}`);
-    out.warn(
+    out.runWarn('Files that could not be read:');
+    for (const file of missing) out.runInfo(`  ${file}`);
+    out.runWarn(
         `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
             'checked. A pass here would report a subset as if it were the whole list. ' +
             'Check the paths, and note that a separator is normalised rather than ' +
@@ -1103,11 +1175,19 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
     const exclude = options.ignoreRule ?? [];
     // Every pass and every kind the registry makes settable.
     const known = new Set<string>(SZ_SETTABLE_DIAGNOSTIC_IDS);
-    const unknown = [...include, ...exclude].filter(id => !known.has(id));
+    // A removed id shipped once, so a script naming it keeps running; it
+    // selects nothing, and the warning names the id to use instead.
+    for (const id of new Set([...include, ...exclude].filter(isRemovedRuleId))) {
+        const diagnostic = removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]);
+        out.runWarn(
+            renderSzDiagnostic({ diagnostic, file: '', computed: SZ_DIAGNOSTIC_COMPUTED_VALUES }),
+        );
+    }
+    const unknown = [...include, ...exclude].filter(id => !known.has(id) && !isRemovedRuleId(id));
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');
         const ids = [...known].join(', ');
-        out.warn(
+        out.runWarn(
             `\u2716 ${given} is not a rule or a diagnostic kind, so it would select nothing. ` +
                 `Known ids: ${ids}.`,
         );
@@ -1143,15 +1223,14 @@ function reportSelectedIssues(
     const selected: ClassifiedIssue[] = [];
     let silenced = 0;
     for (const issue of issues) {
-        const kind = szDiagnosticKindOf(issue.message, issue.code);
+        const kind = issue.code;
         if (!wants('sz-diagnostic', kind)) continue;
         // Set `off` in csszyx.config: not reported, and not "left out" by a flag.
         if (out.levelOf({ rule: 'sz-diagnostic', kind, file: issue.file }) === 'off') {
             silenced++;
             continue;
         }
-        const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
-        selected.push({ ...issue, kind, suggestion });
+        selected.push({ ...issue, kind });
     }
     const leftOut = issues.length - selected.length - silenced;
     if (selected.length > 0) {
@@ -1187,7 +1266,7 @@ function failOnLevel(options: CheckOptions, out: Reporter): SzDiagnosticLevel | 
     const level = options.failOn ?? 'error';
     if (FAIL_ON_LEVELS.has(level)) return level;
     const refusal = level === 'off' ? 'cannot be a threshold' : 'is not a level';
-    out.warn(
+    out.runWarn(
         `\u2716 --fail-on "${level}" ${refusal}: use info, warn or error. Nothing was scanned.`,
     );
     process.exitCode = 1;
@@ -1315,7 +1394,7 @@ function runDeadClassPass(
     const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
     if (!deadClassPass) return;
     if (disagreementLeftOut) {
-        out.info(
+        out.runInfo(
             `Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule ${PREFIX_DISAGREEMENT} left that finding out.`,
         );
         return;

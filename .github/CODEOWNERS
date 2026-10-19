@@ -65,6 +65,8 @@
 # be written by any contributor.
 /packages/compiler/src/index.ts        @nguyennhutien
 /packages/compiler/src/transform-core.ts  @nguyennhutien
+/packages/compiler/src/sz-key-tables.ts  @nguyennhutien
+/packages/compiler/src/closed-enum-tables.ts  @nguyennhutien
 /packages/compiler/src/types/**        @nguyennhutien
 
 # ----- Runtime hydration / SSR safety -----

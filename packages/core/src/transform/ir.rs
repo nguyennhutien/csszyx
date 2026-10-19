@@ -160,8 +160,9 @@ pub struct SzsSlotEntryIr {
 pub struct SzsDiagnosticIr {
     /// Byte offset of the `szs` attribute.
     pub start: u32,
-    /// The rendered message.
-    pub message: String,
+    /// Whether it is on a host element, where `szs` has no effect, rather
+    /// than a slot map the build could not read.
+    pub host_element: bool,
 }
 
 /// A `szs` slot-map attribute with every slot compiled.
@@ -601,12 +602,18 @@ pub struct SpreadSplitClassIr {
     pub element_name: String,
     /// Span of the first class name or `sz` written.
     pub span: TextSpan,
-    /// What the sides before the last one hold, as a reader names it: a class
-    /// name's value in backticks, or the classes of an `sz`.
-    pub earlier: Vec<String>,
-    /// Where to write the one `sz` array and what it holds, built from the
-    /// element: its spread, its class attribute's name, its class values.
-    pub example: String,
+    /// The class names written on the sides before the last one: a string
+    /// value as written, an expression on one line.
+    pub classes: Vec<String>,
+    /// How many `sz` attributes those sides hold.
+    pub sz_count: usize,
+    /// Where the first of them sits among `classes`.
+    pub sz_at: usize,
+    /// The spread's text, when it is a plain name or member chain.
+    pub spread: Option<String>,
+    /// The items of the one `sz` array that would replace them, as code: each
+    /// class value, the spread's class attribute.
+    pub parts: Vec<String>,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.

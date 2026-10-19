@@ -153,3 +153,1297 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::MangleVarsHoistSkipped,
     DiagnosticCode::ColorSlashOpacity,
 ];
+
+/// Shared with the renderer, which prints it.
+#[cfg_attr(not(feature = "native-engine"), allow(dead_code))]
+pub const MAX_SOURCE_NESTING_DEPTH: usize = 64;
+
+/// Shared with the renderer, which prints it.
+#[cfg_attr(not(feature = "native-engine"), allow(dead_code))]
+pub const MERGE_TABLE_FORMAT: u32 = 1;
+
+/// The engine's diagnostics, one constructor per code and form, each
+/// returning the code with its named args in registry order.
+pub mod issue {
+    // A form only the TypeScript lanes report has a constructor the engine never calls.
+    #![allow(clippy::too_many_arguments, dead_code)]
+    use super::DiagnosticCode;
+    use crate::transform::Args;
+
+    /// `unknown-key`: A key no sz table knows, likely a typo.
+    #[must_use]
+    #[inline]
+    pub fn unknown_key(key: &str, suggestion: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::UnknownKey,
+            Args::default()
+                .text("key", key)
+                .optional_text("suggestion", suggestion),
+        )
+    }
+
+    /// `canonical-key`: An alias of a key, with the canonical spelling to write.
+    #[must_use]
+    #[inline]
+    pub fn canonical_key(key: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::CanonicalKey,
+            Args::default().text("key", key),
+        )
+    }
+
+    /// `removed-key` (`runtime-alias`): A key that was removed or replaced, with what to write instead.
+    #[must_use]
+    #[inline]
+    pub fn removed_key_runtime_alias(
+        key: &str,
+        replacement: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RemovedKey,
+            Args::default()
+                .text("form", "runtime-alias")
+                .text("key", key)
+                .optional_text("replacement", replacement),
+        )
+    }
+
+    /// `removed-key` (`sugar-replaced`): A key that was removed or replaced, with what to write instead.
+    #[must_use]
+    #[inline]
+    pub fn removed_key_sugar_replaced(
+        key: &str,
+        replacement: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RemovedKey,
+            Args::default()
+                .text("form", "sugar-replaced")
+                .text("key", key)
+                .optional_text("replacement", replacement),
+        )
+    }
+
+    /// `removed-key` (`sugar`): A key that was removed or replaced, with what to write instead.
+    #[must_use]
+    #[inline]
+    pub fn removed_key_sugar(key: &str, replacement: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RemovedKey,
+            Args::default()
+                .text("form", "sugar")
+                .text("key", key)
+                .optional_text("replacement", replacement),
+        )
+    }
+
+    /// `removed-key` (`removed`): A key that was removed or replaced, with what to write instead.
+    #[must_use]
+    #[inline]
+    pub fn removed_key_removed(key: &str, replacement: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RemovedKey,
+            Args::default()
+                .text("form", "removed")
+                .text("key", key)
+                .optional_text("replacement", replacement),
+        )
+    }
+
+    /// `removed-key` (`replaced`): A key that was removed or replaced, with what to write instead.
+    #[must_use]
+    #[inline]
+    pub fn removed_key_replaced(key: &str, replacement: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RemovedKey,
+            Args::default()
+                .text("form", "replaced")
+                .text("key", key)
+                .optional_text("replacement", replacement),
+        )
+    }
+
+    /// `numeric-key`: A numeric key, the mark of an array or spread passed as an sz object.
+    #[must_use]
+    #[inline]
+    pub fn numeric_key(key: &str) -> (DiagnosticCode, Args) {
+        (DiagnosticCode::NumericKey, Args::default().text("key", key))
+    }
+
+    /// `closed-enum-value` (`sibling-group`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_sibling_group(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "sibling-group")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
+    /// `closed-enum-value` (`dead`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_dead(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "dead")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
+    /// `closed-enum-value` (`css-value`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_css_value(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "css-value")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
+    /// `closed-enum-value` (`font-style`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_font_style(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "font-style")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
+    /// `closed-enum-value` (`font-smoothing`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_font_smoothing(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "font-smoothing")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
+    /// `slash-opacity-string`: A colour key given its opacity in a string, which emits nothing; the object form takes it.
+    #[must_use]
+    #[inline]
+    pub fn slash_opacity_string(key: &str, color: &str, opacity: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SlashOpacityString,
+            Args::default()
+                .text("key", key)
+                .text("color", color)
+                .text("opacity", opacity),
+        )
+    }
+
+    /// `off-scale-value`: A spacing value off Tailwind's quarter-step scale.
+    #[must_use]
+    #[inline]
+    pub fn off_scale_value(key: &str, value: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OffScaleValue,
+            Args::default().text("key", key).text("value", value),
+        )
+    }
+
+    /// `numeric-font-weight`: A font weight written as a numeric string.
+    #[must_use]
+    #[inline]
+    pub fn numeric_font_weight(value: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::NumericFontWeight,
+            Args::default().text("value", value),
+        )
+    }
+
+    /// `per-side-border-style`: A border style on one side, which Tailwind cannot express.
+    #[must_use]
+    #[inline]
+    pub fn per_side_border_style(key: &str, value: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::PerSideBorderStyle,
+            Args::default().text("key", key).text("value", value),
+        )
+    }
+
+    /// `property-object`: An object on a key that names a property, not a variant.
+    #[must_use]
+    #[inline]
+    pub fn property_object(key: &str, nested_keys: Vec<String>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::PropertyObject,
+            Args::default()
+                .text("key", key)
+                .list("nestedKeys", nested_keys),
+        )
+    }
+
+    /// `non-variant-object`: An object on a csszyx-owned key that is not a variant.
+    #[must_use]
+    #[inline]
+    pub fn non_variant_object(key: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::NonVariantObject,
+            Args::default().text("key", key),
+        )
+    }
+
+    /// `unknown-field`: A field a structured value (a mask layer) does not take.
+    #[must_use]
+    #[inline]
+    pub fn unknown_field(
+        owner: &str,
+        member: &str,
+        allowed: Vec<String>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::UnknownField,
+            Args::default()
+                .text("owner", owner)
+                .text("member", member)
+                .list("allowed", allowed),
+        )
+    }
+
+    /// `runtime-value`: A runtime value on a key with no CSS-variable utility.
+    #[must_use]
+    #[inline]
+    pub fn runtime_value(key: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RuntimeValue,
+            Args::default().text("key", key),
+        )
+    }
+
+    /// `unresolvable-spread`: A spread in an sz object the build cannot resolve.
+    #[must_use]
+    #[inline]
+    pub fn unresolvable_spread() -> (DiagnosticCode, Args) {
+        (DiagnosticCode::UnresolvableSpread, Args::default())
+    }
+
+    /// `style-override`: A props spread that may override the style sz emits.
+    #[must_use]
+    #[inline]
+    pub fn style_override() -> (DiagnosticCode, Args) {
+        (DiagnosticCode::StyleOverride, Args::default())
+    }
+
+    /// `szs-slot-map` (`host-element`): An szs slot map the build cannot read, or one on a host element.
+    #[must_use]
+    #[inline]
+    pub fn szs_slot_map_host_element() -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SzsSlotMap,
+            Args::default().text("form", "host-element"),
+        )
+    }
+
+    /// `szs-slot-map` (`unreadable-slot`): An szs slot map the build cannot read, or one on a host element.
+    #[must_use]
+    #[inline]
+    pub fn szs_slot_map_unreadable_slot() -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SzsSlotMap,
+            Args::default().text("form", "unreadable-slot"),
+        )
+    }
+
+    /// `sz-recover` (`non-literal`): An szRecover value the build cannot read.
+    #[must_use]
+    #[inline]
+    pub fn sz_recover_non_literal(mode: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SzRecover,
+            Args::default()
+                .text("form", "non-literal")
+                .optional_text("mode", mode),
+        )
+    }
+
+    /// `sz-recover` (`unknown-mode`): An szRecover value the build cannot read.
+    #[must_use]
+    #[inline]
+    pub fn sz_recover_unknown_mode(mode: Option<&str>) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SzRecover,
+            Args::default()
+                .text("form", "unknown-mode")
+                .optional_text("mode", mode),
+        )
+    }
+
+    /// `class-precedence`: A runtime className beside sz, which sz overrides.
+    #[must_use]
+    #[inline]
+    pub fn class_precedence() -> (DiagnosticCode, Args) {
+        (DiagnosticCode::ClassPrecedence, Args::default())
+    }
+
+    /// `duplicate-sz`: An element with more than one sz attribute, merged in order.
+    #[must_use]
+    #[inline]
+    pub fn duplicate_sz(element_name: &str, count: u64) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::DuplicateSz,
+            Args::default()
+                .text("elementName", element_name)
+                .count("count", count),
+        )
+    }
+
+    /// `spread-split-class`: Class names and sz on more than one side of a spread.
+    #[must_use]
+    #[inline]
+    pub fn spread_split_class(
+        element_name: &str,
+        classes: Vec<String>,
+        sz_count: u64,
+        sz_at: u64,
+        spread: Option<&str>,
+        parts: Vec<String>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::SpreadSplitClass,
+            Args::default()
+                .text("elementName", element_name)
+                .list("classes", classes)
+                .count("szCount", sz_count)
+                .count("szAt", sz_at)
+                .optional_text("spread", spread)
+                .list("parts", parts),
+        )
+    }
+
+    /// `moved-value` (`value`): A value that moved to another key, with the key to write.
+    #[must_use]
+    #[inline]
+    pub fn moved_value_value(
+        key: &str,
+        value: &str,
+        layer_key: Option<&'static str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(
+            layer_key.is_none_or(|v| ["maskLinear", "maskRadial", "maskConic"].contains(&v))
+        );
+        (
+            DiagnosticCode::MovedValue,
+            Args::default()
+                .text("form", "value")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("layerKey", layer_key),
+        )
+    }
+
+    /// `moved-value` (`mask-layer`): A value that moved to another key, with the key to write.
+    #[must_use]
+    #[inline]
+    pub fn moved_value_mask_layer(
+        key: &str,
+        value: &str,
+        layer_key: Option<&'static str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(
+            layer_key.is_none_or(|v| ["maskLinear", "maskRadial", "maskConic"].contains(&v))
+        );
+        (
+            DiagnosticCode::MovedValue,
+            Args::default()
+                .text("form", "mask-layer")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("layerKey", layer_key),
+        )
+    }
+
+    /// `global-before-group`: A stand-alone keyword written before a group key that replaces it.
+    #[must_use]
+    #[inline]
+    pub fn global_before_group(global: &str, value: &str, group: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::GlobalBeforeGroup,
+            Args::default()
+                .text("global", global)
+                .text("value", value)
+                .text("group", group),
+        )
+    }
+
+    /// `runtime-family-conflict` (`key-first`): A runtime value beside the other side of its key family.
+    #[must_use]
+    #[inline]
+    pub fn runtime_family_conflict_key_first(key: &str, other: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RuntimeFamilyConflict,
+            Args::default()
+                .text("form", "key-first")
+                .text("key", key)
+                .text("other", other),
+        )
+    }
+
+    /// `runtime-family-conflict` (`other-first`): A runtime value beside the other side of its key family.
+    #[must_use]
+    #[inline]
+    pub fn runtime_family_conflict_other_first(key: &str, other: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RuntimeFamilyConflict,
+            Args::default()
+                .text("form", "other-first")
+                .text("key", key)
+                .text("other", other),
+        )
+    }
+
+    /// `fallback-missing-css`: A runtime fallback whose classes were never collected.
+    #[must_use]
+    #[inline]
+    pub fn fallback_missing_css(
+        site: &'static str,
+        shape: Option<&'static str>,
+        detail: Option<&str>,
+        path: Option<&str>,
+        key_path: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(["sz", "szr", "szv", "sz-variant-key"].contains(&site));
+        debug_assert!(shape.is_none_or(|v| [
+            "call",
+            "identifier",
+            "import",
+            "member",
+            "other",
+            "szv-factory",
+            "variant"
+        ]
+        .contains(&v)));
+        (
+            DiagnosticCode::FallbackMissingCss,
+            Args::default()
+                .text("site", site)
+                .optional_text("shape", shape)
+                .optional_text("detail", detail)
+                .optional_text("path", path)
+                .optional_text("keyPath", key_path),
+        )
+    }
+
+    /// `fallback-nudge`: A runtime fallback whose classes were still collected.
+    #[must_use]
+    #[inline]
+    pub fn fallback_nudge(
+        site: &'static str,
+        shape: Option<&'static str>,
+        detail: Option<&str>,
+        path: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(["sz", "sz-array-element"].contains(&site));
+        debug_assert!(shape.is_none_or(|v| [
+            "call",
+            "identifier",
+            "import",
+            "member",
+            "other",
+            "szv-factory",
+            "variant"
+        ]
+        .contains(&v)));
+        (
+            DiagnosticCode::FallbackNudge,
+            Args::default()
+                .text("site", site)
+                .optional_text("shape", shape)
+                .optional_text("detail", detail)
+                .optional_text("path", path),
+        )
+    }
+
+    /// `merge-classifier-unavailable` (`unreadable`): A merge table this engine cannot read, so nothing merged.
+    #[must_use]
+    #[inline]
+    pub fn merge_classifier_unavailable_unreadable(
+        error: Option<&str>,
+        table_format: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::MergeClassifierUnavailable,
+            Args::default()
+                .text("form", "unreadable")
+                .optional_text("error", error)
+                .optional_count("tableFormat", table_format),
+        )
+    }
+
+    /// `merge-classifier-unavailable` (`format-mismatch`): A merge table this engine cannot read, so nothing merged.
+    #[must_use]
+    #[inline]
+    pub fn merge_classifier_unavailable_format_mismatch(
+        error: Option<&str>,
+        table_format: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::MergeClassifierUnavailable,
+            Args::default()
+                .text("form", "format-mismatch")
+                .optional_text("error", error)
+                .optional_count("tableFormat", table_format),
+        )
+    }
+
+    /// `parse-error` (`syntax`): A file the parser rejected, which contributes no classes.
+    #[must_use]
+    #[inline]
+    pub fn parse_error_syntax(
+        message: Option<&str>,
+        error_count: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ParseError,
+            Args::default()
+                .text("form", "syntax")
+                .optional_text("message", message)
+                .optional_count("errorCount", error_count),
+        )
+    }
+
+    /// `parse-error` (`summary`): A file the parser rejected, which contributes no classes.
+    #[must_use]
+    #[inline]
+    pub fn parse_error_summary(
+        message: Option<&str>,
+        error_count: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ParseError,
+            Args::default()
+                .text("form", "summary")
+                .optional_text("message", message)
+                .optional_count("errorCount", error_count),
+        )
+    }
+
+    /// `parse-error` (`panicked`): A file the parser rejected, which contributes no classes.
+    #[must_use]
+    #[inline]
+    pub fn parse_error_panicked(
+        message: Option<&str>,
+        error_count: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ParseError,
+            Args::default()
+                .text("form", "panicked")
+                .optional_text("message", message)
+                .optional_count("errorCount", error_count),
+        )
+    }
+
+    /// `parse-error` (`expression`): A file the parser rejected, which contributes no classes.
+    #[must_use]
+    #[inline]
+    pub fn parse_error_expression(
+        message: Option<&str>,
+        error_count: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ParseError,
+            Args::default()
+                .text("form", "expression")
+                .optional_text("message", message)
+                .optional_count("errorCount", error_count),
+        )
+    }
+
+    /// `parse-error` (`prescan`): A file the parser rejected, which contributes no classes.
+    #[must_use]
+    #[inline]
+    pub fn parse_error_prescan(
+        message: Option<&str>,
+        error_count: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ParseError,
+            Args::default()
+                .text("form", "prescan")
+                .optional_text("message", message)
+                .optional_count("errorCount", error_count),
+        )
+    }
+
+    /// `nesting-depth`: A file nested deeper than the parser guard allows.
+    #[must_use]
+    #[inline]
+    pub fn nesting_depth(depth: u64) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::NestingDepth,
+            Args::default().count("depth", depth),
+        )
+    }
+
+    /// `unsupported-dynamic-sz`: An sz attribute whose value the engine cannot read.
+    #[must_use]
+    #[inline]
+    pub fn unsupported_dynamic_sz() -> (DiagnosticCode, Args) {
+        (DiagnosticCode::UnsupportedDynamicSz, Args::default())
+    }
+
+    /// `ast-budget` (`transform`): A file over the AST budget, left unchanged.
+    #[must_use]
+    #[inline]
+    pub fn ast_budget_transform() -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::AstBudget,
+            Args::default().text("form", "transform"),
+        )
+    }
+
+    /// `ast-budget` (`prescan`): A file over the AST budget, left unchanged.
+    #[must_use]
+    #[inline]
+    pub fn ast_budget_prescan() -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::AstBudget,
+            Args::default().text("form", "prescan"),
+        )
+    }
+
+    /// `mangle-vars-hoist-skipped`: A CSS variable mangleVars could not hoist to a component.
+    #[must_use]
+    #[inline]
+    pub fn mangle_vars_hoist_skipped(
+        name: &str,
+        usage_count: u64,
+        reason: &'static str,
+        max_depth: Option<u64>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(["no-lca", "non-host-ancestor", "max-depth"].contains(&reason));
+        (
+            DiagnosticCode::MangleVarsHoistSkipped,
+            Args::default()
+                .text("name", name)
+                .count("usageCount", usage_count)
+                .text("reason", reason)
+                .optional_count("maxDepth", max_depth),
+        )
+    }
+
+    /// `color-slash-opacity` (`op-given`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    #[must_use]
+    #[inline]
+    pub fn color_slash_opacity_op_given(
+        key: &str,
+        base: &str,
+        opacity: &str,
+        important: Option<&'static str>,
+        op: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
+        (
+            DiagnosticCode::ColorSlashOpacity,
+            Args::default()
+                .text("form", "op-given")
+                .text("key", key)
+                .text("base", base)
+                .text("opacity", opacity)
+                .optional_text("important", important)
+                .optional_text("op", op),
+        )
+    }
+
+    /// `color-slash-opacity` (`op-absent`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    #[must_use]
+    #[inline]
+    pub fn color_slash_opacity_op_absent(
+        key: &str,
+        base: &str,
+        opacity: &str,
+        important: Option<&'static str>,
+        op: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
+        (
+            DiagnosticCode::ColorSlashOpacity,
+            Args::default()
+                .text("form", "op-absent")
+                .text("key", key)
+                .text("base", base)
+                .text("opacity", opacity)
+                .optional_text("important", important)
+                .optional_text("op", op),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{issue, DiagnosticCode};
+
+    // One assertion pair per constructor, generated: its length is the registry's.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn every_constructor_names_its_args_in_registry_order() {
+        let (code, args) = issue::unknown_key("key", Some("suggestion"));
+        assert_eq!(code, DiagnosticCode::UnknownKey);
+        assert_eq!(args.to_json(), r#"{"key":"key","suggestion":"suggestion"}"#);
+        let (code, args) = issue::unknown_key("key", None);
+        assert_eq!(code, DiagnosticCode::UnknownKey);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::canonical_key("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::canonical_key("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::removed_key_runtime_alias("key", Some("replacement"));
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"runtime-alias","key":"key","replacement":"replacement"}"#
+        );
+        let (code, args) = issue::removed_key_runtime_alias("key", None);
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(args.to_json(), r#"{"form":"runtime-alias","key":"key"}"#);
+        let (code, args) = issue::removed_key_sugar_replaced("key", Some("replacement"));
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"sugar-replaced","key":"key","replacement":"replacement"}"#
+        );
+        let (code, args) = issue::removed_key_sugar_replaced("key", None);
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(args.to_json(), r#"{"form":"sugar-replaced","key":"key"}"#);
+        let (code, args) = issue::removed_key_sugar("key", Some("replacement"));
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"sugar","key":"key","replacement":"replacement"}"#
+        );
+        let (code, args) = issue::removed_key_sugar("key", None);
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(args.to_json(), r#"{"form":"sugar","key":"key"}"#);
+        let (code, args) = issue::removed_key_removed("key", Some("replacement"));
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"removed","key":"key","replacement":"replacement"}"#
+        );
+        let (code, args) = issue::removed_key_removed("key", None);
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(args.to_json(), r#"{"form":"removed","key":"key"}"#);
+        let (code, args) = issue::removed_key_replaced("key", Some("replacement"));
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"replaced","key":"key","replacement":"replacement"}"#
+        );
+        let (code, args) = issue::removed_key_replaced("key", None);
+        assert_eq!(code, DiagnosticCode::RemovedKey);
+        assert_eq!(args.to_json(), r#"{"form":"replaced","key":"key"}"#);
+        let (code, args) = issue::numeric_key("key");
+        assert_eq!(code, DiagnosticCode::NumericKey);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::numeric_key("key");
+        assert_eq!(code, DiagnosticCode::NumericKey);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::closed_enum_value_sibling_group(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"sibling-group","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) = issue::closed_enum_value_sibling_group("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"sibling-group","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::closed_enum_value_dead(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"dead","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) = issue::closed_enum_value_dead("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"dead","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::closed_enum_value_css_value(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"css-value","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) = issue::closed_enum_value_css_value("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"css-value","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::closed_enum_value_font_style(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"font-style","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) = issue::closed_enum_value_font_style("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"font-style","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::closed_enum_value_font_smoothing(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"font-smoothing","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) =
+            issue::closed_enum_value_font_smoothing("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"font-smoothing","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::slash_opacity_string("key", "color", "opacity");
+        assert_eq!(code, DiagnosticCode::SlashOpacityString);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","color":"color","opacity":"opacity"}"#
+        );
+        let (code, args) = issue::slash_opacity_string("key", "color", "opacity");
+        assert_eq!(code, DiagnosticCode::SlashOpacityString);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","color":"color","opacity":"opacity"}"#
+        );
+        let (code, args) = issue::off_scale_value("key", "value");
+        assert_eq!(code, DiagnosticCode::OffScaleValue);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        let (code, args) = issue::off_scale_value("key", "value");
+        assert_eq!(code, DiagnosticCode::OffScaleValue);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        let (code, args) = issue::numeric_font_weight("value");
+        assert_eq!(code, DiagnosticCode::NumericFontWeight);
+        assert_eq!(args.to_json(), r#"{"value":"value"}"#);
+        let (code, args) = issue::numeric_font_weight("value");
+        assert_eq!(code, DiagnosticCode::NumericFontWeight);
+        assert_eq!(args.to_json(), r#"{"value":"value"}"#);
+        let (code, args) = issue::per_side_border_style("key", "value");
+        assert_eq!(code, DiagnosticCode::PerSideBorderStyle);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        let (code, args) = issue::per_side_border_style("key", "value");
+        assert_eq!(code, DiagnosticCode::PerSideBorderStyle);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        let (code, args) = issue::property_object("key", vec!["nestedKeys".to_string()]);
+        assert_eq!(code, DiagnosticCode::PropertyObject);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","nestedKeys":["nestedKeys"]}"#
+        );
+        let (code, args) = issue::property_object("key", vec!["nestedKeys".to_string()]);
+        assert_eq!(code, DiagnosticCode::PropertyObject);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","nestedKeys":["nestedKeys"]}"#
+        );
+        let (code, args) = issue::non_variant_object("key");
+        assert_eq!(code, DiagnosticCode::NonVariantObject);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::non_variant_object("key");
+        assert_eq!(code, DiagnosticCode::NonVariantObject);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::unknown_field("owner", "member", vec!["allowed".to_string()]);
+        assert_eq!(code, DiagnosticCode::UnknownField);
+        assert_eq!(
+            args.to_json(),
+            r#"{"owner":"owner","member":"member","allowed":["allowed"]}"#
+        );
+        let (code, args) = issue::unknown_field("owner", "member", vec!["allowed".to_string()]);
+        assert_eq!(code, DiagnosticCode::UnknownField);
+        assert_eq!(
+            args.to_json(),
+            r#"{"owner":"owner","member":"member","allowed":["allowed"]}"#
+        );
+        let (code, args) = issue::runtime_value("key");
+        assert_eq!(code, DiagnosticCode::RuntimeValue);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::runtime_value("key");
+        assert_eq!(code, DiagnosticCode::RuntimeValue);
+        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        let (code, args) = issue::unresolvable_spread();
+        assert_eq!(code, DiagnosticCode::UnresolvableSpread);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::unresolvable_spread();
+        assert_eq!(code, DiagnosticCode::UnresolvableSpread);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::style_override();
+        assert_eq!(code, DiagnosticCode::StyleOverride);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::style_override();
+        assert_eq!(code, DiagnosticCode::StyleOverride);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::szs_slot_map_host_element();
+        assert_eq!(code, DiagnosticCode::SzsSlotMap);
+        assert_eq!(args.to_json(), r#"{"form":"host-element"}"#);
+        let (code, args) = issue::szs_slot_map_host_element();
+        assert_eq!(code, DiagnosticCode::SzsSlotMap);
+        assert_eq!(args.to_json(), r#"{"form":"host-element"}"#);
+        let (code, args) = issue::szs_slot_map_unreadable_slot();
+        assert_eq!(code, DiagnosticCode::SzsSlotMap);
+        assert_eq!(args.to_json(), r#"{"form":"unreadable-slot"}"#);
+        let (code, args) = issue::szs_slot_map_unreadable_slot();
+        assert_eq!(code, DiagnosticCode::SzsSlotMap);
+        assert_eq!(args.to_json(), r#"{"form":"unreadable-slot"}"#);
+        let (code, args) = issue::sz_recover_non_literal(Some("mode"));
+        assert_eq!(code, DiagnosticCode::SzRecover);
+        assert_eq!(args.to_json(), r#"{"form":"non-literal","mode":"mode"}"#);
+        let (code, args) = issue::sz_recover_non_literal(None);
+        assert_eq!(code, DiagnosticCode::SzRecover);
+        assert_eq!(args.to_json(), r#"{"form":"non-literal"}"#);
+        let (code, args) = issue::sz_recover_unknown_mode(Some("mode"));
+        assert_eq!(code, DiagnosticCode::SzRecover);
+        assert_eq!(args.to_json(), r#"{"form":"unknown-mode","mode":"mode"}"#);
+        let (code, args) = issue::sz_recover_unknown_mode(None);
+        assert_eq!(code, DiagnosticCode::SzRecover);
+        assert_eq!(args.to_json(), r#"{"form":"unknown-mode"}"#);
+        let (code, args) = issue::class_precedence();
+        assert_eq!(code, DiagnosticCode::ClassPrecedence);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::class_precedence();
+        assert_eq!(code, DiagnosticCode::ClassPrecedence);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::duplicate_sz("elementName", 7);
+        assert_eq!(code, DiagnosticCode::DuplicateSz);
+        assert_eq!(args.to_json(), r#"{"elementName":"elementName","count":7}"#);
+        let (code, args) = issue::duplicate_sz("elementName", 7);
+        assert_eq!(code, DiagnosticCode::DuplicateSz);
+        assert_eq!(args.to_json(), r#"{"elementName":"elementName","count":7}"#);
+        let (code, args) = issue::spread_split_class(
+            "elementName",
+            vec!["classes".to_string()],
+            7,
+            7,
+            Some("spread"),
+            vec!["parts".to_string()],
+        );
+        assert_eq!(code, DiagnosticCode::SpreadSplitClass);
+        assert_eq!(
+            args.to_json(),
+            r#"{"elementName":"elementName","classes":["classes"],"szCount":7,"szAt":7,"spread":"spread","parts":["parts"]}"#
+        );
+        let (code, args) = issue::spread_split_class(
+            "elementName",
+            vec!["classes".to_string()],
+            7,
+            7,
+            None,
+            vec!["parts".to_string()],
+        );
+        assert_eq!(code, DiagnosticCode::SpreadSplitClass);
+        assert_eq!(
+            args.to_json(),
+            r#"{"elementName":"elementName","classes":["classes"],"szCount":7,"szAt":7,"parts":["parts"]}"#
+        );
+        let (code, args) = issue::moved_value_value("key", "value", Some("maskLinear"));
+        assert_eq!(code, DiagnosticCode::MovedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"value","key":"key","value":"value","layerKey":"maskLinear"}"#
+        );
+        let (code, args) = issue::moved_value_value("key", "value", None);
+        assert_eq!(code, DiagnosticCode::MovedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"value","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::moved_value_mask_layer("key", "value", Some("maskLinear"));
+        assert_eq!(code, DiagnosticCode::MovedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"mask-layer","key":"key","value":"value","layerKey":"maskLinear"}"#
+        );
+        let (code, args) = issue::moved_value_mask_layer("key", "value", None);
+        assert_eq!(code, DiagnosticCode::MovedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"mask-layer","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::global_before_group("global", "value", "group");
+        assert_eq!(code, DiagnosticCode::GlobalBeforeGroup);
+        assert_eq!(
+            args.to_json(),
+            r#"{"global":"global","value":"value","group":"group"}"#
+        );
+        let (code, args) = issue::global_before_group("global", "value", "group");
+        assert_eq!(code, DiagnosticCode::GlobalBeforeGroup);
+        assert_eq!(
+            args.to_json(),
+            r#"{"global":"global","value":"value","group":"group"}"#
+        );
+        let (code, args) = issue::runtime_family_conflict_key_first("key", "other");
+        assert_eq!(code, DiagnosticCode::RuntimeFamilyConflict);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"key-first","key":"key","other":"other"}"#
+        );
+        let (code, args) = issue::runtime_family_conflict_key_first("key", "other");
+        assert_eq!(code, DiagnosticCode::RuntimeFamilyConflict);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"key-first","key":"key","other":"other"}"#
+        );
+        let (code, args) = issue::runtime_family_conflict_other_first("key", "other");
+        assert_eq!(code, DiagnosticCode::RuntimeFamilyConflict);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"other-first","key":"key","other":"other"}"#
+        );
+        let (code, args) = issue::runtime_family_conflict_other_first("key", "other");
+        assert_eq!(code, DiagnosticCode::RuntimeFamilyConflict);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"other-first","key":"key","other":"other"}"#
+        );
+        let (code, args) = issue::fallback_missing_css(
+            "sz",
+            Some("call"),
+            Some("detail"),
+            Some("path"),
+            Some("keyPath"),
+        );
+        assert_eq!(code, DiagnosticCode::FallbackMissingCss);
+        assert_eq!(
+            args.to_json(),
+            r#"{"site":"sz","shape":"call","detail":"detail","path":"path","keyPath":"keyPath"}"#
+        );
+        let (code, args) = issue::fallback_missing_css("sz", None, None, None, None);
+        assert_eq!(code, DiagnosticCode::FallbackMissingCss);
+        assert_eq!(args.to_json(), r#"{"site":"sz"}"#);
+        let (code, args) = issue::fallback_nudge("sz", Some("call"), Some("detail"), Some("path"));
+        assert_eq!(code, DiagnosticCode::FallbackNudge);
+        assert_eq!(
+            args.to_json(),
+            r#"{"site":"sz","shape":"call","detail":"detail","path":"path"}"#
+        );
+        let (code, args) = issue::fallback_nudge("sz", None, None, None);
+        assert_eq!(code, DiagnosticCode::FallbackNudge);
+        assert_eq!(args.to_json(), r#"{"site":"sz"}"#);
+        let (code, args) = issue::merge_classifier_unavailable_unreadable(Some("error"), Some(7));
+        assert_eq!(code, DiagnosticCode::MergeClassifierUnavailable);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"unreadable","error":"error","tableFormat":7}"#
+        );
+        let (code, args) = issue::merge_classifier_unavailable_unreadable(None, None);
+        assert_eq!(code, DiagnosticCode::MergeClassifierUnavailable);
+        assert_eq!(args.to_json(), r#"{"form":"unreadable"}"#);
+        let (code, args) =
+            issue::merge_classifier_unavailable_format_mismatch(Some("error"), Some(7));
+        assert_eq!(code, DiagnosticCode::MergeClassifierUnavailable);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"format-mismatch","error":"error","tableFormat":7}"#
+        );
+        let (code, args) = issue::merge_classifier_unavailable_format_mismatch(None, None);
+        assert_eq!(code, DiagnosticCode::MergeClassifierUnavailable);
+        assert_eq!(args.to_json(), r#"{"form":"format-mismatch"}"#);
+        let (code, args) = issue::parse_error_syntax(Some("message"), Some(7));
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"syntax","message":"message","errorCount":7}"#
+        );
+        let (code, args) = issue::parse_error_syntax(None, None);
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(args.to_json(), r#"{"form":"syntax"}"#);
+        let (code, args) = issue::parse_error_summary(Some("message"), Some(7));
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"summary","message":"message","errorCount":7}"#
+        );
+        let (code, args) = issue::parse_error_summary(None, None);
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(args.to_json(), r#"{"form":"summary"}"#);
+        let (code, args) = issue::parse_error_panicked(Some("message"), Some(7));
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"panicked","message":"message","errorCount":7}"#
+        );
+        let (code, args) = issue::parse_error_panicked(None, None);
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(args.to_json(), r#"{"form":"panicked"}"#);
+        let (code, args) = issue::parse_error_expression(Some("message"), Some(7));
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"expression","message":"message","errorCount":7}"#
+        );
+        let (code, args) = issue::parse_error_expression(None, None);
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(args.to_json(), r#"{"form":"expression"}"#);
+        let (code, args) = issue::parse_error_prescan(Some("message"), Some(7));
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"prescan","message":"message","errorCount":7}"#
+        );
+        let (code, args) = issue::parse_error_prescan(None, None);
+        assert_eq!(code, DiagnosticCode::ParseError);
+        assert_eq!(args.to_json(), r#"{"form":"prescan"}"#);
+        let (code, args) = issue::nesting_depth(7);
+        assert_eq!(code, DiagnosticCode::NestingDepth);
+        assert_eq!(args.to_json(), r#"{"depth":7}"#);
+        let (code, args) = issue::nesting_depth(7);
+        assert_eq!(code, DiagnosticCode::NestingDepth);
+        assert_eq!(args.to_json(), r#"{"depth":7}"#);
+        let (code, args) = issue::unsupported_dynamic_sz();
+        assert_eq!(code, DiagnosticCode::UnsupportedDynamicSz);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::unsupported_dynamic_sz();
+        assert_eq!(code, DiagnosticCode::UnsupportedDynamicSz);
+        assert_eq!(args.to_json(), "{}");
+        let (code, args) = issue::ast_budget_transform();
+        assert_eq!(code, DiagnosticCode::AstBudget);
+        assert_eq!(args.to_json(), r#"{"form":"transform"}"#);
+        let (code, args) = issue::ast_budget_transform();
+        assert_eq!(code, DiagnosticCode::AstBudget);
+        assert_eq!(args.to_json(), r#"{"form":"transform"}"#);
+        let (code, args) = issue::ast_budget_prescan();
+        assert_eq!(code, DiagnosticCode::AstBudget);
+        assert_eq!(args.to_json(), r#"{"form":"prescan"}"#);
+        let (code, args) = issue::ast_budget_prescan();
+        assert_eq!(code, DiagnosticCode::AstBudget);
+        assert_eq!(args.to_json(), r#"{"form":"prescan"}"#);
+        let (code, args) = issue::mangle_vars_hoist_skipped("name", 7, "no-lca", Some(7));
+        assert_eq!(code, DiagnosticCode::MangleVarsHoistSkipped);
+        assert_eq!(
+            args.to_json(),
+            r#"{"name":"name","usageCount":7,"reason":"no-lca","maxDepth":7}"#
+        );
+        let (code, args) = issue::mangle_vars_hoist_skipped("name", 7, "no-lca", None);
+        assert_eq!(code, DiagnosticCode::MangleVarsHoistSkipped);
+        assert_eq!(
+            args.to_json(),
+            r#"{"name":"name","usageCount":7,"reason":"no-lca"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_given("key", "base", "opacity", Some("!"), Some("op"));
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_given("key", "base", "opacity", None, None);
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_absent("key", "base", "opacity", Some("!"), Some("op"));
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_absent("key", "base", "opacity", None, None);
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
+        );
+    }
+}

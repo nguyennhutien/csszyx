@@ -42,7 +42,7 @@ const outPath = join(repoRoot, 'packages/runtime/src/box-role-map.generated.ts')
  * generated copy), so it is read the way `gen:rust-tables` reads it.
  */
 const CLOSED_ENUM_VALUES = readTableSource(
-    join(repoRoot, 'packages/compiler/src/transform-core.ts'),
+    join(repoRoot, 'packages/compiler/src/closed-enum-tables.ts'),
 )
     .objectOfStringObjects('CLOSED_ENUM_CLASSES')
     .map(([key, rows]) => [key, rows.map(([value]) => value)]);

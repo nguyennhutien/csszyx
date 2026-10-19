@@ -141,15 +141,17 @@ describe.each(PARSERS)('the %s artifact', parser => {
     it('reports an engine warning at its key and still writes the class', () => {
         const result = run(sfc('<div sz="{ foo: 4 }" />'));
         expect(result.code).toBe(sfc('<div class="foo-4" />'));
-        expect(result.diagnostics).toEqual([
-            {
-                severity: 'warning',
-                message:
-                    '[csszyx] App.vue:2:22: Unknown property "foo" in sz prop. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind\'s @utility.',
-                line: 2,
-                column: 22,
-            },
-        ]);
+        expect(result.diagnostics).toHaveLength(1);
+        const [diagnostic] = result.diagnostics;
+        // The position is the key's, in the file the user wrote.
+        expect(diagnostic).toMatchObject({ severity: 'warning', line: 2, column: 22 });
+        expect(diagnostic.message).toContain('App.vue:2:22');
+        expect(diagnostic.message).toContain('`foo` is not an sz property.');
+        expect(diagnostic.message).toContain('docs: https://csszyx.com/e/unknown-key');
+        // The module the value was lowered in is never shown, and the message
+        // opens with one header only.
+        expect(diagnostic.message).not.toContain('csszyx-template-sz');
+        expect(diagnostic.message.match(/\[csszyx\]/g)).toHaveLength(1);
     });
 
     it('writes an empty class for an empty object', () => {

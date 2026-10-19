@@ -892,16 +892,25 @@ jobs:
           pnpm exec turbo run build ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
       # Absolute gzip budgets for the JS that reaches user bundles (runtime,
-      # dynamic, the compiler browser entry closure). Bytes are deterministic,
-      # so unlike timing this can be a hard gate with zero flake risk. The
+      # dynamic, the compiler browser entry closure) and for the VS Code
+      # extension's bundle. Bytes are deterministic, so unlike timing this
+      # can be a hard gate with zero flake risk. The
       # gated packages are built explicitly first: the workspace build above
       # may scope them away via --affected, and the check treats a missing
       # dist as a failure rather than a pass — turbo serves already-built
       # packages from cache, so the extra build is seconds, not minutes.
       - name: Package size gate
         run: |
-          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler
+          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler --filter=@csszyx/vscode
           pnpm check:package-size
+
+      # Allocations of the engine's diagnostic path, counted as V8
+      # young-generation collections of fixed workloads against a clean
+      # control: they repeat run to run for one Node version, so a budget
+      # rather than a timing. Reads the compiler dist built for the step above
+      # and the host native addon built at the start of this job.
+      - name: Diagnostic cost gate
+        run: pnpm check:diagnostic-cost
 
   # Aggregator. Always runs. Branch protection should require this single
   # check rather than the individual jobs above — those may be legitimately

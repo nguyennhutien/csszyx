@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
+import { ENGINES, type EngineParityResult, type ParityEngine } from './engine-parity-harness.js';
 
 /** One key under test: a value outside its enum, the class it still emits, and one inside. */
 interface EnumCase {
@@ -48,13 +48,17 @@ const CASES = ENGINES.flatMap(([lane, engine]) =>
  *
  * @param engine - The artifact under test.
  * @param sz - The sz object source, as written in JSX.
- * @returns The emitted className and the result's diagnostics.
+ * @returns The emitted className, the result's diagnostics and the issues beside them.
  */
-function run(engine: ParityEngine, sz: string): { emitted: string; diagnostics: string[] } {
+function run(
+    engine: ParityEngine,
+    sz: string,
+): { emitted: string; diagnostics: string[]; issues: NonNullable<EngineParityResult['issues']> } {
     const result = engine(`export const A = () => <div sz={${sz}} />;`, 'closed-enum.tsx');
     return {
         emitted: /className="([^"]*)"/.exec(result.code ?? '')?.[1] ?? '',
         diagnostics: result.diagnostics ?? [],
+        issues: result.issues ?? [],
     };
 }
 
@@ -69,11 +73,15 @@ describe('closed-enum values', () => {
     it.each(CASES)(
         '$lane names the offending $key value and the class it emitted',
         ({ engine, key, bad, bare }) => {
-            const { diagnostics } = run(engine, `{ ${key}: '${bad}' }`);
-            const hit = diagnostics.find(message => message.includes(`"${key}: ${bad}"`));
-            expect(hit, diagnostics.join('\n')).toBeDefined();
-            expect(hit).toContain(`The class "${bare}" is still emitted`);
-            expect(hit).toContain(`${key} takes one of:`);
+            const { diagnostics, issues } = run(engine, `{ ${key}: '${bad}' }`);
+            expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+                ['closed-enum-value', expect.objectContaining({ key, value: bad })],
+            ]);
+            expect(diagnostics).toHaveLength(1);
+            const [hit] = diagnostics;
+            expect(hit).toContain(`\`${key}: ${bad}\` is not a \`${key}\` value.`);
+            expect(hit).toContain(`the class \`${bare}\` is still emitted`);
+            expect(hit).toContain('help: use one of: ');
         },
     );
 
@@ -96,9 +104,66 @@ describe('closed-enum values', () => {
     it.each(CASES)(
         '$lane reports an unrecognised $key value under a variant, and emits it',
         ({ engine, key, bad, bare }) => {
-            const { emitted, diagnostics } = run(engine, `{ hover: { ${key}: '${bad}' } }`);
+            const { emitted, issues } = run(engine, `{ hover: { ${key}: '${bad}' } }`);
             expect(emitted).toBe(`hover:${bare}`);
-            expect(diagnostics.some(message => message.includes(`"${key}: ${bad}"`))).toBe(true);
+            expect(
+                issues.some(
+                    issue =>
+                        issue.code === 'closed-enum-value' &&
+                        (issue.args as { key?: string; value?: string }).key === key &&
+                        (issue.args as { key?: string; value?: string }).value === bad,
+                ),
+            ).toBe(true);
         },
     );
+});
+
+/**
+ * The values the runtime lane names that no closed-enum table holds: a CSS
+ * longhand on an alignment key, which lowers to a dead class, and a font style
+ * or smoothing Tailwind has no class for, which lowers to nothing. The build
+ * ships what the runtime ships, and says so as the runtime does.
+ */
+describe('closed-enum values the runtime lane names', () => {
+    const LANES = ENGINES.map(([lane, engine]) => ({ lane, engine }));
+
+    it.each(LANES)('$lane names a CSS longhand on an alignment key', ({ engine }) => {
+        const { emitted, diagnostics, issues } = run(engine, "{ justify: 'flex-start' }");
+        expect(emitted).toBe('justify-flex-start');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            [
+                'closed-enum-value',
+                { form: 'css-value', key: 'justify', value: 'flex-start', suggestion: 'start' },
+            ],
+        ]);
+        expect(diagnostics[0]).toContain(
+            "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` generates no CSS.",
+        );
+        expect(diagnostics[0]).toContain("help: use the short form: `{ justify: 'start' }`.");
+    });
+
+    it.each(LANES)('$lane names a font style Tailwind has no class for', ({ engine }) => {
+        const { emitted, issues } = run(engine, "{ fontStyle: 'oblique', p: 4 }");
+        expect(emitted).toBe('p-4');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['closed-enum-value', { form: 'font-style', key: 'fontStyle', value: 'oblique' }],
+        ]);
+    });
+
+    it.each(LANES)('$lane names a font smoothing Tailwind has no class for', ({ engine }) => {
+        const { emitted, issues } = run(engine, "{ hover: { fontSmoothing: 'auto' }, p: 4 }");
+        expect(emitted).toBe('p-4');
+        expect(issues.map(issue => [issue.code, issue.args])).toEqual([
+            ['closed-enum-value', { form: 'font-smoothing', key: 'fontSmoothing', value: 'auto' }],
+        ]);
+    });
+
+    it.each(LANES)('$lane stays quiet on the values with a class', ({ engine }) => {
+        const { emitted, issues } = run(
+            engine,
+            "{ justify: 'start', fontStyle: 'italic', fontSmoothing: 'grayscale' }",
+        );
+        expect(emitted).toBe('justify-start italic antialiased');
+        expect(issues).toEqual([]);
+    });
 });

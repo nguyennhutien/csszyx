@@ -48,7 +48,13 @@ describe('csszyx_validate', () => {
         const data = JSON.parse(handleValidate({ sz: { p: 1.3 } }).content[0].text);
         expect(data.valid).toBe(true);
         expect(data.warnings).toHaveLength(1);
-        expect(data.warnings[0]).toContain('spacing scale');
+        // Each part on its own: no header, no label, no layout to cut apart.
+        expect(data.warnings[0]).toEqual({
+            code: 'off-scale-value',
+            message: "`p: 1.3` is not on Tailwind's spacing scale, so the class generates no CSS.",
+            help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'1.3rem'`.",
+            url: 'https://csszyx.com/e/off-scale-value',
+        });
         // The interceptor must not leak past the call.
         expect(console.warn).toBe(before);
     });
@@ -125,9 +131,13 @@ describe('csszyx_validate', () => {
             const data = JSON.parse(handleValidate({ sz: { touch: 'pan-x' } }).content[0].text);
             expect(data.valid).toBe(false);
             expect(data.errors).toHaveLength(1);
-            expect(data.errors[0].key).toBe('touch');
-            expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
-            expect(data.errors[0].message).not.toMatch(/\.tsx:\d/);
+            expect(data.errors[0]).toEqual({
+                key: 'touch',
+                code: 'moved-value',
+                message: '`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                help: "write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
+                url: 'https://csszyx.com/e/moved-value',
+            });
         }
     });
 
@@ -150,7 +160,7 @@ describe('csszyx_validate', () => {
             expect(data.valid).toBe(false);
             expect(data.errors[0].key).toBe('fontVariant');
             expect(data.errors[0].message).toContain('was removed');
-            expect(data.errors[0].message).toContain('one key per group');
+            expect(data.errors[0].help).toContain('one key per group');
         }
     });
 
@@ -160,7 +170,8 @@ describe('csszyx_validate', () => {
         const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
         const data = JSON.parse(handleValidate({ sz }).content[0].text);
         expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
-        expect(data.errors[0].message).toContain("moved to { touchPanX: 'x' }");
+        expect(data.errors[0].message).toContain('`touch: pan-x` moved to `touchPanX`');
+        expect(data.errors[0].help).toContain("write `{ touchPanX: 'x' }`");
         expect(data.transformError).toBeUndefined();
         expect(data.transformResult.className).toBe(transform(sz as SzObject).className);
     });
@@ -171,7 +182,7 @@ describe('csszyx_validate', () => {
             const data = JSON.parse(handleValidate({ sz: { m: 1.3 } }).content[0].text);
             expect(data.valid).toBe(true);
             expect(data.warnings).toHaveLength(1);
-            expect(data.warnings[0]).toContain('spacing scale');
+            expect(data.warnings[0].message).toContain('spacing scale');
         }
         expect(warn).not.toHaveBeenCalled();
         warn.mockRestore();

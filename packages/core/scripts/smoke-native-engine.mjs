@@ -305,7 +305,7 @@ function assertNativeEngineTransform(binding) {
   // className and stays at one diagnostic, which is what makes the advisory
   // precise rather than blanket.
   assertIdentifierFallbackDiagnostic(mergeDynamicClass, 75, "merge dynamic class", [
-    `[csszyx] "sz" takes precedence over the runtime "className" on this element at ${path.join(repoRoot, "fixtures", "merge-dynamic-class.tsx")}:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.`,
+    ["class-precedence", "{}"],
   ]);
 
   if (!recover.code.includes('data-sz-recover="csr" data-sz-recovery-token="')) {
@@ -332,13 +332,26 @@ function assertNativeEngineTransform(binding) {
   }
 }
 
+// The binding returns each issue's code, offset and args, and no sentence:
+// the compiler renders the text from the diagnostic registry. `column` is
+// 1-based on a one-line ASCII source, so the offset is one less.
 function assertIdentifierFallbackDiagnostic(result, column, label, alsoExpect = []) {
+  if ("diagnostics" in result) {
+    fail(`Expected ${label} result to carry no rendered diagnostics: ${JSON.stringify(result.diagnostics)}`);
+  }
   const expected = [
-    `sz fallback at 1:${column}: identifier \`styles\` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().`,
+    [
+      "fallback-nudge",
+      '{"site":"sz","shape":"identifier","detail":"styles","path":""}',
+    ],
     ...alsoExpect,
   ];
-  if (JSON.stringify(result.diagnostics) !== JSON.stringify(expected)) {
-    fail(`Unexpected ${label} diagnostics: ${result.diagnostics}`);
+  const received = (result.issues ?? []).map(issue => [issue.code, issue.argsJson]);
+  if (JSON.stringify(received) !== JSON.stringify(expected)) {
+    fail(`Unexpected ${label} issues: ${JSON.stringify(received)}`);
+  }
+  if (result.issues[0].start !== column - 1) {
+    fail(`Unexpected ${label} fallback offset: ${JSON.stringify(result.issues[0])}`);
   }
 }
 
