@@ -15,6 +15,7 @@ import {
     isRuntimeArtifact,
     listExportEntries,
     listExportSubpaths,
+    moduleOrderProblems,
     nodeEntryFiles,
     SIZE_BUDGETS,
     viteAppBundle,
@@ -351,6 +352,23 @@ test('a file budget whose artifact is missing fails instead of passing silently'
 
 test('committed budgets cover the user-shipped surfaces and the engine entries', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
+    // A budget's module order is checked only where its entries are measured.
+    for (const budget of SIZE_BUDGETS.filter(b => b.moduleOrder)) {
+        for (const subpath of Object.keys(budget.moduleOrder)) {
+            assert.ok(
+                Object.hasOwn(budget.entryBudgets ?? {}, subpath),
+                `${budget.name} ${subpath}`,
+            );
+            assert.ok(
+                Object.hasOwn(budget.vite?.entryBudgets ?? {}, subpath),
+                `${budget.name} ${subpath}`,
+            );
+        }
+    }
+    assert.deepEqual(
+        SIZE_BUDGETS.find(b => b.target === 'packages/compiler')?.moduleOrder?.['./browser'],
+        ['per-key-rows-', 'closed-enum-tables-'],
+    );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
     assert.equal(SIZE_BUDGETS.length, 7);
     for (const budget of SIZE_BUDGETS) {
@@ -754,6 +772,69 @@ test('an app bundle Vite cannot build fails instead of passing silently', async 
             assert.match(empty.failures[0], /typesonly app \(Vite\): no runtime export entries/);
         } finally {
             rmSync(typesOnly, { recursive: true, force: true });
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a module order names the files that must come first, by name prefix', () => {
+    const ids = ['/p/dist/rows-AB12.mjs', '/p/dist/tables-CD34.mjs', '/p/dist/core.mjs'];
+    assert.deepEqual(moduleOrderProblems(ids, ['rows-', 'tables-']), []);
+    assert.deepEqual(moduleOrderProblems(ids, ['tables-', 'rows-']), [
+        'bundles `rows-` before `tables-`',
+    ]);
+    assert.deepEqual(moduleOrderProblems(ids, ['rows-', 'gone-']), [
+        'bundles no module whose file name starts with `gone-`',
+    ]);
+});
+
+/** A package whose one entry imports `a.mjs`, then `b.mjs`.
+ * @returns {Record<string, string>} fixture files
+ */
+function orderedPackage() {
+    return {
+        'packages/ordered/package.json': JSON.stringify({
+            name: 'ordered',
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/ordered/dist/index.mjs':
+            "import { a } from './a.mjs';\nimport { b } from './b.mjs';\nexport const both = a + b;\n",
+        'packages/ordered/dist/a.mjs': "export const a = 'first-module';\n",
+        'packages/ordered/dist/b.mjs': "export const b = 'second-module';\n",
+    };
+}
+
+test('an entry whose bundle lays modules out against its order fails in both lanes', async () => {
+    const root = makeFixture(orderedPackage());
+    try {
+        const budget = (order, extra = {}) =>
+            appBudget('ordered', {
+                entryBudgets: { '.': 100_000 },
+                vite: { maxGzipBytes: 100_000, entryBudgets: { '.': 100_000 } },
+                moduleOrder: order,
+                ...extra,
+            });
+        const kept = budget({ '.': ['a.', 'b.'] });
+        assert.deepEqual(checkBudgets(kept, root).failures, []);
+        assert.deepEqual((await checkViteBudgets(kept, root)).failures, []);
+
+        const swapped = budget({ '.': ['b.', 'a.'] });
+        for (const failures of [
+            checkBudgets(swapped, root).failures,
+            (await checkViteBudgets(swapped, root)).failures,
+        ]) {
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /`\.` bundles `a\.` before `b\.`/);
+        }
+
+        const unknown = budget({ './gone': ['a.'] });
+        for (const failures of [
+            checkBudgets(unknown, root).failures,
+            (await checkViteBudgets(unknown, root)).failures,
+        ]) {
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /`\.\/gone` has a module order but no export/);
         }
     } finally {
         rmSync(root, { recursive: true, force: true });

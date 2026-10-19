@@ -245,6 +245,15 @@ export const SIZE_BUDGETS = [
             './color-var': 550,
             './spacing-var': 1_000,
         },
+        // The capability rows (with the category map) have to be laid out
+        // before the key and closed-enum tables' chunk, in both lanes: with
+        // the tables first, `./browser` measured 16,561 gzip bytes against
+        // 16,425 in esbuild, under its budget, so only the order shows the
+        // drift. A bundler upgrade that stops laying chunks out in
+        // first-import order fails here, not in
+        // `packages/compiler/tests/browser-chunk-order.test.ts`, which reads
+        // the source.
+        moduleOrder: { './browser': ['per-key-rows-', 'closed-enum-tables-'] },
         // Built by Vite, measured 2026-10-19: 17,151, then 16,323 / 384 /
         // 705 / 401 / 300 / 729. This lane is why it exists: when the key
         // tables moved to leaf modules, esbuild measured `./browser` 8 bytes
@@ -582,6 +591,18 @@ export function entryBudgetProblems(shipped, budgeted) {
  * @returns {string} the minified production bundle
  */
 export function appBundle(entryPaths, packageDir) {
+    return appBuild(entryPaths, packageDir).code;
+}
+
+/** The esbuild app build behind {@link appBundle}, with the bundle's modules
+ * in the order it lays them out (esbuild's metafile lists an output's inputs
+ * in that order).
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {{ code: string, moduleIds: string[] }} the bundle and its modules in order
+ */
+function appBuild(entryPaths, packageDir) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     const contents = entryPaths
         .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
@@ -595,11 +616,70 @@ export function appBundle(entryPaths, packageDir) {
         platform: 'browser',
         minify: true,
         treeShaking: true,
+        metafile: true,
         external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
         define: { 'process.env.NODE_ENV': '"production"' },
         logLevel: 'silent',
     });
-    return result.outputFiles[0].text;
+    const [output] = Object.values(result.metafile.outputs);
+    return {
+        code: result.outputFiles[0].text,
+        moduleIds: Object.keys(output.inputs).map(id => path.resolve(packageDir, id)),
+    };
+}
+
+/** Where a budget's `moduleOrder` is broken: each prefix names the first
+ * module whose file name starts with it, and those modules must be laid out in
+ * the listed order. Gzip finds a repeat only within 32 KB, so a table placed
+ * far from the code that spells the same keys costs bytes no line of source
+ * shows (see the compiler's budget).
+ *
+ * @param {string[]} moduleIds module paths in bundle order
+ * @param {string[]} prefixes file-name prefixes, in the order required
+ * @returns {string[]} one problem per prefix with no module or out of order
+ */
+export function moduleOrderProblems(moduleIds, prefixes) {
+    const names = moduleIds.map(id => path.basename(id));
+    const problems = [];
+    let previous;
+    for (const prefix of prefixes) {
+        const at = names.findIndex(name => name.startsWith(prefix));
+        if (at === -1) {
+            problems.push(`bundles no module whose file name starts with \`${prefix}\``);
+            continue;
+        }
+        if (previous !== undefined && at < previous.at) {
+            problems.push(`bundles \`${prefix}\` before \`${previous.prefix}\``);
+        }
+        previous = { prefix, at };
+    }
+    return problems;
+}
+
+/** The failures of a budget's `moduleOrder` for one lane.
+ *
+ * @param {{ name: string, moduleOrder?: Record<string, string[]> }} budget the budget
+ * @param {string} name the lane's budget name
+ * @param {Array<{ subpath: string }>} entries the package's export entries
+ * @param {Map<string, string[]>} modulesBySubpath each measured entry's modules in bundle order
+ * @returns {string[]} failure messages
+ */
+function moduleOrderFailures(budget, name, entries, modulesBySubpath) {
+    const failures = [];
+    for (const [subpath, prefixes] of Object.entries(budget.moduleOrder ?? {})) {
+        if (!entries.some(entry => entry.subpath === subpath)) {
+            failures.push(`${name}: \`${subpath}\` has a module order but no export`);
+            continue;
+        }
+        for (const problem of moduleOrderProblems(modulesBySubpath.get(subpath) ?? [], prefixes)) {
+            failures.push(
+                `${name}: \`${subpath}\` ${problem}. The order keeps tables within gzip's ` +
+                    'reach of the code that repeats their keys; restore it in the import order ' +
+                    'or the chunk groups before moving the budget.',
+            );
+        }
+    }
+    return failures;
 }
 
 /** The id of the entry module the Vite lane bundles from. */
@@ -617,6 +697,16 @@ const VITE_ENTRY = '\0csszyx-size-gate-entry';
  * @returns {Promise<string[]>} the code of every chunk the build emits
  */
 export async function viteAppBundle(entryPaths, packageDir) {
+    return (await viteAppBuild(entryPaths, packageDir)).map(chunk => chunk.code);
+}
+
+/** The Vite build behind {@link viteAppBundle}.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @param {string} packageDir absolute package directory, the resolve root
+ * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
+ */
+async function viteAppBuild(entryPaths, packageDir) {
     const { build } = await import('vite');
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     const external = ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})];
@@ -649,7 +739,9 @@ export async function viteAppBundle(entryPaths, packageDir) {
             },
         },
     });
-    return output.filter(file => file.type === 'chunk').map(chunk => chunk.code);
+    return output
+        .filter(file => file.type === 'chunk')
+        .map(chunk => ({ code: chunk.code, moduleIds: chunk.moduleIds }));
 }
 
 /** Console calls whose first argument opens with a string literal: the
@@ -828,13 +920,20 @@ export function checkBudgets(budgets, rootDir) {
                                 '(measured alone, ~300 bytes of headroom) in `entryBudgets`.',
                         );
                     }
+                    const modulesBySubpath = new Map();
                     for (const { subpath, file } of entries) {
                         if (!Object.hasOwn(budget.entryBudgets, subpath)) continue;
-                        const entryBytes = gzipSync(appBundle([file], target), {
-                            level: 9,
-                        }).length;
-                        entryMeasurements.push([subpath, file, entryBytes]);
+                        const { code, moduleIds } = appBuild([file], target);
+                        modulesBySubpath.set(subpath, moduleIds);
+                        entryMeasurements.push([
+                            subpath,
+                            file,
+                            gzipSync(code, { level: 9 }).length,
+                        ]);
                     }
+                    failures.push(
+                        ...moduleOrderFailures(budget, budget.name, entries, modulesBySubpath),
+                    );
                 }
             }
         } catch (error) {
@@ -892,14 +991,21 @@ export async function checkViteBudgets(budgets, rootDir) {
                 );
             }
             const entryMeasurements = [];
+            const modulesBySubpath = new Map();
             for (const { subpath, file } of entries) {
                 if (!Object.hasOwn(ceilings, subpath)) continue;
+                const chunks = await viteAppBuild([file], target);
+                modulesBySubpath.set(
+                    subpath,
+                    chunks.flatMap(chunk => chunk.moduleIds),
+                );
                 entryMeasurements.push([
                     subpath,
                     file,
-                    gzipChunks(await viteAppBundle([file], target)),
+                    gzipChunks(chunks.map(chunk => chunk.code)),
                 ]);
             }
+            failures.push(...moduleOrderFailures(budget, name, entries, modulesBySubpath));
             record(name, files, gzipBytes, budget.vite.maxGzipBytes);
             for (const [subpath, file, entryBytes] of entryMeasurements) {
                 record(`${name} \`${subpath}\``, [file], entryBytes, ceilings[subpath]);

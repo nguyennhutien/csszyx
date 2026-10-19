@@ -12,7 +12,9 @@
  * (`property-types.ts`), which spells the same keys and goes first. Left in the
  * lowering's chunk it landed after the tables, and `./browser` measured 16,425
  * against 16,332 with it at the front (16,405 against 16,316 in a Vite build).
- * Both numbers pass their budgets, so these tests hold the layout.
+ * Both numbers pass their budgets, so these tests hold the layout in the
+ * source; `moduleOrder` in `scripts/check-package-size.mjs` holds it in what
+ * esbuild and Vite lay out from the build.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
