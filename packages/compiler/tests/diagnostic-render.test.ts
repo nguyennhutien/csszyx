@@ -298,6 +298,20 @@ describe('diagnosticPath', () => {
         expect(diagnosticPath('/elsewhere/A.tsx', '/repo')).toBe('/elsewhere/A.tsx');
         expect(diagnosticPath('C:\\repo\\A.tsx', 'C:\\repo')).toBe('A.tsx');
     });
+
+    it('matches a Windows root whatever its separators and drive-letter case', () => {
+        expect(diagnosticPath('C:\\repo\\src\\A.tsx', 'C:/repo')).toBe('src\\A.tsx');
+        expect(diagnosticPath('C:/repo/src/A.tsx', 'C:\\repo\\')).toBe('src/A.tsx');
+        expect(diagnosticPath('c:\\Repo\\A.tsx', 'C:\\repo')).toBe('A.tsx');
+        expect(diagnosticPath('D:\\repo\\A.tsx', 'C:\\repo')).toBe('D:\\repo\\A.tsx');
+        expect(diagnosticPath('C:\\repository\\A.tsx', 'c:\\repo')).toBe('C:\\repository\\A.tsx');
+        expect(diagnosticPath('c:\\A.tsx', 'C:\\')).toBe('A.tsx');
+        expect(diagnosticPath('C:\\\u0130x\\A.tsx', 'C:\\i\u0307x')).toBe('C:\\\u0130x\\A.tsx');
+    });
+
+    it('keeps the case of a POSIX root significant', () => {
+        expect(diagnosticPath('/Repo/A.tsx', '/repo')).toBe('/Repo/A.tsx');
+    });
 });
 
 describe('renderEngineDiagnostics', () => {

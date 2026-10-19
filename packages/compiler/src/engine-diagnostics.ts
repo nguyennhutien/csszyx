@@ -30,9 +30,27 @@ const ARG_ORDER: ReadonlyMap<string, readonly string[]> = new Map(
     ]),
 );
 
+/** A path that starts with a drive letter, which Windows matches in any case. */
+const WINDOWS_DRIVE = /^[A-Z]:[\\/]/i;
+
+/**
+ * A path in the form two paths are compared in: separators as `/`, and in
+ * lower case on Windows, since that filesystem ignores case.
+ *
+ * @param path - The path.
+ * @param windows - Whether the paths are Windows paths.
+ * @returns The comparable form.
+ */
+function comparablePath(path: string, windows: boolean): string {
+    const slashed = path.replace(/\\/g, '/');
+    return windows ? slashed.toLowerCase() : slashed;
+}
+
 /**
  * A file's path as a diagnostic names it: relative to the project root when it
- * sits under it, as given otherwise.
+ * sits under it, as given otherwise. A Windows root matches whatever its
+ * separators and the case of its letters, because bundlers spell one file both
+ * ways there.
  *
  * @param filename - The path the bundler passed.
  * @param rootDir - The project root, when known.
@@ -42,9 +60,15 @@ export function diagnosticPath(filename: string, rootDir?: string): string {
     if (rootDir === undefined || rootDir === '') return filename;
     let end = rootDir.length;
     while (end > 0 && (rootDir[end - 1] === '/' || rootDir[end - 1] === '\\')) end--;
-    const root = rootDir.slice(0, end);
-    const rest = filename.startsWith(root) ? filename.slice(root.length) : undefined;
-    if (rest === undefined || (rest[0] !== '/' && rest[0] !== '\\')) return filename;
+    const windows = WINDOWS_DRIVE.test(rootDir);
+    // Compared over the same number of UTF-16 units on both sides, since lower
+    // case can change a string's length.
+    const head = filename.slice(0, end);
+    if (comparablePath(head, windows) !== comparablePath(rootDir.slice(0, end), windows)) {
+        return filename;
+    }
+    const rest = filename.slice(end);
+    if (!rest.startsWith('/') && !rest.startsWith('\\')) return filename;
     return rest.slice(1);
 }
 
