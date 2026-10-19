@@ -31,8 +31,10 @@ interface KindMatcher {
 }
 
 /**
- * A kind `csszyx check` can report: an engine code, or `other` for a message
- * with no code that no text matcher accepts.
+ * A kind this module names: an engine code, or `other` for a message with no
+ * code that no text matcher accepts. `other` is no longer a kind `csszyx
+ * check` or a bundler lane reports, since every lane keeps the engine's code;
+ * `rules` and `--rule` accept it only with a `removed-rule-id` warning.
  */
 export type SzDiagnosticKindId = SzDiagnosticCode | 'other';
 

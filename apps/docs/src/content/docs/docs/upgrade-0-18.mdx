@@ -927,7 +927,10 @@ csszyx check --ignore-rule other
 csszyx check --ignore-rule parse-error --ignore-rule ast-budget
 ```
 
-`--rule other` is still accepted. The full list is under
+`--rule other`, `--ignore-rule other` and `rules: { other: … }` in `csszyx.config`
+are still accepted, with a `removed-rule-id` warning: no finding is of that kind
+any more, so they select and set nothing. A line that carries no code, which
+`other` used to name, is set by `sz-diagnostic`. The full list is under
 [Running it in CI](/docs/reference/warnings/#running-it-in-ci).
 
 ## check --json writes version 2, with help and note as fields

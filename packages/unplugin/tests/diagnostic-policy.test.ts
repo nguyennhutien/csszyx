@@ -19,6 +19,7 @@ import {
     diagnosticConfigProblemsMessage,
     isAtLeastLevel,
     readCsszyxFileConfig,
+    removedRuleIdDiagnostic,
     SZ_DIAGNOSTIC_PASS_IDS,
     SZ_DIAGNOSTIC_RULE_IDS,
 } from '../src/diagnostic-policy.js';
@@ -263,6 +264,42 @@ describe('readCsszyxFileConfig', () => {
         // The entry is dropped; the rest of the config still applies.
         expect(read.config.rules).toEqual({ 'dead-class': 'warn' });
         expect(read.config.overrides[0]?.rules).toEqual({});
+    });
+
+    it('warns about a removed id, naming the id that replaced it, and drops the entry', () => {
+        const read = readCsszyxFileConfig({
+            diagnostics: { rules: { other: 'off', 'dead-class': 'warn' } },
+        });
+        expect(read.problems).toEqual([
+            {
+                severity: 'warning',
+                path: 'diagnostics.rules',
+                message:
+                    '`other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                    '  help: name `sz-diagnostic` instead, which reports what `other` did.',
+            },
+        ]);
+        expect(read.config.rules).toEqual({ 'dead-class': 'warn' });
+    });
+
+    it('names no replacement for a removed id nothing replaced', () => {
+        expect(
+            renderSzDiagnosticBody(
+                removedRuleIdDiagnostic('gone', undefined),
+                SZ_DIAGNOSTIC_COMPUTED_VALUES,
+            ),
+        ).toBe(
+            '`gone` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                '  help: remove it.',
+        );
+    });
+
+    it('guesses only an id whose level can be set', () => {
+        // `othr` is one letter from `other`, which is removed: no level reaches
+        // it, so it is never offered.
+        expect(readCsszyxFileConfig({ diagnostics: { rules: { othr: 'off' } } }).problems).toEqual([
+            { severity: 'error', path: 'diagnostics.rules', message: '`othr` is not a rule id.' },
+        ]);
     });
 
     it('names an id with no near match without a guess', () => {

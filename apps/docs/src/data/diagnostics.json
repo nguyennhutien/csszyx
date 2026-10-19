@@ -975,16 +975,6 @@
       }
     },
     {
-      "id": "other",
-      "summary": "An engine diagnostic the text matcher could not name, from a lane that drops its code.",
-      "surfaces": {
-        "check": {
-          "group": "sz-diagnostic"
-        }
-      },
-      "position": "site"
-    },
-    {
       "id": "prefix-disagreement",
       "summary": "Tailwind entries in one project that set different prefixes.",
       "surfaces": {
@@ -2233,7 +2223,11 @@
         }
       },
       "position": "file",
+      "forms": ["replaced", "removed"],
       "args": {
+        "form": {
+          "type": ["enum", "replaced", "removed"]
+        },
         "id": {
           "type": "string"
         },
@@ -2241,6 +2235,11 @@
           "type": "string",
           "optional": true
         }
+      },
+      "text": "`{id}` is no longer reported, so a level or a selection naming it applies to nothing.",
+      "help": {
+        "replaced": "name `{replacedBy}` instead, which reports what `{id}` did.",
+        "removed": "remove it."
       }
     },
     {
@@ -3036,6 +3035,13 @@
     }
   ],
   "removed": [
+    {
+      "id": "other",
+      "since": "0.18.0",
+      "replacedBy": "sz-diagnostic",
+      "was": "check-kind",
+      "reason": "The kind `csszyx check` gave an engine diagnostic whose wording its text matcher could not name. Every lane now keeps the engine code, so no finding is of this kind; `--rule other` and `rules: { other }` are still accepted, with a warning."
+    },
     {
       "id": "CSSZYX_NATIVE_UNAVAILABLE",
       "since": "0.18.0",

@@ -15,9 +15,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+    renderSzDiagnostic,
     renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_URL_BASE,
+    SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
     type SzDiagnosticIssue,
@@ -47,7 +49,9 @@ import {
     diagnosticConfigProblemsMessage,
     hoistedSignUtility,
     isAtLeastLevel,
+    isRemovedRuleId,
     loadDiagnosticPolicy,
+    removedRuleIdDiagnostic,
     unsignedClass,
 } from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
@@ -1171,7 +1175,15 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
     const exclude = options.ignoreRule ?? [];
     // Every pass and every kind the registry makes settable.
     const known = new Set<string>(SZ_SETTABLE_DIAGNOSTIC_IDS);
-    const unknown = [...include, ...exclude].filter(id => !known.has(id));
+    // A removed id shipped once, so a script naming it keeps running; it
+    // selects nothing, and the warning names the id to use instead.
+    for (const id of new Set([...include, ...exclude].filter(isRemovedRuleId))) {
+        const diagnostic = removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]);
+        out.warn(
+            renderSzDiagnostic({ diagnostic, file: '', computed: SZ_DIAGNOSTIC_COMPUTED_VALUES }),
+        );
+    }
+    const unknown = [...include, ...exclude].filter(id => !known.has(id) && !isRemovedRuleId(id));
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');
         const ids = [...known].join(', ');

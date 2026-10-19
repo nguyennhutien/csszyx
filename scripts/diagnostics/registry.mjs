@@ -869,15 +869,6 @@ export const DIAGNOSTICS = [
         sources: [`${CHECK}:633`, 'packages/unplugin/src/dead-class.ts:275'],
     },
     {
-        id: 'other',
-        summary:
-            'An engine diagnostic the text matcher could not name, from a lane that drops its code.',
-        surfaces: { check: { group: 'sz-diagnostic' } },
-        position: 'site',
-        // Goes once every lane keeps the engine's code; then it moves to REMOVED.
-        sources: ['packages/compiler/src/sz-diagnostic-kind.ts:135'],
-    },
-    {
         id: 'prefix-disagreement',
         summary: 'Tailwind entries in one project that set different prefixes.',
         surfaces: { check: { group: 'dead-class' }, error: {} },
@@ -1644,8 +1635,14 @@ export const DIAGNOSTICS = [
         summary: 'A rule id csszyx no longer reports, with the id that replaced it.',
         surfaces: { runtime: { production: false } },
         position: 'file',
-        args: { id: STRING, replacedBy: OPTIONAL_STRING },
-        sources: [],
+        forms: ['replaced', 'removed'],
+        args: { form: formArg(['replaced', 'removed']), id: STRING, replacedBy: OPTIONAL_STRING },
+        text: '`{id}` is no longer reported, so a level or a selection naming it applies to nothing.',
+        help: {
+            replaced: 'name `{replacedBy}` instead, which reports what `{id}` did.',
+            removed: 'remove it.',
+        },
+        sources: [`${POLICY}:336`, `${CHECK}:1172`],
     },
     {
         id: 'config-level-invalid',
@@ -2147,6 +2144,16 @@ export const DIAGNOSTICS = [
 /** Ids that existed in a released tag and are no longer produced. */
 export const REMOVED = [
     {
+        id: 'other',
+        since: '0.18.0',
+        replacedBy: 'sz-diagnostic',
+        was: 'check-kind',
+        reason:
+            'The kind `csszyx check` gave an engine diagnostic whose wording its text matcher could ' +
+            'not name. Every lane now keeps the engine code, so no finding is of this kind; ' +
+            '`--rule other` and `rules: { other }` are still accepted, with a warning.',
+    },
+    {
         id: 'CSSZYX_NATIVE_UNAVAILABLE',
         since: '0.18.0',
         replacedBy: 'native-engine-unavailable',
@@ -2242,11 +2249,11 @@ export const REMOVED = [
 // - error.classes lists csszyx classes only; bare Error/TypeError/SyntaxError/RangeError omitted.
 // - CSSZYX_NATIVE_UNAVAILABLE: since '0.18.0' is the release that renames it; it shipped from
 //   v0.9.0 (git grep), recorded in `reason` since the schema has no first-tag field.
-// - REMOVED holds no kebab id yet. Of the v0.17.2 tags, the 18 shipped kinds (`other` among
-//   them, still produced by the text classifier until every lane keeps the engine's code) and
-//   the 5 shipped --rule ids (sz-diagnostic, dead-class, broken-opacity, sibling-keyword,
-//   theme-collision) are all live; unsigned-value, prefix-disagreement, merge-covered-* never
-//   shipped in a tag.
+// - REMOVED holds `other`, the one kebab tombstone: of the v0.17.2 tags, the other 17 shipped
+//   kinds and the 5 shipped --rule ids (sz-diagnostic, dead-class, broken-opacity,
+//   sibling-keyword, theme-collision) are all live; unsigned-value, prefix-disagreement,
+//   merge-covered-* never shipped in a tag. `other` went once every lane kept the engine's
+//   code: a line with none is levelled by `sz-diagnostic`, which replaces it.
 //   custom-class, unknown-class, classname-expression-merge deleted, not tombstoned.
 //
 // Inventory sites left out on purpose:

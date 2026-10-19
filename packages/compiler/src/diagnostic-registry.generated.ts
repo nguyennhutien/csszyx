@@ -1079,16 +1079,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
-        "id": "other",
-        "summary": "An engine diagnostic the text matcher could not name, from a lane that drops its code.",
-        "surfaces": {
-            "check": {
-                "group": "sz-diagnostic"
-            }
-        },
-        "position": "site"
-    },
-    {
         "id": "prefix-disagreement",
         "summary": "Tailwind entries in one project that set different prefixes.",
         "surfaces": {
@@ -2495,7 +2485,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "file",
+        "forms": [
+            "replaced",
+            "removed"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "replaced",
+                    "removed"
+                ]
+            },
             "id": {
                 "type": "string"
             },
@@ -2503,6 +2504,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "text": "`{id}` is no longer reported, so a level or a selection naming it applies to nothing.",
+        "help": {
+            "replaced": "name `{replacedBy}` instead, which reports what `{id}` did.",
+            "removed": "remove it."
         }
     },
     {

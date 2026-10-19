@@ -19,7 +19,7 @@
  * @module diagnostic-render
  */
 
-import type { SzDiagnosticCode, SzDiagnosticId } from './diagnostic-codes.generated.js';
+import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
 import { PLACEHOLDER } from './diagnostic-placeholder.js';
 import {
     SZ_DIAGNOSTIC_REGISTRY,
@@ -75,7 +75,7 @@ type ArgValue = string | number | readonly string[];
 
 /** A diagnostic to render: what it reports and what it names. */
 export interface RenderableDiagnostic {
-    code: SzDiagnosticCode;
+    code: SzDiagnosticId;
     args: object;
     line?: number;
     column?: number;
@@ -215,7 +215,7 @@ function terminalBody(parts: SzDiagnosticParts): string {
  * @param code - The code.
  * @returns Its position kind.
  */
-export function szDiagnosticPositionOf(code: SzDiagnosticCode): SzDiagnosticSpec['position'] {
+export function szDiagnosticPositionOf(code: SzDiagnosticId): SzDiagnosticSpec['position'] {
     return specOf(code).position;
 }
 

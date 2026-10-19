@@ -49,6 +49,7 @@
  * @module diagnostic-policy
  */
 import {
+    type IdentifiedDiagnostic,
     isSzDiagnosticId,
     nearestName,
     renderSzDiagnosticBody,
@@ -57,6 +58,7 @@ import {
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzRemovedDiagnosticId,
 } from '@csszyx/compiler';
 import type {
     CsszyxFileConfig,
@@ -99,7 +101,36 @@ export const SZ_DIAGNOSTIC_RULE_IDS: readonly SzDiagnosticRuleId[] = [
     ...(Object.keys(SZ_REMOVED_DIAGNOSTIC_IDS) as SzDiagnosticRuleId[]),
 ];
 
-const KNOWN_IDS: ReadonlySet<string> = new Set(SZ_DIAGNOSTIC_RULE_IDS);
+const SETTABLE_IDS: ReadonlySet<string> = new Set(SZ_SETTABLE_DIAGNOSTIC_IDS);
+
+const REMOVED_IDS: ReadonlySet<string> = new Set(Object.keys(SZ_REMOVED_DIAGNOSTIC_IDS));
+
+/**
+ * Whether an id is one a release shipped and csszyx no longer reports.
+ *
+ * @param id - Any id, as a user wrote it.
+ * @returns True for a tombstoned rule or kind id.
+ */
+export function isRemovedRuleId(id: string): id is SzRemovedDiagnosticId {
+    return REMOVED_IDS.has(id);
+}
+
+/**
+ * The diagnostic for a removed id: it sets nothing, and the id that replaced
+ * it, if any, is the one to name.
+ *
+ * @param id - A removed id.
+ * @param replacedBy - The live id that reports what it did, if one does.
+ * @returns The `removed-rule-id` diagnostic.
+ */
+export function removedRuleIdDiagnostic(
+    id: string,
+    replacedBy: string | undefined,
+): IdentifiedDiagnostic {
+    const args =
+        replacedBy === undefined ? { form: 'removed', id } : { form: 'replaced', id, replacedBy };
+    return { code: 'removed-rule-id', args };
+}
 
 /**
  * Where `recommended` and `atomic` differ from `error`, from the registry.
@@ -310,7 +341,7 @@ function isStringList(value: unknown): value is string[] {
 function didYouMean(id: string): string {
     const near = nearestName(
         id,
-        SZ_DIAGNOSTIC_RULE_IDS.map(known => [known, known] as const),
+        SZ_SETTABLE_DIAGNOSTIC_IDS.map(known => [known, known] as const),
         Math.max(1, Math.floor(id.length / 4)),
     );
     return near === null ? '' : ` — did you mean \`${near}\`?`;
@@ -357,7 +388,17 @@ function readRules(
         return rules;
     }
     for (const [id, level] of Object.entries(value)) {
-        if (!KNOWN_IDS.has(id)) {
+        if (isRemovedRuleId(id)) {
+            // Shipped once, so a config naming it keeps loading; it sets nothing.
+            problems.push({
+                severity: 'warning',
+                path: at,
+                message: renderSzDiagnosticBody(
+                    removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]),
+                    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+                ),
+            });
+        } else if (!SETTABLE_IDS.has(id)) {
             problems.push({ severity: 'error', path: at, message: unknownIdMessage(id) });
         } else if (!SZ_DIAGNOSTIC_LEVELS.includes(level as SzDiagnosticLevel)) {
             problems.push({

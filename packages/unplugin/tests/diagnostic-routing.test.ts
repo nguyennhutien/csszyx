@@ -162,6 +162,19 @@ describe('the engine code decides the channel, not the wording', () => {
         expect(routed.advisories).toEqual([`[csszyx] /p/src/A.tsx:4:2\n  ${PRECEDENCE}`]);
     });
 
+    it('levels a line with no code by its pass alone, never by its wording', () => {
+        // The text reads as an unknown key, and an `unknown-key` level does not
+        // reach it: only the pass's own id does, which is what replaced `other`.
+        const keyOff = createDiagnosticPolicy({ rules: { 'unknown-key': 'off' } });
+        expect(route({ diagnostics: [UNKNOWN_KEY], policy: keyOff }).immediate).toHaveLength(1);
+        const passOff = createDiagnosticPolicy({ rules: { 'sz-diagnostic': 'off' } });
+        expect(route({ diagnostics: [UNKNOWN_KEY], policy: passOff }).immediate).toEqual([]);
+        // The cap counts it under the pass, so its closing line names an id `--rule` takes.
+        const limiter = createDiagnosticLimiter(0);
+        route({ diagnostics: [UNKNOWN_KEY], limiter });
+        expect(limiter.flush().join('\n')).toContain('sz-diagnostic');
+    });
+
     it('reads the wording only for a line that carries no code', () => {
         const routed = route({ diagnostics: [UNKNOWN_KEY], holdInfo: true });
         // No code, no args: the message is the whole record, so it is listed

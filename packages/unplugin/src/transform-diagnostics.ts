@@ -10,12 +10,14 @@
  * there without a word. One router, so a lane cannot drift from the others by
  * forgetting a branch.
  *
- * The router reads the engine's code for each diagnostic, never its wording;
- * the text is consulted only for a line that carries no code.
+ * The router reads the engine's code for each diagnostic, never its wording.
+ * A line that carries no code is levelled by its pass, `sz-diagnostic`, alone:
+ * guessing a kind from the text named the ones it could not read `other`, an
+ * id no lane reports since every lane keeps the engine's code.
  *
  * @module
  */
-import { type SzDiagnosticCode, szDiagnosticKey, szDiagnosticKindOf } from '@csszyx/compiler';
+import { type SzDiagnosticCode, szDiagnosticKey } from '@csszyx/compiler';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 
 import type { DiagnosticLimiter } from './diagnostic-limiter.js';
@@ -144,8 +146,7 @@ export interface TransformDiagnosticsInput {
     diagnostics: readonly string[];
     /**
      * The code and position of each, index-parallel. A diagnostic without one
-     * (a cache entry from before codes, a line the runtime lowering shares
-     * wording with) is classified by its text.
+     * is a finding of the `sz-diagnostic` pass, of no narrower kind.
      */
     issues?: ReadonlyArray<DiagnosticIssue | undefined>;
     /** The module identifier the lines name. */
@@ -176,6 +177,9 @@ export interface RoutedTransformDiagnostics {
     /** How many `info` findings the run held back instead of listing. */
     heldAdvisories: number;
 }
+
+/** The pass every engine diagnostic belongs to, and the kind of one with no code. */
+const SZ_DIAGNOSTIC_PASS = 'sz-diagnostic';
 
 /** The policy a caller that names none gets, built once. */
 const DEFAULT_POLICY = createDiagnosticPolicy();
@@ -241,8 +245,8 @@ export function routeTransformDiagnostics(
     };
     for (const [index, message] of diagnostics.entries()) {
         const issue = issues?.[index];
-        const kind = issue?.code ?? szDiagnosticKindOf(message);
-        const level = policy.levelOf({ rule: 'sz-diagnostic', kind, file: input.file });
+        const kind = issue?.code ?? SZ_DIAGNOSTIC_PASS;
+        const level = policy.levelOf({ rule: SZ_DIAGNOSTIC_PASS, kind, file: input.file });
         const channel = channelOfLevel(level, quiet, holdInfo);
         if (channel === 'drop') continue;
         if (channel === 'held') {
