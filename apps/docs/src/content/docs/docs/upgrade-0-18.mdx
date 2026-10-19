@@ -63,7 +63,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
-| [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-four-exports) | an import that no longer resolves | `tsc`, the bundler | you |
+| [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-eight-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find package '@csszyx/core'` | `tsc`, the bundler, the import of `@csszyx/compiler/engine` | you |
 | [Engine at the compiler's version](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `engine-version-skew` | the first engine call | you |
 | [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
@@ -541,7 +541,7 @@ The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it.
 
-## @csszyx/compiler renames one error and drops four exports
+## @csszyx/compiler renames one error and drops eight exports
 
 The error `transformRust` throws when the native engine cannot load is now
 `RustTransformUnavailableError`, the counterpart of `WasmTransformUnavailableError`.
@@ -575,6 +575,21 @@ const object = parseStaticObjectLiteral("{ p: 4 }");
 import { transformSource } from "@csszyx/compiler/engine";
 const { code } = transformSource("export const A = () => <div sz={{ p: 4 }} />;", "a.tsx");
 // code holds className="p-4"
+```
+
+The text classifiers `szDiagnosticKindOf`, `isAdvisorySzDiagnostic`,
+`SZ_DIAGNOSTIC_KIND_IDS` and their type `SzDiagnosticKindId` are gone. They
+guessed a diagnostic's kind from its English. Every build diagnostic now
+carries its code on the result, and `csszyx check --json` writes it on each
+finding, so read the code.
+
+```ts
+// before
+import { szDiagnosticKindOf } from "@csszyx/compiler";
+const kind = szDiagnosticKindOf(result.diagnostics[0]);
+
+// after
+const kind = result.issues?.[0]?.code;
 ```
 
 **What you see.** `tsc` reports that the module has no such exported member, and an

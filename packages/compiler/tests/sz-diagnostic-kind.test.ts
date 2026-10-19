@@ -10,13 +10,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { SZ_DIAGNOSTIC_CODES } from '../src/diagnostic-codes.generated.js';
+import { CODE_SOURCES } from './diagnostic-code-sources.js';
+import { ENGINES } from './engine-parity-harness.js';
 import {
     isAdvisorySzDiagnostic,
     SZ_DIAGNOSTIC_KIND_IDS,
     szDiagnosticKindOf,
-} from '../src/sz-diagnostic-kind.js';
-import { CODE_SOURCES } from './diagnostic-code-sources.js';
-import { ENGINES } from './engine-parity-harness.js';
+} from './helpers/runtime-warning-kind.js';
 
 /**
  * One source per kind the text table names, each diagnosed by the engines

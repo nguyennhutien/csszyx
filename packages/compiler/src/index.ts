@@ -98,12 +98,6 @@ export {
 } from './recovery.js';
 export { sortStrings } from './sort.js';
 export {
-    isAdvisorySzDiagnostic,
-    SZ_DIAGNOSTIC_KIND_IDS,
-    type SzDiagnosticKindId,
-    szDiagnosticKindOf,
-} from './sz-diagnostic-kind.js';
-export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
 } from './sz-fallback-matrix.js';

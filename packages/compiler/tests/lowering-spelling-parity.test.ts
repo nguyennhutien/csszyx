@@ -9,11 +9,10 @@
  * and the native engine must write the same bytes and report the same kinds.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { szDiagnosticKindOf } from '../src/sz-diagnostic-kind.js';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
 import { engineMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { szDiagnosticKindOf } from './helpers/runtime-warning-kind.js';
 
 /** What one lane wrote for an sz object, and the kinds it reported. */
 interface LaneResult {
