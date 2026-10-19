@@ -160,9 +160,11 @@ export function keyIssueMessage(issue: KeyIssue): { message: string; docs: strin
         issue,
         SZ_DIAGNOSTIC_COMPUTED_VALUES,
     );
-    const lines = [text];
-    if (help !== undefined) lines.push(`help: ${help}`);
-    if (note !== undefined) lines.push(`note: ${note}`);
+    const labelled = [
+        ['help', help],
+        ['note', note],
+    ].filter((part): part is [string, string] => part[1] !== undefined);
+    const lines = [text, ...labelled.map(([label, part]) => `${label}: ${part}`)];
     return { message: lines.join('\n'), docs };
 }
 

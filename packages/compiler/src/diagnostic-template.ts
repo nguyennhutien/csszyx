@@ -44,10 +44,7 @@ export type SzDiagnosticComputed = (args: Readonly<Record<string, ArgValue>>) =>
  */
 function joinersOf(spec: SzDiagnosticTemplate): Readonly<Record<string, string>> {
     const joiners: Record<string, string> = {};
-    // The generator requires every id with a template to declare its args.
-    for (const [name, arg] of Object.entries(
-        spec.args as NonNullable<SzDiagnosticTemplate['args']>,
-    )) {
+    for (const [name, arg] of Object.entries(spec.args)) {
         if (arg.joiner !== undefined) joiners[name] = arg.joiner;
     }
     return joiners;

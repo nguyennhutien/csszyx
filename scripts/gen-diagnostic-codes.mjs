@@ -226,11 +226,9 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
     if (entry.surfaces?.engine && entry.position === 'none') {
         problems.push(`${at}: an engine id points at a site or at its file, never at no place`);
     }
-    if (entry.surfaces?.engine && entry.args === undefined) {
-        problems.push(`${at}: an engine id declares its args, \`{}\` for none`);
-    } else if (entry.args === undefined && templatesOf(entry).length > 0) {
-        // The renderer reads the args of every id it fills a template for.
-        problems.push(`${at}: an id with a template declares its args, \`{}\` for none`);
+    // The renderer and the dedupe key read every id's args.
+    if (entry.args === undefined) {
+        problems.push(`${at}: declares its args, \`{}\` for none`);
     }
     const args = entry.args ?? {};
     for (const [name, arg] of Object.entries(args)) {
@@ -827,7 +825,7 @@ export interface SzDiagnosticSpec {
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';
-    readonly args?: Readonly<Record<string, SzDiagnosticArgSpec>>;
+    readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not \`form\`. */

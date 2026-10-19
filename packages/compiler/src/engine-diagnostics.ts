@@ -16,7 +16,7 @@ import { suggestSzKey } from './sz-key-suggestion.js';
 
 /** Each id's arg names, in registry order. */
 const ARG_ORDER: ReadonlyMap<string, readonly string[]> = new Map(
-    SZ_DIAGNOSTIC_REGISTRY.map(spec => [spec.id, Object.keys(spec.args ?? {})]),
+    SZ_DIAGNOSTIC_REGISTRY.map(spec => [spec.id, Object.keys(spec.args)]),
 );
 
 /**

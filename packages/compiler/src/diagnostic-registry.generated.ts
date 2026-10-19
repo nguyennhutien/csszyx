@@ -28,7 +28,7 @@ export interface SzDiagnosticSpec {
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';
-    readonly args?: Readonly<Record<string, SzDiagnosticArgSpec>>;
+    readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
