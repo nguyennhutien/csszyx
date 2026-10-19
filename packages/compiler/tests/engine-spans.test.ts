@@ -89,7 +89,7 @@ describe('createByteOffsetLocator', () => {
         let reads = 0;
         const text = new Proxy(new String('ab\ncd'), {
             get(target, property, receiver) {
-                if (property === 'charCodeAt') reads++;
+                if (property === 'codePointAt') reads++;
                 const value = Reflect.get(target, property, receiver);
                 return typeof value === 'function' ? value.bind(target) : value;
             },
@@ -187,7 +187,7 @@ describe('locateEngineSpans', () => {
         let reads = 0;
         const source = new Proxy(new String('x\ny'), {
             get(target, property, receiver) {
-                if (property === 'charCodeAt') reads++;
+                if (property === 'codePointAt') reads++;
                 const value = Reflect.get(target, property, receiver);
                 return typeof value === 'function' ? value.bind(target) : value;
             },
@@ -232,7 +232,7 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
         let reads = 0;
         const source = new Proxy(new String(text), {
             get(target, property, receiver) {
-                if (property === 'charCodeAt') reads++;
+                if (property === 'codePointAt') reads++;
                 const value = Reflect.get(target, property, receiver);
                 return typeof value === 'function' ? value.bind(target) : value;
             },

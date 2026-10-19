@@ -79,18 +79,11 @@ export interface SzMergeOverride extends SourcePosition {
 export type ByteOffsetLocator = (offset: number) => SourcePosition;
 
 /**
- * Whether a surrogate pair starts at an index: a first half followed by a
- * second half. Either half anywhere else stands alone.
- *
- * @param source - The text.
- * @param index - A UTF-16 index into it.
- * @returns True when the two units there are one character.
+ * The last code point one UTF-16 unit holds. `codePointAt` reads past it only
+ * where a first half of a pair is followed by a second half; either half
+ * anywhere else reads as itself, a lone half.
  */
-function isPairAt(source: string, index: number): boolean {
-    const code = source.charCodeAt(index);
-    // Past the end `charCodeAt` reads NaN, whose bits match no half.
-    return code >= 0xd800 && code <= 0xdbff && (source.charCodeAt(index + 1) & 0xfc00) === 0xdc00;
-}
+const LAST_SINGLE_UNIT = 0xffff;
 
 /**
  * The UTF-8 length of one UTF-16 unit that is not part of a pair.
@@ -107,62 +100,88 @@ function utf8Length(code: number): number {
     return 3;
 }
 
+/** Bytes between two marks inside one line, at least. */
+const MARK_STRIDE = 64;
+
 /**
- * A locator for one source text, building its line index on the first call.
+ * A locator for one source text, building its index on the first call.
  *
- * `O(n)` once for the index, then `O(log lines + line length)` per lookup. An
- * offset past the end resolves to the end, as the engine's own clamp does.
+ * The index marks each line start and, within a line, one character boundary
+ * every {@link MARK_STRIDE} bytes or so, with the line each mark is on. A
+ * lookup finds the last mark at or before the offset by binary search and
+ * walks from there, so it reads at most a stride of text: `O(n)` once for
+ * the index, then `O(log n)` per lookup, however long the line. A minified
+ * module on one line with thousands of diagnostics walked that line up to
+ * each of them when a lookup started at the line.
+ *
+ * An offset past the end resolves to the end, as the engine's own clamp does;
+ * one inside a character, to the character after it.
  *
  * @param source - The module the engine was given.
  * @returns The locator.
  */
 export function createByteOffsetLocator(source: string): ByteOffsetLocator {
-    // Byte and UTF-16 start of each line, built on first use.
-    let byteStarts: number[] | undefined;
-    let unitStarts: number[] = [];
+    // Each mark's byte offset, UTF-16 index and line; each line's UTF-16
+    // start. Built on first use.
+    let markBytes: number[] | undefined;
+    let markUnits: number[] = [];
+    let markLines: number[] = [];
+    let lineUnits: number[] = [];
     const build = (): number[] => {
         const bytes = [0];
         const units = [0];
+        const lines = [0];
+        const starts = [0];
         let byte = 0;
+        let next = MARK_STRIDE;
         for (let index = 0; index < source.length; ) {
-            const code = source.charCodeAt(index);
-            if (isPairAt(source, index)) {
+            const code = source.codePointAt(index) as number;
+            if (code > LAST_SINGLE_UNIT) {
                 byte += 4;
                 index += 2;
+            } else {
+                byte += utf8Length(code);
+                index += 1;
+            }
+            if (code === 0x0a) {
+                starts.push(index);
+            } else if (byte < next) {
                 continue;
             }
-            byte += utf8Length(code);
-            index += 1;
-            if (code === 0x0a) {
-                bytes.push(byte);
-                units.push(index);
-            }
+            bytes.push(byte);
+            units.push(index);
+            lines.push(starts.length - 1);
+            next = byte + MARK_STRIDE;
         }
-        unitStarts = units;
+        markUnits = units;
+        markLines = lines;
+        lineUnits = starts;
         return bytes;
     };
     return offset => {
-        byteStarts ??= build();
+        markBytes ??= build();
         let low = 0;
-        let high = byteStarts.length - 1;
+        let high = markBytes.length - 1;
         while (low < high) {
             const middle = (low + high + 1) >> 1;
-            if ((byteStarts[middle] as number) <= offset) low = middle;
+            if ((markBytes[middle] as number) <= offset) low = middle;
             else high = middle - 1;
         }
-        let byte = byteStarts[low] as number;
-        let unit = unitStarts[low] as number;
+        let byte = markBytes[low] as number;
+        let unit = markUnits[low] as number;
         while (unit < source.length && byte < offset) {
             // A surrogate pair is one character: step over both halves.
-            if (isPairAt(source, unit)) {
+            const code = source.codePointAt(unit) as number;
+            if (code > LAST_SINGLE_UNIT) {
                 byte += 4;
                 unit += 2;
             } else {
-                byte += utf8Length(source.charCodeAt(unit));
+                byte += utf8Length(code);
                 unit += 1;
             }
         }
-        return { line: low + 1, column: unit - (unitStarts[low] as number) + 1 };
+        const line = markLines[low] as number;
+        return { line: line + 1, column: unit - (lineUnits[line] as number) + 1 };
     };
 }
 
