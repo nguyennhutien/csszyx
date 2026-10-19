@@ -18,6 +18,12 @@ import { describe, expect, it } from 'vitest';
 const TSX = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
 const EXTRACTOR = fileURLToPath(new URL('../src/cross-module-extract.ts', import.meta.url));
 const BARREL = fileURLToPath(new URL('../../runtime/src/index.ts', import.meta.url));
+/**
+ * How long the probe may run, and so the test: 1,550 parses took 2.9 to 4.0 s
+ * on CI runners and 5.03 s once, past vitest's default 5 s, and this test
+ * measures memory, not time.
+ */
+const CHILD_TIMEOUT_MS = 120_000;
 
 const PROBE = `
 const { readFileSync } = await import('node:fs');
@@ -33,25 +39,29 @@ process.stdout.write(JSON.stringify({ forwards, grownMb: (process.memoryUsage().
 `;
 
 describe('repeated forward extraction', () => {
-    it.skipIf(!existsSync(TSX))('returns the memory of every parse', () => {
-        // A file, not --eval: the probe needs top-level await, which the eval
-        // form compiles as CommonJS and refuses.
-        const dir = mkdtempSync(path.join(tmpdir(), 'csszyx-forwards-memory-'));
-        const probe = path.join(dir, 'probe.mts');
-        writeFileSync(probe, PROBE);
-        const run = spawnSync(TSX, [probe], {
-            encoding: 'utf8',
-            env: { ...process.env, NODE_OPTIONS: '--expose-gc' },
-            timeout: 120_000,
-        });
-        rmSync(dir, { recursive: true, force: true });
-        expect(run.status, run.stderr).toBe(0);
-        const { forwards, grownMb } = JSON.parse(run.stdout) as {
-            forwards: number;
-            grownMb: number;
-        };
+    it.skipIf(!existsSync(TSX))(
+        'returns the memory of every parse',
+        { timeout: CHILD_TIMEOUT_MS },
+        () => {
+            // A file, not --eval: the probe needs top-level await, which the eval
+            // form compiles as CommonJS and refuses.
+            const dir = mkdtempSync(path.join(tmpdir(), 'csszyx-forwards-memory-'));
+            const probe = path.join(dir, 'probe.mts');
+            writeFileSync(probe, PROBE);
+            const run = spawnSync(TSX, [probe], {
+                encoding: 'utf8',
+                env: { ...process.env, NODE_OPTIONS: '--expose-gc' },
+                timeout: CHILD_TIMEOUT_MS,
+            });
+            rmSync(dir, { recursive: true, force: true });
+            expect(run.status, run.stderr).toBe(0);
+            const { forwards, grownMb } = JSON.parse(run.stdout) as {
+                forwards: number;
+                grownMb: number;
+            };
 
-        expect(forwards).toBeGreaterThan(0);
-        expect(grownMb).toBeLessThan(64);
-    });
+            expect(forwards).toBeGreaterThan(0);
+            expect(grownMb).toBeLessThan(64);
+        },
+    );
 });
