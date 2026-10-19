@@ -79,21 +79,31 @@ export interface SzMergeOverride extends SourcePosition {
 export type ByteOffsetLocator = (offset: number) => SourcePosition;
 
 /**
- * The UTF-8 length of the code point read at an index, with a surrogate pair
- * counted where it starts.
+ * Whether a surrogate pair starts at an index: a first half followed by a
+ * second half. Either half anywhere else stands alone.
  *
- * @param code - The code point `codePointAt` read there.
- * @returns Bytes it contributes: 1–4, or 0 for the second half of a pair.
+ * @param source - The text.
+ * @param index - A UTF-16 index into it.
+ * @returns True when the two units there are one character.
+ */
+function isPairAt(source: string, index: number): boolean {
+    const code = source.charCodeAt(index);
+    // Past the end `charCodeAt` reads NaN, whose bits match no half.
+    return code >= 0xd800 && code <= 0xdbff && (source.charCodeAt(index + 1) & 0xfc00) === 0xdc00;
+}
+
+/**
+ * The UTF-8 length of one UTF-16 unit that is not part of a pair.
+ *
+ * A lone half of a pair, either one, is three bytes: the native binding and
+ * `TextEncoder` both write U+FFFD in its place.
+ *
+ * @param code - The unit.
+ * @returns 1, 2 or 3.
  */
 function utf8Length(code: number): number {
     if (code < 0x80) return 1;
     if (code < 0x800) return 2;
-    if (code > 0xffff) return 4;
-    // The second half of a pair, read on its own: the code point read at the
-    // first half already counted all four bytes.
-    if (code >= 0xdc00 && code <= 0xdfff) return 0;
-    // Anything else, a lone first half included, which an encoder writes as
-    // U+FFFD.
     return 3;
 }
 
@@ -114,14 +124,18 @@ export function createByteOffsetLocator(source: string): ByteOffsetLocator {
         const bytes = [0];
         const units = [0];
         let byte = 0;
-        for (let index = 0; index < source.length; index++) {
-            // At a pair's first half the code point counts all four bytes;
-            // the second half, read on its own, counts none.
-            const code = source.codePointAt(index) as number;
+        for (let index = 0; index < source.length; ) {
+            const code = source.charCodeAt(index);
+            if (isPairAt(source, index)) {
+                byte += 4;
+                index += 2;
+                continue;
+            }
             byte += utf8Length(code);
+            index += 1;
             if (code === 0x0a) {
                 bytes.push(byte);
-                units.push(index + 1);
+                units.push(index);
             }
         }
         unitStarts = units;
@@ -139,10 +153,14 @@ export function createByteOffsetLocator(source: string): ByteOffsetLocator {
         let byte = byteStarts[low] as number;
         let unit = unitStarts[low] as number;
         while (unit < source.length && byte < offset) {
-            const code = source.codePointAt(unit) as number;
-            byte += utf8Length(code);
             // A surrogate pair is one character: step over both halves.
-            unit += code > 0xffff ? 2 : 1;
+            if (isPairAt(source, unit)) {
+                byte += 4;
+                unit += 2;
+            } else {
+                byte += utf8Length(source.charCodeAt(unit));
+                unit += 1;
+            }
         }
         return { line: low + 1, column: unit - (unitStarts[low] as number) + 1 };
     };
