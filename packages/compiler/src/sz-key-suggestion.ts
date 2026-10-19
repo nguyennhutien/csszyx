@@ -18,7 +18,7 @@ import {
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     SUGGESTION_MAP,
-} from './transform-core.js';
+} from './sz-key-tables.js';
 
 /**
  * The target of the nearest candidate name, when exactly one target is nearest.

@@ -12,17 +12,16 @@
  * @module diagnostic-render-helpers
  */
 
-import { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-registry.generated.js';
-import type { SzDiagnosticComputed } from './diagnostic-render.js';
-import { GLOBAL_KEYWORD_GROUPS } from './keyword-families.js';
-import { describeSzFallback, type SzFallbackKind } from './sz-fallback-matrix.js';
 import {
     bareClosedEnumClass,
     CLOSED_ENUM_CLASSES,
     CLOSED_ENUM_VALUE_MOVES,
-    MIGRATION_NOTES,
-    SUGGESTION_MAP,
-} from './transform-core.js';
+} from './closed-enum-tables.js';
+import { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-registry.generated.js';
+import type { SzDiagnosticComputed } from './diagnostic-render.js';
+import { GLOBAL_KEYWORD_GROUPS } from './keyword-families.js';
+import { describeSzFallback, type SzFallbackKind } from './sz-fallback-matrix.js';
+import { MIGRATION_NOTES, SUGGESTION_MAP } from './sz-key-tables.js';
 
 /** One arg value, as the wire carries it. */
 type Args = Parameters<SzDiagnosticComputed>[0];

@@ -68,7 +68,7 @@ function build() {
     let special;
     try {
         forward = readTableSource(
-            path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
+            path.join(repoRoot, 'packages/compiler/src/sz-key-tables.ts'),
         ).stringObject('PROPERTY_MAP');
         const choices = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/migrate-tables/prefix-choice.ts'),

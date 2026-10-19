@@ -179,7 +179,15 @@ export const SIZE_BUDGETS = [
         // now report it (`moved-value`); the side and decoration colour keys
         // take the generic lowering instead of a copy of it. Budget the usual
         // ~300 above.
-        maxGzipBytes: 17_360,
+        //
+        // Raised from 17,360 on 2026-10-19, measured 17,364 (+171 over
+        // 17,193): the key and closed-enum tables moved out of
+        // `transform-core.ts` into two leaf modules, so the engine entries load
+        // the tables without the lowering. The bundle holds the same
+        // declarations in another order: 9 bytes more minified, 151 more
+        // gzipped for `./browser` (16,433 → 16,584). Budget the usual ~300
+        // above.
+        maxGzipBytes: 17_650,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -190,8 +198,10 @@ export const SIZE_BUDGETS = [
             // 15,920 once the runtime stopped judging a sign (ADR 0022), the
             // same day, so lowered from 16,300; 16,297 with the variable type
             // hints, the unjudged colour strings and the production mask
-            // warning (+377, see the union), so raised from 16,220.
-            './browser': 16_600,
+            // warning (+377, see the union), so raised from 16,220. 16,584
+            // once the tables moved to leaf modules, 2026-10-19 (+151, see the
+            // union), so raised from 16,600.
+            './browser': 16_900,
             './sz-limits': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
