@@ -9,17 +9,23 @@
  * wasm side of the dispatch at all.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import {
+    isRustTransformAvailable,
+    transformRust,
+    transformRustUnrendered,
+} from '../src/transform-rust.js';
+import { transformSource, transformSourceUnrendered } from '../src/transform-select.js';
+import { transformWasm, transformWasmUnrendered } from '../src/transform-wasm.js';
 
 vi.mock('../src/transform-rust.js', () => ({
     isRustTransformAvailable: vi.fn(),
     transformRust: vi.fn(() => ({ classes: new Set(['from-rust']) })),
+    transformRustUnrendered: vi.fn(() => ({ classes: new Set(['from-rust-unrendered']) })),
 }));
 
 vi.mock('../src/transform-wasm.js', () => ({
     transformWasm: vi.fn(() => ({ classes: new Set(['from-wasm']) })),
+    transformWasmUnrendered: vi.fn(() => ({ classes: new Set(['from-wasm-unrendered']) })),
 }));
 
 beforeEach(() => {
@@ -49,5 +55,30 @@ describe('transformSource artifact dispatch', () => {
             rootDir: '/p',
         });
         expect(transformRust).not.toHaveBeenCalled();
+    });
+});
+
+describe('transformSourceUnrendered artifact dispatch', () => {
+    it('routes to the native addon when it is available', () => {
+        vi.mocked(isRustTransformAvailable).mockReturnValue(true);
+
+        const result = transformSourceUnrendered('export const a = 1;', '/p/a.tsx');
+
+        expect(result.classes).toEqual(new Set(['from-rust-unrendered']));
+        expect(transformWasmUnrendered).not.toHaveBeenCalled();
+    });
+
+    it('routes to the wasm build when the native addon cannot load', () => {
+        vi.mocked(isRustTransformAvailable).mockReturnValue(false);
+
+        const result = transformSourceUnrendered('export const a = 1;', '/p/a.tsx', {
+            rootDir: '/p',
+        });
+
+        expect(result.classes).toEqual(new Set(['from-wasm-unrendered']));
+        expect(transformWasmUnrendered).toHaveBeenCalledWith('export const a = 1;', '/p/a.tsx', {
+            rootDir: '/p',
+        });
+        expect(transformRustUnrendered).not.toHaveBeenCalled();
     });
 });

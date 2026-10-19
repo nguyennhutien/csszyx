@@ -13,10 +13,21 @@ import { renderSzDiagnostic } from './diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
 import { suggestSzKey } from './sz-key-suggestion.js';
+import type { SourceTransformResult } from './transform-core.js';
 
-/** Each id's arg names, in registry order. */
+/**
+ * The arg the compiler derives from the others once the engine has reported,
+ * by code: filled only when a diagnostic is rendered, so it never tells two
+ * diagnostics apart.
+ */
+const DERIVED_ARGS: Readonly<Record<string, string>> = { 'unknown-key': 'suggestion' };
+
+/** Each id's arg names that tell two diagnostics apart, in registry order. */
 const ARG_ORDER: ReadonlyMap<string, readonly string[]> = new Map(
-    SZ_DIAGNOSTIC_REGISTRY.map(spec => [spec.id, Object.keys(spec.args)]),
+    SZ_DIAGNOSTIC_REGISTRY.map(spec => [
+        spec.id,
+        Object.keys(spec.args).filter(name => name !== DERIVED_ARGS[spec.id]),
+    ]),
 );
 
 /**
@@ -40,7 +51,9 @@ export function diagnosticPath(filename: string, rootDir?: string): string {
 /**
  * What tells two diagnostics of one code apart beside their position: each arg
  * in registry order, so the key does not depend on how the args were written
- * or on the wording that renders them.
+ * or on the wording that renders them. An arg derived on rendering (the
+ * suggestion for an unknown key) is left out, so a diagnostic has one key
+ * whether it was rendered yet or not.
  *
  * @param issue - The diagnostic.
  * @returns The key.
@@ -71,8 +84,24 @@ function completeArgs(issue: SzDiagnosticIssue): void {
 }
 
 /**
- * One message per issue, index-parallel to the issues; each issue's args are
- * completed first, so a reader of the record sees what the message says.
+ * One diagnostic's whole message; its args are completed first, so a reader
+ * of the record sees what the message says.
+ *
+ * @param issue - A located issue, completed in place.
+ * @param file - The file's path as a diagnostic names it.
+ * @returns The message.
+ */
+export function renderEngineDiagnostic(issue: SzDiagnosticIssue, file: string): string {
+    completeArgs(issue);
+    return renderSzDiagnostic({
+        diagnostic: issue,
+        file,
+        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    });
+}
+
+/**
+ * One message per issue, index-parallel to the issues.
  *
  * @param issues - The located issues of one file.
  * @param file - The file's path as a diagnostic names it.
@@ -82,14 +111,75 @@ export function renderEngineDiagnostics(
     issues: readonly SzDiagnosticIssue[],
     file: string,
 ): string[] {
-    return issues.map(issue => {
-        completeArgs(issue);
-        return renderSzDiagnostic({
-            diagnostic: issue,
-            file,
-            computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
-        });
-    });
+    return issues.map(issue => renderEngineDiagnostic(issue, file));
+}
+
+/**
+ * A transform result whose engine diagnostics were left unrendered.
+ *
+ * `diagnostics` is empty and `issues` holds every finding, its derived args
+ * not filled in; `diagnosticFile` is the path a rendered header names. A build
+ * lane prints a handful of a build's findings and counts or drops the rest, so
+ * it renders each one it prints with {@link renderEngineDiagnostic} and no
+ * other. The public transforms render every diagnostic, as their callers
+ * read `diagnostics` itself.
+ *
+ * @internal Read by the bundler plugin, the Next loader and jest; not a stable shape.
+ */
+export interface UnrenderedTransformResult extends SourceTransformResult {
+    /** The file's path as a rendered diagnostic names it. */
+    diagnosticFile: string;
+}
+
+/** The diagnostic fields of a converted engine result. */
+export type EngineDiagnosticFields = Pick<UnrenderedTransformResult, 'diagnostics'> &
+    Partial<UnrenderedTransformResult>;
+
+/**
+ * How an engine lane fills a result's diagnostic fields:
+ * {@link renderedDiagnosticFields} or {@link unrenderedDiagnosticFields}.
+ */
+export type EngineDiagnosticFieldsOf = (
+    issues: readonly SzDiagnosticIssue[],
+    file: string,
+) => EngineDiagnosticFields;
+
+/**
+ * Every message, rendered now.
+ *
+ * @param issues - The located issues.
+ * @param file - The file's path as a diagnostic names it.
+ * @returns The fields to spread into the result.
+ */
+export function renderedDiagnosticFields(
+    issues: readonly SzDiagnosticIssue[],
+    file: string,
+): EngineDiagnosticFields {
+    return { diagnostics: renderEngineDiagnostics(issues, file) };
+}
+
+/**
+ * No message, and the path to render the issues against later.
+ *
+ * @param _issues - The located issues, left on the result.
+ * @param file - The file's path as a diagnostic names it.
+ * @returns The fields to spread into the result.
+ */
+export function unrenderedDiagnosticFields(
+    _issues: readonly SzDiagnosticIssue[],
+    file: string,
+): EngineDiagnosticFields {
+    return { diagnostics: [], diagnosticFile: file };
+}
+
+/**
+ * Where a result's unrendered issues are rendered against, when it has any.
+ *
+ * @param result - Any transform result.
+ * @returns The path, or `undefined` for a rendered result.
+ */
+export function diagnosticFileOf(result: SourceTransformResult): string | undefined {
+    return (result as Partial<UnrenderedTransformResult>).diagnosticFile;
 }
 
 /**

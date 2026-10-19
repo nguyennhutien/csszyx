@@ -7,7 +7,13 @@ import {
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
-import { diagnosticPath, renderEngineDiagnostics } from './engine-diagnostics.js';
+import {
+    diagnosticPath,
+    type EngineDiagnosticFieldsOf,
+    renderedDiagnosticFields,
+    type UnrenderedTransformResult,
+    unrenderedDiagnosticFields,
+} from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -61,10 +67,57 @@ export function transformRust(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
+    return transformRustOne(source, filename, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformRust} with every diagnostic left for the caller to render:
+ * `diagnostics` is empty, and each issue renders with
+ * `renderEngineDiagnostic(issue, result.diagnosticFile)`.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @returns Transform result.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
+ */
+export function transformRustUnrendered(
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult {
+    return transformRustOne(
+        source,
+        filename,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult;
+}
+
+/**
+ * One file through the native engine.
+ *
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns Transform result.
+ */
+function transformRustOne(
+    source: string,
+    filename: string | undefined,
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     // The single-file path names an unnamed module `<anonymous>` — the same
     // answer the shared JS channel always gave — while the BATCH default stays
     // index-based so recovery tokens keep unique per-file inputs.
-    const [result] = transformRustBatch([{ filename: filename ?? '<anonymous>', source }], options);
+    const [result] = runNativeBatch(
+        [{ filename: filename ?? '<anonymous>', source }],
+        options,
+        fields,
+    );
     if (!result) {
         throw new RustTransformUnavailableError('native transform returned no result');
     }
@@ -205,6 +258,43 @@ export function transformRustBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
+    return runNativeBatch(files, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformRustBatch} with every diagnostic left for the caller to
+ * render; see {@link transformRustUnrendered}.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param files Source files to transform.
+ * @param options Compiler options.
+ * @returns One transform result per input file, in input order.
+ * @throws {RustTransformUnavailableError} when the native addon is unavailable.
+ */
+export function transformRustBatchUnrendered(
+    files: readonly TransformRustFile[],
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult[] {
+    return runNativeBatch(
+        files,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult[];
+}
+
+/**
+ * A batch through the native engine, in one napi call.
+ *
+ * @param files Source files to transform.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns One transform result per input file, in input order.
+ */
+function runNativeBatch(
+    files: readonly TransformRustFile[],
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult[] {
     try {
         checkNativeEngine();
         return transformBatch(
@@ -218,6 +308,7 @@ export function transformRustBatch(
                 result,
                 files[index].source,
                 diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+                fields,
             ),
         );
     } catch (err) {
@@ -325,12 +416,14 @@ export function normalizeGlobalVarAliases(
  * @param result Native transform result.
  * @param source The source the result was transformed from, to place its spans.
  * @param file The file's path as a diagnostic names it.
+ * @param fields How to fill the diagnostic fields.
  * @returns Compiler transform result.
  */
 function fromNativeResult(
     result: NativeTransformResult,
     source: string,
     file: string,
+    fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
     const spans = locateEngineSpans(source, result);
     return {
@@ -353,7 +446,7 @@ function fromNativeResult(
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: renderEngineDiagnostics(spans.issues, file),
+        ...fields(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [

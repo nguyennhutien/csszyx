@@ -11,9 +11,14 @@
  * compile preview, and a large body of tests that used it as a driver)
  * migrate by renaming the import.
  */
+import type { UnrenderedTransformResult } from './engine-diagnostics.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
-import { isRustTransformAvailable, transformRust } from './transform-rust.js';
-import { transformWasm } from './transform-wasm.js';
+import {
+    isRustTransformAvailable,
+    transformRust,
+    transformRustUnrendered,
+} from './transform-rust.js';
+import { transformWasm, transformWasmUnrendered } from './transform-wasm.js';
 
 /**
  * Transform one module through whichever engine artifact this host can run.
@@ -32,4 +37,25 @@ export function transformSource(
     return isRustTransformAvailable()
         ? transformRust(source, filename, options)
         : transformWasm(source, filename, options);
+}
+
+/**
+ * {@link transformSource} with every diagnostic left for the caller to
+ * render; see `transformRustUnrendered`.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @returns Transform result.
+ * @throws {WasmTransformUnavailableError} when neither artifact can load.
+ */
+export function transformSourceUnrendered(
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult {
+    return isRustTransformAvailable()
+        ? transformRustUnrendered(source, filename, options)
+        : transformWasmUnrendered(source, filename, options);
 }

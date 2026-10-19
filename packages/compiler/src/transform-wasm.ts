@@ -15,7 +15,13 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
-import { diagnosticPath, renderEngineDiagnostics } from './engine-diagnostics.js';
+import {
+    diagnosticPath,
+    type EngineDiagnosticFieldsOf,
+    renderedDiagnosticFields,
+    type UnrenderedTransformResult,
+    unrenderedDiagnosticFields,
+} from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
 import type {
@@ -202,8 +208,55 @@ export function transformWasm(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
+    return transformWasmOne(source, filename, options, renderedDiagnosticFields);
+}
+
+/**
+ * {@link transformWasm} with every diagnostic left for the caller to render:
+ * `diagnostics` is empty, and each issue renders with
+ * `renderEngineDiagnostic(issue, result.diagnosticFile)`.
+ *
+ * @internal The build lanes' transform; not a stable API.
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @returns Transform result.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function transformWasmUnrendered(
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+): UnrenderedTransformResult {
+    return transformWasmOne(
+        source,
+        filename,
+        options,
+        unrenderedDiagnosticFields,
+    ) as UnrenderedTransformResult;
+}
+
+/**
+ * One file through the wasm engine.
+ *
+ * @param source Source module contents.
+ * @param filename Source filename for diagnostics.
+ * @param options Compiler options.
+ * @param fields How to fill the diagnostic fields.
+ * @returns Transform result.
+ */
+function transformWasmOne(
+    source: string,
+    filename: string | undefined,
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult {
     // Mirrors transformRust: an unnamed single file is `<anonymous>`.
-    const [result] = transformWasmBatch([{ filename: filename ?? '<anonymous>', source }], options);
+    const [result] = runWasmBatch(
+        [{ filename: filename ?? '<anonymous>', source }],
+        options,
+        fields,
+    );
     if (!result) {
         throw new WasmTransformUnavailableError('wasm transform returned no result');
     }
@@ -243,6 +296,22 @@ export function transformWasmBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
+    return runWasmBatch(files, options, renderedDiagnosticFields);
+}
+
+/**
+ * A batch through the wasm engine in one boundary crossing.
+ *
+ * @param files Source files to transform.
+ * @param options Compiler options, normalized exactly like the napi lane.
+ * @param fields How to fill the diagnostic fields.
+ * @returns One transform result per input file, in input order.
+ */
+function runWasmBatch(
+    files: readonly TransformRustFile[],
+    options: TransformSourceCodeOptions | undefined,
+    fields: EngineDiagnosticFieldsOf,
+): SourceTransformResult[] {
     const wasm = requireParserWasm();
 
     const filesJson = JSON.stringify(
@@ -261,6 +330,7 @@ export function transformWasmBatch(
             result,
             files[index].source,
             diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+            fields,
         ),
     );
 }
@@ -288,12 +358,14 @@ function rawGroup(group: WasmMergeGroup): {
  * @param result Raw wasm transform result.
  * @param source The source the result was transformed from, to place its spans.
  * @param file The file's path as a diagnostic names it.
+ * @param fields How to fill the diagnostic fields.
  * @returns Compiler transform result.
  */
 function fromWasmResult(
     result: WasmResultJson,
     source: string,
     file: string,
+    fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
     const spans = locateEngineSpans(source, {
         issues: result.issues,
@@ -320,7 +392,7 @@ function fromWasmResult(
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
-        diagnostics: renderEngineDiagnostics(spans.issues, file),
+        ...fields(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [

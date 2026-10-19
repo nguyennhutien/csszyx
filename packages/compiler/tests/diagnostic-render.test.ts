@@ -327,6 +327,15 @@ describe('szDiagnosticKey', () => {
             szDiagnosticKey({ code: 'unknown-key', args: { key: 'b' } }),
         );
     });
+
+    it("is the same before and after rendering fills an unknown key's suggestion", () => {
+        expect(
+            szDiagnosticKey({
+                code: 'unknown-key',
+                args: { key: 'workBreak', suggestion: 'break' },
+            }),
+        ).toBe(szDiagnosticKey({ code: 'unknown-key', args: { key: 'workBreak' } }));
+    });
 });
 
 describe('isSzDiagnosticId', () => {
