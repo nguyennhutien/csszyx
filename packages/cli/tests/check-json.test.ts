@@ -572,3 +572,82 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         expect(report.findings.filter(finding => finding.rule.startsWith('merge-'))).toEqual([]);
     });
 });
+
+describe('csszyx check --json — what the run says about itself', () => {
+    // A message about the run rather than a finding has no place in the
+    // document, and dropping it left a gate that checks nothing exiting 0, or
+    // one that fails exiting 1 with no reason anywhere in the CI log.
+    const files = {
+        'src/app.css': '@import "tailwindcss";',
+        'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+    };
+
+    /**
+     * Run in JSON mode and keep both streams apart.
+     *
+     * @param options - Options for the run besides the root and the format.
+     * @returns What reached stdout and what reached stderr.
+     */
+    async function streamsFor(
+        options: Omit<CheckOptions, 'cwd' | 'json'>,
+    ): Promise<{ stdout: string; stderr: string }> {
+        const cwd = tailwindProject(files);
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ ...options, cwd, json: true });
+        const joined = (spy: typeof log) => spy.mock.calls.map(call => call.join(' ')).join('\n');
+        return { stdout: joined(log), stderr: joined(error) };
+    }
+
+    it('warns on stderr that a removed id selects nothing, and keeps stdout the document', async () => {
+        const { stdout, stderr } = await streamsFor({ rule: ['other'] });
+
+        expect(stderr).toContain(
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                '  help: name `sz-diagnostic` instead, which reports what `other` did.',
+        );
+        const report = JSON.parse(stdout);
+        expect(report).toEqual({
+            $schema: 'https://csszyx.com/schemas/check-v2.json',
+            version: 2,
+            findings: [],
+        });
+    });
+
+    it('names an unknown id on stderr, and writes no document', async () => {
+        const { stdout, stderr } = await streamsFor({ rule: ['bogus'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain(
+            '✖ "bogus" is not a rule or a diagnostic kind, so it would select nothing.',
+        );
+    });
+
+    it('names a --fail-on that is not a level on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ failOn: 'fatal' as 'error' });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('✖ --fail-on "fatal" is not a level');
+    });
+
+    it('names a directory that does not exist on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ dir: 'nowhere' });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('✖ "nowhere" does not exist under');
+    });
+
+    it('lists the files that could not be read on stderr', async () => {
+        const { stdout, stderr } = await streamsFor({ files: ['src/Missing.tsx'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('Files that could not be read:');
+        expect(stderr).toContain('  src/Missing.tsx');
+        expect(stderr).toContain('✖ 1 listed file(s) could not be read');
+    });
+});

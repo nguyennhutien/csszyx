@@ -408,7 +408,7 @@ function reportDeadClasses(
 
     const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
     if (!hadEntries) {
-        out.info(
+        out.runInfo(
             'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
                 'there is no design system to ask which classes are real.',
         );
@@ -427,14 +427,14 @@ function reportDeadClasses(
         // them produced an oracle, so each has something to say about why, and
         // a project whose stylesheets fail for different reasons is exactly the
         // one where hearing only the first sends the user to the wrong file.
-        out.info(`Dead-class check skipped: ${skipped.join('; ')}.`);
+        out.runInfo(`Dead-class check skipped: ${skipped.join('; ')}.`);
         // A stylesheet that will not compile is a broken project, not an absent
         // one, and passing it quietly is how a check stays green for months
         // after it stopped running. An environment with nothing to ask — no
         // Tailwind, a version without a design system — still passes: failing
         // there would break every consumer who does not build with one.
         if (stylesheetFailed) {
-            out.warn(
+            out.runWarn(
                 '\n✖ The dead-class check did not run. Its stylesheet is part of this project, ' +
                     'so this is reported as a failure rather than a skip — otherwise a check ' +
                     'that never runs is indistinguishable from one that found nothing.',
@@ -1084,7 +1084,7 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
     } else {
         refusal = `"${dir}" does not exist under ${cwd}, so there is nothing to check.`;
     }
-    out.warn(`\u2716 ${refusal}`);
+    out.runWarn(`\u2716 ${refusal}`);
     process.exitCode = 1;
     return null;
 }
@@ -1128,7 +1128,7 @@ async function resolveScanFiles(
         }
     } catch (err) {
         s?.fail('File scan failed');
-        out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
+        out.runWarn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 1;
         return null;
     }
@@ -1136,9 +1136,9 @@ async function resolveScanFiles(
 
     if (missing.length === 0) return files;
 
-    out.warn('Files that could not be read:');
-    for (const file of missing) out.info(`  ${file}`);
-    out.warn(
+    out.runWarn('Files that could not be read:');
+    for (const file of missing) out.runInfo(`  ${file}`);
+    out.runWarn(
         `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
             'checked. A pass here would report a subset as if it were the whole list. ' +
             'Check the paths, and note that a separator is normalised rather than ' +
@@ -1179,7 +1179,7 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
     // selects nothing, and the warning names the id to use instead.
     for (const id of new Set([...include, ...exclude].filter(isRemovedRuleId))) {
         const diagnostic = removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]);
-        out.warn(
+        out.runWarn(
             renderSzDiagnostic({ diagnostic, file: '', computed: SZ_DIAGNOSTIC_COMPUTED_VALUES }),
         );
     }
@@ -1187,7 +1187,7 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');
         const ids = [...known].join(', ');
-        out.warn(
+        out.runWarn(
             `\u2716 ${given} is not a rule or a diagnostic kind, so it would select nothing. ` +
                 `Known ids: ${ids}.`,
         );
@@ -1266,7 +1266,7 @@ function failOnLevel(options: CheckOptions, out: Reporter): SzDiagnosticLevel | 
     const level = options.failOn ?? 'error';
     if (FAIL_ON_LEVELS.has(level)) return level;
     const refusal = level === 'off' ? 'cannot be a threshold' : 'is not a level';
-    out.warn(
+    out.runWarn(
         `\u2716 --fail-on "${level}" ${refusal}: use info, warn or error. Nothing was scanned.`,
     );
     process.exitCode = 1;
@@ -1394,7 +1394,7 @@ function runDeadClassPass(
     const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
     if (!deadClassPass) return;
     if (disagreementLeftOut) {
-        out.info(
+        out.runInfo(
             `Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule ${PREFIX_DISAGREEMENT} left that finding out.`,
         );
         return;
