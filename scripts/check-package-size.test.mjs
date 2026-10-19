@@ -350,7 +350,7 @@ test('a file budget whose artifact is missing fails instead of passing silently'
 test('committed budgets cover the user-shipped surfaces and the engine entries', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 6);
+    assert.equal(SIZE_BUDGETS.length, 7);
     for (const budget of SIZE_BUDGETS) {
         assert.ok(['app-bundle', 'file', 'node-entry'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
@@ -359,6 +359,15 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
     assert.ok(
         SIZE_BUDGETS.some(budget => budget.kind === 'file' && budget.target.includes('pkg-parser')),
         'the parser wasm artifact must stay under a byte ceiling',
+    );
+    // The VS Code extension bundles the compiler's source into one file, so
+    // a heavy import in the compiler grows what every editor install loads.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.target.startsWith('packages/vscode/')).map(budget => [
+            budget.kind,
+            budget.target,
+        ]),
+        [['file', 'packages/vscode/dist/extension.js']],
     );
     // The compiler leaves out only its build-time code, `.`, `./engine`,
     // `./internal` and `./migrate`; everything else it exports ships to the

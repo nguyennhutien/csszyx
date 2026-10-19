@@ -386,6 +386,24 @@ export const SIZE_BUDGETS = [
         // issue per syntax error and the spread notice alone.
         maxGzipBytes: 582_400,
     },
+    // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
+    // bundles from the compiler's source, unminified, and that every editor
+    // with the extension loads at activation. It had no ceiling, so a heavy
+    // import in the compiler grew it unseen. Measured 2026-10-19, gzip -9 of
+    // `dist/extension.js` (raw bytes in brackets): 46,531 [195,793] at main
+    // bd3f3f33, 51,219 [211,264] on `feat/0.18.0-diagnostic-render`. Most of
+    // the 4,688 is the extension reporting each sz key with the code and
+    // words of the diagnostic registry (+3,864, 62704628); the bit-parallel
+    // typo search (+215), the template segments (+289), the tables moving to
+    // leaf modules (+186) and smaller steps are the rest (per-commit deltas
+    // from a worktree build, whose module path comments differ, so only the
+    // deltas carry over). Budget the usual ~300 above.
+    {
+        name: '@csszyx/vscode extension bundle',
+        kind: 'file',
+        target: 'packages/vscode/dist/extension.js',
+        maxGzipBytes: 51_500,
+    },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry
     // and the key tables. Measured 2026-10-19 from a fresh process, p50 of 30
