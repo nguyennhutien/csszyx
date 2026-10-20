@@ -15,7 +15,12 @@ const shared = {
     // `csstype` is a dependency, imported by the declarations: inlined, it was
     // most of 1.9 MB of `.d.ts`, which a React or Vue app with TypeScript
     // already installs once for `@types/react` or `@vue/runtime-dom`.
-    deps: { neverBundle: ['csstype'] },
+    //
+    // `@csszyx/compiler/report` is this package's own development reporter,
+    // which the browser entries import by name: it is built on its own (see
+    // the last build below), and an app resolves it as the package's
+    // `./report` subpath, so no entry bundles a copy.
+    deps: { neverBundle: ['csstype', '@csszyx/compiler/report'] },
     define: {
         __CSSZYX_ENGINE_VERSION__: JSON.stringify(ENGINE_VERSION),
         __CSSZYX_ENGINE_DIGEST__: JSON.stringify(engineDigest()),
@@ -105,13 +110,16 @@ export default defineBuild([
     {
         ...shared,
         clean: false,
-        format: ['esm'],
+        // CommonJS too: the runtime entries' CommonJS builds require it, and
+        // a Jest suite cannot `require()` an ES module.
+        format: ['esm', 'cjs'],
         // The development renderer of a browser console line, with the
         // registry's templates: `@internal`, imported only from a `NODE_ENV`
-        // branch, and ES module only until the runtime requires it. A build
-        // of its own, so it shares no chunk with the entries Node loads:
-        // sharing the template filler split it into a chunk of its own,
-        // which cost `./engine` and `./internal` ~620 gzip bytes each.
+        // branch. A build of its own, so it shares no chunk with the entries
+        // Node loads: sharing the template filler split it into a chunk of
+        // its own, which cost `./engine` and `./internal` ~620 gzip bytes
+        // each, and imported from `./browser` by a relative path it measured
+        // `./engine` +537 and `./internal` +551 (2026-10-20).
         entry: { report: 'src/report.ts' },
     },
 ]);

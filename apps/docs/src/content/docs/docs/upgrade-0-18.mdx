@@ -1340,10 +1340,14 @@ build now names it under the kind `slash-opacity-string`, an `error` under
   docs: https://csszyx.com/e/slash-opacity-string
 ```
 
-The runtime prints its own one-line warning once per value, in production too:
+The runtime prints the same words once per value, and its code and args in
+production:
 
 ```text
-[csszyx] "bg: 'red-500/50'" at src/Card.tsx:3 — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: 'red-500', op: 50 }.
+[csszyx] slash-opacity-string: `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.
+  help: use the object form: `{ color: 'red-500', op: 50 }`.
+  docs: https://csszyx.com/e/slash-opacity-string
+[csszyx] slash-opacity-string: {"key":"bg","color":"red-500","opacity":"50"} https://csszyx.com/e/slash-opacity-string
 ```
 
 **The edit.** Write the object form the line names:

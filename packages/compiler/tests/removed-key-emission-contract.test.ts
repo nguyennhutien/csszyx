@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { transform } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES, type EngineParityResult } from './engine-parity-harness.js';
+import { szReportedCodes } from './helpers/sz-console-line.js';
 
 /**
  * The code and key of each issue an engine reported.
@@ -15,6 +16,8 @@ function keysOf(issues: EngineParityResult['issues']) {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    // Each runtime case reads its own first report.
+    __resetSzWarnDedupForTests();
 });
 
 describe('removed sz key emission contract', () => {
@@ -27,9 +30,9 @@ describe('removed sz key emission contract', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         expect(transform({ [key]: value }).className).toBe('');
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            `"${key}" was removed`,
-        );
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual(['removed-key']);
+        expect(messages[0]).toContain(`\`${key}\` was removed, and nothing is emitted for it.`);
     });
 
     it('runtime drops canonical aliases while preserving custom utility fallthrough', () => {
@@ -44,12 +47,18 @@ describe('removed sz key emission contract', () => {
         });
 
         expect(result.className).toBe('custom-thing-active');
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            'canonical key "p"',
-        );
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            'canonical key "bgRepeat"',
-        );
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual([
+            'canonical-key',
+            'canonical-key',
+            'canonical-key',
+            'canonical-key',
+            'removed-key',
+            'unknown-key',
+        ]);
+        expect(messages.join('\n')).toContain('`padding` is an alias of `p`');
+        expect(messages.join('\n')).toContain('`backgroundRepeat` is an alias of `bgRepeat`');
+        expect(messages.join('\n')).toContain('`customThing` is not an sz property');
     });
 
     it.each(ENGINES)(

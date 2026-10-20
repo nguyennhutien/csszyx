@@ -9,9 +9,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { __szBoolClass } from '../src/bool-class.js';
+import { productionMessage, runtimeMessage } from './engine-message.js';
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
 });
 
 describe('__szBoolClass', () => {
@@ -39,8 +41,27 @@ describe('__szBoolClass', () => {
         expect(__szBoolClass('px', 'boolclassteststr', 'border-b')).toBe('');
         expect(__szBoolClass({ sm: true }, 'boolclasstestobj', 'ring')).toBe('');
         expect(warn).toHaveBeenCalledTimes(3);
-        expect(warn.mock.calls[0][0]).toContain('boolclasstestnum');
-        expect(warn.mock.calls[0][0]).toContain('dynamic()');
+        expect(warn.mock.calls[0]).toEqual([
+            runtimeMessage(
+                'dynamic-non-boolean',
+                'The runtime value of `boolclasstestnum` has type `number`, and only a boolean toggles this class, so it is omitted.',
+                'help: pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.',
+            ),
+        ]);
+    });
+
+    it('prints its code and args in production, where the class is still missing', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('NODE_ENV', 'production');
+        expect(__szBoolClass('px', 'boolclasstestprod', 'border-b')).toBe('');
+        expect(warn.mock.calls).toEqual([
+            [
+                productionMessage('dynamic-non-boolean', {
+                    key: 'boolclasstestprod',
+                    valueType: 'string',
+                }),
+            ],
+        ]);
     });
 
     it('warns once per key/shape pair', () => {

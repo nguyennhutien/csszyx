@@ -15,6 +15,8 @@
  * property. The only correct lowering is the bare class, toggled at runtime.
  */
 
+import { DYNAMIC_NON_BOOLEAN, szReport } from '@csszyx/compiler/report';
+
 /** Values already warned about, so a render loop logs each shape only once. */
 const warnedShapes = new Set<string>();
 
@@ -43,11 +45,14 @@ export function __szBoolClass(v: unknown, key: string, className: string): strin
         warnedShapes.add(shape);
         // Kept in prod: the style silently dropping IS the failure mode this
         // helper exists to prevent, so it must stay visible.
-        console.warn(
-            `[csszyx] dynamic value on "${key}" is a ${typeof v} — only a boolean can ` +
-                'toggle this class, so it is omitted. Write non-boolean values as ' +
-                'literals (or use dynamic() for responsive objects).',
-        );
+        const args = { key, valueType: typeof v };
+        if (process.env.NODE_ENV !== 'production') {
+            szReport({ diagnostic: DYNAMIC_NON_BOOLEAN, args });
+        } else {
+            console.warn(
+                `[csszyx] dynamic-non-boolean: ${JSON.stringify(args)} https://csszyx.com/e/dynamic-non-boolean`,
+            );
+        }
     }
     return '';
 }

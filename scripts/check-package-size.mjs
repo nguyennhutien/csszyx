@@ -7,6 +7,7 @@ import { buildSync } from 'esbuild';
 
 import ts from 'typescript';
 
+import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
 import * as registry from './diagnostics/registry.mjs';
 import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
 
@@ -284,29 +285,19 @@ export const SIZE_BUDGETS = [
             },
         },
         // Each one reports a class the transform did not emit (ADR 0011), so
-        // they print in production and in the browser, once each; only
-        // `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them.
-        productionMessages: [
-            // A value that moved onto its group's own key (`touch: 'pan-x'`).
-            'warn: <expr>',
-            // A replaced or removed key (`ordinal`, `tabularNums`, `inlineFlex`).
-            'warn: [csszyx] ',
-            // A stand-alone key a later group key replaces in one object.
-            'warn: [csszyx] ',
-            // A removed key (`fontVariant`, `maskFrom`), named with its note.
-            'warn: [csszyx] ',
-            // A colour key's slash-opacity string (`bg: 'red-500/50'`), which
-            // emits nothing; the build reports it as `slash-opacity-string`.
-            'warn: [csszyx] ',
-            // A gradient layer on `mask` (`mask: 'linear-45'`), which emits
-            // nothing; the build reports it as `moved-value`.
-            'warn: [csszyx] mask: ',
-            // A dynamic value the runtime helpers cannot lower, so the style
-            // is dropped: a non-boolean on a boolean-only key (`./bool-class`)
-            // and an unresolvable spacing value (`./spacing-var`).
-            'warn: [csszyx] dynamic value on ',
-            'warn: [csszyx] dynamic value on ',
-        ],
+        // it prints in production and in the browser, once each, as its code
+        // and args; only `CSSZYX_QUIET_SZ_WARNINGS=1` mutes the sz key and
+        // value lines. Read from the registry (`runtime.production`), never
+        // listed here: a removed or replaced key, a moved value and a
+        // gradient layer on `mask`, a stand-alone key a later group replaces,
+        // a group's value written on that stand-alone key, a slash-opacity
+        // string, and the two dynamic values the runtime helpers cannot lower.
+        productionCodes: productionCodesOf(
+            registry.DIAGNOSTICS,
+            new Set(
+                [...browserSourceFiles()].filter(file => file.startsWith('packages/compiler/src/')),
+            ),
+        ),
     },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
@@ -812,6 +803,60 @@ export function consoleMessages(code) {
         .sort();
 }
 
+/** The console lines a production bundle may print, by the code that heads
+ * them: every registry id that prints in production (`runtime.production`
+ * true, or a list of the forms that do) from one of the bundle's source
+ * files, with the method its entry names. Read from the registry so the list
+ * is never written twice (ADR 0031); a site writes the compact form inline,
+ * `[csszyx] <code>: <args JSON> <link>`, whose head {@link consoleMessages}
+ * reads.
+ *
+ * @param {Array<{ id: string, surfaces: { runtime?: { production: boolean | string[], console?: 'error' } }, sources?: string[] }>} diagnostics the registry's entries
+ * @param {ReadonlySet<string>} files the sources the bundle can hold, repository-relative
+ * @returns {string[]} the heads, `method: [csszyx] <code>: `, sorted
+ */
+export function productionCodesOf(diagnostics, files) {
+    return diagnostics
+        .filter(({ surfaces, sources = [] }) => {
+            const production = surfaces.runtime?.production;
+            const prints =
+                production === true || (Array.isArray(production) && production.length > 0);
+            return prints && sources.some(source => files.has(source.replace(/:\d+$/, '')));
+        })
+        .map(({ id, surfaces }) => `${surfaces.runtime?.console ?? 'warn'}: [csszyx] ${id}: `)
+        .sort();
+}
+
+/** Compare the lines a bundle prints with the codes the registry lets it
+ * print in production, both ways, as sets: one console call per site, and
+ * one code may have several sites. A head no code allows is a development
+ * line that failed to fold, or a line printed through another method than
+ * the registry names; a code no head prints is a stale entry or a lost site.
+ * A bundle with no console call at all fails too: the scan must find the
+ * sinks it checks, or a pattern that stopped matching would pass every bundle.
+ *
+ * @param {string[]} printed heads from {@link consoleMessages}
+ * @param {string[]} allowed heads from {@link productionCodesOf}
+ * @returns {string[]} one problem per mismatch
+ */
+export function codeProblems(printed, allowed) {
+    const problems = [];
+    if (printed.length === 0) {
+        problems.push('found no console call to check, so the sink scan read nothing');
+    }
+    for (const head of new Set(printed)) {
+        if (!allowed.includes(head)) {
+            problems.push(
+                `prints "${head}", which the registry does not mark as printing in production`,
+            );
+        }
+    }
+    for (const head of allowed) {
+        if (!printed.includes(head)) problems.push(`no longer prints "${head}"`);
+    }
+    return problems;
+}
+
 /** Compare a bundle's console messages with the ones its budget allows, as
  * multisets, both ways: a message nobody listed is a development warning that
  * failed to fold (or a new production message that needs a decision, ADR
@@ -947,10 +992,10 @@ export function checkBudgets(budgets, rootDir) {
                 }
                 const bundle = appBundle(files, target);
                 gzipBytes = gzipSync(bundle, { level: 9 }).length;
-                for (const problem of messageProblems(
-                    consoleMessages(bundle),
-                    budget.productionMessages ?? [],
-                )) {
+                const printed = consoleMessages(bundle);
+                for (const problem of budget.productionCodes === undefined
+                    ? messageProblems(printed, budget.productionMessages ?? [])
+                    : codeProblems(printed, budget.productionCodes)) {
                     failures.push(
                         `${budget.name}: the production bundle ${problem}. Only a message that ` +
                             "reports csszyx's own output as wrong or missing, a security or a crash " +

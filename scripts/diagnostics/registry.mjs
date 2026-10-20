@@ -285,7 +285,7 @@ export const DIAGNOSTICS = [
         text: '`{key}` is not an sz property.',
         help: "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
-        sources: [`${ENGINE}:1175`, `${CORE_TS}:3299`],
+        sources: [`${ENGINE}:1175`, `${CORE_TS}:3438`],
     },
     {
         id: 'canonical-key',
@@ -295,7 +295,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: '`{key}` is an alias of `{canonical}`, and nothing is emitted for it.',
         help: 'write `{canonical}`.',
-        sources: [`${ENGINE}:1168`, `${CORE_TS}:3299`],
+        sources: [`${ENGINE}:1168`, `${CORE_TS}:3432`],
     },
     {
         id: 'removed-key',
@@ -332,9 +332,7 @@ export const DIAGNOSTICS = [
             `${ENGINE}:1156`,
             `${ENGINE}:1164`,
             `${ENGINE}:969`,
-            `${CORE_TS}:3299`,
-            `${CORE_TS}:3907`,
-            `${CORE_TS}:3923`,
+            `${CORE_TS}:4012`,
         ],
     },
     {
@@ -345,7 +343,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: '`sz` received a numeric key `{key}`, and its value is ignored.',
         help: 'pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.',
-        sources: [`${ENGINE}:1170`, `${CORE_TS}:3299`],
+        sources: [`${ENGINE}:1170`, `${CORE_TS}:3434`],
     },
     {
         id: 'closed-enum-value',
@@ -395,11 +393,11 @@ export const DIAGNOSTICS = [
             `${ENGINE}:1205`,
             `${ENGINE}:1213`,
             `${ENGINE}:1224`,
-            `${CORE_TS}:575`,
-            `${CORE_TS}:2410`,
-            `${CORE_TS}:2417`,
-            `${CORE_TS}:2555`,
-            `${CORE_TS}:2566`,
+            `${CORE_TS}:613`,
+            `${CORE_TS}:2433`,
+            `${CORE_TS}:2589`,
+            `${CORE_TS}:2635`,
+            `${CORE_TS}:2647`,
         ],
     },
     {
@@ -412,7 +410,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, color: STRING, opacity: STRING },
         text: "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
         help: "use the object form: `{ color: '{color}', op: {opacity} }`.",
-        sources: [`${ENGINE}:1235`, 'packages/compiler/src/color-validation.ts:70'],
+        sources: [`${ENGINE}:1235`, 'packages/compiler/src/color-validation.ts:72'],
     },
     {
         id: 'off-scale-value',
@@ -422,7 +420,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, value: STRING },
         text: "`{key}: {value}` is not on Tailwind's spacing scale, so the class generates no CSS.",
         help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
-        sources: [`${ENGINE}:772`, `${CORE_TS}:788`],
+        sources: [`${ENGINE}:772`, `${CORE_TS}:827`],
     },
     {
         id: 'numeric-font-weight',
@@ -432,7 +430,7 @@ export const DIAGNOSTICS = [
         args: { value: STRING },
         text: "`weight: '{value}'` is a numeric string, so `font-{value}` generates no CSS.",
         help: 'write `weight: {value}` as a number; it emits `font-[{value}]`.',
-        sources: [`${ENGINE}:1119`, `${CORE_TS}:908`],
+        sources: [`${ENGINE}:1119`, `${CORE_TS}:944`],
     },
     {
         id: 'per-side-border-style',
@@ -442,7 +440,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, value: STRING },
         text: "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
         help: "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width.",
-        sources: [`${ENGINE}:779`, `${CORE_TS}:871`],
+        sources: [`${ENGINE}:779`, `${CORE_TS}:910`],
     },
     {
         id: 'property-object',
@@ -452,7 +450,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, nestedKeys: { type: 'string[]', joiner: ', ' } },
         text: '`{key}` is a property, and its object `{ {nestedKeys} }` emits `{key}:*` classes that match no Tailwind variant and generate no CSS.',
         help: "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
-        sources: [`${ENGINE}:786`, `${CORE_TS}:3819`],
+        sources: [`${ENGINE}:786`, `${CORE_TS}:3912`],
     },
     {
         id: 'non-variant-object',
@@ -462,7 +460,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: '`{key}` is not a variant, so its object emits `{key}:` classes that generate no CSS.',
         help: 'a `--*` key takes a declaration value; `container` takes `true`.',
-        sources: [`${ENGINE}:1183`, `${CORE_TS}:3749`],
+        sources: [`${ENGINE}:1183`, `${CORE_TS}:3842`],
     },
     {
         id: 'unknown-field',
@@ -474,7 +472,7 @@ export const DIAGNOSTICS = [
         args: { owner: STRING, member: STRING, allowed: { type: 'string[]', joiner: ', ' } },
         text: '`{owner}` has no field `{member}`, and nothing is emitted for it.',
         help: '`{owner}` takes `{ {allowed} }`.',
-        sources: [`${ENGINE}:797`, `${CORE_TS}:2978`],
+        sources: [`${ENGINE}:797`, `${CORE_TS}:3061`],
     },
     {
         id: 'runtime-value',
@@ -618,7 +616,7 @@ export const DIAGNOSTICS = [
             'mask-layer':
                 'write this layer on `{layerKey}`; `mask` takes only `none`, a `url()` or a CSS variable.',
         },
-        sources: [`${ENGINE}:988`, `${ENGINE}:996`, `${CORE_TS}:2480`, `${CORE_TS}:3154`],
+        sources: [`${ENGINE}:988`, `${ENGINE}:996`, `${CORE_TS}:2512`, `${CORE_TS}:3246`],
     },
     {
         id: 'global-before-group',
@@ -629,7 +627,7 @@ export const DIAGNOSTICS = [
         text: '`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.',
         help: "to override the group, layer it: `sz={[base, { {global}: '{value}' }]}`.",
         note: "a spread such as `{ ...base, {global}: '{value}' }` keeps the same key order, so it does not fix this.",
-        sources: [`${ENGINE}:981`, `${CORE_TS}:2510`],
+        sources: [`${ENGINE}:981`, `${CORE_TS}:2557`],
     },
     {
         id: 'runtime-family-conflict',
@@ -880,7 +878,7 @@ export const DIAGNOSTICS = [
             'op-given': 'the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.',
             'op-absent': 'the class still applies opacity {opacity}.',
         },
-        sources: [`${ENGINE}:1254`, `${ENGINE}:1255`, `${CORE_TS}:2102`],
+        sources: [`${ENGINE}:1254`, `${ENGINE}:1255`, `${CORE_TS}:2125`],
     },
 
     // --- check: kinds a non-engine `csszyx check` pass reports ---
@@ -941,7 +939,7 @@ export const DIAGNOSTICS = [
         gaps: ['engine'],
         text: '`{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.',
         help: "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`.",
-        sources: [`${CHECK}:685`, `${CORE_TS}:2183`],
+        sources: [`${CHECK}:685`, `${CORE_TS}:2215`],
     },
     {
         id: 'theme-collision',
@@ -1449,7 +1447,7 @@ export const DIAGNOSTICS = [
         },
         sources: [
             'packages/compiler/src/sz-limits.ts:25',
-            `${CORE_TS}:1931`,
+            `${CORE_TS}:1955`,
             'packages/runtime/src/core.ts:179',
             `${VARIANTS}:122`,
             `${VARIANTS}:263`,
@@ -1534,7 +1532,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, and only a boolean toggles this class, so it is omitted.',
         help: 'pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.',
-        sources: ['packages/compiler/src/bool-class.ts:46'],
+        sources: ['packages/compiler/src/bool-class.ts:50'],
     },
     {
         id: 'dynamic-unresolvable',
@@ -1544,7 +1542,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, which cannot be resolved to CSS, so the property is omitted.',
         help: 'pass a number, a token or a CSS length; for a responsive object, use `dynamic()`.',
-        sources: ['packages/compiler/src/spacing-var.ts:64'],
+        sources: ['packages/compiler/src/spacing-var.ts:68'],
     },
     {
         id: 'dev-warnings-partial',
@@ -1555,7 +1553,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The `sz` key warning above has no source location, so it does not name the file that triggered it.',
         help: 'run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line.',
-        sources: [`${CORE_TS}:1745`],
+        sources: [`${CORE_TS}:1770`],
     },
     {
         id: 'diagnostics-capped',
@@ -1587,7 +1585,7 @@ export const DIAGNOSTICS = [
         sources: [
             'packages/unplugin/src/diagnostic-limiter.ts:89',
             'packages/runtime/src/dev-warn.ts:47',
-            `${CORE_TS}:3290`,
+            `${CORE_TS}:3385`,
         ],
     },
     {
@@ -1628,7 +1626,7 @@ export const DIAGNOSTICS = [
             'csszyx-turbopack':
                 'write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.',
         },
-        sources: [`${CORE_TS}:1904`, 'packages/unplugin/src/next-config.ts:129'],
+        sources: [`${CORE_TS}:1928`, 'packages/unplugin/src/next-config.ts:129'],
     },
     {
         id: 'lowering-not-loaded',

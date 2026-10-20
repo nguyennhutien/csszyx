@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import * as validator from './validate-undocumented-warnings.mjs';
 import { extractSinkCallRegions, extractSinkMessages } from './validate-undocumented-warnings.mjs';
 
 /**
@@ -92,4 +93,47 @@ test('finds a message thrown as a type error', () => {
 
 test('still ignores a short throw that is an internal invariant', () => {
     assert.deepEqual(extractSinkMessages('throw new Error("unreachable");'), []);
+});
+
+test('reads the code of a line the registry words, from the reporter and the compact form', () => {
+    // Neither carries a sentence at the site: `szReport` names the registry
+    // entry, and the production line is the code and its args.
+    const codes = validator.extractSinkCodes(
+        [
+            "if (process.env.NODE_ENV !== 'production') szReport({ diagnostic: REMOVED_KEY, args, at });",
+            'else console.warn(`[csszyx] removed-key: ${JSON.stringify(args)} https://csszyx.com/e/removed-key`);',
+            "szReport({\n    diagnostic: CLOSED_ENUM_VALUE,\n    args: { form: 'dead', key, value },\n});",
+            "console.error('[csszyx] mangle-map-unreadable: ' + JSON.stringify(args));",
+            'console.warn(`[csszyx] Tip: run the scan`);',
+        ].join('\n'),
+    );
+
+    assert.deepEqual(codes, [
+        'removed-key',
+        'removed-key',
+        'closed-enum-value',
+        'mangle-map-unreadable',
+    ]);
+});
+
+test('a code no registry entry words is undocumented', () => {
+    const diagnostics = [
+        { id: 'removed-key', text: '`{key}` was removed.' },
+        { id: 'unworded', summary: 'An id with no words yet.' },
+    ];
+
+    assert.deepEqual(
+        validator.undocumentedCodes(['removed-key', 'unworded', 'made-up'], diagnostics),
+        ['unworded', 'made-up'],
+    );
+});
+
+test('reads no prose from the compact form, whose words are the registry entry', () => {
+    assert.deepEqual(
+        extractSinkMessages(
+            'console.warn(`[csszyx] global-before-group: ${JSON.stringify(args)} https://csszyx.com/e/global-before-group`);\n' +
+                "console.error('[csszyx] mangle-map-unreadable: ' + JSON.stringify(args) + ' https://csszyx.com/e/mangle-map-unreadable');",
+        ),
+        [],
+    );
 });

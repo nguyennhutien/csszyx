@@ -58,6 +58,39 @@ export {
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
+// The registry's words for every line this module prints, the reporter that
+// fills them in development and the suggestion an unknown key's line names
+// (ADR 0031). Each `szReport` call sits on the development branch of a literal
+// `NODE_ENV` check, so a production bundle drops the call and every template;
+// a line that prints in production spells its compact form inline at the
+// site. The check wraps the call even below a gate that already returned in
+// production: esbuild keeps a template named by code after an early return
+// (measured: `closed-enum-value` and `non-variant-object` shipped in the
+// runtime app bundle), and `tests/dev-warning-guard.test.ts` holds the shape.
+// Imported by the package's own name: `./report` is a build of its own, and a
+// relative import would split the template filler into a chunk the Node
+// entries share, as `tsdown.config.mjs` measured.
+import {
+    BROKEN_OPACITY,
+    CANONICAL_KEY,
+    CLOSED_ENUM_VALUE,
+    COLOR_SLASH_OPACITY,
+    DEV_WARNINGS_PARTIAL,
+    DIAGNOSTICS_CAPPED,
+    GLOBAL_BEFORE_GROUP,
+    MOVED_VALUE,
+    NON_VARIANT_OBJECT,
+    NUMERIC_FONT_WEIGHT,
+    NUMERIC_KEY,
+    OFF_SCALE_VALUE,
+    PER_SIDE_BORDER_STYLE,
+    PROPERTY_OBJECT,
+    REMOVED_KEY,
+    suggestSzKey,
+    szReport,
+    UNKNOWN_FIELD,
+    UNKNOWN_KEY,
+} from '@csszyx/compiler/report';
 // Imported here, below the `export … from` block, on purpose: an app bundle
 // places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
 // at the first import of either, and that has to come after
@@ -559,10 +592,13 @@ const warnedAlignmentValues = new Set<string>();
  * so the common case pays no `process.env` read.
  *
  * @param rawKey - The sz key being lowered.
- * @param value - Its value.
+ * @param written - Its value, as written.
  */
-function warnAlignmentValue(rawKey: string, value: string): void {
+function warnAlignmentValue(rawKey: string, written: string): void {
     if (process.env.NODE_ENV === 'production') return;
+    // The important modifier is a class suffix, not part of the value, as the
+    // engine reads it: `flex-start!` is still `flex-start`.
+    const { value } = handleImportant(written);
     // Own keys only: `constructor` or `toString` would read Object members.
     // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
     if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
@@ -572,11 +608,13 @@ function warnAlignmentValue(rawKey: string, value: string): void {
         return;
     }
     warnedAlignmentValues.add(sig);
-    console.warn(
-        `[csszyx] ${rawKey}: '${value}' is a CSS value — use the short form '${hint}' ` +
-            `(e.g. { ${rawKey}: '${hint}' }). '${rawKey}-${value}' has no Tailwind utility ` +
-            'and renders nothing.',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args: { form: 'css-value', key: rawKey, value, suggestion: hint },
+            at: szWarnLocation,
+        });
+    }
 }
 
 // ============================================================================
@@ -784,12 +822,13 @@ function warnDeadSpacingStep(key: string, value: number): void {
     const token = `${key}:${value}`;
     if (_warnedSpacingSteps.has(token)) return;
     _warnedSpacingSteps.add(token);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${key}: ${value}"${at}: ${value} is not on Tailwind's spacing scale ` +
-            '(quarter steps only), so the class generates no CSS. Use a quarter step ' +
-            `(1.25, 1.5, 1.75) or a unit value ("${value}rem").`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: OFF_SCALE_VALUE,
+            args: { key, value: String(value) },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /**
@@ -867,12 +906,9 @@ function warnBorderSideStyle(key: string, value: string): void {
     const token = `${key}:${value}`;
     if (_warnedBorderSideStyles.has(token)) return;
     _warnedBorderSideStyles.add(token);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${key}: '${value}'"${at}: Tailwind has no per-side border style, so this ` +
-            `generated no CSS and the class is dropped. Use borderStyle: '${value}' for every ` +
-            `side, or a number on "${key}" for the width.`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: PER_SIDE_BORDER_STYLE, args: { key, value }, at: szWarnLocation });
+    }
 }
 
 /** Weight values already nudged about the bare numeric class (once each). */
@@ -904,14 +940,9 @@ function warnDeadWeightValue(rawKey: string, value: string): void {
     }
     if (_warnedWeightValues.has(value)) return;
     _warnedWeightValues.add(value);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "weight: '${value}'"${at}: Tailwind spells a numeric font weight through ` +
-            `--font-weight-*, so "font-${value}" generates no CSS. Write weight: ${value} as a ` +
-            'number, which brackets to "font-[' +
-            value +
-            ']".',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: NUMERIC_FONT_WEIGHT, args: { value }, at: szWarnLocation });
+    }
 }
 
 /** Custom theme tokens already nudged about slash-opacity (once per token). */
@@ -1709,42 +1740,35 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
- * Whether the one-time "run a full project scan" hint has been shown. Build-time
- * unknown-key warnings are lazy (a file warns only when its route is requested),
- * so the first one points the developer at `csszyx check` for a complete pass.
+ * Whether the one-time "run a full project scan" hint has been shown.
  * Suppressed when `CSSZYX_NO_PROJECT_SCAN_HINT` is set — `csszyx check` itself is
  * the scan and sets it so it doesn't advertise itself.
  */
 let szHintedProjectScan = false;
 
 /**
- * Emits the project-scan hint at most once per process, alongside the first
- * unknown/aliased sz key warning.
+ * Emits the project-scan hint (`dev-warnings-partial`) at most once per
+ * process, after the first unknown or aliased sz key warning that has no
+ * source location.
  *
- * Fires whether or not the warning carries a source location. A location-less
- * warning comes from the runtime/browser path (an sz built from a variable, a
- * spread, an `szv()`/`dynamic()` result) — exactly the case a developer cannot
- * trace by eye, so the "here is the command to find it" tip matters MOST there.
- * Previously the hint was gated on having a location and so never printed for
- * those warnings.
+ * A location-less warning comes from the runtime/browser path (an sz built from
+ * a variable, a spread, an `szv()`/`dynamic()` result) — exactly the case a
+ * developer cannot trace by eye, so the "here is the command to find it" tip
+ * belongs there. A located warning already names its file.
  *
- * @param location - the `at <file>:<line>` suffix, present only on the build path.
+ * Prints through `console.warn` (stderr), not stdout: this can fire during a
+ * transform run inside a stdio JSON-RPC consumer (@csszyx/mcp-server), where
+ * stray stdout corrupts it.
  */
-function hintProjectScanOnce(location: string | undefined): void {
-    if (szHintedProjectScan || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
-        return;
+function hintProjectScanOnce(): void {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        !szHintedProjectScan &&
+        process.env.CSSZYX_NO_PROJECT_SCAN_HINT !== '1'
+    ) {
+        szHintedProjectScan = true;
+        szReport({ diagnostic: DEV_WARNINGS_PARTIAL, args: {} });
     }
-    szHintedProjectScan = true;
-    // A located warning already names its file; a location-less one (runtime
-    // path) does not, so it needs the scan command to find which file to fix.
-    const why = location
-        ? 'dev warnings only surface files as you open them'
-        : 'this warning has no source location — the scan reports which file and key triggered it';
-    // stderr (console.warn), not stdout: this can fire during a transform run inside
-    // a stdio JSON-RPC consumer (@csszyx/mcp-server), where stray stdout corrupts it.
-    console.warn(
-        `[csszyx] Tip: run \`npx @csszyx/cli check\` to scan every file for sz key issues at once (${why}).`,
-    );
 }
 
 /**
@@ -1787,15 +1811,15 @@ function firstUserStackFrame(): string | undefined {
 }
 
 /**
- * Traceability suffix for a location-less (runtime) unknown-key warning: the
- * offending object's shallow shape plus the first user stack frame. Best-effort
- * — never throws, caps the serialized shape, and omits either part it cannot
- * produce.
+ * Where a location-less (runtime) unknown-key warning came from: the offending
+ * object's shallow shape plus the first user stack frame, for the header of
+ * the line in place of a file position. Best-effort — never throws, caps the
+ * serialized shape, and omits either part it cannot produce.
  *
  * @param szProp - The sz object being transformed.
- * @returns A leading-space suffix, or empty string when nothing is available.
+ * @returns The place, or undefined when nothing is available.
  */
-function runtimeSzWarnContext(szProp: SzObject): string {
+function runtimeSzWarnContext(szProp: SzObject): string | undefined {
     let shape = '';
     try {
         // Shallow top-level keys only, capped — never dump a large or cyclic
@@ -1809,7 +1833,7 @@ function runtimeSzWarnContext(szProp: SzObject): string {
     }
     const frame = firstUserStackFrame();
     if (!shape && !frame) {
-        return '';
+        return undefined;
     }
     const parts: string[] = [];
     if (shape) {
@@ -1818,7 +1842,7 @@ function runtimeSzWarnContext(szProp: SzObject): string {
     if (frame) {
         parts.push(`from ${frame}`);
     }
-    return `\n  ${parts.join('  ·  ')}`;
+    return parts.join('  ·  ');
 }
 
 /**
@@ -2049,7 +2073,7 @@ function buildColorObjectClass(
             : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
     }
     const opacity = formatOpacity(color.op);
-    warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
+    warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`);
     return `${prefix}${utilityPrefix}-${colorValue}/${opacity}${important}`;
 }
 
@@ -2093,16 +2117,23 @@ function warnColorObjectSlashOpacity(
     const token = `${key}:${color}:${shown}`;
     if (_warnedColorObjectSlashOpacity.has(token)) return;
     _warnedColorObjectSlashOpacity.add(token);
-    const important = color.endsWith('!') ? '!' : '';
+    const important = color.endsWith('!');
     const unmarked = important ? color.slice(0, -1) : color;
     const slash = unmarked.indexOf('/');
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    const written = shown ? `, op: ${shown}` : '';
-    const used = shown || unmarked.slice(slash + 1);
-    console.warn(
-        `[csszyx] "${key}: { color: '${color}'${written} }"${at} — a colour object takes its ` +
-            `opacity in op, not in color. Write { color: '${unmarked.slice(0, slash)}${important}', op: ${used} }.`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: COLOR_SLASH_OPACITY,
+            args: {
+                form: shown ? 'op-given' : 'op-absent',
+                key,
+                base: unmarked.slice(0, slash),
+                opacity: unmarked.slice(slash + 1),
+                ...(important ? { important: '!' as const } : {}),
+                ...(shown ? { op: shown } : {}),
+            },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /** Formats a color-object base using Tailwind variable and arbitrary syntax. */
@@ -2162,7 +2193,7 @@ function resolvedThemeTokenValue(token: string): string | null {
  * A token that cannot be resolved is not cached: the stylesheet may simply
  * not have loaded yet, and a later lowering deserves a fresh answer.
  */
-function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
+function warnCustomOpacityToken(color: string, className: string): void {
     if (
         process.env.NODE_ENV === 'production' ||
         !szNodeWarningsUnmuted() ||
@@ -2179,13 +2210,13 @@ function warnCustomOpacityToken(color: string, className: string, opacity: strin
         return;
     }
     _warnedOpacityTokens.add(color);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${className}"${at}: the /${opacity} opacity modifier will not apply — ` +
-            `the "${color}" theme token resolves to the bare comma triplet "${resolved}", ` +
-            'which color-mix() cannot dim. Wrap the variable, e.g. ' +
-            `--color-${color}: rgb(var(--your-triplet)).`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: BROKEN_OPACITY,
+            args: { className, value: resolved },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /** Dispatches nested variants that use custom Tailwind syntax. */
@@ -2332,13 +2363,12 @@ function collectBasicSpecialProperty(
             classes.push(`${prefix}${utility}${bang}`);
             return true;
         }
-        const moved = CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`];
-        if (moved !== undefined) {
-            warnMovedValue(rawKey, base, moved);
+        if (CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`] !== undefined) {
+            warnMovedValue(rawKey, base);
             return true;
         }
         const bare = bareClosedEnumClass(rawKey, base);
-        warnClosedEnumValue(rawKey, base, bare, legal);
+        warnClosedEnumValue(rawKey, base, bare);
         classes.push(`${prefix}${bare}${bang}`);
         return true;
     }
@@ -2387,14 +2417,8 @@ const _warnedClosedEnumValues = new Set<string>();
  * @param key - The closed-enum key.
  * @param value - The value that is not in its set.
  * @param bare - The class emitted for it.
- * @param legal - Its value table, whose keys the message lists.
  */
-function warnClosedEnumValue(
-    key: string,
-    value: string,
-    bare: string,
-    legal: ReadonlyMap<string, string>,
-): void {
+function warnClosedEnumValue(key: string, value: string, bare: string): void {
     const token = `${key}:${value}`;
     if (
         process.env.NODE_ENV === 'production' ||
@@ -2403,26 +2427,28 @@ function warnClosedEnumValue(
     )
         return;
     _warnedClosedEnumValues.add(token);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    const values = [...legal.keys()].join(', ');
     const sibling = siblingGroupOf(key, bare);
-    if (sibling !== undefined) {
-        console.warn(
-            `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" it ` +
-                `emits belongs to { ${sibling} }: write that key, so it combines with the other ` +
-                `groups instead of resetting them. ${key} takes one of: ${values}.`,
-        );
-        return;
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args:
+                sibling === undefined
+                    ? { form: 'dead', key, value }
+                    : {
+                          form: 'sibling-group',
+                          key,
+                          value,
+                          groupKey: sibling[0],
+                          groupValue: sibling[1],
+                      },
+            at: szWarnLocation,
+        });
     }
-    console.warn(
-        `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" is ` +
-            'still emitted and styles nothing, unless a rule of your own happens to match ' +
-            `it. ${key} takes one of: ${values}.`,
-    );
 }
 
 /**
  * The group key and value whose class a stand-alone key's stray value emits.
+ * Mirrors the engine's `sibling_group_of`.
  *
  * `contain: 'paint'` emits `contain-paint`, which is the class of
  * `{ containPaint: true }`: the value belongs to a group of the same property.
@@ -2430,56 +2456,65 @@ function warnClosedEnumValue(
  * combining with them, so the message names the group key to write.
  * @param key - A closed-enum key.
  * @param bare - The class its value emits.
- * @returns `group: value` for the group whose class it is, or undefined.
+ * @returns The group and its value (`'true'` for a flag), or undefined.
  */
-function siblingGroupOf(key: string, bare: string): string | undefined {
+function siblingGroupOf(key: string, bare: string): readonly [string, string] | undefined {
     for (const group of GROUPS_OF_GLOBAL_KEYWORD.get(key) ?? []) {
         for (const [value, utility] of CLOSED_ENUM_LOOKUP.get(group) ?? []) {
-            if (utility === bare) return `${group}: '${value}'`;
+            if (utility === bare) return [group, value];
         }
-        if (BOOLEAN_TO_CLASS[group] === bare) return `${group}: true`;
+        if (BOOLEAN_TO_CLASS[group] === bare) return [group, 'true'];
     }
     return undefined;
+}
+
+/**
+ * The group a stand-alone key's value belongs to, when the value is no value
+ * of the key itself but the class of one of its groups: `contain: 'size'` is
+ * `{ containSize: 'size' }`. Mirrors the engine's `is_stray_group_value`.
+ *
+ * Such a value is reported as that group's value wherever it stands, and a
+ * group written after it does not make it an order mistake: layering it, as
+ * the order report advises, keeps the same wrong key.
+ * @param key - A stand-alone key.
+ * @param value - Its value, without a trailing `!`.
+ * @returns The group and its value, or undefined.
+ */
+function strayGroupOf(key: string, value: string): readonly [string, string] | undefined {
+    const legal = CLOSED_ENUM_LOOKUP.get(key);
+    if (
+        legal === undefined ||
+        legal.has(value) ||
+        CLOSED_ENUM_VALUE_MOVES[`${key}:${value}`] !== undefined
+    ) {
+        return undefined;
+    }
+    return siblingGroupOf(key, bareClosedEnumClass(key, value));
 }
 
 /** Moved values already warned about, so a re-render cannot spam. */
 const _warnedMovedValues = new Set<string>();
 
 /**
- * The message for a value that moved onto its group's own key.
+ * Warns that a value moved onto its group's own key (`moved-value`); the
+ * line names the key, looked up from the key or from its canonical key. The
+ * class is gone, so it prints in production and in the browser too (ADR
+ * 0011), once, as removed boolean sugar does; only `CSSZYX_QUIET_SZ_WARNINGS`
+ * mutes it.
  * @param key - The key the value was written on.
  * @param value - The value.
- * @param moved - The key and value that replaced it; `'true'` is a flag.
- * @param at - The ` at file:line` suffix, or empty.
- * @returns The diagnostic.
  */
-function movedValueMessage(
-    key: string,
-    value: string,
-    moved: Record<'key' | 'value', string>,
-    at: string,
-): string {
-    const replacement = moved.value === 'true' ? 'true' : `'${moved.value}'`;
-    return (
-        `[csszyx] "${key}: ${value}" moved to { ${moved.key}: ${replacement} }${at}. ` +
-        'Run `csszyx migrate` to rewrite it.'
-    );
-}
-
-/**
- * Warns that a value moved onto its group's own key. The class is gone, so
- * it prints in production and in the browser too (ADR 0011), once, as removed
- * boolean sugar does; only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
- * @param key - The key the value was written on.
- * @param value - The value.
- * @param moved - The key and value that replaced it.
- */
-function warnMovedValue(key: string, value: string, moved: Record<'key' | 'value', string>): void {
+function warnMovedValue(key: string, value: string): void {
     if (szWarningsQuiet() || _warnedMovedValues.has(`${key}:${value}`)) return;
     _warnedMovedValues.add(`${key}:${value}`);
-    console.warn(
-        movedValueMessage(key, value, moved, szWarnLocation ? ` at ${szWarnLocation}` : ''),
-    );
+    const args = { form: 'value', key, value } as const;
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MOVED_VALUE, args, at: szWarnLocation });
+    } else {
+        console.warn(
+            `[csszyx] moved-value: ${JSON.stringify(args)} https://csszyx.com/e/moved-value`,
+        );
+    }
 }
 
 /** Stand-alone keys already reported before a group, so a re-render cannot spam. */
@@ -2494,6 +2529,9 @@ const _warnedGlobalsBeforeGroups = new Set<string>();
  * spread gave it: `{ ...base, contain: 'none' }` over a `base` holding
  * `contain` and `containPaint` still reads `contain` first. The class it
  * meant is missing, so this prints in production too (ADR 0011), once.
+ *
+ * A value that is no value of the key but a group's class (`contain: 'size'`)
+ * is named as that group's value instead, as the engine names it.
  * @param global - The stand-alone key.
  * @param value - Its value.
  * @param group - The first group key written after it.
@@ -2502,17 +2540,58 @@ function warnGlobalBeforeGroup(global: string, value: unknown, group: string): v
     // A literal, as the engine reports it; an object there is a different
     // mistake, which its own warning names.
     if (typeof value === 'object') return;
+    if (typeof value === 'string') {
+        const base = handleImportant(value).value;
+        const stray = strayGroupOf(global, base);
+        if (stray !== undefined) {
+            warnStrayGroupValue(global, base, stray);
+            return;
+        }
+    }
     const text = String(value as string | number | boolean);
     const token = `${global}:${text}>${group}`;
     if (szWarningsQuiet() || _warnedGlobalsBeforeGroups.has(token)) return;
     _warnedGlobalsBeforeGroups.add(token);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${global}: ${text}"${at} comes before "${group}" in one sz object, so ` +
-            `${group} replaces it and the ${global} value styles nothing. A spread override ` +
-            `({ ...base, ${global}: '${text}' }) leaves this order; to override, layer it: ` +
-            `sz={[base, { ${global}: '${text}' }]}.`,
-    );
+    const args = { global, value: text, group };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: GLOBAL_BEFORE_GROUP, args, at: szWarnLocation });
+    } else {
+        console.warn(
+            `[csszyx] global-before-group: ${JSON.stringify(args)} https://csszyx.com/e/global-before-group`,
+        );
+    }
+}
+
+/**
+ * Warns that a group's value written on its stand-alone key before that group
+ * styles nothing (`closed-enum-value`, form `sibling-group`): the later group
+ * replaces it, and no class is emitted for it. That is missing output, so it
+ * prints in production and in the browser too (ADR 0011), once, as the order
+ * mistake it is reported in place of did; only `CSSZYX_QUIET_SZ_WARNINGS`
+ * mutes it. Written alone, the same value still emits its group's class, and
+ * {@link warnClosedEnumValue} names it in development only.
+ * @param key - The stand-alone key.
+ * @param value - Its value, without a trailing `!`.
+ * @param group - The group whose class the value is, and its value there.
+ */
+function warnStrayGroupValue(key: string, value: string, group: readonly [string, string]): void {
+    const token = `${key}:${value}`;
+    if (szWarningsQuiet() || _warnedClosedEnumValues.has(token)) return;
+    _warnedClosedEnumValues.add(token);
+    const args = {
+        form: 'sibling-group',
+        key,
+        value,
+        groupKey: group[0],
+        groupValue: group[1],
+    } as const;
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: CLOSED_ENUM_VALUE, args, at: szWarnLocation });
+    } else {
+        console.warn(
+            `[csszyx] closed-enum-value: ${JSON.stringify(args)} https://csszyx.com/e/closed-enum-value`,
+        );
+    }
 }
 
 /**
@@ -2552,21 +2631,24 @@ function collectFontModeProperty(
     else if (value === 'subpixel') className = 'subpixel-antialiased';
     if (className) classes.push(`${prefix}${className}`);
     else if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
-        console.warn(
-            `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
-                `'grayscale' or 'subpixel'.`,
-        );
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args: { form: 'font-smoothing', key, value },
+            at: szWarnLocation,
+        });
     }
     return true;
 }
 
 /** Warns when fontStyle cannot map to a Tailwind class. */
 function warnUnsupportedFontStyle(value: string): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    console.warn(
-        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
-            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
-    );
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args: { form: 'font-style', key: 'fontStyle', value },
+            at: szWarnLocation,
+        });
+    }
 }
 
 const DECORATION_CLASSES = new Set([
@@ -2974,11 +3056,13 @@ function warnMaskSlotMember(owner: string, member: string, allowed: readonly str
     const sig = `${owner}.${member}`;
     if (warnedMaskSlotMembers.has(sig)) return;
     warnedMaskSlotMembers.add(sig);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] ${owner}: unknown field "${member}"${at} — nothing is emitted for it. ` +
-            `${owner} takes { ${allowed.join(', ')} }.`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: UNKNOWN_FIELD,
+            args: { owner, member, allowed },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /** One gradient stop: a position, a colour, or both — they are separate vars. */
@@ -3124,7 +3208,9 @@ function isMaskLayerValue(value: string): boolean {
 }
 
 /** Layer value → the key that now owns it. */
-const MASK_LAYER_KEY_BY_FAMILY: Readonly<Record<string, string>> = {
+const MASK_LAYER_KEY_BY_FAMILY: Readonly<
+    Record<string, 'maskLinear' | 'maskRadial' | 'maskConic'>
+> = {
     linear: 'maskLinear',
     radial: 'maskRadial',
     conic: 'maskConic',
@@ -3150,13 +3236,19 @@ function warnMaskLayerValue(value: string): void {
     warnedMaskLayerValues.add(value);
     const bare = value.startsWith('-') ? value.slice(1) : value;
     const family = /^(linear|radial|conic)/.exec(bare)?.[1] as string;
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] mask: '${value}'${at} — gradient layers moved to ` +
-            `"${MASK_LAYER_KEY_BY_FAMILY[family]}". Tailwind composites mask-image from ` +
-            'one variable per layer, so each layer is its own key. `mask` now takes a ' +
-            'direct mask-image only: none, a url(), or a CSS variable.',
-    );
+    const args = {
+        form: 'mask-layer',
+        key: 'mask',
+        value,
+        layerKey: MASK_LAYER_KEY_BY_FAMILY[family],
+    } as const;
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MOVED_VALUE, args, at: szWarnLocation });
+    } else {
+        console.warn(
+            `[csszyx] moved-value: ${JSON.stringify(args)} https://csszyx.com/e/moved-value`,
+        );
+    }
 }
 
 /**
@@ -3282,22 +3374,23 @@ let _announcedUnknownSzPropertyCap = false;
  */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
     if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    let message = unknownSzPropertyMessage(key);
-    if (_warnedUnknownSzProperties.has(message)) return;
+    // One report per key and place: the key decides the code, and a located
+    // build reports each file it meets.
+    const token = `${key}\u0000${szWarnLocation ?? ''}`;
+    if (_warnedUnknownSzProperties.has(token)) return;
     if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
-        if (!_announcedUnknownSzPropertyCap) {
+        if (process.env.NODE_ENV !== 'production' && !_announcedUnknownSzPropertyCap) {
             _announcedUnknownSzPropertyCap = true;
-            console.warn(
-                `[csszyx] ${UNKNOWN_SZ_PROPERTY_WARNINGS_MAX} distinct unknown sz keys have been reported; further ones are suppressed for this process. ` +
-                    'help: sz keys built from data are the usual cause — look above for one key repeating with different names.',
-            );
+            szReport({
+                diagnostic: DIAGNOSTICS_CAPPED,
+                args: { form: 'unknown-keys', count: UNKNOWN_SZ_PROPERTY_WARNINGS_MAX },
+            });
         }
         return;
     }
-    _warnedUnknownSzProperties.add(message);
-    if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
-    console.warn(message);
-    hintProjectScanOnce(szWarnLocation);
+    _warnedUnknownSzProperties.add(token);
+    reportUnknownSzProperty(key, szWarnLocation ?? runtimeSzWarnContext(szProp));
+    if (!szWarnLocation) hintProjectScanOnce();
 }
 
 /** Returns whether a key belongs to any supported property or variant family. */
@@ -3319,35 +3412,35 @@ export function isKnownSzPropertyKey(key: string): boolean {
     );
 }
 
-/** Builds the diagnostic for an unsupported key without runtime context. */
-function unknownSzPropertyMessage(key: string): string {
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    const note = MIGRATION_NOTES[key];
-    if (note) {
-        return `[csszyx] "${key}" was removed${at}: ${note}.`;
+/**
+ * Report an unsupported key under the code its spelling decides: an alias
+ * (`canonical-key`), a numeric key (`numeric-key`), or any other
+ * (`unknown-key`, with the known key it is most likely a typo of). A removed
+ * key never reaches here: `collectTransformProperty` reports it first.
+ *
+ * The unknown key's class is not dropped: it is lowered as a literal class
+ * exactly like a known one, and a project can serve it with `@utility`, so
+ * the line says it styles nothing rather than that it is ignored.
+ *
+ * Called only from the development branch of {@link warnUnknownSzProperty}.
+ * @param key - The key as written.
+ * @param at - Where it is: a file position, or the runtime's object and frame.
+ */
+function reportUnknownSzProperty(key: string, at: string | undefined): void {
+    if (process.env.NODE_ENV !== 'production') {
+        if (SUGGESTION_MAP[key]) {
+            szReport({ diagnostic: CANONICAL_KEY, args: { key }, at });
+        } else if (/^\d+(?:\.\d+)?$/.test(key)) {
+            szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
+        } else {
+            const suggestion = suggestSzKey(key);
+            szReport({
+                diagnostic: UNKNOWN_KEY,
+                args: suggestion === null ? { key } : { key, suggestion },
+                at,
+            });
+        }
     }
-    const suggestion = SUGGESTION_MAP[key];
-    if (suggestion) {
-        return `[csszyx] Use the canonical key "${suggestion}" instead of "${key}"${at}.`;
-    }
-    if (/^\d+(?:\.\d+)?$/.test(key)) {
-        return (
-            `[csszyx] sz received a numeric key "${key}"${at}. This usually ` +
-            'means an array or a spread was passed where an object of sz ' +
-            'keys was expected. The value is ignored.'
-        );
-    }
-    // Deliberately NOT "this will be ignored": the key is not dropped, it is
-    // lowered as a literal class exactly like a known one. Saying otherwise
-    // sent people looking for a missing class instead of a dead one. The key
-    // is also not blocked — a project can serve it with `@utility`, and
-    // refusing to emit would make csszyx the thing standing between the author
-    // and a fix they can already make themselves.
-    return (
-        `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
-        'The class is still emitted, so it styles nothing unless Tailwind ' +
-        "serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
-    );
 }
 
 /** Builds the fallback class for a string-valued property. */
@@ -3745,12 +3838,9 @@ function warnOwnedKeyVariantObject(key: string): void {
         return;
     }
     _warnedOwnedKeyVariants.add(key);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${key}"${at} is not a variant, but it holds an object, so it ` +
-            `lowers to the class prefix "${key}:" and Tailwind generates no CSS ` +
-            'for it. A "--*" key takes a declaration value; "container" takes true.',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: NON_VARIANT_OBJECT, args: { key }, at: szWarnLocation });
+    }
 }
 
 /**
@@ -3790,6 +3880,9 @@ export function __resetSzWarnDedupForTests(): void {
     warnedRemovedSugar.clear();
     _warnedUnknownSzProperties.clear();
     _announcedUnknownSzPropertyCap = false;
+    _warnedWeightValues.clear();
+    _warnedMovedValues.clear();
+    _warnedGlobalsBeforeGroups.clear();
 }
 
 /**
@@ -3814,14 +3907,14 @@ function warnPropertyObjectValue(key: string, value: Record<string, unknown>): v
         return;
     }
     _warnedPropertyObjects.add(key);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    const nested = Object.keys(value).slice(0, 3).join(', ');
-    console.warn(
-        `[csszyx] "${key}" is a property, not a variant, but received an object ` +
-            `{ ${nested} }${at}. This compiles to "${key}:*" classes that match no ` +
-            `Tailwind variant and generate no CSS. Move the nested keys up a level, ` +
-            `or for color opacity use { color: '...', op: ... }.`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({
+            diagnostic: PROPERTY_OBJECT,
+            // The first three, as the engine names them.
+            args: { key, nestedKeys: Object.keys(value).slice(0, 3) },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /** Returns whether a value is a non-array object. */
@@ -3888,39 +3981,40 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
     const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
     if (!removed) return false;
-    const what = REPLACED_KEYS.has(rawKey) ? 'was replaced' : 'boolean sugar was removed';
-    warnRemovedKeyOnce(rawKey, what, `{ ${removed.key}: '${removed.value}' }`);
+    warnRemovedKey(
+        rawKey,
+        REPLACED_KEYS.has(rawKey) ? 'sugar-replaced' : 'sugar',
+        `${removed.key}: '${removed.value}'`,
+    );
     return true;
 }
 
 /**
  * Prints the warning for a key that emits no class because it was replaced or
- * removed, once per key, in every mode and in the browser.
+ * removed (`removed-key`), once per key, in every mode and in the browser: a
+ * page with no build log to read loses the class silently otherwise (ADR
+ * 0011). Only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
  * @param rawKey - The authored key.
- * @param what - `was replaced` or `boolean sugar was removed`.
- * @param replacement - The `{ key: value }` to write instead.
+ * @param form - Why it emits nothing: replaced, removed sugar, or removed.
+ * @param replacement - What to write instead, as the engine spells it
+ *   (`numOrdinal: true`); a removed key has its note instead.
  */
-function warnRemovedKeyOnce(rawKey: string, what: string, replacement: string): void {
+function warnRemovedKey(
+    rawKey: string,
+    form: 'sugar-replaced' | 'sugar' | 'removed' | 'replaced',
+    replacement?: string,
+): void {
     if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
     warnedRemovedSugar.add(rawKey);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(
-        `[csszyx] "${rawKey}" ${what}${at}. Use ${replacement} instead, or run \`csszyx migrate\`.`,
-    );
-}
-
-/**
- * Prints the warning for a key that was removed outright (`MIGRATION_NOTES`),
- * once per key, in every mode and in the browser: the key emits no class, so
- * a page with no build log to read loses it silently otherwise (ADR 0011).
- * Only `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
- * @param rawKey - The authored key.
- */
-function warnRemovedKey(rawKey: string): void {
-    if (szWarningsQuiet() || warnedRemovedSugar.has(rawKey)) return;
-    warnedRemovedSugar.add(rawKey);
-    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    console.warn(`[csszyx] "${rawKey}" was removed${at}: ${MIGRATION_NOTES[rawKey]}.`);
+    const args =
+        replacement === undefined ? { form, key: rawKey } : { form, key: rawKey, replacement };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: REMOVED_KEY, args, at: szWarnLocation });
+    } else {
+        console.warn(
+            `[csszyx] removed-key: ${JSON.stringify(args)} https://csszyx.com/e/removed-key`,
+        );
+    }
 }
 
 /** Removed shorthands already warned about, so a re-render cannot spam. */
@@ -3991,8 +4085,8 @@ function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject)
         typeof value === 'string'
             ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
             : undefined;
-    if (moved !== undefined) warnMovedValue(rawKey, value as string, moved);
-    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey);
+    if (moved !== undefined) warnMovedValue(rawKey, value as string);
+    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey, 'removed');
     // No alias or removed key is a known key; a test pins that.
     else warnUnknownSzProperty(rawKey, szProp);
 }
@@ -4009,7 +4103,7 @@ function collectTransformProperty(
     // A flag that joined a group under a new name emits nothing; say so in
     // every mode, as for the other replaced keys.
     if (REPLACED_KEYS.has(rawKey) && rawKey in SUGGESTION_MAP) {
-        warnRemovedKeyOnce(rawKey, 'was replaced', `{ ${SUGGESTION_MAP[rawKey]}: true }`);
+        warnRemovedKey(rawKey, 'replaced', `${SUGGESTION_MAP[rawKey]}: true`);
         return;
     }
     if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {

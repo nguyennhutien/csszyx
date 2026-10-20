@@ -348,6 +348,9 @@ test('the report entry names every export: the reporter and each browser id', ()
         source,
         /export type \{ SzBrowserDiagnostic \} from '\.\/diagnostic-template\.js';/,
     );
+    // The suggestion an unknown key's line names is computed on the
+    // development branch only, so it ships from the development entry.
+    assert.match(source, /export \{ suggestSzKey \} from '\.\/sz-key-suggestion\.js';/);
     const names = /export \{([^}]*)\} from '\.\/diagnostic-browser\.generated\.js';/
         .exec(source)?.[1]
         .split(',')

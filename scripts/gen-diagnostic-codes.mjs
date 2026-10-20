@@ -1201,7 +1201,9 @@ export function renderReportEntry(input) {
 /**
  * \`@csszyx/compiler/report\`: the development reporter \`szReport\`
  * (\`diagnostic-report.ts\`) and every id the registry words for a console
- * line or a throw, so a site imports both from one place.
+ * line or a throw, so a site imports both from one place; and
+ * \`suggestSzKey\`, the key an unknown key's line names, which only a
+ * development branch computes.
  *
  * @internal Shared by csszyx's own packages; not a stable API.
  * @module report
@@ -1210,6 +1212,7 @@ export function renderReportEntry(input) {
 export { ${names.join(', ')} } from './diagnostic-browser.generated.js';
 export { type SzReportOptions, szReport } from './diagnostic-report.js';
 export type { SzBrowserDiagnostic } from './diagnostic-template.js';
+export { suggestSzKey } from './sz-key-suggestion.js';
 `;
 }
 

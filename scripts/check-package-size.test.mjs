@@ -239,6 +239,127 @@ test('a production bundle may print only the messages its budget lists', () => {
     }
 });
 
+/** A package whose production bundle prints two registry lines, the compact
+ * form a site writes inline, through the method each one's entry names.
+ * @param {string} body extra statements for the entry module
+ * @returns {Record<string, string>} fixture file map
+ */
+function codesPackage(body = '') {
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs':
+            'export function report(args) {\n' +
+            '    console.warn(`[csszyx] gone-key: ${JSON.stringify(args)} https://csszyx.com/e/gone-key`);\n' +
+            '    console.error(`[csszyx] bad-map: ${JSON.stringify(args)} https://csszyx.com/e/bad-map`);\n' +
+            `    ${body}\n` +
+            '}\n',
+    };
+}
+
+/** The registry entries the fixture's codes come from: two that print in
+ * production from the package, one that does not, one from another package.
+ */
+const CODE_ENTRIES = [
+    {
+        id: 'gone-key',
+        surfaces: { runtime: { production: true, host: 'browser' } },
+        sources: ['packages/thing/src/a.ts:1'],
+    },
+    {
+        id: 'bad-map',
+        surfaces: { runtime: { production: ['json'], host: 'browser', console: 'error' } },
+        sources: ['packages/thing/src/b.ts:2'],
+    },
+    {
+        id: 'nudge',
+        surfaces: { runtime: { production: false, host: 'browser' } },
+        sources: ['packages/thing/src/a.ts:9'],
+    },
+    {
+        id: 'elsewhere',
+        surfaces: { runtime: { production: true, host: 'browser' } },
+        sources: ['packages/other/src/c.ts:3'],
+    },
+    {
+        id: 'no-surface',
+        surfaces: { error: { host: 'browser' } },
+        sources: ['packages/thing/src/d.ts:1'],
+    },
+];
+
+test('the codes a production bundle may print come from the registry, with their method', () => {
+    // `d.ts` is a source of the bundle, `a.ts:9` a development line in it.
+    const files = new Set([
+        'packages/thing/src/a.ts',
+        'packages/thing/src/b.ts',
+        'packages/thing/src/d.ts',
+    ]);
+    assert.deepEqual(sizeGate.productionCodesOf(CODE_ENTRIES, files), [
+        'error: [csszyx] bad-map: ',
+        'warn: [csszyx] gone-key: ',
+    ]);
+    // The compiler's list is the registry's: every line its browser entries
+    // print in production, and nothing written by hand.
+    const compiler = SIZE_BUDGETS.find(
+        budget => budget.name === '@csszyx/compiler browser app bundle',
+    );
+    assert.equal(compiler.productionMessages, undefined);
+    assert.ok(compiler.productionCodes.length > 0);
+    assert.ok(compiler.productionCodes.includes('warn: [csszyx] removed-key: '));
+    // A throw from a Node-only module of the package is no console line here.
+    assert.ok(!compiler.productionCodes.some(head => head.includes('recovery-manifest')));
+});
+
+test('a production bundle may print only the codes the registry marks as printing', () => {
+    const codes = sizeGate.productionCodesOf(
+        CODE_ENTRIES,
+        new Set(['packages/thing/src/a.ts', 'packages/thing/src/b.ts']),
+    );
+    const run = files => {
+        const root = makeFixture(files);
+        try {
+            return checkBudgets(appBudget('thing', { productionCodes: codes }), root).failures;
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    };
+
+    assert.deepEqual(run(codesPackage()), []);
+
+    const unlisted = run(codesPackage("console.warn('[csszyx] nudge: ' + JSON.stringify(args));"));
+    assert.equal(unlisted.length, 1);
+    assert.match(unlisted[0], /prints "warn: \[csszyx\] nudge: ", which the registry/);
+
+    // The registry names the method: a line printed through another one is
+    // not the line the docs and the console filters expect.
+    const method = run({
+        ...codesPackage(),
+        'packages/thing/dist/index.mjs':
+            'export function report(a) { console.warn(`[csszyx] gone-key: ${a}`); ' +
+            'console.warn(`[csszyx] bad-map: ${a}`); }\n',
+    });
+    assert.equal(method.length, 2);
+    assert.match(method[0], /prints "warn: \[csszyx\] bad-map: "/);
+    assert.match(method[1], /no longer prints "error: \[csszyx\] bad-map: "/);
+
+    // The positive control: a scan that finds no sink at all is a broken scan
+    // (or a broken bundle), never a pass.
+    const silent = run({
+        ...codesPackage(),
+        'packages/thing/dist/index.mjs': 'export const x = 1;\n',
+    });
+    assert.ok(
+        silent.some(failure => /found no console call/.test(failure)),
+        silent.join('\n'),
+    );
+    assert.ok(
+        silent.some(failure => /no longer prints "warn: \[csszyx\] gone-key: "/.test(failure)),
+    );
+});
+
 test('an excluded subpath is left out, and an exclusion naming no export fails', () => {
     const root = makeFixture(appPackage('thing', false));
     try {

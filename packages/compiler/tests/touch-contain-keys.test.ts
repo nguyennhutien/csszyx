@@ -11,7 +11,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { setSzWarnLocation, transform } from '../src/transform-core.js';
+import { engineMessage, productionMessage, runtimeMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
+import { parseSzConsoleLine } from './helpers/sz-console-line.js';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -127,8 +129,12 @@ describe('touch-action and contain keys', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         expect(transform({ touch: 'pan-up' }).className).toBe('');
-        expect(String(warn.mock.calls[0]?.[0])).toContain(
-            '"touch: pan-up" moved to { touchPanY: \'up\' }',
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            runtimeMessage(
+                'moved-value',
+                '`touch: pan-up` moved to `touchPanY`, and nothing is emitted for it.',
+                "help: write `{ touchPanY: 'up' }`, or run `csszyx migrate`.",
+            ),
         );
     });
 
@@ -149,8 +155,13 @@ describe('touch-action and contain keys', () => {
         }
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            '[csszyx] "touch: pinch-zoom" moved to { touchPinchZoom: true } at src/Pan.tsx:4. Run `csszyx migrate` to rewrite it.',
-            '[csszyx] "touch: pan-down" moved to { touchPanY: \'down\' }. Run `csszyx migrate` to rewrite it.',
+            engineMessage(
+                'moved-value',
+                'src/Pan.tsx:4',
+                '`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.',
+                'help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.',
+            ),
+            productionMessage('moved-value', { form: 'value', key: 'touch', value: 'pan-down' }),
         ]);
     });
 
@@ -209,11 +220,13 @@ describe('touch-action and contain keys', () => {
         for (const [sz, expected] of ORDERED) {
             expect(transform(sz).className, JSON.stringify(sz)).toBe(expected);
         }
-        expect(warn.mock.calls.map(([message]) => /"([^"]+)"/.exec(String(message))?.[1])).toEqual([
-            'contain: strict',
-            'contain: none',
-            'touch: none',
-            'touch: none',
-        ]);
+        expect(
+            warn.mock.calls.map(([message]) => {
+                const line = parseSzConsoleLine(String(message));
+                return line.code === 'global-before-group'
+                    ? /^`([^`]+)`/.exec(line.text)?.[1]
+                    : line.code;
+            }),
+        ).toEqual(['contain: strict', 'contain: none', 'touch: none', 'touch: none']);
     });
 });

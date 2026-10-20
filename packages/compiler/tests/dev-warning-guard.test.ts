@@ -1,5 +1,7 @@
 /**
- * Every call to `szNodeWarningsUnmuted` is gated on `NODE_ENV` at the call site.
+ * Every call to `szNodeWarningsUnmuted` is gated on `NODE_ENV` at the call site,
+ * and so is every `szReport` call that names a line the registry keeps out of
+ * production.
  *
  * The helper answers only "outside a browser, and not muted"; it does not read
  * `NODE_ENV`, because each read of `process.env` is a call into the host on
@@ -8,12 +10,21 @@
  * spelling a bundler folds, so a production app drops the whole warning. A call
  * without it would warn in production and keep its message in every bundle,
  * with nothing failing; this test is what fails instead.
+ *
+ * `szReport` prints the development form and reads no `NODE_ENV` itself (ADR
+ * 0031): a call that a production build can reach would print the full
+ * sentence there and keep its templates in the bundle. Its check has to be the
+ * branch the call sits on — an early `return` above it is not enough, since
+ * esbuild keeps the templates a call names when the call follows a `return`
+ * (measured on the runtime app bundle).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseSync } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
+
+import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-registry.generated.js';
 
 const SRC = path.resolve(import.meta.dirname, '../src');
 const HELPER = 'szNodeWarningsUnmuted';
@@ -172,5 +183,167 @@ describe('the gate itself', () => {
         ],
     ])('refuses %s', body => {
         expect(gated(body)).toEqual([false]);
+    });
+});
+
+/**
+ * Whether a branch runs only outside production, as its parent decides it:
+ * the consequent of a test whose first `&&` operand is `!== 'production'`,
+ * the alternate of one whose first `||` operand is `=== 'production'`, or the
+ * right side of such a chain. Only a first operand folds the whole test when
+ * a bundler defines `NODE_ENV`; a later one leaves the operands before it.
+ * @param parent - The node holding the branch.
+ * @param child - The branch.
+ * @returns True when production never runs it.
+ */
+function isDevelopmentBranch(parent: Node, child: Node): boolean {
+    const first = (test: Node, operator: string) => operands(test, operator)[0] as Node;
+    if (parent.type === 'IfStatement' || parent.type === 'ConditionalExpression') {
+        const test = parent.test as Node;
+        if (parent.consequent === child) return isProductionCheck(first(test, '&&'), '!==');
+        if (parent.alternate === child) return isProductionCheck(first(test, '||'), '===');
+        return false;
+    }
+    return (
+        parent.type === 'LogicalExpression' &&
+        parent.operator === '&&' &&
+        parent.right === child &&
+        isProductionCheck(first(parent.left as Node, '&&'), '!==')
+    );
+}
+
+/** Each id's `runtime.production`, by the name of its browser module export. */
+const PRODUCTION_BY_EXPORT: ReadonlyMap<string, boolean | readonly string[]> = new Map(
+    SZ_DIAGNOSTIC_REGISTRY.map(spec => [
+        spec.id.toUpperCase().replaceAll('-', '_'),
+        spec.surfaces.runtime?.production ?? false,
+    ]),
+);
+
+/**
+ * Whether a `szReport` call names a line that prints in production: its
+ * diagnostic's `runtime.production` is true, or lists the literal `form` its
+ * args name. Anything the call does not spell out counts as development only.
+ * @param call - The call.
+ * @returns True when the call may run in production.
+ */
+function printsInProduction(call: Node): boolean {
+    const [options] = call.arguments as Node[];
+    if (options?.type !== 'ObjectExpression') return false;
+    const property = (object: Node, name: string) =>
+        (object.properties as Node[]).find(
+            p => p.type === 'Property' && (p.key as Node & { name?: string }).name === name,
+        )?.value as Node | undefined;
+    const diagnostic = property(options, 'diagnostic') as (Node & { name?: string }) | undefined;
+    const production = PRODUCTION_BY_EXPORT.get(diagnostic?.name ?? '') ?? false;
+    if (typeof production === 'boolean') return production;
+    const args = property(options, 'args');
+    const form = args?.type === 'ObjectExpression' ? property(args, 'form') : undefined;
+    return form?.type === 'Literal' && production.includes(form.value as string);
+}
+
+/**
+ * Every `szReport` call in one file that names a development-only line, with
+ * whether a development branch holds it.
+ * @param file - A source file.
+ * @param source - Its text; read from disk when omitted.
+ * @returns One finding per call; production lines are left out.
+ */
+function reportSites(
+    file: string,
+    source = readFileSync(file, 'utf8'),
+): Array<{ at: string; gated: boolean }> {
+    const { program } = parseSync(file, source);
+    const found: Array<{ at: string; gated: boolean }> = [];
+    const visit = (node: unknown, ancestors: Node[]) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) {
+            for (const child of node) visit(child, ancestors);
+            return;
+        }
+        const current = node as Node;
+        if (
+            current.type === 'CallExpression' &&
+            (current.callee as Node & { name?: string }).name === 'szReport' &&
+            !printsInProduction(current)
+        ) {
+            const chain = [...ancestors, current];
+            const gated = chain.some(
+                (child, i) => i > 0 && isDevelopmentBranch(chain[i - 1] as Node, child),
+            );
+            const line = source.slice(0, current.start).split('\n').length;
+            found.push({ at: `${path.relative(SRC, file)}:${line}`, gated });
+        }
+        for (const [key, value] of Object.entries(current)) {
+            if (key !== 'parent') visit(value, [...ancestors, current]);
+        }
+    };
+    visit(program, []);
+    return found;
+}
+
+describe('szReport call sites of a development-only line', () => {
+    const calls = SOURCES.flatMap(file => reportSites(file));
+
+    it('exist, so the check below is not vacuous', () => {
+        expect(calls.length).toBeGreaterThan(10);
+    });
+
+    it('each sit on a branch a literal NODE_ENV check keeps out of production', () => {
+        expect(calls.filter(call => !call.gated).map(call => call.at)).toEqual([]);
+    });
+});
+
+describe('the szReport gate itself', () => {
+    const gated = (body: string) =>
+        reportSites(path.join(SRC, 'probe.ts'), `export function f(k, args) { ${body} }`).map(
+            c => c.gated,
+        );
+
+    it.each([
+        ["if (process.env.NODE_ENV !== 'production') szReport({ diagnostic: UNKNOWN_KEY, args });"],
+        [
+            "if (process.env.NODE_ENV !== 'production' && k) { szReport({ diagnostic: UNKNOWN_KEY, args }); }",
+        ],
+        [
+            "if (process.env.NODE_ENV === 'production') return; else szReport({ diagnostic: UNKNOWN_KEY, args });",
+        ],
+        [
+            "if (process.env.NODE_ENV === 'production' || k) {} else { szReport({ diagnostic: UNKNOWN_KEY, args }); }",
+        ],
+        [
+            "process.env.NODE_ENV !== 'production' && szReport({ diagnostic: OFF_SCALE_VALUE, args });",
+        ],
+        [
+            "if ('production' !== process.env.NODE_ENV) { if (k) szReport({ diagnostic: CLOSED_ENUM_VALUE, args: { form: 'dead' } }); }",
+        ],
+    ])('accepts %s', body => {
+        expect(gated(body)).toEqual([true]);
+    });
+
+    it.each([
+        [
+            "if (process.env.NODE_ENV === 'production') return; szReport({ diagnostic: UNKNOWN_KEY, args });",
+        ],
+        [
+            "if (k && process.env.NODE_ENV !== 'production') szReport({ diagnostic: UNKNOWN_KEY, args });",
+        ],
+        [
+            "if (process?.env.NODE_ENV !== 'production') szReport({ diagnostic: UNKNOWN_KEY, args });",
+        ],
+        ["if (process.env.NODE_ENV === 'production') szReport({ diagnostic: UNKNOWN_KEY, args });"],
+        ['szReport({ diagnostic: UNKNOWN_KEY, args });'],
+        ["szReport({ diagnostic: CLOSED_ENUM_VALUE, args: { form: 'dead', key: k } });"],
+        ['szReport({ diagnostic: CLOSED_ENUM_VALUE, args });'],
+        ['szReport(options);'],
+    ])('refuses %s', body => {
+        expect(gated(body)).toEqual([false]);
+    });
+
+    it.each([
+        ['szReport({ diagnostic: REMOVED_KEY, args });'],
+        ["szReport({ diagnostic: CLOSED_ENUM_VALUE, args: { form: 'sibling-group', key: k } });"],
+    ])('leaves a line that prints in production to the size gate: %s', body => {
+        expect(gated(body)).toEqual([]);
     });
 });

@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
-import { engineMessage } from './engine-message.js';
+import { engineMessage, runtimeMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -199,7 +199,11 @@ describe('font-variant-numeric keys', () => {
 
         expect(transform({ stackedFractions: true }).className).toBe('');
         expect(String(warn.mock.calls[0]?.[0])).toBe(
-            '[csszyx] "stackedFractions" was replaced. Use { numFraction: \'stacked\' } instead, or run `csszyx migrate`.',
+            runtimeMessage(
+                'removed-key',
+                '`stackedFractions` was replaced, and nothing is emitted for it.',
+                "help: write `{ numFraction: 'stacked' }` instead, or run `csszyx migrate`.",
+            ),
         );
     });
 });

@@ -95,8 +95,14 @@
       }
     },
     "./report": {
-      "types": "./dist/report.d.mts",
-      "default": "./dist/report.mjs"
+      "import": {
+        "types": "./dist/report.d.mts",
+        "default": "./dist/report.mjs"
+      },
+      "require": {
+        "types": "./dist/report.d.cts",
+        "default": "./dist/report.cjs"
+      }
     },
     "./migrate": {
       "types": "./dist/migrate-rust.d.mts",

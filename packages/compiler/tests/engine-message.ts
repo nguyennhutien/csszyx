@@ -21,3 +21,28 @@ export function engineMessage(code: string, where: string, ...lines: string[]): 
     const place = where === '' ? '' : ` ${where}`;
     return [`[csszyx] ${code}:${place}`, ...lines, `docs: ${DOCS}${code}`].join('\n  ');
 }
+
+/**
+ * One runtime line in development with no place, as `szReport` prints it: the
+ * sentence on the header line, then the body lines and the docs link.
+ *
+ * @param code - The diagnostic code.
+ * @param lines - The sentence, then any `help:` and `note:` lines.
+ * @returns The message.
+ */
+export function runtimeMessage(code: string, ...lines: string[]): string {
+    const [text = '', ...rest] = lines;
+    return [`[csszyx] ${code}: ${text}`, ...rest, `docs: ${DOCS}${code}`].join('\n  ');
+}
+
+/**
+ * One runtime line in a production build: the code, its args as JSON and the
+ * code's page, on one line.
+ *
+ * @param code - The diagnostic code.
+ * @param args - The args, in the registry's order.
+ * @returns The message.
+ */
+export function productionMessage(code: string, args: object): string {
+    return `[csszyx] ${code}: ${JSON.stringify(args)} ${DOCS}${code}`;
+}
