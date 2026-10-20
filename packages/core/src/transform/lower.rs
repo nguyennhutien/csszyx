@@ -282,22 +282,33 @@ pub(crate) fn is_removed_sz_key(key: &str) -> bool {
     key_suggestion(key).is_some() || key_migration_note(key).is_some()
 }
 
-/// Whether a key is a recognized sz property or variant, mirroring the JS
-/// `isKnown` check in transform-core so the native engine warns on the same set
-/// of typo'd keys as the removed JavaScript lanes. Generous by construction — a key is
-/// "known" if ANY table or special form claims it (`property_prefix` already
-/// covers the many special-cased keys like `content`/`display`/`snapAlign`), so
-/// a valid key is never flagged as unknown.
+/// Whether a key is a recognized sz property or variant name. Generous by
+/// construction — a key is "known" if ANY table or special form claims it
+/// (`property_prefix` already covers the many special-cased keys like
+/// `content`/`display`/`snapAlign`), so a valid key is never taken for a
+/// variant. It decides what a runtime value on a key means
+/// ([`is_variant_key`], the parser's conditional branches); which scalar keys
+/// are reported unknown is [`is_scalar_sz_key`]'s answer, as at runtime.
+///
+/// An ARIA state name counts here and not there: a runtime value on it keeps
+/// the lane it had, but `expanded: 'x'` is a key no table owns — the name is
+/// the `aria` variant's parameter (`{ aria: { expanded: … } }`).
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn is_known_sz_key(key: &str) -> bool {
-    is_removed_boolean_sugar(key) || is_value_sz_key(key)
+    is_scalar_sz_key(key, true) || is_aria_state(key)
 }
 
-/// Whether a key is known whatever its value holds: [`is_known_sz_key`] minus
-/// the removed boolean sugar, which is known only in its `true` form. With
-/// any other value a sugar key is a key no table owns (`tabularNums: 'x'`),
-/// unless a table owns it in its own right (`flex: 1`), as the runtime's
-/// `isKnownSzPropertyKey` reads it.
+/// Whether a key holding a scalar is one the runtime's `isKnownSzPropertyKey`
+/// knows, so the engine reports the same unknown keys. Removed boolean sugar
+/// is known only in its `true` form: with any other value it is a key no
+/// table owns (`tabularNums: 'x'`), unless a table owns it in its own right
+/// (`flex: 1`).
+#[cfg(any(feature = "native-engine", test))]
+fn is_scalar_sz_key(key: &str, value_is_true: bool) -> bool {
+    (value_is_true && is_removed_boolean_sugar(key)) || is_value_sz_key(key)
+}
+
+/// Whether a key is known whatever its value holds; see [`is_scalar_sz_key`].
 #[cfg(any(feature = "native-engine", test))]
 fn is_value_sz_key(key: &str) -> bool {
     property_prefix(key).is_some()
@@ -319,7 +330,6 @@ fn is_value_sz_key(key: &str) -> bool {
         || super::generated::tables::is_boolean_shorthand(key)
         || super::generated::tables::is_known_special_property(key)
         || is_known_variant(key)
-        || is_aria_state(key)
         // Cheap byte probes BEFORE variant_string_prefix: that helper builds a
         // whitespace-stripped String for any `[...]` key just to answer
         // `.is_some()`, so a bracket key must short-circuit ahead of it (the
@@ -366,11 +376,10 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             }
             continue;
         }
-        let known = if property.value == StaticSzValue::Boolean(true) {
-            is_known_sz_key(&property.key)
-        } else {
-            is_value_sz_key(&property.key)
-        };
+        let known = is_scalar_sz_key(
+            &property.key,
+            property.value == StaticSzValue::Boolean(true),
+        );
         if !known {
             // An OBJECT value means variant nesting, and variant names are
             // open-ended: a `--breakpoint-*` token from the app's `@theme`
@@ -5149,7 +5158,18 @@ mod tests {
         ] {
             assert!(super::is_variant_key(key), "{key}");
         }
-        for key in ["p", "bg", "maskLinear", "--brand", "container", "truncate"] {
+        // An ARIA state name keeps the lane it had for a runtime value; that a
+        // scalar on it is an unknown key is `collect_unknown_sz_keys`' answer.
+        for key in [
+            "p",
+            "bg",
+            "maskLinear",
+            "--brand",
+            "container",
+            "truncate",
+            "expanded",
+            "hidden",
+        ] {
             assert!(!super::is_variant_key(key), "{key}");
         }
     }

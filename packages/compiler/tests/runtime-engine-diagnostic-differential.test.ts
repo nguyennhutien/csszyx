@@ -33,6 +33,7 @@ import {
 } from '../src/internal.js';
 import {
     __resetSzWarnDedupForTests,
+    ARIA_STATES,
     REMOVED_BOOLEAN_SUGAR,
     type SzObject,
     transform,
@@ -168,14 +169,7 @@ const KNOWN_GAPS: ReadonlyArray<{
     code: string;
     silent: 'engine' | 'runtime';
     reason: string;
-}> = [
-    {
-        sz: { hidden: 'x' },
-        code: 'unknown-key',
-        silent: 'engine',
-        reason: 'the engine counts an ARIA state name as a key (`is_aria_state` in `is_known_sz_key`)',
-    },
-];
+}> = [];
 
 /**
  * The runtime lowering's lines for one object, the project-scan tip aside.
@@ -276,6 +270,48 @@ describe('runtime and engine diagnostics', () => {
                     gap.silent === 'engine' ? [built, runtime] : [runtime, built];
                 expect(loud, 'the other lane reports it').toContain(gap.code);
                 expect(silent, 'fixed: remove it from KNOWN_GAPS').not.toContain(gap.code);
+            });
+        }
+    }
+
+    // An ARIA state name is the `aria` variant's parameter. Written as a key
+    // holding a scalar it is a key no table owns, unless a table owns it in
+    // its own right (`checked` is a variant).
+    for (const key of ARIA_STATES) {
+        for (const value of ['x', 1, true] as const) {
+            const sz = { [key]: value };
+            for (const [name, engine] of ENGINES) {
+                it(`ARIA state ${JSON.stringify(sz)} is unknown to the ${name} engine as at runtime`, () => {
+                    const runtime = runtimeLines(sz);
+                    const built = engineLines(engine, sz);
+                    expect(built.map(szCodeOf)).toEqual(runtime.map(szCodeOf));
+                    expect(bodies(built)).toEqual(bodies(runtime));
+                });
+            }
+        }
+    }
+    it('reports a scalar on an ARIA state name no table owns', () => {
+        expect(runtimeLines({ expanded: 'x' }).map(szCodeOf)).toEqual(['unknown-key']);
+    });
+
+    // The documented form, the `aria` variant's parameter, reports nothing and
+    // lowers alike on every lane.
+    for (const [sz, className] of [
+        [{ aria: { expanded: { bg: 'red-500' } } }, 'aria-expanded:bg-red-500'],
+        [{ aria: { hidden: { p: 4 } } }, 'aria-hidden:p-4'],
+        [{ aria: { sort: { p: 4 } } }, 'aria-[sort]:p-4'],
+        [{ group: { aria: { pressed: { p: 4 } } } }, 'group-aria-pressed:p-4'],
+    ] as const) {
+        for (const [name, engine] of ENGINES) {
+            it(`${JSON.stringify(sz)} is the aria variant to the ${name} engine as at runtime`, () => {
+                expect(runtimeLines(sz)).toEqual([]);
+                expect(engineLines(engine, sz)).toEqual([]);
+                expect(transform(sz).className).toBe(className);
+                const built = engine(
+                    `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
+                    '/p/src/A.jsx',
+                );
+                expect(built.code).toContain(`"${className}"`);
             });
         }
     }

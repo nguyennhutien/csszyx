@@ -4825,6 +4825,52 @@ mod tests {
         );
     }
 
+    /// An ARIA state name is the `aria` variant's parameter. Written as a key
+    /// holding a scalar it is a key no table owns, as the runtime reads it —
+    /// unless a table owns it in its own right (`checked` is a variant,
+    /// `hidden: true` removed sugar).
+    #[test]
+    fn an_aria_state_name_holding_a_scalar_is_an_unknown_key() {
+        for key in [
+            "expanded", "hidden", "pressed", "readonly", "selected", "busy", "current", "live",
+            "atomic", "modal",
+        ] {
+            for value in ["'x'", "1", "true"] {
+                if key == "hidden" && value == "true" {
+                    continue;
+                }
+                let sz = format!("{{ {key}: {value} }}");
+                let (_, diagnostics) = layers_run(&sz);
+                assert_eq!(
+                    diagnostics,
+                    [format!(r#"unknown-key {{"key":"{key}"}}"#)],
+                    "{sz}"
+                );
+            }
+        }
+        for key in ["checked", "disabled", "required", "invalid"] {
+            let (_, diagnostics) = layers_run(&format!("{{ {key}: 'x' }}"));
+            assert!(diagnostics.is_empty(), "{key}: {diagnostics:?}");
+        }
+        // The documented form, the `aria` variant's parameter, reports nothing.
+        for (sz, classes) in [
+            (
+                "{ aria: { expanded: { bg: 'red-500' } } }",
+                "aria-expanded:bg-red-500",
+            ),
+            ("{ aria: { hidden: { p: 4 } } }", "aria-hidden:p-4"),
+            ("{ aria: { sort: { p: 4 } } }", "aria-[sort]:p-4"),
+            (
+                "{ group: { aria: { pressed: { p: 4 } } } }",
+                "group-aria-pressed:p-4",
+            ),
+        ] {
+            let (emitted, diagnostics) = layers_run(sz);
+            assert_eq!(emitted, classes, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
+
     #[test]
     fn an_sz_array_layers_a_stand_alone_keyword_and_its_groups_later_wins() {
         for (sz, expected) in [

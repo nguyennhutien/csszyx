@@ -409,7 +409,7 @@ export const SPECIAL_VARIANTS: Set<string> = new Set([
 // ============================================================================
 // ARIA_STATES: Standard aria boolean states (vs arbitrary aria-[*] syntax)
 // ============================================================================
-const ARIA_STATES = new Set([
+export const ARIA_STATES: ReadonlySet<string> = new Set([
     'checked',
     'disabled',
     'expanded',
