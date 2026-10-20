@@ -477,6 +477,23 @@ export const SIZE_BUDGETS = [
         target: 'packages/vscode/dist/extension.js',
         maxGzipBytes: 49_500,
     },
+    // The CDN bundles, which a `<script>` tag loads whole: unpkg and jsdelivr
+    // serve the production one at the package root, and nothing priced it.
+    // Measured 2026-10-20: 16,097 production, 24,368 development (the
+    // sentences and the development warnings the production one folds out).
+    // Budget the usual ~300 above.
+    {
+        name: 'csszyx CDN bundle',
+        kind: 'file',
+        target: 'packages/csszyx/dist/browser.iife.js',
+        maxGzipBytes: 16_400,
+    },
+    {
+        name: 'csszyx CDN development bundle',
+        kind: 'file',
+        target: 'packages/csszyx/dist/browser.dev.iife.js',
+        maxGzipBytes: 24_650,
+    },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry
     // and the key tables. Measured 2026-10-19 from a fresh process, p50 of 30

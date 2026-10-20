@@ -60,6 +60,7 @@
       "import": "./dist/dynamic-react.mjs"
     },
     "./browser": "./dist/browser.iife.js",
+    "./browser.dev": "./dist/browser.dev.iife.js",
     "./core": {
       "types": "./dist/core.d.mts",
       "import": "./dist/core.mjs"

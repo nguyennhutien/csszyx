@@ -550,7 +550,7 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ['per-key-rows-', 'closed-enum-tables-'],
     );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 7);
+    assert.equal(SIZE_BUDGETS.length, 9);
     for (const budget of SIZE_BUDGETS) {
         assert.ok(['app-bundle', 'file', 'node-entry'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
@@ -568,6 +568,17 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
             budget.target,
         ]),
         [['file', 'packages/vscode/dist/extension.js']],
+    );
+    // A script tag loads the CDN bundles whole, the development one too.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.target.startsWith('packages/csszyx/')).map(budget => [
+            budget.kind,
+            budget.target,
+        ]),
+        [
+            ['file', 'packages/csszyx/dist/browser.iife.js'],
+            ['file', 'packages/csszyx/dist/browser.dev.iife.js'],
+        ],
     );
     // The compiler leaves out its build-time code, `.`, `./engine`,
     // `./internal` and `./migrate`, and the development reporter `./report`,

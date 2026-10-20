@@ -20,7 +20,7 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 /**
- * Locate the built bundle without depending on the working directory.
+ * Locate a built bundle without depending on the working directory.
  *
  * `import.meta.url` is unusable here — the jsdom environment this suite needs
  * makes it a non-file URL — and the repo runs vitest from two roots, so a
@@ -28,11 +28,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
  * failing loudly is the honest version: a bundle that was never built must
  * report that, not skip.
  *
- * @returns Absolute path to `dist/browser.iife.js`.
+ * @param file - The bundle's file name in `dist`.
+ * @returns Absolute path to it.
  */
-function resolveBundlePath(): string {
-    const candidates = ['dist/browser.iife.js', 'packages/csszyx/dist/browser.iife.js'].map(
-        relative => path.resolve(process.cwd(), relative),
+function resolveBundlePath(file = 'browser.iife.js'): string {
+    const candidates = [`dist/${file}`, `packages/csszyx/dist/${file}`].map(relative =>
+        path.resolve(process.cwd(), relative),
     );
     const found = candidates.find(candidate => existsSync(candidate));
     if (!found) {
@@ -46,6 +47,8 @@ function resolveBundlePath(): string {
 }
 
 const bundlePath = resolveBundlePath();
+/** The development CDN bundle: the same entry, built with the sentences. */
+const devBundlePath = resolveBundlePath('browser.dev.iife.js');
 
 /**
  * Run the built bundle against the current document, as a script tag would.
@@ -58,6 +61,46 @@ function loadBundle(): void {
     // biome-ignore lint/security/noGlobalEval: running the shipped artefact as a script tag is the point
     eval(readFileSync(bundlePath, 'utf8'));
     document.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
+}
+
+/**
+ * Load a bundle into a page of attributes that do not parse, in a child
+ * process with a deadline: the shipped parser once spun forever on a stray
+ * character, and a spin blocks this process's event loop, so only an outside
+ * clock can stop a regression.
+ *
+ * @param file - The bundle to load.
+ * @returns The classes each element got and the errors the page printed.
+ */
+function runBraceLessPage(file: string): { classes: string[]; errors: string[] } {
+    const page =
+        '<div id="frac" sz="w: 1/2"></div>' +
+        '<div id="semi" sz="p: 4; m: 2"></div>' +
+        '<div id="hex" sz="bg: #fff"></div>' +
+        '<div id="ok" sz="{p:4}"></div>';
+    const script = `
+const { JSDOM, VirtualConsole } = require('jsdom');
+const errors = [];
+const virtualConsole = new VirtualConsole();
+virtualConsole.on('error', (...args) => errors.push(args.map(String).join(' ')));
+const dom = new JSDOM(${JSON.stringify(page)}, { runScripts: 'outside-only', virtualConsole });
+dom.window.eval(require('node:fs').readFileSync(${JSON.stringify(file)}, 'utf8'));
+// Loaded while the document is still parsing, as a <head> script is; report
+// once the runtime's DOMContentLoaded pass has run.
+dom.window.addEventListener('load', () => {
+    const doc = dom.window.document;
+    console.log(JSON.stringify({
+        classes: ['frac', 'semi', 'hex', 'ok'].map(id => doc.getElementById(id).className),
+        errors,
+    }));
+});`;
+    const run = spawnSync(process.execPath, ['-e', script], {
+        cwd: path.dirname(file),
+        encoding: 'utf8',
+        timeout: 10_000,
+    });
+    expect(run.signal, 'the bundle did not finish within the deadline').toBeNull();
+    return JSON.parse(run.stdout.trim()) as { classes: string[]; errors: string[] };
 }
 
 describe('csszyx/browser CDN bundle', () => {
@@ -99,38 +142,7 @@ describe('csszyx/browser CDN bundle', () => {
     });
 
     it('reports a brace-less value that does not parse, and never hangs on it', () => {
-        // In a child process with a deadline: the shipped parser once spun
-        // forever on a stray character, and a spin blocks this process's
-        // event loop, so only an outside clock can stop a regression.
-        const page =
-            '<div id="frac" sz="w: 1/2"></div>' +
-            '<div id="semi" sz="p: 4; m: 2"></div>' +
-            '<div id="hex" sz="bg: #fff"></div>' +
-            '<div id="ok" sz="{p:4}"></div>';
-        const script = `
-const { JSDOM, VirtualConsole } = require('jsdom');
-const errors = [];
-const virtualConsole = new VirtualConsole();
-virtualConsole.on('error', (...args) => errors.push(args.map(String).join(' ')));
-const dom = new JSDOM(${JSON.stringify(page)}, { runScripts: 'outside-only', virtualConsole });
-dom.window.eval(require('node:fs').readFileSync(${JSON.stringify(bundlePath)}, 'utf8'));
-// Loaded while the document is still parsing, as a <head> script is; report
-// once the runtime's DOMContentLoaded pass has run.
-dom.window.addEventListener('load', () => {
-    const doc = dom.window.document;
-    console.log(JSON.stringify({
-        classes: ['frac', 'semi', 'hex', 'ok'].map(id => doc.getElementById(id).className),
-        errors,
-    }));
-});`;
-        const run = spawnSync(process.execPath, ['-e', script], {
-            cwd: path.dirname(bundlePath),
-            encoding: 'utf8',
-            timeout: 10_000,
-        });
-
-        expect(run.signal, 'the bundle did not finish within the deadline').toBeNull();
-        const result = JSON.parse(run.stdout.trim()) as { classes: string[]; errors: string[] };
+        const result = runBraceLessPage(bundlePath);
         expect(result.classes).toEqual(['', '', '', 'p-4']);
         // The bundle is built for production, so each prints its code and
         // args: the attribute, the character and where it is.
@@ -143,6 +155,20 @@ dom.window.addEventListener('load', () => {
         ]);
         // Above the child's 10 s deadline, so that deadline is what fails a
         // hang; jsdom alone took 7.4 s to start on a loaded CI runner.
+    }, 20_000);
+
+    it('prints the sentence from the development bundle, which a page under development loads', () => {
+        const result = runBraceLessPage(devBundlePath);
+        expect(result.classes).toEqual(['', '', '', 'p-4']);
+        expect(result.errors[0]).toBe(
+            '[csszyx] sz-attribute-syntax: The `sz` attribute `w: 1/2` has an unexpected `/` at offset 4, so the element gets no classes from it.\n' +
+                '  help: write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.\n' +
+                '  docs: https://csszyx.com/e/sz-attribute-syntax',
+        );
+        expect(result.errors).toHaveLength(3);
+        expect(readFileSync(devBundlePath, 'utf8')).not.toContain('process.env');
+        // The production bundle carries none of those words.
+        expect(readFileSync(bundlePath, 'utf8')).not.toContain('write it as an object literal');
     }, 20_000);
 
     it('leaves no global behind', () => {
