@@ -23,8 +23,19 @@ export interface SzDiagnosticSpec {
     readonly surfaces: {
         readonly engine?: Record<string, never>;
         readonly check?: { readonly group: string };
-        readonly runtime?: { readonly production: boolean | readonly string[] };
-        readonly error?: { readonly classes?: readonly string[]; readonly production?: boolean };
+        readonly runtime?: {
+            readonly production: boolean | readonly string[];
+            /** Where the line prints: a browser bundle, Node, or both. */
+            readonly host: 'browser' | 'node' | 'both';
+            /** `error` when the line prints through `console.error`; absent, `console.warn`. */
+            readonly console?: 'error';
+        };
+        readonly error?: {
+            readonly classes?: readonly string[];
+            readonly production?: boolean;
+            /** Where it is thrown: a browser bundle, Node, or both. */
+            readonly host: 'browser' | 'node' | 'both';
+        };
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';
@@ -44,11 +55,14 @@ export interface SzDiagnosticSpec {
 /** A template: one text, or one per variant of the sentence. */
 export type SzDiagnosticTemplateText = string | Readonly<Record<string, string>>;
 
+/** What a diagnostic says, apart from its metadata. */
+export type SzDiagnosticWords = Pick<SzDiagnosticSpec, 'text' | 'help' | 'note'>;
+
 /** The registry's format, so a reader can refuse one it does not know. */
 export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = 1;
 
-/** Engine limits a sentence names, from the registry the engine reads too. */
-export const SZ_DIAGNOSTIC_CONSTANTS = {"maxNestingDepth":64,"mergeTableFormat":1} as const;
+// Generated once, into a module the browser helpers read too.
+export { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-constants.generated.js';
 
 /** The computed values a template may name beside its args. */
 export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral"];
@@ -61,7 +75,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -84,7 +99,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -102,7 +118,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -153,7 +170,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -173,7 +191,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "runtime": {
                 "production": [
                     "sibling-group"
-                ]
+                ],
+                "host": "browser"
             }
         },
         "position": "site",
@@ -239,7 +258,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -263,7 +283,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -284,7 +305,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -302,7 +324,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -323,7 +346,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -345,7 +369,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -363,7 +388,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -561,7 +587,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -608,7 +635,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -822,9 +850,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             },
             "error": {
+                "host": "node",
                 "classes": [
                     "ExplainParseError"
                 ]
@@ -915,7 +945,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -990,7 +1021,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "defaults": {
@@ -1052,7 +1084,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "dead-class"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -1070,7 +1103,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "dead-class"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -1087,7 +1121,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "check": {
                 "group": "dead-class"
             },
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -1138,7 +1174,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "broken-opacity"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -1152,9 +1189,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         },
         "gaps": [
             "engine"
-        ],
-        "text": "`{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.",
-        "help": "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`."
+        ]
     },
     {
         "id": "theme-collision",
@@ -1164,7 +1199,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "theme-collision"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "site",
@@ -1190,14 +1226,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "joiner": ", ",
                 "optional": true
             }
-        },
-        "text": {
-            "classes": "Theme token `{name}` also names `{classes}`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.",
-            "utility-keyword": "Theme token `{name}` shadows a built-in utility keyword, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.",
-            "value": "Theme token `{name}` shadows a built-in value, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's."
-        },
-        "help": "rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.",
-        "note": "a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only."
+        }
     },
     {
         "id": "merge-covered-key",
@@ -1207,7 +1236,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "merge-covered-key"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "defaults": {
@@ -1232,7 +1262,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "group": "merge-covered-class"
             },
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "defaults": {
@@ -1251,9 +1282,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A recovery manifest that is not valid JSON or not in the recovery format.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser",
+                "console": "error"
             },
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -1273,17 +1308,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true,
                 "opaque": true
             }
-        },
-        "text": {
-            "json": "The recovery manifest on this page is not valid JSON, so it is ignored.",
-            "format": "This recovery manifest is missing `buildId`, `checksum` or `tokens`, so `parseManifest` cannot read it."
-        },
-        "help": {
-            "json": "serve the HTML as the build wrote it; the manifest is the `__SZ_RECOVERY_MANIFEST__` script the build adds to the page.",
-            "format": "pass the manifest the build wrote, unchanged."
-        },
-        "note": {
-            "json": "the browser reported: {error}."
         }
     },
     {
@@ -1291,7 +1315,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A mangle map on the page that is not a plain map of class names, so it is ignored.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser",
+                "console": "error"
             }
         },
         "position": "none",
@@ -1312,14 +1338,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true,
                 "opaque": true
             }
-        },
-        "text": {
-            "schema": "The mangle map on this page is not a plain map of class names to class names, so it is ignored.",
-            "json": "The mangle map on this page is not valid JSON, so it is ignored."
-        },
-        "help": "serve the HTML as the build wrote it; a map that does not read means the page was changed or cut short after the build.",
-        "note": {
-            "json": "the browser reported: {error}."
         }
     },
     {
@@ -1327,20 +1345,20 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A mangle census on the page that is not a valid map, so nothing was verified.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "The mangle census on this page is not a valid map, so nothing was verified.",
-        "help": "serve the HTML as the build wrote it; a census that does not read means the page was changed or cut short after the build."
+        "args": {}
     },
     {
         "id": "mangle-checksum-mismatch",
         "summary": "A mangle map whose hash differs from the checksum it was built with.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1351,17 +1369,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "expected": {
                 "type": "string"
             }
-        },
-        "text": "The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.",
-        "help": "deploy the HTML and the bundle from one build.",
-        "note": "this detects a damaged or stale page, not an attacker; the checksum is not signed."
+        }
     },
     {
         "id": "mangle-map-unavailable",
         "summary": "A page with a mangle checksum but no census or map to recompute it from.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1369,31 +1385,31 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "checksum": {
                 "type": "string"
             }
-        },
-        "text": "This page carries the checksum `{checksum}` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.",
-        "help": "turn `production.hydrationCensus` on when the build sets `production.mangleVars` without `production.mangle`, which ships no map; otherwise, load the bundle that registers the map on this page."
+        }
     },
     {
         "id": "web-crypto-unavailable",
         "summary": "A page without Web Crypto, so the mangle checksum cannot be recomputed.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             },
-            "error": {}
+            "error": {
+                "host": "browser"
+            }
         },
         "position": "none",
-        "args": {},
-        "text": "Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.",
-        "help": "serve the page over HTTPS, or from `localhost`.",
-        "note": "`crypto.subtle` exists only in a secure context."
+        "args": {}
     },
     {
         "id": "hydration-aborted",
         "summary": "A hydration check that threw on an element and stopped.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser",
+                "console": "error"
             }
         },
         "position": "none",
@@ -1419,21 +1435,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true,
                 "opaque": true
             }
-        },
-        "text": {
-            "checksum-mismatch": "The HTML, the bundle and the recovery manifest do not all come from one build, so csszyx aborted hydration at `<{tagName}>`.",
-            "map-missing": "Your code called `abortHydration` with `map_missing`, so csszyx aborted hydration at `<{tagName}>`.",
-            "invalid-token": "Your code called `abortHydration` with `invalid_token`, so csszyx aborted hydration at `<{tagName}>`."
-        },
-        "help": {
-            "checksum-mismatch": "deploy the HTML, the bundle and the manifest from one build.",
-            "map-missing": "serve the page with the mangle map its build wrote.",
-            "invalid-token": "deploy the HTML and the recovery manifest from one build."
-        },
-        "note": {
-            "checksum-mismatch": "csszyx only marks the element with `data-sz-hydration-aborted` and `data-sz-interactive=\"false\"`; nothing skips hydrating it unless your code checks `isHydrationAborted`.",
-            "map-missing": "the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`.",
-            "invalid-token": "the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`."
         }
     },
     {
@@ -1441,13 +1442,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A hydration mismatch on an element without an szRecover directive.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.",
-        "help": "add `szRecover=\"csr\"` to recover it, or `szRecover=\"dev-only\"` to recover it in development only."
+        "args": {}
     },
     {
         "id": "csr-recovery-dev-only",
@@ -1456,7 +1456,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "runtime": {
                 "production": [
                     "runtime"
-                ]
+                ],
+                "host": "both"
             }
         },
         "position": "none",
@@ -1481,17 +1482,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "joiner": ", ",
                 "optional": true
             }
-        },
-        "text": {
-            "runtime": "This element has `szRecover=\"dev-only\"`, which is off in production, so its hydration mismatch is not recovered.",
-            "stripped": "The production manifest leaves out {count} `szRecover=\"dev-only\"` token(s), so recovery for those elements is off in production."
-        },
-        "help": {
-            "runtime": "fix the mismatch, or use `szRecover=\"csr\"` where recovery must run in production.",
-            "stripped": "use `szRecover=\"csr\"` on any of them whose recovery must run in production."
-        },
-        "note": {
-            "stripped": "this is expected in a production build; the tokens are at {sites}."
         }
     },
     {
@@ -1499,20 +1489,20 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A hydration mismatch the runtime recovered by rendering on the client.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "A hydration mismatch on this element was recovered by rendering it on the client.",
-        "help": "fix the cause of the mismatch; with `szRecover=\"csr\"`, this recovery also runs in production."
+        "args": {}
     },
     {
         "id": "merge-table-format-skew",
         "summary": "A merge table in a format this runtime does not read, so szcn merges nothing.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1523,58 +1513,51 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "expected": {
                 "type": "number"
             }
-        },
-        "text": "The merge table was written in format {format}, and this runtime reads format {expected}, so `szcn` ignores the table and removes only exact repeats.",
-        "help": "run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed."
+        }
     },
     {
         "id": "merge-table-missing",
         "summary": "A run with no merge table, so szcn removes only exact repeats.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
-        "help": "use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.",
-        "note": "esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table."
+        "args": {}
     },
     {
         "id": "uncompiled-sz",
         "summary": "A raw sz object that reached the runtime because its file was not compiled.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.",
-        "help": "add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.",
-        "note": "csszyx dropped the object, so the DOM does not get `sz=\"[object Object]\"`."
+        "args": {}
     },
     {
         "id": "register-szcn-groups-ignored",
         "summary": "A registerSzcnGroups call, which no longer changes what szcn merges.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.",
-        "help": "declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.",
-        "note": "`szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats."
+        "args": {}
     },
     {
         "id": "theme-token-ambiguous",
         "summary": "A theme token defined under two namespaces that share one class prefix.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1593,20 +1576,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "name": {
                 "type": "string"
             }
-        },
-        "text": {
-            "color-text-size": "Theme token `{name}` is defined as both a colour and a text size, so `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for only one of them.",
-            "font-family-weight": "Theme token `{name}` is defined as both a font family and a font weight, so `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for only one of them."
-        },
-        "help": "rename one of the tokens.",
-        "note": "until then the token belongs to neither, so `szcn` keeps both classes instead of merging them."
+        }
     },
     {
         "id": "split-box-selector-invalid",
         "summary": "A has/pick/omit selector that can never match a token.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1650,20 +1628,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        },
-        "text": {
-            "array": "`has`, `pick` and `omit` take one selector, so an array matches nothing.",
-            "empty": "The empty selector `{}` names no category, so it matches nothing.",
-            "multi": "An object selector names one category and value, so `{ {categories} }` can never match a single token.",
-            "property": "`{property}` is not a property csszyx tells apart, so `{selector}` matches nothing.",
-            "sz-qualified": "`{selector}` names a property, and `hasSz`, `pickSz` and `omitSz` match an sz key by category only, so it matches nothing."
-        },
-        "help": {
-            "array": "pass the selectors one at a time; `splitBox` takes a list in `inner` and `outer`.",
-            "empty": "name a category and a value, such as `{ overflow: \"hidden\" }`.",
-            "multi": "pass one selector per category.",
-            "property": "use one of: {properties}; `classify('<a class>')` shows the one a class carries.",
-            "sz-qualified": "pass `{name}`."
         }
     },
     {
@@ -1671,7 +1635,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A selector name that is no category or class prefix csszyx knows.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1696,12 +1661,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        },
-        "text": "`{name}` is not a category or class prefix csszyx knows, so it matches nothing.",
-        "help": {
-            "no-hint": "call `classify('<a class>')` to see the category a class belongs to.",
-            "hint": "use the category `{hint}`.",
-            "property-hint": "use the category `{hint}`, or `{hint}:{name}` to match that property only."
         }
     },
     {
@@ -1709,7 +1668,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A splitBox placement written with a variant or marker, which never matches.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1727,16 +1687,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "base": {
                 "type": "string"
             }
-        },
-        "text": "A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.",
-        "help": "write `{ {side}: ['{base}'] }`; it places every variant of `{base}`."
+        }
     },
     {
         "id": "split-box-peer-on-frame",
         "summary": "A peer class splitBox kept on the frame although its base belongs inside.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1750,16 +1709,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "reaching": {
                 "type": "string"
             }
-        },
-        "text": "`splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.",
-        "help": "target the content from the frame instead: `{reaching}`."
+        }
     },
     {
         "id": "split-box-unclassified",
         "summary": "A class or raw CSS splitBox cannot classify, placed on the fallback node.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1793,14 +1751,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "outer"
                 ]
             }
-        },
-        "text": {
-            "class": "`{token}` is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify.",
-            "raw-css": "The `css` key holds raw CSS `splitBoxSz` does not classify, so it went to the {node} node with everything else it could not classify."
-        },
-        "help": {
-            "class": "if it is a custom `@utility` that declares properties for both nodes, place it yourself with `{ {side}: ['{token}'] }`; csszyx cannot split it, and no side is correct.",
-            "raw-css": "if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`."
         }
     },
     {
@@ -1808,7 +1758,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A scrolling content node whose height nothing bounds, so it grows instead.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1816,29 +1767,27 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "scroller": {
                 "type": "string"
             }
-        },
-        "text": "`splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.",
-        "help": "give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content."
+        }
     },
     {
         "id": "split-box-unclipped-corners",
         "summary": "A rounded frame that does not clip its scrolling content.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.",
-        "help": "add `overflow-hidden` to the frame."
+        "args": {}
     },
     {
         "id": "split-box-hidden-content",
         "summary": "A hiding class placed on the content node, which leaves the frame visible.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1846,16 +1795,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "hidden": {
                 "type": "string"
             }
-        },
-        "text": "`splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.",
-        "help": "pass `{ outer: ['hidden'] }` if the whole box should disappear."
+        }
     },
     {
         "id": "szv-config-invalid",
         "summary": "A part of an szv config that does not have the shape szv reads.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1890,22 +1838,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "got": {
                 "type": "string"
             }
-        },
-        "text": {
-            "config": "The `szv` config is not an object (got {got}), so `szv` returns an empty sz object.",
-            "base": "`base` in the `szv` config is not an sz object (got {got}), so `szv` ignores it.",
-            "variants": "`variants` in the `szv` config is not an object (got {got}), so `szv` returns only `base`.",
-            "default-variants": "`defaultVariants` in the `szv` config is not an object (got {got}), so no variant gets a default value.",
-            "dimension": "`variants.{dimension}` is not an object of values (got {got}), so it adds no classes.",
-            "variant-value": "`variants.{dimension}.{token}` is not an sz object (got {got}), so it is ignored."
-        },
-        "help": {
-            "config": "pass an object such as `{ base: { … }, variants: { … } }`.",
-            "base": "make `base` an sz object, such as `{ p: 4 }`.",
-            "variants": "make `variants` an object of dimensions, such as `{ size: { sm: { p: 2 } } }`.",
-            "default-variants": "make `defaultVariants` an object of values, such as `{ size: 'sm' }`.",
-            "dimension": "make `variants.{dimension}` an object that maps each value to an sz object.",
-            "variant-value": "make it an sz object, such as `{ p: 4 }`, or `null` to add nothing."
         }
     },
     {
@@ -1913,9 +1845,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An sz object at runtime nested deeper than the depth limit.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             },
             "error": {
+                "host": "browser",
                 "classes": [
                     "SzDepthError"
                 ]
@@ -1941,14 +1875,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        },
-        "text": {
-            "value": "This `sz` value nests deeper than {maxDepth} levels, so csszyx rejects it.",
-            "szv-config": "`{where}` in the `szv` config nests deeper than {maxDepth} levels, so `szv` rejects it at render."
-        },
-        "help": {
-            "value": "check what reaches the `sz` prop; nesting this deep usually means untrusted or looping data.",
-            "szv-config": "flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data."
         }
     },
     {
@@ -1956,7 +1882,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A key in an szv config that csszyx never reads, such as __proto__.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1967,16 +1894,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        },
-        "text": "`{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.",
-        "help": "remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`."
+        }
     },
     {
         "id": "szv-unknown-variant",
         "summary": "A selection that names a variant the szv config does not declare.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -1984,16 +1910,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        },
-        "text": "The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.",
-        "help": "declare `variants.{key}`, or remove `{key}` from the selection."
+        }
     },
     {
         "id": "szv-unknown-variant-value",
         "summary": "A selection that gives a variant a value it has no styles for.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -2008,30 +1933,27 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string[]",
                 "joiner": ", "
             }
-        },
-        "text": "The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.",
-        "help": "use one of: {allowed}, or add `{value}` to `variants.{key}`."
+        }
     },
     {
         "id": "szv-object-as-string",
         "summary": "An sz object from szv() used as a class string, which renders \"[object Object]\".",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.",
-        "help": "pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.",
-        "note": "a development build renders an empty string in its place."
+        "args": {}
     },
     {
         "id": "dynamic-injection-growth",
         "summary": "A session in which dynamic() has injected so many classes the CSSOM keeps growing.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -2039,16 +1961,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        },
-        "text": "`dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.",
-        "help": "drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead."
+        }
     },
     {
         "id": "dynamic-unsafe-arbitrary",
         "summary": "An arbitrary value dynamic() dropped because it could inject CSS.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -2056,17 +1977,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "utility": {
                 "type": "string"
             }
-        },
-        "text": "The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.",
-        "help": "keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.",
-        "note": "only the first dropped value of a session is reported."
+        }
     },
     {
         "id": "dynamic-non-boolean",
         "summary": "A runtime value that is not a boolean on a key only a boolean can toggle.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -2077,16 +1996,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "valueType": {
                 "type": "string"
             }
-        },
-        "text": "The runtime value of `{key}` has type `{valueType}`, and only a boolean toggles this class, so it is omitted.",
-        "help": "pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object."
+        }
     },
     {
         "id": "dynamic-unresolvable",
         "summary": "A runtime value of a type no CSS value can be resolved from.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser"
             }
         },
         "position": "none",
@@ -2097,29 +2015,27 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "valueType": {
                 "type": "string"
             }
-        },
-        "text": "The runtime value of `{key}` has type `{valueType}`, which cannot be resolved to CSS, so the property is omitted.",
-        "help": "pass a number, a token or a CSS length; for a responsive object, use `dynamic()`."
+        }
     },
     {
         "id": "dev-warnings-partial",
         "summary": "A development warning with no source location; csszyx check names the file and key.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "browser"
             }
         },
         "position": "none",
-        "args": {},
-        "text": "The `sz` key warning above has no source location, so it does not name the file that triggered it.",
-        "help": "run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line."
+        "args": {}
     },
     {
         "id": "diagnostics-capped",
         "summary": "More findings of one kind than a run lists; the rest are counted, not printed.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "both"
             }
         },
         "position": "none",
@@ -2145,15 +2061,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "number",
                 "optional": true
             }
-        },
-        "text": {
-            "dev-warnings": "This session has printed {count} distinct development warnings, so further ones are suppressed.",
-            "unknown-keys": "This process has reported {count} distinct unknown sz keys, so further ones are suppressed."
-        },
-        "help": {
-            "per-id": "`csszyx check --rule {id}` lists every one.",
-            "dev-warnings": "look above for one warning repeating with different values; a className built from data is the usual cause.",
-            "unknown-keys": "look above for one key repeating with different names; sz keys built from data are the usual cause."
         }
     },
     {
@@ -2161,9 +2068,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An sz attribute string that does not parse.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": true,
+                "host": "browser",
+                "console": "error"
             },
-            "error": {}
+            "error": {
+                "host": "browser"
+            }
         },
         "position": "site",
         "args": {
@@ -2176,15 +2087,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "index": {
                 "type": "number"
             }
-        },
-        "text": "The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.",
-        "help": "write it as an object literal with commas between keys, such as `sz=\"p: 4, w: '1/2'\"`; quote a value that holds `/` or `#`."
+        }
     },
     {
         "id": "options-object-required",
         "summary": "An options argument that is not the one object the call takes.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "both"
+            }
         },
         "position": "none",
         "forms": [
@@ -2199,32 +2110,25 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "csszyx-turbopack"
                 ]
             }
-        },
-        "text": {
-            "transform": "`transform` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
-            "csszyx-turbopack": "`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument or an option it does not know is refused."
-        },
-        "help": {
-            "transform": "pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.",
-            "csszyx-turbopack": "write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`."
         }
     },
     {
         "id": "lowering-not-loaded",
         "summary": "An sz object passed to a string helper before the lowering module is loaded.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "browser"
+            }
         },
         "position": "none",
-        "args": {},
-        "text": "A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.",
-        "help": "add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime."
+        "args": {}
     },
     {
         "id": "lite-sz-object",
         "summary": "An sz object passed to a lite-runtime helper, which cannot lower objects.",
         "surfaces": {
             "error": {
+                "host": "browser",
                 "production": false
             }
         },
@@ -2236,16 +2140,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "received": {
                 "type": "string"
             }
-        },
-        "text": "`{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.",
-        "help": "write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.",
-        "note": "a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`."
+        }
     },
     {
         "id": "split-box-sz-string",
         "summary": "A class string passed to splitBoxSz, which takes sz objects.",
         "surfaces": {
             "error": {
+                "host": "browser",
                 "production": false
             }
         },
@@ -2254,16 +2156,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "value": {
                 "type": "string"
             }
-        },
-        "text": "`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.",
-        "help": "use `splitBox()` for a class string.",
-        "note": "a production build drops the string instead of throwing."
+        }
     },
     {
         "id": "runtime-prefix-conflict",
         "summary": "Two builds sharing one runtime that registered different Tailwind prefixes.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "browser"
+            }
         },
         "position": "none",
         "forms": [
@@ -2285,37 +2186,33 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        },
-        "text": {
-            "prefixes": "Two builds sharing one JavaScript runtime registered the Tailwind prefixes `{first}` and `{second}`, so csszyx cannot tell which prefix their classes take.",
-            "unprefixed": "Two builds sharing one JavaScript runtime registered different Tailwind prefixes, `{first}` and none, so csszyx cannot tell which prefix their classes take."
-        },
-        "help": "keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix."
+        }
     },
     {
         "id": "dynamic-manifest-unreachable",
         "summary": "A dynamic manifest the browser could not fetch.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "browser"
+            }
         },
         "position": "none",
         "args": {
             "status": {
                 "type": "number"
             }
-        },
-        "text": "The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.",
-        "help": "serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.",
-        "note": "the error is caught and nothing is printed; csszyx does not fetch it again this session until you call `resetManifest`."
+        }
     },
     {
         "id": "native-engine-unavailable",
         "summary": "A native engine that is missing, cannot load, or predates this compiler.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             },
             "error": {
+                "host": "node",
                 "classes": [
                     "CsszyxNativeUnavailableError",
                     "RustTransformUnavailableError"
@@ -2361,6 +2258,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A wasm engine that failed to load.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "WasmTransformUnavailableError"
                 ]
@@ -2379,6 +2277,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A native engine csszyx migrate needs and cannot load; migrate has no wasm lane.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "RustMigrateUnavailableError"
                 ]
@@ -2397,6 +2296,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An engine built from other source than the compiler that loads it.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "EngineVersionSkewError"
                 ]
@@ -2436,6 +2336,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A @csszyx/runtime at another version than the plugin that lowers for it.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "RuntimeVersionSkewError"
                 ]
@@ -2458,7 +2359,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "peer-module-unresolved",
         "summary": "A peer package csszyx needs that does not resolve from the project.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -2478,6 +2381,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A project where generate-types finds no loadable Tailwind CSS v3.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "TailwindUnavailableError"
                 ]
@@ -2514,6 +2418,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An input to csszyx explain that is not one sz expression the build lowers.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "ExplainParseError"
                 ]
@@ -2544,7 +2449,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "template-sz-invalid",
         "summary": "A Vue or Svelte file whose template sz has errors, each reported with its own code.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {
@@ -2557,7 +2464,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "template-runtime-value",
         "summary": "A template sz value only known at runtime, which a template cannot resolve.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "site",
         "args": {}
@@ -2566,7 +2475,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "template-unparsable",
         "summary": "A Vue or Svelte file its own compiler cannot parse, so no sz in it gets a class.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "site",
         "forms": [
@@ -2593,7 +2504,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "template-lang-unsupported",
         "summary": "A Vue template in a language other than HTML, which csszyx does not read.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "site",
         "args": {
@@ -2606,7 +2519,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "svelte-version-unsupported",
         "summary": "An installed Svelte older than 5, whose markup csszyx does not read.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "site",
         "args": {
@@ -2619,7 +2534,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "ignore-package-incompatible",
         "summary": "An installed `ignore` package that no longer reads .gitignore the way csszyx needs.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {}
@@ -2629,6 +2546,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A state csszyx should never reach: a csszyx bug to report.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "RustTransformUnavailableError",
                     "WasmTransformUnavailableError"
@@ -2647,9 +2565,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A call into the engine that threw.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             },
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -2675,7 +2596,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A csszyx.config with problems, each reported with its own code.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2694,19 +2616,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        },
-        "text": {
-            "partly-applied": "This file has {count} problem(s); each one is ignored, and the rest of the file applies.",
-            "not-applied": "This file has {count} problem(s), and it is not applied, so every finding keeps its default level."
-        },
-        "help": "https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved."
+        }
     },
     {
         "id": "unknown-rule-id",
         "summary": "A rule id no diagnostic, kind or group has, likely a typo.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -2737,7 +2655,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A rule id for a runtime line or a throw, whose level csszyx.config cannot set.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2745,16 +2664,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "id": {
                 "type": "string"
             }
-        },
-        "text": "`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.",
-        "help": "remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only."
+        }
     },
     {
         "id": "removed-rule-id",
         "summary": "A rule id csszyx no longer reports, with the id that replaced it.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2777,11 +2695,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
-        },
-        "text": "`{id}` is no longer reported, so a level or a selection naming it applies to nothing.",
-        "help": {
-            "replaced": "name `{replacedBy}` instead, which reports what `{id}` did.",
-            "removed": "remove it."
         }
     },
     {
@@ -2789,7 +2702,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A rule set to something other than off, info, warn or error.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2807,7 +2721,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A diagnostics preset other than recommended or atomic.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2822,7 +2737,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A field csszyx.config does not read.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2858,7 +2774,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A csszyx.config field whose value does not have the shape it takes.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2884,7 +2801,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An override glob that is absolute or steps out of the root, so it never matches.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2899,7 +2817,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A second csszyx.config file beside the one csszyx reads.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2914,7 +2833,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A csszyx.config that could not be loaded, so the default levels apply.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2947,7 +2867,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A csszyx.config with no default export.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2958,7 +2879,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A saved diagnostic policy in a format this version does not read.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2973,7 +2895,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A Next safelist shard in a format this version does not read.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -2988,7 +2911,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "Findings at info a production build counted instead of listing.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -2996,17 +2920,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "count": {
                 "type": "number"
             }
-        },
-        "text": "This build held back {count} finding(s) at `info` and listed none of them.",
-        "help": "run a development build to see each one with its file and position.",
-        "note": "they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`."
+        }
     },
     {
         "id": "merge-covered-held",
         "summary": "Classes a build removed by merging, counted instead of listed.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3031,7 +2953,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A plugin option that was removed and is no longer read.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3054,7 +2977,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A build without its transform cache, because package versions did not resolve.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3065,7 +2989,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "The parser a build runs, and whether it fell back from the native engine.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3090,7 +3015,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A project-wide input that changed, so a dev server recompiled every module.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -3122,7 +3048,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "watch-prefix-changed",
         "summary": "A Tailwind prefix that changed during a watch build, which needs a restart.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3145,7 +3073,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A generated safelist csszyx could not write, so Tailwind misses its classes.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "file",
@@ -3161,7 +3090,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "An @utility whose name another utility also claims, so Tailwind merges both.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3179,7 +3109,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "Theme auto-scan turned on in a project without TypeScript configured.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3190,7 +3121,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "production.mangle on the esbuild adapter, which turns mangling off.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3201,7 +3133,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A CSS selector the class mangler could not parse, left unmangled.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3219,7 +3152,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "mangle-preserve-invalid",
         "summary": "A production.manglePreserve entry that is not a class name or a prefix.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -3248,7 +3183,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "mangle-global-vars-options-invalid",
         "summary": "production.mangleGlobalVars options csszyx cannot apply.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -3276,7 +3213,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "mangle-global-vars-plan-invalid",
         "summary": "A global-variable alias plan that renames a variable unsafely.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3291,7 +3230,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "mangle-map-too-large",
         "summary": "A CSS variable mangle map larger than its safety cap.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3307,7 +3248,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "mangle-census-late",
         "summary": "Classes that appeared after the mangle map was frozen.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -3338,7 +3281,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "merge-hook-late",
         "summary": "A rule selecting on a class the build had already merged away.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {
@@ -3351,7 +3296,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "tailwind-stylesheet-missing",
         "summary": "A configured Tailwind stylesheet that does not exist.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3371,7 +3318,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "tailwind-stylesheet-broken",
         "summary": "A stylesheet reaching Tailwind that does not compile, so the prefix is unknown.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3388,7 +3337,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "tailwind-config-missing",
         "summary": "A Tailwind config path that does not exist.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {}
@@ -3397,7 +3348,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "tailwind-config-unloadable",
         "summary": "A Tailwind config that threw while loading.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {
@@ -3411,7 +3364,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "legacy-source-directive",
         "summary": "An @source line naming the old safelist file, which csszyx no longer writes.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {
@@ -3424,7 +3379,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "postcss-plugin-order",
         "summary": "The csszyx PostCSS plugin listed after Tailwind, which then never reads the safelist.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {}
@@ -3433,7 +3390,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "ignore-pattern-negated",
         "summary": "A negated pattern in an ignore list, which can only add paths.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3446,7 +3405,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "css-source-unstable",
         "summary": "A CSS source that kept changing while csszyx read it.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {}
@@ -3455,7 +3416,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "rsc-boundary-violation",
         "summary": "A client-only csszyx export imported into a Server Component.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {
@@ -3473,6 +3436,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A Next lane that runs before the Tailwind prefix was read.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "NextStylesheetFactsPending"
                 ]
@@ -3500,6 +3464,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A Next safelist state another live process holds the lock on.",
         "surfaces": {
             "error": {
+                "host": "node",
                 "classes": [
                     "NextSafelistStateLockedError"
                 ]
@@ -3528,7 +3493,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "next-generation-manifest-invalid",
         "summary": "A Next generation manifest that does not have the shape csszyx writes.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [
@@ -3553,7 +3520,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "next-mangle-vars-unsupported",
         "summary": "production.mangleVars on a Next lane that cannot mangle CSS variables.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "forms": [
@@ -3574,7 +3543,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "next-turbo-cache-unseeded",
         "summary": "A Turbopack production build whose safelist was not seeded by csszyx next prebuild.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3590,7 +3561,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "next-sz-untransformed",
         "summary": "A Next module that still holds sz syntax after the csszyx transform.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "file",
         "args": {}
@@ -3599,7 +3572,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "next-watcher-not-started",
         "summary": "A Next safelist watcher whose first cycle did not complete.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {}
@@ -3609,7 +3584,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A Next safelist watcher that threw while closing.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             }
         },
         "position": "none",
@@ -3625,9 +3601,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "summary": "A source pattern that matched no file under the root.",
         "surfaces": {
             "runtime": {
-                "production": false
+                "production": false,
+                "host": "node"
             },
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "args": {
@@ -3643,7 +3622,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "id": "cli-option-invalid",
         "summary": "A CLI option value outside the values the command takes.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "host": "node"
+            }
         },
         "position": "none",
         "forms": [

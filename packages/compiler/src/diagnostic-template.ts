@@ -9,11 +9,9 @@
  * @module diagnostic-template
  */
 
+import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
 import { PLACEHOLDER } from './diagnostic-placeholder.js';
-import type {
-    SzDiagnosticSpec,
-    SzDiagnosticTemplateText,
-} from './diagnostic-registry.generated.js';
+import type { SzDiagnosticTemplateText } from './diagnostic-registry.generated.js';
 
 /** A diagnostic to fill: the code its page is named by, and its args. */
 export interface TemplatedDiagnostic {
@@ -21,17 +19,44 @@ export interface TemplatedDiagnostic {
     args: object;
 }
 
-/** What filling a code needs from its registry entry. */
-export type SzDiagnosticTemplate = Pick<
-    SzDiagnosticSpec,
-    'args' | 'variesBy' | 'text' | 'help' | 'note'
->;
+/**
+ * What filling a code needs from its registry entry: how each list arg joins,
+ * the arg a per-variant template is keyed by, and the templates. A registry
+ * entry is one; so is each export of the browser module.
+ */
+export interface SzDiagnosticTemplate {
+    /** Every arg, by name; a list arg with the separator it is written with. */
+    readonly args: Readonly<Record<string, { readonly joiner?: string }>>;
+    /** The enum arg a per-variant template is keyed by, when it is not `form`. */
+    readonly variesBy?: string;
+    /** What the diagnostic says: one template, or one per variant. */
+    readonly text?: SzDiagnosticTemplateText;
+    /** What to do. */
+    readonly help?: SzDiagnosticTemplateText;
+    /** What does not happen, or still holds. */
+    readonly note?: SzDiagnosticTemplateText;
+}
+
+/**
+ * One id as the browser module carries it, for `szReport` to print.
+ *
+ * @template Args - The args a report of it passes, as the registry declares them.
+ */
+export interface SzBrowserDiagnostic<Args extends object = Readonly<Record<string, ArgValue>>>
+    extends SzDiagnosticTemplate {
+    /** The id the line is headed by. */
+    readonly id: SzDiagnosticId;
+    /** `error` when the line prints through `console.error`; absent, `console.warn`. */
+    readonly console?: 'error';
+    /** Never set: carries `Args` to the `szReport` call that names this id. */
+    readonly argsType?: Args;
+}
 
 /** Where every code's page lives; the code is appended. */
 export const SZ_DIAGNOSTIC_URL_BASE = 'https://csszyx.com/e/';
 
 /** One arg value, as the wire carries it. */
-type ArgValue = string | number | readonly string[];
+export type ArgValue = string | number | readonly string[];
 
 /** A value computed from an issue's args, by a helper over shared data. */
 export type SzDiagnosticComputed = (args: Readonly<Record<string, ArgValue>>) => string;
@@ -209,4 +234,45 @@ export function fillSzDiagnosticTemplate(
         ...(note === undefined ? {} : { note }),
         docs: `${SZ_DIAGNOSTIC_URL_BASE}${diagnostic.code}`,
     };
+}
+
+/**
+ * The terminal layout of a body: the text, then each labelled part, two
+ * spaces in.
+ *
+ * @param parts - The parts.
+ * @returns The body.
+ */
+export function szDiagnosticBody(parts: SzDiagnosticParts): string {
+    let body = parts.text;
+    if (parts.help !== undefined) body += `\n  help: ${parts.help}`;
+    if (parts.note !== undefined) body += `\n  note: ${parts.note}`;
+    return body;
+}
+
+/**
+ * A whole message as a console or a terminal prints it, the one layout the
+ * build and the browser share. With a place, the header names it and the body
+ * follows two spaces in, as the engine's messages read; an empty place leaves
+ * the header bare. With none, as a browser line has, the sentence follows the
+ * code on the first line. The link to the code's page comes last.
+ *
+ * @param options - What to lay out.
+ * @param options.code - The code the line is headed by.
+ * @param options.parts - The filled parts.
+ * @param options.where - Where the diagnostic is, when it has a place.
+ * @returns The message.
+ */
+export function layoutSzDiagnostic(options: {
+    code: string;
+    parts: SzDiagnosticParts;
+    where?: string;
+}): string {
+    const { code, parts, where } = options;
+    const tag = `[csszyx] ${code}:`;
+    const body = szDiagnosticBody(parts);
+    let head = `${tag} ${body}`;
+    if (where === '') head = `${tag}\n  ${body}`;
+    else if (where !== undefined) head = `${tag} ${where}\n  ${body}`;
+    return `${head}\n  docs: ${parts.docs}`;
 }

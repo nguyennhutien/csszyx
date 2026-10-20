@@ -11,6 +11,9 @@
  * - the engine's Rust enum (ids the engine emits);
  * - the compiler's TypeScript ids, groups, default levels and tombstones;
  * - the compiler's Node-only registry module (summaries, surfaces, arguments);
+ * - the compiler's browser module: one plain object per id a console line or a
+ *   throw words, which the development renderer `szReport` fills;
+ * - the constants module: the engine limits a sentence names, for both;
  * - the docs site's data, from which every `/e/<code>` page is built.
  *
  * `--check` fails CI when a written file is stale or the registry breaks a rule
@@ -27,7 +30,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
 import * as registry from './diagnostics/registry.mjs';
+
+export { browserSourceFiles };
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const rustPath = path.join(repoRoot, 'packages/core/src/transform/generated/diagnostic_codes.rs');
@@ -37,6 +43,16 @@ const registryTsPath = path.join(
     'packages/compiler/src/diagnostic-registry.generated.ts',
 );
 const docsDataPath = path.join(repoRoot, 'apps/docs/src/data/diagnostics.json');
+const browserPath = path.join(repoRoot, 'packages/compiler/src/diagnostic-browser.generated.ts');
+const nodeWordsPath = path.join(
+    repoRoot,
+    'packages/compiler/src/diagnostic-node-words.generated.ts',
+);
+const reportPath = path.join(repoRoot, 'packages/compiler/src/report.ts');
+const constantsPath = path.join(
+    repoRoot,
+    'packages/compiler/src/diagnostic-constants.generated.ts',
+);
 const editorTemplatesPath = path.join(
     repoRoot,
     'packages/compiler/src/editor-diagnostic-templates.generated.ts',
@@ -59,6 +75,7 @@ export const ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 export const PLACEHOLDER_PATTERN = /(?<!\$)\{([a-z][a-zA-Z0-9]*)\}/g;
 
 const SURFACES = ['engine', 'check', 'runtime', 'error'];
+const HOSTS = ['browser', 'node', 'both'];
 const LEVELS = ['off', 'info', 'warn', 'error'];
 const POSITIONS = ['site', 'file', 'none'];
 const SCALAR_TYPES = ['string', 'number', 'string[]'];
@@ -189,7 +206,7 @@ function isArgType(type) {
  * @param {ReadonlySet<string>} groups - The group ids.
  * @param {string[]} problems - Where problems are collected.
  */
-function validateEntry(entry, groups, problems, computed = new Map()) {
+function validateEntry(entry, groups, problems, computed = new Map(), browserFiles = undefined) {
     const at = `diagnostic ${JSON.stringify(entry.id)}`;
     if (typeof entry.summary !== 'string' || entry.summary.length === 0) {
         problems.push(`${at}: has no summary`);
@@ -234,6 +251,12 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
             }
         }
     }
+    // `szReport` prints through `console.warn` unless the line is an error.
+    const sink = entry.surfaces?.runtime?.console;
+    if (sink !== undefined && sink !== 'error') {
+        problems.push(`${at}: runtime console is \`error\`, or absent for \`console.warn\``);
+    }
+    validateHosts(entry, at, problems, browserFiles);
     const thrownInProduction = entry.surfaces?.error?.production;
     if (thrownInProduction !== undefined && typeof thrownInProduction !== 'boolean') {
         problems.push(`${at}: error production is true or false`);
@@ -274,6 +297,84 @@ function validateEntry(entry, groups, problems, computed = new Map()) {
         if (entry.surfaces?.[gap]) problems.push(`${at}: lists ${gap} as both a surface and a gap`);
     }
     validateTemplates(entry, at, problems, computed);
+}
+
+/**
+ * The places a host names: `both` is the browser and Node.
+ *
+ * @param {string} host - `browser`, `node` or `both`.
+ * @returns {string[]} The places.
+ */
+function placesOf(host) {
+    return host === 'both' ? ['browser', 'node'] : [host];
+}
+
+/**
+ * Where an entry renders by its surfaces: each console line's and throw's
+ * \`host\`, and Node for an engine or a check id, which the build and the CLI
+ * print.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {Set<string>} \`browser\`, \`node\`, or both.
+ */
+function declaredPlaces(entry) {
+    const places = new Set();
+    if (entry.surfaces?.engine || entry.surfaces?.check) places.add('node');
+    for (const surface of ['runtime', 'error']) {
+        const host = entry.surfaces?.[surface]?.host;
+        if (host !== undefined) for (const place of placesOf(host)) places.add(place);
+    }
+    return places;
+}
+
+/**
+ * Whether Node renders an entry's words: an engine or check id, or a console
+ * line or a throw whose host includes Node. The Node registry carries only
+ * these words; a browser-only line's live in the browser module.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {boolean} Whether it does.
+ */
+export function rendersInNode(entry) {
+    return declaredPlaces(entry).has('node');
+}
+
+/**
+ * Check where each console line and throw says it runs: \`host\` is required
+ * and one of {@link HOSTS}, and, given the browser files, the places the
+ * entry's \`sources\` run in must be the places its surfaces declare.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @param {string} at - The entry's label.
+ * @param {string[]} problems - Where problems are collected.
+ * @param {ReadonlySet<string> | undefined} browserFiles - The files a browser bundle can hold.
+ */
+function validateHosts(entry, at, problems, browserFiles) {
+    let valid = true;
+    for (const surface of ['runtime', 'error']) {
+        const spec = entry.surfaces?.[surface];
+        if (spec !== undefined && !HOSTS.includes(spec.host)) {
+            problems.push(`${at}: ${surface} host is browser, node or both`);
+            valid = false;
+        }
+    }
+    if (!valid || browserFiles === undefined) return;
+    if (!entry.surfaces?.runtime && !entry.surfaces?.error) return;
+    const declared = [...declaredPlaces(entry)].sort().join(' and ');
+    const actual = [
+        ...new Set(
+            (entry.sources ?? []).map(source =>
+                browserFiles.has(source.replace(/:\d+$/, '')) ? 'browser' : 'node',
+            ),
+        ),
+    ]
+        .sort()
+        .join(' and ');
+    if (declared !== actual) {
+        problems.push(
+            `${at}: runs in ${declared} by its surfaces, but its sources run in ${actual}`,
+        );
+    }
 }
 
 /**
@@ -356,9 +457,12 @@ function validateTemplates(entry, at, problems, computed = new Map()) {
  * hold for ids, not for wording.
  *
  * @param {typeof registry} input - The registry module.
+ * @param {ReadonlySet<string>} [browserFiles] - The files a browser bundle can
+ *   hold, from {@link browserSourceFiles}; given, each \`host\` is checked
+ *   against the entry's \`sources\`.
  * @returns {string[]} One message per broken rule; empty when it is sound.
  */
-export function validateRegistry(input) {
+export function validateRegistry(input, browserFiles = undefined) {
     const problems = [];
     const seen = new Set();
     const claim = (id, where) => {
@@ -388,7 +492,13 @@ export function validateRegistry(input) {
         } else {
             claim(entry.id, 'diagnostic');
         }
-        validateEntry(entry, groups, problems, new Map(Object.entries(input.COMPUTED ?? {})));
+        validateEntry(
+            entry,
+            groups,
+            problems,
+            new Map(Object.entries(input.COMPUTED ?? {})),
+            browserFiles,
+        );
     }
     const live = new Set(input.DIAGNOSTICS.map(entry => entry.id));
     for (const removed of input.REMOVED) {
@@ -807,14 +917,65 @@ export function publicData(input) {
 }
 
 /**
+ * An entry without its words.
+ *
+ * @param {Record<string, any>} entry - A public entry.
+ * @returns {Record<string, any>} Its metadata.
+ */
+function metadataOf(entry) {
+    const { text: _text, help: _help, note: _note, ...metadata } = entry;
+    return metadata;
+}
+
+/**
+ * Render the Node words module: the words of every id Node renders beyond the
+ * engine's — a check pass, a \`node\` or \`both\` console line, a throw in Node —
+ * by id. The root's renderer reads them; \`./engine\` and \`./internal\` render
+ * engine ids only and never load this module.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {string} TypeScript source.
+ */
+export function renderNodeWordsModule(input) {
+    const words = Object.fromEntries(
+        input.DIAGNOSTICS.filter(
+            entry =>
+                !entry.surfaces.engine &&
+                rendersInNode(entry) &&
+                TEMPLATE_FIELDS.some(field => entry[field] !== undefined),
+        ).map(({ id, text, help, note }) => [id, { text, help, note }]),
+    );
+    return `// @generated by scripts/gen-diagnostic-codes.mjs
+// Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
+//
+// Node-only, and only for the root's renderer: the engine lane loads none of it.
+
+import type { SzDiagnosticWords } from './diagnostic-registry.generated.js';
+
+/** The words of each id Node renders that the engine does not report, by id. */
+export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords>> = ${JSON.stringify(words, null, 4)};
+`;
+}
+
+/**
  * Render the Node-only registry module. Browser entries never import it: one
  * object is not tree-shaken per key, so a single use would ship every entry.
+ * Every id keeps its metadata, which Node reads for levels, args and surfaces;
+ * only an engine id keeps its words, so \`./engine\` loads no template it
+ * never renders. {@link renderNodeWordsModule} holds the other words Node
+ * renders.
  *
  * @param {typeof registry} input - The registry module.
  * @returns {string} TypeScript source.
  */
 export function renderRegistryModule(input) {
     const data = publicData(input);
+    // Words for the engine's ids only: \`./engine\` loads this module and
+    // renders nothing else. The other ids Node renders have theirs in the
+    // Node words module, a browser-only line's are in the browser module.
+    const diagnostics = data.diagnostics.map((entry, index) =>
+        input.DIAGNOSTICS[index].surfaces.engine ? entry : metadataOf(entry),
+    );
     return `// @generated by scripts/gen-diagnostic-codes.mjs
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
 //
@@ -840,8 +1001,19 @@ export interface SzDiagnosticSpec {
     readonly surfaces: {
         readonly engine?: Record<string, never>;
         readonly check?: { readonly group: string };
-        readonly runtime?: { readonly production: boolean | readonly string[] };
-        readonly error?: { readonly classes?: readonly string[]; readonly production?: boolean };
+        readonly runtime?: {
+            readonly production: boolean | readonly string[];
+            /** Where the line prints: a browser bundle, Node, or both. */
+            readonly host: 'browser' | 'node' | 'both';
+            /** \`error\` when the line prints through \`console.error\`; absent, \`console.warn\`. */
+            readonly console?: 'error';
+        };
+        readonly error?: {
+            readonly classes?: readonly string[];
+            readonly production?: boolean;
+            /** Where it is thrown: a browser bundle, Node, or both. */
+            readonly host: 'browser' | 'node' | 'both';
+        };
     };
     readonly defaults?: { readonly recommended: string; readonly atomic: string };
     readonly position: 'site' | 'file' | 'none';
@@ -861,17 +1033,183 @@ export interface SzDiagnosticSpec {
 /** A template: one text, or one per variant of the sentence. */
 export type SzDiagnosticTemplateText = string | Readonly<Record<string, string>>;
 
+/** What a diagnostic says, apart from its metadata. */
+export type SzDiagnosticWords = Pick<SzDiagnosticSpec, 'text' | 'help' | 'note'>;
+
 /** The registry's format, so a reader can refuse one it does not know. */
 export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = ${data.format};
 
-/** Engine limits a sentence names, from the registry the engine reads too. */
-export const SZ_DIAGNOSTIC_CONSTANTS = ${JSON.stringify(Object.fromEntries(Object.entries(input.CONSTANTS ?? {}).map(([name, { value }]) => [name, value])))} as const;
+// Generated once, into a module the browser helpers read too.
+export { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-constants.generated.js';
 
 /** The computed values a template may name beside its args. */
 export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ${JSON.stringify(Object.keys(input.COMPUTED ?? {}))};
 
 /** Every live id, in registry order. */
-export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = ${JSON.stringify(data.diagnostics, null, 4)};
+export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = ${JSON.stringify(diagnostics, null, 4)};
+`;
+}
+
+/**
+ * The constant a browser module export is named by: the id in upper snake
+ * case, so `removed-key` is `REMOVED_KEY`. An id starts with a letter, so the
+ * name is a valid identifier.
+ *
+ * @param {string} id - A public id.
+ * @returns {string} The constant's name.
+ */
+export function browserConstName(id) {
+    return id.toUpperCase().replaceAll('-', '_');
+}
+
+/**
+ * The ids the browser module carries, in registry order: every id a console
+ * line or a throw reports, once the registry words it. An id with no text yet
+ * has nothing for the renderer to fill.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {Record<string, any>[]} The entries.
+ */
+export function browserDiagnostics(input) {
+    return input.DIAGNOSTICS.filter(
+        entry =>
+            (entry.surfaces.runtime !== undefined || entry.surfaces.error !== undefined) &&
+            entry.text !== undefined,
+    );
+}
+
+/**
+ * What the development renderer reads of one entry: the id its line is headed
+ * by, each arg in registry order with its joiner when it is a list, the
+ * templates, and the console method when it is not \`warn\`.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {Record<string, unknown>} The data; absent fields are left out.
+ */
+function browserEntry(entry) {
+    const { id, variesBy, text, help, note } = entry;
+    return {
+        id,
+        args: templateArgs(entry),
+        variesBy,
+        text,
+        help,
+        note,
+        console: entry.surfaces.runtime?.console,
+    };
+}
+
+/**
+ * What filling a template reads of an entry's args: each name, in registry
+ * order, with its joiner when it is a list.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {Record<string, { joiner?: string }>} The args.
+ */
+function templateArgs(entry) {
+    return Object.fromEntries(
+        Object.entries(entry.args).map(([name, arg]) => [
+            name,
+            arg.joiner === undefined ? {} : { joiner: arg.joiner },
+        ]),
+    );
+}
+
+/**
+ * The TypeScript type of an entry's args, for \`szReport\` to check a call's
+ * args against.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {string} The type.
+ */
+function browserArgsType(entry) {
+    const fields = Object.entries(entry.args).map(
+        ([name, arg]) => `readonly ${name}${arg.optional ? '?' : ''}: ${tsArgType(arg)};`,
+    );
+    return fields.length === 0
+        ? 'Record<never, never>'
+        : `{ ${fields.join(' ').replace(/;$/, '')} }`;
+}
+
+/**
+ * Render the constants module: the engine limits a sentence names, in a
+ * module of their own, so the helpers that print them load no template.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {string} TypeScript source.
+ */
+export function renderConstantsModule(input) {
+    const constants = Object.fromEntries(
+        Object.entries(input.CONSTANTS ?? {}).map(([name, { value }]) => [name, value]),
+    );
+    return `// @generated by scripts/gen-diagnostic-codes.mjs
+// Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
+
+/** Engine limits a sentence names, from the registry the engine reads too. */
+export const SZ_DIAGNOSTIC_CONSTANTS = ${JSON.stringify(constants)} as const;
+`;
+}
+
+/**
+ * Render the browser module: one plain object literal per id
+ * {@link browserDiagnostics} lists. A bundle
+ * keeps only the exports it uses, and a production build that references them
+ * from a \`NODE_ENV\` branch alone keeps none: a bare \`Object.freeze\`
+ * survives that in esbuild, Vite and webpack (measured, PR C council), so the
+ * module never calls one. It imports no value, the Node registry least of all.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {string} TypeScript source.
+ */
+export function renderBrowserModule(input) {
+    const exports = browserDiagnostics(input).map(
+        entry =>
+            `/** \`${entry.id}\`: ${entry.summary} */\n` +
+            `export const ${browserConstName(entry.id)}: SzBrowserDiagnostic<${browserArgsType(entry)}> = ` +
+            `${JSON.stringify(browserEntry(entry))};`,
+    );
+    return `// @generated by scripts/gen-diagnostic-codes.mjs
+// Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
+//
+// Browser-safe: every value is a plain literal, so a bundle drops each one it
+// does not use, and no value is imported. Node code reads the whole registry
+// from its own module instead.
+
+import type { SzBrowserDiagnostic } from './diagnostic-template.js';
+
+${exports.join('\n\n')}
+`;
+}
+
+/**
+ * Render the \`./report\` entry: the development reporter and every browser
+ * module export, each by name, so the subpath lists its whole surface and
+ * re-exports nothing it did not name.
+ *
+ * @param {typeof registry} input - The registry module.
+ * @returns {string} TypeScript source.
+ */
+export function renderReportEntry(input) {
+    // Sorted as Biome's import organizer leaves an export list: \`_\` first.
+    const key = name => name.replaceAll('_', ' ');
+    const names = browserDiagnostics(input)
+        .map(entry => browserConstName(entry.id))
+        .sort((a, b) => (key(a) < key(b) ? -1 : 1));
+    return `// @generated by scripts/gen-diagnostic-codes.mjs
+// Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
+
+/**
+ * \`@csszyx/compiler/report\`: the development reporter \`szReport\`
+ * (\`diagnostic-report.ts\`) and every id the registry words for a console
+ * line or a throw, so a site imports both from one place.
+ *
+ * @internal Shared by csszyx's own packages; not a stable API.
+ * @module report
+ */
+
+export { ${names.join(', ')} } from './diagnostic-browser.generated.js';
+export { type SzReportOptions, szReport } from './diagnostic-report.js';
+export type { SzBrowserDiagnostic } from './diagnostic-template.js';
 `;
 }
 
@@ -887,8 +1225,8 @@ export function renderEditorTemplates(input) {
     const entries = EDITOR_IDS.map(id => {
         const entry = input.DIAGNOSTICS.find(candidate => candidate.id === id);
         if (entry === undefined) throw new Error(`editor id ${id} is not in the registry`);
-        const { args, variesBy, text, help, note } = entry;
-        return [id, { args, variesBy, text, help, note }];
+        const { variesBy, text, help, note } = entry;
+        return [id, { args: templateArgs(entry), variesBy, text, help, note }];
     });
     return `// @generated by scripts/gen-diagnostic-codes.mjs
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
@@ -962,7 +1300,7 @@ function readOrEmpty(file) {
  * @returns {number} Process exit code.
  */
 export function main(check) {
-    const problems = validateRegistry(registry);
+    const problems = validateRegistry(registry, browserSourceFiles());
     for (const problem of problems) console.error(`[gen-diagnostic-codes] ${problem}`);
     if (problems.length > 0) return 1;
     const outputs = [
@@ -971,6 +1309,10 @@ export function main(check) {
             [tsPath, renderTypeScript(registry)],
             [registryTsPath, renderRegistryModule(registry)],
             [docsDataPath, `${JSON.stringify(publicData(registry), null, 2)}\n`],
+            [browserPath, renderBrowserModule(registry)],
+            [constantsPath, renderConstantsModule(registry)],
+            [reportPath, renderReportEntry(registry)],
+            [nodeWordsPath, renderNodeWordsModule(registry)],
             [editorTemplatesPath, renderEditorTemplates(registry)],
         ]),
     ];

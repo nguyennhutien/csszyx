@@ -94,6 +94,10 @@
         "default": "./dist/spacing-var.cjs"
       }
     },
+    "./report": {
+      "types": "./dist/report.d.mts",
+      "default": "./dist/report.mjs"
+    },
     "./migrate": {
       "types": "./dist/migrate-rust.d.mts",
       "default": "./dist/migrate-rust.mjs"

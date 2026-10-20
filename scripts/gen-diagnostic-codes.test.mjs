@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import * as registry from './diagnostics/registry.mjs';
+import * as generator from './gen-diagnostic-codes.mjs';
 import {
     casingProblems,
     EDITOR_IDS,
@@ -56,7 +57,7 @@ function entry(overrides = {}) {
 }
 
 test('the committed registry keeps every rule', () => {
-    assert.deepEqual(validateRegistry(registry), []);
+    assert.deepEqual(validateRegistry(registry, generator.browserSourceFiles?.()), []);
 });
 
 test('a placeholder is a camelCase name in braces; every other brace is text', () => {
@@ -159,7 +160,7 @@ test('surfaces, groups, levels and positions are checked', () => {
 test('a console line prints in production for all forms, none, or the forms it lists', () => {
     const runtime = production =>
         entry({
-            surfaces: { runtime: { production } },
+            surfaces: { runtime: { production, host: 'node' } },
             position: 'none',
             forms: ['a', 'b'],
             args: { form: { type: ['enum', 'a', 'b'] } },
@@ -179,14 +180,191 @@ test('a console line prints in production for all forms, none, or the forms it l
     );
     assert.match(
         validateRegistry(
-            registryOf([entry({ surfaces: { runtime: { production: ['a'] } }, position: 'none' })]),
+            registryOf([
+                entry({
+                    surfaces: { runtime: { production: ['a'], host: 'node' } },
+                    position: 'none',
+                }),
+            ]),
         ).join('\n'),
         /prints in production for form a, which is not one of its forms/,
     );
 });
 
+test('a console line printed as an error says so; nothing else is a sink', () => {
+    const runtime = console =>
+        entry({
+            surfaces: { runtime: { production: true, console, host: 'node' } },
+            position: 'none',
+        });
+    assert.deepEqual(validateRegistry(registryOf([runtime('error')])), []);
+    assert.deepEqual(validateRegistry(registryOf([runtime(undefined)])), []);
+    assert.match(
+        validateRegistry(registryOf([runtime('log')])).join('\n'),
+        /runtime console is `error`, or absent for `console.warn`/,
+    );
+    // The ids whose line prints through `console.error` today say so.
+    const errors = registry.DIAGNOSTICS.filter(({ surfaces }) => surfaces.runtime?.console)
+        .map(({ id }) => id)
+        .sort();
+    assert.deepEqual(errors, [
+        'hydration-aborted',
+        'mangle-map-unreadable',
+        'recovery-manifest-unreadable',
+        'sz-attribute-syntax',
+    ]);
+});
+
+test('a console line and a throw say where they run, and their sources agree', () => {
+    const browserFiles = new Set(['packages/runtime/src/hydration.ts']);
+    const at = (surfaces, sources) =>
+        validateRegistry(
+            registryOf([entry({ surfaces, sources, position: surfaces.engine ? 'site' : 'none' })]),
+            browserFiles,
+        ).join('\n');
+    const RUNTIME = 'packages/runtime/src/hydration.ts:1';
+    const NODE = 'packages/unplugin/src/unplugin.ts:1';
+    assert.equal(at({ runtime: { production: true, host: 'browser' } }, [RUNTIME]), '');
+    assert.equal(at({ runtime: { production: false, host: 'node' } }, [NODE]), '');
+    assert.equal(at({ runtime: { production: true, host: 'both' } }, [RUNTIME, NODE]), '');
+    // A throw in Node and a line in the browser make the pair both.
+    assert.equal(
+        at({ runtime: { production: true, host: 'browser' }, error: { host: 'node' } }, [
+            RUNTIME,
+            NODE,
+        ]),
+        '',
+    );
+    // An engine or check id renders in Node too.
+    assert.equal(
+        at({ engine: {}, runtime: { production: true, host: 'browser' } }, [
+            'packages/core/src/transform/engine.rs:1',
+            RUNTIME,
+        ]),
+        '',
+    );
+    assert.match(
+        at({ runtime: { production: true } }, [RUNTIME]),
+        /runtime host is browser, node or both/,
+    );
+    assert.match(at({ error: {} }, [RUNTIME]), /error host is browser, node or both/);
+    assert.match(
+        at({ runtime: { production: true, host: 'node' } }, [RUNTIME]),
+        /runs in node by its surfaces, but its sources run in browser/,
+    );
+    assert.match(
+        at({ runtime: { production: true, host: 'browser' } }, [RUNTIME, NODE]),
+        /runs in browser by its surfaces, but its sources run in browser and node/,
+    );
+});
+
+test('the browser files are the ones a browser entry reaches', () => {
+    const files = generator.browserSourceFiles?.() ?? new Set();
+    for (const file of [
+        'packages/runtime/src/hydration.ts',
+        'packages/dynamic/src/injector.ts',
+        'packages/csszyx/src/browser.ts',
+        'packages/csszyx/src/parse-sz-attribute.ts',
+        'packages/compiler/src/transform-core.ts',
+        'packages/compiler/src/bool-class.ts',
+    ]) {
+        assert.ok(files.has(file), file);
+    }
+    for (const file of [
+        'packages/compiler/src/engine.ts',
+        'packages/compiler/src/template-sz.ts',
+        'packages/unplugin/src/unplugin.ts',
+        'packages/compiler/src/diagnostic-registry.generated.ts',
+    ]) {
+        assert.ok(!files.has(file), file);
+    }
+});
+
+test('the Node registry keeps the engine words; Node-only words have a module of their own', () => {
+    const words = { text: 'It went.', help: 'do this.', note: 'it stays.' };
+    const input = registryOf([
+        entry({ id: 'engine-one', ...words }),
+        entry({
+            id: 'browser-one',
+            surfaces: { runtime: { production: true, host: 'browser' } },
+            position: 'none',
+            ...words,
+        }),
+        entry({
+            id: 'node-one',
+            surfaces: { runtime: { production: false, host: 'node' } },
+            position: 'none',
+            ...words,
+        }),
+        entry({
+            id: 'both-one',
+            surfaces: { runtime: { production: true, host: 'both' } },
+            position: 'none',
+            ...words,
+        }),
+        entry({
+            id: 'thrown-in-node',
+            surfaces: { runtime: { production: true, host: 'browser' }, error: { host: 'node' } },
+            position: 'none',
+            ...words,
+        }),
+        entry({ id: 'checked', surfaces: { check: { group: 'sz-diagnostic' } }, ...words }),
+    ]);
+    const source = renderRegistryModule(input);
+    const registryOfModule = JSON.parse(
+        source
+            .slice(
+                source.indexOf('= [', source.indexOf('export const SZ_DIAGNOSTIC_REGISTRY:')) + 2,
+            )
+            .replace(/;\s*$/, ''),
+    );
+    const worded = registryOfModule.filter(spec => spec.text !== undefined).map(spec => spec.id);
+    // `./engine` loads this module and renders engine ids only.
+    assert.deepEqual(worded, ['engine-one']);
+    // The other ids Node renders: a check pass, a Node or both line, a Node throw.
+    const nodeWords = generator.renderNodeWordsModule?.(input) ?? '';
+    const listed = JSON.parse(
+        nodeWords
+            .slice(nodeWords.indexOf('= {', nodeWords.indexOf('SZ_NODE_DIAGNOSTIC_WORDS:')) + 2)
+            .replace(/;\s*$/, '') || '{}',
+    );
+    assert.deepEqual(Object.keys(listed), ['node-one', 'both-one', 'thrown-in-node', 'checked']);
+    assert.deepEqual(listed['node-one'], { text: 'It went.', help: 'do this.', note: 'it stays.' });
+    // The metadata stays for every id: a level, an arg or a surface is read in Node.
+    const browser = registryOfModule.find(spec => spec.id === 'browser-one');
+    assert.deepEqual(Object.keys(browser), ['id', 'summary', 'surfaces', 'position', 'args']);
+    // The docs keep every word: their data is built from the registry, not this module.
+    assert.equal(publicData(input).diagnostics[1].text, 'It went.');
+});
+
+test('the report entry names every export: the reporter and each browser id', () => {
+    const source = generator.renderReportEntry?.(registry) ?? '';
+    assert.ok(!source.includes('export *'));
+    assert.match(
+        source,
+        /export \{ type SzReportOptions, szReport \} from '\.\/diagnostic-report\.js';/,
+    );
+    assert.match(
+        source,
+        /export type \{ SzBrowserDiagnostic \} from '\.\/diagnostic-template\.js';/,
+    );
+    const names = /export \{([^}]*)\} from '\.\/diagnostic-browser\.generated\.js';/
+        .exec(source)?.[1]
+        .split(',')
+        .map(name => name.trim())
+        .filter(Boolean);
+    assert.deepEqual(
+        [...names].sort(),
+        generator
+            .browserDiagnostics(registry)
+            .map(({ id }) => generator.browserConstName(id))
+            .sort(),
+    );
+});
+
 test('a throw states whether a production build reaches it', () => {
-    const thrown = error => entry({ surfaces: { error }, position: 'none' });
+    const thrown = error =>
+        entry({ surfaces: { error: { host: 'node', ...error } }, position: 'none' });
     assert.deepEqual(validateRegistry(registryOf([thrown({ production: false })])), []);
     assert.deepEqual(validateRegistry(registryOf([thrown({})])), []);
     assert.match(
@@ -262,7 +440,10 @@ test('an engine id has a place and declared args, and a list arg its joiner', ()
 });
 
 test('every id declares its args, a runtime one too', () => {
-    const runtime = { surfaces: { runtime: { production: false } }, position: 'none' };
+    const runtime = {
+        surfaces: { runtime: { production: false, host: 'node' } },
+        position: 'none',
+    };
     assert.match(
         validateRegistry(registryOf([entry({ ...runtime, args: undefined })])).join('\n'),
         /declares its args/,
@@ -477,6 +658,104 @@ test('the registry check applies the casing rule to every field and form', () =>
     );
 });
 
+test('the browser module names each worded console or thrown id as a constant', () => {
+    assert.equal(generator.browserConstName?.('removed-key'), 'REMOVED_KEY');
+    assert.equal(generator.browserConstName?.('csr-recovery-dev-only'), 'CSR_RECOVERY_DEV_ONLY');
+    const ids = generator.browserDiagnostics?.(registry).map(({ id }) => id) ?? [];
+    // A runtime id and an engine id the runtime also prints are in it; an
+    // engine-only id, and an id with no words yet, are not.
+    assert.ok(ids.includes('mangle-census-unreadable'));
+    assert.ok(ids.includes('removed-key'));
+    assert.ok(!ids.includes('runtime-value'));
+    assert.ok(!ids.includes('native-engine-unavailable'));
+    for (const entry of registry.DIAGNOSTICS) {
+        const expected =
+            (entry.surfaces.runtime !== undefined || entry.surfaces.error !== undefined) &&
+            entry.text !== undefined;
+        assert.equal(ids.includes(entry.id), expected, entry.id);
+    }
+});
+
+test('a browser export is a plain literal holding what the dev renderer reads', () => {
+    const input = {
+        ...registryOf([
+            entry({
+                id: 'removed-key',
+                surfaces: { engine: {}, runtime: { production: true, console: 'error' } },
+                forms: ['a', 'b'],
+                args: {
+                    form: { type: ['enum', 'a', 'b'] },
+                    key: { type: 'string' },
+                    parts: { type: 'string[]', joiner: ', ', optional: true },
+                },
+                text: { a: '`{key}` went.', b: '`{key}` moved.' },
+                help: 'write {parts}.',
+            }),
+            entry({
+                id: 'mangle-census-unreadable',
+                surfaces: { runtime: { production: true } },
+                position: 'none',
+                args: {},
+                text: 'The census is unreadable.',
+            }),
+            entry({ id: 'runtime-value', text: 'Not here.' }),
+        ]),
+        CONSTANTS: { maxNestingDepth: { rust: 'X', type: 'usize', value: 64 } },
+    };
+    const source = generator.renderBrowserModule?.(input) ?? '';
+    const removed =
+        '/** `removed-key`: A key no sz table knows. */\n' +
+        "export const REMOVED_KEY: SzBrowserDiagnostic<{ readonly form: 'a' | 'b'; readonly key: string; readonly parts?: readonly string[] }> = " +
+        '{"id":"removed-key","args":{"form":{},"key":{},"parts":{"joiner":", "}},' +
+        '"text":{"a":"`{key}` went.","b":"`{key}` moved."},"help":"write {parts}.","console":"error"};';
+    assert.ok(source.includes(removed), source);
+    assert.ok(
+        source.includes(
+            'export const MANGLE_CENSUS_UNREADABLE: SzBrowserDiagnostic<Record<never, never>> = ' +
+                '{"id":"mangle-census-unreadable","args":{},"text":"The census is unreadable."};',
+        ),
+        source,
+    );
+    assert.ok(!source.includes('SZ_DIAGNOSTIC_CONSTANTS'));
+    // The constants have a module of their own, which loads no template.
+    assert.equal(
+        generator.renderConstantsModule?.(input).split('\n').slice(3).join('\n'),
+        '/** Engine limits a sentence names, from the registry the engine reads too. */\n' +
+            'export const SZ_DIAGNOSTIC_CONSTANTS = {"maxNestingDepth":64} as const;\n',
+    );
+    assert.ok(!source.includes('RUNTIME_VALUE'));
+    // A bare `Object.freeze` survives a production build in esbuild, Vite and
+    // webpack (measured, PR C council): plain literals only.
+    assert.ok(!source.includes('Object.freeze'));
+    // The one import is a type, erased before any bundler sees it.
+    assert.deepEqual(
+        [...source.matchAll(/^import .*$/gm)].map(([line]) => line),
+        ["import type { SzBrowserDiagnostic } from './diagnostic-template.js';"],
+    );
+});
+
+test('the committed browser module carries every worded console or thrown id', () => {
+    const source = generator.renderBrowserModule?.(registry) ?? '';
+    const exported = [...source.matchAll(/^export const (\w+)/gm)].map(([, name]) => name);
+    assert.deepEqual(
+        exported,
+        (generator.browserDiagnostics?.(registry) ?? []).map(({ id }) =>
+            generator.browserConstName(id),
+        ),
+    );
+    assert.ok(!source.includes('diagnostic-registry.generated'));
+});
+
+test('the Node registry module takes its constants from the constants module', () => {
+    const source = renderRegistryModule(registryOf([entry()]));
+    assert.ok(
+        source.includes(
+            "export { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-constants.generated.js';",
+        ),
+    );
+    assert.ok(!source.includes('export const SZ_DIAGNOSTIC_CONSTANTS'));
+});
+
 test('the editor module carries the editor ids only, each as the registry words it', () => {
     const source = renderEditorTemplates(registry);
     for (const id of EDITOR_IDS) {
@@ -484,6 +763,9 @@ test('the editor module carries the editor ids only, each as the registry words 
         assert.ok(source.includes(JSON.stringify(text, null, 4).split('\n')[0]), id);
     }
     assert.ok(!source.includes('"dead-class"'));
+    // An arg carries what filling reads, its joiner, as the browser module's do.
+    assert.ok(!source.includes('"type"'));
+    assert.ok(source.includes('"args": {\n            "key": {},'), source);
     assert.throws(
         () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
         /editor id unknown-key is not in the registry/,

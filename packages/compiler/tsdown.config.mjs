@@ -102,4 +102,16 @@ export default defineBuild([
         format: ['cjs'],
         entry: RUNTIME_ENTRIES,
     },
+    {
+        ...shared,
+        clean: false,
+        format: ['esm'],
+        // The development renderer of a browser console line, with the
+        // registry's templates: `@internal`, imported only from a `NODE_ENV`
+        // branch, and ES module only until the runtime requires it. A build
+        // of its own, so it shares no chunk with the entries Node loads:
+        // sharing the template filler split it into a chunk of its own,
+        // which cost `./engine` and `./internal` ~620 gzip bytes each.
+        entry: { report: 'src/report.ts' },
+    },
 ]);

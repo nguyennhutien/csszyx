@@ -147,15 +147,31 @@ export const COMPUTED = {
  *   reported by `csszyx check` under the `sz-diagnostic` group; that is
  *   implied, not written as `check`.
  * @property {{ group: string }} [check] - A non-engine `csszyx check` pass reports it as a kind of this group.
- * @property {{ production: boolean | string[] }} [runtime] - Printed to the
+ * @property {{ production: boolean | string[], host: Host, console?: 'error' }} [runtime] - Printed to the
  *   console: by the runtime, dynamic or compiler browser entries, or by a Node
  *   build/CLI. `production` is true when it prints in a production browser
  *   build, or the forms that do when only some of them do; it is always false
- *   for a Node-only line.
- * @property {{ classes?: string[], production?: boolean }} [error] - Thrown.
+ *   for a Node-only line. `console: 'error'` when the line prints through
+ *   `console.error`; absent, it prints through `console.warn`.
+ * @property {{ classes?: string[], production?: boolean, host: Host }} [error] - Thrown.
  *   `classes` names the csszyx error classes that carry it today; a bare
  *   `Error`/`TypeError` is not listed. `production: false` marks a throw that
  *   only a development build reaches; absent, a production build throws it too.
+ */
+
+/**
+ * Where a console line prints or an error is thrown, required on `runtime` and
+ * `error`: `browser` when every site sits in a file a browser bundle can hold
+ * (the runtime, dynamic and vars packages, the umbrella's browser entries,
+ * and the compiler files its browser subpaths reach — see
+ * `scripts/diagnostics/browser-sources.mjs`), `node` when none does, `both`
+ * otherwise. The generator checks it against `sources`: the places the
+ * sources run in must equal the places the surfaces declare, an engine or
+ * check id counting as Node. It decides where the words ship: the browser
+ * module carries every console or thrown id, the Node registry only the ids
+ * Node renders (engine, check, and a `node` or `both` host).
+ *
+ * @typedef {'browser' | 'node' | 'both'} Host
  */
 
 /**
@@ -257,7 +273,13 @@ export const DIAGNOSTICS = [
     {
         id: 'unknown-key',
         summary: 'A key no sz table knows, likely a typo.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: {
+            engine: {},
+            runtime: {
+                production: false,
+                host: 'browser',
+            },
+        },
         position: 'site',
         args: { key: STRING, suggestion: OPTIONAL_STRING },
         text: '`{key}` is not an sz property.',
@@ -268,7 +290,7 @@ export const DIAGNOSTICS = [
     {
         id: 'canonical-key',
         summary: 'An alias of a key, with the canonical spelling to write.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING },
         text: '`{key}` is an alias of `{canonical}`, and nothing is emitted for it.',
@@ -278,7 +300,7 @@ export const DIAGNOSTICS = [
     {
         id: 'removed-key',
         summary: 'A key that was removed or replaced, with what to write instead.',
-        surfaces: { engine: {}, runtime: { production: true } },
+        surfaces: { engine: {}, runtime: { production: true, host: 'browser' } },
         position: 'site',
         forms: ['runtime-alias', 'sugar-replaced', 'sugar', 'removed', 'replaced'],
         args: {
@@ -318,7 +340,7 @@ export const DIAGNOSTICS = [
     {
         id: 'numeric-key',
         summary: 'A numeric key, the mark of an array or spread passed as an sz object.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING },
         text: '`sz` received a numeric key `{key}`, and its value is ignored.',
@@ -331,7 +353,7 @@ export const DIAGNOSTICS = [
         // The sibling-group form prints in production: the runtime reported
         // `{ contain: 'size', containPaint: true }` as global-before-group,
         // which does, and moving it here must not make a production page quiet.
-        surfaces: { engine: {}, runtime: { production: ['sibling-group'] } },
+        surfaces: { engine: {}, runtime: { production: ['sibling-group'], host: 'browser' } },
         position: 'site',
         forms: ['sibling-group', 'dead', 'css-value', 'font-style', 'font-smoothing'],
         args: {
@@ -384,7 +406,7 @@ export const DIAGNOSTICS = [
         id: 'slash-opacity-string',
         summary:
             'A colour key given its opacity in a string, which emits nothing; the object form takes it.',
-        surfaces: { engine: {}, runtime: { production: true } },
+        surfaces: { engine: {}, runtime: { production: true, host: 'browser' } },
         position: 'site',
         // The value as written is `{color}/{opacity}`, split on its first `/`.
         args: { key: STRING, color: STRING, opacity: STRING },
@@ -395,7 +417,7 @@ export const DIAGNOSTICS = [
     {
         id: 'off-scale-value',
         summary: "A spacing value off Tailwind's quarter-step scale.",
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING, value: STRING },
         text: "`{key}: {value}` is not on Tailwind's spacing scale, so the class generates no CSS.",
@@ -405,7 +427,7 @@ export const DIAGNOSTICS = [
     {
         id: 'numeric-font-weight',
         summary: 'A font weight written as a numeric string.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { value: STRING },
         text: "`weight: '{value}'` is a numeric string, so `font-{value}` generates no CSS.",
@@ -415,7 +437,7 @@ export const DIAGNOSTICS = [
     {
         id: 'per-side-border-style',
         summary: 'A border style on one side, which Tailwind cannot express.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING, value: STRING },
         text: "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
@@ -425,7 +447,7 @@ export const DIAGNOSTICS = [
     {
         id: 'property-object',
         summary: 'An object on a key that names a property, not a variant.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING, nestedKeys: { type: 'string[]', joiner: ', ' } },
         text: '`{key}` is a property, and its object `{ {nestedKeys} }` emits `{key}:*` classes that match no Tailwind variant and generate no CSS.',
@@ -435,7 +457,7 @@ export const DIAGNOSTICS = [
     {
         id: 'non-variant-object',
         summary: 'An object on a csszyx-owned key that is not a variant.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING },
         text: '`{key}` is not a variant, so its object emits `{key}:` classes that generate no CSS.',
@@ -445,7 +467,7 @@ export const DIAGNOSTICS = [
     {
         id: 'unknown-field',
         summary: 'A field a structured value (a mask layer) does not take.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         // `allowed` travels: the mask member tables are not shared data, and
         // picking one means parsing `owner`.
@@ -575,7 +597,7 @@ export const DIAGNOSTICS = [
     {
         id: 'moved-value',
         summary: 'A value that moved to another key, with the key to write.',
-        surfaces: { engine: {}, runtime: { production: true } },
+        surfaces: { engine: {}, runtime: { production: true, host: 'browser' } },
         position: 'site',
         forms: ['value', 'mask-layer'],
         args: {
@@ -601,7 +623,7 @@ export const DIAGNOSTICS = [
     {
         id: 'global-before-group',
         summary: 'A stand-alone keyword written before a group key that replaces it.',
-        surfaces: { engine: {}, runtime: { production: true } },
+        surfaces: { engine: {}, runtime: { production: true, host: 'browser' } },
         position: 'site',
         args: { global: STRING, value: STRING, group: STRING },
         text: '`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.',
@@ -713,8 +735,8 @@ export const DIAGNOSTICS = [
         summary: 'A file the parser rejected, which contributes no classes.',
         surfaces: {
             engine: {},
-            runtime: { production: false },
-            error: { classes: ['ExplainParseError'] },
+            runtime: { production: false, host: 'node' },
+            error: { host: 'node', classes: ['ExplainParseError'] },
         },
         position: 'site',
         forms: ['syntax', 'summary', 'panicked', 'expression', 'prescan'],
@@ -778,7 +800,7 @@ export const DIAGNOSTICS = [
     {
         id: 'ast-budget',
         summary: 'A file over the AST budget, left unchanged.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'node' } },
         // No `defaults` on purpose: a file over the budget contributes no class
         // to the safelist, so its styles are missing — an error, as in 0.17.2
         // and by ADR 0011's litmus.
@@ -828,7 +850,7 @@ export const DIAGNOSTICS = [
     {
         id: 'color-slash-opacity',
         summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
-        surfaces: { engine: {}, runtime: { production: false } },
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         // The class still applies an opacity either way: a note on the
         // spelling, raised to warn under atomic (user decision 2026-10-18).
         defaults: { recommended: 'info', atomic: 'warn' },
@@ -865,7 +887,7 @@ export const DIAGNOSTICS = [
     {
         id: 'unsigned-value',
         summary: 'A negative value on a key Tailwind serves no negative utility for.',
-        surfaces: { check: { group: 'dead-class' }, runtime: { production: false } },
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { className: STRING },
         sources: [`${CHECK}:594`, 'packages/unplugin/src/dead-class.ts:298'],
@@ -873,7 +895,7 @@ export const DIAGNOSTICS = [
     {
         id: 'dead-class',
         summary: "An emitted class this project's Tailwind generates no CSS for.",
-        surfaces: { check: { group: 'dead-class' }, runtime: { production: false } },
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { className: STRING },
         sources: [`${CHECK}:661`, 'packages/unplugin/src/dead-class.ts:275'],
@@ -881,7 +903,7 @@ export const DIAGNOSTICS = [
     {
         id: 'prefix-disagreement',
         summary: 'Tailwind entries in one project that set different prefixes.',
-        surfaces: { check: { group: 'dead-class' }, error: {} },
+        surfaces: { check: { group: 'dead-class' }, error: { host: 'node' } },
         position: 'none',
         args: {
             entries: { type: 'string[]', joiner: ', ' },
@@ -910,7 +932,10 @@ export const DIAGNOSTICS = [
     {
         id: 'broken-opacity',
         summary: 'An opacity modifier on a colour whose theme value color-mix() cannot dim.',
-        surfaces: { check: { group: 'broken-opacity' }, runtime: { production: false } },
+        surfaces: {
+            check: { group: 'broken-opacity' },
+            runtime: { production: false, host: 'browser' },
+        },
         position: 'site',
         args: { className: STRING, value: STRING },
         gaps: ['engine'],
@@ -921,7 +946,10 @@ export const DIAGNOSTICS = [
     {
         id: 'theme-collision',
         summary: 'A theme token whose name a built-in utility also uses.',
-        surfaces: { check: { group: 'theme-collision' }, runtime: { production: false } },
+        surfaces: {
+            check: { group: 'theme-collision' },
+            runtime: { production: false, host: 'browser' },
+        },
         position: 'site',
         // One form per surface: check names the built-in classes, the runtime
         // names the kind of built-in the token shadows.
@@ -946,7 +974,10 @@ export const DIAGNOSTICS = [
     {
         id: 'merge-covered-key',
         summary: 'An sz key the build removed because a later key in the same object covers it.',
-        surfaces: { check: { group: 'merge-covered-key' }, runtime: { production: false } },
+        surfaces: {
+            check: { group: 'merge-covered-key' },
+            runtime: { production: false, host: 'node' },
+        },
         // What the build merged away: an audit, never a problem.
         defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
@@ -961,7 +992,10 @@ export const DIAGNOSTICS = [
         id: 'merge-covered-class',
         summary:
             'A className class the build removed because an sz class on the element covers it.',
-        surfaces: { check: { group: 'merge-covered-class' }, runtime: { production: false } },
+        surfaces: {
+            check: { group: 'merge-covered-class' },
+            runtime: { production: false, host: 'node' },
+        },
         // What the build merged away: an audit, never a problem.
         defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
@@ -977,7 +1011,10 @@ export const DIAGNOSTICS = [
     {
         id: 'recovery-manifest-unreadable',
         summary: 'A recovery manifest that is not valid JSON or not in the recovery format.',
-        surfaces: { runtime: { production: true }, error: {} },
+        surfaces: {
+            runtime: { production: true, host: 'browser', console: 'error' },
+            error: { host: 'node' },
+        },
         position: 'none',
         forms: ['json', 'format'],
         // `error` is the parser's own message, on the json form only.
@@ -997,7 +1034,7 @@ export const DIAGNOSTICS = [
         id: 'mangle-map-unreadable',
         summary:
             'A mangle map on the page that is not a plain map of class names, so it is ignored.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser', console: 'error' } },
         position: 'none',
         forms: ['schema', 'json'],
         // `error` is the parser's own message, on the json form only.
@@ -1013,7 +1050,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-census-unreadable',
         summary: 'A mangle census on the page that is not a valid map, so nothing was verified.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'The mangle census on this page is not a valid map, so nothing was verified.',
@@ -1023,7 +1060,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-checksum-mismatch',
         summary: 'A mangle map whose hash differs from the checksum it was built with.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: { computed: STRING, expected: STRING },
         text: 'The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.',
@@ -1034,7 +1071,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-map-unavailable',
         summary: 'A page with a mangle checksum but no census or map to recompute it from.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: { checksum: STRING },
         text: 'This page carries the checksum `{checksum}` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.',
@@ -1044,7 +1081,7 @@ export const DIAGNOSTICS = [
     {
         id: 'web-crypto-unavailable',
         summary: 'A page without Web Crypto, so the mangle checksum cannot be recomputed.',
-        surfaces: { runtime: { production: true }, error: {} },
+        surfaces: { runtime: { production: true, host: 'browser' }, error: { host: 'browser' } },
         position: 'none',
         args: {},
         text: 'Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.',
@@ -1055,7 +1092,7 @@ export const DIAGNOSTICS = [
     {
         id: 'hydration-aborted',
         summary: 'A hydration check that threw on an element and stopped.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser', console: 'error' } },
         position: 'none',
         // One form per `HydrationErrorType`. csszyx itself reports only
         // checksum-mismatch; the other two reach here from a caller of the
@@ -1092,7 +1129,7 @@ export const DIAGNOSTICS = [
     {
         id: 'csr-recovery-unmarked',
         summary: 'A hydration mismatch on an element without an szRecover directive.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.',
@@ -1104,7 +1141,7 @@ export const DIAGNOSTICS = [
         summary:
             'An szRecover="dev-only" element in a production build, where its recovery is off.',
         // The stripped form is the build's own line, in Node.
-        surfaces: { runtime: { production: ['runtime'] } },
+        surfaces: { runtime: { production: ['runtime'], host: 'both' } },
         position: 'none',
         forms: ['runtime', 'stripped'],
         args: {
@@ -1129,7 +1166,7 @@ export const DIAGNOSTICS = [
     {
         id: 'csr-recovery-used',
         summary: 'A hydration mismatch the runtime recovered by rendering on the client.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'A hydration mismatch on this element was recovered by rendering it on the client.',
@@ -1139,7 +1176,7 @@ export const DIAGNOSTICS = [
     {
         id: 'merge-table-format-skew',
         summary: 'A merge table in a format this runtime does not read, so szcn merges nothing.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         // `expected` travels: the page has no version, so it could only name
         // the latest release's format.
@@ -1151,7 +1188,7 @@ export const DIAGNOSTICS = [
     {
         id: 'merge-table-missing',
         summary: 'A run with no merge table, so szcn removes only exact repeats.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
@@ -1162,7 +1199,7 @@ export const DIAGNOSTICS = [
     {
         id: 'uncompiled-sz',
         summary: 'A raw sz object that reached the runtime because its file was not compiled.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.',
@@ -1173,7 +1210,7 @@ export const DIAGNOSTICS = [
     {
         id: 'register-szcn-groups-ignored',
         summary: 'A registerSzcnGroups call, which no longer changes what szcn merges.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.',
@@ -1184,7 +1221,7 @@ export const DIAGNOSTICS = [
     {
         id: 'theme-token-ambiguous',
         summary: 'A theme token defined under two namespaces that share one class prefix.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         forms: ['color-text-size', 'font-family-weight'],
         args: { form: formArg(['color-text-size', 'font-family-weight']), name: STRING },
@@ -1201,7 +1238,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-selector-invalid',
         summary: 'A has/pick/omit selector that can never match a token.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         forms: ['array', 'empty', 'multi', 'property', 'sz-qualified'],
         args: {
@@ -1242,7 +1279,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-unknown-category',
         summary: 'A selector name that is no category or class prefix csszyx knows.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         forms: ['no-hint', 'hint', 'property-hint'],
         args: {
@@ -1263,7 +1300,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-placement-variant',
         summary: 'A splitBox placement written with a variant or marker, which never matches.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         // `base` is `selector` without its variant prefix and its `!` or `-`.
         args: { selector: STRING, side: { type: ['enum', 'inner', 'outer'] }, base: STRING },
@@ -1274,7 +1311,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-peer-on-frame',
         summary: 'A peer class splitBox kept on the frame although its base belongs inside.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         // `base` is the token's utility; `reaching` is the token rewritten to
         // reach the content from the frame, `[&>*]:` before its base.
@@ -1286,7 +1323,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-unclassified',
         summary: 'A class or raw CSS splitBox cannot classify, placed on the fallback node.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         forms: ['class', 'raw-css'],
         args: {
@@ -1312,7 +1349,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-unbounded-scroll',
         summary: 'A scrolling content node whose height nothing bounds, so it grows instead.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { scroller: STRING },
         text: '`splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.',
@@ -1322,7 +1359,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-unclipped-corners',
         summary: 'A rounded frame that does not clip its scrolling content.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.',
@@ -1332,7 +1369,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-hidden-content',
         summary: 'A hiding class placed on the content node, which leaves the frame visible.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { hidden: STRING },
         text: '`splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.',
@@ -1342,7 +1379,7 @@ export const DIAGNOSTICS = [
     {
         id: 'szv-config-invalid',
         summary: 'A part of an szv config that does not have the shape szv reads.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         forms: ['config', 'base', 'variants', 'default-variants', 'dimension', 'variant-value'],
         args: {
@@ -1393,7 +1430,10 @@ export const DIAGNOSTICS = [
     {
         id: 'sz-object-depth',
         summary: 'An sz object at runtime nested deeper than the depth limit.',
-        surfaces: { runtime: { production: false }, error: { classes: ['SzDepthError'] } },
+        surfaces: {
+            runtime: { production: false, host: 'browser' },
+            error: { host: 'browser', classes: ['SzDepthError'] },
+        },
         position: 'none',
         forms: ['value', 'szv-config'],
         args: { form: formArg(['value', 'szv-config']), maxDepth: NUMBER, where: OPTIONAL_STRING },
@@ -1425,7 +1465,7 @@ export const DIAGNOSTICS = [
     {
         id: 'szv-forbidden-key',
         summary: 'A key in an szv config that csszyx never reads, such as __proto__.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { where: STRING, key: STRING },
         text: '`{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.',
@@ -1435,7 +1475,7 @@ export const DIAGNOSTICS = [
     {
         id: 'szv-unknown-variant',
         summary: 'A selection that names a variant the szv config does not declare.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { key: STRING },
         text: 'The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.',
@@ -1445,7 +1485,7 @@ export const DIAGNOSTICS = [
     {
         id: 'szv-unknown-variant-value',
         summary: 'A selection that gives a variant a value it has no styles for.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { key: STRING, value: STRING, allowed: { type: 'string[]', joiner: ', ' } },
         text: 'The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.',
@@ -1455,7 +1495,7 @@ export const DIAGNOSTICS = [
     {
         id: 'szv-object-as-string',
         summary: 'An sz object from szv() used as a class string, which renders "[object Object]".',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.',
@@ -1467,7 +1507,7 @@ export const DIAGNOSTICS = [
         id: 'dynamic-injection-growth',
         summary:
             'A session in which dynamic() has injected so many classes the CSSOM keeps growing.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         // `count` is the threshold the session crossed.
         args: { count: NUMBER },
@@ -1478,7 +1518,7 @@ export const DIAGNOSTICS = [
     {
         id: 'dynamic-unsafe-arbitrary',
         summary: 'An arbitrary value dynamic() dropped because it could inject CSS.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: { utility: STRING },
         text: 'The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.',
@@ -1489,7 +1529,7 @@ export const DIAGNOSTICS = [
     {
         id: 'dynamic-non-boolean',
         summary: 'A runtime value that is not a boolean on a key only a boolean can toggle.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, and only a boolean toggles this class, so it is omitted.',
@@ -1499,7 +1539,7 @@ export const DIAGNOSTICS = [
     {
         id: 'dynamic-unresolvable',
         summary: 'A runtime value of a type no CSS value can be resolved from.',
-        surfaces: { runtime: { production: true } },
+        surfaces: { runtime: { production: true, host: 'browser' } },
         position: 'none',
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, which cannot be resolved to CSS, so the property is omitted.',
@@ -1510,7 +1550,7 @@ export const DIAGNOSTICS = [
         id: 'dev-warnings-partial',
         summary:
             'A development warning with no source location; csszyx check names the file and key.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'browser' } },
         position: 'none',
         args: {},
         text: 'The `sz` key warning above has no source location, so it does not name the file that triggered it.',
@@ -1520,7 +1560,7 @@ export const DIAGNOSTICS = [
     {
         id: 'diagnostics-capped',
         summary: 'More findings of one kind than a run lists; the rest are counted, not printed.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'both' } },
         position: 'none',
         forms: ['per-id', 'dev-warnings', 'unknown-keys'],
         args: {
@@ -1553,7 +1593,10 @@ export const DIAGNOSTICS = [
     {
         id: 'sz-attribute-syntax',
         summary: 'An sz attribute string that does not parse.',
-        surfaces: { runtime: { production: true }, error: {} },
+        surfaces: {
+            runtime: { production: true, host: 'browser', console: 'error' },
+            error: { host: 'browser' },
+        },
         position: 'site',
         // `index` is where in `input` the parser met `char`.
         args: { input: STRING, char: STRING, index: NUMBER },
@@ -1569,7 +1612,7 @@ export const DIAGNOSTICS = [
     {
         id: 'options-object-required',
         summary: 'An options argument that is not the one object the call takes.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'both' } },
         position: 'none',
         forms: ['transform', 'csszyx-turbopack'],
         args: { form: formArg(['transform', 'csszyx-turbopack']) },
@@ -1590,7 +1633,7 @@ export const DIAGNOSTICS = [
     {
         id: 'lowering-not-loaded',
         summary: 'An sz object passed to a string helper before the lowering module is loaded.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'browser' } },
         position: 'none',
         args: {},
         text: 'A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.',
@@ -1600,7 +1643,7 @@ export const DIAGNOSTICS = [
     {
         id: 'lite-sz-object',
         summary: 'An sz object passed to a lite-runtime helper, which cannot lower objects.',
-        surfaces: { error: { production: false } },
+        surfaces: { error: { host: 'browser', production: false } },
         position: 'none',
         args: { fnName: STRING, received: STRING },
         text: '`{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.',
@@ -1611,7 +1654,7 @@ export const DIAGNOSTICS = [
     {
         id: 'split-box-sz-string',
         summary: 'A class string passed to splitBoxSz, which takes sz objects.',
-        surfaces: { error: { production: false } },
+        surfaces: { error: { host: 'browser', production: false } },
         position: 'none',
         args: { value: STRING },
         text: '`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.',
@@ -1622,7 +1665,7 @@ export const DIAGNOSTICS = [
     {
         id: 'runtime-prefix-conflict',
         summary: 'Two builds sharing one runtime that registered different Tailwind prefixes.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'browser' } },
         position: 'none',
         forms: ['prefixes', 'unprefixed'],
         args: {
@@ -1643,7 +1686,7 @@ export const DIAGNOSTICS = [
     {
         id: 'dynamic-manifest-unreachable',
         summary: 'A dynamic manifest the browser could not fetch.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'browser' } },
         position: 'none',
         args: { status: NUMBER },
         text: 'The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.',
@@ -1655,8 +1698,11 @@ export const DIAGNOSTICS = [
         id: 'native-engine-unavailable',
         summary: 'A native engine that is missing, cannot load, or predates this compiler.',
         surfaces: {
-            runtime: { production: false },
-            error: { classes: ['CsszyxNativeUnavailableError', 'RustTransformUnavailableError'] },
+            runtime: { production: false, host: 'node' },
+            error: {
+                host: 'node',
+                classes: ['CsszyxNativeUnavailableError', 'RustTransformUnavailableError'],
+            },
         },
         position: 'none',
         forms: [
@@ -1694,7 +1740,7 @@ export const DIAGNOSTICS = [
     {
         id: 'wasm-engine-unavailable',
         summary: 'A wasm engine that failed to load.',
-        surfaces: { error: { classes: ['WasmTransformUnavailableError'] } },
+        surfaces: { error: { host: 'node', classes: ['WasmTransformUnavailableError'] } },
         position: 'none',
         args: { detail: OPAQUE },
         sources: [
@@ -1705,7 +1751,7 @@ export const DIAGNOSTICS = [
     {
         id: 'native-migrate-unavailable',
         summary: 'A native engine csszyx migrate needs and cannot load; migrate has no wasm lane.',
-        surfaces: { error: { classes: ['RustMigrateUnavailableError'] } },
+        surfaces: { error: { host: 'node', classes: ['RustMigrateUnavailableError'] } },
         position: 'none',
         args: { detail: OPAQUE },
         sources: [
@@ -1716,7 +1762,7 @@ export const DIAGNOSTICS = [
     {
         id: 'engine-version-skew',
         summary: 'An engine built from other source than the compiler that loads it.',
-        surfaces: { error: { classes: ['EngineVersionSkewError'] } },
+        surfaces: { error: { host: 'node', classes: ['EngineVersionSkewError'] } },
         position: 'none',
         args: {
             artifact: { type: ['enum', 'native', 'wasm'] },
@@ -1734,7 +1780,7 @@ export const DIAGNOSTICS = [
     {
         id: 'runtime-version-skew',
         summary: 'A @csszyx/runtime at another version than the plugin that lowers for it.',
-        surfaces: { error: { classes: ['RuntimeVersionSkewError'] } },
+        surfaces: { error: { host: 'node', classes: ['RuntimeVersionSkewError'] } },
         position: 'none',
         args: { pluginVersion: STRING, runtimeVersion: STRING, runtimeDir: STRING },
         sources: [
@@ -1745,7 +1791,7 @@ export const DIAGNOSTICS = [
     {
         id: 'peer-module-unresolved',
         summary: 'A peer package csszyx needs that does not resolve from the project.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { requiredBy: STRING, request: STRING, install: STRING },
         sources: ['packages/compiler/src/peer-module.ts:46'],
@@ -1753,7 +1799,7 @@ export const DIAGNOSTICS = [
     {
         id: 'tailwind-v3-unavailable',
         summary: 'A project where generate-types finds no loadable Tailwind CSS v3.',
-        surfaces: { error: { classes: ['TailwindUnavailableError'] } },
+        surfaces: { error: { host: 'node', classes: ['TailwindUnavailableError'] } },
         position: 'none',
         forms: ['absent', 'wrong-major', 'broken-entry'],
         args: {
@@ -1773,7 +1819,7 @@ export const DIAGNOSTICS = [
     {
         id: 'explain-input-invalid',
         summary: 'An input to csszyx explain that is not one sz expression the build lowers.',
-        surfaces: { error: { classes: ['ExplainParseError'] } },
+        surfaces: { error: { host: 'node', classes: ['ExplainParseError'] } },
         position: 'none',
         forms: ['not-one-expression', 'runtime-only'],
         args: {
@@ -1790,7 +1836,7 @@ export const DIAGNOSTICS = [
         id: 'template-sz-invalid',
         summary:
             'A Vue or Svelte file whose template sz has errors, each reported with its own code.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: { count: NUMBER },
         sources: ['packages/svelte-adapter/src/index.ts:102', `${UNPLUGIN}:6882`],
@@ -1798,7 +1844,7 @@ export const DIAGNOSTICS = [
     {
         id: 'template-runtime-value',
         summary: 'A template sz value only known at runtime, which a template cannot resolve.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'site',
         args: {},
         sources: ['packages/compiler/src/template-sz.ts:239'],
@@ -1806,7 +1852,7 @@ export const DIAGNOSTICS = [
     {
         id: 'template-unparsable',
         summary: 'A Vue or Svelte file its own compiler cannot parse, so no sz in it gets a class.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'site',
         forms: ['vue', 'svelte-quoted', 'svelte-preprocess'],
         args: {
@@ -1821,7 +1867,7 @@ export const DIAGNOSTICS = [
     {
         id: 'template-lang-unsupported',
         summary: 'A Vue template in a language other than HTML, which csszyx does not read.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'site',
         args: { lang: STRING },
         sources: ['packages/vue-adapter/src/template-ast.ts:130'],
@@ -1829,7 +1875,7 @@ export const DIAGNOSTICS = [
     {
         id: 'svelte-version-unsupported',
         summary: 'An installed Svelte older than 5, whose markup csszyx does not read.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'site',
         args: { version: STRING },
         sources: ['packages/svelte-adapter/src/markup-ast.ts:77'],
@@ -1838,7 +1884,7 @@ export const DIAGNOSTICS = [
         id: 'ignore-package-incompatible',
         summary:
             'An installed `ignore` package that no longer reads .gitignore the way csszyx needs.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: {},
         sources: ['packages/tailwind-oracle/src/project-walk.ts:193'],
@@ -1847,7 +1893,10 @@ export const DIAGNOSTICS = [
         id: 'internal-error',
         summary: 'A state csszyx should never reach: a csszyx bug to report.',
         surfaces: {
-            error: { classes: ['RustTransformUnavailableError', 'WasmTransformUnavailableError'] },
+            error: {
+                host: 'node',
+                classes: ['RustTransformUnavailableError', 'WasmTransformUnavailableError'],
+            },
         },
         position: 'none',
         args: { where: STRING },
@@ -1868,7 +1917,7 @@ export const DIAGNOSTICS = [
     {
         id: 'engine-call-failed',
         summary: 'A call into the engine that threw.',
-        surfaces: { runtime: { production: false }, error: {} },
+        surfaces: { runtime: { production: false, host: 'node' }, error: { host: 'node' } },
         position: 'none',
         forms: ['call', 'prescan'],
         args: { form: formArg(['call', 'prescan']), detail: OPAQUE },
@@ -1883,7 +1932,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-invalid',
         summary: 'A csszyx.config with problems, each reported with its own code.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         forms: ['partly-applied', 'not-applied'],
         args: { form: formArg(['partly-applied', 'not-applied']), count: NUMBER },
@@ -1904,7 +1953,7 @@ export const DIAGNOSTICS = [
     {
         id: 'unknown-rule-id',
         summary: 'A rule id no diagnostic, kind or group has, likely a typo.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         forms: ['config', 'cli'],
         args: {
@@ -1917,7 +1966,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-id-not-settable',
         summary: 'A rule id for a runtime line or a throw, whose level csszyx.config cannot set.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { id: STRING },
         text: '`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.',
@@ -1927,7 +1976,7 @@ export const DIAGNOSTICS = [
     {
         id: 'removed-rule-id',
         summary: 'A rule id csszyx no longer reports, with the id that replaced it.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         forms: ['replaced', 'removed'],
         args: { form: formArg(['replaced', 'removed']), id: STRING, replacedBy: OPTIONAL_STRING },
@@ -1941,7 +1990,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-level-invalid',
         summary: 'A rule set to something other than off, info, warn or error.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { id: STRING, level: STRING },
         sources: [`${POLICY}:405`],
@@ -1949,7 +1998,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-preset-unknown',
         summary: 'A diagnostics preset other than recommended or atomic.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { preset: STRING },
         sources: [`${POLICY}:669`],
@@ -1957,7 +2006,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-field-unknown',
         summary: 'A field csszyx.config does not read.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         forms: ['top-level', 'misspelt', 'plugin-option', 'diagnostics', 'allow'],
         args: {
@@ -1976,7 +2025,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-field-invalid',
         summary: 'A csszyx.config field whose value does not have the shape it takes.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: {
             field: STRING,
@@ -2006,7 +2055,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-glob-unmatchable',
         summary: 'An override glob that is absolute or steps out of the root, so it never matches.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { glob: STRING },
         sources: [`${POLICY}:509`],
@@ -2014,7 +2063,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-file-duplicate',
         summary: 'A second csszyx.config file beside the one csszyx reads.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { read: STRING },
         sources: [`${CONFIG_FILE}:573`],
@@ -2022,7 +2071,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-unloadable',
         summary: 'A csszyx.config that could not be loaded, so the default levels apply.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         forms: ['load', 'legacy-template', 'worker'],
         args: {
@@ -2040,7 +2089,7 @@ export const DIAGNOSTICS = [
     {
         id: 'config-no-default-export',
         summary: 'A csszyx.config with no default export.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: {},
         sources: [`${CONFIG_FILE}:603`],
@@ -2048,7 +2097,7 @@ export const DIAGNOSTICS = [
     {
         id: 'policy-state-format-skew',
         summary: 'A saved diagnostic policy in a format this version does not read.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { format: NUMBER },
         sources: [`${CONFIG_FILE}:85`],
@@ -2056,7 +2105,7 @@ export const DIAGNOSTICS = [
     {
         id: 'safelist-shard-format-skew',
         summary: 'A Next safelist shard in a format this version does not read.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { format: NUMBER },
         sources: ['packages/unplugin/src/next-safelist-state.ts:55'],
@@ -2064,7 +2113,7 @@ export const DIAGNOSTICS = [
     {
         id: 'diagnostics-held',
         summary: 'Findings at info a production build counted instead of listing.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: { count: NUMBER },
         text: 'This build held back {count} finding(s) at `info` and listed none of them.',
@@ -2075,7 +2124,7 @@ export const DIAGNOSTICS = [
     {
         id: 'merge-covered-held',
         summary: 'Classes a build removed by merging, counted instead of listed.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: {
             classes: NUMBER,
@@ -2088,7 +2137,7 @@ export const DIAGNOSTICS = [
     {
         id: 'removed-option',
         summary: 'A plugin option that was removed and is no longer read.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         forms: ['inject-checksum', 'mangle-map-delivery'],
         args: { form: formArg(['inject-checksum', 'mangle-map-delivery']) },
@@ -2102,7 +2151,7 @@ export const DIAGNOSTICS = [
     {
         id: 'transform-cache-disabled',
         summary: 'A build without its transform cache, because package versions did not resolve.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: {},
         sources: [`${UNPLUGIN}:3236`],
@@ -2110,7 +2159,7 @@ export const DIAGNOSTICS = [
     {
         id: 'active-parser',
         summary: 'The parser a build runs, and whether it fell back from the native engine.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         forms: ['native', 'wasm', 'degraded'],
         args: { form: formArg(['native', 'wasm', 'degraded']) },
@@ -2119,7 +2168,7 @@ export const DIAGNOSTICS = [
     {
         id: 'project-reload',
         summary: 'A project-wide input that changed, so a dev server recompiled every module.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         forms: ['config', 'merge-groups', 'prefix'],
         args: {
@@ -2132,7 +2181,7 @@ export const DIAGNOSTICS = [
     {
         id: 'watch-prefix-changed',
         summary: 'A Tailwind prefix that changed during a watch build, which needs a restart.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: {
             changed: { type: 'string[]', joiner: ', ' },
@@ -2144,7 +2193,7 @@ export const DIAGNOSTICS = [
     {
         id: 'safelist-unwritable',
         summary: 'A generated safelist csszyx could not write, so Tailwind misses its classes.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'file',
         args: { reason: OPAQUE },
         sources: [`${UNPLUGIN}:4722`],
@@ -2152,7 +2201,7 @@ export const DIAGNOSTICS = [
     {
         id: 'utility-collision',
         summary: 'An @utility whose name another utility also claims, so Tailwind merges both.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: { name: STRING, reason: STRING },
         sources: [`${UNPLUGIN}:2298`],
@@ -2160,7 +2209,7 @@ export const DIAGNOSTICS = [
     {
         id: 'theme-scan-without-typescript',
         summary: 'Theme auto-scan turned on in a project without TypeScript configured.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: {},
         sources: [`${UNPLUGIN}:2341`],
@@ -2168,7 +2217,7 @@ export const DIAGNOSTICS = [
     {
         id: 'esbuild-mangle-unsupported',
         summary: 'production.mangle on the esbuild adapter, which turns mangling off.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: {},
         sources: [`${UNPLUGIN}:8569`],
@@ -2176,7 +2225,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-selector-unparsable',
         summary: 'A CSS selector the class mangler could not parse, left unmangled.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: { selector: STRING, error: OPAQUE },
         sources: ['packages/unplugin/src/css-mangler.ts:330'],
@@ -2184,7 +2233,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-preserve-invalid',
         summary: 'A production.manglePreserve entry that is not a class name or a prefix.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         forms: ['entry', 'lone-star'],
         args: {
@@ -2200,7 +2249,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-global-vars-options-invalid',
         summary: 'production.mangleGlobalVars options csszyx cannot apply.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         forms: ['schema', 'tokens-required', 'auto-prefix'],
         args: {
@@ -2212,7 +2261,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-global-vars-plan-invalid',
         summary: 'A global-variable alias plan that renames a variable unsafely.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { findings: { type: 'string[]', joiner: '\n', opaque: true } },
         sources: [`${UNPLUGIN}:1841`],
@@ -2220,7 +2269,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-map-too-large',
         summary: 'A CSS variable mangle map larger than its safety cap.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { size: NUMBER, maxBytes: NUMBER },
         sources: [`${UNPLUGIN}:2066`],
@@ -2228,7 +2277,7 @@ export const DIAGNOSTICS = [
     {
         id: 'mangle-census-late',
         summary: 'Classes that appeared after the mangle map was frozen.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         forms: ['classes', 'census-changed'],
         args: {
@@ -2241,7 +2290,7 @@ export const DIAGNOSTICS = [
     {
         id: 'merge-hook-late',
         summary: 'A rule selecting on a class the build had already merged away.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: { className: STRING },
         sources: [`${UNPLUGIN}:5737`],
@@ -2249,7 +2298,7 @@ export const DIAGNOSTICS = [
     {
         id: 'tailwind-stylesheet-missing',
         summary: 'A configured Tailwind stylesheet that does not exist.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { setting: STRING, missing: { type: 'string[]', joiner: ', ' }, root: STRING },
         sources: ['packages/unplugin/src/next-stylesheet-facts.ts:347', `${UNPLUGIN}:5586`],
@@ -2257,7 +2306,7 @@ export const DIAGNOSTICS = [
     {
         id: 'tailwind-stylesheet-broken',
         summary: 'A stylesheet reaching Tailwind that does not compile, so the prefix is unknown.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { stylesheets: { type: 'string[]', joiner: '\n' }, setting: STRING },
         sources: [`${UNPLUGIN}:5604`, 'packages/unplugin/src/next-stylesheet-facts.ts:376'],
@@ -2265,7 +2314,7 @@ export const DIAGNOSTICS = [
     {
         id: 'tailwind-config-missing',
         summary: 'A Tailwind config path that does not exist.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: {},
         sources: ['packages/cli/src/scanner/tailwind-scanner.ts:108'],
@@ -2273,7 +2322,7 @@ export const DIAGNOSTICS = [
     {
         id: 'tailwind-config-unloadable',
         summary: 'A Tailwind config that threw while loading.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: { reason: OPAQUE },
         sources: ['packages/cli/src/scanner/tailwind-scanner.ts:121'],
@@ -2281,7 +2330,7 @@ export const DIAGNOSTICS = [
     {
         id: 'legacy-source-directive',
         summary: 'An @source line naming the old safelist file, which csszyx no longer writes.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: { target: STRING },
         sources: [
@@ -2294,7 +2343,7 @@ export const DIAGNOSTICS = [
         id: 'postcss-plugin-order',
         summary:
             'The csszyx PostCSS plugin listed after Tailwind, which then never reads the safelist.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: {},
         sources: ['packages/unplugin/src/postcss.ts:110'],
@@ -2302,7 +2351,7 @@ export const DIAGNOSTICS = [
     {
         id: 'ignore-pattern-negated',
         summary: 'A negated pattern in an ignore list, which can only add paths.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { pattern: STRING },
         sources: ['packages/unplugin/src/root-ignore-matcher.ts:63'],
@@ -2310,7 +2359,7 @@ export const DIAGNOSTICS = [
     {
         id: 'css-source-unstable',
         summary: 'A CSS source that kept changing while csszyx read it.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: {},
         sources: ['packages/unplugin/src/stable-file-snapshot.ts:61'],
@@ -2318,7 +2367,7 @@ export const DIAGNOSTICS = [
     {
         id: 'rsc-boundary-violation',
         summary: 'A client-only csszyx export imported into a Server Component.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: { symbol: STRING, chain: { type: 'string[]', joiner: ' -> ' } },
         sources: [
@@ -2329,7 +2378,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-prefix-unread',
         summary: 'A Next lane that runs before the Tailwind prefix was read.',
-        surfaces: { error: { classes: ['NextStylesheetFactsPending'] } },
+        surfaces: { error: { host: 'node', classes: ['NextStylesheetFactsPending'] } },
         position: 'none',
         args: {
             lane: { type: ['enum', 'prebuild', 'turbopack-loader'] },
@@ -2345,7 +2394,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-safelist-locked',
         summary: 'A Next safelist state another live process holds the lock on.',
-        surfaces: { error: { classes: ['NextSafelistStateLockedError'] } },
+        surfaces: { error: { host: 'node', classes: ['NextSafelistStateLockedError'] } },
         position: 'none',
         args: { pid: NUMBER, root: STRING, mode: STRING, host: STRING, updatedAt: STRING },
         sources: [
@@ -2357,7 +2406,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-generation-manifest-invalid',
         summary: 'A Next generation manifest that does not have the shape csszyx writes.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         forms: ['read', 'written'],
         args: { form: formArg(['read', 'written']), reason: OPTIONAL_STRING },
@@ -2369,7 +2418,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-mangle-vars-unsupported',
         summary: 'production.mangleVars on a Next lane that cannot mangle CSS variables.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         forms: ['prebuild', 'turbopack'],
         args: { form: formArg(['prebuild', 'turbopack']) },
@@ -2382,7 +2431,7 @@ export const DIAGNOSTICS = [
         id: 'next-turbo-cache-unseeded',
         summary:
             'A Turbopack production build whose safelist was not seeded by csszyx next prebuild.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: { root: STRING, reason: STRING },
         sources: ['packages/unplugin/src/next-turbo-loader.ts:563'],
@@ -2390,7 +2439,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-sz-untransformed',
         summary: 'A Next module that still holds sz syntax after the csszyx transform.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'file',
         args: {},
         sources: ['packages/unplugin/src/next-source-transformer.ts:126'],
@@ -2398,7 +2447,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-watcher-not-started',
         summary: 'A Next safelist watcher whose first cycle did not complete.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         args: {},
         sources: ['packages/unplugin/src/next-watcher.ts:142'],
@@ -2406,7 +2455,7 @@ export const DIAGNOSTICS = [
     {
         id: 'next-watcher-unclosed',
         summary: 'A Next safelist watcher that threw while closing.',
-        surfaces: { runtime: { production: false } },
+        surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
         args: { detail: OPAQUE },
         sources: ['packages/cli/src/commands/next-watch.ts:546'],
@@ -2414,7 +2463,7 @@ export const DIAGNOSTICS = [
     {
         id: 'no-source-files',
         summary: 'A source pattern that matched no file under the root.',
-        surfaces: { runtime: { production: false }, error: {} },
+        surfaces: { runtime: { production: false, host: 'node' }, error: { host: 'node' } },
         position: 'none',
         args: { pattern: STRING, root: STRING },
         sources: [
@@ -2425,7 +2474,7 @@ export const DIAGNOSTICS = [
     {
         id: 'cli-option-invalid',
         summary: 'A CLI option value outside the values the command takes.',
-        surfaces: { error: {} },
+        surfaces: { error: { host: 'node' } },
         position: 'none',
         forms: ['mode', 'parser-mode', 'debounce-ms'],
         args: { form: formArg(['mode', 'parser-mode', 'debounce-ms']), value: OPTIONAL_STRING },

@@ -4,53 +4,41 @@
  * imports of every browser-facing source, through the compiler subpaths it
  * imports, and fail when one reaches the registry.
  */
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import {
+    browserRoots,
+    compilerBrowserSubpaths,
     compilerEntry,
     compilerSrc,
-    packages,
     reachable,
     valueImports,
 } from './helpers/value-import-graph.js';
 
 const REGISTRY = path.join(compilerSrc, 'diagnostic-registry.generated.ts');
 
-/** Packages whose every source can land in a browser bundle. */
-const BROWSER_PACKAGES = ['runtime', 'dynamic', 'vars'];
-/** The browser entries of the umbrella package; its other entries are Node. */
-const UMBRELLA_BROWSER_ENTRIES = ['index.browser.ts', 'browser.ts'];
-
-/**
- * The source files of a package, tests and type tests left out.
- *
- * @param dir - The package's `src`.
- * @returns The files.
- */
-function sources(dir: string): string[] {
-    return readdirSync(dir, { recursive: true, encoding: 'utf8' })
-        .filter(name => name.endsWith('.ts') && !/\.(?:type-)?test\.ts$/.test(name))
-        .map(name => path.join(dir, name));
-}
-
-/**
- * Every source a browser bundle can start from.
- *
- * @returns The files.
- */
-const browserRoots = (): string[] => [
-    ...BROWSER_PACKAGES.flatMap(pkg => sources(path.join(packages, pkg, 'src'))),
-    ...UMBRELLA_BROWSER_ENTRIES.map(name => path.join(packages, 'csszyx/src', name)),
-];
-
 describe('the diagnostic registry stays out of browser bundles', () => {
     it('is reached from no browser source, through any compiler subpath it imports', () => {
         const reached = reachable(browserRoots());
         expect(reached).toContain(path.join(compilerSrc, 'transform-core.ts'));
+        expect(reached).not.toContain(REGISTRY);
+    });
+
+    it('is reached from no compiler browser entry, the development reporter included', () => {
+        const subpaths = compilerBrowserSubpaths();
+        expect(subpaths).toContain('./browser');
+        expect(subpaths).toContain('./report');
+        const reached = reachable(
+            subpaths.map(subpath => compilerEntry(`@csszyx/compiler${subpath.slice(1)}`)),
+        );
+        // The reporter's templates and the helpers that fill them are reached,
+        // so the walk followed the path a development warning prints on.
+        expect(reached).toContain(path.join(compilerSrc, 'diagnostic-browser.generated.ts'));
+        expect(reached).toContain(path.join(compilerSrc, 'diagnostic-computed.ts'));
         expect(reached).not.toContain(REGISTRY);
     });
 

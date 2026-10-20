@@ -18,78 +18,11 @@ import { renderSzDiagnostic, renderSzDiagnosticParts } from '../src/diagnostic-r
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
 import { fillSzDiagnosticTemplate } from '../src/diagnostic-template.js';
 import { SZ_EDITOR_DIAGNOSTIC_TEMPLATES } from '../src/editor-diagnostic-templates.generated.js';
+import { argSets } from './helpers/diagnostic-arg-samples.js';
 import {
     legacyFillSzDiagnosticTemplate,
     legacyRenderSzDiagnostic,
 } from './helpers/legacy-diagnostic-template.js';
-
-/** Text values: real keys the computed values look up, and hostile text. */
-const STRINGS = [
-    'workBreak',
-    '{key}',
-    '$&',
-    '$1$2$$',
-    '',
-    'é😀\uDC00',
-    '`tick`',
-    'fontStyle',
-    'sz-variant-key',
-    'a.b',
-];
-const NUMBERS = [0, 7, 64];
-const LISTS: string[][] = [[], ['a'], ['{x}', '$&', 'b`c']];
-
-/**
- * The value of one arg in the k-th sample.
- *
- * @param type - The arg's declared type.
- * @param k - The sample index.
- * @returns A value of that type.
- */
-function sampleOf(type: SzDiagnosticSpec['args'][string]['type'], k: number): unknown {
-    if (Array.isArray(type)) return type[1 + (k % (type.length - 1))];
-    if (type === 'number') return NUMBERS[k % NUMBERS.length];
-    if (type === 'string[]') return LISTS[k % LISTS.length];
-    return STRINGS[k % STRINGS.length];
-}
-
-/**
- * The k-th sample of every arg of an entry, and the same without its optional
- * args.
- *
- * @param spec - The entry.
- * @param k - The sample index.
- * @returns Both arg sets.
- */
-function samplePair(spec: SzDiagnosticSpec, k: number): Array<Record<string, unknown>> {
-    const args: Record<string, unknown> = {};
-    const required: Record<string, unknown> = {};
-    for (const [name, arg] of Object.entries(spec.args)) {
-        args[name] = sampleOf(arg.type, k + name.length);
-        if (!arg.optional) required[name] = args[name];
-    }
-    return [args, required];
-}
-
-/**
- * Arg sets for one entry: for each value of the arg its sentence varies by
- * (or one pass when none), several samples, each also without its optional args.
- *
- * @param spec - The entry.
- * @returns The arg sets.
- */
-function argSets(spec: SzDiagnosticSpec): Array<Record<string, unknown>> {
-    const by = spec.variesBy ?? 'form';
-    const byType = spec.args[by]?.type;
-    const variants = Array.isArray(byType) ? byType.slice(1) : [undefined];
-    return variants.flatMap(variant =>
-        STRINGS.flatMap((_, k) =>
-            samplePair(spec, k).map(args =>
-                variant === undefined ? args : { ...args, [by]: variant },
-            ),
-        ),
-    );
-}
 
 /**
  * What a call returns, or the error it throws: a computed value fed a
@@ -151,6 +84,18 @@ describe('the diagnostic renderer against the filler it replaced', () => {
 
     it('lays out every whole message as before, placed and unplaced', () => {
         for (const spec of SZ_DIAGNOSTIC_REGISTRY) {
+            // An id with no words here is worded by another renderer, or not
+            // yet; this one refuses it rather than print an empty line.
+            if (spec.text === undefined && spec.help === undefined && spec.note === undefined) {
+                expect(() =>
+                    renderSzDiagnostic({
+                        diagnostic: { code: spec.id as never, args: {} },
+                        file: '',
+                        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+                    }),
+                ).toThrow(`no words for \`${spec.id}\``);
+                continue;
+            }
             for (const args of argSets(spec)) {
                 for (const place of [{}, { line: 3, column: 9 }]) {
                     for (const file of ['', 'src/a.tsx']) {

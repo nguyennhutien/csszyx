@@ -37,7 +37,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -60,7 +61,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -78,7 +80,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -129,7 +132,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -147,7 +151,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": ["sibling-group"]
+          "production": ["sibling-group"],
+          "host": "browser"
         }
       },
       "position": "site",
@@ -213,7 +218,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -237,7 +243,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -258,7 +265,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -276,7 +284,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -297,7 +306,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -319,7 +329,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -337,7 +348,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -521,7 +533,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -556,7 +569,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -746,9 +760,11 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         },
         "error": {
+          "host": "node",
           "classes": ["ExplainParseError"]
         }
       },
@@ -831,7 +847,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -894,7 +911,8 @@
       "surfaces": {
         "engine": {},
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "defaults": {
@@ -946,7 +964,8 @@
           "group": "dead-class"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -964,7 +983,8 @@
           "group": "dead-class"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -981,7 +1001,9 @@
         "check": {
           "group": "dead-class"
         },
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -1032,7 +1054,8 @@
           "group": "broken-opacity"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -1056,7 +1079,8 @@
           "group": "theme-collision"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "site",
@@ -1090,7 +1114,8 @@
           "group": "merge-covered-key"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "defaults": {
@@ -1115,7 +1140,8 @@
           "group": "merge-covered-class"
         },
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "defaults": {
@@ -1134,9 +1160,13 @@
       "summary": "A recovery manifest that is not valid JSON or not in the recovery format.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser",
+          "console": "error"
         },
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["json", "format"],
@@ -1167,7 +1197,9 @@
       "summary": "A mangle map on the page that is not a plain map of class names, so it is ignored.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser",
+          "console": "error"
         }
       },
       "position": "none",
@@ -1196,7 +1228,8 @@
       "summary": "A mangle census on the page that is not a valid map, so nothing was verified.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1209,7 +1242,8 @@
       "summary": "A mangle map whose hash differs from the checksum it was built with.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1230,7 +1264,8 @@
       "summary": "A page with a mangle checksum but no census or map to recompute it from.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1247,9 +1282,12 @@
       "summary": "A page without Web Crypto, so the mangle checksum cannot be recomputed.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         },
-        "error": {}
+        "error": {
+          "host": "browser"
+        }
       },
       "position": "none",
       "args": {},
@@ -1262,7 +1300,9 @@
       "summary": "A hydration check that threw on an element and stopped.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser",
+          "console": "error"
         }
       },
       "position": "none",
@@ -1301,7 +1341,8 @@
       "summary": "A hydration mismatch on an element without an szRecover directive.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1314,7 +1355,8 @@
       "summary": "An szRecover=\"dev-only\" element in a production build, where its recovery is off.",
       "surfaces": {
         "runtime": {
-          "production": ["runtime"]
+          "production": ["runtime"],
+          "host": "both"
         }
       },
       "position": "none",
@@ -1350,7 +1392,8 @@
       "summary": "A hydration mismatch the runtime recovered by rendering on the client.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1363,7 +1406,8 @@
       "summary": "A merge table in a format this runtime does not read, so szcn merges nothing.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1383,7 +1427,8 @@
       "summary": "A run with no merge table, so szcn removes only exact repeats.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1397,7 +1442,8 @@
       "summary": "A raw sz object that reached the runtime because its file was not compiled.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1411,7 +1457,8 @@
       "summary": "A registerSzcnGroups call, which no longer changes what szcn merges.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1425,7 +1472,8 @@
       "summary": "A theme token defined under two namespaces that share one class prefix.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1450,7 +1498,8 @@
       "summary": "A has/pick/omit selector that can never match a token.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1509,7 +1558,8 @@
       "summary": "A selector name that is no category or class prefix csszyx knows.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1538,7 +1588,8 @@
       "summary": "A splitBox placement written with a variant or marker, which never matches.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1561,7 +1612,8 @@
       "summary": "A peer class splitBox kept on the frame although its base belongs inside.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1584,7 +1636,8 @@
       "summary": "A class or raw CSS splitBox cannot classify, placed on the fallback node.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1618,7 +1671,8 @@
       "summary": "A scrolling content node whose height nothing bounds, so it grows instead.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1635,7 +1689,8 @@
       "summary": "A rounded frame that does not clip its scrolling content.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1648,7 +1703,8 @@
       "summary": "A hiding class placed on the content node, which leaves the frame visible.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1665,7 +1721,8 @@
       "summary": "A part of an szv config that does not have the shape szv reads.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1723,9 +1780,11 @@
       "summary": "An sz object at runtime nested deeper than the depth limit.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         },
         "error": {
+          "host": "browser",
           "classes": ["SzDepthError"]
         }
       },
@@ -1757,7 +1816,8 @@
       "summary": "A key in an szv config that csszyx never reads, such as __proto__.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1777,7 +1837,8 @@
       "summary": "A selection that names a variant the szv config does not declare.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1794,7 +1855,8 @@
       "summary": "A selection that gives a variant a value it has no styles for.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1818,7 +1880,8 @@
       "summary": "An sz object from szv() used as a class string, which renders \"[object Object]\".",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1832,7 +1895,8 @@
       "summary": "A session in which dynamic() has injected so many classes the CSSOM keeps growing.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1849,7 +1913,8 @@
       "summary": "An arbitrary value dynamic() dropped because it could inject CSS.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1867,7 +1932,8 @@
       "summary": "A runtime value that is not a boolean on a key only a boolean can toggle.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1887,7 +1953,8 @@
       "summary": "A runtime value of a type no CSS value can be resolved from.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1907,7 +1974,8 @@
       "summary": "A development warning with no source location; csszyx check names the file and key.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "browser"
         }
       },
       "position": "none",
@@ -1920,7 +1988,8 @@
       "summary": "More findings of one kind than a run lists; the rest are counted, not printed.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "both"
         }
       },
       "position": "none",
@@ -1953,9 +2022,13 @@
       "summary": "An sz attribute string that does not parse.",
       "surfaces": {
         "runtime": {
-          "production": true
+          "production": true,
+          "host": "browser",
+          "console": "error"
         },
-        "error": {}
+        "error": {
+          "host": "browser"
+        }
       },
       "position": "site",
       "args": {
@@ -1976,7 +2049,9 @@
       "id": "options-object-required",
       "summary": "An options argument that is not the one object the call takes.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "both"
+        }
       },
       "position": "none",
       "forms": ["transform", "csszyx-turbopack"],
@@ -1998,7 +2073,9 @@
       "id": "lowering-not-loaded",
       "summary": "An sz object passed to a string helper before the lowering module is loaded.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "browser"
+        }
       },
       "position": "none",
       "args": {},
@@ -2010,6 +2087,7 @@
       "summary": "An sz object passed to a lite-runtime helper, which cannot lower objects.",
       "surfaces": {
         "error": {
+          "host": "browser",
           "production": false
         }
       },
@@ -2031,6 +2109,7 @@
       "summary": "A class string passed to splitBoxSz, which takes sz objects.",
       "surfaces": {
         "error": {
+          "host": "browser",
           "production": false
         }
       },
@@ -2048,7 +2127,9 @@
       "id": "runtime-prefix-conflict",
       "summary": "Two builds sharing one runtime that registered different Tailwind prefixes.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "browser"
+        }
       },
       "position": "none",
       "forms": ["prefixes", "unprefixed"],
@@ -2074,7 +2155,9 @@
       "id": "dynamic-manifest-unreachable",
       "summary": "A dynamic manifest the browser could not fetch.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "browser"
+        }
       },
       "position": "none",
       "args": {
@@ -2091,9 +2174,11 @@
       "summary": "A native engine that is missing, cannot load, or predates this compiler.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         },
         "error": {
+          "host": "node",
           "classes": [
             "CsszyxNativeUnavailableError",
             "RustTransformUnavailableError"
@@ -2139,6 +2224,7 @@
       "summary": "A wasm engine that failed to load.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["WasmTransformUnavailableError"]
         }
       },
@@ -2155,6 +2241,7 @@
       "summary": "A native engine csszyx migrate needs and cannot load; migrate has no wasm lane.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["RustMigrateUnavailableError"]
         }
       },
@@ -2171,6 +2258,7 @@
       "summary": "An engine built from other source than the compiler that loads it.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["EngineVersionSkewError"]
         }
       },
@@ -2204,6 +2292,7 @@
       "summary": "A @csszyx/runtime at another version than the plugin that lowers for it.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["RuntimeVersionSkewError"]
         }
       },
@@ -2224,7 +2313,9 @@
       "id": "peer-module-unresolved",
       "summary": "A peer package csszyx needs that does not resolve from the project.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -2244,6 +2335,7 @@
       "summary": "A project where generate-types finds no loadable Tailwind CSS v3.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["TailwindUnavailableError"]
         }
       },
@@ -2269,6 +2361,7 @@
       "summary": "An input to csszyx explain that is not one sz expression the build lowers.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["ExplainParseError"]
         }
       },
@@ -2290,7 +2383,9 @@
       "id": "template-sz-invalid",
       "summary": "A Vue or Svelte file whose template sz has errors, each reported with its own code.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {
@@ -2303,7 +2398,9 @@
       "id": "template-runtime-value",
       "summary": "A template sz value only known at runtime, which a template cannot resolve.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "site",
       "args": {}
@@ -2312,7 +2409,9 @@
       "id": "template-unparsable",
       "summary": "A Vue or Svelte file its own compiler cannot parse, so no sz in it gets a class.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "site",
       "forms": ["vue", "svelte-quoted", "svelte-preprocess"],
@@ -2330,7 +2429,9 @@
       "id": "template-lang-unsupported",
       "summary": "A Vue template in a language other than HTML, which csszyx does not read.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "site",
       "args": {
@@ -2343,7 +2444,9 @@
       "id": "svelte-version-unsupported",
       "summary": "An installed Svelte older than 5, whose markup csszyx does not read.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "site",
       "args": {
@@ -2356,7 +2459,9 @@
       "id": "ignore-package-incompatible",
       "summary": "An installed `ignore` package that no longer reads .gitignore the way csszyx needs.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {}
@@ -2366,6 +2471,7 @@
       "summary": "A state csszyx should never reach: a csszyx bug to report.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": [
             "RustTransformUnavailableError",
             "WasmTransformUnavailableError"
@@ -2384,9 +2490,12 @@
       "summary": "A call into the engine that threw.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         },
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["call", "prescan"],
@@ -2405,7 +2514,8 @@
       "summary": "A csszyx.config with problems, each reported with its own code.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2429,7 +2539,8 @@
       "summary": "A rule id no diagnostic, kind or group has, likely a typo.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2453,7 +2564,8 @@
       "summary": "A rule id for a runtime line or a throw, whose level csszyx.config cannot set.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2470,7 +2582,8 @@
       "summary": "A rule id csszyx no longer reports, with the id that replaced it.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2498,7 +2611,8 @@
       "summary": "A rule set to something other than off, info, warn or error.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2516,7 +2630,8 @@
       "summary": "A diagnostics preset other than recommended or atomic.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2531,7 +2646,8 @@
       "summary": "A field csszyx.config does not read.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2567,7 +2683,8 @@
       "summary": "A csszyx.config field whose value does not have the shape it takes.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2593,7 +2710,8 @@
       "summary": "An override glob that is absolute or steps out of the root, so it never matches.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2608,7 +2726,8 @@
       "summary": "A second csszyx.config file beside the one csszyx reads.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2623,7 +2742,8 @@
       "summary": "A csszyx.config that could not be loaded, so the default levels apply.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2647,7 +2767,8 @@
       "summary": "A csszyx.config with no default export.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2658,7 +2779,8 @@
       "summary": "A saved diagnostic policy in a format this version does not read.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2673,7 +2795,8 @@
       "summary": "A Next safelist shard in a format this version does not read.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2688,7 +2811,8 @@
       "summary": "Findings at info a production build counted instead of listing.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2706,7 +2830,8 @@
       "summary": "Classes a build removed by merging, counted instead of listed.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2731,7 +2856,8 @@
       "summary": "A plugin option that was removed and is no longer read.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2747,7 +2873,8 @@
       "summary": "A build without its transform cache, because package versions did not resolve.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2758,7 +2885,8 @@
       "summary": "The parser a build runs, and whether it fell back from the native engine.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2774,7 +2902,8 @@
       "summary": "A project-wide input that changed, so a dev server recompiled every module.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2797,7 +2926,9 @@
       "id": "watch-prefix-changed",
       "summary": "A Tailwind prefix that changed during a watch build, which needs a restart.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -2820,7 +2951,8 @@
       "summary": "A generated safelist csszyx could not write, so Tailwind misses its classes.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "file",
@@ -2836,7 +2968,8 @@
       "summary": "An @utility whose name another utility also claims, so Tailwind merges both.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2854,7 +2987,8 @@
       "summary": "Theme auto-scan turned on in a project without TypeScript configured.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2865,7 +2999,8 @@
       "summary": "production.mangle on the esbuild adapter, which turns mangling off.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2876,7 +3011,8 @@
       "summary": "A CSS selector the class mangler could not parse, left unmangled.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -2894,7 +3030,9 @@
       "id": "mangle-preserve-invalid",
       "summary": "A production.manglePreserve entry that is not a class name or a prefix.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["entry", "lone-star"],
@@ -2916,7 +3054,9 @@
       "id": "mangle-global-vars-options-invalid",
       "summary": "production.mangleGlobalVars options csszyx cannot apply.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["schema", "tokens-required", "auto-prefix"],
@@ -2935,7 +3075,9 @@
       "id": "mangle-global-vars-plan-invalid",
       "summary": "A global-variable alias plan that renames a variable unsafely.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -2950,7 +3092,9 @@
       "id": "mangle-map-too-large",
       "summary": "A CSS variable mangle map larger than its safety cap.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -2966,7 +3110,9 @@
       "id": "mangle-census-late",
       "summary": "Classes that appeared after the mangle map was frozen.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["classes", "census-changed"],
@@ -2990,7 +3136,9 @@
       "id": "merge-hook-late",
       "summary": "A rule selecting on a class the build had already merged away.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {
@@ -3003,7 +3151,9 @@
       "id": "tailwind-stylesheet-missing",
       "summary": "A configured Tailwind stylesheet that does not exist.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -3023,7 +3173,9 @@
       "id": "tailwind-stylesheet-broken",
       "summary": "A stylesheet reaching Tailwind that does not compile, so the prefix is unknown.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -3040,7 +3192,9 @@
       "id": "tailwind-config-missing",
       "summary": "A Tailwind config path that does not exist.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {}
@@ -3049,7 +3203,9 @@
       "id": "tailwind-config-unloadable",
       "summary": "A Tailwind config that threw while loading.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {
@@ -3063,7 +3219,9 @@
       "id": "legacy-source-directive",
       "summary": "An @source line naming the old safelist file, which csszyx no longer writes.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {
@@ -3076,7 +3234,9 @@
       "id": "postcss-plugin-order",
       "summary": "The csszyx PostCSS plugin listed after Tailwind, which then never reads the safelist.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {}
@@ -3085,7 +3245,9 @@
       "id": "ignore-pattern-negated",
       "summary": "A negated pattern in an ignore list, which can only add paths.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -3098,7 +3260,9 @@
       "id": "css-source-unstable",
       "summary": "A CSS source that kept changing while csszyx read it.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {}
@@ -3107,7 +3271,9 @@
       "id": "rsc-boundary-violation",
       "summary": "A client-only csszyx export imported into a Server Component.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {
@@ -3125,6 +3291,7 @@
       "summary": "A Next lane that runs before the Tailwind prefix was read.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["NextStylesheetFactsPending"]
         }
       },
@@ -3146,6 +3313,7 @@
       "summary": "A Next safelist state another live process holds the lock on.",
       "surfaces": {
         "error": {
+          "host": "node",
           "classes": ["NextSafelistStateLockedError"]
         }
       },
@@ -3172,7 +3340,9 @@
       "id": "next-generation-manifest-invalid",
       "summary": "A Next generation manifest that does not have the shape csszyx writes.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["read", "written"],
@@ -3190,7 +3360,9 @@
       "id": "next-mangle-vars-unsupported",
       "summary": "production.mangleVars on a Next lane that cannot mangle CSS variables.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "forms": ["prebuild", "turbopack"],
@@ -3204,7 +3376,9 @@
       "id": "next-turbo-cache-unseeded",
       "summary": "A Turbopack production build whose safelist was not seeded by csszyx next prebuild.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -3220,7 +3394,9 @@
       "id": "next-sz-untransformed",
       "summary": "A Next module that still holds sz syntax after the csszyx transform.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "file",
       "args": {}
@@ -3229,7 +3405,9 @@
       "id": "next-watcher-not-started",
       "summary": "A Next safelist watcher whose first cycle did not complete.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {}
@@ -3239,7 +3417,8 @@
       "summary": "A Next safelist watcher that threw while closing.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         }
       },
       "position": "none",
@@ -3255,9 +3434,12 @@
       "summary": "A source pattern that matched no file under the root.",
       "surfaces": {
         "runtime": {
-          "production": false
+          "production": false,
+          "host": "node"
         },
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "args": {
@@ -3273,7 +3455,9 @@
       "id": "cli-option-invalid",
       "summary": "A CLI option value outside the values the command takes.",
       "surfaces": {
-        "error": {}
+        "error": {
+          "host": "node"
+        }
       },
       "position": "none",
       "forms": ["mode", "parser-mode", "debounce-ms"],

@@ -6,6 +6,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
+import * as sizeGate from './check-package-size.mjs';
 import {
     appBundle,
     checkBudgets,
@@ -389,11 +390,18 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ]),
         [['file', 'packages/vscode/dist/extension.js']],
     );
-    // The compiler leaves out only its build-time code, `.`, `./engine`,
-    // `./internal` and `./migrate`; everything else it exports ships to the
-    // browser, `./browser` first.
+    // The compiler leaves out its build-time code, `.`, `./engine`,
+    // `./internal` and `./migrate`, and the development reporter `./report`,
+    // which the template leak gate prices through its consumers; everything
+    // else it exports ships to the browser, `./browser` first.
     const compiler = SIZE_BUDGETS.find(budget => budget.target === 'packages/compiler');
-    assert.deepEqual(compiler?.excludeSubpaths, ['.', './engine', './internal', './migrate']);
+    assert.deepEqual(compiler?.excludeSubpaths, [
+        '.',
+        './engine',
+        './internal',
+        './migrate',
+        './report',
+    ]);
     assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
     // The two entries the build tools import are priced by what Node loads.
@@ -839,4 +847,146 @@ test('an entry whose bundle lays modules out against its order fails in both lan
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
+});
+
+/** A diagnostic as the generator's browser list carries it. */
+const LEAK_DIAGNOSTIC = {
+    id: 'gone-key',
+    text: 'The `{key}` marker sentence that a production build drops entirely.',
+    help: 'write `{key}`; short.',
+};
+
+/** A package that reports `gone-key` from a development branch, through a
+ * csszyx sibling it bundles. With `leak` it also uses the template outside
+ * any branch, as a site that forgot its check would.
+ * @param {boolean} leak whether production code reads the template
+ * @returns {Record<string, string>} fixture file map
+ */
+function reportingPackage(leak) {
+    const lib = 'packages/thing/node_modules/@csszyx/lib';
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: { '.': { import: { default: './dist/index.mjs' } } },
+        }),
+        'packages/thing/dist/index.mjs':
+            "import { GONE_KEY, szReport } from '@csszyx/lib/report';\n" +
+            'export function check(key) {\n' +
+            "    if (process.env.NODE_ENV !== 'production') szReport({ diagnostic: GONE_KEY, args: { key } });\n" +
+            "    else console.warn('[csszyx] gone-key: ' + JSON.stringify({ key }));\n" +
+            (leak ? '    return GONE_KEY.text;\n' : '') +
+            '}\n',
+        [`${lib}/package.json`]: JSON.stringify({
+            name: '@csszyx/lib',
+            sideEffects: false,
+            exports: { './report': './report.mjs' },
+        }),
+        [`${lib}/report.mjs`]:
+            `export const GONE_KEY = ${JSON.stringify(LEAK_DIAGNOSTIC)};\n` +
+            'export function szReport({ diagnostic, args }) {\n' +
+            '    console.warn(diagnostic.text.replace("{key}", args.key));\n' +
+            '}\n',
+    };
+}
+
+/** The leak gate's options for {@link reportingPackage}.
+ * @returns {object} the options
+ */
+function leakOptions() {
+    return {
+        diagnostics: [LEAK_DIAGNOSTIC],
+        control: {
+            resolveDir: 'packages/thing',
+            id: 'gone-key',
+            contents:
+                "import { GONE_KEY, szReport } from '@csszyx/lib/report';\n" +
+                "if (process.env.NODE_ENV !== 'production') szReport({ diagnostic: GONE_KEY, args: { key: 'x' } });\n",
+        },
+    };
+}
+
+test('a template counts as shipped when a bundle holds it whole as a string literal', () => {
+    const texts = sizeGate.templateTexts?.([
+        LEAK_DIAGNOSTIC,
+        { id: 'formed', text: { a: 'A one.', b: 'A two.' }, note: { b: 'a note.' } },
+        { id: 'unworded' },
+    ]);
+    assert.deepEqual(texts, [
+        { id: 'gone-key', text: LEAK_DIAGNOSTIC.text },
+        { id: 'gone-key', text: LEAK_DIAGNOSTIC.help },
+        { id: 'formed', text: 'A one.' },
+        { id: 'formed', text: 'A two.' },
+        { id: 'formed', text: 'a note.' },
+    ]);
+    // Whichever quotes and escapes a minifier picks, the literal reads as the
+    // template; prose that only shares its words is not one.
+    for (const code of [
+        `x=${JSON.stringify(LEAK_DIAGNOSTIC.text)}`,
+        "x='The `{key}` marker sentence that a production build drops entirely.'",
+        'x=`The \\`{key}\\` marker sentence that a production build drops entirely.`',
+        'x={t:"The \\u0060{key}\\u0060 marker sentence that a production build drops entirely."}',
+    ]) {
+        assert.deepEqual(sizeGate.templateLeaks?.(code, texts), [texts[0]], code);
+    }
+    assert.deepEqual(
+        sizeGate.templateLeaks?.(
+            'x="[csszyx] The `dispaly` marker sentence that a production build drops entirely."',
+            texts,
+        ),
+        [],
+    );
+});
+
+test('production carries no template, and a development build of a site carries it', async () => {
+    const clean = makeFixture(reportingPackage(false));
+    const leaky = makeFixture(reportingPackage(true));
+    try {
+        assert.deepEqual(
+            (await sizeGate.checkTemplateLeaks(appBudget('thing'), clean, leakOptions())).failures,
+            [],
+        );
+        const leaked = await sizeGate.checkTemplateLeaks(appBudget('thing'), leaky, leakOptions());
+        // The object ships whole, so both its templates do, in each bundler.
+        assert.deepEqual(
+            leaked.failures.map(failure => /^[^:]*/.exec(failure)[0]),
+            ['thing app', 'thing app', 'thing app (Vite)', 'thing app (Vite)'],
+        );
+        assert.match(
+            leaked.failures[0],
+            /^thing app: the production bundle carries the development text "The `\{key\}` marker sentence that a production build drops entirely\." of `gone-key`/,
+        );
+        assert.match(leaked.failures[1], /"write `\{key\}`; short\." of `gone-key`/);
+        assert.match(leaked.failures[2], /^thing app \(Vite\): the production bundle carries/);
+        // The control is what proves the check can see a template at all: a
+        // site whose development branch bundles nothing fails it, in each bundler.
+        const blind = leakOptions();
+        blind.control.contents = "import { GONE_KEY } from '@csszyx/lib/report';\n";
+        const blinded = (await sizeGate.checkTemplateLeaks(appBudget('thing'), clean, blind))
+            .failures;
+        assert.equal(blinded.length, 4, blinded.join('\n'));
+        assert.match(
+            blinded[0],
+            /^template leak control: a development build of a site that reports `gone-key` lacks "The `\{key\}` marker sentence/,
+        );
+        assert.match(blinded[2], /^template leak control \(Vite\): a development build/);
+        const none = { ...leakOptions(), diagnostics: [{ id: 'x' }] };
+        assert.match(
+            (await sizeGate.checkTemplateLeaks(appBudget('thing'), clean, none)).failures.join(
+                '\n',
+            ),
+            /no template to look for/,
+        );
+    } finally {
+        rmSync(clean, { recursive: true, force: true });
+        rmSync(leaky, { recursive: true, force: true });
+    }
+});
+
+test('the leak gate reads every worded console or thrown id, and its control is a real site', () => {
+    const texts = sizeGate.templateTexts?.(sizeGate.TEMPLATE_DIAGNOSTICS ?? []) ?? [];
+    assert.ok(texts.length > 150, `${texts.length} templates`);
+    assert.ok(new Set(texts.map(({ id }) => id)).size > 60);
+    assert.equal(sizeGate.TEMPLATE_CONTROL?.id, 'removed-key');
+    assert.match(sizeGate.TEMPLATE_CONTROL.contents, /from '@csszyx\/compiler\/report'/);
+    assert.match(sizeGate.TEMPLATE_CONTROL.contents, /process\.env\.NODE_ENV !== 'production'/);
 });

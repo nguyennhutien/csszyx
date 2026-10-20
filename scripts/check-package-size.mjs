@@ -1,9 +1,14 @@
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 import { buildSync } from 'esbuild';
+
+import ts from 'typescript';
+
+import * as registry from './diagnostics/registry.mjs';
+import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
 
 /**
  * Size gate for the JS that ships to end users. Bytes are the one performance
@@ -172,7 +177,14 @@ export const SIZE_BUDGETS = [
         // the engine; `./internal` is what the adapters, the CLI and the build
         // plugin share). A new export is measured, and needs an entry budget,
         // unless it is added here.
-        excludeSubpaths: ['.', './engine', './internal', './migrate'],
+        //
+        // `./report` ships to the browser but only in development: the
+        // reporter and every template, re-exported whole, which a namespace
+        // import keeps live, so an entry budget would price the full template
+        // set no app ships. It is priced through its consumers instead: a
+        // site imports it from a `NODE_ENV` branch, and `checkTemplateLeaks`
+        // fails any production bundle that keeps a template.
+        excludeSubpaths: ['.', './engine', './internal', './migrate', './report'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so
@@ -594,6 +606,19 @@ export function appBundle(entryPaths, packageDir) {
     return appBuild(entryPaths, packageDir).code;
 }
 
+/** An app entry that imports each entry as a namespace and exports them all,
+ * so nothing a consumer could reach is shaken out.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @returns {string} the entry's source
+ */
+function namespaceEntry(entryPaths) {
+    return entryPaths
+        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
+        .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
+        .join('\n');
+}
+
 /** The esbuild app build behind {@link appBundle}, with the bundle's modules
  * in the order it lays them out (esbuild's metafile lists an output's inputs
  * in that order).
@@ -604,12 +629,8 @@ export function appBundle(entryPaths, packageDir) {
  */
 function appBuild(entryPaths, packageDir) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    const contents = entryPaths
-        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
-        .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
-        .join('\n');
     const result = buildSync({
-        stdin: { contents, resolveDir: packageDir, loader: 'js' },
+        stdin: { contents: namespaceEntry(entryPaths), resolveDir: packageDir, loader: 'js' },
         bundle: true,
         write: false,
         format: 'esm',
@@ -707,22 +728,50 @@ export async function viteAppBundle(entryPaths, packageDir) {
  * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
  */
 async function viteAppBuild(entryPaths, packageDir) {
-    const { build } = await import('vite');
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    const external = ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})];
-    // An app's entry exports nothing, so a namespace has to be used to stay.
-    const contents = entryPaths
+    return viteSiteBuild({
+        contents: globalEntry(entryPaths),
+        root: packageDir,
+        nodeEnv: 'production',
+        external: ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})],
+    });
+}
+
+/** An app entry for Vite: it exports nothing, so each namespace is kept
+ * reachable through a global.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @returns {string} the entry's source
+ */
+function globalEntry(entryPaths) {
+    return entryPaths
         .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
         .concat(`globalThis.__csszyxSizeGate = [${entryPaths.map((_, i) => `e${i}`).join(', ')}];`)
         .join('\n');
+}
+
+/** `vite build` of one entry source with no config of its own, so its
+ * defaults (Rolldown, the Oxc minifier, the default browser target) decide.
+ * A build error rejects.
+ *
+ * @param {object} options what to build
+ * @param {string} options.contents the entry's source
+ * @param {string} options.root absolute directory imports resolve from
+ * @param {'production' | 'development'} options.nodeEnv the `process.env.NODE_ENV` to define
+ * @param {string[]} options.external packages left out, each with its subpaths
+ * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
+ */
+async function viteSiteBuild(options) {
+    const { build } = await import('vite');
+    const { contents, root, nodeEnv, external } = options;
     // One output, so one result: a watcher or a list would fail on `.output`.
     const { output } = await build({
         configFile: false,
-        root: packageDir,
+        root,
         publicDir: false,
         logLevel: 'silent',
-        mode: 'production',
-        define: { 'process.env.NODE_ENV': '"production"' },
+        mode: nodeEnv,
+        define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
         plugins: [
             {
                 name: 'csszyx-size-gate-entry',
@@ -1017,12 +1066,245 @@ export async function checkViteBudgets(budgets, rootDir) {
     return { results, failures };
 }
 
+/** The ids whose templates the leak gate looks for: every id the browser
+ * module carries, read from the registry the generator writes it from. */
+export const TEMPLATE_DIAGNOSTICS = browserDiagnostics(registry);
+
+/** The positive control: a site written the way a browser entry reports a
+ * diagnostic, `szReport` on the development branch of a `NODE_ENV` check. A
+ * development build of it must carry the id's templates, or the production
+ * check could pass for a template that was never bundled at all. */
+export const TEMPLATE_CONTROL = {
+    resolveDir: 'packages/runtime',
+    id: 'removed-key',
+    contents:
+        "import { REMOVED_KEY, szReport } from '@csszyx/compiler/report';\n" +
+        "if (process.env.NODE_ENV !== 'production') {\n" +
+        "    szReport({ diagnostic: REMOVED_KEY, args: { form: 'removed', key: 'fontVariant' } });\n" +
+        '}\n',
+};
+
+/** Every template string the ids carry, each form of each field: what a
+ * bundle holds as a string literal whenever it holds the template.
+ *
+ * @param {Array<{ id: string, text?: unknown, help?: unknown, note?: unknown }>} diagnostics the ids, with their templates
+ * @returns {Array<{ id: string, text: string }>} the templates, in registry order
+ */
+export function templateTexts(diagnostics) {
+    const texts = [];
+    for (const diagnostic of diagnostics) {
+        for (const field of ['text', 'help', 'note']) {
+            const value = diagnostic[field];
+            if (value === undefined) continue;
+            for (const text of typeof value === 'string' ? [value] : Object.values(value)) {
+                texts.push({ id: diagnostic.id, text });
+            }
+        }
+    }
+    return texts;
+}
+
+/** The value of every string literal in a bundle, as parsed: whichever
+ * quotes and escapes a minifier picks, a literal reads as the text it holds.
+ *
+ * @param {string} code a bundle
+ * @returns {Set<string>} the values
+ */
+function stringLiterals(code) {
+    const source = ts.createSourceFile(
+        'bundle.js',
+        code,
+        ts.ScriptTarget.Latest,
+        false,
+        ts.ScriptKind.JS,
+    );
+    const values = new Set();
+    const visit = node => {
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+            values.add(node.text);
+        ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return values;
+}
+
+/** The templates a bundle holds, each as a whole string literal. Prose that
+ * shares words with a template is not one: a template holds its `{name}`
+ * placeholders, or, with none, is the whole sentence as the registry words it.
+ *
+ * @param {string} code a bundle
+ * @param {Array<{ id: string, text: string }>} texts from {@link templateTexts}
+ * @returns {Array<{ id: string, text: string }>} the ones found
+ */
+export function templateLeaks(code, texts) {
+    const literals = stringLiterals(code);
+    return texts.filter(({ text }) => literals.has(text));
+}
+
+/** The peer dependencies an app brings itself, for a package and the csszyx
+ * packages it depends on: a build that bundles the siblings leaves these out.
+ *
+ * @param {string} packageDir absolute package directory
+ * @param {string} rootDir absolute repository root
+ * @returns {string[]} the package names
+ */
+function appPeers(packageDir, rootDir) {
+    const read = dir => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    const manifest = read(packageDir);
+    const peers = new Set(Object.keys(manifest.peerDependencies ?? {}));
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
+        const sibling = path.join(rootDir, 'packages', name.replace(/^@csszyx\//, ''));
+        if (!name.startsWith('@csszyx/') || !existsSync(path.join(sibling, 'package.json'))) {
+            continue;
+        }
+        for (const peer of Object.keys(read(sibling).peerDependencies ?? {})) peers.add(peer);
+    }
+    return [...peers];
+}
+
+/** Bundle a site the way an app ships it, csszyx siblings included, so code
+ * a package imports from another csszyx package is in the bundle.
+ *
+ * @param {object} options what to build
+ * @param {string} options.contents the entry's source
+ * @param {string} options.resolveDir absolute directory imports resolve from
+ * @param {'production' | 'development'} options.nodeEnv the `process.env.NODE_ENV` to define
+ * @param {string[]} options.external packages left out
+ * @returns {string} the minified bundle
+ */
+function siteBundle(options) {
+    const { contents, resolveDir, nodeEnv, external } = options;
+    return buildSync({
+        stdin: { contents, resolveDir, loader: 'js' },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        minify: true,
+        treeShaking: true,
+        external,
+        define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
+        logLevel: 'silent',
+    }).outputFiles[0].text;
+}
+
+/** The two-way template gate (ADR 0031, PR C). Every app bundle, built for
+ * production by esbuild and by Vite ({@link TEMPLATE_LANES}) with the csszyx
+ * packages it imports bundled in, must carry no
+ * template text: a template reaches production only through a call outside a
+ * `NODE_ENV` branch, or a template that is not a plain literal (a bare
+ * `Object.freeze` survives in esbuild, Vite and webpack). And a development
+ * build of {@link TEMPLATE_CONTROL} must carry its id's templates, so "none
+ * found" cannot come from a check that sees nothing.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @param {object} [options] what to look for
+ * @param {Array<{ id: string }>} [options.diagnostics] the ids and their templates
+ * @param {{ resolveDir: string, id: string, contents: string }} [options.control] the positive control
+ * @returns {Promise<{ failures: string[], templates: number, bundles: number }>} failures, and what was checked
+ */
+export async function checkTemplateLeaks(budgets, rootDir, options = {}) {
+    const { diagnostics = TEMPLATE_DIAGNOSTICS, control = TEMPLATE_CONTROL } = options;
+    const texts = templateTexts(diagnostics);
+    const failures = [];
+    if (texts.length === 0) {
+        failures.push('template leak gate: no template to look for, so no bundle can fail');
+        return { failures, templates: 0, bundles: 0 };
+    }
+    let bundles = 0;
+    for (const lane of TEMPLATE_LANES) {
+        for (const budget of budgets.filter(b => b.kind === 'app-bundle')) {
+            const target = path.join(rootDir, budget.target);
+            const name = `${budget.name}${lane.suffix}`;
+            let code;
+            try {
+                const entries = listExportEntries(target, budget.excludeSubpaths);
+                code = await lane.build({
+                    contents: lane.entry(entries),
+                    resolveDir: target,
+                    nodeEnv: 'production',
+                    external: appPeers(target, rootDir),
+                });
+            } catch (error) {
+                failures.push(`${name}: ${error.message} — run \`pnpm build\` first?`);
+                continue;
+            }
+            bundles += 1;
+            for (const { id, text } of templateLeaks(code, texts)) {
+                failures.push(
+                    `${name}: the production bundle carries the development text "${text}" ` +
+                        `of \`${id}\`. Report it with \`szReport\` only inside a ` +
+                        "`process.env.NODE_ENV !== 'production'` branch, and keep the template a plain literal.",
+                );
+            }
+        }
+        failures.push(...(await controlFailures(lane, rootDir, control, texts)));
+    }
+    return { failures, templates: texts.length, bundles };
+}
+
+/** The control's failures in one lane: its development build must carry each
+ * of its id's templates, its production build none.
+ *
+ * @param {(typeof TEMPLATE_LANES)[number]} lane the bundler
+ * @param {string} rootDir absolute repository root
+ * @param {{ resolveDir: string, id: string, contents: string }} control the positive control
+ * @param {Array<{ id: string, text: string }>} texts every template
+ * @returns {Promise<string[]>} failure messages
+ */
+async function controlFailures(lane, rootDir, control, texts) {
+    const label = `template leak control${lane.suffix}`;
+    const dir = path.join(rootDir, control.resolveDir);
+    const build = nodeEnv =>
+        lane.build({
+            contents: control.contents,
+            resolveDir: dir,
+            nodeEnv,
+            external: appPeers(dir, rootDir),
+        });
+    const failures = [];
+    try {
+        const expected = texts.filter(({ id }) => id === control.id);
+        const kept = templateLeaks(await build('development'), expected);
+        for (const { text } of expected.filter(template => !kept.includes(template))) {
+            failures.push(
+                `${label}: a development build of a site that reports \`${control.id}\` ` +
+                    `lacks "${text}", so a production bundle without it proves nothing.`,
+            );
+        }
+        for (const { id, text } of templateLeaks(await build('production'), texts)) {
+            failures.push(`${label}: its production build carries "${text}" of \`${id}\`.`);
+        }
+    } catch (error) {
+        failures.push(`${label}: ${error.message} — run \`pnpm build\` first?`);
+    }
+    return failures;
+}
+
+/** The bundlers the template gate builds with: esbuild, and Vite (Rolldown
+ * and the Oxc minifier), which drop dead branches and unused literals by
+ * different rules. */
+const TEMPLATE_LANES = [
+    { suffix: '', entry: namespaceEntry, build: async options => siteBundle(options) },
+    {
+        suffix: ' (Vite)',
+        entry: globalEntry,
+        build: async ({ contents, resolveDir, nodeEnv, external }) =>
+            (await viteSiteBuild({ contents, root: resolveDir, nodeEnv, external }))
+                .map(chunk => chunk.code)
+                .join('\n'),
+    },
+];
+
 async function main() {
     const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const { results, failures } = checkBudgets(SIZE_BUDGETS, rootDir);
     const vite = await checkViteBudgets(SIZE_BUDGETS, rootDir);
     results.push(...vite.results);
     failures.push(...vite.failures);
+    const leaks = await checkTemplateLeaks(SIZE_BUDGETS, rootDir);
+    failures.push(...leaks.failures);
     for (const result of results) {
         const headroom = result.maxGzipBytes - result.gzipBytes;
         console.log(
@@ -1030,6 +1312,10 @@ async function main() {
                 `(${result.files.length} files, ${headroom >= 0 ? `${headroom} under` : `${-headroom} over`})`,
         );
     }
+    console.log(
+        `Template leak gate: ${leaks.templates} templates looked for in ${leaks.bundles} ` +
+            'production app bundles and the development control.',
+    );
     if (failures.length > 0) {
         throw new Error(`Package size check failed:\n- ${failures.join('\n- ')}`);
     }

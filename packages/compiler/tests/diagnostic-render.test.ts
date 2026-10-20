@@ -14,6 +14,7 @@ import {
     renderSzDiagnosticParts,
 } from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
+import { renderSzDiagnosticBody as renderRootBody } from '../src/diagnostic-render-root.js';
 import {
     diagnosticPath,
     renderEngineDiagnostics,
@@ -25,6 +26,35 @@ import { SZ_FALLBACK_KINDS } from '../src/sz-fallback-matrix.js';
 import { MIGRATION_NOTES } from '../src/transform-core.js';
 
 const computed = SZ_DIAGNOSTIC_COMPUTED_VALUES;
+
+describe('the root renderer', () => {
+    it('words a line only Node prints, which the engine renderer carries no words for', async () => {
+        const root = await import('../src/index.js');
+        const diagnostic = {
+            code: 'config-id-not-settable' as const,
+            args: { id: 'uncompiled-sz' },
+        };
+        expect(root.renderSzDiagnosticParts(diagnostic, computed).text).toBe(
+            '`uncompiled-sz` is printed to the console or thrown, so `csszyx.config` sets no level for it.',
+        );
+        // The engine lane renders engine ids, so it loads none of these words,
+        // and says so rather than print an empty line.
+        expect(() => renderSzDiagnosticParts(diagnostic, computed)).toThrow(
+            'this renderer has no words for `config-id-not-settable`',
+        );
+        // An engine id reads the same either way.
+        const engine = { code: 'canonical-key' as const, args: { key: 'padding' } };
+        expect(root.renderSzDiagnosticParts(engine, computed)).toEqual(
+            renderSzDiagnosticParts(engine, computed),
+        );
+        expect(root.renderSzDiagnostic({ diagnostic, file: 'csszyx.config.ts', computed })).toBe(
+            '[csszyx] config-id-not-settable: csszyx.config.ts\n' +
+                '  `uncompiled-sz` is printed to the console or thrown, so `csszyx.config` sets no level for it.\n' +
+                `  help: ${root.renderSzDiagnosticParts(diagnostic, computed).help}\n` +
+                '  docs: https://csszyx.com/e/config-id-not-settable',
+        );
+    });
+});
 
 describe('renderSzDiagnosticParts', () => {
     it('returns each part bare, for a sink to lay out', () => {
@@ -368,9 +398,9 @@ describe('isSzDiagnosticId', () => {
         expect(isSzDiagnosticId('CSSZYX_NATIVE_UNAVAILABLE')).toBe(false);
     });
 
-    it('renders a template of an id the engine does not report', () => {
+    it('renders a template of an id the engine does not report, through the root', () => {
         expect(
-            renderSzDiagnosticBody(
+            renderRootBody(
                 { code: 'config-id-not-settable', args: { id: 'internal-error' } },
                 SZ_DIAGNOSTIC_COMPUTED_VALUES,
             ),
