@@ -4050,12 +4050,14 @@ function collectUnresolvedDirectProperty(
  */
 function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): void {
     // An alias holding a value that moved: its canonical key no longer
-    // takes the value, so name where the value went instead.
+    // takes the value, so name where the value went instead. The important
+    // modifier is a class suffix, not part of the value, as on the key itself.
+    const base = typeof value === 'string' ? handleImportant(value).value : undefined;
     const moved =
-        typeof value === 'string'
-            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${value}`]
+        base !== undefined
+            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${base}`]
             : undefined;
-    if (moved !== undefined) warnMovedValue(rawKey, value as string);
+    if (moved !== undefined) warnMovedValue(rawKey, base as string);
     else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey, 'removed');
     // No alias or removed key is a known key; a test pins that.
     else warnUnknownSzProperty(rawKey, szProp);

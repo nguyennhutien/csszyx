@@ -290,6 +290,16 @@ pub(crate) fn is_removed_sz_key(key: &str) -> bool {
 /// a valid key is never flagged as unknown.
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn is_known_sz_key(key: &str) -> bool {
+    is_removed_boolean_sugar(key) || is_value_sz_key(key)
+}
+
+/// Whether a key is known whatever its value holds: [`is_known_sz_key`] minus
+/// the removed boolean sugar, which is known only in its `true` form. With
+/// any other value a sugar key is a key no table owns (`tabularNums: 'x'`),
+/// unless a table owns it in its own right (`flex: 1`), as the runtime's
+/// `isKnownSzPropertyKey` reads it.
+#[cfg(any(feature = "native-engine", test))]
+fn is_value_sz_key(key: &str) -> bool {
     property_prefix(key).is_some()
         || boolean_class(key).is_some()
         // Flag-only utilities (truncate, blur, grayscale, invert, sepia,
@@ -308,7 +318,6 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         // symbol tied to its single cfg-gated use.
         || super::generated::tables::is_boolean_shorthand(key)
         || super::generated::tables::is_known_special_property(key)
-        || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
         // Cheap byte probes BEFORE variant_string_prefix: that helper builds a
@@ -335,11 +344,11 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 }
 
 /// Collect the keys of unrecognized sz properties (likely typos) as
-/// `(key, byte_offset)` pairs. Walks nested SIMPLE-variant objects the same way
-/// the lowering does, but does NOT descend into parametric variants
-/// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, the
-/// mask slots, or color-with-opacity objects — their members are parameters/values, not sz
-/// properties, so checking them would falsely warn (matches the JavaScript walk it replaced).
+/// `(key, byte_offset)` pairs. Walks nested variant objects the way the
+/// lowering does, a parametric variant's bodies included
+/// ([`for_each_sz_object_in`]) — its parameters are names, never judged as sz
+/// keys — and skips `css`, `bgImg`, the mask slots and color-with-opacity
+/// objects, whose members are values, not sz properties.
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
@@ -351,13 +360,18 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             // report, which says where the value went; the alias's canonical
             // key no longer takes it.
             let moved = matches!(&property.value, StaticSzValue::String(value)
-                if moved_value(&property.key, value).is_some());
+                if moved_value(&property.key, value.strip_suffix('!').unwrap_or(value)).is_some());
             if !moved {
                 out.push((property.key.clone(), property.span.start));
             }
             continue;
         }
-        if !is_known_sz_key(&property.key) {
+        let known = if property.value == StaticSzValue::Boolean(true) {
+            is_known_sz_key(&property.key)
+        } else {
+            is_value_sz_key(&property.key)
+        };
+        if !known {
             // An OBJECT value means variant nesting, and variant names are
             // open-ended: a `--breakpoint-*` token from the app's `@theme`
             // (`{ tablet: { p: 4 } }`) or an arbitrary selector cannot appear in
@@ -375,22 +389,16 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             continue;
         }
         if let StaticSzValue::Object(nested) = &property.value {
-            if matches!(
-                property.key.as_str(),
-                "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
-            ) || mask_slot_members(&property.key).is_some()
-            {
-                // A mask slot's members are geometry with their own closed
-                // check (`collect_unknown_mask_slot_members`); walking them
-                // here read `angle` / `at` / `shape` as unknown sz keys.
-                continue;
-            }
-            if property_prefix(&property.key).is_some()
-                && object_string_property(nested, "color").is_some()
+            // A mask slot's members are geometry with their own closed
+            // check (`collect_unknown_mask_slot_members`); walking them
+            // here read `angle` / `at` / `shape` as unknown sz keys.
+            if mask_slot_members(&property.key).is_some() || is_color_object(&property.key, nested)
             {
                 continue;
             }
-            collect_unknown_sz_keys(nested, out);
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_unknown_sz_keys(object, out);
+            });
         }
     }
 }
@@ -454,27 +462,10 @@ pub(crate) fn collect_dead_weight_values(object: &StaticSzObject, out: &mut Vec<
                     out.push((value.clone(), property.span.start));
                 }
             }
-            StaticSzValue::Object(nested) => {
-                if matches!(
-                    property.key.as_str(),
-                    "css"
-                        | "bgImg"
-                        | "supports"
-                        | "data"
-                        | "not"
-                        | "aria"
-                        | "has"
-                        | "group"
-                        | "peer"
-                ) {
-                    continue;
-                }
-                if property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()
-                {
-                    continue;
-                }
-                collect_dead_weight_values(nested, out);
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_dead_weight_values(object, out);
+                });
             }
             _ => {}
         }
@@ -505,29 +496,12 @@ pub(crate) fn collect_dead_spacing_steps(
                     _ => {}
                 }
             }
-            StaticSzValue::Object(nested) => {
-                if matches!(
-                    property.key.as_str(),
-                    "css"
-                        | "bgImg"
-                        | "supports"
-                        | "data"
-                        | "not"
-                        | "aria"
-                        | "has"
-                        | "group"
-                        | "peer"
-                ) {
-                    continue;
-                }
-                if property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()
-                {
-                    continue;
-                }
-                collect_dead_spacing_steps(nested, out);
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_dead_spacing_steps(object, out);
+                });
             }
-            StaticSzValue::Boolean(_) => {}
+            StaticSzValue::Object(_) | StaticSzValue::Boolean(_) => {}
         }
     }
 }
@@ -571,28 +545,15 @@ pub(crate) fn collect_owned_key_variant_objects(
             out.push((property.key.clone(), property.span.start));
             continue;
         }
-        // `min` / `max` hold breakpoint NAMES, each holding a variant object:
-        // the names are the project's own and are not judged, but what they
-        // hold is walked, as the runtime lane walks it.
-        if matches!(key, "min" | "max") {
-            for breakpoint in &nested.properties {
-                if let StaticSzValue::Object(scoped) = &breakpoint.value {
-                    collect_owned_key_variant_objects(scoped, out);
-                }
-            }
-            continue;
+        // A mask slot's members are geometry. A breakpoint stem (`min` /
+        // `max`) or a parametric stem holds names — the project's own
+        // breakpoints, SELECTOR text (`has: { img: … }`) — which are not
+        // judged, while what they hold is walked, as the runtime lane walks it.
+        if mask_slot_members(key).is_none() {
+            for_each_sz_object_in(key, nested, &mut |object| {
+                collect_owned_key_variant_objects(object, out);
+            });
         }
-        // Object-shaped VALUE keys, and the parametric stems whose nested keys
-        // are SELECTOR text (`has: { img: … }`, `supports: { 'display:grid': … }`).
-        // Same boundary `collect_property_object_values` draws.
-        if matches!(
-            key,
-            "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
-        ) || mask_slot_members(key).is_some()
-        {
-            continue;
-        }
-        collect_owned_key_variant_objects(nested, out);
     }
 }
 
@@ -610,8 +571,11 @@ pub(crate) fn collect_moved_values(object: &StaticSzObject, out: &mut Vec<MovedV
     for (index, property) in object.properties.iter().enumerate() {
         match &property.value {
             StaticSzValue::String(value) if !settled.contains(&index) => {
-                if moved_value(&property.key, value).is_some() {
-                    out.push((property.key.clone(), value.clone(), property.span.start));
+                // The important modifier is a class suffix, not part of the
+                // value: `pan-x!` moved as `pan-x` did.
+                let base = value.strip_suffix('!').unwrap_or(value);
+                if moved_value(&property.key, base).is_some() {
+                    out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -670,44 +634,82 @@ pub(crate) fn collect_globals_before_groups(
     }
 }
 
-/// Call `visit` with each object under `key` that holds sz keys.
+/// Call `visit` with each object under `key` that holds sz keys, as the
+/// lowering reads them.
 ///
 /// A variant's object is one. A parametric variant (`group`, `peer`, `data`,
-/// `aria`, `has`, `not`, `supports`) holds its parameters, each naming an
-/// object of sz keys; a parameter whose value is not an object is a selector
-/// value, not an sz key. `css` and `bgImg` hold declaration values.
-#[cfg(feature = "native-engine")]
-fn for_each_sz_object_in(
+/// `aria`, `has`, `not`, `supports`) and a breakpoint stem (`min`, `max`) hold
+/// parameters, each naming an object of sz keys; a parameter is a name, never
+/// an sz key, and one whose value is not an object lowers nothing. `group` and
+/// `peer` take a second level where the lowering does (`has`/`data`/`aria`
+/// and a named scope's states), `not` under its `supports`. `css` and `bgImg`
+/// hold declaration values. Mirrors `lower_object_into`'s dispatch to
+/// `lower_group_peer_variant`, `lower_not_variant`, `lower_has_variant`,
+/// `lower_aria_variant`, `lower_bracket_param_variant` and
+/// `lower_breakpoint_variant`, so a collector reaches every object that
+/// lowers and no parameter.
+#[cfg(any(feature = "native-engine", test))]
+pub(crate) fn for_each_sz_object_in(
     key: &str,
     nested: &StaticSzObject,
     visit: &mut dyn FnMut(&StaticSzObject),
 ) {
-    if matches!(key, "css" | "bgImg") {
-        return;
+    match key {
+        "css" | "bgImg" => {}
+        "group" | "peer" => for_each_group_peer_body(nested, visit),
+        "not" => {
+            for (condition, body) in object_children(nested) {
+                if condition == "supports" {
+                    object_children(body).for_each(|(_, inner)| visit(inner));
+                } else {
+                    visit(body);
+                }
+            }
+        }
+        "supports" | "data" | "aria" | "has" | "min" | "max" => {
+            object_children(nested).for_each(|(_, body)| visit(body));
+        }
+        _ => visit(nested),
     }
-    if !is_parameter_namespace(key) {
-        visit(nested);
-        return;
-    }
-    for parameter in &nested.properties {
-        if let StaticSzValue::Object(body) = &parameter.value {
-            visit(body);
+}
+
+/// The sz objects of a `group` / `peer` object, as
+/// `lower_group_peer_variant` lowers them: `has`/`data`/`aria` hold
+/// attributes, a selector or a known variant holds the body, and any other
+/// key is a scope name whose states hold the bodies, `data`/`aria` a level
+/// further down.
+#[cfg(any(feature = "native-engine", test))]
+fn for_each_group_peer_body(object: &StaticSzObject, visit: &mut dyn FnMut(&StaticSzObject)) {
+    for (key, nested) in object_children(object) {
+        if matches!(key, "has" | "data" | "aria") {
+            object_children(nested).for_each(|(_, body)| visit(body));
+        } else if key.starts_with(['.', '#', '[', ':'])
+            || is_known_variant(key)
+            || is_known_variant(get_variant_prefix(key).as_ref())
+        {
+            visit(nested);
+        } else {
+            for (state, body) in object_children(nested) {
+                if matches!(state, "data" | "aria") {
+                    object_children(body).for_each(|(_, inner)| visit(inner));
+                } else {
+                    visit(body);
+                }
+            }
         }
     }
+}
+
+/// Whether `key: nested` is a colour written as an object (`{ color, op }`),
+/// one value whose members are not sz keys.
+#[cfg(any(feature = "native-engine", test))]
+fn is_color_object(key: &str, nested: &StaticSzObject) -> bool {
+    property_prefix(key).is_some() && object_string_property(nested, "color").is_some()
 }
 
 /// A moved value: key, value, offset.
 #[cfg(feature = "native-engine")]
 pub(crate) type MovedValue = (String, String, u32);
-
-/// Keys whose objects hold parameters or values, not sz properties.
-#[cfg(feature = "native-engine")]
-fn is_parameter_namespace(key: &str) -> bool {
-    matches!(
-        key,
-        "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
-    )
-}
 
 /// The class a closed-enum key emits for a value outside its table.
 ///
@@ -831,27 +833,10 @@ pub(crate) fn collect_dead_enum_values(
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
             }
-            StaticSzValue::Object(nested) => {
-                if matches!(
-                    property.key.as_str(),
-                    "css"
-                        | "bgImg"
-                        | "supports"
-                        | "data"
-                        | "not"
-                        | "aria"
-                        | "has"
-                        | "group"
-                        | "peer"
-                ) {
-                    continue;
-                }
-                if property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()
-                {
-                    continue;
-                }
-                collect_dead_enum_values(nested, out);
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_dead_enum_values(object, out);
+                });
             }
             _ => {}
         }
@@ -1043,19 +1028,20 @@ pub(crate) fn collect_property_object_values(
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
+        // The `{ color, op }` object form on a property key is the documented
+        // color-opacity spelling.
+        if is_color_object(&property.key, nested) {
+            continue;
+        }
         // Parametric/scope variants and object-shaped value keys take nested
-        // objects legitimately.
+        // objects legitimately; a parametric variant's bodies are walked.
         if matches!(
             property.key.as_str(),
             "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
         ) {
-            continue;
-        }
-        // The `{ color, op }` object form on a property key is the documented
-        // color-opacity spelling.
-        if property_prefix(&property.key).is_some()
-            && object_string_property(nested, "color").is_some()
-        {
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_property_object_values(object, out);
+            });
             continue;
         }
         if property_prefix(&property.key).is_some()
@@ -1118,29 +1104,12 @@ pub(crate) fn collect_border_side_styles(
                     out.push((property.key.clone(), value.clone(), property.span.start));
                 }
             }
-            StaticSzValue::Object(nested) => {
-                if matches!(
-                    property.key.as_str(),
-                    "css"
-                        | "bgImg"
-                        | "supports"
-                        | "data"
-                        | "not"
-                        | "aria"
-                        | "has"
-                        | "group"
-                        | "peer"
-                ) {
-                    continue;
-                }
-                if property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()
-                {
-                    continue;
-                }
-                collect_border_side_styles(nested, out);
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_border_side_styles(object, out);
+                });
             }
-            StaticSzValue::Number(_) | StaticSzValue::Boolean(_) => {}
+            StaticSzValue::Object(_) | StaticSzValue::Number(_) | StaticSzValue::Boolean(_) => {}
         }
     }
 }
@@ -3391,8 +3360,9 @@ mod tests {
     }
 
     #[test]
-    fn collect_unknown_sz_keys_does_not_descend_parametric_variants() {
-        // `data`/`aria`/etc. members are parameter names, not sz props.
+    fn collect_unknown_sz_keys_reads_parametric_parameters_as_names() {
+        // `data`/`aria`/etc. members are parameter names, not sz props; only
+        // the objects they hold are sz objects.
         let object = StaticSzObject {
             properties: vec![StaticSzProperty {
                 key: "data".to_string(),

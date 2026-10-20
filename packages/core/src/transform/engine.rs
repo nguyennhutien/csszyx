@@ -4695,6 +4695,136 @@ mod tests {
         (result.classes.join(" "), lines(&result))
     }
 
+    /// A value's important suffix is a class suffix, not part of the value,
+    /// so a moved value written with one is still named as moved, on its key
+    /// and on an alias of it, as the runtime names it.
+    #[test]
+    fn a_moved_value_is_named_with_its_important_suffix_split_off() {
+        for (sz, line) in [
+            (
+                "{ touch: 'pan-x!' }",
+                r#"moved-value {"form":"value","key":"touch","value":"pan-x"}"#,
+            ),
+            (
+                "{ touchAction: 'pan-y!' }",
+                r#"moved-value {"form":"value","key":"touchAction","value":"pan-y"}"#,
+            ),
+        ] {
+            let (classes, diagnostics) = layers_run(sz);
+            assert_eq!(classes, "", "{sz}");
+            assert_eq!(diagnostics, [line], "{sz}");
+        }
+    }
+
+    /// A parametric variant's bodies are sz objects, as the lowering and the
+    /// runtime read them, so every key and value family reports inside one as
+    /// it does at the top.
+    #[test]
+    fn every_key_value_family_reports_inside_a_parametric_variant() {
+        for (sz, code) in [
+            ("{ group: { hover: { dispaly: 'flex' } } }", "unknown-key"),
+            ("{ data: { foo: { dispaly: 'block' } } }", "unknown-key"),
+            (
+                "{ group: { card: { hover: { dispaly: 'grid' } } } }",
+                "unknown-key",
+            ),
+            (
+                "{ peer: { hover: { backgroundColor: 'red-500' } } }",
+                "canonical-key",
+            ),
+            ("{ has: { img: { fontVariant: 'x' } } }", "removed-key"),
+            ("{ has: { img: { p: 1.3 } } }", "off-scale-value"),
+            ("{ group: { has: { img: { p: 1.1 } } } }", "off-scale-value"),
+            (
+                "{ peer: { focus: { weight: '600' } } }",
+                "numeric-font-weight",
+            ),
+            (
+                "{ not: { supports: { 'display:grid': { weight: '500' } } } }",
+                "numeric-font-weight",
+            ),
+            (
+                "{ aria: { checked: { display: 'flx' } } }",
+                "closed-enum-value",
+            ),
+            (
+                "{ not: { first: { borderT: 'dashed' } } }",
+                "per-side-border-style",
+            ),
+            (
+                "{ group: { focus: { p: { a: 1, b: 2 } } } }",
+                "property-object",
+            ),
+            (
+                "{ data: { open: { container: { p: 4 } } } }",
+                "non-variant-object",
+            ),
+        ] {
+            let (_, diagnostics) = layers_run(sz);
+            assert!(
+                diagnostics
+                    .iter()
+                    .any(|line| line.starts_with(&format!("{code} "))),
+                "{sz}: {diagnostics:?}"
+            );
+        }
+    }
+
+    /// A parametric variant's parameters are names, not sz keys: a data
+    /// attribute called `container` is no `container` key.
+    #[test]
+    fn a_parametric_variant_s_parameters_are_not_judged_as_keys() {
+        for (sz, classes) in [
+            (
+                "{ group: { data: { container: { p: 4 } } } }",
+                "group-data-[container]:p-4",
+            ),
+            (
+                "{ peer: { name: { data: { container: { p: 4 } } } } }",
+                "peer-data-[container]/name:p-4",
+            ),
+            ("{ data: { dispaly: { p: 4 } } }", "data-[dispaly]:p-4"),
+            ("{ has: { img: { p: 4 } } }", "has-[img]:p-4"),
+            ("{ group: { '.card': { p: 4 } } }", "group-[.card]:p-4"),
+            ("{ min: { md: { p: 4 } } }", "min-md:p-4"),
+            ("{ max: { '330px': { p: 4 } } }", "max-[330px]:p-4"),
+            ("{ aria: { 'sort=asc': { p: 4 } } }", "aria-[sort=asc]:p-4"),
+            (
+                "{ group: { card: { hover: { p: 4 } } } }",
+                "group-hover/card:p-4",
+            ),
+            (
+                "{ not: { supports: { 'display:grid': { p: 4 } } } }",
+                "not-supports-[display:grid]:p-4",
+            ),
+        ] {
+            let (emitted, diagnostics) = layers_run(sz);
+            assert_eq!(emitted, classes, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
+
+    /// Removed boolean sugar is known only in its `true` form, which its own
+    /// report names. With any other value it is a key no table owns, unless a
+    /// table owns it in its own right (`flex: 1`), as the runtime reads it.
+    #[test]
+    fn removed_sugar_holding_a_value_is_an_unknown_key() {
+        let (classes, diagnostics) = layers_run("{ tabularNums: 'x' }");
+        assert_eq!(classes, "tabular-nums-x");
+        assert_eq!(diagnostics, [r#"unknown-key {"key":"tabularNums"}"#]);
+        let (classes, diagnostics) = layers_run("{ flex: 'x' }");
+        assert_eq!(classes, "flex-x");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let (classes, diagnostics) = layers_run("{ tabularNums: true }");
+        assert_eq!(classes, "");
+        assert!(
+            diagnostics
+                .iter()
+                .all(|line| line.starts_with("removed-key ")),
+            "{diagnostics:?}"
+        );
+    }
+
     #[test]
     fn an_sz_array_layers_a_stand_alone_keyword_and_its_groups_later_wins() {
         for (sz, expected) in [

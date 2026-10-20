@@ -31,7 +31,12 @@ import {
     transformWasmUnrendered,
     type UnrenderedTransformResult,
 } from '../src/internal.js';
-import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    REMOVED_BOOLEAN_SUGAR,
+    type SzObject,
+    transform,
+} from '../src/transform-core.js';
 import { szBodyOf, szCodeOf } from './helpers/sz-console-line.js';
 
 /** One engine artifact's transform that leaves its diagnostics unrendered. */
@@ -81,11 +86,23 @@ const SHARED_FORMS = SHARED.flatMap(spec =>
  * of an `sz` attribute.
  */
 const CASES: Readonly<Record<string, readonly SzObject[]>> = {
-    'unknown-key': [{ dispaly: 'flex' }, { xyzzy: 1 }],
-    'canonical-key': [{ backgroundColor: 'red-500' }],
+    'unknown-key': [
+        { dispaly: 'flex' },
+        { xyzzy: 1 },
+        // A parametric variant's bodies are sz objects; its parameters are not.
+        { group: { hover: { dispaly: 'flex' } } },
+        { data: { foo: { dispaly: 'block' } } },
+        { group: { card: { hover: { dispaly: 'grid' } } } },
+        // Removed sugar is known only in its `true` form.
+        { tabularNums: 'x' },
+    ],
+    'canonical-key': [
+        { backgroundColor: 'red-500' },
+        { peer: { hover: { backgroundColor: 'red-500' } } },
+    ],
     'removed-key/sugar-replaced': [{ tabularNums: true }],
     'removed-key/sugar': [{ inlineFlex: true }],
-    'removed-key/removed': [{ fontVariant: 'x' }],
+    'removed-key/removed': [{ fontVariant: 'x' }, { has: { img: { fontVariant: 'x' } } }],
     'removed-key/replaced': [{ ordinal: true }],
     'numeric-key': [{ 0: 'p-4' }],
     'closed-enum-value/sibling-group': [
@@ -93,18 +110,38 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { contain: 'size', containPaint: true },
         { hover: { contain: 'layout', containStyle: true } },
     ],
-    'closed-enum-value/dead': [{ display: 'flx' }],
-    'closed-enum-value/css-value': [{ justify: 'flex-start' }, { items: 'flex-end!' }],
+    'closed-enum-value/dead': [{ display: 'flx' }, { aria: { checked: { display: 'flx' } } }],
+    'closed-enum-value/css-value': [
+        { justify: 'flex-start' },
+        { items: 'flex-end!' },
+        { supports: { 'display:grid': { justify: 'flex-start' } } },
+    ],
     'closed-enum-value/font-style': [{ fontStyle: 'oblique' }],
     'closed-enum-value/font-smoothing': [{ fontSmoothing: 'none' }],
     'slash-opacity-string': [{ bg: 'red-500/50' }],
-    'off-scale-value': [{ p: 1.4 }],
-    'numeric-font-weight': [{ weight: '700' }],
-    'per-side-border-style': [{ borderB: 'none' }],
-    'property-object': [{ p: { a: 1, b: 2, c: 3, d: 4 } }],
-    'non-variant-object': [{ container: { p: 4 } }],
+    'off-scale-value': [
+        { p: 1.4 },
+        { has: { img: { p: 1.3 } } },
+        { group: { has: { img: { p: 1.1 } } } },
+    ],
+    'numeric-font-weight': [
+        { weight: '700' },
+        { peer: { focus: { weight: '600' } } },
+        { not: { supports: { 'display:grid': { weight: '500' } } } },
+    ],
+    'per-side-border-style': [{ borderB: 'none' }, { not: { first: { borderT: 'dashed' } } }],
+    'property-object': [
+        { p: { a: 1, b: 2, c: 3, d: 4 } },
+        { group: { focus: { p: { a: 1, b: 2, c: 3, d: 4 } } } },
+    ],
+    'non-variant-object': [{ container: { p: 4 } }, { data: { open: { container: { p: 4 } } } }],
     'unknown-field': [{ maskLinear: { form: 'black' } }],
-    'moved-value/value': [{ touch: 'pan-x' }, { touchAction: 'pan-y' }],
+    'moved-value/value': [
+        { touch: 'pan-x' },
+        { touchAction: 'pan-y' },
+        { touch: 'pan-x!' },
+        { touchAction: 'pan-y!' },
+    ],
     'moved-value/mask-layer': [{ mask: 'linear-45' }],
     'global-before-group': [{ contain: 'none', containPaint: true }],
     'color-slash-opacity/op-given': [{ bg: { color: 'red-500/50', op: 30 } }],
@@ -133,34 +170,10 @@ const KNOWN_GAPS: ReadonlyArray<{
     reason: string;
 }> = [
     {
-        sz: { touch: 'pan-x!' },
-        code: 'moved-value',
-        silent: 'engine',
-        reason: '`moved_value` looks the value up with its `!` (lower.rs)',
-    },
-    {
-        sz: { group: { hover: { dispaly: 'flex' } } },
+        sz: { hidden: 'x' },
         code: 'unknown-key',
         silent: 'engine',
-        reason: 'the engine collectors skip parametric variants',
-    },
-    {
-        sz: { data: { foo: { dispaly: 'block' } } },
-        code: 'unknown-key',
-        silent: 'engine',
-        reason: 'the engine collectors skip parametric variants',
-    },
-    {
-        sz: { has: { img: { p: 1.3 } } },
-        code: 'off-scale-value',
-        silent: 'engine',
-        reason: 'the engine collectors skip parametric variants',
-    },
-    {
-        sz: { tabularNums: 'x' },
-        code: 'unknown-key',
-        silent: 'engine',
-        reason: 'the engine emits `tabular-nums-x` and reports nothing',
+        reason: 'the engine counts an ARIA state name as a key (`is_aria_state` in `is_known_sz_key`)',
     },
 ];
 
@@ -263,6 +276,22 @@ describe('runtime and engine diagnostics', () => {
                     gap.silent === 'engine' ? [built, runtime] : [runtime, built];
                 expect(loud, 'the other lane reports it').toContain(gap.code);
                 expect(silent, 'fixed: remove it from KNOWN_GAPS').not.toContain(gap.code);
+            });
+        }
+    }
+
+    // A removed boolean-sugar key holding anything but `true` is no sugar: it
+    // is a key in its own right where a table owns it (`flex: 1`), and unknown
+    // where none does (`tabularNums: 'x'`).
+    const gapped = new Set(KNOWN_GAPS.map(gap => JSON.stringify(gap.sz)));
+    for (const key of Object.keys(REMOVED_BOOLEAN_SUGAR)) {
+        const sz = { [key]: 'x' };
+        if (gapped.has(JSON.stringify(sz))) continue;
+        for (const [name, engine] of ENGINES) {
+            it(`removed sugar ${key} holding a value is unknown to the ${name} engine as at runtime`, () => {
+                const unknown = (lines: readonly string[]) =>
+                    lines.map(szCodeOf).includes('unknown-key');
+                expect(unknown(engineLines(engine, sz))).toBe(unknown(runtimeLines(sz)));
             });
         }
     }
