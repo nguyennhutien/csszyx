@@ -981,11 +981,11 @@ function splitBoxUncached(
         (side === 'outer' ? outer : inner).push(token);
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-        warnUnplacedTokens(unplaced, fallback);
-        warnSiblingBound(outer, bridge);
-        warnUnusableSplit(outer, inner, bridge);
-    }
+    // Each holds the one `NODE_ENV` check around its own reports, which is what
+    // lets a production bundle drop the analysis and every template it names.
+    warnUnplacedTokens(unplaced, fallback);
+    warnSiblingBound(outer, bridge);
+    warnUnusableSplit(outer, inner, bridge);
 
     return { outer: outer.join(' '), inner: inner.join(' ') };
 }
@@ -1531,7 +1531,7 @@ function partitionSzEntry(key: string, value: SzValue, context: SzPartitionConte
         return;
     }
     if (!isVariantContainer(key, entry, value)) {
-        if (key === RAW_CSS_KEY && process.env.NODE_ENV !== 'production') {
+        if (key === RAW_CSS_KEY) {
             warnUnplacedCss(context.fallback);
         }
         (context.fallback === 'inner' ? context.inner : context.outer)[key] = value;

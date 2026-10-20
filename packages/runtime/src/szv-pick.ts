@@ -23,7 +23,7 @@
  * @module @csszyx/runtime/szv-pick
  */
 
-import { warnSelectionValue } from './selection-value.js';
+import { warnSelection, warnSelectionValue } from './selection-value.js';
 
 /** A build-precompiled szv config: every branch lowered to its class string. */
 export interface SzvCompiledTable {
@@ -50,9 +50,8 @@ export type SzvPickSelection = Readonly<Record<string, unknown>> | undefined;
  * gets a new name.
  */
 export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection): string {
-    if (process.env.NODE_ENV !== 'production') {
-        warnUnknownPickSelection(table, selection);
-    }
+    // Development only: the check is inside, around the report.
+    warnSelection(selection, table.d);
     let result = table.base;
     // for-in, not Object.keys: the keys array would be allocated on EVERY
     // call, and this is the per-render hot path the rewrite exists to serve.
@@ -109,9 +108,8 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
  * gets a new name.
  */
 export function __szvPick1(table: SzvCompiledTable, dimension: string, value: unknown): string {
-    if (process.env.NODE_ENV !== 'production') {
-        warnSelectionValue(dimension, value, table.d);
-    }
+    // Development only: the check is inside, around the report.
+    warnSelectionValue(dimension, value, table.d);
     // null/undefined selects nothing: with no defaults to fall back to, that is
     // the base alone — exactly what the full picker's `continue` leaves.
     if (value === null || value === undefined) {
@@ -122,19 +120,4 @@ export function __szvPick1(table: SzvCompiledTable, dimension: string, value: un
         return table.base;
     }
     return table.base ? `${table.base} ${classes}` : classes;
-}
-
-/**
- * Dev-only mirror of `szv()`'s invalid-selection warnings, byte for byte.
- *
- * @param table - Build-emitted table for one szv factory.
- * @param selection - Runtime variant selection.
- */
-function warnUnknownPickSelection(table: SzvCompiledTable, selection: SzvPickSelection): void {
-    if (!selection) {
-        return;
-    }
-    for (const key of Object.keys(selection)) {
-        warnSelectionValue(key, selection[key], table.d);
-    }
 }

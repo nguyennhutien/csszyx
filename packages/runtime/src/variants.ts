@@ -19,7 +19,7 @@ import {
 } from '@csszyx/compiler/report';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 import { devWarn } from './dev-warn.js';
-import { describeValue, warnSelectionValue } from './selection-value.js';
+import { describeValue, warnSelection } from './selection-value.js';
 
 /**
  * Dimension → option → sz row. Row VALUES are checked by this constraint, with
@@ -186,112 +186,157 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The `szv-config-invalid` args: the part, and how its value is described. */
+type ConfigInvalidArgs = NonNullable<(typeof SZV_CONFIG_INVALID)['argsType']>;
+
 /**
- * Validate every value within one szv variant dimension.
- *
- * @param dimension Variant dimension name.
- * @param values Candidate variant-value table.
+ * One problem the config check found. The check only collects them, and
+ * `validateSzvConfig` reports them inside its one `NODE_ENV` check, so a
+ * production bundle drops the check with every template it names.
  */
-function validateVariantDimension(dimension: string, values: unknown): void {
-    if (process.env.NODE_ENV !== 'production') {
-        if (!isPlainObject(values)) {
-            reportConfig({ form: 'dimension', dimension, got: describeValue(values) });
-            return;
-        }
-        for (const [token, value] of Object.entries(values)) {
-            if (value !== null && value !== undefined && !isPlainObject(value)) {
-                reportConfig({
-                    form: 'variant-value',
-                    dimension,
-                    token,
-                    got: describeValue(value),
-                });
-            } else if (isPlainObject(value)) {
-                assertBoundedDepth(value, `variants.${dimension}.${token}`);
-            }
+type ConfigProblem =
+    | { kind: 'shape'; args: ConfigInvalidArgs }
+    | { kind: 'depth'; where: string }
+    | { kind: 'forbidden-key'; where: string; key: string };
+
+/**
+ * Check every value within one szv variant dimension.
+ *
+ * @param dimension - Variant dimension name.
+ * @param values - Candidate variant-value table.
+ * @param problems - Where each problem found is collected.
+ */
+function checkVariantDimension(
+    dimension: string,
+    values: unknown,
+    problems: ConfigProblem[],
+): void {
+    if (!isPlainObject(values)) {
+        problems.push({
+            kind: 'shape',
+            args: { form: 'dimension', dimension, got: describeValue(values) },
+        });
+        return;
+    }
+    for (const [token, value] of Object.entries(values)) {
+        if (value !== null && value !== undefined && !isPlainObject(value)) {
+            problems.push({
+                kind: 'shape',
+                args: { form: 'variant-value', dimension, token, got: describeValue(value) },
+            });
+        } else if (isPlainObject(value)) {
+            checkBoundedDepth(value, `variants.${dimension}.${token}`, problems);
         }
     }
 }
 
 /**
- * Report one part of a szv config that does not have the shape `szv` reads.
+ * Check a szv config's structure — strong types catch this at compile time,
+ * but a config built from runtime/JSON data, an `as any`, or a JS caller
+ * bypasses them, and the failure is otherwise silent (dead or wrong classes).
+ * Reuses the shared `isForbiddenSzKey` + `MAX_SZ_DEPTH` guards (the same
+ * deep-object protections as the Rust/compiler path) so a hostile or
+ * pathological config is bounded here too.
  *
- * @param args - The `szv-config-invalid` args: the part, and how its value is described.
+ * @param config - The szv config to check.
+ * @param problems - Where each problem found is collected.
+ * @returns true if the config is structurally usable; false if it should fall back.
  */
-function reportConfig(args: NonNullable<(typeof SZV_CONFIG_INVALID)['argsType']>): void {
-    if (process.env.NODE_ENV !== 'production') {
-        devWarn({ diagnostic: SZV_CONFIG_INVALID, args });
+function checkSzvConfig(config: unknown, problems: ConfigProblem[]): boolean {
+    if (!isPlainObject(config)) {
+        problems.push({ kind: 'shape', args: { form: 'config', got: describeValue(config) } });
+        return false;
     }
+    if (config.base !== undefined && !isPlainObject(config.base)) {
+        problems.push({ kind: 'shape', args: { form: 'base', got: describeValue(config.base) } });
+    }
+    // A base-only config (no `variants` key) is valid: it declares one
+    // reusable class bundle. Warning here while still returning the base
+    // object was the worst of both — the warning spammed and the behaviour
+    // didn't change.
+    if (config.variants === undefined) {
+        return true;
+    }
+    if (!isPlainObject(config.variants)) {
+        problems.push({
+            kind: 'shape',
+            args: { form: 'variants', got: describeValue(config.variants) },
+        });
+        return false;
+    }
+    for (const [dimension, values] of Object.entries(config.variants)) {
+        checkVariantDimension(dimension, values, problems);
+    }
+    if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
+        problems.push({
+            kind: 'shape',
+            args: { form: 'default-variants', got: describeValue(config.defaultVariants) },
+        });
+    }
+    return true;
 }
 
 /**
  * Validate a szv config's structure in development and warn (once) on each
- * problem — strong types catch this at compile time, but a config built from
- * runtime/JSON data, an `as any`, or a JS caller bypasses them, and the failure
- * is otherwise silent (dead or wrong classes). Reuses the shared `isForbiddenSzKey`
- * + `MAX_SZ_DEPTH` guards (the same deep-object protections as the Rust/compiler
- * path) so a hostile or pathological config is bounded here too.
+ * problem {@link checkSzvConfig} finds. Production skips the check and reads
+ * every config as usable.
  *
  * @param config - The szv config to validate.
  * @returns true if the config is structurally usable; false if it should fall back.
  */
 function validateSzvConfig(config: unknown): boolean {
     if (process.env.NODE_ENV !== 'production') {
-        if (!isPlainObject(config)) {
-            reportConfig({ form: 'config', got: describeValue(config) });
-            return false;
+        const problems: ConfigProblem[] = [];
+        const usable = checkSzvConfig(config, problems);
+        for (const problem of problems) {
+            if (problem.kind === 'shape') {
+                devWarn({ diagnostic: SZV_CONFIG_INVALID, args: problem.args });
+            } else if (problem.kind === 'depth') {
+                devWarn({
+                    diagnostic: SZ_OBJECT_DEPTH,
+                    args: { form: 'szv-config', maxDepth: MAX_SZ_DEPTH, where: problem.where },
+                });
+            } else {
+                devWarn({
+                    diagnostic: SZV_FORBIDDEN_KEY,
+                    args: { where: problem.where, key: problem.key },
+                });
+            }
         }
-        if (config.base !== undefined && !isPlainObject(config.base)) {
-            reportConfig({ form: 'base', got: describeValue(config.base) });
-        }
-        // A base-only config (no `variants` key) is valid: it declares one
-        // reusable class bundle. Warning here while still returning the base
-        // object was the worst of both — the warning spammed and the behaviour
-        // didn't change.
-        if (config.variants === undefined) {
-            return true;
-        }
-        if (!isPlainObject(config.variants)) {
-            reportConfig({ form: 'variants', got: describeValue(config.variants) });
-            return false;
-        }
-        for (const [dimension, values] of Object.entries(config.variants)) {
-            validateVariantDimension(dimension, values);
-        }
-        if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
-            reportConfig({ form: 'default-variants', got: describeValue(config.defaultVariants) });
-        }
+        return usable;
     }
     return true;
 }
 
 /**
- * Walk an sz object bounded by `MAX_SZ_DEPTH`, warning if it is nested deeper —
- * the dev mirror of the runtime depth guard, so a pathological config is flagged
- * at authoring time instead of throwing an `SzDepthError` mid-render.
+ * Walk an sz object bounded by `MAX_SZ_DEPTH`, collecting a problem if it is
+ * nested deeper — the dev mirror of the runtime depth guard, so a
+ * pathological config is flagged at authoring time instead of throwing an
+ * `SzDepthError` mid-render.
  *
  * @param obj - The sz object to bound-check.
  * @param where - A label for the warning (e.g. `variants.size.sm`).
+ * @param problems - Where each problem found is collected.
  * @param depth - Current recursion depth.
  */
-function assertBoundedDepth(obj: Record<string, unknown>, where: string, depth = 0): void {
-    if (process.env.NODE_ENV !== 'production') {
-        if (depth >= MAX_SZ_DEPTH) {
-            devWarn({
-                diagnostic: SZ_OBJECT_DEPTH,
-                args: { form: 'szv-config', maxDepth: MAX_SZ_DEPTH, where },
-            });
-            return;
+function checkBoundedDepth(
+    obj: Record<string, unknown>,
+    where: string,
+    problems: ConfigProblem[],
+    depth = 0,
+): void {
+    if (depth >= MAX_SZ_DEPTH) {
+        problems.push({ kind: 'depth', where });
+        return;
+    }
+    for (const key of Object.keys(obj)) {
+        if (isForbiddenSzKey(key)) {
+            problems.push({ kind: 'forbidden-key', where, key });
+            continue;
         }
-        for (const key of Object.keys(obj)) {
-            if (isForbiddenSzKey(key)) {
-                devWarn({ diagnostic: SZV_FORBIDDEN_KEY, args: { where, key } });
-                continue;
-            }
-            const v = obj[key];
-            if (isPlainObject(v)) {
-                assertBoundedDepth(v, `${where}.${key}`, depth + 1);
-            }
+        const v = obj[key];
+        if (isPlainObject(v)) {
+            checkBoundedDepth(v, `${where}.${key}`, problems, depth + 1);
         }
     }
 }
@@ -378,7 +423,7 @@ function resolveSelection(
     config: LooseSzvConfig,
     selection: Record<string, unknown> | undefined,
 ): SzObject {
-    warnInvalidSelection(selection, config.variants);
+    warnSelection(selection, config.variants);
     const resolved = resolveVariantSelection(selection, config.defaultVariants);
     return attachStringCoercionGuard(applySelectedVariants(config, resolved));
 }
@@ -391,22 +436,6 @@ function resolveSelection(
 function invalidConfigFallback(config: LooseSzvConfig): SzObject {
     const base = isPlainObject(config?.base) ? { ...config.base } : {};
     return attachStringCoercionGuard(base);
-}
-
-/**
- * Warns in development when a selection names an unknown dimension or value.
- * @param selection - The caller's requested variant values.
- * @param variants - The configured variant dimensions.
- */
-function warnInvalidSelection(
-    selection: Record<string, unknown> | undefined,
-    variants: LooseSzvConfig['variants'],
-): void {
-    if (process.env.NODE_ENV !== 'production' && selection) {
-        for (const key of Object.keys(selection)) {
-            warnSelectionValue(key, selection[key], variants);
-        }
-    }
 }
 
 /**
@@ -477,9 +506,7 @@ function attachStringCoercionGuard(result: SzObject): SzObject {
     if (process.env.NODE_ENV !== 'production') {
         Object.defineProperty(result, 'toString', {
             value: (): string => {
-                if (process.env.NODE_ENV !== 'production') {
-                    devWarn({ diagnostic: SZV_OBJECT_AS_STRING, args: {} });
-                }
+                devWarn({ diagnostic: SZV_OBJECT_AS_STRING, args: {} });
                 return '';
             },
             enumerable: false,

@@ -3,7 +3,11 @@
  * two report one value the same way.
  */
 
-import { SZV_UNKNOWN_VARIANT, SZV_UNKNOWN_VARIANT_VALUE } from '@csszyx/compiler/report';
+import {
+    SZV_UNKNOWN_VARIANT,
+    SZV_UNKNOWN_VARIANT_VALUE,
+    type SzReportOptions,
+} from '@csszyx/compiler/report';
 
 import { devWarn } from './dev-warn.js';
 
@@ -39,10 +43,68 @@ export function describeValue(value: unknown): string {
     return typeof value;
 }
 
+/** The `szv-unknown-variant` args. */
+type UnknownVariantArgs = NonNullable<(typeof SZV_UNKNOWN_VARIANT)['argsType']>;
+/** The `szv-unknown-variant-value` args. */
+type UnknownValueArgs = NonNullable<(typeof SZV_UNKNOWN_VARIANT_VALUE)['argsType']>;
+
+/**
+ * What is wrong with one selected value, as the report that says so: a
+ * dimension the factory does not declare, or a value its dimension does not
+ * define. Reports nothing itself, so the two callers below each hold the one
+ * `NODE_ENV` check around their `devWarn` and a production bundle drops this
+ * with the templates it names.
+ *
+ * @param key - The selected dimension.
+ * @param value - The value selected for it.
+ * @param dimensions - The factory's dimensions, each a table of its values.
+ * @returns The report to print, or undefined when the selection is fine.
+ */
+function selectionValueReport(
+    key: string,
+    value: unknown,
+    dimensions: Readonly<Record<string, unknown>> | undefined,
+): SzReportOptions<UnknownVariantArgs> | SzReportOptions<UnknownValueArgs> | undefined {
+    if (dimensions === undefined || !(key in dimensions)) {
+        return { diagnostic: SZV_UNKNOWN_VARIANT, args: { key } };
+    }
+    if (value === null || value === undefined) return undefined;
+    // A dimension that is no table was reported when the config was read;
+    // it defines no value.
+    const values = dimensions[key];
+    const table = typeof values === 'object' && values !== null ? values : {};
+    const valueKey = selectionValueKey(value);
+    if (valueKey !== null && valueKey in table) return undefined;
+    return {
+        diagnostic: SZV_UNKNOWN_VARIANT_VALUE,
+        args: { key, value: valueKey ?? describeValue(value), allowed: Object.keys(table) },
+    };
+}
+
 /**
  * Say, in development, that a selection names a dimension the factory does
  * not declare, or a value its dimension does not define. `szv()` and its
  * precompiled pick both report through here, so the two print one line.
+ *
+ * @param selection - The caller's requested variant values.
+ * @param dimensions - The factory's dimensions, each a table of its values.
+ */
+export function warnSelection(
+    selection: Readonly<Record<string, unknown>> | null | undefined,
+    dimensions: Readonly<Record<string, unknown>> | undefined,
+): void {
+    // The check sits before the loop, so a production render pays one call
+    // and never walks the selection.
+    if (process.env.NODE_ENV !== 'production' && selection) {
+        for (const key of Object.keys(selection)) {
+            const report = selectionValueReport(key, selection[key], dimensions);
+            if (report) devWarn(report);
+        }
+    }
+}
+
+/**
+ * {@link warnSelection} for the one dimension a single-dimension pick selects.
  *
  * @param key - The selected dimension.
  * @param value - The value selected for it.
@@ -54,25 +116,7 @@ export function warnSelectionValue(
     dimensions: Readonly<Record<string, unknown>> | undefined,
 ): void {
     if (process.env.NODE_ENV !== 'production') {
-        if (dimensions === undefined || !(key in dimensions)) {
-            devWarn({ diagnostic: SZV_UNKNOWN_VARIANT, args: { key } });
-            return;
-        }
-        if (value === null || value === undefined) return;
-        // A dimension that is no table was reported when the config was read;
-        // it defines no value.
-        const values = dimensions[key];
-        const table = typeof values === 'object' && values !== null ? values : {};
-        const valueKey = selectionValueKey(value);
-        if (valueKey === null || !(valueKey in table)) {
-            devWarn({
-                diagnostic: SZV_UNKNOWN_VARIANT_VALUE,
-                args: {
-                    key,
-                    value: valueKey ?? describeValue(value),
-                    allowed: Object.keys(table),
-                },
-            });
-        }
+        const report = selectionValueReport(key, value, dimensions);
+        if (report) devWarn(report);
     }
 }
