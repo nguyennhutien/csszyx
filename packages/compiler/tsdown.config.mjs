@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { engineDigest } from '../../scripts/engine-digest.mjs';
 import { base, defineBuild } from '../../tsdown.base.mjs';
@@ -8,6 +10,25 @@ const ENGINE_VERSION = JSON.parse(
     readFileSync(new URL('../core/package.json', import.meta.url), 'utf8'),
 ).version;
 
+/** The development reporter's source, as the browser entries import it. */
+const REPORT_SOURCE = fileURLToPath(new URL('./src/report.ts', import.meta.url));
+
+/**
+ * Leaves the development reporter out of every entry and imports it as the
+ * package's `./report` subpath, which an app resolves to the separate build of
+ * it. A bare package name, so the bundler writes it as given; `output.paths`
+ * on the source path wrote `./@csszyx/compiler/report`.
+ */
+const reportAsSubpath = {
+    name: 'csszyx-report-subpath',
+    resolveId(source, importer) {
+        if (source !== './report.js' || importer === undefined) return null;
+        return path.resolve(path.dirname(importer), 'report.ts') === REPORT_SOURCE
+            ? { id: '@csszyx/compiler/report', external: true }
+            : null;
+    },
+};
+
 /** What every build of the package shares. */
 const shared = {
     ...base,
@@ -16,11 +37,13 @@ const shared = {
     // most of 1.9 MB of `.d.ts`, which a React or Vue app with TypeScript
     // already installs once for `@types/react` or `@vue/runtime-dom`.
     //
-    // `@csszyx/compiler/report` is this package's own development reporter,
-    // which the browser entries import by name: it is built on its own (see
-    // the last build below), and an app resolves it as the package's
-    // `./report` subpath, so no entry bundles a copy.
-    deps: { neverBundle: ['csstype', '@csszyx/compiler/report'] },
+    // `./report.js` is the development reporter, which the browser entries
+    // import by a relative path so every tool that runs the sources resolves
+    // it without a build. It is built on its own (see the last build below):
+    // each entry leaves it out and reaches it as the package's `./report`
+    // subpath, so no entry bundles a copy.
+    deps: { neverBundle: ['csstype'] },
+    plugins: [reportAsSubpath],
     define: {
         __CSSZYX_ENGINE_VERSION__: JSON.stringify(ENGINE_VERSION),
         __CSSZYX_ENGINE_DIGEST__: JSON.stringify(engineDigest()),

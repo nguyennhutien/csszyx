@@ -317,6 +317,9 @@ describe('the szReport gate itself', () => {
         [
             "if ('production' !== process.env.NODE_ENV) { if (k) szReport({ diagnostic: CLOSED_ENUM_VALUE, args: { form: 'dead' } }); }",
         ],
+        [
+            "if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) { if (k.has(args)) return; k.add(args); szReport({ diagnostic: OFF_SCALE_VALUE, args }); }",
+        ],
     ])('accepts %s', body => {
         expect(gated(body)).toEqual([true]);
     });

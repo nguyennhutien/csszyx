@@ -15,7 +15,7 @@
  * property. The only correct lowering is the bare class, toggled at runtime.
  */
 
-import { DYNAMIC_NON_BOOLEAN, szReport } from '@csszyx/compiler/report';
+import { DYNAMIC_NON_BOOLEAN, szReport } from './report.js';
 
 /** Values already warned about, so a render loop logs each shape only once. */
 const warnedShapes = new Set<string>();

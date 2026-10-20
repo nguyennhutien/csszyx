@@ -14,7 +14,7 @@
  * have lowered the same literal.
  */
 
-import { DYNAMIC_UNRESOLVABLE, szReport } from '@csszyx/compiler/report';
+import { DYNAMIC_UNRESOLVABLE, szReport } from './report.js';
 
 /** Sizing keys whose `screen` token means the viewport WIDTH. */
 const VIEWPORT_WIDTH_KEYS = new Set([

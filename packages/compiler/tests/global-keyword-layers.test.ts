@@ -189,6 +189,21 @@ describe('a stand-alone key written before a group key of its family', () => {
         ]);
     });
 
+    it('runtime names a literal that is not a string by its text', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('NODE_ENV', 'production');
+
+        transform({ contain: 7, containPaint: true });
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            productionMessage('global-before-group', {
+                global: 'contain',
+                value: '7',
+                group: 'containPaint',
+            }),
+        ]);
+    });
+
     it('runtime stays quiet under CSSZYX_QUIET_SZ_WARNINGS', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');

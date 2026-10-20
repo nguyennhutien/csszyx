@@ -58,18 +58,33 @@ export {
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
 export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
+// Imported here, below the `export … from` block, on purpose: an app bundle
+// places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
+// at the first import of either, and that has to come after
+// `property-types.js` and `sz-capabilities.generated.js` (their own chunk, see
+// `tsdown.config.mjs`), so PROPERTY_MAP follows the per-key rows that repeat
+// its keys and gzip finds them close by. At the top of the import list, where
+// the import sort puts it, the browser entry measured 136 bytes larger gzipped
+// (16,561 against 16,425). `tests/browser-chunk-order.test.ts` holds the order.
+import {
+    bareClosedEnumClass,
+    CLOSED_ENUM_CLASSES,
+    CLOSED_ENUM_VALUE_MOVES,
+} from './closed-enum-tables.js';
 // The registry's words for every line this module prints, the reporter that
 // fills them in development and the suggestion an unknown key's line names
 // (ADR 0031). Each `szReport` call sits on the development branch of a literal
 // `NODE_ENV` check, so a production bundle drops the call and every template;
 // a line that prints in production spells its compact form inline at the
-// site. The check wraps the call even below a gate that already returned in
-// production: esbuild keeps a template named by code after an early return
-// (measured: `closed-enum-value` and `non-variant-object` shipped in the
-// runtime app bundle), and `tests/dev-warning-guard.test.ts` holds the shape.
-// Imported by the package's own name: `./report` is a build of its own, and a
-// relative import would split the template filler into a chunk the Node
-// entries share, as `tsdown.config.mjs` measured.
+// site. A development-only warning keeps its whole body inside that one check
+// rather than returning early in production: esbuild keeps a template named by
+// code after an early return (measured: `closed-enum-value` and
+// `non-variant-object` shipped in the runtime app bundle), and a second check
+// below the return would be a branch no run can take.
+// `tests/dev-warning-guard.test.ts` holds the shape.
+// A build of its own: `tsdown.config.mjs` turns this import into the
+// `@csszyx/compiler/report` subpath, so no entry bundles a copy and the
+// template filler shares no chunk with the entries Node loads.
 import {
     BROKEN_OPACITY,
     CANONICAL_KEY,
@@ -90,20 +105,7 @@ import {
     szReport,
     UNKNOWN_FIELD,
     UNKNOWN_KEY,
-} from '@csszyx/compiler/report';
-// Imported here, below the `export … from` block, on purpose: an app bundle
-// places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
-// at the first import of either, and that has to come after
-// `property-types.js` and `sz-capabilities.generated.js` (their own chunk, see
-// `tsdown.config.mjs`), so PROPERTY_MAP follows the per-key rows that repeat
-// its keys and gzip finds them close by. At the top of the import list, where
-// the import sort puts it, the browser entry measured 136 bytes larger gzipped
-// (16,561 against 16,425). `tests/browser-chunk-order.test.ts` holds the order.
-import {
-    bareClosedEnumClass,
-    CLOSED_ENUM_CLASSES,
-    CLOSED_ENUM_VALUE_MOVES,
-} from './closed-enum-tables.js';
+} from './report.js';
 
 /**
  * Represents a value in the sz object.
@@ -595,20 +597,17 @@ const warnedAlignmentValues = new Set<string>();
  * @param written - Its value, as written.
  */
 function warnAlignmentValue(rawKey: string, written: string): void {
-    if (process.env.NODE_ENV === 'production') return;
-    // The important modifier is a class suffix, not part of the value, as the
-    // engine reads it: `flex-start!` is still `flex-start`.
-    const { value } = handleImportant(written);
-    // Own keys only: `constructor` or `toString` would read Object members.
-    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
-    if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
-    const hint = ALIGNMENT_CSS_VALUE_HINT[value];
-    const sig = `${rawKey}:${value}`;
-    if (warnedAlignmentValues.has(sig)) {
-        return;
-    }
-    warnedAlignmentValues.add(sig);
     if (process.env.NODE_ENV !== 'production') {
+        // The important modifier is a class suffix, not part of the value, as the
+        // engine reads it: `flex-start!` is still `flex-start`.
+        const { value } = handleImportant(written);
+        // Own keys only: `constructor` or `toString` would read Object members.
+        // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
+        if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
+        const hint = ALIGNMENT_CSS_VALUE_HINT[value];
+        const sig = `${rawKey}:${value}`;
+        if (warnedAlignmentValues.has(sig)) return;
+        warnedAlignmentValues.add(sig);
         szReport({
             diagnostic: CLOSED_ENUM_VALUE,
             args: { form: 'css-value', key: rawKey, value, suggestion: hint },
@@ -818,11 +817,10 @@ function isDeadSpacingStep(key: string, value: number): boolean {
  * @param value - The numeric value about to be emitted bare.
  */
 function warnDeadSpacingStep(key: string, value: number): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    const token = `${key}:${value}`;
-    if (_warnedSpacingSteps.has(token)) return;
-    _warnedSpacingSteps.add(token);
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        const token = `${key}:${value}`;
+        if (_warnedSpacingSteps.has(token)) return;
+        _warnedSpacingSteps.add(token);
         szReport({
             diagnostic: OFF_SCALE_VALUE,
             args: { key, value: String(value) },
@@ -902,11 +900,10 @@ function isBorderSideStyleValue(key: string, value: string): boolean {
  * @param value - The style keyword that was dropped.
  */
 function warnBorderSideStyle(key: string, value: string): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    const token = `${key}:${value}`;
-    if (_warnedBorderSideStyles.has(token)) return;
-    _warnedBorderSideStyles.add(token);
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        const token = `${key}:${value}`;
+        if (_warnedBorderSideStyles.has(token)) return;
+        _warnedBorderSideStyles.add(token);
         szReport({ diagnostic: PER_SIDE_BORDER_STYLE, args: { key, value }, at: szWarnLocation });
     }
 }
@@ -930,17 +927,16 @@ const _warnedWeightValues = new Set<string>();
  * @param value - The string value about to be emitted bare.
  */
 function warnDeadWeightValue(rawKey: string, value: string): void {
+    // The key test first: every string value reaches this line, and the
+    // environment reads are the expensive half.
+    if (rawKey !== 'weight') return;
     if (
-        rawKey !== 'weight' ||
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        !/^\d+(?:\.\d+)?$/.test(value)
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        /^\d+(?:\.\d+)?$/.test(value) &&
+        !_warnedWeightValues.has(value)
     ) {
-        return;
-    }
-    if (_warnedWeightValues.has(value)) return;
-    _warnedWeightValues.add(value);
-    if (process.env.NODE_ENV !== 'production') {
+        _warnedWeightValues.add(value);
         szReport({ diagnostic: NUMERIC_FONT_WEIGHT, args: { value }, at: szWarnLocation });
     }
 }
@@ -2108,19 +2104,18 @@ function warnColorObjectSlashOpacity(
     color: string,
     op: number | string | undefined,
 ): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    // An `op` that is neither a number nor a string is named as if absent,
-    // as the engines name it.
-    let shown = '';
-    if (typeof op === 'number') shown = `${op}`;
-    else if (typeof op === 'string') shown = `'${op}'`;
-    const token = `${key}:${color}:${shown}`;
-    if (_warnedColorObjectSlashOpacity.has(token)) return;
-    _warnedColorObjectSlashOpacity.add(token);
-    const important = color.endsWith('!');
-    const unmarked = important ? color.slice(0, -1) : color;
-    const slash = unmarked.indexOf('/');
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        // An `op` that is neither a number nor a string is named as if absent,
+        // as the engines name it.
+        let shown = '';
+        if (typeof op === 'number') shown = `${op}`;
+        else if (typeof op === 'string') shown = `'${op}'`;
+        const token = `${key}:${color}:${shown}`;
+        if (_warnedColorObjectSlashOpacity.has(token)) return;
+        _warnedColorObjectSlashOpacity.add(token);
+        const important = color.endsWith('!');
+        const unmarked = important ? color.slice(0, -1) : color;
+        const slash = unmarked.indexOf('/');
         szReport({
             diagnostic: COLOR_SLASH_OPACITY,
             args: {
@@ -2195,22 +2190,17 @@ function resolvedThemeTokenValue(token: string): string | null {
  */
 function warnCustomOpacityToken(color: string, className: string): void {
     if (
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        color.startsWith('--') ||
-        needsArbitraryBrackets(color) ||
-        /-\d{2,3}$/.test(color) ||
-        ALPHA_SAFE_NAMED_COLORS.has(color) ||
-        _warnedOpacityTokens.has(color)
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !color.startsWith('--') &&
+        !needsArbitraryBrackets(color) &&
+        !/-\d{2,3}$/.test(color) &&
+        !ALPHA_SAFE_NAMED_COLORS.has(color) &&
+        !_warnedOpacityTokens.has(color)
     ) {
-        return;
-    }
-    const resolved = resolvedThemeTokenValue(color);
-    if (resolved === null || !BARE_RGB_TRIPLET.test(resolved)) {
-        return;
-    }
-    _warnedOpacityTokens.add(color);
-    if (process.env.NODE_ENV !== 'production') {
+        const resolved = resolvedThemeTokenValue(color);
+        if (resolved === null || !BARE_RGB_TRIPLET.test(resolved)) return;
+        _warnedOpacityTokens.add(color);
         szReport({
             diagnostic: BROKEN_OPACITY,
             args: { className, value: resolved },
@@ -2421,14 +2411,12 @@ const _warnedClosedEnumValues = new Set<string>();
 function warnClosedEnumValue(key: string, value: string, bare: string): void {
     const token = `${key}:${value}`;
     if (
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        _warnedClosedEnumValues.has(token)
-    )
-        return;
-    _warnedClosedEnumValues.add(token);
-    const sibling = siblingGroupOf(key, bare);
-    if (process.env.NODE_ENV !== 'production') {
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedClosedEnumValues.has(token)
+    ) {
+        _warnedClosedEnumValues.add(token);
+        const sibling = siblingGroupOf(key, bare);
         szReport({
             diagnostic: CLOSED_ENUM_VALUE,
             args:
@@ -3052,11 +3040,10 @@ const warnedMaskSlotMembers = new Set<string>();
  * @param allowed - The members the owner accepts, for the message.
  */
 function warnMaskSlotMember(owner: string, member: string, allowed: readonly string[]): void {
-    if (process.env.NODE_ENV === 'production') return;
-    const sig = `${owner}.${member}`;
-    if (warnedMaskSlotMembers.has(sig)) return;
-    warnedMaskSlotMembers.add(sig);
     if (process.env.NODE_ENV !== 'production') {
+        const sig = `${owner}.${member}`;
+        if (warnedMaskSlotMembers.has(sig)) return;
+        warnedMaskSlotMembers.add(sig);
         szReport({
             diagnostic: UNKNOWN_FIELD,
             args: { owner, member, allowed },
@@ -3373,24 +3360,44 @@ let _announcedUnknownSzPropertyCap = false;
  * `process.env` read.
  */
 function warnUnknownSzProperty(key: string, szProp: SzObject): void {
-    if (process.env.NODE_ENV === 'production' || !szNodeWarningsUnmuted()) return;
-    // One report per key and place: the key decides the code, and a located
-    // build reports each file it meets.
-    const token = `${key}\u0000${szWarnLocation ?? ''}`;
-    if (_warnedUnknownSzProperties.has(token)) return;
-    if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
-        if (process.env.NODE_ENV !== 'production' && !_announcedUnknownSzPropertyCap) {
-            _announcedUnknownSzPropertyCap = true;
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        // One report per key and place: the key decides the code, and a located
+        // build reports each file it meets.
+        const token = `${key}\u0000${szWarnLocation ?? ''}`;
+        if (_warnedUnknownSzProperties.has(token)) return;
+        if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
+            if (!_announcedUnknownSzPropertyCap) {
+                _announcedUnknownSzPropertyCap = true;
+                szReport({
+                    diagnostic: DIAGNOSTICS_CAPPED,
+                    args: { form: 'unknown-keys', count: UNKNOWN_SZ_PROPERTY_WARNINGS_MAX },
+                });
+            }
+            return;
+        }
+        _warnedUnknownSzProperties.add(token);
+        // The key's spelling decides the code: an alias (`canonical-key`), a
+        // numeric key (`numeric-key`), or any other (`unknown-key`, with the
+        // known key it is most likely a typo of). A removed key never reaches
+        // here: `collectTransformProperty` reports it first. The unknown key's
+        // class is not dropped: it is lowered as a literal class exactly like a
+        // known one, and a project can serve it with `@utility`, so the line
+        // says it styles nothing rather than that it is ignored.
+        const at = szWarnLocation ?? runtimeSzWarnContext(szProp);
+        if (SUGGESTION_MAP[key]) {
+            szReport({ diagnostic: CANONICAL_KEY, args: { key }, at });
+        } else if (/^\d+(?:\.\d+)?$/.test(key)) {
+            szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
+        } else {
+            const suggestion = suggestSzKey(key);
             szReport({
-                diagnostic: DIAGNOSTICS_CAPPED,
-                args: { form: 'unknown-keys', count: UNKNOWN_SZ_PROPERTY_WARNINGS_MAX },
+                diagnostic: UNKNOWN_KEY,
+                args: suggestion === null ? { key } : { key, suggestion },
+                at,
             });
         }
-        return;
+        if (!szWarnLocation) hintProjectScanOnce();
     }
-    _warnedUnknownSzProperties.add(token);
-    reportUnknownSzProperty(key, szWarnLocation ?? runtimeSzWarnContext(szProp));
-    if (!szWarnLocation) hintProjectScanOnce();
 }
 
 /** Returns whether a key belongs to any supported property or variant family. */
@@ -3410,37 +3417,6 @@ export function isKnownSzPropertyKey(key: string): boolean {
             key === 'min' ||
             key === 'max',
     );
-}
-
-/**
- * Report an unsupported key under the code its spelling decides: an alias
- * (`canonical-key`), a numeric key (`numeric-key`), or any other
- * (`unknown-key`, with the known key it is most likely a typo of). A removed
- * key never reaches here: `collectTransformProperty` reports it first.
- *
- * The unknown key's class is not dropped: it is lowered as a literal class
- * exactly like a known one, and a project can serve it with `@utility`, so
- * the line says it styles nothing rather than that it is ignored.
- *
- * Called only from the development branch of {@link warnUnknownSzProperty}.
- * @param key - The key as written.
- * @param at - Where it is: a file position, or the runtime's object and frame.
- */
-function reportUnknownSzProperty(key: string, at: string | undefined): void {
-    if (process.env.NODE_ENV !== 'production') {
-        if (SUGGESTION_MAP[key]) {
-            szReport({ diagnostic: CANONICAL_KEY, args: { key }, at });
-        } else if (/^\d+(?:\.\d+)?$/.test(key)) {
-            szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
-        } else {
-            const suggestion = suggestSzKey(key);
-            szReport({
-                diagnostic: UNKNOWN_KEY,
-                args: suggestion === null ? { key } : { key, suggestion },
-                at,
-            });
-        }
-    }
 }
 
 /** Builds the fallback class for a string-valued property. */
@@ -3829,16 +3805,13 @@ function warnOwnedKeyVariantObject(key: string): void {
     // The key test first: every nested variant reaches this line, and the
     // environment reads in the production check are the expensive half
     // (+13% on a six-variant object when it ran first).
+    if (!isOwnedNonVariantKey(key)) return;
     if (
-        !isOwnedNonVariantKey(key) ||
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        _warnedOwnedKeyVariants.has(key)
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedOwnedKeyVariants.has(key)
     ) {
-        return;
-    }
-    _warnedOwnedKeyVariants.add(key);
-    if (process.env.NODE_ENV !== 'production') {
+        _warnedOwnedKeyVariants.add(key);
         szReport({ diagnostic: NON_VARIANT_OBJECT, args: { key }, at: szWarnLocation });
     }
 }
@@ -3898,16 +3871,13 @@ export function __resetSzWarnDedupForTests(): void {
  */
 function warnPropertyObjectValue(key: string, value: Record<string, unknown>): void {
     if (
-        process.env.NODE_ENV === 'production' ||
-        !szNodeWarningsUnmuted() ||
-        KNOWN_VARIANTS.has(key) ||
-        SPECIAL_VARIANTS.has(key) ||
-        _warnedPropertyObjects.has(key)
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !KNOWN_VARIANTS.has(key) &&
+        !SPECIAL_VARIANTS.has(key) &&
+        !_warnedPropertyObjects.has(key)
     ) {
-        return;
-    }
-    _warnedPropertyObjects.add(key);
-    if (process.env.NODE_ENV !== 'production') {
+        _warnedPropertyObjects.add(key);
         szReport({
             diagnostic: PROPERTY_OBJECT,
             // The first three, as the engine names them.

@@ -13,8 +13,10 @@
  * }
  * ```
  *
- * A site imports it, and the ids it names, from `@csszyx/compiler/report`,
- * whose entry the generator writes (`report.ts`).
+ * A site imports it, and the ids it names, from `report.ts`, whose entry the
+ * generator writes: by `./report.js` inside the compiler, which the build
+ * turns into the `@csszyx/compiler/report` subpath, and by that subpath from
+ * the other packages.
  *
  * Browser-safe: it never imports the Node registry.
  *

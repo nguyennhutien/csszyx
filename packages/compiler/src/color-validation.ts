@@ -6,8 +6,8 @@
  * served; the project's Tailwind does, at build (ADR 0022).
  */
 
-import { SLASH_OPACITY_STRING, szReport } from '@csszyx/compiler/report';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { SLASH_OPACITY_STRING, szReport } from './report.js';
 import { szWarningsQuiet } from './sz-dev-warnings.js';
 
 /**
