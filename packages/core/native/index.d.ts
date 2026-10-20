@@ -209,11 +209,18 @@ export interface NativeTransformResult {
 
 /** Error thrown when the native transform package is not installed/available. */
 export class CsszyxNativeUnavailableError extends Error {
-    /** Stable machine-readable error code. */
-    readonly code: 'CSSZYX_NATIVE_UNAVAILABLE';
+    /** The registry id; `https://csszyx.com/e/native-engine-unavailable` explains it. */
+    readonly code: 'native-engine-unavailable';
+    /** The values the message names, by the registry's arg names. */
+    readonly args: {
+        readonly form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding';
+        readonly packageName?: string;
+        readonly exportName?: string;
+        readonly detail: string;
+    };
     /** Optional package expected for the current platform, when supported. */
     readonly packageName: NativePlatformPackage | null;
-    /** The message without its `csszyx native engine unavailable: ` prefix: what is missing, a `help:` line, a `note:` line. */
+    /** The message without its `[csszyx] native-engine-unavailable: ` prefix: what is missing, a `help:` line, a `note:` line. */
     readonly detail: string;
     /** The action to take, without its `help: ` label. */
     readonly help: string;

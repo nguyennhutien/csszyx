@@ -117,7 +117,12 @@ export const SIZE_BUDGETS = [
         // sentence (ADR 0031), and the development ones are the registry's
         // templates, which a production build drops. Budget the usual ~300
         // above.
-        maxGzipBytes: 16_000,
+        //
+        // Lowered from 16,000 on 2026-10-20, measured 15,547 (15,744 before):
+        // the errors it throws carry their code and throw the compact line in
+        // production instead of the sentence (`lowering-not-loaded`,
+        // `runtime-prefix-conflict`, `web-crypto-unavailable`).
+        maxGzipBytes: 15_850,
         // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
         // 8,144 / 1,082. `.` raised from 15,700 on 2026-10-17, measured 15,721,
         // for the same check, and lowered from 16,000 on 2026-10-20, measured
@@ -125,28 +130,37 @@ export const SIZE_BUDGETS = [
         // / 8,153 / 1,096 that day: each module that reports keeps a bare
         // import of `@csszyx/compiler/report`, external here, which an app
         // that bundles the compiler drops (`sideEffects: false`).
+        //
+        // `.` lowered from 15,550 and `./merge` from 1,400 on 2026-10-20 with
+        // the union, measured 15,064 and 1,030 (15,307 and 1,137 before), the
+        // others 477 / 1,308 / 463 / 8,160: `./lite` and `./lowering` grew by
+        // a bare import of `@csszyx/compiler/errors` each, external here.
         entryBudgets: {
-            '.': 15_550,
+            '.': 15_400,
             './lite': 750,
             './core': 1_650,
             './lowering': 750,
             './split': 8_450,
-            './merge': 1_400,
+            './merge': 1_350,
         },
         // The same bundles built by Vite (see `checkViteBudgets`), measured
         // 2026-10-19: 15,686, then 15,376 / 464 / 1,362 / 515 / 8,059 / 996.
         // Each the usual ~300 above, rounded up to 50. The union and `.`
         // lowered on 2026-10-20 with the esbuild ones, measured 15,331 and
         // 15,014.
+        //
+        // Lowered on 2026-10-20 with the thrown errors' compact lines,
+        // measured 15,088, then 14,693 / 478 / 1,264 / 530 / 8,072 / 892
+        // (15,352, then 15,026 / 464 / 1,375 / 515 / 8,066 / 1,004 before).
         vite: {
-            maxGzipBytes: 15_650,
+            maxGzipBytes: 15_400,
             entryBudgets: {
-                '.': 15_350,
+                '.': 15_000,
                 './lite': 800,
-                './core': 1_700,
+                './core': 1_600,
                 './lowering': 850,
                 './split': 8_400,
-                './merge': 1_300,
+                './merge': 1_200,
             },
         },
         // Each one reports csszyx's own output as wrong or an integrity check
@@ -267,7 +281,12 @@ export const SIZE_BUDGETS = [
             // in the chunk order that put them first, see the union), and
             // 16,332 with the category map ahead of them, the same day.
             './browser': 16_600,
+            // `./sz-limits` measured 501 on 2026-10-20 (346 before):
+            // `SzDepthError` extends the error class of `./errors`, measured
+            // 357 alone, which ships to the browser because the runtime
+            // re-exports its guard and every csszyx error extends it.
             './sz-limits': 650,
+            './errors': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
             './color-var': 550,
@@ -292,7 +311,9 @@ export const SIZE_BUDGETS = [
             maxGzipBytes: 17_500,
             entryBudgets: {
                 './browser': 16_650,
+                // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
+                './errors': 700,
                 './keyword-families': 1_050,
                 './bool-class': 750,
                 './color-var': 600,
@@ -488,11 +509,17 @@ export const SIZE_BUDGETS = [
         target: 'packages/csszyx/dist/browser.iife.js',
         maxGzipBytes: 16_400,
     },
+    // The development one raised from 24,650 on 2026-10-20, measured 24,795
+    // (+427): the errors it can throw (`sz-object-depth`,
+    // `options-object-required`, `sz-attribute-syntax`) carry the registry's
+    // words, help and note included, where they threw a one-line sentence,
+    // and the error class came with them. The production one measured 16,069
+    // (-28) the same day.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 24_650,
+        maxGzipBytes: 25_100,
     },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry

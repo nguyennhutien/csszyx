@@ -74,12 +74,17 @@ describe('@csszyx/core/native transformBatch', () => {
             const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
             expect(error.message.split('\n')).toEqual([
                 // No manifest to read the binding's version from: named alone.
-                `csszyx native engine unavailable: csszyx native package ${packageName.current} is older than @csszyx/core ${version} and returns a result it cannot read`,
+                `[csszyx] native-engine-unavailable: csszyx native package ${packageName.current} is older than @csszyx/core ${version} and returns a result it cannot read`,
                 'help: update @csszyx/core and its platform package together, to the same version',
                 'note: the wasm engine ships inside @csszyx/core and produces the same output',
             ]);
             expect(error.packageName).toBe(packageName.current);
             expect(error.helpIsExplicit).toBe(true);
+            expect(error.args).toEqual({
+                form: 'stale-binding',
+                packageName: packageName.current,
+                detail: error.detail,
+            });
         }
     });
 });

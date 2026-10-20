@@ -9,6 +9,9 @@
  * Never inlined into HTML — each page only pays the cost if dynamic() is used.
  */
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+import { DYNAMIC_MANIFEST_UNREACHABLE, szRender } from '@csszyx/compiler/report';
+
 /**
  *
  */
@@ -50,6 +53,27 @@ export function isManifestLoaded(): boolean {
 }
 
 /**
+ * The error a failed manifest fetch rejects with, `dynamic-manifest-unreachable`.
+ * {@link ensureManifest} catches it: the page renders with every class
+ * injected, as the registry's note says.
+ *
+ * @internal Exported for its test.
+ * @param status - The HTTP status the fetch answered with.
+ * @returns The error.
+ */
+export function manifestUnreachable(status: number): CsszyxError {
+    const args = { status };
+    return new CsszyxError({
+        code: 'dynamic-manifest-unreachable',
+        args,
+        message:
+            process.env.NODE_ENV !== 'production'
+                ? szRender({ diagnostic: DYNAMIC_MANIFEST_UNREACHABLE, args })
+                : `[csszyx] dynamic-manifest-unreachable: ${JSON.stringify(args)} https://csszyx.com/e/dynamic-manifest-unreachable`,
+    });
+}
+
+/**
  * Lazily fetches and caches the manifest.
  * Returns the in-flight promise so concurrent calls coalesce.
  *
@@ -66,7 +90,7 @@ export function ensureManifest(): Promise<void> {
     fetchPromise = fetch(manifestUrl)
         .then(r => {
             if (!r.ok) {
-                throw new Error(`csszyx: manifest fetch failed ${r.status}`);
+                throw manifestUnreachable(r.status);
             }
             return r.json() as Promise<CSSManifest>;
         })

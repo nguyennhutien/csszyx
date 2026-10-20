@@ -2,8 +2,9 @@
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
 
 /**
- * `@csszyx/compiler/report`: the development reporter `szReport`
- * (`diagnostic-report.ts`) and every id the registry words for a console
+ * `@csszyx/compiler/report`: the development reporter `szReport` and
+ * `szRender`, which words a thrown error's message the same way
+ * (`diagnostic-report.ts`), and every id the registry words for a console
  * line or a throw, so a site imports both from one place; and
  * `suggestSzKey`, the key an unknown key's line names, which only a
  * development branch computes.
@@ -79,6 +80,6 @@ export {
     UNKNOWN_KEY,
     WEB_CRYPTO_UNAVAILABLE,
 } from './diagnostic-browser.generated.js';
-export { type SzReportOptions, szReport } from './diagnostic-report.js';
+export { type SzReportOptions, szRender, szReport } from './diagnostic-report.js';
 export type { SzBrowserDiagnostic } from './diagnostic-template.js';
 export { suggestSzKey } from './sz-key-suggestion.js';

@@ -10,24 +10,15 @@
 import type { MangleMap } from './hydration.js';
 
 /**
- * Why Web Crypto cannot be used here, or null when it can.
+ * Whether Web Crypto is missing. `crypto.subtle` exists only in a secure
+ * context, so a page served over plain HTTP from anything but localhost does
+ * not have it. The verify path warns and the public compute path throws, both
+ * as `web-crypto-unavailable`.
  *
- * `crypto.subtle` exists only in a secure context, so a page served over plain
- * HTTP from anything but localhost does not have it. Both the compute and the
- * verify path need this answer and both need to say the same thing about it,
- * so the sentence lives here once.
- *
- * @returns the reason, or null when Web Crypto is available.
+ * @returns true when Web Crypto cannot be used.
  */
-export function webCryptoUnavailable(): string | null {
-    if (typeof crypto === 'undefined' || crypto.subtle === undefined) {
-        return (
-            '[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. ' +
-            'crypto.subtle exists only in a secure context: serve the page over HTTPS, or ' +
-            'from localhost. Nothing was verified.'
-        );
-    }
-    return null;
+export function webCryptoUnavailable(): boolean {
+    return typeof crypto === 'undefined' || crypto.subtle === undefined;
 }
 
 /**
@@ -55,17 +46,16 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
  *
  * Uses the Web Crypto API (`crypto.subtle`), so it works WITHOUT the WASM core —
  * unlike the WASM-only sync path. Async because `crypto.subtle.digest` is async.
+ * The caller checks {@link webCryptoUnavailable} first: the public
+ * `computeMangleChecksumAsync` (`hydration.ts`) throws the registry's error,
+ * which this module cannot word without importing the compiler, and the core's
+ * parity suite loads this module from source before the compiler is built.
  *
  * @param map - the mangle map to checksum.
  * @returns the 16-char hex checksum, byte-for-byte what the Rust core derives
  *          from the same map, whatever characters the class names carry.
- * @throws when Web Crypto is unavailable, which means an insecure context.
  */
-export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
-    const unavailable = webCryptoUnavailable();
-    if (unavailable !== null) {
-        throw new Error(unavailable);
-    }
+export async function digestMangleMap(map: MangleMap): Promise<string> {
     // Sort by the bytes that get hashed, which is what the Rust core compares.
     // Comparing the strings instead is a tenth of a millisecond cheaper on a
     // five-hundred-name map and wrong: JavaScript would order the text it holds

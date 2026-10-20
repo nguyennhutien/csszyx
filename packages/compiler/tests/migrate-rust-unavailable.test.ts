@@ -34,7 +34,7 @@ class FakeUnavailable extends Error {
             `help: ${helpLine}`,
             'note: the wasm engine ships inside @csszyx/core and produces the same output',
         ].join('\n');
-        super(`csszyx native engine unavailable: ${detail}`);
+        super(`[csszyx] native-engine-unavailable: ${detail}`);
         this.name = 'CsszyxNativeUnavailableError';
         this.packageName = packageName;
         this.detail = detail;

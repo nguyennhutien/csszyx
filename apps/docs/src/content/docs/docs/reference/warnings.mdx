@@ -719,9 +719,15 @@ wrap it: `className={szr(someSzv({ … }))}`.
 
 | Message | When |
 | --- | --- |
-| **Thrown.** `[csszyx] {fn}() received a plain object — the compiler could not resolve this sz prop at build time.` followed by `Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}` / `Fix:            sz={[cond ? varA : varB, { key: 'val' }]}` / `Received: {json}` | A spread the compiler could not fold reached the runtime. |
-| **Thrown.** `[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names.` … `add once at startup:` / `    import '@csszyx/runtime/lowering';` | Running outside the bundler plugin — unit tests, scripts. |
-| **Thrown.** `[csszyx] two builds sharing one JavaScript runtime registered different Tailwind prefixes: {before} and {after}. Keep independently configured applications on separate @csszyx/runtime instances or align their Tailwind prefix.` | Two independently built applications share a runtime realm but their stylesheets use different prefixes. csszyx stops before runtime lowering can emit a class owned by the wrong stylesheet. |
+| **Thrown.** ``[csszyx] lite-sz-object: `{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.`` — help: ``write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.`` | A spread the compiler could not fold reached the lite runtime. Development only: a production build skips the check. |
+| **Thrown.** ``[csszyx] lowering-not-loaded: A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.`` — help: ``add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.`` | Running outside the bundler plugin — unit tests, scripts. |
+| **Thrown.** ``[csszyx] runtime-prefix-conflict: Two builds sharing one JavaScript runtime registered the Tailwind prefixes `{first}` and `{second}`, so csszyx cannot tell which prefix their classes take.`` — help: ``keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix.`` | Two independently built applications share a runtime realm but their stylesheets use different prefixes. csszyx stops before runtime lowering can emit a class owned by the wrong stylesheet. When one of them has no prefix, the sentence reads ``registered different Tailwind prefixes, `{first}` and none``. |
+
+Each of these is thrown as an error whose `code` is the id after `[csszyx]`
+and whose `args` hold the values the sentence names; a production build
+throws the code, its args as JSON and the code's page instead of the
+sentence. Test it with `isCsszyxError(err)` and `err.code`, from `csszyx` or
+`@csszyx/runtime`.
 
 An unreadable `szr()` argument is reported at build time as `szr fallback at …`
 and is **always missing output**.
@@ -798,7 +804,7 @@ not cover `text-wrap`.
 | ``[csszyx] dynamic-non-boolean: The runtime value of `{key}` has type `{type}`, and only a boolean toggles this class, so it is omitted.`` — help: ``pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.`` | **Yes** — same reason. Fires for the boolean-only keys such as `border*`, `ring`, `outline`, `shadow` and `truncate`, where a dynamic value can only ever mean on or off. `false` is a meaningful "off" and stays silent. |
 | ``[csszyx] dynamic-unsafe-arbitrary: The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.`` — help: ``keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.`` — note: ``only the first dropped value of a session is reported.`` | No — dev only. See [Security](/docs/security/). |
 | ``[csszyx] dynamic-injection-growth: `dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.`` — help: ``drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.`` | No — dev only, once. |
-| **Thrown.** `csszyx: manifest fetch failed {status}` | Yes |
+| **Thrown** and caught. ``[csszyx] dynamic-manifest-unreachable: The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.`` — help: ``serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.`` | Never printed: `dynamic()` catches it and injects every class. |
 
 ## Plugin configuration
 
@@ -1349,7 +1355,7 @@ lanes it described.
 
 | Message | Kind |
 | --- | --- |
-| **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
+| **Thrown.** ``[csszyx] sz-object-depth: This `sz` value nests deeper than {maxDepth} levels, so csszyx rejects it.`` — help: ``check what reaches the `sz` prop; nesting this deep usually means untrusted or looping data.`` | Error: an `SzDepthError`, with `code` `sz-object-depth` |
 | `[csszyx] nesting-depth: Source nesting exceeds {maxNestingDepth} levels (found {depth}).` — help: ``flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.`` — note: `the file is left unchanged and contributes no classes.` | Native engine |
 | `[csszyx] ast-budget: The file exceeds the AST node budget.` — help: ``raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.`` — note: `the file is left unchanged, and none of its classes are collected.` | Native engine |
 
@@ -1839,14 +1845,17 @@ output found - run build first`, `Checksum not found in HTML`, and similar.
 Errors from `@csszyx/runtime`, met while a page runs rather than while it builds.
 
 ```text
-[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names. The csszyx bundler plugin loads it automatically for files that can pass objects at runtime. Outside the plugin pipeline (unit tests, scripts), add once at startup: import '@csszyx/runtime/lowering';
+[csszyx] lowering-not-loaded: A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.
+  help: add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.
 ```
 
 The message names the fix. It appears in unit tests and standalone scripts,
 where nothing has run the plugin that would have injected the import.
 
 ```text
-[csszyx] {helper}() received a plain object — the compiler could not resolve this sz prop at build time. Common cause: sz={{ ...(cond ? varA : varB), key: 'val' }} Fix: sz={[cond ? varA : varB, { key: 'val' }]} Received: {value}
+[csszyx] lite-sz-object: `{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.
+  help: write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.
+  note: a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`.
 ```
 
 A spread of a conditional hides the shape from the compiler, so the build has
@@ -1900,8 +1909,15 @@ show which category a class belongs to. The same checks run for `hasSz`,
 `pickSz`, `omitSz` and `splitBoxSz`, where an sz key such as `minW` is a valid
 selector.
 
-Two helpers take two different inputs, and mixing them up says so:
-`splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
+Two helpers take two different inputs, and mixing them up says so, with a
+`TypeError` in development:
+
+```text
+[csszyx] split-box-sz-string: `splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.
+  help: use `splitBox()` for a class string.
+  note: a production build drops the string instead of throwing.
+```
+
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
 
 ### A qualified selector reached the sz twins

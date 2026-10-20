@@ -45,11 +45,17 @@ fail(`Unexpectedly loaded non-host native package ${nonHostPackage.name}.`);
  * @param {string} packageName Expected optional native package name.
  */
 function assertUnavailableError(err, packageName) {
-  if (err.code !== "CSSZYX_NATIVE_UNAVAILABLE") {
+  if (err.code !== "native-engine-unavailable") {
     fail(`Unexpected native error code: ${err.code}`);
   }
   if (err.packageName !== packageName) {
     fail(`Unexpected native package name: ${err.packageName}`);
+  }
+  if (err[Symbol.for("csszyx.error")] !== true) {
+    fail("Unavailable error does not carry the csszyx error brand.");
+  }
+  if (!err.message.startsWith("[csszyx] native-engine-unavailable: ")) {
+    fail(`Unavailable error is not headed by its code: ${err.message}`);
   }
   const help = err.message.split("\n")[1] ?? "";
   if (!help.startsWith("help: ") || !help.includes('build.parser: "wasm"')) {

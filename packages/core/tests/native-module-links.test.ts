@@ -44,6 +44,10 @@ describe('@csszyx/core/native scanModuleLinks', () => {
             const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
             expect(error.message).toContain('predates the module-link scan');
             expect(error.message).toContain('scanModuleLinks()');
+            expect(error.args).toMatchObject({
+                form: 'missing-export',
+                exportName: 'scanModuleLinks',
+            });
             expect(error.message).toContain(
                 'update @csszyx/core and its platform package together',
             );

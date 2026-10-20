@@ -193,7 +193,7 @@ describe('csszyx_validate', () => {
         loop.hover = loop;
         const data = JSON.parse(handleValidate({ sz: loop }).content[0].text);
         expect(data.valid).toBe(false);
-        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformError).toContain('[csszyx] sz-object-depth:');
     });
 
     it('reports a transformError (and omits transformResult) when transform() itself throws', () => {
@@ -207,7 +207,7 @@ describe('csszyx_validate', () => {
         const data = JSON.parse(handleValidate({ sz: deep }).content[0].text);
 
         expect(data.valid).toBe(false);
-        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformError).toContain('[csszyx] sz-object-depth:');
         expect(data.transformResult).toBeUndefined();
     });
 });

@@ -1085,7 +1085,7 @@ export const DIAGNOSTICS = [
         text: 'Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.',
         help: 'serve the page over HTTPS, or from `localhost`.',
         note: '`crypto.subtle` exists only in a secure context.',
-        sources: [`${HYDRATION}:395`, 'packages/runtime/src/mangle-checksum.ts:67'],
+        sources: [`${HYDRATION}:419`, `${HYDRATION}:42`],
     },
     {
         id: 'hydration-aborted',
@@ -1433,17 +1433,17 @@ export const DIAGNOSTICS = [
                 'flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data.',
         },
         sources: [
-            'packages/compiler/src/sz-limits.ts:25',
-            `${CORE_TS}:1955`,
-            `${VARIANTS}:281`,
+            'packages/compiler/src/sz-limits.ts:37',
+            `${CORE_TS}:1957`,
+            `${VARIANTS}:296`,
             'packages/dynamic/src/purify.ts:119',
             'packages/dynamic/src/purify.ts:185',
-            'packages/runtime/src/core.ts:179',
-            `${SPLIT_BOX}:1405`,
-            `${SPLIT_BOX}:1427`,
-            `${SPLIT_BOX}:1468`,
-            `${SPLIT_BOX}:1574`,
-            `${SPLIT_BOX}:1601`,
+            'packages/runtime/src/core.ts:181',
+            `${SPLIT_BOX}:1413`,
+            `${SPLIT_BOX}:1435`,
+            `${SPLIT_BOX}:1478`,
+            `${SPLIT_BOX}:1584`,
+            `${SPLIT_BOX}:1611`,
             `${VARIANTS}:128`,
         ],
     },
@@ -1589,7 +1589,7 @@ export const DIAGNOSTICS = [
         help: 'write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
         sources: [
             'packages/csszyx/src/browser.ts:99',
-            'packages/csszyx/src/parse-sz-attribute.ts:39',
+            'packages/csszyx/src/parse-sz-attribute.ts:44',
         ],
     },
 
@@ -1613,7 +1613,7 @@ export const DIAGNOSTICS = [
             'csszyx-turbopack':
                 'write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.',
         },
-        sources: [`${CORE_TS}:1928`, 'packages/unplugin/src/next-config.ts:129'],
+        sources: [`${CORE_TS}:1923`, 'packages/unplugin/src/next-config.ts:129'],
     },
     {
         id: 'lowering-not-loaded',
@@ -1623,7 +1623,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.',
         help: "add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.",
-        sources: ['packages/runtime/src/core.ts:215'],
+        sources: ['packages/runtime/src/core.ts:218'],
     },
     {
         id: 'lite-sz-object',
@@ -1634,7 +1634,7 @@ export const DIAGNOSTICS = [
         text: '`{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.',
         help: "write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.",
         note: 'a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`.',
-        sources: ['packages/runtime/src/lite.ts:40'],
+        sources: ['packages/runtime/src/lite.ts:47'],
     },
     {
         id: 'split-box-sz-string',
@@ -1645,7 +1645,7 @@ export const DIAGNOSTICS = [
         text: '`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.',
         help: 'use `splitBox()` for a class string.',
         note: 'a production build drops the string instead of throwing.',
-        sources: [`${SPLIT_BOX}:1431`],
+        sources: [`${SPLIT_BOX}:1440`],
     },
     {
         id: 'runtime-prefix-conflict',
@@ -1666,7 +1666,7 @@ export const DIAGNOSTICS = [
                 'Two builds sharing one JavaScript runtime registered different Tailwind prefixes, `{first}` and none, so csszyx cannot tell which prefix their classes take.',
         },
         help: 'keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix.',
-        sources: ['packages/runtime/src/lowering-slot.ts:148'],
+        sources: ['packages/runtime/src/lowering-slot.ts:157'],
     },
     {
         id: 'dynamic-manifest-unreachable',
@@ -1677,7 +1677,7 @@ export const DIAGNOSTICS = [
         text: 'The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.',
         help: 'serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.',
         note: 'the error is caught and nothing is printed; csszyx does not fetch it again this session until you call `resetManifest`.',
-        sources: ['packages/dynamic/src/manifest.ts:69'],
+        sources: ['packages/dynamic/src/manifest.ts:66'],
     },
     {
         id: 'native-engine-unavailable',

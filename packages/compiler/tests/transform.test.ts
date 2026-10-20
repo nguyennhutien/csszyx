@@ -194,7 +194,9 @@ describe('unknown property warnings', () => {
         // call that keeps it would otherwise read the prefix as options.
         const call = transform as unknown as (a: unknown, b: unknown, c?: unknown) => unknown;
 
-        expect(() => call({ p: 4 }, 'hover:')).toThrow(/takes options.*prefix:/s);
-        expect(() => call({ p: 4 }, '', { 'p-4': 'x' })).toThrow(/takes options/);
+        expect(() => call({ p: 4 }, 'hover:')).toThrow(
+            /^\[csszyx\] options-object-required: `transform` takes its options.*prefix: 'hover:'/s,
+        );
+        expect(() => call({ p: 4 }, '', { 'p-4': 'x' })).toThrow(/options-object-required/);
     });
 });

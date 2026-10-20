@@ -81,9 +81,14 @@ describe('@csszyx/compiler/sz-limits subpath', () => {
         expect(limits.MAX_SZ_DEPTH).toBe(browser.MAX_SZ_DEPTH);
     });
 
+    // `SzDepthError` extends the error class and words its message from the
+    // registry: the class module and the development reporter, which the
+    // build leaves out of the entry, are all it may import.
     it('keeps the module free of the compiler tables it exists to avoid', () => {
         const source = readFileSync(new URL('../src/sz-limits.ts', import.meta.url), 'utf8');
+        const imported = [...source.matchAll(/^import .* from '([^']+)';$/gm)].map(m => m[1]);
 
-        expect(source).not.toMatch(/^import /m);
+        expect(imported).toEqual(['./errors.js', './report.js']);
+        expect(source.match(/^import /gm)).toHaveLength(2);
     });
 });

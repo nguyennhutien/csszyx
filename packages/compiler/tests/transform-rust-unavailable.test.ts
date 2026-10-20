@@ -10,14 +10,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const LOADER_LINES = [
-    'csszyx native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
+    '[csszyx] native-engine-unavailable: @csszyx/core-darwin-arm64 is not installed',
     'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"',
     'note: the wasm engine ships inside @csszyx/core and produces the same output',
 ];
 
 class FakeUnavailable extends Error {
     packageName = '@csszyx/core-darwin-arm64';
-    detail = LOADER_LINES.join('\n').replace('csszyx native engine unavailable: ', '');
+    detail = LOADER_LINES.join('\n').replace('[csszyx] native-engine-unavailable: ', '');
 
     constructor() {
         super(LOADER_LINES.join('\n'));

@@ -64,12 +64,23 @@ const EMPTY_BASELINE = { count: 0, messages: [] };
  * entry, not a sentence, and so does the compact line a site prints in
  * production (`[csszyx] <code>: <args>`). Those are read by code
  * ({@link extractSinkCodes}) and checked against the registry.
+ *
+ * A thrown csszyx error is read the same way: `new CsszyxError({ code, … })`
+ * or a native error given a code by `brandCsszyxError`, whose message is
+ * `szRender`'s words for the entry in development and the compact form in
+ * production. Prose handed to either is still a message to document.
  */
 const SINK_PATTERN =
-    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|szReport|warn|(?:diagnostics|errors)\.push|push_diagnostic|throw new (?:Error|TypeError))\s*\(/g;
+    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|szReport|szRender|warn|(?:diagnostics|errors)\.push|push_diagnostic|throw new (?:Error|TypeError)|new CsszyxError|brandCsszyxError)\s*\(/g;
 
 /** A registry entry a `szReport` call names, as the browser module exports it. */
 const REPORTED_ENTRY = /\bdiagnostic:\s*([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)\b/g;
+
+/** The calls that throw a csszyx error, whose `code` field is a registry id. */
+const ERROR_SINK_PATTERN = /\b(?:new CsszyxError|brandCsszyxError)\s*\(/g;
+
+/** The code a thrown csszyx error names: `code: '<code>'`. */
+const ERROR_CODE = /\bcode:\s*['"]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)['"]/g;
 
 /** The code that heads a line: `[csszyx] <code>: `, as the compact form writes it. */
 const CODE_HEAD = /\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*): /g;
@@ -91,12 +102,13 @@ const MIN_MESSAGE_WORDS = 8;
  * line-based cut would capture only its first fragment.
  *
  * @param source Raw contents of one source file.
+ * @param pattern The sink calls to read; every sink by default.
  * @returns The text inside each sink call's argument list.
  */
-export function extractSinkCallRegions(source) {
+export function extractSinkCallRegions(source, pattern = SINK_PATTERN) {
     const text = String(source);
     const regions = [];
-    for (const match of text.matchAll(SINK_PATTERN)) {
+    for (const match of text.matchAll(pattern)) {
         let depth = 1;
         let i = match.index + match[0].length;
         const start = i;
@@ -131,9 +143,10 @@ export function extractSinkMessages(source, rust = false) {
 }
 
 /**
- * Collect the codes a file's sinks print: each registry entry a `szReport`
- * call names, and each code that heads a sink's literal. The words of such a
- * line live in the registry, so its code is what gets checked.
+ * Collect the codes a file's sinks print: each registry entry a `szReport` or
+ * `szRender` call names, each code a thrown csszyx error names, and each code
+ * that heads a sink's literal. The words of such a line live in the registry,
+ * so its code is what gets checked.
  *
  * @param source Raw contents of one source file.
  * @returns The codes, one per mention, in source order.
@@ -145,6 +158,9 @@ export function extractSinkCodes(source) {
             codes.push(name.toLowerCase().replaceAll('_', '-'));
         }
         for (const [, code] of region.matchAll(CODE_HEAD)) codes.push(code);
+    }
+    for (const region of extractSinkCallRegions(source, ERROR_SINK_PATTERN)) {
+        for (const [, code] of region.matchAll(ERROR_CODE)) codes.push(code);
     }
     return codes;
 }

@@ -13,6 +13,9 @@
  * @module @csszyx/runtime/lite
  */
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+import { LITE_SZ_OBJECT, szRender } from '@csszyx/compiler/report';
+
 // Inlined at build time — NOT a runtime dep. See tsup.config.ts.
 export { __szBoolClass } from '@csszyx/compiler/bool-class';
 export { __szColorVar } from '@csszyx/compiler/color-var';
@@ -31,20 +34,21 @@ export type SzStringInput = string | null | undefined | false;
  * Compiled sz props are always strings; an object here means the compiler
  * hit an unhandled pattern and fell back to _sz(objectExpr).
  *
- * Dead-code eliminated in production builds (process.env.NODE_ENV check).
+ * Dead-code eliminated in production builds: every call sits under a
+ * `process.env.NODE_ENV` check, so a bundler drops the calls, this function
+ * and the registry's words for `lite-sz-object` with them.
  * @param cls - Value to check; expected to be a string, null, undefined, or false
  * @param fnName - Name of the calling helper, included in the error message
+ * @throws {CsszyxError} `lite-sz-object`, when `cls` is an object.
  */
 function assertNotObject(cls: unknown, fnName: string): void {
     if (cls !== null && cls !== undefined && cls !== false && typeof cls !== 'string') {
-        throw new Error(
-            `[csszyx] ${fnName}() received a plain object — the compiler could not resolve this sz prop at build time.\n` +
-                '\n' +
-                "Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}\n" +
-                "Fix:            sz={[cond ? varA : varB, { key: 'val' }]}\n" +
-                '\n' +
-                `Received: ${JSON.stringify(cls)}`,
-        );
+        const args = { fnName, received: JSON.stringify(cls) };
+        throw new CsszyxError({
+            code: 'lite-sz-object',
+            args,
+            message: szRender({ diagnostic: LITE_SZ_OBJECT, args }),
+        });
     }
 }
 

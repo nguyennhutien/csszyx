@@ -60,7 +60,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`font-variant-numeric` keys](#font-variant-numeric-takes-one-key-per-group) | `[csszyx] removed-key:` on `tabularNums` | the build, `csszyx check` | `migrate --keys-only` |
 | [`touch-action` keys, `contain`](#touch-action-takes-one-key-per-group-contain-gains-keys) | `[csszyx] moved-value:` on `touch: pan-x` | the build, `csszyx check` | `migrate --keys-only` |
 | [`szv()` returns `SzProps`](#szv-returns-szprops-and-checks-every-row) | type errors in `szv` rows | `tsc` | you |
-| [`transform` options](#transform-takes-an-options-object) | `transform takes options` thrown | `tsc`, runtime throw | you |
+| [`transform` options](#transform-takes-an-options-object) | `[csszyx] options-object-required:` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-nine-exports) | an import that no longer resolves | `tsc`, the bundler | you |
@@ -69,6 +69,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Runtime at the plugin's version](#the-build-stops-when-csszyxruntime-is-from-another-release) | `runtime-version-skew` | the build start | you |
 | [Core in Node only](#csszyxcore-runs-in-node-only-and-verifymanglemapintegrity-is-gone) | `verifyMangleMapIntegrity` not exported; `Could not resolve "@csszyx/core"` in a browser build | `tsc`, the bundler | you |
 | [`@csszyx/core/native` results](#csszyxcorenative-returns-codes-instead-of-sentences) | no `diagnostics` on a result; `rootDir` not accepted | `tsc` | you |
+| [Thrown errors carry a code](#errors-csszyx-throws-carry-a-code) | `err.code` is `native-engine-unavailable` where it was `CSSZYX_NATIVE_UNAVAILABLE`; messages start `[csszyx] <code>:` | your `catch` | you |
 | [ES modules only](#csszyxunplugin-and-csszyxcompiler-ship-es-modules-only) | `TS1471` or `TS1479` in a CommonJS TypeScript file | `tsc` | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
@@ -498,8 +499,9 @@ transform(sz, { mangleMap: map });
 **What you see.** `tsc` rejects the old call. Untyped code throws:
 
 ```text
-[csszyx] transform takes options: the prefix and the mangle map are keys in one object.
-  help: transform(sz, { prefix: 'hover:', mangleMap }) — a second argument that is not an options object is no longer read.
+[csszyx] options-object-required: `transform` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
+  help: pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.
+  docs: https://csszyx.com/e/options-object-required
 ```
 
 **Tooling.** `tsc --noEmit`. `csszyx migrate` does not rewrite calls.
@@ -782,6 +784,36 @@ only shortened the file path inside a sentence, is no longer accepted.
 `@csszyx/compiler/engine` instead. Their result holds the rendered
 `diagnostics` and an `issues` entry with `code`, `args`, `line` and `column`
 for each.
+
+## Errors csszyx throws carry a code
+
+An error the browser packages throw has a `code`, the id its
+[page](/docs/reference/codes/) is named by, and `args`, the values its message
+names. Its message starts `[csszyx] <code>:`; a production build throws the
+code, its args as JSON and the page instead of the sentence. The class you
+caught before still matches: `SzDepthError` is still an `SzDepthError`, and
+`splitBoxSz` and the CDN's attribute parser still throw a `TypeError` and a
+`SyntaxError`.
+
+`CsszyxNativeUnavailableError` from `@csszyx/core/native` changes its `code`
+from `CSSZYX_NATIVE_UNAVAILABLE` to `native-engine-unavailable`, and its
+message starts `[csszyx] native-engine-unavailable:` instead of
+`csszyx native engine unavailable:`.
+
+**The edit.** Match on the code, and recognise the error with `isCsszyxError`,
+from `csszyx` or `@csszyx/runtime`. Two copies of csszyx in one app have two
+error classes, so `instanceof` can answer `false` where the guard does not:
+
+```ts
+import { isCsszyxError } from 'csszyx';
+
+try {
+    szr(input);
+} catch (err) {
+    if (isCsszyxError(err) && err.code === 'sz-object-depth') return '';
+    throw err;
+}
+```
 
 ## @csszyx/unplugin and @csszyx/compiler ship ES modules only
 

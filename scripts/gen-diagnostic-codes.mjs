@@ -823,6 +823,7 @@ export function renderTypeScript(input) {
     const groups = input.GROUPS.map(group => group.id);
     const settable = settableIds(input);
     const live = input.DIAGNOSTICS.map(entry => entry.id);
+    const thrown = input.DIAGNOSTICS.filter(entry => entry.surfaces.error).map(entry => entry.id);
     const defaults = input.DIAGNOSTICS.filter(entry => entry.defaults).map(
         ({ id, defaults }) => `    '${id}': ['${defaults.recommended}', '${defaults.atomic}'],`,
     );
@@ -877,6 +878,12 @@ ${list(settable)}
 /** Every live public id, whatever surface prints it. */
 export type SzDiagnosticId =
 ${union(live)};
+
+/**
+ * The \`code\` of an error csszyx throws: every id the registry gives an
+ * error surface, so a typo in \`err.code === '…'\` fails to compile.
+ */
+export type SzErrorCode =${thrown.length === 0 ? ' never' : `\n${union(thrown)}`};
 
 /**
  * Where \`recommended\` and \`atomic\` differ from \`error\`, by id. An id not
@@ -1199,8 +1206,9 @@ export function renderReportEntry(input) {
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
 
 /**
- * \`@csszyx/compiler/report\`: the development reporter \`szReport\`
- * (\`diagnostic-report.ts\`) and every id the registry words for a console
+ * \`@csszyx/compiler/report\`: the development reporter \`szReport\` and
+ * \`szRender\`, which words a thrown error's message the same way
+ * (\`diagnostic-report.ts\`), and every id the registry words for a console
  * line or a throw, so a site imports both from one place; and
  * \`suggestSzKey\`, the key an unknown key's line names, which only a
  * development branch computes.
@@ -1210,7 +1218,7 @@ export function renderReportEntry(input) {
  */
 
 export { ${names.join(', ')} } from './diagnostic-browser.generated.js';
-export { type SzReportOptions, szReport } from './diagnostic-report.js';
+export { type SzReportOptions, szRender, szReport } from './diagnostic-report.js';
 export type { SzBrowserDiagnostic } from './diagnostic-template.js';
 export { suggestSzKey } from './sz-key-suggestion.js';
 `;

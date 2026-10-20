@@ -374,6 +374,65 @@ export type SzDiagnosticId =
     | 'cli-option-invalid';
 
 /**
+ * The `code` of an error csszyx throws: every id the registry gives an
+ * error surface, so a typo in `err.code === '…'` fails to compile.
+ */
+export type SzErrorCode =
+    | 'parse-error'
+    | 'prefix-disagreement'
+    | 'recovery-manifest-unreadable'
+    | 'web-crypto-unavailable'
+    | 'sz-object-depth'
+    | 'sz-attribute-syntax'
+    | 'options-object-required'
+    | 'lowering-not-loaded'
+    | 'lite-sz-object'
+    | 'split-box-sz-string'
+    | 'runtime-prefix-conflict'
+    | 'dynamic-manifest-unreachable'
+    | 'native-engine-unavailable'
+    | 'wasm-engine-unavailable'
+    | 'native-migrate-unavailable'
+    | 'engine-version-skew'
+    | 'runtime-version-skew'
+    | 'peer-module-unresolved'
+    | 'tailwind-v3-unavailable'
+    | 'explain-input-invalid'
+    | 'template-sz-invalid'
+    | 'template-runtime-value'
+    | 'template-unparsable'
+    | 'template-lang-unsupported'
+    | 'svelte-version-unsupported'
+    | 'ignore-package-incompatible'
+    | 'internal-error'
+    | 'engine-call-failed'
+    | 'watch-prefix-changed'
+    | 'mangle-preserve-invalid'
+    | 'mangle-global-vars-options-invalid'
+    | 'mangle-global-vars-plan-invalid'
+    | 'mangle-map-too-large'
+    | 'mangle-census-late'
+    | 'merge-hook-late'
+    | 'tailwind-stylesheet-missing'
+    | 'tailwind-stylesheet-broken'
+    | 'tailwind-config-missing'
+    | 'tailwind-config-unloadable'
+    | 'legacy-source-directive'
+    | 'postcss-plugin-order'
+    | 'ignore-pattern-negated'
+    | 'css-source-unstable'
+    | 'rsc-boundary-violation'
+    | 'next-prefix-unread'
+    | 'next-safelist-locked'
+    | 'next-generation-manifest-invalid'
+    | 'next-mangle-vars-unsupported'
+    | 'next-turbo-cache-unseeded'
+    | 'next-sz-untransformed'
+    | 'next-watcher-not-started'
+    | 'no-source-files'
+    | 'cli-option-invalid';
+
+/**
  * Where `recommended` and `atomic` differ from `error`, by id. An id not
  * listed is `error` under both.
  */

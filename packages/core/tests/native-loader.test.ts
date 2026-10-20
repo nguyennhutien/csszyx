@@ -22,15 +22,15 @@ describe('@csszyx/core/native loader', () => {
         const error = new CsszyxNativeUnavailableError();
 
         expect(error.packageName).toBe(getNativePackageName());
-        expect(error.code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
+        expect(error.code).toBe('native-engine-unavailable');
         // Absent a purpose the error speaks for the transform, which is the
         // one that really can fall back to the wasm engine. One line per
         // thing the reader needs: what is missing, what to do, what holds.
         const [what, help, note] = error.message.split('\n');
         expect(what).toBe(
             error.packageName
-                ? `csszyx native engine unavailable: ${error.packageName} is not installed`
-                : 'csszyx native engine unavailable: no prebuilt package covers this platform',
+                ? `[csszyx] native-engine-unavailable: ${error.packageName} is not installed`
+                : '[csszyx] native-engine-unavailable: no prebuilt package covers this platform',
         );
         expect(help).toMatch(/^help: .*build\.parser: "wasm"/);
         expect(note).toBe(
@@ -38,7 +38,41 @@ describe('@csszyx/core/native loader', () => {
         );
         // The wrapper in @csszyx/compiler re-prefixes the first line, so the
         // text after the prefix is exposed on its own.
-        expect(error.detail).toBe(error.message.replace('csszyx native engine unavailable: ', ''));
+        expect(error.detail).toBe(
+            error.message.replace('[csszyx] native-engine-unavailable: ', ''),
+        );
+    });
+
+    // `@csszyx/compiler/errors` recognises a csszyx error by this brand; the
+    // compiler's own suite checks its guard accepts this error, since this
+    // module cannot import the compiler.
+    it('carries the csszyx error brand, the code and its args', () => {
+        const brand = Symbol.for('csszyx.error');
+        const none = new CsszyxNativeUnavailableError(undefined, null);
+        expect((none as unknown as Record<symbol, unknown>)[brand]).toBe(true);
+        expect(none.args).toEqual({ form: 'no-platform-package', detail: none.detail });
+        const missing = new CsszyxNativeUnavailableError(undefined, '@csszyx/core-test-x');
+        expect(missing.args).toEqual({
+            form: 'not-installed',
+            packageName: '@csszyx/core-test-x',
+            detail: missing.detail,
+        });
+    });
+
+    it('names the export a package lacks', () => {
+        const fixture = fixturePath('fixtures/native-binding-invalid.cjs');
+        try {
+            loadNativeBinding(fixture);
+        } catch (err) {
+            expect((err as CsszyxNativeUnavailableError).args).toEqual({
+                form: 'missing-export',
+                packageName: fixture,
+                exportName: 'transformBatch',
+                detail: (err as CsszyxNativeUnavailableError).detail,
+            });
+            return;
+        }
+        throw new Error('loadNativeBinding unexpectedly returned a binding');
     });
 
     it('says no prebuilt package covers the platform when told there is none', () => {
@@ -46,7 +80,7 @@ describe('@csszyx/core/native loader', () => {
 
         expect(error.packageName).toBeNull();
         expect(error.message.split('\n')).toEqual([
-            'csszyx native engine unavailable: no prebuilt package covers this platform',
+            '[csszyx] native-engine-unavailable: no prebuilt package covers this platform',
             'help: set build.parser: "wasm"; the wasm engine ships inside @csszyx/core',
             'note: the wasm engine ships inside @csszyx/core and produces the same output',
         ]);
@@ -71,7 +105,7 @@ describe('@csszyx/core/native loader', () => {
             expect(typeof binding.transformBatch).toBe('function');
         } catch (err) {
             expect(err).toBeInstanceOf(CsszyxNativeUnavailableError);
-            expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
+            expect((err as CsszyxNativeUnavailableError).code).toBe('native-engine-unavailable');
             expect((err as CsszyxNativeUnavailableError).message).toContain('build.parser: "wasm"');
             return;
         }
@@ -88,7 +122,7 @@ describe('@csszyx/core/native loader', () => {
         try {
             loadNativeBinding(missingPackage);
         } catch (err) {
-            expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
+            expect((err as CsszyxNativeUnavailableError).code).toBe('native-engine-unavailable');
             expect((err as CsszyxNativeUnavailableError).packageName).toBe(missingPackage);
             return;
         }
@@ -101,7 +135,7 @@ describe('@csszyx/core/native loader', () => {
 
         expect(() => loadNativeBinding(fixture)).toThrow(CsszyxNativeUnavailableError);
         expect(() => loadNativeBinding(fixture)).toThrow(
-            `csszyx native engine unavailable: ${fixture} does not export transformBatch()`,
+            `[csszyx] native-engine-unavailable: ${fixture} does not export transformBatch()`,
         );
     });
 

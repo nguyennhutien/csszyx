@@ -7,7 +7,12 @@ const require = createRequire(import.meta.url);
 let cachedBinding;
 let cachedPackageName;
 
-const PREFIX = 'csszyx native engine unavailable: ';
+const CODE = 'native-engine-unavailable';
+const PREFIX = `[csszyx] ${CODE}: `;
+// The key `@csszyx/compiler/errors` brands every csszyx error under. This
+// module cannot import the compiler, which imports it, so it writes the same
+// key; the compiler's suite checks its `isCsszyxError` accepts this error.
+const BRAND = Symbol.for('csszyx.error');
 const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the same output';
 // migrate exists only on the native engine, so the note above would promise a
 // fallback that is not there and the install help would send a reader to
@@ -46,9 +51,25 @@ function defaultHelp(packageName) {
 }
 
 /**
+ * The registry form of an error the loader builds: a missing package unless
+ * the caller says what is missing, which only the loader's own sites do.
+ *
+ * @param {string | undefined} what @param {string | null} packageName
+ * @returns {'no-platform-package' | 'not-installed' | 'missing-export'} The form.
+ */
+function formOf(what, packageName) {
+    if (what !== undefined) return 'missing-export';
+    return packageName ? 'not-installed' : 'no-platform-package';
+}
+
+/**
  * One line per thing the reader needs: what is missing, what to do, what
  * still holds. `detail` is the message without the fixed prefix, for a
  * caller that re-prefixes it under its own name.
+ *
+ * A csszyx error: `code` is the registry id `native-engine-unavailable`,
+ * `args` its form, the package and the detail, and it carries the brand
+ * `isCsszyxError` recognises.
  */
 export class CsszyxNativeUnavailableError extends Error {
     // `help` carries an explicit `undefined` rather than nothing: every
@@ -62,7 +83,13 @@ export class CsszyxNativeUnavailableError extends Error {
         ].join('\n');
         super(PREFIX + detail);
         this.name = 'CsszyxNativeUnavailableError';
-        this.code = 'CSSZYX_NATIVE_UNAVAILABLE';
+        this[BRAND] = true;
+        this.code = CODE;
+        this.args = {
+            form: formOf(what, packageName),
+            ...(packageName ? { packageName } : {}),
+            detail,
+        };
         this.packageName = packageName;
         this.detail = detail;
         this.help = helpText(help, packageName);
@@ -96,11 +123,13 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
 
     const binding = loaded?.default ?? loaded;
     if (typeof binding?.transformBatch !== 'function') {
-        throw new CsszyxNativeUnavailableError(
+        const error = new CsszyxNativeUnavailableError(
             `${packageName} does not export transformBatch()`,
             packageName,
             `reinstall ${packageName} at the version of @csszyx/core, or set build.parser: "wasm"`,
         );
+        error.args = { ...error.args, exportName: 'transformBatch' };
+        throw error;
     }
 
     cachedBinding = binding;
@@ -143,11 +172,13 @@ function currentResults(results, current) {
     // Versions when the manifests can be read, which a fixture's cannot.
     const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
     const core = named('@csszyx/core', '../package.json');
-    throw new CsszyxNativeUnavailableError(
+    const error = new CsszyxNativeUnavailableError(
         `csszyx native package ${native} is older than ${core} and returns a result it cannot read`,
         cachedPackageName,
         RESULT_HELP,
     );
+    error.args = { ...error.args, form: 'stale-binding' };
+    throw error;
 }
 
 export function transformBatch(_files, options) {
@@ -187,12 +218,14 @@ function migrateExport(name) {
 function laterExport(name, feature, help, note) {
     const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
-        throw new CsszyxNativeUnavailableError(
+        const error = new CsszyxNativeUnavailableError(
             `csszyx native package ${cachedPackageName} predates ${feature} and does not export ${name}()`,
             cachedPackageName,
             help,
             note,
         );
+        error.args = { ...error.args, exportName: name };
+        throw error;
     }
     return binding[name];
 }

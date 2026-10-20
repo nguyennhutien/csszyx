@@ -6,6 +6,7 @@
  * the abort protocol when necessary to preserve SSR invariants.
  */
 
+import { CsszyxError } from '@csszyx/compiler/errors';
 import {
     CSR_RECOVERY_UNMARKED,
     CSR_RECOVERY_USED,
@@ -14,18 +15,41 @@ import {
     MANGLE_CHECKSUM_MISMATCH,
     MANGLE_MAP_UNAVAILABLE,
     MANGLE_MAP_UNREADABLE,
+    szRender,
     szReport,
     WEB_CRYPTO_UNAVAILABLE,
 } from '@csszyx/compiler/report';
 
 import { createHydrationMangleMap } from './hydration-map.js';
-import { computeMangleChecksumAsync, webCryptoUnavailable } from './mangle-checksum.js';
+import { digestMangleMap, webCryptoUnavailable } from './mangle-checksum.js';
 import { getMangleRegistry } from './mangle-registry.js';
 import { sortStrings } from './sort.js';
 import type { RecoveryManifest } from './verify.js';
 import { getRecoveryMode, hasRecoveryToken } from './verify.js';
 
-export { computeMangleChecksumAsync };
+/**
+ * Recompute a mangle map's checksum the way the Rust core does, with Web
+ * Crypto, so it works without the WASM core.
+ *
+ * @param map - the mangle map to checksum.
+ * @returns the 16-char hex checksum, byte-for-byte what the Rust core derives
+ *          from the same map, whatever characters the class names carry.
+ * @throws {CsszyxError} `web-crypto-unavailable`, in an insecure context.
+ */
+export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
+    if (webCryptoUnavailable()) {
+        const args = {};
+        throw new CsszyxError({
+            code: 'web-crypto-unavailable',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: WEB_CRYPTO_UNAVAILABLE, args })
+                    : `[csszyx] web-crypto-unavailable: ${JSON.stringify(args)} https://csszyx.com/e/web-crypto-unavailable`,
+        });
+    }
+    return await digestMangleMap(map);
+}
 
 /**
  * Window augmentation for csszyx global state.
@@ -390,7 +414,7 @@ export async function verifyMangleChecksumAsync(
     // map; the caller needs to know the check never ran. Warned in production
     // too: a caller believing integrity was verified when it was not is exactly
     // the state this function exists to prevent.
-    if (webCryptoUnavailable() !== null) {
+    if (webCryptoUnavailable()) {
         if (process.env.NODE_ENV !== 'production') {
             szReport({ diagnostic: WEB_CRYPTO_UNAVAILABLE, args: {} });
         } else {
@@ -411,7 +435,7 @@ export async function verifyMangleChecksumAsync(
         }
         return false;
     }
-    const computed = await computeMangleChecksumAsync(source.map);
+    const computed = await digestMangleMap(source.map);
     if (computed === expectedChecksum) return true;
     if (source.found) {
         const args = { computed, expected: expectedChecksum };

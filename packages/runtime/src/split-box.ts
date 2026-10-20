@@ -14,6 +14,7 @@
  * dependency rules (e.g. "if the frame clips, make the scroller scroll") without
  * hardcoding csszyx's class vocabulary.
  */
+
 import {
     isForbiddenSzKey,
     MAX_SZ_DEPTH,
@@ -21,15 +22,18 @@ import {
     type SzObject,
     type SzValue,
 } from '@csszyx/compiler/browser';
+import { brandCsszyxError } from '@csszyx/compiler/errors';
 import {
     SPLIT_BOX_HIDDEN_CONTENT,
     SPLIT_BOX_PEER_ON_FRAME,
     SPLIT_BOX_PLACEMENT_VARIANT,
     SPLIT_BOX_SELECTOR_INVALID,
+    SPLIT_BOX_SZ_STRING,
     SPLIT_BOX_UNBOUNDED_SCROLL,
     SPLIT_BOX_UNCLASSIFIED,
     SPLIT_BOX_UNCLIPPED_CORNERS,
     SPLIT_BOX_UNKNOWN_CATEGORY,
+    szRender,
 } from '@csszyx/compiler/report';
 import {
     BOX_ROLE_BY_KEY,
@@ -1433,8 +1437,10 @@ function flattenSz(sz: SzInput, depth: number): SzObject {
     if (!sz) return {};
     if (typeof sz === 'string') {
         if (process.env.NODE_ENV !== 'production' && sz.trim()) {
-            throw new TypeError(
-                `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for ${JSON.stringify(sz)}.`,
+            const args = { value: sz };
+            throw brandCsszyxError(
+                new TypeError(szRender({ diagnostic: SPLIT_BOX_SZ_STRING, args })),
+                { code: 'split-box-sz-string', args },
             );
         }
         return {};

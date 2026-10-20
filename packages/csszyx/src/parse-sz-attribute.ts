@@ -5,6 +5,9 @@
  * @module
  */
 
+import { brandCsszyxError } from '@csszyx/compiler/errors';
+import { SZ_ATTRIBUTE_SYNTAX, szRender } from '@csszyx/compiler/report';
+
 /**
  * Safe JS object literal parser for sz attributes. Handles single-quoted
  * strings, unquoted keys, numbers, booleans, nested objects, and arbitrary
@@ -34,13 +37,17 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     let pos = 0;
 
     // Only called inside a loop that runs while `pos` is in range. The
-    // error carries what the runtime's line names (`sz-attribute-syntax`).
+    // error stays a `SyntaxError` and carries the code and args of the
+    // runtime's line (`sz-attribute-syntax`).
     const unexpected = (): never => {
-        throw Object.assign(
+        const args = { input: rawInput, char: input[pos] as string, index: pos + offset };
+        throw brandCsszyxError(
             new SyntaxError(
-                `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos + offset} in sz attribute "${rawInput}"`,
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: SZ_ATTRIBUTE_SYNTAX, args })
+                    : `[csszyx] sz-attribute-syntax: ${JSON.stringify(args)} https://csszyx.com/e/sz-attribute-syntax`,
             ),
-            { args: { input: rawInput, char: input[pos] as string, index: pos + offset } },
+            { code: 'sz-attribute-syntax', args },
         );
     };
 

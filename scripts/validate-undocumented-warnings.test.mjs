@@ -137,3 +137,46 @@ test('reads no prose from the compact form, whose words are the registry entry',
         [],
     );
 });
+
+test('reads the code of a thrown csszyx error, whose words are the registry entry', () => {
+    // A throw names its code, and its message is the registry's words in
+    // development and the compact form in production: no prose at the site.
+    const source = [
+        'throw new CsszyxError({',
+        "    code: 'lowering-not-loaded',",
+        '    args,',
+        "    message: process.env.NODE_ENV !== 'production'",
+        '        ? szRender({ diagnostic: LOWERING_NOT_LOADED, args })',
+        '        : `[csszyx] lowering-not-loaded: ${JSON.stringify(args)} https://csszyx.com/e/lowering-not-loaded`,',
+        '});',
+        'throw brandCsszyxError(new TypeError(szRender({ diagnostic: SPLIT_BOX_SZ_STRING, args })), {',
+        "    code: 'split-box-sz-string',",
+        '    args,',
+        '});',
+    ].join('\n');
+
+    assert.deepEqual(
+        new Set(validator.extractSinkCodes(source)),
+        new Set(['lowering-not-loaded', 'split-box-sz-string']),
+    );
+    assert.deepEqual(extractSinkMessages(source), []);
+});
+
+test('reads a code field only from a thrown csszyx error', () => {
+    // A diagnostics record pushed by the build has its own `code` field, which
+    // names no registry entry.
+    assert.deepEqual(
+        validator.extractSinkCodes(
+            "diagnostics.push({ code: 'registered-property', severity: 'error', name });",
+        ),
+        [],
+    );
+});
+
+test('finds prose thrown through a csszyx error, which the registry does not word', () => {
+    const messages = extractSinkMessages(
+        "throw new CsszyxError({ code: 'lowering-not-loaded', args, message: 'the lowering module is not loaded so nothing can be lowered here' });",
+    );
+
+    assert.equal(messages.length, 1);
+});

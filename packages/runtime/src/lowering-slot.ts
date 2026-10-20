@@ -13,12 +13,17 @@
  * injecting `import '@csszyx/runtime/lowering'` into files that can pass
  * objects, or the back-compat `@csszyx/runtime` entry eagerly on first use.
  *
- * This module must stay dependency-free and free of module-level side effects:
- * it is inlined into every entry bundle, and a top-level impure statement here
- * would defeat tree shaking for the whole barrel.
+ * This module must stay free of module-level side effects and of the
+ * compiler's transform: it is inlined into every entry bundle, and a top-level
+ * impure statement here would defeat tree shaking for the whole barrel. It
+ * imports only the error class and, for development, the reporter that words
+ * the prefix conflict, both side-effect free.
  *
  * @module @csszyx/runtime/lowering-slot
  */
+
+import { CsszyxError } from '@csszyx/compiler/errors';
+import { RUNTIME_PREFIX_CONFLICT, szRender } from '@csszyx/compiler/report';
 
 /**
  * Lowers sz input to its className string (mangle-aware).
@@ -132,7 +137,8 @@ export function setSzClassPrefix(prefix: string | null): void {
  * shared runtime-import injection path.
  *
  * @param prefix - The build's prefix, or null when its stylesheet has none.
- * @throws When another module in the realm registered a different value.
+ * @throws {CsszyxError} `runtime-prefix-conflict`, when another module in the
+ * realm registered a different value.
  * @internal Called by generated code, not written by hand. The three
  * engines share these names as an ABI: a changed shape makes classes
  * vanish where a build and a runtime differ in version, so a new shape
@@ -143,12 +149,19 @@ export function registerSzClassPrefix(prefix: string | null): void {
     const globals = globalThis as typeof globalThis & SzLoweringGlobals;
     const registered = currentClassPrefixRegistration ?? globals.__csszyx_class_prefix_registration;
     if (registered !== undefined && registered.value !== value) {
-        const describe = (candidate: string | null): string =>
-            candidate === null ? 'no prefix' : `prefix(${candidate})`;
-        throw new Error(
-            `[csszyx] two builds sharing one JavaScript runtime registered different Tailwind prefixes: ${describe(registered.value)} and ${describe(value)}. ` +
-                'Keep independently configured applications on separate @csszyx/runtime instances or align their Tailwind prefix.',
-        );
+        // The values differ, so at most one of them is `null`.
+        const args =
+            registered.value !== null && value !== null
+                ? ({ form: 'prefixes', first: registered.value, second: value } as const)
+                : ({ form: 'unprefixed', first: (registered.value ?? value) as string } as const);
+        throw new CsszyxError({
+            code: 'runtime-prefix-conflict',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: RUNTIME_PREFIX_CONFLICT, args })
+                    : `[csszyx] runtime-prefix-conflict: ${JSON.stringify(args)} https://csszyx.com/e/runtime-prefix-conflict`,
+        });
     }
     const registration = registered ?? { value };
     currentClassPrefixRegistration = registration;

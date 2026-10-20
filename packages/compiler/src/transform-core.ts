@@ -12,6 +12,7 @@ import {
     warnStringColorOpacity,
 } from './color-validation.js';
 import type { SzDiagnosticIssue, SzMergeGroup, SzMergeOverride } from './engine-spans.js';
+import { CsszyxError } from './errors.js';
 import {
     GROUPS_OF_GLOBAL_KEYWORD,
     keysDisplacedBy,
@@ -98,10 +99,12 @@ import {
     NUMERIC_FONT_WEIGHT,
     NUMERIC_KEY,
     OFF_SCALE_VALUE,
+    OPTIONS_OBJECT_REQUIRED,
     PER_SIDE_BORDER_STYLE,
     PROPERTY_OBJECT,
     REMOVED_KEY,
     suggestSzKey,
+    szRender,
     szReport,
     UNKNOWN_FIELD,
     UNKNOWN_KEY,
@@ -1897,12 +1900,6 @@ export interface TransformOptions {
     mangleMap?: Record<string, string>;
 }
 
-/** What `transform` says when it is called the way the previous shape took. */
-const POSITIONAL_CALL_MESSAGE = [
-    '[csszyx] transform takes options: the prefix and the mangle map are keys in one object.',
-    "  help: transform(sz, { prefix: 'hover:', mangleMap }) — a second argument that is not an options object is no longer read.",
-].join('\n');
-
 /**
  * Transform an sz object into a className string.
  *
@@ -1913,7 +1910,8 @@ const POSITIONAL_CALL_MESSAGE = [
  * @param options - the prefix to prepend and the mangle map to apply.
  * @param rest - nothing; a third argument is what the previous shape took.
  * @returns the emitted className.
- * @throws {Error} When called the way the positional shape took.
+ * @throws {CsszyxError} `options-object-required`, when called the way the
+ * positional shape took.
  */
 export function transform(
     szProp: SzObject,
@@ -1921,7 +1919,15 @@ export function transform(
     ...rest: never[]
 ): TransformResult {
     if (rest.length > 0 || typeof options !== 'object' || options === null) {
-        throw new Error(POSITIONAL_CALL_MESSAGE);
+        const args = { form: 'transform' } as const;
+        throw new CsszyxError({
+            code: 'options-object-required',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: OPTIONS_OBJECT_REQUIRED, args })
+                    : `[csszyx] options-object-required: ${JSON.stringify(args)} https://csszyx.com/e/options-object-required`,
+        });
     }
     return transformNested(szProp, options.prefix ?? '', options.mangleMap);
 }

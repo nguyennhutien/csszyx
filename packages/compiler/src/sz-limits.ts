@@ -7,8 +7,13 @@
  * — a denial-of-service that is reachable at request time, not just at build.
  * These limits convert that crash into a catchable, typed error.
  *
- * Kept dependency-free so both the compiler and the runtime can import it.
+ * Kept free of the compiler's tables so both the compiler and the runtime can
+ * import it: it imports the error class, and the development reporter that
+ * words the error, which an app's production build drops.
  */
+
+import { CsszyxError } from './errors.js';
+import { SZ_OBJECT_DEPTH, szRender } from './report.js';
 
 /**
  * Maximum nesting depth for an sz object / array before processing aborts.
@@ -21,16 +26,22 @@ export const MAX_SZ_DEPTH = 32;
  * Thrown when an sz object/array nests deeper than {@link MAX_SZ_DEPTH}. A typed
  * error so callers can distinguish a hostile-input limit from a real bug, and so
  * the build pipeline's per-file fallback can swallow it without a stack overflow.
+ * A csszyx error with the code `sz-object-depth`.
  */
-export class SzDepthError extends Error {
+export class SzDepthError extends CsszyxError {
     /**
      * @param depth - the depth limit that was exceeded (for the message).
      */
     constructor(depth: number = MAX_SZ_DEPTH) {
-        super(
-            `[csszyx] sz nesting exceeded the maximum depth of ${depth}. ` +
-                'This usually means untrusted/looping data reached an sz prop.',
-        );
+        const args = { form: 'value', maxDepth: depth } as const;
+        super({
+            code: 'sz-object-depth',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: SZ_OBJECT_DEPTH, args })
+                    : `[csszyx] sz-object-depth: ${JSON.stringify(args)} https://csszyx.com/e/sz-object-depth`,
+        });
         this.name = 'SzDepthError';
     }
 }

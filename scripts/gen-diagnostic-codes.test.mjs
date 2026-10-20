@@ -342,7 +342,7 @@ test('the report entry names every export: the reporter and each browser id', ()
     assert.ok(!source.includes('export *'));
     assert.match(
         source,
-        /export \{ type SzReportOptions, szReport \} from '\.\/diagnostic-report\.js';/,
+        /export \{ type SzReportOptions, szRender, szReport \} from '\.\/diagnostic-report\.js';/,
     );
     assert.match(
         source,
@@ -593,6 +593,9 @@ test('the TypeScript ids follow the registry', () => {
         ts,
         /export type SzDiagnosticId =\n {4}\| 'unknown-key'\n {4}\| 'web-crypto-unavailable';/,
     );
+    // A thrown error's `code`: the ids with an error surface, and only those.
+    assert.match(ts, /export type SzErrorCode =\n {4}\| 'web-crypto-unavailable';/);
+    assert.match(renderTypeScript(registryOf([entry()], [])), /export type SzErrorCode = never;/);
 });
 
 test('the Node registry module carries the public data and no review metadata', () => {

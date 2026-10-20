@@ -95,7 +95,7 @@ describe('splitBoxSz', () => {
     });
 
     it('throws on a raw class string in development', () => {
-        expect(() => splitBoxSz('m-4 px-2')).toThrow(/raw class strings/);
+        expect(() => splitBoxSz('m-4 px-2')).toThrow(/^\[csszyx\] split-box-sz-string: /);
     });
 
     it('skips prototype-polluting keys', () => {

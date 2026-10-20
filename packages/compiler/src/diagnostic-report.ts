@@ -53,22 +53,46 @@ export interface SzReportOptions<Args extends object> {
 }
 
 /**
- * Print a diagnostic in its full development form: the code, the sentence,
- * `help:` and `note:` lines, and the link to its page. It prints through
- * `console.error` when the registry marks the line an error, and through
- * `console.warn` otherwise.
+ * A diagnostic in its full development form, as {@link szReport} prints it:
+ * the code, the sentence, `help:` and `note:` lines, and the link to its
+ * page. A thrown error takes it as its message, on the development branch of
+ * the site's `NODE_ENV` check; the production branch writes the compact line.
+ *
+ * ```ts
+ * throw new CsszyxError({
+ *     code: 'lowering-not-loaded',
+ *     args,
+ *     message: process.env.NODE_ENV !== 'production'
+ *         ? szRender({ diagnostic: LOWERING_NOT_LOADED, args })
+ *         : `[csszyx] lowering-not-loaded: ${JSON.stringify(args)} https://csszyx.com/e/lowering-not-loaded`,
+ * });
+ * ```
  *
  * @internal
- * @param options - What to print.
+ * @param options - What to word; `extra` is for the console and is ignored.
+ * @returns The message.
  */
-export function szReport<Args extends object>(options: SzReportOptions<Args>): void {
-    const { diagnostic, args, at, extra = [] } = options;
+export function szRender<Args extends object>(options: SzReportOptions<Args>): string {
+    const { diagnostic, args, at } = options;
     const parts = fillSzDiagnosticTemplate(
         diagnostic,
         { code: diagnostic.id, args: args as Readonly<Record<string, ArgValue>> },
         SZ_BROWSER_DIAGNOSTIC_COMPUTED_VALUES,
     );
-    const message = layoutSzDiagnostic({ code: diagnostic.id, parts, where: at });
+    return layoutSzDiagnostic({ code: diagnostic.id, parts, where: at });
+}
+
+/**
+ * Print a diagnostic in its full development form ({@link szRender}). It
+ * prints through `console.error` when the registry marks the line an error,
+ * and through `console.warn` otherwise.
+ *
+ * @internal
+ * @param options - What to print.
+ */
+export function szReport<Args extends object>(options: SzReportOptions<Args>): void {
+    const message = szRender(options);
+    const { diagnostic, extra = [] } = options;
     if (diagnostic.console === 'error') console.error(message, ...extra);
     else console.warn(message, ...extra);
 }

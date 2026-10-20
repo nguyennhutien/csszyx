@@ -63,6 +63,10 @@ const RUNTIME_ENTRIES = {
     // The depth limit, its error and the key guard on their own, so the
     // runtime's `core` and `merge` entries do not pull the property tables.
     'sz-limits': 'src/sz-limits.ts',
+    // The error csszyx throws and its guard, which `@csszyx/runtime` and
+    // `csszyx` re-export: `SzDepthError` above extends its class, and an
+    // entry of this build shares the one class with it.
+    errors: 'src/errors.ts',
     // The stand-alone keyword families and their pure settlement, for the
     // runtime's `szv` merge, without the transform's property tables.
     'keyword-families': 'src/keyword-families.ts',
