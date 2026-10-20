@@ -12,6 +12,7 @@
  * So this file replaces `devWarn` with a spy that prints nothing and refuses
  * nothing. The only thing that can keep it uncalled is the caller's own guard.
  */
+import { SPLIT_BOX_PLACEMENT_VARIANT, SPLIT_BOX_UNKNOWN_CATEGORY } from '@csszyx/compiler/report';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const devWarn = vi.fn();
@@ -64,7 +65,10 @@ describe('the placement-name warning in a production build', () => {
     it('is reached everywhere else', () => {
         process.env.NODE_ENV = 'development';
         splitBox('dev-only-2 md:hidden', { outer: ['md:hidden'] });
-        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining("'md:hidden' never matches"));
+        expect(devWarn).toHaveBeenCalledWith({
+            diagnostic: SPLIT_BOX_PLACEMENT_VARIANT,
+            args: { selector: 'md:hidden', side: 'outer', base: 'hidden' },
+        });
     });
 });
 
@@ -84,6 +88,9 @@ describe('the selector warnings in a production build', () => {
     it('are reached everywhere else', () => {
         process.env.NODE_ENV = 'development';
         has('p-4', 'nonsense-dev');
-        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining('is not a category'));
+        expect(devWarn).toHaveBeenCalledWith({
+            diagnostic: SPLIT_BOX_UNKNOWN_CATEGORY,
+            args: { form: 'no-hint', name: 'nonsense-dev' },
+        });
     });
 });

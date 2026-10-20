@@ -23,8 +23,7 @@
  * @module @csszyx/runtime/szv-pick
  */
 
-import { devWarn } from './dev-warn.js';
-import { describeValue, selectionValueKey } from './selection-value.js';
+import { warnSelectionValue } from './selection-value.js';
 
 /** A build-precompiled szv config: every branch lowered to its class string. */
 export interface SzvCompiledTable {
@@ -111,7 +110,7 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
  */
 export function __szvPick1(table: SzvCompiledTable, dimension: string, value: unknown): string {
     if (process.env.NODE_ENV !== 'production') {
-        warnUnknownPickValue(table, dimension, value);
+        warnSelectionValue(dimension, value, table.d);
     }
     // null/undefined selects nothing: with no defaults to fall back to, that is
     // the base alone — exactly what the full picker's `continue` leaves.
@@ -136,27 +135,6 @@ function warnUnknownPickSelection(table: SzvCompiledTable, selection: SzvPickSel
         return;
     }
     for (const key of Object.keys(selection)) {
-        warnUnknownPickValue(table, key, selection[key]);
-    }
-}
-
-/**
- * Dev-only mirror of `szv()`'s warnings for ONE selected dimension.
- *
- * @param table - Build-emitted table for one szv factory.
- * @param key - The selected variant dimension.
- * @param value - The value selected for it.
- */
-function warnUnknownPickValue(table: SzvCompiledTable, key: string, value: unknown): void {
-    if (!(key in table.d)) {
-        devWarn(`szv()(selection): unknown variant "${key}" — not declared in config.variants.`);
-        return;
-    }
-    if (value === null || value === undefined) return;
-    const valueKey = selectionValueKey(value);
-    if (valueKey === null || !(valueKey in table.d[key])) {
-        devWarn(
-            `szv()(selection): "${valueKey ?? describeValue(value)}" is not a value of variant "${key}" — it has no styles.`,
-        );
+        warnSelectionValue(key, selection[key], table.d);
     }
 }

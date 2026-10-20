@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { has, omit, pick } from '../src/split-box.js';
+import { SELECTOR_INVALID, unknownCategoryLine } from './helpers/split-box-lines.js';
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -33,7 +34,7 @@ describe('an empty object selector', () => {
 
     it('says why', () => {
         has('w-full', {});
-        expect(said()).toContain('empty selector');
+        expect(said()).toBe(SELECTOR_INVALID.empty);
     });
 });
 
@@ -41,16 +42,12 @@ describe('a selector the tables do not know', () => {
     it('still answers false, and warns once', () => {
         expect(has('w-full', 'widht')).toBe(false);
         expect(has('w-full', 'widht')).toBe(false);
-        const lines = said()
-            .split('\n')
-            .filter(l => l.includes('widht'));
-        expect(lines).toHaveLength(1);
+        expect(warn.mock.calls).toEqual([[unknownCategoryLine('widht')]]);
     });
 
     it('names the category the caller probably meant', () => {
         has('w-full', 'width');
-        expect(said()).toContain("'width'");
-        expect(said()).toContain('sizing');
+        expect(said()).toBe(unknownCategoryLine('width', 'sizing', true));
     });
 
     it('is quiet for every real selector shape', () => {
@@ -67,7 +64,7 @@ describe('a selector the tables do not know', () => {
 describe('an array passed where one selector is expected', () => {
     it('warns instead of silently answering false', () => {
         expect(has('w-full', ['w', 'size'] as unknown as string)).toBe(false);
-        expect(said()).toContain('array');
+        expect(said()).toBe(SELECTOR_INVALID.array);
     });
 });
 
@@ -93,30 +90,30 @@ describe('selector shapes the toolkit has always accepted stay quiet', () => {
 describe('an object selector that can never match', () => {
     it('warns when its category is not one the tables know', () => {
         expect(has('w-full', { width: 'full' })).toBe(false);
-        expect(said()).toContain("'width'");
-        expect(said()).toContain('sizing');
+        expect(said()).toBe(unknownCategoryLine('width', 'sizing', true));
     });
 
     it('warns when it names more than one category', () => {
         // A token has one category, so two entries can never both agree.
         expect(has('overflow-hidden flex', { overflow: 'hidden', display: 'flex' })).toBe(false);
-        expect(said()).toContain('one category');
+        expect(said()).toBe(SELECTOR_INVALID.multi(['overflow', 'display']));
     });
 });
 
 describe('a selector nobody can act on names what to do', () => {
     it('points at classify for a word with no hint', () => {
         has('w-full', 'margin-ish');
-        expect(said()).toContain('classify(');
+        expect(said()).toBe(unknownCategoryLine('margin-ish'));
     });
 
     it('knows the CSS property words people reach for', () => {
         has('text-red-500', 'color');
-        expect(said()).toContain("'text'");
         // `text` alone would also catch `text-sm`; the qualified form is the
         // answer that matches what the word meant.
-        expect(said()).toContain("'text:color'");
         has('bg-red-500', 'background');
-        expect(said()).toContain("'bg'");
+        expect(warn.mock.calls).toEqual([
+            [unknownCategoryLine('color', 'text', true)],
+            [unknownCategoryLine('background', 'bg')],
+        ]);
     });
 });

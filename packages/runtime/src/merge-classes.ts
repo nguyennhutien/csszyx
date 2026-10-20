@@ -28,6 +28,8 @@
  *
  * @module
  */
+import { MERGE_TABLE_MISSING, szReport } from '@csszyx/compiler/report';
+
 import { decodeToken, encodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import { getMergeSignatureGeneration, getMergeSignatureTable } from './merge-signatures.js';
 
@@ -196,15 +198,14 @@ let warnedNoTable = false;
  * build answered, so this stays quiet.
  */
 function warnIfNoTable(): void {
-    if (warnedNoTable || getMergeSignatureTable() !== undefined) return;
-    warnedNoTable = true;
-    console.warn(
-        '[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: ' +
-            "`szcn('p-2', 'p-4')` keeps both classes.\n" +
-            '  help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; ' +
-            'for jest, run the build or `csszyx next prebuild` first.\n' +
-            '  note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.',
-    );
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        !warnedNoTable &&
+        getMergeSignatureTable() === undefined
+    ) {
+        warnedNoTable = true;
+        szReport({ diagnostic: MERGE_TABLE_MISSING, args: {} });
+    }
 }
 
 /**

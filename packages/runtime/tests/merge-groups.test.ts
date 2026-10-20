@@ -14,6 +14,7 @@ import {
 } from '../src/merge-groups.js';
 import { sameGroup } from './helpers/same-group.js';
 import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+import { themeAmbiguousLine, themeCollisionLine } from './helpers/theme-lines.js';
 
 useTailwindMergeTable();
 
@@ -199,7 +200,7 @@ describe('custom theme registration', () => {
         // bg-cover must still classify as background-SIZE, never a color.
         expect(sameGroup('bg', 'cover', 'red-500')).toBe(false);
         expect(sameGroup('bg', 'cover', 'contain')).toBe(true);
-        expect(warn.mock.calls.some(c => String(c[0]).includes('"cover"'))).toBe(true);
+        expect(warn).toHaveBeenCalledWith(themeCollisionLine('cover', 'utility-keyword'));
     });
 
     it('guard rail: a token in two conflicting categories is dropped from both', () => {
@@ -207,7 +208,7 @@ describe('custom theme registration', () => {
         registerSzcnGroups({ colors: ['huge'], textSizes: ['huge'] });
         expect(sameGroup('text', 'huge', 'sm')).toBe(false);
         expect(sameGroup('text', 'huge', 'red-500')).toBe(false);
-        expect(warn.mock.calls.some(c => String(c[0]).includes('BOTH'))).toBe(true);
+        expect(warn).toHaveBeenCalledWith(themeAmbiguousLine('huge', 'color-text-size'));
     });
 
     it('registration is additive and idempotent', () => {

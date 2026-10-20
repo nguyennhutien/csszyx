@@ -12,6 +12,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { splitBox } from '../src/split-box.js';
 import { getUnservedGeneration, registerUnservedClasses } from '../src/unserved-classes.js';
+import { unclassifiedLine } from './helpers/split-box-lines.js';
 
 afterEach(() => {
     registerUnservedClasses([]);
@@ -56,7 +57,7 @@ describe('unserved classes', () => {
     it('still warns for a class nothing classifies at all', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         splitBox('card p-4');
-        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls).toEqual([[unclassifiedLine('card', 'frame')]]);
     });
 
     it('follows the variant to its base', () => {

@@ -16,7 +16,12 @@
  * sentence there and keep its templates in the bundle. Its check has to be the
  * branch the call sits on — an early `return` above it is not enough, since
  * esbuild keeps the templates a call names when the call follows a `return`
- * (measured on the runtime app bundle).
+ * (measured on the runtime app bundle). The runtime's `devWarn`, which dedupes
+ * and caps before it calls `szReport`, names its template the same way, so
+ * its calls are held to the same rule.
+ *
+ * The browser packages report through the same two, so their sources are read
+ * too: the runtime, `@csszyx/dynamic` and the umbrella's CDN entry.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -28,6 +33,13 @@ import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-registry.generated.js'
 
 const SRC = path.resolve(import.meta.dirname, '../src');
 const HELPER = 'szNodeWarningsUnmuted';
+/** Every package whose sources report a diagnostic (`turbo.json` lists them as inputs). */
+const PACKAGES = path.resolve(SRC, '../..');
+const REPORTING_SOURCES = ['compiler', 'runtime', 'dynamic', 'csszyx'].map(name =>
+    path.join(PACKAGES, name, 'src'),
+);
+/** The calls that print a registry template: the reporter, and the runtime's deduping wrapper. */
+const REPORTERS: ReadonlySet<string> = new Set(['szReport', 'devWarn']);
 
 type Node = { type: string; start: number; end: number; [key: string]: unknown };
 
@@ -99,7 +111,7 @@ function callSites(
         ) {
             const line = source.slice(0, current.start).split('\n').length;
             found.push({
-                at: `${path.relative(SRC, file)}:${line}`,
+                at: `${path.relative(PACKAGES, file)}:${line}`,
                 gated: isGated(current, ancestors),
             });
         }
@@ -142,10 +154,12 @@ function isGated(call: Node, ancestors: Node[]): boolean {
     return false;
 }
 
-const SOURCES = readdirSync(SRC, { recursive: true })
-    .map(String)
-    .filter(name => name.endsWith('.ts') && !name.endsWith('.d.ts'))
-    .map(name => path.join(SRC, name));
+const SOURCES = REPORTING_SOURCES.flatMap(dir =>
+    readdirSync(dir, { recursive: true })
+        .map(String)
+        .filter(name => name.endsWith('.ts') && !name.endsWith('.d.ts'))
+        .map(name => path.join(dir, name)),
+);
 
 describe(`${HELPER} call sites`, () => {
     const calls = SOURCES.flatMap(file => callSites(file));
@@ -243,8 +257,8 @@ function printsInProduction(call: Node): boolean {
 }
 
 /**
- * Every `szReport` call in one file that names a development-only line, with
- * whether a development branch holds it.
+ * Every `szReport` or `devWarn` call in one file that names a development-only
+ * line, with whether a development branch holds it.
  * @param file - A source file.
  * @param source - Its text; read from disk when omitted.
  * @returns One finding per call; production lines are left out.
@@ -264,7 +278,7 @@ function reportSites(
         const current = node as Node;
         if (
             current.type === 'CallExpression' &&
-            (current.callee as Node & { name?: string }).name === 'szReport' &&
+            REPORTERS.has((current.callee as Node & { name?: string }).name ?? '') &&
             !printsInProduction(current)
         ) {
             const chain = [...ancestors, current];
@@ -272,7 +286,7 @@ function reportSites(
                 (child, i) => i > 0 && isDevelopmentBranch(chain[i - 1] as Node, child),
             );
             const line = source.slice(0, current.start).split('\n').length;
-            found.push({ at: `${path.relative(SRC, file)}:${line}`, gated });
+            found.push({ at: `${path.relative(PACKAGES, file)}:${line}`, gated });
         }
         for (const [key, value] of Object.entries(current)) {
             if (key !== 'parent') visit(value, [...ancestors, current]);
@@ -287,6 +301,11 @@ describe('szReport call sites of a development-only line', () => {
 
     it('exist, so the check below is not vacuous', () => {
         expect(calls.length).toBeGreaterThan(10);
+    });
+
+    // The umbrella's one report, the CDN's parse error, prints in production.
+    it.each(['runtime', 'dynamic'])('exist in %s too, so its sources are read', name => {
+        expect(calls.filter(call => call.at.startsWith(`${name}/`)).length).toBeGreaterThan(0);
     });
 
     it('each sit on a branch a literal NODE_ENV check keeps out of production', () => {
@@ -340,6 +359,23 @@ describe('the szReport gate itself', () => {
         ['szReport({ diagnostic: CLOSED_ENUM_VALUE, args });'],
         ['szReport(options);'],
     ])('refuses %s', body => {
+        expect(gated(body)).toEqual([false]);
+    });
+
+    it.each([
+        [
+            "if (process.env.NODE_ENV !== 'production') devWarn({ diagnostic: SZV_UNKNOWN_VARIANT, args });",
+        ],
+    ])('accepts the runtime wrapper on a development branch: %s', body => {
+        expect(gated(body)).toEqual([true]);
+    });
+
+    it.each([
+        ['devWarn({ diagnostic: SZV_UNKNOWN_VARIANT, args });'],
+        [
+            "if (process.env.NODE_ENV === 'production') return; devWarn({ diagnostic: SZV_UNKNOWN_VARIANT, args });",
+        ],
+    ])('refuses the runtime wrapper off a development branch: %s', body => {
         expect(gated(body)).toEqual([false]);
     });
 

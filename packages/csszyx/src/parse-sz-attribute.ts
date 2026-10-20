@@ -33,10 +33,14 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     const offset = rawInput.length - rawInput.trimStart().length - (wrapped ? 1 : 0);
     let pos = 0;
 
-    // Only called inside a loop that runs while `pos` is in range.
+    // Only called inside a loop that runs while `pos` is in range. The
+    // error carries what the runtime's line names (`sz-attribute-syntax`).
     const unexpected = (): never => {
-        throw new SyntaxError(
-            `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos + offset} in sz attribute "${rawInput}"`,
+        throw Object.assign(
+            new SyntaxError(
+                `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos + offset} in sz attribute "${rawInput}"`,
+            ),
+            { args: { input: rawInput, char: input[pos] as string, index: pos + offset } },
         );
     };
 

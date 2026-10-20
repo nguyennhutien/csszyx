@@ -26,6 +26,13 @@
  *
  * @module
  */
+import {
+    REGISTER_SZCN_GROUPS_IGNORED,
+    THEME_COLLISION,
+    THEME_TOKEN_AMBIGUOUS,
+} from '@csszyx/compiler/report';
+
+import { devWarn, resetDevWarnCache } from './dev-warn.js';
 import { sortStrings } from './sort.js';
 
 /** Canonical property suffixes shared by group classification and selectors. */
@@ -196,8 +203,8 @@ type ThemeCategory = (typeof CATEGORIES)[number];
 interface AmbiguityPair {
     first: ThemeCategory;
     second: ThemeCategory;
-    /** Builds the warning for a name in this pair. */
-    message: (name: string) => string;
+    /** The `theme-token-ambiguous` form that names this pair. */
+    form: 'color-text-size' | 'font-family-weight';
 }
 
 /**
@@ -209,22 +216,8 @@ interface AmbiguityPair {
  * being declared in one of the two categories simply stops being ambiguous.
  */
 const AMBIGUITY_PAIRS: readonly AmbiguityPair[] = [
-    {
-        first: 'colors',
-        second: 'textSizes',
-        message: name =>
-            `theme token "${name}" is defined as BOTH a color and a text size — ` +
-            `\`classify\` cannot name the property of \`text-${name}\`, and Tailwind ` +
-            'compiles that class for one of the two only. Rename one of the tokens.',
-    },
-    {
-        first: 'fontFamilies',
-        second: 'fontWeights',
-        message: name =>
-            `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
-            `\`classify\` cannot name the property of \`font-${name}\`, and Tailwind ` +
-            'compiles that class for one of the two only. Rename one of the tokens.',
-    },
+    { first: 'colors', second: 'textSizes', form: 'color-text-size' },
+    { first: 'fontFamilies', second: 'fontWeights', form: 'font-family-weight' },
 ];
 
 /**
@@ -367,20 +360,6 @@ function getCollisionBlocklist(): Record<keyof typeof customTokens, ReadonlySet<
 }
 
 /**
- * One-time dev warning helper (mirrors the runtime's devWarn conventions
- * without importing the variants module).
- *
- * @param message - The warning text.
- */
-function warnOnce(message: string): void {
-    if (process.env.NODE_ENV !== 'production' && !_warned.has(message)) {
-        _warned.add(message);
-        console.warn(`[csszyx] ${message}`);
-    }
-}
-const _warned = new Set<string>();
-
-/**
  * Add token names to a source's declaration, keeping what it already declared.
  *
  * The default for hand-written CSS utilities: call it once per group of
@@ -400,16 +379,9 @@ const _warned = new Set<string>();
 export function registerSzcnGroups(groups: SzcnThemeGroups, source: string = DEFAULT_SOURCE): void {
     // On 0.17 this was how a class written in plain CSS joined a merge group.
     // The build calls `setSzcnGroups`, so this reaches only an app's own call.
-    warnOnce(
-        '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the ' +
-            'CSS your Tailwind compiles, and this registry now only names the property ' +
-            '`classify` and `splitBox` read.\n  help: declare the tokens under `@theme` ' +
-            '(`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules ' +
-            'you wrote for those classes, and use a csszyx integration that supplies a ' +
-            'merge table.\n' +
-            '  note: `szcn` never removes a class from `@utility`, a plugin or plain CSS; ' +
-            'without a table it removes only exact repeats.',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        devWarn({ diagnostic: REGISTER_SZCN_GROUPS_IGNORED, args: {} });
+    }
     writeDeclarations(source, groups, false);
 }
 
@@ -533,16 +505,12 @@ function collectDeclaredTokens(): TokensByCategory {
  */
 function shadowsBuiltIn(category: ThemeCategory, name: string): boolean {
     if (!getCollisionBlocklist()[category].has(name)) return false;
-    const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
-    warnOnce(
-        `theme token "${name}" shadows a built-in ${builtInKind} — ` +
-            "Tailwind compiles both meanings into one class, so it sets the token's " +
-            "property and the built-in's. A later class that sets only one of them does " +
-            'not replace it in `szcn`: both then apply, and stylesheet order decides which ' +
-            'wins rather than the order you passed them. `classify` reports the built-in ' +
-            'meaning only. Rename the token — no spelling of the merge can fix this while ' +
-            'the name is shared.',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        devWarn({
+            diagnostic: THEME_COLLISION,
+            args: { form: category === 'colors' ? 'utility-keyword' : 'value', name },
+        });
+    }
     return true;
 }
 
@@ -561,7 +529,9 @@ function dropAmbiguousTokens(next: TokensByCategory): void {
             if (!next[pair.second].has(name)) continue;
             next[pair.first].delete(name);
             next[pair.second].delete(name);
-            warnOnce(pair.message(name));
+            if (process.env.NODE_ENV !== 'production') {
+                devWarn({ diagnostic: THEME_TOKEN_AMBIGUOUS, args: { form: pair.form, name } });
+            }
         }
     }
 }
@@ -613,7 +583,7 @@ export function _resetSzcnGroups(): void {
         set.clear();
     }
     sourceDeclarations.clear();
-    _warned.clear();
+    resetDevWarnCache();
     _generation++;
 }
 

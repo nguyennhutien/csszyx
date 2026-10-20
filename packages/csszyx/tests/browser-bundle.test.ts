@@ -132,11 +132,15 @@ dom.window.addEventListener('load', () => {
         expect(run.signal, 'the bundle did not finish within the deadline').toBeNull();
         const result = JSON.parse(run.stdout.trim()) as { classes: string[]; errors: string[] };
         expect(result.classes).toEqual(['', '', '', 'p-4']);
-        expect(result.errors).toHaveLength(3);
-        for (const error of result.errors) {
-            expect(error).toContain('[csszyx] Parsing error:');
-        }
-        expect(result.errors[0]).toContain('Unexpected "/" at 4');
+        // The bundle is built for production, so each prints its code and
+        // args: the attribute, the character and where it is.
+        const line = (input: string, char: string): string =>
+            `[csszyx] sz-attribute-syntax: ${JSON.stringify({ input, char, index: 4 })} https://csszyx.com/e/sz-attribute-syntax`;
+        expect(result.errors).toEqual([
+            line('w: 1/2', '/'),
+            line('p: 4; m: 2', ';'),
+            line('bg: #fff', '#'),
+        ]);
         // Above the child's 10 s deadline, so that deadline is what fails a
         // hang; jsdom alone took 7.4 s to start on a loaded CI runner.
     }, 20_000);

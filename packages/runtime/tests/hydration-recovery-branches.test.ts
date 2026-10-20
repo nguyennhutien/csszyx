@@ -8,6 +8,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { productionMessage } from '../../compiler/tests/engine-message.js';
+
 import {
     attemptCSRRecovery,
     disableCSRRecovery,
@@ -15,6 +17,7 @@ import {
     getAbortedSubtreeCount,
     loadMangleMapFromDOM,
 } from '../src/hydration.js';
+import { jsonErrorOf, mangleMapUnreadableLine } from './helpers/hydration-lines.js';
 
 afterEach(() => {
     document.documentElement.removeAttribute('data-sz-checksum');
@@ -32,7 +35,7 @@ describe('loadMangleMapFromDOM with an empty script tag', () => {
 
         const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
         expect(loadMangleMapFromDOM()).toBeNull();
-        expect(errorLog).toHaveBeenCalledWith('Failed to parse mangle map:', expect.anything());
+        expect(errorLog.mock.calls).toEqual([[mangleMapUnreadableLine(jsonErrorOf(''))]]);
     });
 });
 
@@ -52,9 +55,11 @@ describe('attemptCSRRecovery — dev-only mode in production', () => {
 
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(attemptCSRRecovery(element)).toBe(false);
-        expect(warn).toHaveBeenCalledWith(
-            expect.stringContaining('szRecover="dev-only" is disabled in production'),
-        );
+        // Only a production build reaches it, so it prints the compact
+        // line, with the element DevTools can reveal.
+        expect(warn.mock.calls).toEqual([
+            [productionMessage('csr-recovery-dev-only', { form: 'runtime' }), element],
+        ]);
     });
 });
 

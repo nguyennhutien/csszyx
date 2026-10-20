@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
+import { mapUnavailableLine, WEB_CRYPTO_LINE } from './helpers/hydration-lines.js';
 
 /**
  * The canonical form spelled out again, by hand, over Node's own SHA-256.
@@ -102,7 +103,7 @@ describe('verifyMangleChecksumAsync', () => {
     it('returns false, and says so, when no map is available', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         expect(await verifyMangleChecksumAsync('whatever')).toBe(false);
-        expect(warn.mock.calls[0]?.[0]).toMatch(/^\[csszyx\] mangle-map-unavailable:/);
+        expect(warn.mock.calls).toEqual([[mapUnavailableLine('whatever')]]);
         warn.mockRestore();
     });
 });
@@ -136,10 +137,7 @@ describe('without Web Crypto, which is what an insecure context looks like', () 
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         await expect(verifyMangleChecksumAsync('whatever', MAP)).resolves.toBe(false);
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0]?.[0]).toMatch(
-            /^\[csszyx\] web-crypto-unavailable: .*secure context/i,
-        );
+        expect(warn.mock.calls).toEqual([[WEB_CRYPTO_LINE]]);
     });
 
     it('does not report a false match when the checksum would have been right', async () => {

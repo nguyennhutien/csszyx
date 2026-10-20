@@ -17,22 +17,9 @@
  * }
  */
 
-/** Messages already emitted, so a leaked `sz` warns once rather than per render. */
-const warned = new Set<string>();
+import { UNCOMPILED_SZ } from '@csszyx/compiler/report';
 
-const RAW_SZ_WARNING =
-    '[csszyx] A raw `sz` object reached the runtime and was dropped before it ' +
-    'could leak to the DOM as sz="[object Object]".\n' +
-    'This means the file was not compiled — its `sz` produces no CSS. If it ' +
-    'lives in a workspace package, add that package directory to `compileSources`; ' +
-    'otherwise check that the bundler is not skipping the file.';
-
-/** Warn once (in dev) that a raw, uncompiled `sz` object reached the runtime. */
-function warnRawSz(): void {
-    if (warned.has(RAW_SZ_WARNING)) return;
-    warned.add(RAW_SZ_WARNING);
-    console.warn(RAW_SZ_WARNING);
-}
+import { devWarn, resetDevWarnCache } from './dev-warn.js';
 
 /**
  * Return `props` without its `sz` key. When `sz` is absent the original object
@@ -50,16 +37,15 @@ export function stripSzProps<T extends Record<string, unknown>>(props: T): Omit<
 
     const { sz, ...rest } = props;
 
-    if (process.env.NODE_ENV !== 'production') {
-        if (sz !== null && typeof sz === 'object') {
-            warnRawSz();
-        }
+    // Once per session: `devWarn` dedupes the line, which carries no args.
+    if (process.env.NODE_ENV !== 'production' && sz !== null && typeof sz === 'object') {
+        devWarn({ diagnostic: UNCOMPILED_SZ, args: {} });
     }
 
     return rest as Omit<T, 'sz'>;
 }
 
-/** Reset the once-per-message warning guard. Test-only; not re-exported. */
+/** Reset the once-per-session warning guard. Test-only; not re-exported. */
 export function __resetStripSzWarnings(): void {
-    warned.clear();
+    resetDevWarnCache();
 }

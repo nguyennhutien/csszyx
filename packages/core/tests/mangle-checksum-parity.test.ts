@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { computeMangleChecksumAsync } from '../../runtime/src/hydration.js';
+import { computeMangleChecksumAsync } from '../../runtime/src/mangle-checksum.js';
 import { compute_mangle_checksum } from '../pkg-parser/csszyx_core.js';
 
 type MangleMapLike = Record<string, string>;

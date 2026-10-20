@@ -687,27 +687,29 @@ safelisted.
 ### szv — runtime
 
 All of these are dev-only, deduplicated, and removed entirely from a production
-bundle. The `[csszyx] ` prefix is added by the shared helper.
+bundle. `{got}` is `null`, `an array`, or the value's `typeof`.
 
 | Message |
 | --- |
-| `szv(config): config must be an object, got {value}. Ignoring.` |
-| `szv(config): base must be an sz object, got {value}.` |
-| `szv(config): variants must be an object when present, got {value}. Ignoring.` |
-| `szv(config): defaultVariants must be an object, got {value}.` |
-| `szv(config): variants.{dimension} must be an object of values, got {value}.` |
-| `szv(config): variants.{dimension}.{token} must be an sz object, got {value}. It will be skipped.` |
-| `szv(config): {where} nests deeper than {max} levels; it will be rejected at render.` |
-| `szv(config): {where} has a forbidden key "{key}"; it will be skipped.` |
-| `szv()(selection): unknown variant "{key}" — not declared in config.variants.` |
-| `szv()(selection): "{value}" is not a value of variant "{key}" — it has no styles.` |
+| ``[csszyx] szv-config-invalid: The `szv` config is not an object (got {got}), so `szv` returns an empty sz object.`` — help: ``pass an object such as `{ base: { … }, variants: { … } }`.`` |
+| ``[csszyx] szv-config-invalid: `base` in the `szv` config is not an sz object (got {got}), so `szv` ignores it.`` — help: ``make `base` an sz object, such as `{ p: 4 }`.`` |
+| ``[csszyx] szv-config-invalid: `variants` in the `szv` config is not an object (got {got}), so `szv` returns only `base`.`` — help: ``make `variants` an object of dimensions, such as `{ size: { sm: { p: 2 } } }`.`` |
+| ``[csszyx] szv-config-invalid: `defaultVariants` in the `szv` config is not an object (got {got}), so no variant gets a default value.`` — help: ``make `defaultVariants` an object of values, such as `{ size: 'sm' }`.`` |
+| ``[csszyx] szv-config-invalid: `variants.{dimension}` is not an object of values (got {got}), so it adds no classes.`` — help: ``make `variants.{dimension}` an object that maps each value to an sz object.`` |
+| ``[csszyx] szv-config-invalid: `variants.{dimension}.{token}` is not an sz object (got {got}), so it is ignored.`` — help: ``make it an sz object, such as `{ p: 4 }`, or `null` to add nothing.`` |
+| ``[csszyx] sz-object-depth: `{where}` in the `szv` config nests deeper than {maxDepth} levels, so `szv` rejects it at render.`` — help: ``flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data.`` |
+| ``[csszyx] szv-forbidden-key: `{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.`` — help: ``remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`.`` |
+| ``[csszyx] szv-unknown-variant: The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.`` — help: ``declare `variants.{key}`, or remove `{key}` from the selection.`` |
+| ``[csszyx] szv-unknown-variant-value: The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.`` — help: ``use one of: {allowed}, or add `{value}` to `variants.{key}`.`` |
 
 The last two also fire from the precompiled fast path, with identical wording.
 
 **If you see `[object Object]` in `class`:**
 
 ```text
-[csszyx] szv() returned an sz OBJECT that was used as a string (e.g. className={someSzv({...})}) — this renders "[object Object]". Pass it to an sz= prop, or resolve it with szr(...) first.
+[csszyx] szv-object-as-string: An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.
+  help: pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.
+  note: a development build renders an empty string in its place.
 ```
 
 `szv()` returns an sz object, not a class string. Either pass it to `sz=`, or
@@ -748,27 +750,28 @@ and the theme group registry — which `classify` reads — says so once.
 
 | Message |
 | --- |
-| ``[csszyx] theme token "{name}" shadows a built-in {kind} — Tailwind compiles both meanings into one class, so it sets the token's property and the built-in's. A later class that sets only one of them does not replace it in `szcn`: both then apply, and stylesheet order decides which wins rather than the order you passed them. `classify` reports the built-in meaning only. Rename the token — no spelling of the merge can fix this while the name is shared.`` |
-| ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
-| ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
-| ``[csszyx] `registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry now only names the property `classify` and `splitBox` read.`` + ``help: declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.`` + ``note: `szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats.`` |
+| ``[csszyx] theme-collision: Theme token `{name}` shadows a built-in utility keyword, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.`` — help: ``rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.`` — note: ``a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only.`` |
+| ``[csszyx] theme-collision: Theme token `{name}` shadows a built-in value, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.`` — help and note as above. A colour token shadows a utility keyword; a text-size, font-family or font-weight token a value. |
+| ``[csszyx] theme-token-ambiguous: Theme token `{name}` is defined as both a colour and a text size, so `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for only one of them.`` — help: ``rename one of the tokens.`` — note: ``until then the token belongs to neither, so `szcn` keeps both classes instead of merging them.`` |
+| ``[csszyx] theme-token-ambiguous: Theme token `{name}` is defined as both a font family and a font weight, so `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for only one of them.`` — help and note as above. |
+| ``[csszyx] register-szcn-groups-ignored: `registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.`` — help: ``declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.`` — note: ``` `szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats. ``` |
 
 One more is not about a token at all. It is printed once, in development, the
 first time `szcn` meets two classes with no merge table registered:
 
 | Message |
 | --- |
-| ``[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.`` + ``help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; for jest, run the build or `csszyx next prebuild` first.`` + ``note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.`` |
+| ``[csszyx] merge-table-missing: `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.`` — help: ``use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.`` — note: ``esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.`` |
 
 A table the build wrote in a format this runtime does not read is refused the
 same way, which is what a stale `.csszyx/merge-registration.*` from another
 csszyx release looks like to a jest run. Rejection clears the previous table
 and cached merges. The regeneration warning appears once per session in both
-development and production:
+development and production (there as `[csszyx] merge-table-format-skew: {"format":2,"expected":1} https://csszyx.com/e/merge-table-format-skew`):
 
 | Message |
 | --- |
-| ``[csszyx] the merge table was written in format {n} and this runtime reads format {m}, so `szcn` keeps every class until it is rebuilt.`` + ``help: run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.`` |
+| ``[csszyx] merge-table-format-skew: The merge table was written in format {format}, and this runtime reads format {expected}, so `szcn` ignores the table and removes only exact repeats.`` — help: ``run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.`` |
 
 See [Where the table comes from](/docs/reference/runtime/#where-the-table-comes-from).
 
@@ -793,8 +796,8 @@ not cover `text-wrap`.
 | --- | --- |
 | ``[csszyx] dynamic-unresolvable: The runtime value of `{key}` has type `{type}`, which cannot be resolved to CSS, so the property is omitted.`` — help: ``pass a number, a token or a CSS length; for a responsive object, use `dynamic()`.`` | **Yes** — this one is deliberately kept in production, because the property is dropped. |
 | ``[csszyx] dynamic-non-boolean: The runtime value of `{key}` has type `{type}`, and only a boolean toggles this class, so it is omitted.`` — help: ``pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.`` | **Yes** — same reason. Fires for the boolean-only keys such as `border*`, `ring`, `outline`, `shadow` and `truncate`, where a dynamic value can only ever mean on or off. `false` is a meaningful "off" and stays silent. |
-| `[csszyx] dropped an arbitrary value that could inject CSS: "{utility}". Arbitrary values from untrusted data are not emitted at runtime.` | No — dev only. See [Security](/docs/security/). |
-| ``[csszyx] dynamic() has injected {n}+ unique classes this session. Injected CSS rules are never removed, so continuously varying values (e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. Drive continuously changing values through a CSS variable instead.`` | No — dev only, once. |
+| ``[csszyx] dynamic-unsafe-arbitrary: The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.`` — help: ``keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.`` — note: ``only the first dropped value of a session is reported.`` | No — dev only. See [Security](/docs/security/). |
+| ``[csszyx] dynamic-injection-growth: `dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.`` — help: ``drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.`` | No — dev only, once. |
 | **Thrown.** `csszyx: manifest fetch failed {status}` | Yes |
 
 ## Plugin configuration
@@ -1473,20 +1476,24 @@ difference between them is the bug.
 
 ## SSR & hydration
 
+Every row prints in production too, except `uncompiled-sz`; there each prints
+its code, its args as JSON and the code's page instead of the sentence.
+
 | Message | Notes |
 | --- | --- |
-| `[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.` | |
-| `Failed to parse mangle map:` | The census is not JSON; it is ignored. |
-| `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to {computed}, and the checksum it was built with is {expectedChecksum}` + `note: this detects a damaged or stale page, not an attacker; the checksum is not signed` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
-| `[csszyx] mangle-map-unavailable: this page carries the checksum {expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified` + `help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
-| `[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
-| `[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. crypto.subtle exists only in a secure context: serve the page over HTTPS, or from localhost. Nothing was verified.` | `verifyMangleChecksumAsync` answers `false`; `computeMangleChecksumAsync` throws it. Printed in production too. |
-| `[csszyx] Hydration aborted at {tag}:` + reason | |
-| `[csszyx] CSR recovery requires explicit szRecover directive` | Add `szRecover="csr"`. |
-| `[csszyx] szRecover="dev-only" is disabled in production` | By design. |
-| `[csszyx] Hydration mismatch recovered via CSR. Fix root cause before production.` | The page renders, but you have a real mismatch. |
+| ``[csszyx] mangle-map-unreadable: The mangle map on this page is not a plain map of class names to class names, so it is ignored.`` — help: ``serve the HTML as the build wrote it; a map that does not read means the page was changed or cut short after the build.`` | Printed through `console.error`, in production too. |
+| ``[csszyx] mangle-map-unreadable: The mangle map on this page is not valid JSON, so it is ignored.`` — help as above — note: ``the browser reported: {error}.`` | The census is not JSON; it is ignored. |
+| ``[csszyx] recovery-manifest-unreadable: The recovery manifest on this page is not valid JSON, so it is ignored.`` — help: ``serve the HTML as the build wrote it; the manifest is the `__SZ_RECOVERY_MANIFEST__` script the build adds to the page.`` — note: ``the browser reported: {error}.`` | From `loadManifestFromDOM`, through `console.error`, in production too. |
+| ``[csszyx] mangle-checksum-mismatch: The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.`` — help: ``deploy the HTML and the bundle from one build.`` — note: ``this detects a damaged or stale page, not an attacker; the checksum is not signed.`` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
+| ``[csszyx] mangle-map-unavailable: This page carries the checksum `{checksum}` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.`` — help: ``turn `production.hydrationCensus` on when the build sets `production.mangleVars` without `production.mangle`, which ships no map; otherwise, load the bundle that registers the map on this page.`` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
+| ``[csszyx] mangle-census-unreadable: The mangle census on this page is not a valid map, so nothing was verified.`` — help: ``serve the HTML as the build wrote it; a census that does not read means the page was changed or cut short after the build.`` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
+| ``[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.`` — help: ``serve the page over HTTPS, or from `localhost`.`` — note: ``` `crypto.subtle` exists only in a secure context. ``` | `verifyMangleChecksumAsync` answers `false`, in production too; `computeMangleChecksumAsync` throws. |
+| ``[csszyx] hydration-aborted: The HTML, the bundle and the recovery manifest do not all come from one build, so csszyx aborted hydration at `<{tagName}>`.`` — help: ``deploy the HTML, the bundle and the manifest from one build.`` | Through `console.error`, with the element after the message. A call to `abortHydration` with `map_missing` or `invalid_token` names that type and adds `note: the caller reported: {message}`. |
+| ``[csszyx] csr-recovery-unmarked: This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.`` — help: ``add `szRecover="csr"` to recover it, or `szRecover="dev-only"` to recover it in development only.`` | With the element after the message. |
+| ``[csszyx] csr-recovery-dev-only: This element has `szRecover="dev-only"`, which is off in production, so its hydration mismatch is not recovered.`` | By design. Only a production build prints it, so it prints as `[csszyx] csr-recovery-dev-only: {"form":"runtime"} https://csszyx.com/e/csr-recovery-dev-only`, with the element after it. |
+| ``[csszyx] csr-recovery-used: A hydration mismatch on this element was recovered by rendering it on the client.`` — help: ``fix the cause of the mismatch; with `szRecover="csr"`, this recovery also runs in production.`` | The page renders, but you have a real mismatch. |
 | `[csszyx] Stripped {n} szRecover="dev-only" token(s) from the production manifest. Recovery for these elements is disabled in production by design. Sites: {paths}` | Build-time, informational. |
-| `[csszyx] A raw ``sz`` object reached the runtime and was dropped before it could leak to the DOM as sz="[object Object]".` + ``This means the file was not compiled — its `sz` produces no CSS. If it lives in a workspace package, add that package directory to `compileSources`; otherwise check that the bundler is not skipping the file.`` | Dev only, once. The most direct "this file was never compiled" signal there is. |
+| ``[csszyx] uncompiled-sz: A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.`` — help: ``add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.`` — note: ``csszyx dropped the object, so the DOM does not get `sz="[object Object]"`.`` | Dev only, once. The most direct "this file was never compiled" signal there is. |
 
 See [SSR & Hydration](/docs/ssr/) and the
 [Hydration API](/docs/reference/hydration/).
@@ -1850,15 +1857,18 @@ The class toolkit refuses a selector it cannot act on, in development, and
 answers as if nothing matched:
 
 ```text
-[csszyx] has/pick/omit take one selector, not an array; pass the selectors one at a time, or use splitBox whose inner/outer options take a list.
+[csszyx] split-box-selector-invalid: `has`, `pick` and `omit` take one selector, so an array matches nothing.
+  help: pass the selectors one at a time; `splitBox` takes a list in `inner` and `outer`.
 ```
 
 ```text
-[csszyx] an empty selector {} matches nothing; name a category and value, e.g. { overflow: "hidden" }.
+[csszyx] split-box-selector-invalid: The empty selector `{}` names no category, so it matches nothing.
+  help: name a category and a value, such as `{ overflow: "hidden" }`.
 ```
 
 ```text
-[csszyx] '{selector}' is not a category or class prefix csszyx knows; the category is '{hint}'.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: use the category `{hint}`.
 ```
 
 When the word is also a property the qualified form can name — `color` is
@@ -1867,15 +1877,18 @@ category alone would catch more than the word meant: `'text'` also matches
 `text-sm`.
 
 ```text
-[csszyx] '{name}' is not a category or class prefix csszyx knows; the category is '{hint}', and '{hint}:{name}' matches that property only.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: use the category `{hint}`, or `{hint}:{name}` to match that property only.
 ```
 
 ```text
-[csszyx] '{selector}' is not a category or class prefix csszyx knows; classify('<a class>') shows the category a class belongs to.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: call `classify('<a class>')` to see the category a class belongs to.
 ```
 
 ```text
-[csszyx] an object selector names one category and value; { {categories} } can never match a single token.
+[csszyx] split-box-selector-invalid: An object selector names one category and value, so `{ {categories} }` can never match a single token.
+  help: pass one selector per category.
 ```
 
 An empty object used to match every csszyx token, and a misspelt category
@@ -1894,7 +1907,8 @@ Two helpers take two different inputs, and mixing them up says so:
 ### A qualified selector reached the sz twins
 
 ```text
-[csszyx] '{selector}' names a property, which the sz twins do not read: an sz key has no value to classify. help: pass '{name}'.
+[csszyx] split-box-selector-invalid: `{selector}` names a property, and `hasSz`, `pickSz` and `omitSz` match an sz key by category only, so it matches nothing.
+  help: pass `{name}`.
 ```
 
 `'text:color'` qualifies a *class* selector by the property its value names —
@@ -1906,7 +1920,8 @@ to pass instead of pretending the selector does not exist.
 ### A peer rule kept a class on the frame
 
 ```text
-[csszyx] splitBox: '{token}' stays on the frame although '{base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. help: to reach the content instead, target it from the frame: '{reaching}'.
+[csszyx] split-box-peer-on-frame: `splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.
+  help: target the content from the frame instead: `{reaching}`.
 ```
 
 Every `peer-*` variant compiles to the general sibling combinator — the rule
@@ -1926,7 +1941,8 @@ are not affected — their rules reach descendants, and the content node is one.
 ### `css` went to the fallback node
 
 ```text
-[csszyx] splitBoxSz: '{key}' holds raw CSS csszyx does not classify, so it went to the {node} node with everything else it could not classify. help: if its declarations belong on the other node, place it yourself with { {other}: ['{key}'] }.
+[csszyx] split-box-unclassified: The `css` key holds raw CSS `splitBoxSz` does not classify, so it went to the {node} node with everything else it could not classify.
+  help: if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`.
 ```
 
 `css` carries raw declarations, not sz keys, so `splitBoxSz` cannot tell which
@@ -1939,7 +1955,8 @@ silences the warning.
 ### A qualified selector names a property csszyx does not tell apart
 
 ```text
-[csszyx] '{property}' is not a property csszyx tells apart; '{selector}' matches nothing. help: the properties are {list} — classify('<a class>') shows the one a class carries.
+[csszyx] split-box-selector-invalid: `{property}` is not a property csszyx tells apart, so `{selector}` matches nothing.
+  help: use one of: {properties}; `classify('<a class>')` shows the one a class carries.
 ```
 
 A selector such as `'text:color'` reads the half after the colon as a
@@ -1959,7 +1976,8 @@ warning is the only place it is said. Development only, once per message, and
 none of them changes the output.
 
 ```text
-[csszyx] splitBox: '{token}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.
+[csszyx] split-box-unbounded-scroll: `splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.
+  help: give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content.
 ```
 
 A scroll container with no height grows to fit its content, so it never
@@ -1968,14 +1986,16 @@ scrolls. The bound can be a class on either node (`h-*`, `max-h-*`, `min-h-*`,
 frame and a flex child (`flex-1`, `grow`, `basis-*`) are accepted as bounded.
 
 ```text
-[csszyx] splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. help: add 'overflow-hidden' to the frame.
+[csszyx] split-box-unclipped-corners: The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.
+  help: add `overflow-hidden` to the frame.
 ```
 
 Scrolled content paints out to the padding box, so it runs over a corner the
 frame rounded but never clipped.
 
 ```text
-[csszyx] splitBox: '{token}' went to the content node, so the frame keeps its background, border and size and stays visible. help: pass { outer: ['hidden'] } if the whole box should disappear.
+[csszyx] split-box-hidden-content: `splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.
+  help: pass `{ outer: ['hidden'] }` if the whole box should disappear.
 ```
 
 `hidden` is `display: none`, which acts on the contents, so it stops the content
@@ -1989,7 +2009,8 @@ partitions an sz object.
 ### A class csszyx does not recognise
 
 ```text
-[csszyx] splitBox: '{token}' is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify. help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { {other}: ['{token}'] }.
+[csszyx] split-box-unclassified: `{token}` is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify.
+  help: if it is a custom `@utility` that declares properties for both nodes, place it yourself with `{ {side}: ['{token}'] }`; csszyx cannot split it, and no side is correct.
 ```
 
 The toolkit's vocabulary is atomic utilities — a class whose name states one
@@ -2001,7 +2022,7 @@ per-property fragments to make the question answerable, so it says what it did
 and hands the call back.
 
 `{node}` is the node the fallback chose — `frame` by default, `content` when
-you passed `fallback: 'inner'` — and `{other}` is the opposite one, so the help
+you passed `fallback: 'inner'` — and `{side}` is the opposite one, so the help
 line always suggests moving the class rather than leaving it where it is.
 
 Placing the token by hand is the fix, and a placement list accepts the literal
@@ -2023,7 +2044,8 @@ the side the fallback would have chosen anyway.
 ### A placement names a variant
 
 ```text
-[csszyx] splitBox: a placement list names a class by its base, so '{token}' never matches; the variant prefix and the ! or - marker are stripped before the comparison. help: write { {side}: ['{base}'] }; it places every variant of '{base}'.
+[csszyx] split-box-placement-variant: A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.
+  help: write `{ {side}: ['{base}'] }`; it places every variant of `{base}`.
 ```
 
 Use the base name in `outer` and `inner` placement lists. The rule applies to
@@ -2041,7 +2063,8 @@ for literal custom-class placement, and
 ### The cap on development warnings
 
 ```text
-[csszyx] {count} distinct development warnings have been printed; further ones are suppressed for this session. help: a className built from data is the usual cause — look above for one warning repeating with different values.
+[csszyx] diagnostics-capped: This session has printed {count} distinct development warnings, so further ones are suppressed.
+  help: look above for one warning repeating with different values; a className built from data is the usual cause.
 ```
 
 Every warning prints once per distinct message, and the cache behind that

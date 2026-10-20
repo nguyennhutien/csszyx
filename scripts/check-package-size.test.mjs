@@ -360,6 +360,64 @@ test('a production bundle may print only the codes the registry marks as printin
     );
 });
 
+test('the runtime and dynamic lists are the registry codes their sources print', () => {
+    const budget = name => SIZE_BUDGETS.find(entry => entry.name === name);
+    const runtime = budget('@csszyx/runtime app bundle');
+    assert.equal(runtime.productionMessages, undefined);
+    // Integrity checks and recovery report csszyx's own output as wrong.
+    for (const head of [
+        'error: [csszyx] hydration-aborted: ',
+        'error: [csszyx] mangle-map-unreadable: ',
+        'error: [csszyx] recovery-manifest-unreadable: ',
+        'warn: [csszyx] csr-recovery-dev-only: ',
+        'warn: [csszyx] merge-table-format-skew: ',
+        'warn: [csszyx] web-crypto-unavailable: ',
+    ]) {
+        assert.ok(runtime.productionCodes.includes(head), head);
+    }
+    // The compiler's own production lines print from the compiler's bundle.
+    assert.ok(!runtime.productionCodes.some(head => head.includes('removed-key')));
+    // The two `initRuntime({ debug: true })` logs are no diagnostic (ADR 0031
+    // item 5), so the registry has no id for them: they are the only lines
+    // allowed beside its codes, and they are listed by hand.
+    assert.deepEqual(runtime.nonRegistryMessages, [
+        'log: [csszyx] Runtime initialized',
+        'warn: [csszyx] Runtime already initialized',
+    ]);
+    // `@csszyx/dynamic` prints nothing in production: its one production
+    // failure is a rejected fetch, which it catches.
+    const dynamic = budget('@csszyx/dynamic app bundle');
+    assert.equal(dynamic.productionMessages, undefined);
+    assert.deepEqual(dynamic.productionCodes, []);
+});
+
+test('a bundle the registry lets print nothing passes only while it prints nothing', () => {
+    const run = (files, extra = {}) => {
+        const root = makeFixture(files);
+        try {
+            return checkBudgets(appBudget('thing', { productionCodes: [], ...extra }), root)
+                .failures;
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    };
+    const quiet = {
+        ...codesPackage(),
+        'packages/thing/dist/index.mjs': 'export const x = 1;\n',
+    };
+    assert.deepEqual(run(quiet), []);
+    const loud = run(codesPackage());
+    assert.equal(loud.length, 2, loud.join('\n'));
+    // A line outside the registry passes only when the budget names it.
+    const debug = {
+        ...codesPackage(),
+        'packages/thing/dist/index.mjs':
+            "export function init(c) { if (c) console.log('[thing] up', c); }\n",
+    };
+    assert.equal(run(debug).length, 1);
+    assert.deepEqual(run(debug, { nonRegistryMessages: ['log: [thing] up'] }), []);
+});
+
 test('an excluded subpath is left out, and an exclusion naming no export fails', () => {
     const root = makeFixture(appPackage('thing', false));
     try {

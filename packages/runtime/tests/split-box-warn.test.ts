@@ -10,6 +10,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { splitBox } from '../src/split-box.js';
+import {
+    hiddenContentLine,
+    UNCLIPPED_CORNERS_LINE,
+    unboundedScrollLine,
+} from './helpers/split-box-lines.js';
 
 let warn: ReturnType<typeof vi.spyOn>;
 
@@ -34,8 +39,7 @@ function messages(): string {
 describe('a scroller with nothing to scroll inside', () => {
     it('warns when neither node bounds the height', () => {
         splitBox('overflow-y-auto p-4');
-        expect(messages()).toContain("'overflow-y-auto' went to the content node");
-        expect(messages()).toContain('nothing bounds the height');
+        expect(warn.mock.calls).toEqual([[unboundedScrollLine('overflow-y-auto')]]);
     });
 
     // Each case also asserts the partition it produced. `splitMemo` is module
@@ -50,7 +54,7 @@ describe('a scroller with nothing to scroll inside', () => {
         ['an inherited height', 'h-full overflow-auto p-4', 'h-full', 'overflow-auto p-4'],
     ])('stays quiet with %s', (_label, className, outer, inner) => {
         expect(splitBox(className)).toEqual({ outer, inner });
-        expect(messages()).not.toContain('nothing bounds the height');
+        expect(messages()).not.toContain('split-box-unbounded-scroll');
     });
 
     // A frame stretched by its parent is bounded too, and the bound is not a
@@ -72,20 +76,20 @@ describe('a scroller with nothing to scroll inside', () => {
         ['a flex child that cannot grow but is sized', 'grow-0 overflow-auto p-4', 'grow-0'],
     ])('stays quiet with %s', (_label, className, outer) => {
         expect(splitBox(className)).toEqual({ outer, inner: 'overflow-auto p-4' });
-        expect(messages()).not.toContain('nothing bounds the height');
+        expect(messages()).not.toContain('split-box-unbounded-scroll');
     });
 
     // Positioned but not pinned: `absolute` alone leaves the height to the
     // content, so the scroller is still unbounded.
     it('still warns for a positioned frame with no inset', () => {
         splitBox('absolute overflow-auto p-4');
-        expect(messages()).toContain('nothing bounds the height');
+        expect(warn.mock.calls).toEqual([[unboundedScrollLine('overflow-auto')]]);
     });
 
     // An unowned class carries no box role, so it can never be the bound.
     it('still warns when only a third-party class is present', () => {
         splitBox('zzz-vendor-frame overflow-auto p-4');
-        expect(messages()).toContain('nothing bounds the height');
+        expect(messages()).toContain(unboundedScrollLine('overflow-auto'));
     });
 
     it('says nothing when there is no scroller at all', () => {
@@ -93,15 +97,14 @@ describe('a scroller with nothing to scroll inside', () => {
             outer: 'h-64 overflow-hidden',
             inner: 'p-4',
         });
-        expect(messages()).not.toContain('nothing bounds the height');
+        expect(messages()).not.toContain('split-box-unbounded-scroll');
     });
 });
 
 describe('a display:none that hides only the content', () => {
     it('warns, because the frame stays visible', () => {
         splitBox('hidden bg-white border');
-        expect(messages()).toContain("'hidden' went to the content node");
-        expect(messages()).toContain("{ outer: ['hidden'] }");
+        expect(warn.mock.calls).toEqual([[hiddenContentLine('hidden')]]);
     });
 
     // Under a variant the pair is usually deliberate — `hidden md:block` toggles
@@ -111,14 +114,14 @@ describe('a display:none that hides only the content', () => {
             outer: 'bg-white',
             inner: 'md:hidden',
         });
-        expect(messages()).not.toContain('went to the content node');
+        expect(messages()).not.toContain('split-box-hidden-content');
     });
 });
 
 describe('a rounded frame that does not clip its scroller', () => {
     it('warns that scrolled content paints over the corners', () => {
         splitBox('rounded-xl h-64 overflow-y-auto');
-        expect(messages()).toContain('the frame is rounded and the content scrolls');
+        expect(warn.mock.calls).toEqual([[UNCLIPPED_CORNERS_LINE]]);
     });
 
     it.each([
@@ -136,7 +139,7 @@ describe('a rounded frame that does not clip its scroller', () => {
         ],
     ])('stays quiet once the frame clips with %s', (_label, className, outer, inner) => {
         expect(splitBox(className)).toEqual({ outer, inner });
-        expect(messages()).not.toContain('the frame is rounded');
+        expect(messages()).not.toContain('split-box-unclipped-corners');
     });
 
     it('stays quiet with square corners', () => {
@@ -144,7 +147,7 @@ describe('a rounded frame that does not clip its scroller', () => {
             outer: 'h-64 border',
             inner: 'overflow-y-auto',
         });
-        expect(messages()).not.toContain('the frame is rounded');
+        expect(messages()).not.toContain('split-box-unclipped-corners');
     });
 });
 

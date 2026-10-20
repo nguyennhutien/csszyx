@@ -8,6 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
 import { createHydrationMangleMap } from '../src/hydration-map.js';
 import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registry.js';
+import {
+    CENSUS_UNREADABLE_LINE,
+    checksumMismatchLine,
+    mapUnavailableLine,
+} from './helpers/hydration-lines.js';
 
 const map = { 'p-4': 'a', 'bg-red-500': 'b' };
 
@@ -68,14 +73,12 @@ describe('verifyMangleChecksumAsync, reading the map from the page', () => {
     it('names both checksums when the census was altered', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const built = await computeMangleChecksumAsync(map);
-        census(JSON.stringify({ ...map, 'p-4': 'z' }));
+        const altered = { ...map, 'p-4': 'z' };
+        census(JSON.stringify(altered));
         expect(await verifyMangleChecksumAsync(built)).toBe(false);
-        expect(warn).toHaveBeenCalledTimes(1);
-        const message = String(warn.mock.calls[0]?.[0]);
-        expect(message).toMatch(
-            /^\[csszyx\] mangle-checksum-mismatch: .* hashes to [0-9a-f]{16}, /,
-        );
-        expect(message).toContain(`the checksum it was built with is ${built}\n`);
+        expect(warn.mock.calls).toEqual([
+            [checksumMismatchLine(await computeMangleChecksumAsync(altered), built)],
+        ]);
     });
 
     // `hydrationCensus: false` is a configuration, not a fault: the bundle
@@ -100,11 +103,9 @@ describe('verifyMangleChecksumAsync, reading the map from the page', () => {
 
     it('says nothing was verified when a page carries a checksum and no map', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync(map))).toBe(false);
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0]?.[0]).toMatch(
-            /^\[csszyx\] mangle-map-unavailable: .*nothing was verified\nhelp: /,
-        );
+        const built = await computeMangleChecksumAsync(map);
+        expect(await verifyMangleChecksumAsync(built)).toBe(false);
+        expect(warn.mock.calls).toEqual([[mapUnavailableLine(built)]]);
     });
 
     // A census the page carries but nothing can read was damaged on the way:
@@ -119,10 +120,7 @@ describe('verifyMangleChecksumAsync, reading the map from the page', () => {
         census(content);
         installMangleRuntime({ mangleMap: map });
         expect(await verifyMangleChecksumAsync(await computeMangleChecksumAsync(map))).toBe(false);
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0]?.[0]).toMatch(
-            /^\[csszyx\] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified$/,
-        );
+        expect(warn.mock.calls).toEqual([[CENSUS_UNREADABLE_LINE]]);
     });
 });
 

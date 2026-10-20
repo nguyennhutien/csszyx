@@ -9,6 +9,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { REGISTER_IGNORED_LINE } from './helpers/theme-lines.js';
+
 afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -33,9 +35,8 @@ describe('registering theme tokens by hand', () => {
     it('says the registry no longer changes what szcn merges, and what to do', async () => {
         const printed = await warningsOf('register');
 
-        expect(printed).toContain('no longer changes what `szcn` merges');
         // Every group the registry took is a `@theme` namespace.
-        expect(printed).toContain('declare the tokens under `@theme`');
+        expect(printed).toBe(REGISTER_IGNORED_LINE);
     });
 
     it.each([false, true])(
@@ -49,8 +50,7 @@ describe('registering theme tokens by hand', () => {
                 ]);
             }
             const printed = await warningsOf('register');
-            expect(printed).toContain('integration that supplies a merge table');
-            expect(printed).toContain('without a table it removes only exact repeats');
+            expect(printed).toBe(REGISTER_IGNORED_LINE);
 
             // Registering names does not substitute for delivery of merge data.
             const { szcn, _szcn } = await import('../src/merge-classes.js');
@@ -72,13 +72,11 @@ describe('registering theme tokens by hand', () => {
         groups.registerSzcnGroups({ colors: ['one'] });
         groups.registerSzcnGroups({ colors: ['two'] });
 
-        expect(warn.mock.calls.filter(args => String(args[0]).includes('`@utility`'))).toHaveLength(
-            1,
-        );
+        expect(warn.mock.calls).toEqual([[REGISTER_IGNORED_LINE]]);
     });
 
     it('says nothing when the build replaces its own declaration', async () => {
-        expect(await warningsOf('set')).not.toContain('`@utility`');
+        expect(await warningsOf('set')).toBe('');
     });
 
     it('says nothing in production', async () => {

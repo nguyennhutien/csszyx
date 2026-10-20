@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registry.js';
 import { omit, pick, splitBox } from '../src/split-box.js';
+import { placementVariantLine, unclassifiedLine } from './helpers/split-box-lines.js';
 
 describe('placing an unrecognised token by hand', () => {
     it('honours an exact name in the inner list', () => {
@@ -102,13 +103,15 @@ describe('warning that a token was placed by the fallback', () => {
         warn.mockRestore();
     });
 
-    /** @returns Every warning message that names `splitBox`. */
+    /** @returns Every warning message a `split-box-*` code heads. */
     const messages = (): string[] =>
-        warn.mock.calls.map(call => String(call[0])).filter(m => m.includes('splitBox'));
+        warn.mock.calls
+            .map(call => String(call[0]))
+            .filter(m => m.startsWith('[csszyx] split-box-'));
 
     it('names the token it could not classify', () => {
         splitBox('card p-4');
-        expect(messages().join('\n')).toContain("'card'");
+        expect(messages()).toEqual([unclassifiedLine('card', 'frame')]);
     });
 
     it('says which node the token landed on', () => {
@@ -116,12 +119,17 @@ describe('warning that a token was placed by the fallback', () => {
         // means an identical string never re-enters the uncached path, so a
         // repeated call is silent by design and `devWarn` dedupes on top.
         splitBox('panel p-4');
-        expect(messages().join('\n')).toContain('frame');
+        expect(messages()).toEqual([unclassifiedLine('panel', 'frame')]);
+        splitBox('pane p-4', { fallback: 'inner' });
+        expect(messages()).toEqual([
+            unclassifiedLine('panel', 'frame'),
+            unclassifiedLine('pane', 'content'),
+        ]);
     });
 
     it('points at the option that places it by hand', () => {
         splitBox('sheet p-4');
-        expect(messages().join('\n')).toContain("inner: ['sheet']");
+        expect(messages()).toEqual([unclassifiedLine('sheet', 'frame')]);
     });
 
     it('stays quiet when the caller already placed the token', () => {
@@ -170,8 +178,8 @@ describe('warning that a token was placed by the fallback', () => {
                 outer: '',
                 inner: `${selector} p-4`,
             });
-            expect(messages().join('\n')).toContain(`'${selector}'`);
-            expect(messages().join('\n')).toContain("outer: ['hidden']");
+            // `!hidden` still hides the content, which has a line of its own.
+            expect(messages()).toContain(placementVariantLine(selector, 'outer', 'hidden'));
         },
     );
 
@@ -179,8 +187,7 @@ describe('warning that a token was placed by the fallback', () => {
         // `-mt-4` is margin and routes outer on its own; the point is the
         // message, which must name `mt-4` — the form that would have matched.
         splitBox('-mt-4 p-4', { inner: ['-mt-4'] });
-        expect(messages().join('\n')).toContain("'-mt-4'");
-        expect(messages().join('\n')).toContain("inner: ['mt-4']");
+        expect(messages()).toEqual([placementVariantLine('-mt-4', 'inner', 'mt-4')]);
     });
 
     it('does not mistake a colon in an arbitrary value for a variant', () => {
@@ -190,8 +197,9 @@ describe('warning that a token was placed by the fallback', () => {
 
     it('names every unrecognised token, not just the first', () => {
         splitBox('card widget p-4');
-        const all = messages().join('\n');
-        expect(all).toContain("'card'");
-        expect(all).toContain("'widget'");
+        expect(messages()).toEqual([
+            unclassifiedLine('card', 'frame'),
+            unclassifiedLine('widget', 'frame'),
+        ]);
     });
 });

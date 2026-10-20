@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { classify, pick, splitBox } from '../src/split-box.js';
+import { peerOnFrameLine } from './helpers/split-box-lines.js';
 
 describe('a peer consumer routes to the node its selector can reach', () => {
     it.each([
@@ -60,27 +61,37 @@ describe('the move is said, not silent', () => {
     });
     afterEach(() => warn.mockRestore());
     const messages = (): string[] =>
-        warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('splitBox'));
+        warn.mock.calls
+            .map(c => String(c[0]))
+            .filter(m => m.startsWith('[csszyx] split-box-peer-on-frame:'));
 
     it('names the token that stayed on the frame and why', () => {
         splitBox('peer-hover:p-4 m-2');
-        const all = messages().join('\n');
-        expect(all).toContain("'peer-hover:p-4'");
-        expect(all).toContain('sibling');
+        expect(messages()).toEqual([
+            peerOnFrameLine('peer-hover:p-4', 'p-4', 'peer-hover:[&>*]:p-4'),
+        ]);
     });
 
     it('offers the arbitrary variant that reaches the content from the frame', () => {
         // A distinct className per test: the partition memo serves a repeat
         // without re-running the analysis, so a repeat is silent by design.
         splitBox('peer-hover:p-4 m-3');
-        expect(messages().join('\n')).toContain('peer-hover:[&>*]:p-4');
+        expect(messages()).toEqual([
+            peerOnFrameLine('peer-hover:p-4', 'p-4', 'peer-hover:[&>*]:p-4'),
+        ]);
     });
 
     it('splits at the variant boundary, not at a colon inside a value', () => {
         // `text-[length:2rem]` is a font size, so it belongs inside and moves;
         // the colon in its value must not be mistaken for the variant boundary.
         splitBox('peer-hover:text-[length:2rem] m-4');
-        expect(messages().join('\n')).toContain('peer-hover:[&>*]:text-[length:2rem]');
+        expect(messages()).toEqual([
+            peerOnFrameLine(
+                'peer-hover:text-[length:2rem]',
+                'text-[length:2rem]',
+                'peer-hover:[&>*]:text-[length:2rem]',
+            ),
+        ]);
     });
 
     it('stays quiet when nothing had to move', () => {

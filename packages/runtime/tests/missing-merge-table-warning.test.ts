@@ -9,6 +9,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MISSING_TABLE_LINE } from './helpers/merge-lines.js';
+
 afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -33,8 +35,7 @@ describe('a merge with no table', () => {
 
         expect(runtime.szcn('p-2', 'p-4')).toBe('p-2 p-4');
 
-        expect(printed()).toContain('no merge table');
-        expect(printed()).toContain('csszyx next prebuild');
+        expect(printed()).toBe(MISSING_TABLE_LINE);
     });
 
     it('says it once, through either helper', async () => {
@@ -43,9 +44,7 @@ describe('a merge with no table', () => {
         runtime._szcn('m-2', 'm-4');
         runtime.szcn('gap-2', 'gap-4');
 
-        expect(
-            warn.mock.calls.filter(args => String(args[0]).includes('no merge table')),
-        ).toHaveLength(1);
+        expect(warn.mock.calls).toEqual([[MISSING_TABLE_LINE]]);
     });
 
     it('says nothing for a single class, which needs no table', async () => {
@@ -53,7 +52,7 @@ describe('a merge with no table', () => {
         runtime.szcn('p-4');
         runtime.szcn('p-4 p-4');
 
-        expect(printed()).not.toContain('no merge table');
+        expect(printed()).not.toContain('merge-table-missing');
     });
 
     it('says nothing once a build registered a table, even an empty one', async () => {
@@ -61,7 +60,7 @@ describe('a merge with no table', () => {
         runtime.registerMergeSignatures([{}, []]);
         runtime.szcn('p-2', 'p-4');
 
-        expect(printed()).not.toContain('no merge table');
+        expect(printed()).not.toContain('merge-table-missing');
     });
 
     it('says nothing in production', async () => {

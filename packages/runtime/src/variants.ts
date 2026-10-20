@@ -11,9 +11,15 @@
 import type { SzProps, VariantModifiers } from '@csszyx/compiler';
 import type { SzObject } from '@csszyx/compiler/browser';
 import { keysDisplacedBy, keysSettledAway } from '@csszyx/compiler/keyword-families';
+import {
+    SZ_OBJECT_DEPTH,
+    SZV_CONFIG_INVALID,
+    SZV_FORBIDDEN_KEY,
+    SZV_OBJECT_AS_STRING,
+} from '@csszyx/compiler/report';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 import { devWarn } from './dev-warn.js';
-import { describeValue, selectionValueKey } from './selection-value.js';
+import { describeValue, warnSelectionValue } from './selection-value.js';
 
 /**
  * Dimension → option → sz row. Row VALUES are checked by this constraint, with
@@ -187,20 +193,34 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * @param values Candidate variant-value table.
  */
 function validateVariantDimension(dimension: string, values: unknown): void {
-    if (!isPlainObject(values)) {
-        devWarn(
-            `szv(config): variants.${dimension} must be an object of values, got ${describeValue(values)}.`,
-        );
-        return;
-    }
-    for (const [token, value] of Object.entries(values)) {
-        if (value !== null && value !== undefined && !isPlainObject(value)) {
-            devWarn(
-                `szv(config): variants.${dimension}.${token} must be an sz object, got ${describeValue(value)}. It will be skipped.`,
-            );
-        } else if (isPlainObject(value)) {
-            assertBoundedDepth(value, `variants.${dimension}.${token}`);
+    if (process.env.NODE_ENV !== 'production') {
+        if (!isPlainObject(values)) {
+            reportConfig({ form: 'dimension', dimension, got: describeValue(values) });
+            return;
         }
+        for (const [token, value] of Object.entries(values)) {
+            if (value !== null && value !== undefined && !isPlainObject(value)) {
+                reportConfig({
+                    form: 'variant-value',
+                    dimension,
+                    token,
+                    got: describeValue(value),
+                });
+            } else if (isPlainObject(value)) {
+                assertBoundedDepth(value, `variants.${dimension}.${token}`);
+            }
+        }
+    }
+}
+
+/**
+ * Report one part of a szv config that does not have the shape `szv` reads.
+ *
+ * @param args - The `szv-config-invalid` args: the part, and how its value is described.
+ */
+function reportConfig(args: NonNullable<(typeof SZV_CONFIG_INVALID)['argsType']>): void {
+    if (process.env.NODE_ENV !== 'production') {
+        devWarn({ diagnostic: SZV_CONFIG_INVALID, args });
     }
 }
 
@@ -216,35 +236,31 @@ function validateVariantDimension(dimension: string, values: unknown): void {
  * @returns true if the config is structurally usable; false if it should fall back.
  */
 function validateSzvConfig(config: unknown): boolean {
-    if (process.env.NODE_ENV === 'production') {
-        return true;
-    }
-    if (!isPlainObject(config)) {
-        devWarn(`szv(config): config must be an object, got ${describeValue(config)}. Ignoring.`);
-        return false;
-    }
-    if (config.base !== undefined && !isPlainObject(config.base)) {
-        devWarn(`szv(config): base must be an sz object, got ${describeValue(config.base)}.`);
-    }
-    // A base-only config (no `variants` key) is valid: it declares one reusable
-    // class bundle. Warning here while still returning the base object was the
-    // worst of both — the warning spammed and the behaviour didn't change.
-    if (config.variants === undefined) {
-        return true;
-    }
-    if (!isPlainObject(config.variants)) {
-        devWarn(
-            `szv(config): variants must be an object when present, got ${describeValue(config.variants)}. Ignoring.`,
-        );
-        return false;
-    }
-    for (const [dimension, values] of Object.entries(config.variants)) {
-        validateVariantDimension(dimension, values);
-    }
-    if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
-        devWarn(
-            `szv(config): defaultVariants must be an object, got ${describeValue(config.defaultVariants)}.`,
-        );
+    if (process.env.NODE_ENV !== 'production') {
+        if (!isPlainObject(config)) {
+            reportConfig({ form: 'config', got: describeValue(config) });
+            return false;
+        }
+        if (config.base !== undefined && !isPlainObject(config.base)) {
+            reportConfig({ form: 'base', got: describeValue(config.base) });
+        }
+        // A base-only config (no `variants` key) is valid: it declares one
+        // reusable class bundle. Warning here while still returning the base
+        // object was the worst of both — the warning spammed and the behaviour
+        // didn't change.
+        if (config.variants === undefined) {
+            return true;
+        }
+        if (!isPlainObject(config.variants)) {
+            reportConfig({ form: 'variants', got: describeValue(config.variants) });
+            return false;
+        }
+        for (const [dimension, values] of Object.entries(config.variants)) {
+            validateVariantDimension(dimension, values);
+        }
+        if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
+            reportConfig({ form: 'default-variants', got: describeValue(config.defaultVariants) });
+        }
     }
     return true;
 }
@@ -259,20 +275,23 @@ function validateSzvConfig(config: unknown): boolean {
  * @param depth - Current recursion depth.
  */
 function assertBoundedDepth(obj: Record<string, unknown>, where: string, depth = 0): void {
-    if (depth >= MAX_SZ_DEPTH) {
-        devWarn(
-            `szv(config): ${where} nests deeper than ${MAX_SZ_DEPTH} levels; it will be rejected at render.`,
-        );
-        return;
-    }
-    for (const key of Object.keys(obj)) {
-        if (isForbiddenSzKey(key)) {
-            devWarn(`szv(config): ${where} has a forbidden key "${key}"; it will be skipped.`);
-            continue;
+    if (process.env.NODE_ENV !== 'production') {
+        if (depth >= MAX_SZ_DEPTH) {
+            devWarn({
+                diagnostic: SZ_OBJECT_DEPTH,
+                args: { form: 'szv-config', maxDepth: MAX_SZ_DEPTH, where },
+            });
+            return;
         }
-        const v = obj[key];
-        if (isPlainObject(v)) {
-            assertBoundedDepth(v, `${where}.${key}`, depth + 1);
+        for (const key of Object.keys(obj)) {
+            if (isForbiddenSzKey(key)) {
+                devWarn({ diagnostic: SZV_FORBIDDEN_KEY, args: { where, key } });
+                continue;
+            }
+            const v = obj[key];
+            if (isPlainObject(v)) {
+                assertBoundedDepth(v, `${where}.${key}`, depth + 1);
+            }
         }
     }
 }
@@ -383,38 +402,10 @@ function warnInvalidSelection(
     selection: Record<string, unknown> | undefined,
     variants: LooseSzvConfig['variants'],
 ): void {
-    if (process.env.NODE_ENV === 'production' || !selection) {
-        return;
-    }
-
-    for (const key of Object.keys(selection)) {
-        const value = selection[key];
-        warnInvalidSelectionValue(key, value, variants);
-    }
-}
-
-/**
- * Warn for one selected variant dimension/value pair.
- * @param key - Selected dimension name.
- * @param value - Selected dimension value.
- * @param variants - Configured variant dimensions.
- */
-function warnInvalidSelectionValue(
-    key: string,
-    value: unknown,
-    variants: LooseSzvConfig['variants'],
-): void {
-    if (!(key in (variants ?? {}))) {
-        devWarn(`szv()(selection): unknown variant "${key}" — not declared in config.variants.`);
-        return;
-    }
-    if (value === null || value === undefined) return;
-
-    const valueKey = selectionValueKey(value);
-    if (valueKey === null || !(valueKey in (variants?.[key] ?? {}))) {
-        devWarn(
-            `szv()(selection): "${valueKey ?? describeValue(value)}" is not a value of variant "${key}" — it has no styles.`,
-        );
+    if (process.env.NODE_ENV !== 'production' && selection) {
+        for (const key of Object.keys(selection)) {
+            warnSelectionValue(key, selection[key], variants);
+        }
     }
 }
 
@@ -452,7 +443,9 @@ function applySelectedVariants(
     config: LooseSzvConfig,
     resolved: Record<string, unknown>,
 ): SzObject {
-    let result: SzObject = config.base ? { ...config.base } : {};
+    // A base that is not an sz object was reported when the config was read,
+    // and is ignored as its line says: a string would spread into index keys.
+    let result: SzObject = isPlainObject(config.base) ? { ...(config.base as SzObject) } : {};
     for (const variantKey of Object.keys(config.variants ?? {})) {
         const selectedValue = resolved[variantKey];
         if (selectedValue === null || selectedValue === undefined) {
@@ -484,11 +477,9 @@ function attachStringCoercionGuard(result: SzObject): SzObject {
     if (process.env.NODE_ENV !== 'production') {
         Object.defineProperty(result, 'toString', {
             value: (): string => {
-                devWarn(
-                    'szv() returned an sz OBJECT that was used as a string (e.g. ' +
-                        'className={someSzv({...})}) — this renders "[object Object]". ' +
-                        'Pass it to an sz= prop, or resolve it with szr(...) first.',
-                );
+                if (process.env.NODE_ENV !== 'production') {
+                    devWarn({ diagnostic: SZV_OBJECT_AS_STRING, args: {} });
+                }
                 return '';
             },
             enumerable: false,

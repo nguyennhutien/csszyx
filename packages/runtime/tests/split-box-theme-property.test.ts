@@ -21,8 +21,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resetDevWarnCache } from '../src/dev-warn.js';
-import { _resetSzcnGroups, clearSzcnGroups, registerSzcnGroups } from '../src/merge-groups.js';
+import {
+    _resetSzcnGroups,
+    clearSzcnGroups,
+    getMergeGroupProperties,
+    registerSzcnGroups,
+} from '../src/merge-groups.js';
 import { classify, has, omit, pick, splitBox } from '../src/split-box.js';
+import { SELECTOR_INVALID, unknownCategoryLine } from './helpers/split-box-lines.js';
 
 afterEach(() => {
     _resetSzcnGroups();
@@ -232,11 +238,10 @@ describe('a selector can name the property', () => {
                 expect(pick('text-red-500', selector)).toBe('');
                 expect(omit('text-red-500', selector)).toBe('text-red-500');
                 expect(warn).toHaveBeenCalledExactlyOnceWith(
-                    expect.stringContaining(
-                        `'${selector.split(':')[1]}' is not a property csszyx tells apart`,
-                    ),
+                    SELECTOR_INVALID.property(selector.split(':')[1] as string, selector, [
+                        ...getMergeGroupProperties(),
+                    ]),
                 );
-                expect(warn.mock.calls[0]?.[0]).toContain('help: the properties are');
             } finally {
                 warn.mockRestore();
             }
@@ -246,7 +251,7 @@ describe('a selector can name the property', () => {
     it('still warns when the half before the colon names nothing', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(has('text-red-500', 'widht:color')).toBe(false);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('widht'));
+        expect(warn).toHaveBeenCalledWith(unknownCategoryLine('widht'));
         warn.mockRestore();
     });
 });

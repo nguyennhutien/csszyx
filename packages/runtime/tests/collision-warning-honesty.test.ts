@@ -28,9 +28,14 @@ import {
     szcn,
 } from '../src/index.js';
 import { __resetMergeSignaturesForTests } from '../src/merge-signatures.js';
+import {
+    REGISTER_IGNORED_LINE,
+    themeAmbiguousLine,
+    themeCollisionLine,
+} from './helpers/theme-lines.js';
 
 // A DIFFERENT colliding token per case. The warning is emitted through
-// `warnOnce`, which keys on the message, so reusing one name would leave the
+// `devWarn`, which keys on the code and its args, so reusing one name would leave the
 // second case asserting against a warning that was suppressed rather than one
 // that was never produced.
 describe('the warning for a token that shadows a built-in', () => {
@@ -45,9 +50,11 @@ describe('the warning for a token that shadows a built-in', () => {
 
         registerSzcnGroups({ colors: ['balance'] }, 'honesty-test');
 
-        const message = warn.mock.calls.map(call => String(call[0])).join('\n');
-        expect(message).toContain('shadows a built-in');
-        expect(message).not.toContain('safe keep-both');
+        expect(warn.mock.calls).toEqual([
+            [REGISTER_IGNORED_LINE],
+            [themeCollisionLine('balance', 'utility-keyword')],
+        ]);
+        expect(String(warn.mock.calls[1]?.[0])).not.toContain('safe keep-both');
     });
 
     it('says what the author actually loses — the argument order stops deciding', () => {
@@ -56,6 +63,7 @@ describe('the warning for a token that shadows a built-in', () => {
         registerSzcnGroups({ colors: ['collapse'] }, 'honesty-test-2');
 
         const message = warn.mock.calls.map(call => String(call[0])).join('\n');
+        expect(message).toContain(themeCollisionLine('collapse', 'utility-keyword'));
         expect(message).toContain('stylesheet order');
     });
 
@@ -65,7 +73,7 @@ describe('the warning for a token that shadows a built-in', () => {
         registerSzcnGroups({ colors: ['cover'] }, 'honesty-test-4');
 
         const message = warn.mock.calls.map(call => String(call[0])).join('\n');
-        expect(message).toContain('`classify`');
+        expect(message).toContain(themeCollisionLine('cover', 'utility-keyword'));
         expect(message).not.toContain('szcn cannot');
     });
 
@@ -89,16 +97,18 @@ describe('the warning for a token declared in two categories', () => {
     });
 
     it.each([
-        [{ colors: ['honest-a'], textSizes: ['honest-a'] }, 'text-honest-a'],
-        [{ fontFamilies: ['honest-b'], fontWeights: ['honest-b'] }, 'font-honest-b'],
-    ])('says classify cannot name the property, and leaves szcn out of it', (groups, cls) => {
+        [{ colors: ['honest-a'], textSizes: ['honest-a'] }, 'honest-a', 'color-text-size'],
+        [
+            { fontFamilies: ['honest-b'], fontWeights: ['honest-b'] },
+            'honest-b',
+            'font-family-weight',
+        ],
+    ] as const)('says classify cannot name the property', (groups, name, form) => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         registerSzcnGroups(groups, 'honesty-test-5');
 
         const message = warn.mock.calls.map(call => String(call[0])).join('\n');
-        expect(message).toContain(`\`${cls}\``);
-        expect(message).toContain('`classify`');
-        expect(message).not.toContain('szcn');
+        expect(message).toContain(themeAmbiguousLine(name, form));
     });
 });

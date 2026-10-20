@@ -75,6 +75,18 @@ import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
  * number, tight enough that silently swallowing a 30KB dependency fails.
  */
 
+/**
+ * The sources of one package that a browser bundle can hold.
+ *
+ * @param {string} name - The package's directory under `packages/`.
+ * @returns {Set<string>} The files, repository-relative.
+ */
+function sourcesOf(name) {
+    return new Set(
+        [...browserSourceFiles()].filter(file => file.startsWith(`packages/${name}/src/`)),
+    );
+}
+
 /** Gzip ceilings per user-shipped surface, set the usual ~300 bytes above a
  * measurement. Re-measure with `pnpm check:package-size` after a build.
  *
@@ -99,12 +111,22 @@ export const SIZE_BUDGETS = [
         // mangle check finds its map on the page or in the bundle, says why
         // every `false` happened, and fails a census the page carries but
         // cannot read instead of reading past it to the bundle's map.
-        maxGzipBytes: 16_450,
+        //
+        // Lowered from 16,450 on 2026-10-20, measured 15,689 (16,170 before):
+        // its production lines print their code and args instead of the
+        // sentence (ADR 0031), and the development ones are the registry's
+        // templates, which a production build drops. Budget the usual ~300
+        // above.
+        maxGzipBytes: 16_000,
         // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
         // 8,144 / 1,082. `.` raised from 15,700 on 2026-10-17, measured 15,721,
-        // for the same check.
+        // for the same check, and lowered from 16,000 on 2026-10-20, measured
+        // 15,250, with the union. The other entries measured 426 / 1,366 / 434
+        // / 8,153 / 1,096 that day: each module that reports keeps a bare
+        // import of `@csszyx/compiler/report`, external here, which an app
+        // that bundles the compiler drops (`sideEffects: false`).
         entryBudgets: {
-            '.': 16_000,
+            '.': 15_550,
             './lite': 750,
             './core': 1_650,
             './lowering': 750,
@@ -113,11 +135,13 @@ export const SIZE_BUDGETS = [
         },
         // The same bundles built by Vite (see `checkViteBudgets`), measured
         // 2026-10-19: 15,686, then 15,376 / 464 / 1,362 / 515 / 8,059 / 996.
-        // Each the usual ~300 above, rounded up to 50.
+        // Each the usual ~300 above, rounded up to 50. The union and `.`
+        // lowered on 2026-10-20 with the esbuild ones, measured 15,331 and
+        // 15,014.
         vite: {
-            maxGzipBytes: 16_000,
+            maxGzipBytes: 15_650,
             entryBudgets: {
-                '.': 15_700,
+                '.': 15_350,
                 './lite': 800,
                 './core': 1_700,
                 './lowering': 850,
@@ -125,31 +149,18 @@ export const SIZE_BUDGETS = [
                 './merge': 1_300,
             },
         },
-        // Each one reports csszyx's own output as wrong, an integrity check
-        // failing, or prints only because the app turned `debug` on (ADR
-        // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
-        productionMessages: [
-            // The mangle map and recovery manifest are integrity inputs.
-            'error: Failed to parse mangle map:',
-            'error: Failed to parse recovery manifest:',
-            'error: [csszyx] Mangle map failed schema validation (not a plai',
-            // `verifyMangleChecksumAsync` saying why it answered false:
-            // `web-crypto-unavailable`, built before the call, then
-            // `mangle-checksum-mismatch` / `mangle-map-unavailable`, chosen
-            // by the call, and `mangle-census-unreadable` for a census the
-            // page carries but cannot read.
-            'warn: <expr>',
-            'warn: <expr>',
-            'warn: [csszyx] mangle-census-unreadable: the mangle census on ',
-            // Hydration that aborted or fell back renders other than the
-            // server did; `dev-only` recovery says it is off in production.
-            'error: [csszyx] Hydration aborted at ',
-            'warn: [csszyx] CSR recovery requires explicit szRecover direct',
-            'warn: [csszyx] Hydration mismatch recovered via CSR. Fix root ',
-            'warn: [csszyx] szRecover=',
-            // A merge table from another csszyx version merges wrongly.
-            'warn: [csszyx] the merge table was written in format ',
-            // Only with `initRuntime({ debug: true })`.
+        // Each one reports csszyx's own output as wrong or an integrity check
+        // failing (ADR 0011), so it prints in production as its code and
+        // args: the mangle map, census and recovery manifest the page
+        // carries, a mangle check that answered false, hydration that
+        // aborted or fell back, and a merge table from another csszyx
+        // version. Read from the registry (`runtime.production`), never listed
+        // here. A usage nudge belongs behind `NODE_ENV`.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('runtime')),
+        // The two lines `initRuntime({ debug: true })` prints. They report no
+        // problem, so the registry has no id for them (ADR 0031 item 5), and
+        // they are the only lines allowed beside its codes.
+        nonRegistryMessages: [
             'log: [csszyx] Runtime initialized',
             'warn: [csszyx] Runtime already initialized',
         ],
@@ -165,6 +176,10 @@ export const SIZE_BUDGETS = [
         entryBudgets: { '.': 10_650, './react': 8_200 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
         vite: { maxGzipBytes: 11_000, entryBudgets: { '.': 10_700, './react': 8_100 } },
+        // None today: its one production failure, an unreachable manifest, is
+        // a rejected fetch it catches. Read from the registry all the same, so
+        // a production line added to its sources has to be registered.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('dynamic')),
     },
     {
         name: '@csszyx/compiler browser app bundle',
@@ -292,12 +307,7 @@ export const SIZE_BUDGETS = [
         // gradient layer on `mask`, a stand-alone key a later group replaces,
         // a group's value written on that stand-alone key, a slash-opacity
         // string, and the two dynamic values the runtime helpers cannot lower.
-        productionCodes: productionCodesOf(
-            registry.DIAGNOSTICS,
-            new Set(
-                [...browserSourceFiles()].filter(file => file.startsWith('packages/compiler/src/')),
-            ),
-        ),
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('compiler')),
     },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
@@ -838,8 +848,10 @@ export function productionCodesOf(diagnostics, files) {
  * one code may have several sites. A head no code allows is a development
  * line that failed to fold, or a line printed through another method than
  * the registry names; a code no head prints is a stale entry or a lost site.
- * A bundle with no console call at all fails too: the scan must find the
- * sinks it checks, or a pattern that stopped matching would pass every bundle.
+ * A bundle with no console call at all fails too when the registry lets it
+ * print something: the scan must find the sinks it checks, or a pattern that
+ * stopped matching would pass every bundle. One the registry lets print
+ * nothing passes only while it prints nothing.
  *
  * @param {string[]} printed heads from {@link consoleMessages}
  * @param {string[]} allowed heads from {@link productionCodesOf}
@@ -847,7 +859,7 @@ export function productionCodesOf(diagnostics, files) {
  */
 export function codeProblems(printed, allowed) {
     const problems = [];
-    if (printed.length === 0) {
+    if (printed.length === 0 && allowed.length > 0) {
         problems.push('found no console call to check, so the sink scan read nothing');
     }
     for (const head of new Set(printed)) {
@@ -1001,7 +1013,10 @@ export function checkBudgets(budgets, rootDir) {
                 const printed = consoleMessages(bundle);
                 for (const problem of budget.productionCodes === undefined
                     ? messageProblems(printed, budget.productionMessages ?? [])
-                    : codeProblems(printed, budget.productionCodes)) {
+                    : codeProblems(printed, [
+                          ...budget.productionCodes,
+                          ...(budget.nonRegistryMessages ?? []),
+                      ])) {
                     failures.push(
                         `${budget.name}: the production bundle ${problem}. Only a message that ` +
                             "reports csszyx's own output as wrong or missing, a security or a crash " +

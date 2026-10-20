@@ -967,7 +967,7 @@ export const DIAGNOSTICS = [
         },
         help: 'rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.',
         note: 'a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only.',
-        sources: [`${CHECK}:1040`, 'packages/runtime/src/merge-groups.ts:537'],
+        sources: [`${CHECK}:1040`, 'packages/runtime/src/merge-groups.ts:510'],
     },
     {
         id: 'merge-covered-key',
@@ -1026,7 +1026,7 @@ export const DIAGNOSTICS = [
             format: 'pass the manifest the build wrote, unchanged.',
         },
         note: { json: 'the browser reported: {error}.' },
-        sources: ['packages/runtime/src/verify.ts:152', 'packages/compiler/src/manifest.ts:231'],
+        sources: ['packages/runtime/src/verify.ts:157', 'packages/compiler/src/manifest.ts:231'],
     },
     {
         id: 'mangle-map-unreadable',
@@ -1043,7 +1043,7 @@ export const DIAGNOSTICS = [
         },
         help: 'serve the HTML as the build wrote it; a map that does not read means the page was changed or cut short after the build.',
         note: { json: 'the browser reported: {error}.' },
-        sources: [`${HYDRATION}:211`, `${HYDRATION}:218`],
+        sources: [`${HYDRATION}:251`],
     },
     {
         id: 'mangle-census-unreadable',
@@ -1053,7 +1053,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The mangle census on this page is not a valid map, so nothing was verified.',
         help: 'serve the HTML as the build wrote it; a census that does not read means the page was changed or cut short after the build.',
-        sources: [`${HYDRATION}:450`],
+        sources: [`${HYDRATION}:406`],
     },
     {
         id: 'mangle-checksum-mismatch',
@@ -1064,7 +1064,7 @@ export const DIAGNOSTICS = [
         text: 'The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.',
         help: 'deploy the HTML and the bundle from one build.',
         note: 'this detects a damaged or stale page, not an attacker; the checksum is not signed.',
-        sources: [`${HYDRATION}:457`],
+        sources: [`${HYDRATION}:419`],
     },
     {
         id: 'mangle-map-unavailable',
@@ -1074,7 +1074,7 @@ export const DIAGNOSTICS = [
         args: { checksum: STRING },
         text: 'This page carries the checksum `{checksum}` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.',
         help: 'turn `production.hydrationCensus` on when the build sets `production.mangleVars` without `production.mangle`, which ships no map; otherwise, load the bundle that registers the map on this page.',
-        sources: [`${HYDRATION}:457`],
+        sources: [`${HYDRATION}:428`],
     },
     {
         id: 'web-crypto-unavailable',
@@ -1085,7 +1085,7 @@ export const DIAGNOSTICS = [
         text: 'Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.',
         help: 'serve the page over HTTPS, or from `localhost`.',
         note: '`crypto.subtle` exists only in a secure context.',
-        sources: [`${HYDRATION}:445`, `${HYDRATION}:350`],
+        sources: [`${HYDRATION}:395`, 'packages/runtime/src/mangle-checksum.ts:67'],
     },
     {
         id: 'hydration-aborted',
@@ -1122,7 +1122,7 @@ export const DIAGNOSTICS = [
             'invalid-token':
                 'the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`.',
         },
-        sources: [`${HYDRATION}:501`],
+        sources: [`${HYDRATION}:480`],
     },
     {
         id: 'csr-recovery-unmarked',
@@ -1132,7 +1132,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.',
         help: 'add `szRecover="csr"` to recover it, or `szRecover="dev-only"` to recover it in development only.',
-        sources: [`${HYDRATION}:607`],
+        sources: [`${HYDRATION}:593`],
     },
     {
         id: 'csr-recovery-dev-only',
@@ -1159,7 +1159,7 @@ export const DIAGNOSTICS = [
             stripped: 'use `szRecover="csr"` on any of them whose recovery must run in production.',
         },
         note: { stripped: 'this is expected in a production build; the tokens are at {sites}.' },
-        sources: [`${HYDRATION}:615`, `${UNPLUGIN}:7934`],
+        sources: [`${HYDRATION}:610`, `${UNPLUGIN}:7934`],
     },
     {
         id: 'csr-recovery-used',
@@ -1169,7 +1169,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'A hydration mismatch on this element was recovered by rendering it on the client.',
         help: 'fix the cause of the mismatch; with `szRecover="csr"`, this recovery also runs in production.',
-        sources: [`${HYDRATION}:619`],
+        sources: [`${HYDRATION}:617`],
     },
     {
         id: 'merge-table-format-skew',
@@ -1181,7 +1181,7 @@ export const DIAGNOSTICS = [
         args: { format: NUMBER, expected: NUMBER },
         text: 'The merge table was written in format {format}, and this runtime reads format {expected}, so `szcn` ignores the table and removes only exact repeats.',
         help: 'run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.',
-        sources: ['packages/runtime/src/merge-signatures.ts:51'],
+        sources: ['packages/runtime/src/merge-signatures.ts:57'],
     },
     {
         id: 'merge-table-missing',
@@ -1192,7 +1192,7 @@ export const DIAGNOSTICS = [
         text: "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
         help: 'use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.',
         note: 'esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.',
-        sources: ['packages/runtime/src/merge-classes.ts:201'],
+        sources: ['packages/runtime/src/merge-classes.ts:207'],
     },
     {
         id: 'uncompiled-sz',
@@ -1203,7 +1203,7 @@ export const DIAGNOSTICS = [
         text: 'A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.',
         help: 'add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.',
         note: 'csszyx dropped the object, so the DOM does not get `sz="[object Object]"`.',
-        sources: ['packages/runtime/src/strip-sz-props.ts:34'],
+        sources: ['packages/runtime/src/strip-sz-props.ts:42'],
     },
     {
         id: 'register-szcn-groups-ignored',
@@ -1214,7 +1214,7 @@ export const DIAGNOSTICS = [
         text: '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.',
         help: 'declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.',
         note: '`szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats.',
-        sources: ['packages/runtime/src/merge-groups.ts:403'],
+        sources: ['packages/runtime/src/merge-groups.ts:383'],
     },
     {
         id: 'theme-token-ambiguous',
@@ -1231,7 +1231,7 @@ export const DIAGNOSTICS = [
         },
         help: 'rename one of the tokens.',
         note: 'until then the token belongs to neither, so `szcn` keeps both classes instead of merging them.',
-        sources: ['packages/runtime/src/merge-groups.ts:564'],
+        sources: ['packages/runtime/src/merge-groups.ts:533'],
     },
     {
         id: 'split-box-selector-invalid',
@@ -1266,13 +1266,7 @@ export const DIAGNOSTICS = [
                 "use one of: {properties}; `classify('<a class>')` shows the one a class carries.",
             'sz-qualified': 'pass `{name}`.',
         },
-        sources: [
-            `${SPLIT_BOX}:645`,
-            `${SPLIT_BOX}:651`,
-            `${SPLIT_BOX}:657`,
-            `${SPLIT_BOX}:663`,
-            `${SPLIT_BOX}:670`,
-        ],
+        sources: [`${SPLIT_BOX}:653`],
     },
     {
         id: 'split-box-unknown-category',
@@ -1293,7 +1287,7 @@ export const DIAGNOSTICS = [
             'property-hint':
                 'use the category `{hint}`, or `{hint}:{name}` to match that property only.',
         },
-        sources: [`${SPLIT_BOX}:689`, `${SPLIT_BOX}:699`, `${SPLIT_BOX}:705`],
+        sources: [`${SPLIT_BOX}:701`],
     },
     {
         id: 'split-box-placement-variant',
@@ -1304,7 +1298,7 @@ export const DIAGNOSTICS = [
         args: { selector: STRING, side: { type: ['enum', 'inner', 'outer'] }, base: STRING },
         text: 'A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.',
         help: "write `{ {side}: ['{base}'] }`; it places every variant of `{base}`.",
-        sources: [`${SPLIT_BOX}:935`],
+        sources: [`${SPLIT_BOX}:930`],
     },
     {
         id: 'split-box-peer-on-frame',
@@ -1316,7 +1310,7 @@ export const DIAGNOSTICS = [
         args: { token: STRING, base: STRING, reaching: STRING },
         text: '`splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.',
         help: 'target the content from the frame instead: `{reaching}`.',
-        sources: [`${SPLIT_BOX}:1067`],
+        sources: [`${SPLIT_BOX}:1062`],
     },
     {
         id: 'split-box-unclassified',
@@ -1342,7 +1336,7 @@ export const DIAGNOSTICS = [
             'raw-css':
                 "if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`.",
         },
-        sources: [`${SPLIT_BOX}:1088`, `${SPLIT_BOX}:1327`],
+        sources: [`${SPLIT_BOX}:1082`, `${SPLIT_BOX}:1321`],
     },
     {
         id: 'split-box-unbounded-scroll',
@@ -1352,7 +1346,7 @@ export const DIAGNOSTICS = [
         args: { scroller: STRING },
         text: '`splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.',
         help: 'give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content.',
-        sources: [`${SPLIT_BOX}:1139`],
+        sources: [`${SPLIT_BOX}:1140`],
     },
     {
         id: 'split-box-unclipped-corners',
@@ -1362,7 +1356,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.',
         help: 'add `overflow-hidden` to the frame.',
-        sources: [`${SPLIT_BOX}:1151`],
+        sources: [`${SPLIT_BOX}:1149`],
     },
     {
         id: 'split-box-hidden-content',
@@ -1372,7 +1366,7 @@ export const DIAGNOSTICS = [
         args: { hidden: STRING },
         text: '`splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.',
         help: "pass `{ outer: ['hidden'] }` if the whole box should disappear.",
-        sources: [`${SPLIT_BOX}:1166`],
+        sources: [`${SPLIT_BOX}:1162`],
     },
     {
         id: 'szv-config-invalid',
@@ -1416,14 +1410,7 @@ export const DIAGNOSTICS = [
                 'make `variants.{dimension}` an object that maps each value to an sz object.',
             'variant-value': 'make it an sz object, such as `{ p: 4 }`, or `null` to add nothing.',
         },
-        sources: [
-            `${VARIANTS}:191`,
-            `${VARIANTS}:198`,
-            `${VARIANTS}:223`,
-            `${VARIANTS}:227`,
-            `${VARIANTS}:236`,
-            `${VARIANTS}:245`,
-        ],
+        sources: [`${VARIANTS}:223`],
     },
     {
         id: 'sz-object-depth',
@@ -1448,16 +1435,16 @@ export const DIAGNOSTICS = [
         sources: [
             'packages/compiler/src/sz-limits.ts:25',
             `${CORE_TS}:1955`,
-            'packages/runtime/src/core.ts:179',
-            `${VARIANTS}:122`,
-            `${VARIANTS}:263`,
-            `${SPLIT_BOX}:1398`,
-            `${SPLIT_BOX}:1420`,
-            `${SPLIT_BOX}:1461`,
-            `${SPLIT_BOX}:1567`,
-            `${SPLIT_BOX}:1594`,
+            `${VARIANTS}:281`,
             'packages/dynamic/src/purify.ts:119',
             'packages/dynamic/src/purify.ts:185',
+            'packages/runtime/src/core.ts:179',
+            `${SPLIT_BOX}:1405`,
+            `${SPLIT_BOX}:1427`,
+            `${SPLIT_BOX}:1468`,
+            `${SPLIT_BOX}:1574`,
+            `${SPLIT_BOX}:1601`,
+            `${VARIANTS}:128`,
         ],
     },
     {
@@ -1468,7 +1455,7 @@ export const DIAGNOSTICS = [
         args: { where: STRING, key: STRING },
         text: '`{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.',
         help: 'remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`.',
-        sources: [`${VARIANTS}:270`],
+        sources: [`${VARIANTS}:288`],
     },
     {
         id: 'szv-unknown-variant',
@@ -1478,7 +1465,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: 'The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.',
         help: 'declare `variants.{key}`, or remove `{key}` from the selection.',
-        sources: [`${VARIANTS}:408`, 'packages/runtime/src/szv-pick.ts:152'],
+        sources: ['packages/runtime/src/selection-value.ts:58'],
     },
     {
         id: 'szv-unknown-variant-value',
@@ -1488,7 +1475,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, value: STRING, allowed: { type: 'string[]', joiner: ', ' } },
         text: 'The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.',
         help: 'use one of: {allowed}, or add `{value}` to `variants.{key}`.',
-        sources: [`${VARIANTS}:415`, 'packages/runtime/src/szv-pick.ts:158'],
+        sources: ['packages/runtime/src/selection-value.ts:69'],
     },
     {
         id: 'szv-object-as-string',
@@ -1499,7 +1486,7 @@ export const DIAGNOSTICS = [
         text: 'An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.',
         help: 'pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.',
         note: 'a development build renders an empty string in its place.',
-        sources: [`${VARIANTS}:487`],
+        sources: [`${VARIANTS}:481`],
     },
     {
         id: 'dynamic-injection-growth',
@@ -1511,7 +1498,7 @@ export const DIAGNOSTICS = [
         args: { count: NUMBER },
         text: '`dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.',
         help: 'drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.',
-        sources: ['packages/dynamic/src/injector.ts:214'],
+        sources: ['packages/dynamic/src/injector.ts:217'],
     },
     {
         id: 'dynamic-unsafe-arbitrary',
@@ -1522,7 +1509,7 @@ export const DIAGNOSTICS = [
         text: 'The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.',
         help: 'keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.',
         note: 'only the first dropped value of a session is reported.',
-        sources: ['packages/dynamic/src/css-generator.ts:37'],
+        sources: ['packages/dynamic/src/css-generator.ts:33'],
     },
     {
         id: 'dynamic-non-boolean',
@@ -1584,7 +1571,7 @@ export const DIAGNOSTICS = [
         },
         sources: [
             'packages/unplugin/src/diagnostic-limiter.ts:89',
-            'packages/runtime/src/dev-warn.ts:47',
+            'packages/runtime/src/dev-warn.ts:51',
             `${CORE_TS}:3385`,
         ],
     },
@@ -1601,8 +1588,8 @@ export const DIAGNOSTICS = [
         text: 'The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.',
         help: 'write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
         sources: [
-            'packages/csszyx/src/parse-sz-attribute.ts:38',
-            'packages/csszyx/src/browser.ts:77',
+            'packages/csszyx/src/browser.ts:99',
+            'packages/csszyx/src/parse-sz-attribute.ts:39',
         ],
     },
 
@@ -1658,7 +1645,7 @@ export const DIAGNOSTICS = [
         text: '`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.',
         help: 'use `splitBox()` for a class string.',
         note: 'a production build drops the string instead of throwing.',
-        sources: [`${SPLIT_BOX}:1424`],
+        sources: [`${SPLIT_BOX}:1431`],
     },
     {
         id: 'runtime-prefix-conflict',

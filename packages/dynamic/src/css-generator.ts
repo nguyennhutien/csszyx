@@ -13,6 +13,7 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
+import { DYNAMIC_UNSAFE_ARBITRARY, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
 import { isUtilityArbitrarySafe } from './css-sanitize.js';
 
@@ -24,20 +25,13 @@ let warnedUnsafeArbitrary = false;
  * @param utility - the utility whose arbitrary value was dropped.
  */
 function warnUnsafeArbitrary(utility: string): void {
-    if (warnedUnsafeArbitrary) {
-        return;
-    }
     // Written out so the app's bundler folds it. Probing `typeof process` and
     // `process.env?.` first kept it from folding: the warning shipped in every
     // production bundle and printed there, in a browser that has no `process`.
-    if (process.env.NODE_ENV === 'production') {
-        return;
+    if (process.env.NODE_ENV !== 'production' && !warnedUnsafeArbitrary) {
+        warnedUnsafeArbitrary = true;
+        szReport({ diagnostic: DYNAMIC_UNSAFE_ARBITRARY, args: { utility } });
     }
-    warnedUnsafeArbitrary = true;
-    console.warn(
-        `[csszyx] dropped an arbitrary value that could inject CSS: "${utility}". ` +
-            'Arbitrary values from untrusted data are not emitted at runtime.',
-    );
 }
 
 /**

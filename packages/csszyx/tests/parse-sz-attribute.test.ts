@@ -92,8 +92,12 @@ describe('parseSzAttribute', () => {
     // has shown it ends: a regression would otherwise hang the suite here.
     it('names the character and where it is', () => {
         expect(strayInputsEnd).toBe(true);
+        // The args are what the runtime's `sz-attribute-syntax` line names.
         expect(() => parseSzAttribute('{ w: 1/2 }')).toThrow(
-            new SyntaxError('[csszyx] Unexpected "/" at 6 in sz attribute "{ w: 1/2 }"'),
+            Object.assign(
+                new SyntaxError('[csszyx] Unexpected "/" at 6 in sz attribute "{ w: 1/2 }"'),
+                { args: { input: '{ w: 1/2 }', char: '/', index: 6 } },
+            ),
         );
         expect(() => parseSzAttribute('{ list: [1, /] }')).toThrow(/Unexpected "\/" at 12/);
     });

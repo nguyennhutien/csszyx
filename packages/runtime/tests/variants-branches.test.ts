@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { szv } from '../src/variants.js';
+import { configInvalidLine, unknownValueLine, unknownVariantLine } from './helpers/szv-lines.js';
 
 describe('szv config shape warnings (base / defaultVariants)', () => {
     let warn: ReturnType<typeof vi.spyOn>;
@@ -21,24 +22,35 @@ describe('szv config shape warnings (base / defaultVariants)', () => {
         warn.mockRestore();
     });
 
-    const warned = (re: RegExp) => warn.mock.calls.some(c => re.test(String(c[0])));
-
     it('warns when base is present but not an object (and describes null)', () => {
         // @ts-expect-error — intentionally invalid base
         szv({ base: null });
-        expect(warned(/base must be an sz object, got null/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('base', 'null')]]);
     });
 
     it('warns when base is an array (describe() array branch)', () => {
         // @ts-expect-error — intentionally invalid base
         szv({ base: [] });
-        expect(warned(/base must be an sz object, got an array/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('base', 'an array')]]);
+    });
+
+    it('ignores a base that is not an sz object, as its line says', () => {
+        // A string spread into an object gives index keys (`{ 0: 'p', … }`),
+        // which would lower to classes nobody wrote.
+        const f = szv({
+            // @ts-expect-error — intentionally invalid base
+            base: 'p-4',
+            variants: { size: { sm: { px: 2 } } },
+        });
+        expect(f()).toEqual({});
+        expect(f({ size: 'sm' })).toEqual({ px: 2 });
+        expect(warn.mock.calls).toEqual([[configInvalidLine('base', 'string')]]);
     });
 
     it('warns when defaultVariants is present but not an object', () => {
         // @ts-expect-error — intentionally invalid defaultVariants
         szv({ variants: { size: { sm: { px: 2 } } }, defaultVariants: 'sm' });
-        expect(warned(/defaultVariants must be an object, got string/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('default-variants', 'string')]]);
     });
 
     it('still uses a valid base when a different part of the config is broken', () => {
@@ -50,7 +62,7 @@ describe('szv config shape warnings (base / defaultVariants)', () => {
             variants: 'nope',
         });
         expect(f()).toEqual({ p: 4 });
-        expect(warned(/variants must be an object/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('variants', 'string')]]);
     });
 });
 
@@ -65,13 +77,11 @@ describe('szv selection validation against an undeclared/undefined variants map'
         warn.mockRestore();
     });
 
-    const warned = (re: RegExp) => warn.mock.calls.some(c => re.test(String(c[0])));
-
     it('warns "unknown variant" when the config declares no variants at all', () => {
         const f = szv({ base: { p: 4 } });
         // @ts-expect-error — no variants declared on this config
         expect(f({ color: 'blue' })).toEqual({ p: 4 });
-        expect(warned(/unknown variant "color"/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[unknownVariantLine('color')]]);
     });
 
     it('warns "not a value of variant" when the dimension is declared but undefined', () => {
@@ -81,6 +91,11 @@ describe('szv selection validation against an undeclared/undefined variants map'
         });
         // @ts-expect-error — selecting a token for it
         expect(f({ size: 'sm' })).toEqual({});
-        expect(warned(/"sm" is not a value of variant "size"/)).toBe(true);
+        // The config check names the dimension first; with no values to
+        // list, the selection's line offers none.
+        expect(warn.mock.calls).toEqual([
+            [configInvalidLine('dimension', 'undefined', 'size')],
+            [unknownValueLine('size', 'sm', [])],
+        ]);
     });
 });
