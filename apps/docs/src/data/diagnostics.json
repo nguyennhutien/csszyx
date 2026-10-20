@@ -3487,5 +3487,588 @@
       "was": "error-code",
       "reason": "The `code` of @csszyx/core's CsszyxNativeUnavailableError since 0.9.0, renamed to the kebab-case grammar every other code uses. No /e/ page: the old string breaks the URL grammar."
     }
-  ]
+  ],
+  "placeholder": "(?<!\\$)\\{([a-z][a-zA-Z0-9]*)\\}",
+  "computed": {
+    "canonical": "The canonical key of `key` (SUGGESTION_MAP).",
+    "note": "The migration note of `key` (MIGRATION_NOTES).",
+    "enumAllowed": "The values closed-enum `key` takes, joined by \", \" (CLOSED_ENUM_CLASSES).",
+    "canonicalAllowed": "The values the canonical key of `key` takes, joined by \", \" (SUGGESTION_MAP, CLOSED_ENUM_CLASSES).",
+    "bare": "The class `key: value` emits without a table (CLOSED_ENUM_AFFIXES).",
+    "movedKey": "The key `key: value` moved to (CLOSED_ENUM_VALUE_MOVES, SUGGESTION_MAP).",
+    "movedValue": "The value it moved with, as a JS literal: `true` bare, otherwise quoted.",
+    "groups": "The group keys of the canonical key of `key`, joined by \", \" (GLOBAL_KEYWORD_GROUPS).",
+    "maxNestingDepth": "The engine's source nesting limit (MAX_SOURCE_NESTING_DEPTH).",
+    "mergeTableFormat": "The merge table format this engine reads (MERGE_TABLE_FORMAT).",
+    "fallbackReason": "Why the value fell back, from the generated sz fallback matrix for `shape`.",
+    "fallbackSuggestion": "What to write instead, from the same matrix.",
+    "earlier": "The classes and `sz` of the sides before the last, as a reader names them.",
+    "example": "The items of the one `sz` array that replaces them.",
+    "spreadPlace": "Where that array goes: after the spread named by `spread`, or \"the spread\".",
+    "spellingHint": "A `suggestion` as \"write `…` if you meant it\", or \"check the spelling\" without one.",
+    "parserMessage": "The parser's `message`, without a closing period of its own.",
+    "groupLiteral": "`groupValue` as a JS literal: `true` bare, otherwise quoted."
+  },
+  "lookups": {
+    "removed-key": [
+      {
+        "args": {
+          "form": "removed",
+          "key": "maskFrom"
+        },
+        "values": {
+          "note": "write the from stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ from }`"
+        }
+      },
+      {
+        "args": {
+          "form": "removed",
+          "key": "maskTo"
+        },
+        "values": {
+          "note": "write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`"
+        }
+      },
+      {
+        "args": {
+          "form": "removed",
+          "key": "maskVia"
+        },
+        "values": {
+          "note": "write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop"
+        }
+      },
+      {
+        "args": {
+          "form": "removed",
+          "key": "maskShape"
+        },
+        "values": {
+          "note": "write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`"
+        }
+      },
+      {
+        "args": {
+          "form": "removed",
+          "key": "fontVariant"
+        },
+        "values": {
+          "note": "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`"
+        }
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "block",
+          "replacement": "display: 'block'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "inline",
+          "replacement": "display: 'inline'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "inlineBlock",
+          "replacement": "display: 'inline-block'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "flex",
+          "replacement": "display: 'flex'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "inlineFlex",
+          "replacement": "display: 'inline-flex'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "grid",
+          "replacement": "display: 'grid'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "inlineGrid",
+          "replacement": "display: 'inline-grid'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "hidden",
+          "replacement": "display: 'none'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "contents",
+          "replacement": "display: 'contents'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "table",
+          "replacement": "display: 'table'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "tableRow",
+          "replacement": "display: 'table-row'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "tableCell",
+          "replacement": "display: 'table-cell'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "flowRoot",
+          "replacement": "display: 'flow-root'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "listItem",
+          "replacement": "display: 'list-item'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "static",
+          "replacement": "position: 'static'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "fixed",
+          "replacement": "position: 'fixed'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "absolute",
+          "replacement": "position: 'absolute'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "relative",
+          "replacement": "position: 'relative'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "sticky",
+          "replacement": "position: 'sticky'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "visible",
+          "replacement": "visibility: 'visible'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "invisible",
+          "replacement": "visibility: 'hidden'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "collapse",
+          "replacement": "visibility: 'collapse'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "isolate",
+          "replacement": "isolation: 'isolate'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "uppercase",
+          "replacement": "textTransform: 'uppercase'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "lowercase",
+          "replacement": "textTransform: 'lowercase'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "capitalize",
+          "replacement": "textTransform: 'capitalize'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "normalCase",
+          "replacement": "textTransform: 'none'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "italic",
+          "replacement": "fontStyle: 'italic'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "notItalic",
+          "replacement": "fontStyle: 'normal'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "underline",
+          "replacement": "decoration: 'underline'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "overline",
+          "replacement": "decoration: 'overline'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "lineThrough",
+          "replacement": "decoration: 'line-through'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "noUnderline",
+          "replacement": "decoration: 'none'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "antialiased",
+          "replacement": "fontSmoothing: 'grayscale'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar",
+          "key": "subpixelAntialiased",
+          "replacement": "fontSmoothing: 'subpixel'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "liningNums",
+          "replacement": "numFigure: 'lining'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "oldstyleNums",
+          "replacement": "numFigure: 'oldstyle'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "proportionalNums",
+          "replacement": "numSpacing: 'proportional'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "tabularNums",
+          "replacement": "numSpacing: 'tabular'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "diagonalFractions",
+          "replacement": "numFraction: 'diagonal'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "sugar-replaced",
+          "key": "stackedFractions",
+          "replacement": "numFraction: 'stacked'"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "replaced",
+          "key": "ordinal",
+          "replacement": "numOrdinal: true"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "replaced",
+          "key": "slashedZero",
+          "replacement": "numSlashedZero: true"
+        },
+        "values": {}
+      },
+      {
+        "args": {
+          "form": "runtime-alias",
+          "key": "touchAction",
+          "replacement": "touch"
+        },
+        "engine": true,
+        "values": {
+          "canonical": "touch",
+          "canonicalAllowed": "auto, none, manipulation",
+          "groups": "touchPanX, touchPanY, touchPinchZoom"
+        }
+      }
+    ],
+    "moved-value": [
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-x"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'x'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-x"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'x'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-left"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'left'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-left"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'left'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-right"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'right'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-right"
+        },
+        "values": {
+          "movedKey": "touchPanX",
+          "movedValue": "'right'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-y"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'y'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-y"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'y'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-up"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'up'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-up"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'up'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pan-down"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'down'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pan-down"
+        },
+        "values": {
+          "movedKey": "touchPanY",
+          "movedValue": "'down'"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touch",
+          "value": "pinch-zoom"
+        },
+        "values": {
+          "movedKey": "touchPinchZoom",
+          "movedValue": "true"
+        }
+      },
+      {
+        "args": {
+          "form": "value",
+          "key": "touchAction",
+          "value": "pinch-zoom"
+        },
+        "values": {
+          "movedKey": "touchPinchZoom",
+          "movedValue": "true"
+        }
+      }
+    ]
+  }
 }

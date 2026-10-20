@@ -4,12 +4,14 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
+import { productionLookups, readLookupTables } from './diagnostics/docs-lookups.mjs';
 import * as registry from './diagnostics/registry.mjs';
 import * as generator from './gen-diagnostic-codes.mjs';
 import {
     casingProblems,
+    docsData,
     EDITOR_IDS,
+    PLACEHOLDER_PATTERN,
     placeholdersOf,
     publicData,
     renderEditorTemplates,
@@ -776,4 +778,104 @@ test('the editor module carries the editor ids only, each as the registry words 
         () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
         /editor id unknown-key is not in the registry/,
     );
+});
+
+/** Compiler tables, a few rows each, in the shape `readLookupTables` returns. */
+const TABLES = {
+    migrationNotes: { maskFrom: 'write the from stop on its layer' },
+    suggestionMap: { ordinal: 'numOrdinal', touchAction: 'touch', padding: 'p' },
+    removedBooleanSugar: {
+        flex: { key: 'display', value: 'flex' },
+        tabularNums: { key: 'numSpacing', value: 'tabular' },
+    },
+    replacedKeys: ['tabularNums', 'ordinal'],
+    closedEnumClasses: { touch: { auto: 'touch-auto', none: 'touch-none' } },
+    closedEnumValueMoves: {
+        'touch:pan-x': { key: 'touchPanX', value: 'x' },
+        'touch:pinch-zoom': { key: 'touchPinchZoom', value: 'true' },
+    },
+    globalKeywordGroups: {
+        touch: { property: 'touch-action', groups: 'touchPanX touchPinchZoom' },
+    },
+};
+
+test('a production line names a key; the docs carry what each key needs, from the compiler tables', () => {
+    const lookups = productionLookups(TABLES);
+    assert.deepEqual(lookups['removed-key'], [
+        {
+            args: { form: 'removed', key: 'maskFrom' },
+            values: { note: 'write the from stop on its layer' },
+        },
+        { args: { form: 'sugar', key: 'flex', replacement: "display: 'flex'" }, values: {} },
+        {
+            args: {
+                form: 'sugar-replaced',
+                key: 'tabularNums',
+                replacement: "numSpacing: 'tabular'",
+            },
+            values: {},
+        },
+        { args: { form: 'replaced', key: 'ordinal', replacement: 'numOrdinal: true' }, values: {} },
+        {
+            args: { form: 'runtime-alias', key: 'touchAction', replacement: 'touch' },
+            engine: true,
+            values: {
+                canonical: 'touch',
+                canonicalAllowed: 'auto, none',
+                groups: 'touchPanX, touchPinchZoom',
+            },
+        },
+    ]);
+    // A move under the key, and under each alias of it, as the lookup reads both.
+    assert.deepEqual(lookups['moved-value'], [
+        {
+            args: { form: 'value', key: 'touch', value: 'pan-x' },
+            values: { movedKey: 'touchPanX', movedValue: "'x'" },
+        },
+        {
+            args: { form: 'value', key: 'touchAction', value: 'pan-x' },
+            values: { movedKey: 'touchPanX', movedValue: "'x'" },
+        },
+        {
+            args: { form: 'value', key: 'touch', value: 'pinch-zoom' },
+            values: { movedKey: 'touchPinchZoom', movedValue: 'true' },
+        },
+        {
+            args: { form: 'value', key: 'touchAction', value: 'pinch-zoom' },
+            values: { movedKey: 'touchPinchZoom', movedValue: 'true' },
+        },
+    ]);
+    assert.deepEqual(Object.keys(lookups), ['removed-key', 'moved-value']);
+    // A key with no table row has no values to name.
+    const bare = productionLookups({
+        ...TABLES,
+        closedEnumClasses: {},
+        globalKeywordGroups: { touch: {} },
+    })['removed-key'].at(-1);
+    assert.deepEqual(bare.values, { canonical: 'touch', canonicalAllowed: '', groups: '' });
+});
+
+test('the lookups read the tables the compiler reads', () => {
+    const tables = readLookupTables();
+    assert.match(tables.migrationNotes.maskFrom, /maskLinear/);
+    assert.equal(tables.suggestionMap.ordinal, 'numOrdinal');
+    assert.ok(tables.replacedKeys.includes('ordinal'));
+    assert.deepEqual(tables.removedBooleanSugar.flex, { key: 'display', value: 'flex' });
+    assert.deepEqual(tables.closedEnumValueMoves['touch:pan-x'], { key: 'touchPanX', value: 'x' });
+    assert.ok('touch' in tables.globalKeywordGroups);
+    assert.ok('auto' in tables.closedEnumClasses.touch);
+});
+
+test('the docs data adds the placeholder grammar, each computed value and the lookups', () => {
+    const input = {
+        ...registryOf([entry()]),
+        COMPUTED: { note: { reads: ['key'], summary: 'The note.' } },
+    };
+    const data = docsData(input, TABLES);
+    assert.equal(data.format, 1);
+    assert.deepEqual(data.diagnostics, publicData(input).diagnostics);
+    assert.equal(data.placeholder, PLACEHOLDER_PATTERN.source);
+    assert.deepEqual(data.computed, { note: 'The note.' });
+    assert.deepEqual(data.lookups, productionLookups(TABLES));
+    assert.deepEqual(docsData(registryOf([entry()]), TABLES).computed, {});
 });

@@ -31,6 +31,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
+import { productionLookups, readLookupTables } from './diagnostics/docs-lookups.mjs';
 import * as registry from './diagnostics/registry.mjs';
 
 export { browserSourceFiles };
@@ -924,6 +925,27 @@ export function publicData(input) {
 }
 
 /**
+ * The docs site's data: the public data, plus what a page needs to show each
+ * message as a reader sees it: the placeholder grammar, a line on where each
+ * computed value comes from, and the rows of computed values a production
+ * line leaves out (`./diagnostics/docs-lookups.mjs`).
+ *
+ * @param {typeof registry} input - The registry module.
+ * @param {import('./diagnostics/docs-lookups.mjs').LookupTables} tables - The compiler tables.
+ * @returns {Record<string, unknown>} The data.
+ */
+export function docsData(input, tables) {
+    return {
+        ...publicData(input),
+        placeholder: PLACEHOLDER_PATTERN.source,
+        computed: Object.fromEntries(
+            Object.entries(input.COMPUTED ?? {}).map(([name, { summary }]) => [name, summary]),
+        ),
+        lookups: productionLookups(tables),
+    };
+}
+
+/**
  * An entry without its words.
  *
  * @param {Record<string, any>} entry - A public entry.
@@ -1319,7 +1341,7 @@ export function main(check) {
         ...formatWithBiome([
             [tsPath, renderTypeScript(registry)],
             [registryTsPath, renderRegistryModule(registry)],
-            [docsDataPath, `${JSON.stringify(publicData(registry), null, 2)}\n`],
+            [docsDataPath, `${JSON.stringify(docsData(registry, readLookupTables()), null, 2)}\n`],
             [browserPath, renderBrowserModule(registry)],
             [constantsPath, renderConstantsModule(registry)],
             [reportPath, renderReportEntry(registry)],
