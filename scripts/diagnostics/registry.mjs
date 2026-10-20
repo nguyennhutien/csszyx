@@ -769,7 +769,7 @@ export const DIAGNOSTICS = [
             'packages/core/src/transform/parser.rs:208',
             'packages/core/src/transform/parser.rs:210',
             'packages/compiler/src/template-sz.ts:239',
-            'packages/cli/src/commands/explain.ts:69',
+            'packages/cli/src/commands/explain.ts:96',
             `${UNPLUGIN}:4803`,
         ],
     },
@@ -1716,9 +1716,9 @@ export const DIAGNOSTICS = [
             `${NATIVE}:99`,
             `${NATIVE}:146`,
             `${NATIVE}:190`,
-            'packages/compiler/src/transform-rust.ts:46',
-            'packages/compiler/src/transform-rust.ts:186',
-            'packages/compiler/src/transform-rust.ts:384',
+            'packages/compiler/src/transform-rust.ts:53',
+            'packages/compiler/src/transform-rust.ts:204',
+            'packages/compiler/src/transform-rust.ts:402',
             `${UNPLUGIN}:3528`,
         ],
     },
@@ -1729,8 +1729,8 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { detail: OPAQUE },
         sources: [
-            'packages/compiler/src/transform-wasm.ts:94',
-            'packages/compiler/src/transform-wasm.ts:139',
+            'packages/compiler/src/transform-wasm.ts:99',
+            'packages/compiler/src/transform-wasm.ts:158',
         ],
     },
     {
@@ -1740,8 +1740,8 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { detail: OPAQUE },
         sources: [
-            'packages/compiler/src/migrate-rust.ts:140',
-            'packages/compiler/src/migrate-rust.ts:298',
+            'packages/compiler/src/migrate-rust.ts:145',
+            'packages/compiler/src/migrate-rust.ts:312',
         ],
     },
     {
@@ -1758,8 +1758,8 @@ export const DIAGNOSTICS = [
             platformPackage: OPTIONAL_STRING,
         },
         sources: [
-            'packages/compiler/src/engine-identity.ts:39',
-            'packages/compiler/src/engine-identity.ts:80',
+            'packages/compiler/src/engine-identity.ts:60',
+            'packages/compiler/src/engine-identity.ts:113',
         ],
     },
     {
@@ -1769,8 +1769,8 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { pluginVersion: STRING, runtimeVersion: STRING, runtimeDir: STRING },
         sources: [
-            'packages/unplugin/src/runtime-version.ts:30',
-            'packages/unplugin/src/runtime-version.ts:99',
+            'packages/unplugin/src/runtime-version.ts:45',
+            'packages/unplugin/src/runtime-version.ts:116',
         ],
     },
     {
@@ -1793,12 +1793,12 @@ export const DIAGNOSTICS = [
             reason: OPTIONAL_OPAQUE,
         },
         sources: [
-            'packages/cli/src/scanner/tailwind-availability.ts:168',
-            'packages/cli/src/scanner/tailwind-availability.ts:222',
-            'packages/cli/src/scanner/tailwind-availability.ts:227',
-            'packages/cli/src/scanner/tailwind-availability.ts:236',
-            'packages/cli/src/scanner/tailwind-availability.ts:239',
+            'packages/cli/src/scanner/tailwind-availability.ts:179',
+            'packages/cli/src/scanner/tailwind-availability.ts:246',
             'packages/cli/src/scanner/tailwind-availability.ts:251',
+            'packages/cli/src/scanner/tailwind-availability.ts:260',
+            'packages/cli/src/scanner/tailwind-availability.ts:263',
+            'packages/cli/src/scanner/tailwind-availability.ts:276',
         ],
     },
     {
@@ -1812,9 +1812,9 @@ export const DIAGNOSTICS = [
             diagnostics: { type: 'string[]', joiner: '\n', optional: true, opaque: true },
         },
         sources: [
-            'packages/cli/src/commands/explain.ts:28',
-            'packages/cli/src/commands/explain.ts:75',
-            'packages/cli/src/commands/explain.ts:80',
+            'packages/cli/src/commands/explain.ts:44',
+            'packages/cli/src/commands/explain.ts:105',
+            'packages/cli/src/commands/explain.ts:113',
         ],
     },
     {
@@ -1886,8 +1886,8 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { where: STRING },
         sources: [
-            'packages/compiler/src/transform-rust.ts:122',
-            'packages/compiler/src/transform-wasm.ts:261',
+            'packages/compiler/src/transform-rust.ts:140',
+            'packages/compiler/src/transform-wasm.ts:280',
             'packages/unplugin/src/next-source-transformer.ts:81',
             `${UNPLUGIN}:1914`,
             `${UNPLUGIN}:2946`,
@@ -2372,8 +2372,8 @@ export const DIAGNOSTICS = [
         },
         sources: [
             'packages/unplugin/src/next-prebuild.ts:164',
-            'packages/unplugin/src/next-turbo-loader.ts:217',
-            'packages/unplugin/src/next-turbo-loader.ts:639',
+            'packages/unplugin/src/next-turbo-loader.ts:218',
+            'packages/unplugin/src/next-turbo-loader.ts:644',
         ],
     },
     {
@@ -2383,9 +2383,9 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { pid: NUMBER, root: STRING, mode: STRING, host: STRING, updatedAt: STRING },
         sources: [
-            'packages/unplugin/src/next-safelist-state.ts:361',
-            'packages/unplugin/src/next-safelist-state.ts:369',
-            'packages/unplugin/src/next-safelist-state.ts:837',
+            'packages/unplugin/src/next-safelist-state.ts:362',
+            'packages/unplugin/src/next-safelist-state.ts:370',
+            'packages/unplugin/src/next-safelist-state.ts:838',
         ],
     },
     {
@@ -2626,7 +2626,7 @@ export const REMOVED = [
 // - internal-error: next-source-transformer.ts:53, unplugin.ts:2940 (unreadStylesheetsError,
 //   thrown at 4321/5757), unplugin.ts:1908 (alias-table mismatch), next-watcher.ts:132,
 //   stable-file-snapshot.ts:44, map-concurrent.ts:39, project-resolver.ts:118, and the
-//   "returned no result" forms of transform-rust.ts:69 / transform-wasm.ts:209.
+//   "returned no result" forms of transform-rust.ts:140 / transform-wasm.ts:280.
 // - prefix-disagreement: check kind + thrown styleModelError 'prefixes' form.
 // - tailwind-stylesheet-broken: styleModelError 'broken' form at unplugin.ts:5598 and
 //   next-stylesheet-facts.ts:376 (same sites as prefix-disagreement, other form).

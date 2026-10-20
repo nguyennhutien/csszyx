@@ -22,6 +22,7 @@ import {
     type NativeMigrateResult,
 } from '@csszyx/core/native';
 
+import { CsszyxError } from './errors.js';
 import { checkNativeEngine } from './transform-rust.js';
 
 /**
@@ -136,13 +137,26 @@ export interface MigrateRustParsedClass {
     extra?: { prop: string; value: unknown };
 }
 
-/** The native migrate cannot run in this install. */
-export class RustMigrateUnavailableError extends Error {
+/**
+ * The native migrate cannot run in this install. A csszyx error,
+ * `native-migrate-unavailable`: migrate has no wasm lane, so it is its own
+ * id rather than the loader's, whose error it keeps as its `cause`.
+ */
+export class RustMigrateUnavailableError extends CsszyxError {
     /**
      * @param detail - What the install is missing.
+     * @param options - What it wraps.
+     * @param options.cause - The loader's error.
      */
-    constructor(detail: string) {
-        super(`migrate: native engine unavailable: ${detail}`);
+    constructor(detail: string, options: { cause?: unknown } = {}) {
+        super({
+            code: 'native-migrate-unavailable',
+            args: { detail },
+            // The registry has no words for this id yet; the message stays
+            // migrate's own until it is worded (ADR 0031).
+            message: `migrate: native engine unavailable: ${detail}`,
+            cause: options.cause,
+        });
         this.name = 'RustMigrateUnavailableError';
     }
 }
@@ -301,6 +315,7 @@ function guarded<T>(call: () => T): T {
                     error.detail.split('\n')[0],
                     error.helpIsExplicit ? error.help : undefined,
                 ),
+                { cause: error },
             );
         }
         throw error;

@@ -5,13 +5,13 @@
  * other tables. There is no switch to turn the check off.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import {
     assertEngineIdentity,
     EngineVersionSkewError,
     EXPECTED_ENGINE,
     wasmEngineIdentity,
 } from '../src/engine-identity.js';
+import { CsszyxError } from '../src/errors.js';
 
 const expected = { version: '0.18.0', digest: 'aaaaaaaaaaaaaaaa' };
 
@@ -76,6 +76,47 @@ describe('assertEngineIdentity', () => {
             code: 'engine-version-skew',
             name: 'EngineVersionSkewError',
         });
+    });
+
+    it.each([
+        [
+            'another native release',
+            {
+                reported: { version: '0.17.2', digest: 'bbbbbbbbbbbbbbbb' },
+                artifact: 'native (@csszyx/core-linux-x64-gnu)',
+                platformPackage: '@csszyx/core-linux-x64-gnu',
+            },
+            {
+                artifact: 'native',
+                expectedVersion: '0.18.0',
+                expectedDigest: 'aaaaaaaaaaaaaaaa',
+                foundVersion: '0.17.2',
+                foundDigest: 'bbbbbbbbbbbbbbbb',
+                platformPackage: '@csszyx/core-linux-x64-gnu',
+            },
+        ],
+        [
+            'a wasm engine too old to report itself',
+            { reported: null, artifact: 'wasm' },
+            { artifact: 'wasm', expectedVersion: '0.18.0', expectedDigest: 'aaaaaaaaaaaaaaaa' },
+        ],
+        [
+            'a host no platform package covers',
+            { reported: null, artifact: 'native', platformPackage: null },
+            { artifact: 'native', expectedVersion: '0.18.0', expectedDigest: 'aaaaaaaaaaaaaaaa' },
+        ],
+    ])('is a csszyx error whose args name %s', (_name, input, args) => {
+        let error: unknown;
+        try {
+            assertEngineIdentity({ expected, ...input });
+        } catch (caught) {
+            error = caught;
+        }
+        expect(error).toBeInstanceOf(EngineVersionSkewError);
+        expect(error).toBeInstanceOf(CsszyxError);
+        // Exactly these: an optional arg it has nothing for is absent.
+        expect((error as EngineVersionSkewError).args).toEqual(args);
+        expect(error).toMatchObject({ code: 'engine-version-skew' });
     });
 
     it('checks nothing when run from source, where no build set an expectation', () => {

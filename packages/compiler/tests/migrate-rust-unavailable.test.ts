@@ -133,6 +133,28 @@ describe('the native migrate on an install without it', () => {
         }
     });
 
+    it("carries its own code, the detail as its arg, and the loader's error as its cause", async () => {
+        const { migrateRustBatch, RustMigrateUnavailableError } = await import(
+            '../src/migrate-rust.js'
+        );
+        let error: unknown;
+        try {
+            migrateRustBatch([]);
+        } catch (caught) {
+            error = caught;
+        }
+        expect(error).toBeInstanceOf(RustMigrateUnavailableError);
+        // The module graph is reset per test, so the class is this test's copy.
+        expect(error).toBeInstanceOf((await import('../src/errors.js')).CsszyxError);
+        const { message, cause } = error as Error;
+        expect(error).toMatchObject({
+            name: 'RustMigrateUnavailableError',
+            code: 'native-migrate-unavailable',
+            args: { detail: message.replace('migrate: native engine unavailable: ', '') },
+        });
+        expect(cause).toBeInstanceOf(FakeUnavailable);
+    });
+
     it('says no package covers the platform when there is none to name', async () => {
         const { migrateRustHtml } = await import('../src/migrate-rust.js');
         expect(() => migrateRustHtml('<div class="p-4" />')).toThrow(

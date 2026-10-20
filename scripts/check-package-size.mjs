@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -508,6 +509,17 @@ export const SIZE_BUDGETS = [
         kind: 'file',
         target: 'packages/csszyx/dist/browser.iife.js',
         maxGzipBytes: 16_400,
+        // Its sinks are read as an app's (ADR 0031 §6): every line it prints
+        // and every error it throws carries a code the registry lets print in
+        // production. The file holds only what `browser.ts` reaches, so the
+        // codes of every browser source are allowed and those of its own
+        // sources required.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, browserSourceFiles()),
+        requiredCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('csszyx')),
+        // `reportUnreadable` prints an error the parse or the transform threw
+        // that is not the attribute's syntax as it was thrown: a csszyx error
+        // carries its own code, and anything else is not csszyx's to word.
+        passthroughSinks: ['error: <expr>'],
     },
     // The development one raised from 24,650 on 2026-10-20, measured 24,795
     // (+427): the errors it can throw (`sz-object-depth`,
@@ -529,19 +541,26 @@ export const SIZE_BUDGETS = [
     // (49,614), and 3.61 ms after the tables moved to their own module
     // (30,115). `./internal` measured 33,093 the same day. Budgets the usual
     // ~300 above the measurement.
+    //
+    // Raised 2026-10-20 from 30,400 / 33,400, measured 30,964 / 33,882 (+702
+    // / +703 against 30,262 / 33,179): the engine's error classes extend
+    // `CsszyxError` and carry the registry's `code` and `args`, so both
+    // entries load `./errors` (394) and the code that fills those args
+    // (`transform-rust` +192, `transform-select` +119). Branding the classes
+    // without extending measured 30,594 / 33,510, still over (user accepted).
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 30_400,
+        maxGzipBytes: 31_250,
     },
     {
         name: '@csszyx/compiler `./internal`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 33_400,
+        maxGzipBytes: 34_200,
     },
 ];
 
@@ -844,67 +863,249 @@ async function viteSiteBuild(options) {
         .map(chunk => ({ code: chunk.code, moduleIds: chunk.moduleIds }));
 }
 
-/** Console calls whose first argument opens with a string literal: the
- * method, then the text up to the first interpolation or quote. Ordered
- * alternation and a negated class keep the scan linear on minified input. */
-const CONSOLE_CALL_PATTERN =
-    /console\.(warn|error|log|info|debug)\(\s*([`"'])?((?:(?!\$\{)[^`"'\\])*)/g;
+/** The parser the sink gate reads a bundle with: the compiler's own
+ * dependency, resolved from the compiler so the gate needs no copy of it. */
+const { parseSync } = createRequire(new URL('../packages/compiler/package.json', import.meta.url))(
+    'oxc-parser',
+);
 
-/** The messages a bundle can print, one entry per console call: `method: head`,
- * where head is the literal's opening text (at most 56 characters) or
- * `<expr>` when the first argument is not a string literal.
+/** The console methods whose first argument is a message. */
+const CONSOLE_METHODS = new Set(['warn', 'error', 'log', 'info', 'debug']);
+
+/** A native error class, the one constructor name a minifier keeps:
+ * `Error`, `TypeError`, `SyntaxError`, … */
+const NATIVE_ERROR = /^(?:[A-Z][A-Za-z]*)?Error$/;
+
+/** The head of a registered line: `[csszyx] <code>: `. */
+const CODE_HEAD = /^\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*): /;
+
+/** How much of a prose literal a head keeps. */
+const HEAD_LENGTH = 56;
+
+/** Each error class the registry names (`surfaces.error.classes`), by the one
+ * id it throws under. A class listed under two ids throws either, so its
+ * code is not known from the class and it is left out.
+ *
+ * @param {Array<{ id: string, surfaces: { error?: { classes?: string[] } } }>} diagnostics the registry's entries
+ * @returns {Map<string, string>} class name → id
+ */
+export function errorClassCodesOf(diagnostics) {
+    const codes = new Map();
+    const shared = new Set();
+    for (const { id, surfaces } of diagnostics) {
+        for (const name of surfaces.error?.classes ?? []) {
+            if (codes.has(name)) shared.add(name);
+            codes.set(name, id);
+        }
+    }
+    for (const name of shared) codes.delete(name);
+    return codes;
+}
+
+/** The registry's error classes, by id. */
+const ERROR_CLASS_CODES = errorClassCodesOf(registry.DIAGNOSTICS);
+
+/** A message as the literal text and the expressions it is built from, in
+ * order: a string, a template literal, or a `+` chain of them.
+ *
+ * @param {any} node an expression
+ * @returns {Array<{ text: string } | { expr: true }>} the parts
+ */
+function messageParts(node) {
+    if (node.type === 'ParenthesizedExpression') return messageParts(node.expression);
+    if (node.type === 'Literal' && typeof node.value === 'string') return [{ text: node.value }];
+    if (node.type === 'TemplateLiteral') {
+        return node.quasis.flatMap((quasi, i) =>
+            i < node.expressions.length
+                ? [{ text: quasi.value.cooked }, { expr: true }]
+                : [{ text: quasi.value.cooked }],
+        );
+    }
+    if (node.type === 'BinaryExpression' && node.operator === '+') {
+        return [...messageParts(node.left), ...messageParts(node.right)];
+    }
+    return [{ expr: true }];
+}
+
+/** Whether a message opens with literal text. */
+const literalLed = node => 'text' in messageParts(node)[0];
+
+/** The head a sink's message is read by. The compact production line,
+ * `[csszyx] <code>: <args> https://csszyx.com/e/<code>`, reads as its code
+ * head alone; any other literal text beside it is prose, read as written so
+ * no list can allow it by its code. A message that opens with no literal is
+ * `<expr>`.
+ *
+ * @param {any} node the message expression, or nothing
+ * @returns {string} the head
+ */
+function messageHead(node) {
+    if (node === undefined) return '<expr>';
+    const parts = messageParts(node);
+    const [first] = parts;
+    if (!('text' in first)) return '<expr>';
+    const head = CODE_HEAD.exec(first.text);
+    if (head === null || first.text.length > head[0].length) {
+        return first.text.slice(0, HEAD_LENGTH);
+    }
+    const link = ` https://csszyx.com/e/${head[1]}`;
+    const prose = parts
+        .slice(1)
+        .find(part => 'text' in part && part.text !== '' && part.text !== link);
+    return prose === undefined ? head[0] : `${head[0]}…${prose.text}`;
+}
+
+/** The message of a csszyx error built from its options,
+ * `{ code, args, message }`, with the code checked against the head: a
+ * `code` the message does not name is a line no page explains.
+ *
+ * @param {any} node an argument
+ * @returns {string | undefined} the head, or nothing for any other argument
+ */
+function optionsHead(node) {
+    if (node?.type !== 'ObjectExpression') return undefined;
+    const property = name =>
+        node.properties.find(
+            p => p.type === 'Property' && !p.computed && (p.key.name ?? p.key.value) === name,
+        )?.value;
+    const message = property('message');
+    const code = property('code');
+    if (message === undefined || code === undefined) return undefined;
+    const head = messageHead(message);
+    const named = CODE_HEAD.exec(head)?.[1];
+    return code.type === 'Literal' && named !== undefined && code.value !== named
+        ? `${head}(code ${code.value})`
+        : head;
+}
+
+/** The messages a bundle can print or throw, read from its syntax tree, one
+ * head per sink (ADR 0031 §6, the sinks `validate-undocumented-warnings`
+ * reads): `method: head` for a console call, and `throw: head` for
+ *
+ * - a native error built with a message (`new TypeError(…)`),
+ * - a csszyx error built from its options, by whatever name the minifier
+ *   gave its class, directly or through a subclass's `super(…)`,
+ * - a `super(…)` or a `throw` handed literal text, and
+ * - a class the registry names, imported under any name, which throws its
+ *   id: its message is worded, and read, in the package that defines it.
+ *
+ * Passthrough sinks are allowed by what they are (ADR 0031 item 5): a throw
+ * of a caught value, of a call's result, or of a class that words its own
+ * message carries no message at the throw, and its message is read where the
+ * error is built. A non-literal message handed to a console call or a native
+ * error reads `<expr>`, which a budget must name to let through.
  *
  * @param {string} code a bundle
- * @returns {string[]} message heads, sorted
+ * @param {ReadonlyMap<string, string>} [classCodes] error class → id, from {@link errorClassCodesOf}
+ * @returns {string[]} the heads, sorted
  */
-export function consoleMessages(code) {
-    return [...code.matchAll(CONSOLE_CALL_PATTERN)]
-        .map(([, method, quote, text]) => `${method}: ${quote ? text.slice(0, 56) : '<expr>'}`)
-        .sort();
+export function sinkMessages(code, classCodes = ERROR_CLASS_CODES) {
+    const { program, errors } = parseSync('bundle.js', code, { sourceType: 'module' });
+    if (errors.length > 0) throw new Error(`cannot read the bundle: ${errors[0].message}`);
+    const imported = new Map();
+    for (const node of program.body) {
+        if (node.type !== 'ImportDeclaration') continue;
+        for (const specifier of node.specifiers) {
+            const name = specifier.imported?.name ?? specifier.imported?.value;
+            if (classCodes.has(name)) imported.set(specifier.local.name, classCodes.get(name));
+        }
+    }
+    const heads = [];
+    const sink = node => {
+        const [first] = node.arguments ?? [];
+        const { callee } = node;
+        if (node.type === 'ThrowStatement') {
+            if (literalLed(node.argument)) heads.push(`throw: ${messageHead(node.argument)}`);
+        } else if (
+            node.type === 'CallExpression' &&
+            callee.type === 'MemberExpression' &&
+            !callee.computed &&
+            callee.object.type === 'Identifier' &&
+            callee.object.name === 'console' &&
+            CONSOLE_METHODS.has(callee.property.name)
+        ) {
+            heads.push(`${callee.property.name}: ${messageHead(first)}`);
+        } else if (node.type === 'NewExpression' && imported.has(callee.name)) {
+            heads.push(`throw: [csszyx] ${imported.get(callee.name)}: `);
+        } else if (
+            node.type === 'NewExpression' ||
+            (node.type === 'CallExpression' && callee.type === 'Super')
+        ) {
+            const head =
+                optionsHead(first) ??
+                (NATIVE_ERROR.test(callee.name) ||
+                (callee.type === 'Super' && first !== undefined && literalLed(first))
+                    ? messageHead(first)
+                    : undefined);
+            if (head !== undefined) heads.push(`throw: ${head}`);
+        }
+    };
+    const visit = node => {
+        if (Array.isArray(node)) {
+            for (const child of node) visit(child);
+            return;
+        }
+        if (node === null || typeof node !== 'object') return;
+        if (typeof node.type === 'string') sink(node);
+        for (const [key, value] of Object.entries(node)) {
+            if (key !== 'parent') visit(value);
+        }
+    };
+    visit(program);
+    return heads.sort();
 }
 
-/** The console lines a production bundle may print, by the code that heads
- * them: every registry id that prints in production (`runtime.production`
- * true, or a list of the forms that do) from one of the bundle's source
- * files, with the method its entry names. Read from the registry so the list
- * is never written twice (ADR 0031); a site writes the compact form inline,
- * `[csszyx] <code>: <args JSON> <link>`, whose head {@link consoleMessages}
+/** The lines a production bundle may print and the errors it may throw, by
+ * the code that heads them: every registry id that prints in production
+ * (`runtime.production` true, or a list of the forms that do) from one of
+ * the bundle's source files, with the method its entry names, and every id
+ * it throws (`surfaces.error`, unless `production` is false) from one of
+ * them. Read from the registry so the list is never written twice (ADR
+ * 0031); a site writes the compact form inline,
+ * `[csszyx] <code>: <args JSON> <link>`, whose head {@link sinkMessages}
  * reads.
  *
- * @param {Array<{ id: string, surfaces: { runtime?: { production: boolean | string[], console?: 'error' } }, sources?: string[] }>} diagnostics the registry's entries
+ * @param {Array<{ id: string, surfaces: { runtime?: { production: boolean | string[], console?: 'error' }, error?: { host: string, production?: false } }, sources?: string[] }>} diagnostics the registry's entries
  * @param {ReadonlySet<string>} files the sources the bundle can hold, repository-relative
- * @returns {string[]} the heads, `method: [csszyx] <code>: `, sorted
+ * @returns {string[]} the heads, `method: [csszyx] <code>: ` and `throw: [csszyx] <code>: `, sorted
  */
 export function productionCodesOf(diagnostics, files) {
-    return diagnostics
-        .filter(({ surfaces, sources = [] }) => {
-            const production = surfaces.runtime?.production;
-            const prints =
-                production === true || (Array.isArray(production) && production.length > 0);
-            return prints && sources.some(source => files.has(source.replace(/:\d+$/, '')));
-        })
-        .map(({ id, surfaces }) => `${surfaces.runtime?.console ?? 'warn'}: [csszyx] ${id}: `)
-        .sort();
+    const heads = [];
+    for (const { id, surfaces, sources = [] } of diagnostics) {
+        if (!sources.some(source => files.has(source.replace(/:\d+$/, '')))) continue;
+        const production = surfaces.runtime?.production;
+        if (production === true || (Array.isArray(production) && production.length > 0)) {
+            heads.push(`${surfaces.runtime.console ?? 'warn'}: [csszyx] ${id}: `);
+        }
+        const thrown = surfaces.error;
+        if (thrown !== undefined && thrown.host !== 'node' && thrown.production !== false) {
+            heads.push(`throw: [csszyx] ${id}: `);
+        }
+    }
+    return heads.sort();
 }
 
-/** Compare the lines a bundle prints with the codes the registry lets it
- * print in production, both ways, as sets: one console call per site, and
- * one code may have several sites. A head no code allows is a development
- * line that failed to fold, or a line printed through another method than
- * the registry names; a code no head prints is a stale entry or a lost site.
- * A bundle with no console call at all fails too when the registry lets it
- * print something: the scan must find the sinks it checks, or a pattern that
- * stopped matching would pass every bundle. One the registry lets print
- * nothing passes only while it prints nothing.
+/** Compare the lines a bundle prints and throws with the codes the registry
+ * lets it print in production, as sets: one sink per site, and one code may
+ * have several sites. A head no code allows is a development line that
+ * failed to fold, a sentence where the compact line belongs, or a line
+ * printed through another method than the registry names; a required head
+ * the bundle no longer prints is a stale entry or a lost site. The required
+ * heads are the allowed ones, unless a budget measures a file that holds
+ * only what its entry reaches. A bundle with no sink at all fails too when
+ * the registry lets it print something: the scan must find the sinks it
+ * checks, or a reader that stopped matching would pass every bundle. One the
+ * registry lets print nothing passes only while it prints nothing.
  *
- * @param {string[]} printed heads from {@link consoleMessages}
- * @param {string[]} allowed heads from {@link productionCodesOf}
+ * @param {string[]} printed heads from {@link sinkMessages}
+ * @param {string[]} allowed heads from {@link productionCodesOf}, and the ones a budget names
+ * @param {string[]} [required] heads the bundle must print
  * @returns {string[]} one problem per mismatch
  */
-export function codeProblems(printed, allowed) {
+export function codeProblems(printed, allowed, required = allowed) {
     const problems = [];
     if (printed.length === 0 && allowed.length > 0) {
-        problems.push('found no console call to check, so the sink scan read nothing');
+        problems.push('found no sink to check, so the sink scan read nothing');
     }
     for (const head of new Set(printed)) {
         if (!allowed.includes(head)) {
@@ -913,18 +1114,46 @@ export function codeProblems(printed, allowed) {
             );
         }
     }
-    for (const head of allowed) {
+    for (const head of required) {
         if (!printed.includes(head)) problems.push(`no longer prints "${head}"`);
     }
     return problems;
 }
 
-/** Compare a bundle's console messages with the ones its budget allows, as
+/** The sink failures of one production bundle against its budget: the
+ * registry's codes when the budget reads them, and a hand-written list
+ * otherwise.
+ *
+ * @param {(typeof SIZE_BUDGETS)[number]} budget the budget
+ * @param {string} bundle the bundle
+ * @returns {string[]} failure messages
+ */
+function sinkFailures(budget, bundle) {
+    const printed = sinkMessages(bundle);
+    const named = [...(budget.nonRegistryMessages ?? []), ...(budget.passthroughSinks ?? [])];
+    const problems =
+        budget.productionCodes === undefined
+            ? messageProblems(printed, budget.productionMessages ?? [])
+            : codeProblems(
+                  printed,
+                  [...budget.productionCodes, ...named],
+                  [...(budget.requiredCodes ?? budget.productionCodes), ...named],
+              );
+    return problems.map(
+        problem =>
+            `${budget.name}: the production bundle ${problem}. Only a message that ` +
+            "reports csszyx's own output as wrong or missing, a security or a crash " +
+            'stays in production (ADR 0011), as its code (ADR 0031); anything else checks ' +
+            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
+    );
+}
+
+/** Compare a bundle's sink messages with the ones its budget allows, as
  * multisets, both ways: a message nobody listed is a development warning that
  * failed to fold (or a new production message that needs a decision, ADR
  * 0011), and a listed message the bundle no longer prints is a stale list.
  *
- * @param {string[]} printed heads from {@link consoleMessages}
+ * @param {string[]} printed heads from {@link sinkMessages}
  * @param {string[]} allowed heads the budget lists
  * @returns {string[]} one problem per mismatch
  */
@@ -1047,6 +1276,10 @@ export function checkBudgets(budgets, rootDir) {
                 statSync(target);
                 files = [target];
                 gzipBytes = gzipTotalBytes(files);
+                // A production bundle shipped as a file is read like an app's.
+                if (budget.productionCodes !== undefined) {
+                    failures.push(...sinkFailures(budget, readFileSync(target, 'utf8')));
+                }
             } else {
                 files = listExportEntries(target, budget.excludeSubpaths);
                 if (files.length === 0) {
@@ -1054,20 +1287,7 @@ export function checkBudgets(budgets, rootDir) {
                 }
                 const bundle = appBundle(files, target);
                 gzipBytes = gzipSync(bundle, { level: 9 }).length;
-                const printed = consoleMessages(bundle);
-                for (const problem of budget.productionCodes === undefined
-                    ? messageProblems(printed, budget.productionMessages ?? [])
-                    : codeProblems(printed, [
-                          ...budget.productionCodes,
-                          ...(budget.nonRegistryMessages ?? []),
-                      ])) {
-                    failures.push(
-                        `${budget.name}: the production bundle ${problem}. Only a message that ` +
-                            "reports csszyx's own output as wrong or missing, a security or a crash " +
-                            'stays in production (ADR 0011); anything else checks ' +
-                            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
-                    );
-                }
+                failures.push(...sinkFailures(budget, bundle));
                 if (budget.entryBudgets) {
                     const entries = listExportSubpaths(target, budget.excludeSubpaths);
                     for (const problem of entryBudgetProblems(

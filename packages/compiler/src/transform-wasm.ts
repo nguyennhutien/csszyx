@@ -24,6 +24,7 @@ import {
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
+import { CsszyxError } from './errors.js';
 import type {
     GlobalVarSourceFile,
     GlobalVarUsageDiagnostic,
@@ -90,13 +91,28 @@ interface ParserWasmModule {
 
 /**
  * Thrown when the wasm parser artifact cannot be loaded.
+ *
+ * A csszyx error: `wasm-engine-unavailable`, with what loading the artifact
+ * threw as its `cause`. Without a load failure to wrap, as when the artifact
+ * answers a file with no result, the state is a csszyx bug: `internal-error`.
  */
-export class WasmTransformUnavailableError extends Error {
+export class WasmTransformUnavailableError extends CsszyxError {
     /**
      * @param detail Loader failure detail.
+     * @param options What it wraps.
+     * @param options.cause What loading the artifact threw.
      */
-    constructor(detail: string) {
-        super(`transformWasm: wasm engine unavailable - ${detail}`);
+    constructor(detail: string, options: { cause?: unknown } = {}) {
+        const { cause } = options;
+        super({
+            ...(cause === undefined
+                ? ({ code: 'internal-error', args: { where: 'transformWasm' } } as const)
+                : ({ code: 'wasm-engine-unavailable', args: { detail } } as const)),
+            // The registry has no words for these ids yet; the message stays
+            // the lane's own until they are worded (ADR 0031).
+            message: `transformWasm: wasm engine unavailable - ${detail}`,
+            cause,
+        });
         this.name = 'WasmTransformUnavailableError';
     }
 }
@@ -106,6 +122,8 @@ let wasmIdentityChecked = false;
 /** Memoized wasm module: loading instantiates the wasm once per process. */
 let wasmModule: ParserWasmModule | null | undefined;
 let wasmLoadError = '';
+/** What loading the wasm module threw, kept as the unavailable error's cause. */
+let wasmLoadCause: unknown;
 
 /**
  * Require the wasm module once; remember failure so probes stay cheap.
@@ -121,6 +139,7 @@ function loadParserWasm(): ParserWasmModule | null {
         wasmModule = requireFromHere('@csszyx/core/parser-wasm') as ParserWasmModule;
     } catch (err) {
         wasmLoadError = err instanceof Error ? err.message : String(err);
+        wasmLoadCause = err;
         wasmModule = null;
     }
     return wasmModule;
@@ -136,7 +155,7 @@ function requireParserWasm(): ParserWasmModule {
     const wasm = loadParserWasm();
     if (!wasm) {
         // `loadParserWasm` records why whenever it has no module to return.
-        throw new WasmTransformUnavailableError(wasmLoadError);
+        throw new WasmTransformUnavailableError(wasmLoadError, { cause: wasmLoadCause });
     }
     if (!wasmIdentityChecked && EXPECTED_ENGINE !== null) {
         assertEngineIdentity({

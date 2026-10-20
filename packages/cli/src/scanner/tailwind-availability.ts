@@ -32,6 +32,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+
 /** Tailwind v3's `resolveConfig`: fills a user config with the defaults. */
 export type ResolveConfig = (config: unknown) => unknown;
 
@@ -160,12 +162,21 @@ export function tailwindLoaderFor(projectRoot: string, alsoNextToCli = true): Ta
 /** Which of the install states the probe found. */
 export type TailwindState = 'absent' | 'wrong-major' | 'broken';
 
+/** The registry's form for each install state. */
+const FORM_OF_STATE = {
+    absent: 'absent',
+    'wrong-major': 'wrong-major',
+    broken: 'broken-entry',
+} as const satisfies Record<TailwindState, string>;
+
 /**
  * Thrown by `resolveTailwindV3`: the message is the complete explanation for
  * the user, and the fields let a caller that prints its own line — `doctor` —
- * read the state instead of the prose.
+ * read the state instead of the prose. A csszyx error,
+ * `tailwind-v3-unavailable`, whose `args` carry the state's form, the
+ * version and the reason, and whose `cause` is what loading the entry threw.
  */
-export class TailwindUnavailableError extends Error {
+export class TailwindUnavailableError extends CsszyxError {
     /** The install state. */
     readonly state: TailwindState;
     /** The installed version, when one was found. */
@@ -179,13 +190,26 @@ export class TailwindUnavailableError extends Error {
      * @param fields - What the state carries.
      * @param fields.version - The installed version, when one was found.
      * @param fields.reason - What loading the entry threw, for a broken install.
+     * @param fields.cause - What loading the entry threw, as it was thrown.
      */
     constructor(
         state: TailwindState,
         message: string,
-        fields: { version?: string; reason?: string } = {},
+        fields: { version?: string; reason?: string; cause?: unknown } = {},
     ) {
-        super(message);
+        const { version, reason, cause } = fields;
+        super({
+            code: 'tailwind-v3-unavailable',
+            args: {
+                form: FORM_OF_STATE[state],
+                ...(version === undefined ? {} : { version }),
+                ...(reason === undefined ? {} : { reason }),
+            },
+            // The registry has no words for this id yet; the message stays
+            // the command's own until it is worded (ADR 0031).
+            message,
+            cause,
+        });
         this.name = 'TailwindUnavailableError';
         this.state = state;
         this.version = fields.version;
@@ -233,7 +257,7 @@ export async function resolveTailwindV3(
         // A v3 has been located, so whatever its entry throws — a code-less
         // SyntaxError from a damaged file included — is a fact about that
         // install, and the reinstall is its remedy.
-        throw brokenEntry(version, error instanceof Error ? error.message : String(error));
+        throw brokenEntry(version, error instanceof Error ? error.message : String(error), error);
     }
     if (typeof entry !== 'function')
         throw brokenEntry(version, 'the entry did not export a function');
@@ -245,12 +269,14 @@ export async function resolveTailwindV3(
  *
  * @param version - The installed version.
  * @param reason - What loading the entry threw.
+ * @param cause - What it threw, as thrown; absent when it threw nothing.
  * @returns The error, carrying both.
  */
-function brokenEntry(version: string, reason: string): TailwindUnavailableError {
+function brokenEntry(version: string, reason: string, cause?: unknown): TailwindUnavailableError {
     return new TailwindUnavailableError('broken', brokenEntryMessage(version, reason), {
         version,
         reason,
+        cause,
     });
 }
 

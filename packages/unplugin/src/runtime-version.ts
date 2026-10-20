@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+
 const RUNTIME = '@csszyx/runtime';
 
 /** The runtime a project resolves. */
@@ -26,14 +28,29 @@ export interface InstalledRuntime {
     dir: string;
 }
 
-/** Thrown when the project's runtime is not the plugin's release. */
-export class RuntimeVersionSkewError extends Error {
-    /** The diagnostic code, as `[csszyx] <code>:` starts the message. */
-    readonly code = 'runtime-version-skew';
+/** What a {@link RuntimeVersionSkewError} names, by the registry's arg names. */
+export interface RuntimeVersionSkewArgs {
+    /** The plugin's own version. */
+    readonly pluginVersion: string;
+    /** The version of the runtime the project resolves. */
+    readonly runtimeVersion: string;
+    /** The directory of that runtime's `package.json`. */
+    readonly runtimeDir: string;
+}
 
-    /** @param message - The full message. */
-    constructor(message: string) {
-        super(message);
+/**
+ * Thrown when the project's runtime is not the plugin's release. A csszyx
+ * error: `runtime-version-skew`.
+ */
+export class RuntimeVersionSkewError extends CsszyxError {
+    declare readonly code: 'runtime-version-skew';
+
+    /**
+     * @param message - The full message.
+     * @param args - Both versions and where the runtime is; csszyx always passes them.
+     */
+    constructor(message: string, args: Partial<RuntimeVersionSkewArgs> = {}) {
+        super({ code: 'runtime-version-skew', args, message });
         this.name = 'RuntimeVersionSkewError';
     }
 }
@@ -99,5 +116,6 @@ export function assertRuntimeMatchesPlugin(input: AssertRuntimeMatchesPluginInpu
     throw new RuntimeVersionSkewError(
         `[csszyx] runtime-version-skew: @csszyx/unplugin ${pluginVersion} found @csszyx/runtime ${runtime.version} at ${runtime.dir}\n` +
             `help: install @csszyx/runtime@${pluginVersion}; the build and the runtime lower sz objects with rules from the same release`,
+        { pluginVersion, runtimeVersion: runtime.version, runtimeDir: runtime.dir },
     );
 }

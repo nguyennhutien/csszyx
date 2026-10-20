@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
+import { CsszyxError } from '@csszyx/compiler/errors';
 import lockfile from 'proper-lockfile';
 import { type AtomicWriteOptions, atomicWriteFileSync } from './atomic-write.js';
 import { renderSafelistFile } from './safelist-format.js';
@@ -834,14 +835,28 @@ function isProcessAlive(pid: number): boolean {
  * one caller that does: a watcher holding this lock is not a conflict for it,
  * because the shard it just wrote is what wakes that watcher.
  */
-export class NextSafelistStateLockedError extends Error {
+export class NextSafelistStateLockedError extends CsszyxError {
     readonly holder: NextSafelistStateLockMetadata;
 
     /**
+     * A csszyx error, `next-safelist-locked`, whose args name the holder.
+     *
      * @param holder - metadata read from the lock file.
      */
     constructor(holder: NextSafelistStateLockMetadata) {
-        super(formatLiveLockError(holder));
+        super({
+            code: 'next-safelist-locked',
+            args: {
+                pid: holder.pid,
+                root: holder.root,
+                mode: holder.mode,
+                host: holder.hostname,
+                updatedAt: holder.updatedAt,
+            },
+            // The registry has no words for this id yet; the message stays
+            // the lock's own until it is worded (ADR 0031).
+            message: formatLiveLockError(holder),
+        });
         this.name = 'NextSafelistStateLockedError';
         this.holder = holder;
     }

@@ -20,12 +20,39 @@
 
 import { renderUnplacedDiagnostic, type SourceTransformResult } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { findEmittedClassName } from '@csszyx/compiler/internal';
 
 import { printError, printInfo, printWarn } from '../utils/terminal-ui.js';
 
-/** Thrown when the argument is not an sz object the build resolves to classes. */
-export class ExplainParseError extends Error {}
+/** Why `csszyx explain` refuses its input, by the registry's ids and args. */
+export type ExplainParseFailure =
+    | { readonly code: 'parse-error'; readonly args: { readonly form: 'expression' } }
+    | {
+          readonly code: 'explain-input-invalid';
+          readonly args:
+              | { readonly form: 'not-one-expression' }
+              | { readonly form: 'runtime-only'; readonly diagnostics?: readonly string[] };
+      };
+
+/**
+ * Thrown when the argument is not an sz object the build resolves to classes.
+ * A csszyx error: `parse-error` for input that does not parse,
+ * `explain-input-invalid` for one that is not one sz expression the build
+ * lowers.
+ */
+export class ExplainParseError extends CsszyxError {
+    /**
+     * @param message - The reason, as the command prints it.
+     * @param failure - Its registry id and args.
+     */
+    constructor(message: string, failure: ExplainParseFailure) {
+        // The registry has no words for the explain forms yet; the message
+        // stays the command's own until they are worded (ADR 0031).
+        super({ ...failure, message });
+        this.name = 'ExplainParseError';
+    }
+}
 
 /** One engine artifact, or the selection a build makes between them. */
 export type ExplainEngine = (source: string, filename?: string) => SourceTransformResult;
@@ -66,19 +93,32 @@ function emittedClassName(code: string): string | null {
 export function explainSz(input: string, engine: ExplainEngine = transformSource): SzExplanation {
     const result = engine(`${PREFIX}${input}${SUFFIX}`, FILENAME);
     if (result.issues?.some(issue => issue.code === 'parse-error')) {
-        throw new ExplainParseError('could not be parsed as a JavaScript expression');
+        throw new ExplainParseError('could not be parsed as a JavaScript expression', {
+            code: 'parse-error',
+            args: { form: 'expression' },
+        });
     }
     // Rendered without a place: the synthesized module's file and positions
     // mean nothing to the reader.
     const diagnostics = (result.issues ?? []).map(renderUnplacedDiagnostic);
     if (result.code.match(/ (?:className|sz)=[{"]/g)?.length !== 1) {
-        throw new ExplainParseError('the input is not one sz expression');
+        throw new ExplainParseError('the input is not one sz expression', {
+            code: 'explain-input-invalid',
+            args: { form: 'not-one-expression' },
+        });
     }
     const className = emittedClassName(result.code);
     if (className === null) {
         const reason = diagnostics.length > 0 ? `: ${diagnostics.join('\n')}` : '';
         throw new ExplainParseError(
             `the build emits no classes for it; it is resolved at runtime by \`_sz()\`${reason}`,
+            {
+                code: 'explain-input-invalid',
+                args: {
+                    form: 'runtime-only',
+                    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+                },
+            },
         );
     }
     const runtimeValues = [...result.code.matchAll(/"(--_sz-[\w-]+)":/g)].map(match => match[1]);

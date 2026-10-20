@@ -36,5 +36,9 @@ describe('a wasm batch that returns no result', () => {
         expect(() => transform('export const a = 1;', 'a.tsx')).toThrow(
             new WasmTransformUnavailableError('wasm transform returned no result'),
         );
+        // Only a broken artifact answers so: a csszyx bug, not a missing engine.
+        expect(() => transform('export const a = 1;', 'a.tsx')).toThrow(
+            expect.objectContaining({ code: 'internal-error', args: { where: 'transformWasm' } }),
+        );
     });
 });

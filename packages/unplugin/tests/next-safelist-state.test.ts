@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     acquireNextSafelistStateLock,
@@ -18,6 +18,7 @@ import {
     materializeNextSafelist,
     NEXT_SAFELIST_SHARD_FORMAT,
     NEXT_SAFELIST_SHARD_READ_FORMAT,
+    NextSafelistStateLockedError,
     readNextSafelistStateLockMetadata,
     resolveNextSafelistStatePaths,
     writeNextSafelistShard,
@@ -704,5 +705,36 @@ describe('Next safelist state', () => {
         expect(firstWrite.changed).toBe(true);
         expect(secondWrite.changed).toBe(false);
         expect(secondWrite.filePath).toBe(firstWrite.filePath);
+    });
+});
+
+describe('the error for a lock another live process holds', () => {
+    it('is a csszyx error that names the holder by the registry args', () => {
+        const holder = {
+            version: 1 as const,
+            pid: 4242,
+            token: 't',
+            hostname: 'build-host',
+            root: '/app',
+            mode: 'development' as const,
+            command: 'csszyx next watch',
+            startedAt: '2026-06-04T00:00:00.000Z',
+            updatedAt: '2026-06-04T00:00:10.000Z',
+        };
+        const error = new NextSafelistStateLockedError(holder);
+        expect(error).toBeInstanceOf(CsszyxError);
+        expect(error).toMatchObject({
+            name: 'NextSafelistStateLockedError',
+            code: 'next-safelist-locked',
+            args: {
+                pid: 4242,
+                root: '/app',
+                mode: 'development',
+                host: 'build-host',
+                updatedAt: '2026-06-04T00:00:10.000Z',
+            },
+            holder,
+        });
+        expect(error.message).toMatch(/already locked by process 4242/);
     });
 });

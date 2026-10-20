@@ -16,6 +16,7 @@ import {
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
+import { CsszyxError, isCsszyxError } from './errors.js';
 import type {
     GlobalVarSourceFile,
     GlobalVarUsageDiagnostic,
@@ -42,13 +43,30 @@ export interface TransformRustFile {
 /**
  * Thrown when the native engine cannot run on the current host. The wasm
  * artifact's counterpart is `WasmTransformUnavailableError`.
+ *
+ * A csszyx error. Wrapping the loader's error, it keeps that error as its
+ * `cause` and takes its `code` and `args` (`native-engine-unavailable`):
+ * the wrapper renames the failure for this lane, it does not reclassify it.
+ * Without a csszyx error to wrap, as when the binding answers a file with no
+ * result, the state is a csszyx bug: `internal-error`.
  */
-export class RustTransformUnavailableError extends Error {
+export class RustTransformUnavailableError extends CsszyxError {
     /**
      * @param detail Native loader or transform failure detail.
+     * @param options What it wraps.
+     * @param options.cause The loader's error.
      */
-    constructor(detail: string) {
-        super(`transformRust: native engine unavailable: ${detail}`);
+    constructor(detail: string, options: { cause?: unknown } = {}) {
+        const { cause } = options;
+        const wrapped = isCsszyxError(cause) ? cause : undefined;
+        super({
+            code: wrapped?.code ?? 'internal-error',
+            args: wrapped?.args ?? { where: 'transformRust' },
+            // The registry has no words for these ids yet; the message stays
+            // the lane's own until they are worded (ADR 0031).
+            message: `transformRust: native engine unavailable: ${detail}`,
+            cause,
+        });
         this.name = 'RustTransformUnavailableError';
     }
 }
@@ -183,7 +201,7 @@ export function ensureRustTransformAvailable(): void {
         rustAvailability = true;
     } catch (err) {
         if (err instanceof CsszyxNativeUnavailableError) {
-            throw new RustTransformUnavailableError(err.detail);
+            throw new RustTransformUnavailableError(err.detail, { cause: err });
         }
         throw err;
     }
@@ -381,7 +399,7 @@ export function scanGlobalVarUsagesRust(
  */
 function asRustUnavailable(err: unknown): unknown {
     return err instanceof CsszyxNativeUnavailableError
-        ? new RustTransformUnavailableError(err.detail)
+        ? new RustTransformUnavailableError(err.detail, { cause: err })
         : err;
 }
 

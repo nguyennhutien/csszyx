@@ -297,8 +297,10 @@ test('the codes a production bundle may print come from the registry, with their
         'packages/thing/src/b.ts',
         'packages/thing/src/d.ts',
     ]);
+    // A throw is a sink too (ADR 0031 §6): `d.ts` throws `no-surface`.
     assert.deepEqual(sizeGate.productionCodesOf(CODE_ENTRIES, files), [
         'error: [csszyx] bad-map: ',
+        'throw: [csszyx] no-surface: ',
         'warn: [csszyx] gone-key: ',
     ]);
     // The compiler's list is the registry's: every line its browser entries
@@ -352,7 +354,7 @@ test('a production bundle may print only the codes the registry marks as printin
         'packages/thing/dist/index.mjs': 'export const x = 1;\n',
     });
     assert.ok(
-        silent.some(failure => /found no console call/.test(failure)),
+        silent.some(failure => /found no sink/.test(failure)),
         silent.join('\n'),
     );
     assert.ok(
@@ -384,11 +386,26 @@ test('the runtime and dynamic lists are the registry codes their sources print',
         'log: [csszyx] Runtime initialized',
         'warn: [csszyx] Runtime already initialized',
     ]);
+    // The errors the runtime throws in production, by code.
+    for (const head of [
+        'throw: [csszyx] lowering-not-loaded: ',
+        'throw: [csszyx] runtime-prefix-conflict: ',
+        'throw: [csszyx] sz-object-depth: ',
+        'throw: [csszyx] web-crypto-unavailable: ',
+    ]) {
+        assert.ok(runtime.productionCodes.includes(head), head);
+    }
+    // A throw the registry keeps to development is no production sink.
+    assert.ok(!runtime.productionCodes.some(head => head.includes('lite-sz-object')));
+    assert.ok(!runtime.productionCodes.some(head => head.includes('split-box-sz-string')));
     // `@csszyx/dynamic` prints nothing in production: its one production
-    // failure is a rejected fetch, which it catches.
+    // failure is a rejected fetch, which it catches. It throws two errors.
     const dynamic = budget('@csszyx/dynamic app bundle');
     assert.equal(dynamic.productionMessages, undefined);
-    assert.deepEqual(dynamic.productionCodes, []);
+    assert.deepEqual(dynamic.productionCodes, [
+        'throw: [csszyx] dynamic-manifest-unreachable: ',
+        'throw: [csszyx] sz-object-depth: ',
+    ]);
 });
 
 test('a bundle the registry lets print nothing passes only while it prints nothing', () => {
@@ -1179,4 +1196,195 @@ test('the leak gate reads every worded console or thrown id, and its control is 
     assert.equal(sizeGate.TEMPLATE_CONTROL?.id, 'removed-key');
     assert.match(sizeGate.TEMPLATE_CONTROL.contents, /from '@csszyx\/compiler\/report'/);
     assert.match(sizeGate.TEMPLATE_CONTROL.contents, /process\.env\.NODE_ENV !== 'production'/);
+});
+
+test('a sink is a console call, a throw, and the message of an error a bundle builds', () => {
+    const { sinkMessages } = sizeGate;
+    const compact = code =>
+        `\`[csszyx] ${code}: \${JSON.stringify(a)} https://csszyx.com/e/${code}\``;
+    assert.deepEqual(
+        sinkMessages(
+            `export function f(a, e) {
+                console.warn(${compact('gone-key')});
+                console.error('[csszyx] bad-map: ' + JSON.stringify(a) + ' https://csszyx.com/e/bad-map');
+                if (a) throw new Error('the value is not what it should be');
+                if (e) throw new TypeError(${compact('sz-attribute-syntax')});
+                throw \`[csszyx] thrown-template: \${a}\`;
+            }`,
+        ),
+        [
+            'error: [csszyx] bad-map: ',
+            'throw: [csszyx] sz-attribute-syntax: ',
+            'throw: [csszyx] thrown-template: ',
+            'throw: the value is not what it should be',
+            'warn: [csszyx] gone-key: ',
+        ],
+    );
+    // A csszyx error built from options, directly or through a subclass's
+    // `super`, whatever its minified class name: the message is the sink.
+    assert.deepEqual(
+        sinkMessages(
+            `import { CsszyxError as q } from '@csszyx/compiler/errors';
+            var D = class extends q { constructor(n) { let a = { n };
+                super({ code: 'deep', args: a, message: ${compact('deep')} }); } };
+            export const make = a => new q({ code: 'gone', args: a, message: ${compact('gone')} });
+            export const deep = () => { throw new D(1); };`,
+        ),
+        ['throw: [csszyx] deep: ', 'throw: [csszyx] gone: '],
+    );
+});
+
+test('a sink that carries prose, or a code the message does not name, is read as written', () => {
+    const { sinkMessages } = sizeGate;
+    // Prose after the code head is a sentence in production, not the compact line.
+    assert.deepEqual(
+        sinkMessages(
+            'export const f = a => { throw new Error(`[csszyx] gone-key: the key ${a} is gone`); };',
+        ),
+        ['throw: [csszyx] gone-key: the key '],
+    );
+    // So is a link to another code's page.
+    assert.deepEqual(
+        sinkMessages(
+            'export const f = a => console.warn(`[csszyx] gone-key: ${JSON.stringify(a)} https://csszyx.com/e/other`);',
+        ),
+        ['warn: [csszyx] gone-key: … https://csszyx.com/e/other'],
+    );
+    // An error whose `code` is not the code its message names.
+    assert.deepEqual(
+        sinkMessages(
+            `import { CsszyxError as q } from '@csszyx/compiler/errors';
+            export const f = a => new q({ code: 'one', args: a,
+                message: \`[csszyx] two: \${JSON.stringify(a)} https://csszyx.com/e/two\` });`,
+        ),
+        ['throw: [csszyx] two: (code one)'],
+    );
+});
+
+test('a passthrough sink is read by what it is, and a class csszyx registers by its code', () => {
+    const { sinkMessages } = sizeGate;
+    // A rethrow, an error from a factory and a class that words its own
+    // message carry no message at the throw: the message is read where the
+    // error is built.
+    assert.deepEqual(
+        sinkMessages(
+            `export function f(g) { try { g(); } catch (e) { throw e; } }
+            export const h = g => { throw g(); };
+            export const i = C => { throw new C(); };`,
+        ),
+        [],
+    );
+    // A non-literal message at a console call or a native error is listed,
+    // so a budget has to name it to let it through.
+    assert.deepEqual(
+        sinkMessages('export const f = e => { console.error(e); throw new Error(e.message); };'),
+        ['error: <expr>', 'throw: <expr>'],
+    );
+    // A class the registry names, imported under any name, throws its code:
+    // its message is worded, and checked, in the package that defines it.
+    assert.deepEqual(
+        sinkMessages(
+            `import { SzDepthError as Q } from '@csszyx/compiler/sz-limits';
+            export const f = d => { if (d > 32) throw new Q(); };`,
+        ),
+        ['throw: [csszyx] sz-object-depth: '],
+    );
+});
+
+test('a production bundle that throws prose fails, and one that throws its codes passes', () => {
+    const entries = [
+        {
+            id: 'gone-key',
+            surfaces: { error: { host: 'browser' } },
+            sources: ['packages/thing/src/a.ts:1'],
+        },
+        {
+            id: 'dev-only',
+            surfaces: { error: { host: 'browser', production: false } },
+            sources: ['packages/thing/src/a.ts:2'],
+        },
+    ];
+    const codes = sizeGate.productionCodesOf(entries, new Set(['packages/thing/src/a.ts']));
+    assert.deepEqual(codes, ['throw: [csszyx] gone-key: ']);
+    const run = (body, extra = {}) => {
+        const root = makeFixture({
+            'packages/thing/package.json': JSON.stringify({
+                name: 'thing',
+                exports: { '.': { import: { default: './dist/index.mjs' } } },
+            }),
+            'packages/thing/dist/index.mjs':
+                "import { CsszyxError } from '@csszyx/compiler/errors';\n" +
+                'export function check(args) {\n' +
+                '    if (!args) throw new CsszyxError({ code: "gone-key", args, message: ' +
+                '`[csszyx] gone-key: ${JSON.stringify(args)} https://csszyx.com/e/gone-key` });\n' +
+                `    ${body}\n` +
+                '}\n',
+        });
+        try {
+            return checkBudgets(appBudget('thing', { productionCodes: codes, ...extra }), root)
+                .failures;
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    };
+    assert.deepEqual(run(''), []);
+    const prose = run("if (args.x) throw new Error('csszyx could not read this value');");
+    assert.equal(prose.length, 1, prose.join('\n'));
+    assert.match(prose[0], /prints "throw: csszyx could not read this value"/);
+    // A throw the registry keeps to development must fold out of production.
+    const dev = run(
+        'if (args.y) throw new CsszyxError({ code: "dev-only", args, message: ' +
+            '`[csszyx] dev-only: ${JSON.stringify(args)} https://csszyx.com/e/dev-only` });',
+    );
+    assert.equal(dev.length, 1, dev.join('\n'));
+    assert.match(dev[0], /prints "throw: \[csszyx\] dev-only: "/);
+    // A passthrough is let through only by name, with the reason beside it.
+    const passthrough = 'try { args.z(); } catch (e) { console.error(e); }';
+    assert.equal(run(passthrough).length, 1);
+    assert.deepEqual(run(passthrough, { passthroughSinks: ['error: <expr>'] }), []);
+});
+
+test('a file budget checks its sinks one way: registered codes, its own required', () => {
+    const root = makeFixture({
+        'packages/thing/dist/cdn.js':
+            '(()=>{function f(a){if(!a)throw new SyntaxError(`[csszyx] one: ${JSON.stringify(a)} https://csszyx.com/e/one`);' +
+            'try{a()}catch(e){console.error(e)}}window.f=f})();\n',
+    });
+    const budget = extra => [
+        {
+            name: 'thing CDN bundle',
+            kind: 'file',
+            target: 'packages/thing/dist/cdn.js',
+            maxGzipBytes: 100_000,
+            productionCodes: ['throw: [csszyx] one: ', 'warn: [csszyx] two: '],
+            requiredCodes: ['throw: [csszyx] one: '],
+            passthroughSinks: ['error: <expr>'],
+            ...extra,
+        },
+    ];
+    try {
+        // `two` is allowed, not required: the file holds what its entry reaches.
+        assert.deepEqual(checkBudgets(budget(), root).failures, []);
+        const missing = checkBudgets(budget({ requiredCodes: ['warn: [csszyx] two: '] }), root);
+        assert.equal(missing.failures.length, 1, missing.failures.join('\n'));
+        assert.match(missing.failures[0], /no longer prints "warn: \[csszyx\] two: "/);
+        const unlisted = checkBudgets(budget({ passthroughSinks: [] }), root);
+        assert.equal(unlisted.failures.length, 1, unlisted.failures.join('\n'));
+        assert.match(unlisted.failures[0], /prints "error: <expr>"/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('the CDN bundle reads its sinks against the registry, its passthrough named', () => {
+    const cdn = SIZE_BUDGETS.find(budget => budget.name === 'csszyx CDN bundle');
+    assert.ok(cdn.productionCodes.includes('throw: [csszyx] sz-attribute-syntax: '));
+    assert.ok(cdn.productionCodes.includes('warn: [csszyx] removed-key: '));
+    assert.ok(cdn.requiredCodes.includes('error: [csszyx] sz-attribute-syntax: '));
+    assert.ok(cdn.requiredCodes.includes('throw: [csszyx] sz-attribute-syntax: '));
+    // `reportUnreadable` prints an error it did not throw as it was thrown.
+    assert.deepEqual(cdn.passthroughSinks, ['error: <expr>']);
+    // The development bundle prints sentences by design and is not read.
+    const dev = SIZE_BUDGETS.find(budget => budget.name === 'csszyx CDN development bundle');
+    assert.equal(dev.productionCodes, undefined);
 });

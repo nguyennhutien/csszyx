@@ -13,6 +13,8 @@
  * @module engine-identity
  */
 
+import { CsszyxError } from './errors.js';
+
 /** Replaced at build time by tsdown's `define`; absent when run from source. */
 declare const __CSSZYX_ENGINE_VERSION__: string | undefined;
 /** Replaced at build time by tsdown's `define`; absent when run from source. */
@@ -35,14 +37,35 @@ export const EXPECTED_ENGINE: EngineIdentity | null =
         ? { version: __CSSZYX_ENGINE_VERSION__, digest: __CSSZYX_ENGINE_DIGEST__ }
         : null;
 
-/** Thrown when the engine that loaded is not the one this compiler was built against. */
-export class EngineVersionSkewError extends Error {
-    /** The diagnostic code, as `[csszyx] <code>:` starts the message. */
-    readonly code = 'engine-version-skew';
+/** What an {@link EngineVersionSkewError} names, by the registry's arg names. */
+export interface EngineVersionSkewArgs {
+    /** Which artifact answered. */
+    readonly artifact: 'native' | 'wasm';
+    /** The engine version the compiler was built for. */
+    readonly expectedVersion: string;
+    /** The digest of the engine source the compiler was built for. */
+    readonly expectedDigest: string;
+    /** The version the engine reported; absent for one too old to report it. */
+    readonly foundVersion?: string;
+    /** The digest the engine reported; absent for one too old to report it. */
+    readonly foundDigest?: string;
+    /** The platform package that answered, for the native artifact on a host one covers. */
+    readonly platformPackage?: string;
+}
 
-    /** @param message - The full message. */
-    constructor(message: string) {
-        super(message);
+/**
+ * Thrown when the engine that loaded is not the one this compiler was built
+ * against. A csszyx error: `engine-version-skew`.
+ */
+export class EngineVersionSkewError extends CsszyxError {
+    declare readonly code: 'engine-version-skew';
+
+    /**
+     * @param message - The full message.
+     * @param args - Both identities and the artifact; csszyx always passes them.
+     */
+    constructor(message: string, args: Partial<EngineVersionSkewArgs> = {}) {
+        super({ code: 'engine-version-skew', args, message });
         this.name = 'EngineVersionSkewError';
     }
 }
@@ -77,8 +100,19 @@ export function assertEngineIdentity(input: AssertEngineIdentityInput): void {
         reported === null
             ? `the ${artifact} engine, from a release before 0.18 that does not report its version`
             : `the ${artifact} engine ${reported.version} (source ${reported.digest})`;
+    const args: EngineVersionSkewArgs = {
+        // Only the native artifact is given a platform package, `null` included.
+        artifact: input.platformPackage === undefined ? 'wasm' : 'native',
+        expectedVersion: expected.version,
+        expectedDigest: expected.digest,
+        ...(reported === null
+            ? {}
+            : { foundVersion: reported.version, foundDigest: reported.digest }),
+        ...(input.platformPackage ? { platformPackage: input.platformPackage } : {}),
+    };
     throw new EngineVersionSkewError(
         `[csszyx] engine-version-skew: @csszyx/compiler ${expected.version} was built for engine source ${expected.digest} and found ${found}\n${skewHelp(input, expected)}`,
+        args,
     );
 }
 

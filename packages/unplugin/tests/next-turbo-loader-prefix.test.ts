@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { isCsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runNextPrebuild } from '../src/next-prebuild.js';
@@ -172,6 +173,20 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
 
         expect(() => runNextTurboLoader(APP, loaderContext(root, page), OPTIONS)).toThrow(
             /Tailwind prefix[\s\S]*csszyx next prebuild/,
+        );
+        let error: unknown;
+        try {
+            runNextTurboLoader(APP, loaderContext(root, page), OPTIONS);
+        } catch (caught) {
+            error = caught;
+        }
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error).toMatchObject({
+            code: 'next-prefix-unread',
+            args: { lane: 'turbopack-loader', root, reason: expect.any(String) },
+        });
+        expect((error as Error).message).toContain(
+            (error as { args: { reason: string } }).args.reason,
         );
     }, 60_000);
 

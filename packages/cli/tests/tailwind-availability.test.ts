@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -80,6 +81,12 @@ describe('resolveTailwindV3', () => {
         );
         const error = await resolveTailwindV3(loaderFor({ kind: 'absent' })).catch(e => e);
         expect(error.state).toBe('absent');
+        expect(error).toBeInstanceOf(CsszyxError);
+        expect(error).toMatchObject({
+            name: 'TailwindUnavailableError',
+            code: 'tailwind-v3-unavailable',
+            args: { form: 'absent' },
+        });
         expect(error.message).toContain('npm  install -D tailwindcss@3');
         expect(error.message).toContain('optional peer');
         // A v4 project reading this must not be told to downgrade.
@@ -92,6 +99,10 @@ describe('resolveTailwindV3', () => {
         ).catch(e => e);
         expect(error.state).toBe('wrong-major');
         expect(error.version).toBe('4.3.3');
+        expect(error).toMatchObject({
+            code: 'tailwind-v3-unavailable',
+            args: { form: 'wrong-major', version: '4.3.3' },
+        });
         expect(error.message).toContain('this project has 4.3.3');
         expect(error.message).toContain('Nothing is broken');
         expect(error.message).toContain(
@@ -145,6 +156,17 @@ describe('resolveTailwindV3', () => {
             expect(error.message).toContain(
                 failure instanceof Error ? failure.message : String(failure),
             );
+            // The registry's form for the state, and what the entry threw as
+            // the cause: wrapped, never relabelled.
+            expect(error).toMatchObject({
+                code: 'tailwind-v3-unavailable',
+                args: {
+                    form: 'broken-entry',
+                    version: '3.4.19',
+                    reason: failure instanceof Error ? failure.message : String(failure),
+                },
+            });
+            expect(error.cause).toBe(failure);
         }
     });
 
@@ -283,6 +305,10 @@ describe('tailwindLoaderFor', () => {
         );
         expect(error.state).toBe('wrong-major');
         expect(error.version).toBe('4.3.3');
+        expect(error).toMatchObject({
+            code: 'tailwind-v3-unavailable',
+            args: { form: 'wrong-major', version: '4.3.3' },
+        });
     });
 
     // The fallback exists to improve on the project's answer, never to

@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import type { SourceTransformResult } from '@csszyx/compiler';
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { diagnosticFileOf } from '@csszyx/compiler/internal';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
@@ -222,6 +223,7 @@ export function runNextTurboLoader(
                 tailwindStylesheet,
                 mode: context.manifestExpectation.mode,
             },
+            prefix.reason,
         );
     }
     // The facts file and every stylesheet it records: an edit to any of them
@@ -635,16 +637,25 @@ interface NextStylesheetFactsInput {
     mode: 'development' | 'production';
 }
 
-/** A loader run that has no Tailwind prefix to lower with yet. */
-class NextStylesheetFactsPending extends Error {
+/**
+ * A loader run that has no Tailwind prefix to lower with yet. A csszyx error,
+ * `next-prefix-unread`, for when nobody can wait for the read.
+ */
+class NextStylesheetFactsPending extends CsszyxError {
     readonly input: NextStylesheetFactsInput;
 
     /**
      * @param message - What the loader would report if nobody can wait.
      * @param input - What reading the stylesheets needs.
+     * @param reason - Why the prefix is unread.
      */
-    constructor(message: string, input: NextStylesheetFactsInput) {
-        super(message);
+    constructor(message: string, input: NextStylesheetFactsInput, reason: string) {
+        super({
+            code: 'next-prefix-unread',
+            args: { lane: 'turbopack-loader', root: input.root, reason },
+            message,
+        });
+        this.name = 'NextStylesheetFactsPending';
         this.input = input;
     }
 }

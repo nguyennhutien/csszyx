@@ -15,9 +15,25 @@
  */
 import type { SourceTransformResult } from '@csszyx/compiler';
 import { transformRust, transformWasm } from '@csszyx/compiler/engine';
+import { isCsszyxError } from '@csszyx/compiler/errors';
 import { describe, expect, it } from 'vitest';
 
 import { ExplainParseError, explainSz } from '../src/commands/explain.js';
+
+/**
+ * What a call throws.
+ *
+ * @param call - The call.
+ * @returns The thrown value.
+ */
+function thrown(call: () => unknown): unknown {
+    try {
+        call();
+    } catch (error) {
+        return error;
+    }
+    throw new Error('expected the call to throw');
+}
 
 type Engine = (source: string, filename?: string) => SourceTransformResult;
 
@@ -113,10 +129,17 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
         expect(() => explainSz(sz, engine)).toThrow(/resolved at runtime by `_sz\(\)`/);
         expect(() => explainSz(sz, engine)).toThrow(reason);
         expect(() => explainSz(sz, engine)).not.toThrow(/\d:\d/);
+        expect(thrown(() => explainSz(sz, engine))).toMatchObject({
+            code: 'explain-input-invalid',
+            args: { form: 'runtime-only', diagnostics: [expect.stringMatching(reason)] },
+        });
     });
 
     it.each(['{ p:', '{{{{', 'not an object', '{ p: 4 } }'])('%s is a syntax error', sz => {
         expect(() => explainSz(sz, engine)).toThrow(/could not be parsed/);
+        const error = thrown(() => explainSz(sz, engine));
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error).toMatchObject({ code: 'parse-error', args: { form: 'expression' } });
     });
 
     it('reads an attribute name inside a value as text', () => {
@@ -131,6 +154,10 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
         expect(() => explainSz('{ p: 4 }} /><b sz={{ m: 2 }', engine)).toThrow(
             /not one sz expression/,
         );
+        expect(thrown(() => explainSz('{ p: 4 }} /><b sz={{ m: 2 }', engine))).toMatchObject({
+            code: 'explain-input-invalid',
+            args: { form: 'not-one-expression' },
+        });
     });
 });
 
@@ -145,6 +172,10 @@ describe('explainSz on a runtime fallback the engine gives no reason for', () =>
         expect(() => explainSz('x', silent)).toThrow(
             /^the build emits no classes for it; it is resolved at runtime by `_sz\(\)`$/,
         );
+        // No diagnostics, so no arg for them: absent, never empty.
+        expect((thrown(() => explainSz('x', silent)) as { args: unknown }).args).toEqual({
+            form: 'runtime-only',
+        });
     });
 });
 
