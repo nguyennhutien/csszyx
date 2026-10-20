@@ -20,12 +20,28 @@
  * never a table (ADR 0012, PROJECT-RULES §4): a project that defines
  * `@utility -p-*` serves `-p-2`, and nothing is said.
  *
+ * A dead class the project serves with one of its variants dropped
+ * (`hidden:p-4`, served as `p-4`) is reported once, as `unserved-variant`,
+ * naming that variant: Tailwind has no bare `hidden` variant. Asked the same
+ * way, of the project's Tailwind: a project that defines `@custom-variant
+ * hidden` serves the class, and nothing is said. Only the words come from a
+ * table, the form of the name (an ARIA state, one that is an HTML attribute
+ * too, or neither).
+ *
  * No new CSS read: the question goes to the style model every lane already
  * opened (`css-reading-entry-points.test.ts`).
  *
  * @module
  */
-import { type SourcePosition, type SzMergeGroup, sortStrings } from '@csszyx/compiler';
+import {
+    renderSzDiagnostic,
+    type SourcePosition,
+    type StateVariantForm,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    type SzMergeGroup,
+    sortStrings,
+    stateVariantForm,
+} from '@csszyx/compiler';
 
 import type { DiagnosticLimiter, LimitedFinding } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
@@ -57,8 +73,22 @@ export interface DeadClassFinding extends DeadClassSite {
      * every other dead class.
      */
     unsigned?: string;
+    /**
+     * `unserved-variant` when the class is served with this one variant
+     * dropped, and with no other: the variant as the class writes it, and the
+     * form its line takes. Absent for every other dead class.
+     */
+    variant?: UnservedVariant;
     /** Every later file that emits the class, in path order. */
     others?: readonly DeadClassSite[];
+}
+
+/** The variant a dead class is served without, as `unserved-variant` names it. */
+export interface UnservedVariant {
+    /** The variant, as the class writes it (`hidden`). */
+    name: string;
+    /** An ARIA state, one that is an HTML attribute too, or a name csszyx does not know. */
+    form: StateVariantForm | 'unknown';
 }
 
 /** Where the engine placed one emitted class: the key it was lowered from. */
@@ -199,13 +229,64 @@ export function unsignedClass(className: string): string | null {
 }
 
 /**
+ * Each variant of a class, with the class that variant dropped and everything
+ * else kept: the questions `unserved-variant` asks. A variant is a segment
+ * before a `:` outside brackets and parentheses (`data-[a=b:c]` is one), the
+ * prefix (`tw:`) counted as one, so dropping it is simply never served.
+ *
+ * @param className - The class, as emitted.
+ * @returns One entry per variant, in the order the class writes them.
+ */
+export function variantDroppedForms(
+    className: string,
+): Array<{ variant: string; without: string }> {
+    const ends: number[] = [];
+    let depth = 0;
+    for (let index = 0; index < className.length; index++) {
+        const char = className[index];
+        if (char === '[' || char === '(') depth++;
+        else if ((char === ']' || char === ')') && depth > 0) depth--;
+        else if (char === ':' && depth === 0) ends.push(index);
+    }
+    return ends.map((end, index) => {
+        const start = index === 0 ? 0 : (ends[index - 1] as number) + 1;
+        return {
+            variant: className.slice(start, end),
+            without: className.slice(0, start) + className.slice(end + 1),
+        };
+    });
+}
+
+/**
+ * The variant a dead class is served without, when there is exactly one.
+ *
+ * @param className - The dead class.
+ * @param served - Whether the project serves a class.
+ * @returns The variant and its form, or null when no single drop serves it.
+ */
+export function unservedVariantOf(
+    className: string,
+    served: (className: string) => boolean,
+): UnservedVariant | null {
+    const serving = variantDroppedForms(className).filter(form => served(form.without));
+    if (serving.length !== 1) return null;
+    const name = (serving[0] as { variant: string }).variant;
+    return { name, form: stateVariantForm(name) ?? 'unknown' };
+}
+
+/** The ids the dead-class pass reports a class under. */
+type DeadClassId = 'dead-class' | 'unsigned-value' | 'unserved-variant';
+
+/**
  * The id a dead class is reported under.
  *
  * @param finding - The dead class.
- * @returns `unsigned-value` for a hoisted sign, `dead-class` otherwise.
+ * @returns `unsigned-value` for a hoisted sign, `unserved-variant` for a
+ *          variant the project does not serve, `dead-class` otherwise.
  */
-function findingId(finding: DeadClassFinding): 'dead-class' | 'unsigned-value' {
-    return finding.unsigned === undefined ? 'dead-class' : 'unsigned-value';
+function findingId(finding: DeadClassFinding): DeadClassId {
+    if (finding.unsigned !== undefined) return 'unsigned-value';
+    return finding.variant === undefined ? 'dead-class' : 'unserved-variant';
 }
 
 /**
@@ -219,9 +300,11 @@ const verdicts = new WeakMap<object, Map<string, boolean>>();
  *
  * Dead means dead under every root the model compiled, as `check` decides.
  * Each class is asked once per model: a model is one design system, and a
- * stylesheet edit opens a new one. A dead class with a hoisted sign brings
- * one more question, its {@link unsignedClass}: `unsigned` is set only when
- * that one is served.
+ * stylesheet edit opens a new one. A dead class brings more questions, asked
+ * together: with a hoisted sign, its {@link unsignedClass}, and `unsigned` is
+ * set only when that one is served; with variants, each of its
+ * {@link variantDroppedForms}, and `variant` is set when exactly one of them
+ * is served and the sign is not the thing to name.
  *
  * @param model - The project's style model.
  * @param origins - Each emitted class, and the file that emits it or every
@@ -248,16 +331,25 @@ export function findDeadSzClasses(
     ask(classes);
     const deadClasses = classes.filter(className => known.get(className) === true);
     // A dead signed class is `unsigned-value` only when its unsigned form is
-    // served: the second question, asked of the same design system.
-    ask(deadClasses.map(unsignedClass).filter(className => className !== null));
+    // served, and a dead class `unserved-variant` only when it is served with
+    // one variant dropped: the second question, asked of the same design
+    // system, of the dead classes only.
+    ask(
+        deadClasses.flatMap(className => [
+            ...[unsignedClass(className)].filter(form => form !== null),
+            ...variantDroppedForms(className).map(form => form.without),
+        ]),
+    );
+    const served = (className: string): boolean => known.get(className) === false;
     return deadClasses.map(className => {
         const origin = origins.get(className) as string | readonly DeadClassSite[];
         const unsignedForm = unsignedClass(className);
         const unsigned =
-            unsignedForm !== null && known.get(unsignedForm) === false
-                ? hoistedSignUtility(className)
-                : null;
-        const found = unsigned === null ? { className } : { className, unsigned };
+            unsignedForm !== null && served(unsignedForm) ? hoistedSignUtility(className) : null;
+        const variant = unsigned === null ? unservedVariantOf(className, served) : null;
+        let found: Omit<DeadClassFinding, 'file'> = { className };
+        if (unsigned !== null) found = { className, unsigned };
+        else if (variant !== null) found = { className, variant };
         if (typeof origin === 'string') return { ...found, file: origin };
         const [first, ...others] = origin as readonly DeadClassSite[];
         return others.length === 0 ? { ...found, ...first } : { ...found, ...first, others };
@@ -310,6 +402,30 @@ export function unsignedValueMessage(
 }
 
 /**
+ * The line a build prints for one dead class served with one variant dropped,
+ * in the registry's words.
+ *
+ * @param finding - The dead class and its variant.
+ * @param site - Where it is named.
+ * @returns The warning, headed by its code.
+ */
+export function unservedVariantMessage(
+    finding: Pick<DeadClassFinding, 'className'> & { variant: UnservedVariant },
+    site: DeadClassSite,
+): string {
+    const { name, form } = finding.variant;
+    return renderSzDiagnostic({
+        diagnostic: {
+            code: 'unserved-variant',
+            args: { form, variant: name, className: finding.className },
+            ...(site.line === undefined ? {} : { line: site.line, column: site.column }),
+        },
+        file: site.file,
+        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    });
+}
+
+/**
  * The line a build prints for one finding, under its id.
  *
  * @param finding - The dead class.
@@ -317,9 +433,12 @@ export function unsignedValueMessage(
  * @returns The warning.
  */
 function findingMessage(finding: DeadClassFinding, site: DeadClassSite): string {
-    return finding.unsigned === undefined
+    if (finding.unsigned !== undefined) {
+        return unsignedValueMessage(finding.className, finding.unsigned, site.file, site);
+    }
+    return finding.variant === undefined
         ? deadClassMessage(finding.className, site.file, site)
-        : unsignedValueMessage(finding.className, finding.unsigned, site.file, site);
+        : unservedVariantMessage({ ...finding, variant: finding.variant }, site);
 }
 
 /** How a lane reports dead classes. */
@@ -364,8 +483,9 @@ function firstListedSite(
  * The lines to print for a lane's dead classes, at the levels the policy sets.
  *
  * A class whose utility carries a hoisted sign is said under
- * `unsigned-value` (`rule: 'dead-class'`, `kind: 'unsigned-value'`), so a
- * level for either id reaches it, the kind's winning; every other one under
+ * `unsigned-value` (`rule: 'dead-class'`, `kind: 'unsigned-value'`), and one
+ * served with a variant dropped under `unserved-variant`, so a level for
+ * either id reaches it, the kind's winning; every other one under
  * `dead-class`. Each class is said once, under one id.
  *
  * `allow.classes` leaves a class out, as `check --allow` does. The level is
@@ -386,9 +506,10 @@ export function reportDeadSzClasses(
 ): { lines: string[]; held: number } {
     const lines: string[] = [];
     let held = 0;
-    const present = {
-        'dead-class': [] as LimitedFinding[],
-        'unsigned-value': [] as LimitedFinding[],
+    const present: Record<DeadClassId, LimitedFinding[]> = {
+        'dead-class': [],
+        'unsigned-value': [],
+        'unserved-variant': [],
     };
     for (const finding of findings) {
         if (input.policy.allowsClass(finding.className)) continue;
@@ -408,7 +529,6 @@ export function reportDeadSzClasses(
         present[id].push(limited);
         if (input.limiter.admit(limited)) lines.push(findingMessage(finding, site));
     }
-    input.limiter.retain('dead-class', present['dead-class']);
-    input.limiter.retain('unsigned-value', present['unsigned-value']);
+    for (const [id, retained] of Object.entries(present)) input.limiter.retain(id, retained);
     return { lines, held };
 }

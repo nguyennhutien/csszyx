@@ -78,6 +78,7 @@ export {
     UNCOMPILED_SZ,
     UNKNOWN_FIELD,
     UNKNOWN_KEY,
+    UNSERVED_VARIANT,
     WEB_CRYPTO_UNAVAILABLE,
 } from './diagnostic-browser.generated.js';
 export { type SzReportOptions, szRender, szReport } from './diagnostic-report.js';

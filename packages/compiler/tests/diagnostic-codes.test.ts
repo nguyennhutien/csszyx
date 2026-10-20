@@ -93,8 +93,12 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
 
     it.each(ORACLE_CODES)('never renders %s, the oracle’s verdict', code => {
         // `p: -2` is the shape the engine reported as unsigned-value before the
-        // verdict moved to the project's Tailwind.
-        const result = transform('export const A = () => <div sz={{ p: -2 }} />;', '/p/src/A.tsx');
+        // verdict moved to the project's Tailwind; `hidden` holding an object is
+        // an open variant to the engine, which a project may define.
+        const result = transform(
+            'export const A = () => <div sz={{ p: -2, hidden: { p: 4 } }} />;',
+            '/p/src/A.tsx',
+        );
 
         expect(result.issues?.map(issue => issue.code)).not.toContain(code);
         expect(result.issues).toEqual([]);

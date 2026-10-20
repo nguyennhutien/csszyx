@@ -174,7 +174,8 @@ export type SzSettableDiagnosticId =
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
     | 'unsigned-value'
-    | 'prefix-disagreement';
+    | 'prefix-disagreement'
+    | 'unserved-variant';
 
 /** Every id a level can be set for, in registry order. */
 export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
@@ -219,6 +220,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'color-slash-opacity',
     'unsigned-value',
     'prefix-disagreement',
+    'unserved-variant',
 ];
 
 /** Every live public id, whatever surface prints it. */
@@ -260,6 +262,7 @@ export type SzDiagnosticId =
     | 'prefix-disagreement'
     | 'sibling-keyword'
     | 'broken-opacity'
+    | 'unserved-variant'
     | 'theme-collision'
     | 'merge-covered-key'
     | 'merge-covered-class'

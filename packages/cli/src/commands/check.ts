@@ -52,7 +52,10 @@ import {
     isRemovedRuleId,
     loadDiagnosticPolicy,
     removedRuleIdDiagnostic,
+    type UnservedVariant,
+    unservedVariantOf,
     unsignedClass,
+    variantDroppedForms,
 } from '@csszyx/unplugin/diagnostics';
 import fg from 'fast-glob';
 import {
@@ -459,17 +462,29 @@ function reportDeadClasses(
     // A dead class with a hoisted sign is `unsigned-value` only when the class
     // without it is served, by the same consensus: `-p-medium` is dead
     // unsigned too, and "drop the sign" would be wrong advice.
-    const unsignedForms = [
-        ...new Set(dead.map(([token]) => unsignedClass(token)).filter(form => form !== null)),
+    // A dead class is `unserved-variant` when the class with exactly one of
+    // its variants dropped is served, by the same consensus. Both questions
+    // are asked of the dead classes only, in one call per stylesheet.
+    const secondForms = [
+        ...new Set(
+            dead.flatMap(([token]) => [
+                ...[unsignedClass(token)].filter(form => form !== null),
+                ...variantDroppedForms(token).map(form => form.without),
+            ]),
+        ),
     ];
-    const unsignedDeadPerOracle = oracles.map(oracle => new Set(oracle.findDead(unsignedForms)));
-    const unsignedServed = new Set(
-        unsignedForms.filter(form => !unsignedDeadPerOracle.every(deadSet => deadSet.has(form))),
-    );
+    const secondDeadPerOracle = oracles.map(oracle => new Set(oracle.findDead(secondForms)));
+    const served = (form: string): boolean =>
+        !secondDeadPerOracle.every(deadSet => deadSet.has(form));
     const signed = (token: string): boolean => {
         const form = unsignedClass(token);
-        return form !== null && unsignedServed.has(form);
+        return form !== null && served(form);
     };
+    const variants = new Map<string, UnservedVariant>();
+    for (const [token] of dead) {
+        const variant = signed(token) ? null : unservedVariantOf(token, served);
+        if (variant !== null) variants.set(token, variant);
+    }
     // The opacity verdict follows the dead-class consensus rule for the same
     // reason: one stylesheet serving the modifier is enough for it to be real,
     // and erring the other way would report working classes.
@@ -488,8 +503,15 @@ function reportDeadClasses(
             value: brokenPerOracle[0].get(token) as string,
         }));
     printDeadClassReport(out, {
-        dead: dead.filter(([token]) => !signed(token)),
+        dead: dead.filter(([token]) => !signed(token) && !variants.has(token)),
         unsigned: dead.filter(([token]) => signed(token)),
+        variants: dead
+            .filter(([token]) => variants.has(token))
+            .map(([token, origin]) => ({
+                token,
+                origin,
+                variant: variants.get(token) as UnservedVariant,
+            })),
         broken,
         acceptedCount: accepted.length,
         emittedCount: origins.size,
@@ -497,6 +519,13 @@ function reportDeadClasses(
         failOn,
     });
     return false;
+}
+
+/** One emitted class the project serves with one of its variants dropped. */
+interface UnservedVariantFinding {
+    token: string;
+    origin: string;
+    variant: UnservedVariant;
 }
 
 /** One emitted class that carries an opacity modifier the stylesheet drops. */
@@ -512,6 +541,8 @@ interface DeadClassReport {
     dead: ReadonlyArray<readonly [string, string]>;
     /** The dead classes with a hoisted sign whose unsigned form is served. */
     unsigned: ReadonlyArray<readonly [string, string]>;
+    /** The dead classes served with one variant dropped, with that variant. */
+    variants: readonly UnservedVariantFinding[];
     broken: readonly BrokenOpacityFinding[];
     acceptedCount: number;
     emittedCount: number;
@@ -610,6 +641,66 @@ function printUnsignedValues(
 }
 
 /**
+ * Print the dead classes the project serves with one variant dropped: its
+ * Tailwind serves no such variant (`{ hidden: { p: 4 } }` → `hidden:p-4`).
+ * Reported by the dead-class pass under the kind `unserved-variant`, in the
+ * registry's words, and never also as `dead-class`.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param variants - The classes, each with its origin and variant.
+ * @param wants - The run's rule selection.
+ * @param failOn - The quietest level that fails the run.
+ */
+function printUnservedVariants(
+    out: Reporter,
+    variants: readonly UnservedVariantFinding[],
+    wants: RuleSelection,
+    failOn: SzDiagnosticLevel,
+): void {
+    if (!wants('dead-class', 'unserved-variant')) return;
+    const shown = variants
+        .map(entry => ({
+            ...entry,
+            level: out.levelOf({
+                rule: 'dead-class',
+                kind: 'unserved-variant',
+                file: entry.origin,
+            }),
+        }))
+        .filter(entry => entry.level !== 'off');
+    if (shown.length === 0) return;
+    out.warn("\nVariants this project's Tailwind does not serve:");
+    for (const { token, origin, variant, level } of shown) {
+        const args = { form: variant.form, variant: variant.name, className: token };
+        const { text, help, note } = renderSzDiagnosticParts(
+            { code: 'unserved-variant', args },
+            SZ_DIAGNOSTIC_COMPUTED_VALUES,
+        );
+        out.push({
+            rule: 'dead-class',
+            kind: 'unserved-variant',
+            file: origin,
+            message: text,
+            help,
+            note,
+            args,
+            url: `${SZ_DIAGNOSTIC_URL_BASE}unserved-variant`,
+        });
+        out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
+        // The advice depends on the name, so each line carries its own.
+        out.info(`      help: ${help}`);
+    }
+    const { mark, below } = summaryMark(
+        shown.map(entry => entry.level),
+        failOn,
+    );
+    out.warn(
+        `\n${mark} ${shown.length} emitted class(es) use a variant this project's Tailwind does not ` +
+            `serve, so each styles nothing.${belowNote(below, failOn)}`,
+    );
+}
+
+/**
  * Print what the dead-class scan found.
  *
  * Split from the scan so each side stays readable on its own: the scan decides
@@ -619,12 +710,17 @@ function printUnsignedValues(
  * @param report - What the scan concluded.
  */
 function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
-    const { dead, unsigned, broken, acceptedCount, emittedCount, wants, failOn } = report;
+    const { dead, unsigned, variants, broken, acceptedCount, emittedCount, wants, failOn } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
 
-    if (dead.length === 0 && unsigned.length === 0 && broken.length === 0) {
+    if (
+        dead.length === 0 &&
+        unsigned.length === 0 &&
+        variants.length === 0 &&
+        broken.length === 0
+    ) {
         out.success(
             `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
@@ -637,6 +733,7 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
     // utility carries a hoisted sign, served without it, is said once, as
     // `unsigned-value`.
     printUnsignedValues(out, unsigned, wants, failOn);
+    printUnservedVariants(out, variants, wants, failOn);
     const shownDead = wants('dead-class', 'dead-class')
         ? dead
               .map(([token, origin]) => ({
@@ -1390,7 +1487,8 @@ function runDeadClassPass(
     const deadClassPass =
         wantsRule('dead-class') ||
         wantsRule('broken-opacity') ||
-        wants('dead-class', 'unsigned-value');
+        wants('dead-class', 'unsigned-value') ||
+        wants('dead-class', 'unserved-variant');
     const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
     if (!deadClassPass) return;
     if (disagreementLeftOut) {

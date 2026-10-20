@@ -11,6 +11,15 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "text": "`{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.",
         "help": "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`."
     },
+    "unserved-variant": {
+        "text": "`{className}` produces no CSS: Tailwind serves no `{variant}` variant.",
+        "help": {
+            "aria": "write `aria: { {variant}: { … } }` for the ARIA state.",
+            "attribute-or-aria": "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
+            "unknown": "check the spelling of `{variant}`."
+        },
+        "note": "the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`."
+    },
     "theme-collision": {
         "text": {
             "classes": "Theme token `{name}` also names `{classes}`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.",

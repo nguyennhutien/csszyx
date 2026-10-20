@@ -942,6 +942,41 @@ export const DIAGNOSTICS = [
         sources: [`${CHECK}:685`, `${CORE_TS}:2215`],
     },
     {
+        id: 'unserved-variant',
+        summary: 'A bare variant name Tailwind serves no variant for, on a utility it serves.',
+        // `csszyx check` and the build ask the project's own Tailwind; the
+        // runtime reads a table generated from the Tailwind csszyx builds with
+        // (`state-variants.generated.ts`), and only for a name csszyx knows as
+        // an ARIA state, so it never prints `unknown`. An HTML attribute that
+        // is no ARIA state (`inert`) has no form: every Tailwind v4 serves it
+        // bare, and the table's generator fails when the pin stops.
+        surfaces: {
+            check: { group: 'dead-class' },
+            runtime: { production: false, host: 'both' },
+        },
+        position: 'site',
+        forms: ['aria', 'attribute-or-aria', 'unknown'],
+        args: {
+            form: formArg(['aria', 'attribute-or-aria', 'unknown']),
+            variant: STRING,
+            className: STRING,
+        },
+        // The engines lower every bare key holding an object as an open
+        // variant (a project's `@custom-variant`) and cannot see the project's
+        // stylesheet: their verdict would be the pinned Tailwind's, which the
+        // build lane already gets from the project's own.
+        gaps: ['engine'],
+        text: '`{className}` produces no CSS: Tailwind serves no `{variant}` variant.',
+        help: {
+            aria: 'write `aria: { {variant}: { … } }` for the ARIA state.',
+            'attribute-or-aria':
+                "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
+            unknown: 'check the spelling of `{variant}`.',
+        },
+        note: 'the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`.',
+        sources: [`${CHECK}:681`, 'packages/unplugin/src/dead-class.ts:417', `${CORE_TS}:3974`],
+    },
+    {
         id: 'theme-collision',
         summary: 'A theme token whose name a built-in utility also uses.',
         surfaces: {

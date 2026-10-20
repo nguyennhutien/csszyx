@@ -1192,6 +1192,44 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         ]
     },
     {
+        "id": "unserved-variant",
+        "summary": "A bare variant name Tailwind serves no variant for, on a utility it serves.",
+        "surfaces": {
+            "check": {
+                "group": "dead-class"
+            },
+            "runtime": {
+                "production": false,
+                "host": "both"
+            }
+        },
+        "position": "site",
+        "forms": [
+            "aria",
+            "attribute-or-aria",
+            "unknown"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "aria",
+                    "attribute-or-aria",
+                    "unknown"
+                ]
+            },
+            "variant": {
+                "type": "string"
+            },
+            "className": {
+                "type": "string"
+            }
+        },
+        "gaps": [
+            "engine"
+        ]
+    },
+    {
         "id": "theme-collision",
         "summary": "A theme token whose name a built-in utility also uses.",
         "surfaces": {

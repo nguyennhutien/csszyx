@@ -108,7 +108,9 @@ import {
     szReport,
     UNKNOWN_FIELD,
     UNKNOWN_KEY,
+    UNSERVED_VARIANT,
 } from './report.js';
+import { unservedStateVariantForm } from './state-variants.js';
 
 /**
  * Represents a value in the sz object.
@@ -3856,6 +3858,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedClosedEnumValues.clear();
     __resetStringColorOpacityWarnings();
     _warnedOwnedKeyVariants.clear();
+    _warnedUnservedVariants.clear();
     warnedRemovedSugar.clear();
     _warnedUnknownSzProperties.clear();
     _announcedUnknownSzPropertyCap = false;
@@ -3936,7 +3939,43 @@ function collectNestedVariant(
         ? normalizeArbitraryVariant(rawKey)
         : getVariantPrefix(rawKey);
     const nestedResult = transformNested(value, `${prefix}${variantName}:`);
-    if (nestedResult.className) classes.push(nestedResult.className);
+    if (nestedResult.className) {
+        classes.push(nestedResult.className);
+        warnUnservedStateVariant(variantName, nestedResult.className);
+    }
+}
+
+/** State names already reported as an unserved variant (once each). */
+const _warnedUnservedVariants = new Set<string>();
+
+/**
+ * Names a bare state the Tailwind csszyx builds with serves no variant for:
+ * `{ hidden: { p: 4 } }` writes `hidden:p-4`, which styles nothing.
+ *
+ * Only a name csszyx knows as an ARIA state (`hidden`, `expanded`), from the
+ * table generated on the pinned Tailwind (`state-variants.generated.ts`):
+ * every other name is an open variant a project may define with
+ * `@custom-variant`, which only `csszyx check` can see. The class is still
+ * emitted.
+ *
+ * @param variant - The variant as the class writes it.
+ * @param classNames - The classes emitted under it, space-separated.
+ */
+function warnUnservedStateVariant(variant: string, classNames: string): void {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedUnservedVariants.has(variant)
+    ) {
+        const form = unservedStateVariantForm(variant);
+        if (form === null) return;
+        _warnedUnservedVariants.add(variant);
+        szReport({
+            diagnostic: UNSERVED_VARIANT,
+            args: { form, variant, className: classNames.split(' ')[0] as string },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /**

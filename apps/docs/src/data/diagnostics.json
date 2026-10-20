@@ -1072,6 +1072,40 @@
       "help": "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`."
     },
     {
+      "id": "unserved-variant",
+      "summary": "A bare variant name Tailwind serves no variant for, on a utility it serves.",
+      "surfaces": {
+        "check": {
+          "group": "dead-class"
+        },
+        "runtime": {
+          "production": false,
+          "host": "both"
+        }
+      },
+      "position": "site",
+      "forms": ["aria", "attribute-or-aria", "unknown"],
+      "args": {
+        "form": {
+          "type": ["enum", "aria", "attribute-or-aria", "unknown"]
+        },
+        "variant": {
+          "type": "string"
+        },
+        "className": {
+          "type": "string"
+        }
+      },
+      "gaps": ["engine"],
+      "text": "`{className}` produces no CSS: Tailwind serves no `{variant}` variant.",
+      "help": {
+        "aria": "write `aria: { {variant}: { … } }` for the ARIA state.",
+        "attribute-or-aria": "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
+        "unknown": "check the spelling of `{variant}`."
+      },
+      "note": "the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`."
+    },
+    {
       "id": "theme-collision",
       "summary": "A theme token whose name a built-in utility also uses.",
       "surfaces": {

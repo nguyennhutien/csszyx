@@ -28,8 +28,12 @@ export {
     deadClassMessage,
     hoistedSignUtility,
     reportDeadSzClasses,
+    type UnservedVariant,
+    unservedVariantMessage,
+    unservedVariantOf,
     unsignedClass,
     unsignedValueMessage,
+    variantDroppedForms,
 } from './dead-class.js';
 export {
     capOverflowMessage,

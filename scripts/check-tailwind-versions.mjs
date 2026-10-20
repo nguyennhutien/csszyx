@@ -22,7 +22,11 @@
  *   on a version that serves the utility's plain value (`mt-2`) — a spelling
  *   the lanes must not use there;
  * - `table`: the capability generator, run against this version, disagrees
- *   with the pinned table on a key whose utility exists in this version.
+ *   with the pinned table on a key whose utility exists in this version;
+ * - `variant`: a state name (`hidden`, `checked`, or an HTML attribute the
+ *   table leaves out because the pin serves it, `inert`) this version serves
+ *   as a bare variant and the pin does not, or the other way round — the
+ *   runtime reports `unserved-variant` from the table measured on the pin.
  *
  * Each list, per version, is a ratchet baseline in
  * `packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json`:
@@ -49,7 +53,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-
+import {
+    HTML_STATE_ATTRIBUTES,
+    htmlOnlyStateNames,
+    servedStateVariants,
+    stateVariantDifferences,
+} from './gen-state-variants.mjs';
 import { COLUMN_PROBES, COLUMNS, measureCapabilities } from './gen-sz-capabilities.mjs';
 
 /**
@@ -98,7 +107,7 @@ export const TAILWIND_VERSIONS = [
 export const BASELINE_FORMAT = 1;
 
 /** The finding lists, in the order they are reported. */
-const KINDS = ['regressed', 'dead', 'spelling', 'table'];
+const KINDS = ['regressed', 'dead', 'spelling', 'table', 'variant'];
 
 /**
  * Values besides the column probes' plain ones whose class, served, shows a
@@ -396,10 +405,20 @@ async function main() {
         throw new Error(`the pinned tailwindcss ${pin} is not in TAILWIND_VERSIONS; add it`);
     }
 
-    const { PROPERTY_MAP } = await import('../packages/compiler/src/transform-core.js');
+    const { ARIA_STATES, PROPERTY_MAP } = await import(
+        '../packages/compiler/src/transform-core.js'
+    );
     const { SZ_CAPABILITIES } = await import(
         '../packages/compiler/src/sz-capabilities.generated.js'
     );
+    const { SERVED_STATE_VARIANTS, STATE_VARIANT_FORMS } = await import(
+        '../packages/compiler/src/state-variants.generated.js'
+    );
+    // The HTML attributes the table leaves out are served bare by the pin (its
+    // generator fails otherwise), so a version that does not serve one differs.
+    const htmlOnly = htmlOnlyStateNames(ARIA_STATES, HTML_STATE_ATTRIBUTES);
+    const stateNames = [...Object.keys(STATE_VARIANT_FORMS), ...htmlOnly];
+    const pinnedStates = [...SERVED_STATE_VARIANTS, ...htmlOnly];
     const { lowerEveryCase } = await import(
         '../packages/tailwind-oracle/tests/sz-capability-cases.js'
     );
@@ -463,6 +482,11 @@ async function main() {
             table: tableFindings(PROPERTY_MAP, SZ_CAPABILITIES, rows, prefix =>
                 existing.has(prefix),
             ),
+            variant: stateVariantDifferences(
+                servedStateVariants(stateNames, oracle.findDead),
+                pinnedStates,
+                stateNames,
+            ),
             timing: { install: t1 - t0, ask: performance.now() - t1, cached },
         });
     }
@@ -477,6 +501,7 @@ async function main() {
                     version === pin ? [] : deadBeyondPin(ids, served.get(version), served.get(pin)),
                 spelling: perVersion.get(version).spelling,
                 table: perVersion.get(version).table,
+                variant: perVersion.get(version).variant,
             },
         ]),
     );

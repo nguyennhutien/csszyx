@@ -249,6 +249,7 @@ jobs:
               - 'packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json'
               - 'packages/unplugin/src/merge-signature.ts'
               - 'scripts/gen-sz-capabilities.mjs'
+              - 'scripts/gen-state-variants.mjs'
               - 'scripts/check-tailwind-versions.mjs'
               - 'scripts/check-tailwind-versions.test.mjs'
               - '.github/workflows/ci.yml'

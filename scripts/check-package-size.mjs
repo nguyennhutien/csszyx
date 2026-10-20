@@ -526,12 +526,15 @@ export const SIZE_BUDGETS = [
     // `options-object-required`, `sz-attribute-syntax`) carry the registry's
     // words, help and note included, where they threw a one-line sentence,
     // and the error class came with them. The production one measured 16,069
-    // (-28) the same day.
+    // (-28) the same day. Raised again to 25,400 on 2026-10-20, measured 25,114
+    // (+319): `unserved-variant` prints only in Node, but its gate reads
+    // `typeof window`, which no bundler folds, so the table (84), the words
+    // (120) and the report (~109) ride along, as every Node-only line does.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 25_100,
+        maxGzipBytes: 25_400,
     },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry

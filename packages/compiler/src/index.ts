@@ -99,6 +99,15 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
+/**
+ * The form `unserved-variant` names an ARIA state in, for the build and
+ * `csszyx check`, which ask the project's Tailwind whether it is served.
+ *
+ * @internal Shared by csszyx's own packages; not a stable API. Here rather
+ * than in `./internal` because the table shares the lowering's chunk, which
+ * the root loads already.
+ */
+export { type StateVariantForm, stateVariantForm } from './state-variants.js';
 export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,

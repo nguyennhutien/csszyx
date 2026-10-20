@@ -421,3 +421,100 @@ describe('csszyx check — a sign this project serves no negative of', () => {
         expect(process.exitCode).not.toBe(1);
     });
 });
+
+describe('csszyx check — a variant the project does not serve', () => {
+    /**
+     * Run the command with `--json` and return its findings.
+     *
+     * @param cwd - Project root.
+     * @param rule - The `--rule` selection, when given.
+     * @returns The findings.
+     */
+    async function findingsFor(
+        cwd: string,
+        rule?: string[],
+    ): Promise<Array<Record<string, unknown>>> {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd, json: true, rule });
+        return JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+    }
+
+    const STATES =
+        'export const A = () => <div sz={{ hidden: { p: 4 }, hovr: { p: 4 }, checked: { p: 2 }, aria: { expanded: { p: 1 } }, md: { expanded: { m: 1 } } }} />;';
+
+    it('names the variant, by the project’s Tailwind, once per class', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': STATES,
+        });
+        const findings = (await findingsFor(cwd)).filter(entry => entry.rule === 'dead-class');
+
+        // `checked:p-2` and `aria-expanded:p-1` are served, and not named.
+        expect(findings).toEqual([
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                file: 'src/A.tsx',
+                level: 'error',
+                args: { form: 'attribute-or-aria', variant: 'hidden', className: 'hidden:p-4' },
+                message: expect.stringContaining('`hidden:p-4`'),
+                help: expect.stringContaining("`{ '[hidden]': { … } }`"),
+                url: 'https://csszyx.com/e/unserved-variant',
+            }),
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                args: { form: 'unknown', variant: 'hovr', className: 'hovr:p-4' },
+                help: 'check the spelling of `hovr`.',
+                note: expect.stringContaining('@custom-variant'),
+            }),
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                args: { form: 'aria', variant: 'expanded', className: 'md:expanded:m-1' },
+            }),
+        ]);
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('lists them apart from the classes that produce no CSS', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ hidden: { p: 4 }, break: 'bogus' }} />;",
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd });
+        const report = stripVTControlCharacters(
+            log.mock.calls.map(call => call.join(' ')).join('\n'),
+        );
+
+        expect(report).toMatch(
+            /Variants this project's Tailwind does not serve:\n.*hidden:p-4 +src\/A\.tsx/,
+        );
+        expect(report).not.toMatch(/Classes that produce no CSS:\n(.*\n)*.*hidden:p-4 /);
+        expect(report).toContain('break-bogus');
+    });
+
+    it('runs the pass for --rule unserved-variant alone', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ hidden: { p: 4 }, break: 'bogus' }} />;",
+        });
+        const findings = await findingsFor(cwd, ['unserved-variant']);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([
+            expect.objectContaining({ kind: 'unserved-variant', file: 'src/A.tsx' }),
+        ]);
+    });
+
+    it('passes a project that defines the variant with @custom-variant', async () => {
+        const cwd = tailwindProject({
+            'src/app.css':
+                '@import "tailwindcss";\n@custom-variant expanded (&[aria-expanded=true]);',
+            'src/A.tsx': 'export const A = () => <div sz={{ expanded: { p: 4 } }} />;',
+        });
+        const findings = await findingsFor(cwd);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([]);
+        expect(process.exitCode).not.toBe(1);
+    });
+});

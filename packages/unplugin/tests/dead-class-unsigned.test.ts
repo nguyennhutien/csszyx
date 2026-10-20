@@ -95,14 +95,18 @@ describe('findDeadSzClasses', () => {
             ['md:-p-3', 'src/A.tsx'],
         ]);
         // `md:p-3` is served, so the sign is the thing to name there; the
-        // others are dead unsigned too, and only under their variants.
+        // others are dead unsigned too, and with any one variant dropped, as
+        // Tailwind answers: no utility `p-medium` or `p-wide` under any name.
         const model = modelServingAllBut([
             '-p-medium',
             'p-medium',
             'hover:!-p-medium',
             'hover:!p-medium',
+            '!-p-medium',
             'tw:md:-p-wide',
             'tw:md:p-wide',
+            'md:-p-wide',
+            'tw:-p-wide',
             'md:-p-3',
         ]);
         expect(findDeadSzClasses(model, origins)).toEqual([

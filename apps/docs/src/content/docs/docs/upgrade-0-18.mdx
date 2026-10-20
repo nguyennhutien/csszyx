@@ -85,6 +85,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
+| [A variant Tailwind does not serve](#a-variant-your-tailwind-does-not-serve-is-reported) | `[csszyx] unserved-variant:` on `{ hidden: { p: 4 } }` | the build, `csszyx check`, dev runtime | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
 | [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
@@ -1320,6 +1321,44 @@ negative one. A project that serves the negative on purpose defines it with
 findings, and `rules['unsigned-value']` of this one alone.
 
 **Tooling.** `csszyx check --rule unsigned-value`. `csszyx migrate` does not
+rewrite it.
+
+## A variant your Tailwind does not serve is reported
+
+A key holding an object is a variant, so `{ hidden: { p: 4 } }` writes
+`hidden:p-4`. Tailwind serves a bare variant for some states (`checked:`,
+`disabled:`, `open:`) and not for others (`hidden:`, `readonly:`,
+`expanded:`), and the class it does not serve styles nothing. 0.17's build
+wrote it without a word, and `csszyx check` listed it as a plain `dead-class`.
+Both now name the variant:
+
+```text
+[csszyx] unserved-variant: src/Card.tsx:3:22
+  `hidden:p-4` produces no CSS: Tailwind serves no `hidden` variant.
+  help: write `{ '[hidden]': { … } }` to match the HTML attribute, or `aria: { hidden: { … } }` for the ARIA state.
+  note: the class is still emitted, and it styles nothing unless the project defines `hidden` with `@custom-variant`.
+  docs: https://csszyx.com/e/unserved-variant
+```
+
+**You are affected** when an `sz` object puts an HTML attribute, an ARIA state
+or a misspelt variant name alone as a key: `{ hidden: { … } }`,
+`{ expanded: { … } }`, `{ hovr: { … } }`.
+
+**What you see.** The line above, where the build prints
+[`dead-class`](#the-build-names-sz-classes-that-produce-no-css), and in
+`csszyx check` under `Variants this project's Tailwind does not serve:`. It is a
+kind of `dead-class`, at `error` under both presets. Both ask your Tailwind:
+the line comes only when the class with that one variant dropped is served. In
+development the runtime prints it too, on Node and SSR, for an ARIA state the
+Tailwind csszyx is built with does not serve, and never for another name.
+
+**The edit.** Write the attribute in brackets (`{ '[hidden]': { p: 4 } }` →
+`[hidden]:p-4`) or the ARIA state under `aria` (`{ aria: { expanded: { p: 4 } } }`
+→ `aria-expanded:p-4`). A project that means its own variant defines it with
+`@custom-variant` and hears nothing. `rules['dead-class']` sets the level of
+every dead-class finding, and `rules['unserved-variant']` of this one alone.
+
+**Tooling.** `csszyx check --rule unserved-variant`. `csszyx migrate` does not
 rewrite it.
 
 ## A runtime value under a variant key is reported
