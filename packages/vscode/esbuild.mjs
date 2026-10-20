@@ -23,6 +23,11 @@ const options = {
     // Tree-shake aggressively — only PROPERTY_MAP/transform/etc. survive
     treeShaking: true,
     minify: false,
+    // The compiler's development warnings print to the extension host's log,
+    // which no user reads, while the extension reports the same keys as
+    // editor diagnostics of its own; production folds them out, with the
+    // registry templates they render.
+    define: { 'process.env.NODE_ENV': '"production"' },
     sourcemap: true,
     logLevel: 'info',
     // Resolve .js imports to .ts when the .ts file exists.

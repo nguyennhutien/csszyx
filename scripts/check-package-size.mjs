@@ -455,11 +455,17 @@ export const SIZE_BUDGETS = [
     // leaf modules (+186) and smaller steps are the rest (per-commit deltas
     // from a worktree build, whose module path comments differ, so only the
     // deltas carry over). Budget the usual ~300 above.
+    //
+    // 49,180 on 2026-10-20, lowered from 51,500: the compiler's browser lane
+    // now renders its development warnings from the registry, and the
+    // extension, built without `NODE_ENV`, carried those templates (53,138)
+    // to print warnings into the extension host's log. `esbuild.mjs` now
+    // builds it as production, which folds them out.
     {
         name: '@csszyx/vscode extension bundle',
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
-        maxGzipBytes: 51_500,
+        maxGzipBytes: 49_500,
     },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry
