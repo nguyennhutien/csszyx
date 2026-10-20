@@ -171,7 +171,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": false
+                "production": [
+                    "sibling-group"
+                ]
             }
         },
         "position": "site",
@@ -1145,13 +1147,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             },
             "value": {
-                "type": "string",
-                "optional": true
+                "type": "string"
             }
         },
         "gaps": [
             "engine"
-        ]
+        ],
+        "text": "`{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.",
+        "help": "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`."
     },
     {
         "id": "theme-collision",
@@ -1165,7 +1168,20 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "classes",
+            "utility-keyword",
+            "value"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "classes",
+                    "utility-keyword",
+                    "value"
+                ]
+            },
             "name": {
                 "type": "string"
             },
@@ -1173,16 +1189,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string[]",
                 "joiner": ", ",
                 "optional": true
-            },
-            "builtInKind": {
-                "type": [
-                    "enum",
-                    "utility-keyword",
-                    "value"
-                ],
-                "optional": true
             }
-        }
+        },
+        "text": {
+            "classes": "Theme token `{name}` also names `{classes}`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.",
+            "utility-keyword": "Theme token `{name}` shadows a built-in utility keyword, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.",
+            "value": "Theme token `{name}` shadows a built-in value, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's."
+        },
+        "help": "rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.",
+        "note": "a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only."
     },
     {
         "id": "merge-covered-key",
@@ -1258,6 +1273,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true,
                 "opaque": true
             }
+        },
+        "text": {
+            "json": "The recovery manifest on this page is not valid JSON, so it is ignored.",
+            "format": "This recovery manifest is missing `buildId`, `checksum` or `tokens`, so `parseManifest` cannot read it."
+        },
+        "help": {
+            "json": "serve the HTML as the build wrote it; the manifest is the `__SZ_RECOVERY_MANIFEST__` script the build adds to the page.",
+            "format": "pass the manifest the build wrote, unchanged."
+        },
+        "note": {
+            "json": "the browser reported: {error}."
         }
     },
     {
@@ -1286,6 +1312,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true,
                 "opaque": true
             }
+        },
+        "text": {
+            "schema": "The mangle map on this page is not a plain map of class names to class names, so it is ignored.",
+            "json": "The mangle map on this page is not valid JSON, so it is ignored."
+        },
+        "help": "serve the HTML as the build wrote it; a map that does not read means the page was changed or cut short after the build.",
+        "note": {
+            "json": "the browser reported: {error}."
         }
     },
     {
@@ -1297,7 +1331,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "The mangle census on this page is not a valid map, so nothing was verified.",
+        "help": "serve the HTML as the build wrote it; a census that does not read means the page was changed or cut short after the build."
     },
     {
         "id": "mangle-checksum-mismatch",
@@ -1315,7 +1351,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "expected": {
                 "type": "string"
             }
-        }
+        },
+        "text": "The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.",
+        "help": "deploy the HTML and the bundle from one build.",
+        "note": "this detects a damaged or stale page, not an attacker; the checksum is not signed."
     },
     {
         "id": "mangle-map-unavailable",
@@ -1330,7 +1369,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "checksum": {
                 "type": "string"
             }
-        }
+        },
+        "text": "This page carries the checksum `{checksum}` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.",
+        "help": "turn `production.hydrationCensus` on when the build sets `production.mangleVars` without `production.mangle`, which ships no map; otherwise, load the bundle that registers the map on this page."
     },
     {
         "id": "web-crypto-unavailable",
@@ -1342,7 +1383,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "error": {}
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.",
+        "help": "serve the page over HTTPS, or from `localhost`.",
+        "note": "`crypto.subtle` exists only in a secure context."
     },
     {
         "id": "hydration-aborted",
@@ -1353,14 +1397,43 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
+        "forms": [
+            "checksum-mismatch",
+            "map-missing",
+            "invalid-token"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "checksum-mismatch",
+                    "map-missing",
+                    "invalid-token"
+                ]
+            },
             "tagName": {
                 "type": "string"
             },
             "message": {
                 "type": "string",
+                "optional": true,
                 "opaque": true
             }
+        },
+        "text": {
+            "checksum-mismatch": "The HTML, the bundle and the recovery manifest do not all come from one build, so csszyx aborted hydration at `<{tagName}>`.",
+            "map-missing": "Your code called `abortHydration` with `map_missing`, so csszyx aborted hydration at `<{tagName}>`.",
+            "invalid-token": "Your code called `abortHydration` with `invalid_token`, so csszyx aborted hydration at `<{tagName}>`."
+        },
+        "help": {
+            "checksum-mismatch": "deploy the HTML, the bundle and the manifest from one build.",
+            "map-missing": "serve the page with the mangle map its build wrote.",
+            "invalid-token": "deploy the HTML and the recovery manifest from one build."
+        },
+        "note": {
+            "checksum-mismatch": "csszyx only marks the element with `data-sz-hydration-aborted` and `data-sz-interactive=\"false\"`; nothing skips hydrating it unless your code checks `isHydrationAborted`.",
+            "map-missing": "the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`.",
+            "invalid-token": "the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`."
         }
     },
     {
@@ -1372,14 +1445,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.",
+        "help": "add `szRecover=\"csr\"` to recover it, or `szRecover=\"dev-only\"` to recover it in development only."
     },
     {
         "id": "csr-recovery-dev-only",
         "summary": "An szRecover=\"dev-only\" element in a production build, where its recovery is off.",
         "surfaces": {
             "runtime": {
-                "production": true
+                "production": [
+                    "runtime"
+                ]
             }
         },
         "position": "none",
@@ -1404,6 +1481,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "joiner": ", ",
                 "optional": true
             }
+        },
+        "text": {
+            "runtime": "This element has `szRecover=\"dev-only\"`, which is off in production, so its hydration mismatch is not recovered.",
+            "stripped": "The production manifest leaves out {count} `szRecover=\"dev-only\"` token(s), so recovery for those elements is off in production."
+        },
+        "help": {
+            "runtime": "fix the mismatch, or use `szRecover=\"csr\"` where recovery must run in production.",
+            "stripped": "use `szRecover=\"csr\"` on any of them whose recovery must run in production."
+        },
+        "note": {
+            "stripped": "this is expected in a production build; the tokens are at {sites}."
         }
     },
     {
@@ -1415,7 +1503,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "A hydration mismatch on this element was recovered by rendering it on the client.",
+        "help": "fix the cause of the mismatch; with `szRecover=\"csr\"`, this recovery also runs in production."
     },
     {
         "id": "merge-table-format-skew",
@@ -1429,8 +1519,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "format": {
                 "type": "number"
+            },
+            "expected": {
+                "type": "number"
             }
-        }
+        },
+        "text": "The merge table was written in format {format}, and this runtime reads format {expected}, so `szcn` ignores the table and removes only exact repeats.",
+        "help": "run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed."
     },
     {
         "id": "merge-table-missing",
@@ -1441,7 +1536,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
+        "help": "use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.",
+        "note": "esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table."
     },
     {
         "id": "uncompiled-sz",
@@ -1452,7 +1550,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.",
+        "help": "add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.",
+        "note": "csszyx dropped the object, so the DOM does not get `sz=\"[object Object]\"`."
     },
     {
         "id": "register-szcn-groups-ignored",
@@ -1463,7 +1564,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.",
+        "help": "declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.",
+        "note": "`szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats."
     },
     {
         "id": "theme-token-ambiguous",
@@ -1489,7 +1593,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "name": {
                 "type": "string"
             }
-        }
+        },
+        "text": {
+            "color-text-size": "Theme token `{name}` is defined as both a colour and a text size, so `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for only one of them.",
+            "font-family-weight": "Theme token `{name}` is defined as both a font family and a font weight, so `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for only one of them."
+        },
+        "help": "rename one of the tokens.",
+        "note": "until then the token belongs to neither, so `szcn` keeps both classes instead of merging them."
     },
     {
         "id": "split-box-selector-invalid",
@@ -1530,7 +1640,30 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string[]",
                 "joiner": ", ",
                 "optional": true
+            },
+            "properties": {
+                "type": "string[]",
+                "joiner": ", ",
+                "optional": true
+            },
+            "name": {
+                "type": "string",
+                "optional": true
             }
+        },
+        "text": {
+            "array": "`has`, `pick` and `omit` take one selector, so an array matches nothing.",
+            "empty": "The empty selector `{}` names no category, so it matches nothing.",
+            "multi": "An object selector names one category and value, so `{ {categories} }` can never match a single token.",
+            "property": "`{property}` is not a property csszyx tells apart, so `{selector}` matches nothing.",
+            "sz-qualified": "`{selector}` names a property, and `hasSz`, `pickSz` and `omitSz` match an sz key by category only, so it matches nothing."
+        },
+        "help": {
+            "array": "pass the selectors one at a time; `splitBox` takes a list in `inner` and `outer`.",
+            "empty": "name a category and a value, such as `{ overflow: \"hidden\" }`.",
+            "multi": "pass one selector per category.",
+            "property": "use one of: {properties}; `classify('<a class>')` shows the one a class carries.",
+            "sz-qualified": "pass `{name}`."
         }
     },
     {
@@ -1558,7 +1691,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "name": {
                 "type": "string"
+            },
+            "hint": {
+                "type": "string",
+                "optional": true
             }
+        },
+        "text": "`{name}` is not a category or class prefix csszyx knows, so it matches nothing.",
+        "help": {
+            "no-hint": "call `classify('<a class>')` to see the category a class belongs to.",
+            "hint": "use the category `{hint}`.",
+            "property-hint": "use the category `{hint}`, or `{hint}:{name}` to match that property only."
         }
     },
     {
@@ -1580,8 +1723,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "inner",
                     "outer"
                 ]
+            },
+            "base": {
+                "type": "string"
             }
-        }
+        },
+        "text": "A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.",
+        "help": "write `{ {side}: ['{base}'] }`; it places every variant of `{base}`."
     },
     {
         "id": "split-box-peer-on-frame",
@@ -1595,8 +1743,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "token": {
                 "type": "string"
+            },
+            "base": {
+                "type": "string"
+            },
+            "reaching": {
+                "type": "string"
             }
-        }
+        },
+        "text": "`splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.",
+        "help": "target the content from the frame instead: `{reaching}`."
     },
     {
         "id": "split-box-unclassified",
@@ -1629,7 +1785,22 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "frame",
                     "content"
                 ]
+            },
+            "side": {
+                "type": [
+                    "enum",
+                    "inner",
+                    "outer"
+                ]
             }
+        },
+        "text": {
+            "class": "`{token}` is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify.",
+            "raw-css": "The `css` key holds raw CSS `splitBoxSz` does not classify, so it went to the {node} node with everything else it could not classify."
+        },
+        "help": {
+            "class": "if it is a custom `@utility` that declares properties for both nodes, place it yourself with `{ {side}: ['{token}'] }`; csszyx cannot split it, and no side is correct.",
+            "raw-css": "if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`."
         }
     },
     {
@@ -1645,7 +1816,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "scroller": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.",
+        "help": "give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content."
     },
     {
         "id": "split-box-unclipped-corners",
@@ -1656,7 +1829,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.",
+        "help": "add `overflow-hidden` to the frame."
     },
     {
         "id": "split-box-hidden-content",
@@ -1671,7 +1846,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "hidden": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.",
+        "help": "pass `{ outer: ['hidden'] }` if the whole box should disappear."
     },
     {
         "id": "szv-config-invalid",
@@ -1713,6 +1890,22 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "got": {
                 "type": "string"
             }
+        },
+        "text": {
+            "config": "The `szv` config is not an object (got {got}), so `szv` returns an empty sz object.",
+            "base": "`base` in the `szv` config is not an sz object (got {got}), so `szv` ignores it.",
+            "variants": "`variants` in the `szv` config is not an object (got {got}), so `szv` returns only `base`.",
+            "default-variants": "`defaultVariants` in the `szv` config is not an object (got {got}), so no variant gets a default value.",
+            "dimension": "`variants.{dimension}` is not an object of values (got {got}), so it adds no classes.",
+            "variant-value": "`variants.{dimension}.{token}` is not an sz object (got {got}), so it is ignored."
+        },
+        "help": {
+            "config": "pass an object such as `{ base: { … }, variants: { … } }`.",
+            "base": "make `base` an sz object, such as `{ p: 4 }`.",
+            "variants": "make `variants` an object of dimensions, such as `{ size: { sm: { p: 2 } } }`.",
+            "default-variants": "make `defaultVariants` an object of values, such as `{ size: 'sm' }`.",
+            "dimension": "make `variants.{dimension}` an object that maps each value to an sz object.",
+            "variant-value": "make it an sz object, such as `{ p: 4 }`, or `null` to add nothing."
         }
     },
     {
@@ -1748,6 +1941,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string",
                 "optional": true
             }
+        },
+        "text": {
+            "value": "This `sz` value nests deeper than {maxDepth} levels, so csszyx rejects it.",
+            "szv-config": "`{where}` in the `szv` config nests deeper than {maxDepth} levels, so `szv` rejects it at render."
+        },
+        "help": {
+            "value": "check what reaches the `sz` prop; nesting this deep usually means untrusted or looping data.",
+            "szv-config": "flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data."
         }
     },
     {
@@ -1766,7 +1967,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.",
+        "help": "remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`."
     },
     {
         "id": "szv-unknown-variant",
@@ -1781,7 +1984,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             }
-        }
+        },
+        "text": "The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.",
+        "help": "declare `variants.{key}`, or remove `{key}` from the selection."
     },
     {
         "id": "szv-unknown-variant-value",
@@ -1798,8 +2003,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "value": {
                 "type": "string"
+            },
+            "allowed": {
+                "type": "string[]",
+                "joiner": ", "
             }
-        }
+        },
+        "text": "The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.",
+        "help": "use one of: {allowed}, or add `{value}` to `variants.{key}`."
     },
     {
         "id": "szv-object-as-string",
@@ -1810,7 +2021,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.",
+        "help": "pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.",
+        "note": "a development build renders an empty string in its place."
     },
     {
         "id": "dynamic-injection-growth",
@@ -1821,7 +2035,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "none",
-        "args": {}
+        "args": {
+            "count": {
+                "type": "number"
+            }
+        },
+        "text": "`dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.",
+        "help": "drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead."
     },
     {
         "id": "dynamic-unsafe-arbitrary",
@@ -1836,7 +2056,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "utility": {
                 "type": "string"
             }
-        }
+        },
+        "text": "The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.",
+        "help": "keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.",
+        "note": "only the first dropped value of a session is reported."
     },
     {
         "id": "dynamic-non-boolean",
@@ -1854,7 +2077,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "valueType": {
                 "type": "string"
             }
-        }
+        },
+        "text": "The runtime value of `{key}` has type `{valueType}`, and only a boolean toggles this class, so it is omitted.",
+        "help": "pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object."
     },
     {
         "id": "dynamic-unresolvable",
@@ -1872,30 +2097,22 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "valueType": {
                 "type": "string"
             }
-        }
+        },
+        "text": "The runtime value of `{key}` has type `{valueType}`, which cannot be resolved to CSS, so the property is omitted.",
+        "help": "pass a number, a token or a CSS length; for a responsive object, use `dynamic()`."
     },
     {
         "id": "dev-warnings-partial",
-        "summary": "Development warnings that cover only the files a page loads; csszyx check scans all.",
+        "summary": "A development warning with no source location; csszyx check names the file and key.",
         "surfaces": {
             "runtime": {
                 "production": false
             }
         },
         "position": "none",
-        "forms": [
-            "located",
-            "unlocated"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "located",
-                    "unlocated"
-                ]
-            }
-        }
+        "args": {},
+        "text": "The `sz` key warning above has no source location, so it does not name the file that triggered it.",
+        "help": "run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line."
     },
     {
         "id": "diagnostics-capped",
@@ -1929,8 +2146,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true
             }
         },
+        "text": {
+            "dev-warnings": "This session has printed {count} distinct development warnings, so further ones are suppressed.",
+            "unknown-keys": "This process has reported {count} distinct unknown sz keys, so further ones are suppressed."
+        },
         "help": {
-            "per-id": "`csszyx check --rule {id}` lists every one."
+            "per-id": "`csszyx check --rule {id}` lists every one.",
+            "dev-warnings": "look above for one warning repeating with different values; a className built from data is the usual cause.",
+            "unknown-keys": "look above for one key repeating with different names; sz keys built from data are the usual cause."
         }
     },
     {
@@ -1948,10 +2171,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             },
             "char": {
-                "type": "string",
-                "optional": true
+                "type": "string"
+            },
+            "index": {
+                "type": "number"
             }
-        }
+        },
+        "text": "The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.",
+        "help": "write it as an object literal with commas between keys, such as `sz=\"p: 4, w: '1/2'\"`; quote a value that holds `/` or `#`."
     },
     {
         "id": "options-object-required",
@@ -1972,6 +2199,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "csszyx-turbopack"
                 ]
             }
+        },
+        "text": {
+            "transform": "`transform` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
+            "csszyx-turbopack": "`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument or an option it does not know is refused."
+        },
+        "help": {
+            "transform": "pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.",
+            "csszyx-turbopack": "write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`."
         }
     },
     {
@@ -1981,13 +2216,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "error": {}
         },
         "position": "none",
-        "args": {}
+        "args": {},
+        "text": "A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.",
+        "help": "add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime."
     },
     {
         "id": "lite-sz-object",
         "summary": "An sz object passed to a lite-runtime helper, which cannot lower objects.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "production": false
+            }
         },
         "position": "none",
         "args": {
@@ -1997,20 +2236,28 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "received": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.",
+        "help": "write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.",
+        "note": "a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`."
     },
     {
         "id": "split-box-sz-string",
         "summary": "A class string passed to splitBoxSz, which takes sz objects.",
         "surfaces": {
-            "error": {}
+            "error": {
+                "production": false
+            }
         },
         "position": "none",
         "args": {
             "value": {
                 "type": "string"
             }
-        }
+        },
+        "text": "`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.",
+        "help": "use `splitBox()` for a class string.",
+        "note": "a production build drops the string instead of throwing."
     },
     {
         "id": "runtime-prefix-conflict",
@@ -2019,16 +2266,31 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "error": {}
         },
         "position": "none",
+        "forms": [
+            "prefixes",
+            "unprefixed"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "prefixes",
+                    "unprefixed"
+                ]
+            },
             "first": {
-                "type": "string",
-                "optional": true
+                "type": "string"
             },
             "second": {
                 "type": "string",
                 "optional": true
             }
-        }
+        },
+        "text": {
+            "prefixes": "Two builds sharing one JavaScript runtime registered the Tailwind prefixes `{first}` and `{second}`, so csszyx cannot tell which prefix their classes take.",
+            "unprefixed": "Two builds sharing one JavaScript runtime registered different Tailwind prefixes, `{first}` and none, so csszyx cannot tell which prefix their classes take."
+        },
+        "help": "keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix."
     },
     {
         "id": "dynamic-manifest-unreachable",
@@ -2041,7 +2303,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "status": {
                 "type": "number"
             }
-        }
+        },
+        "text": "The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.",
+        "help": "serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.",
+        "note": "the error is caught and nothing is printed; csszyx does not fetch it again this session until you call `resetManifest`."
     },
     {
         "id": "native-engine-unavailable",
