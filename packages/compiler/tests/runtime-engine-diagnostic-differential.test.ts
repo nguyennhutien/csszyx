@@ -38,6 +38,7 @@ import {
     type SzObject,
     transform,
 } from '../src/transform-core.js';
+import { settleNativeLane } from './helpers/native-lane.js';
 import { szBodyOf, szCodeOf } from './helpers/sz-console-line.js';
 
 /** One engine artifact's transform that leaves its diagnostics unrendered. */
@@ -45,8 +46,9 @@ type Unrendered = (source: string, filename: string) => UnrenderedTransformResul
 
 /**
  * The native addon, when it loads and answers for this engine version. A
- * stale addon (built from an older engine) refuses every call; the suite then
- * runs on wasm and says why, instead of failing on a local build step.
+ * stale addon (built from an older engine) refuses every call. Locally the
+ * suite then runs on wasm and says why; under CI, or with
+ * `CSSZYX_REQUIRE_NATIVE=1`, it fails ({@link settleNativeLane}).
  *
  * @returns The lane, or the reason it is skipped.
  */
@@ -60,15 +62,12 @@ function nativeLane(): Unrendered | string {
     }
 }
 
-const NATIVE = nativeLane();
-if (typeof NATIVE === 'string') {
-    console.info(`runtime/engine differential: native lane skipped — ${NATIVE}`);
-}
+const NATIVE = settleNativeLane('runtime/engine differential', nativeLane(), process.env);
 
 /** The engine artifacts this run compares against. */
 const ENGINES: ReadonlyArray<readonly [string, Unrendered]> = [
     ['wasm', transformWasmUnrendered],
-    ...(typeof NATIVE === 'string' ? [] : ([['native', NATIVE]] as const)),
+    ...(NATIVE === undefined ? [] : ([['native', NATIVE]] as const)),
 ];
 
 /** The ids both lanes report, each with the forms it can print. */

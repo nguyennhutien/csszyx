@@ -54,7 +54,7 @@ const outcome = input => {
 let strayInputsEnd = false;
 
 /** The args of the `sz-attribute-syntax` error `{ w: 1/2 }` throws. */
-const ARGS = { input: '{ w: 1/2 }', char: '/', index: 6 };
+const ARGS = { form: 'char', input: '{ w: 1/2 }', char: '/', index: 6 };
 
 afterEach(() => {
     process.env.NODE_ENV = 'test';
@@ -67,14 +67,14 @@ afterEach(() => {
  */
 function thrownBy(input: string): SyntaxError & {
     code: string;
-    args: { input: string; char: string; index: number };
+    args: { form: string; input: string; char?: string; index: number };
 } {
     try {
         parseSzAttribute(input);
     } catch (error) {
         return error as SyntaxError & {
             code: string;
-            args: { input: string; char: string; index: number };
+            args: { form: string; input: string; char?: string; index: number };
         };
     }
     throw new Error(`expected ${input} to throw`);
@@ -137,6 +137,23 @@ describe('parseSzAttribute', () => {
             ),
         );
         expect(thrownBy('{ list: [1, /] }').args).toMatchObject({ char: '/', index: 12 });
+    });
+
+    it('names where an attribute ends before it is complete, with no character to name', () => {
+        process.env.NODE_ENV = 'development';
+        // `[` reads as a key that never reaches its `:`; the end is after
+        // the attribute's last character, the trailing space aside.
+        const error = thrownBy(' [ ');
+        expect(error).toBeInstanceOf(SyntaxError);
+        expect(error.args).toEqual({ form: 'end', input: ' [ ', index: 2 });
+        expect(error.message).toBe(
+            runtimeMessage(
+                'sz-attribute-syntax',
+                'The `sz` attribute ` [ ` ends at offset 2 before it is complete, so the element gets no classes from it.',
+                'help: write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+            ),
+        );
+        expect(thrownBy('{ p').args).toEqual({ form: 'end', input: '{ p', index: 3 });
     });
 
     it('is the compact line in production', () => {

@@ -8,19 +8,13 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
     Record<'unknown-key' | 'canonical-key' | 'removed-key' | 'numeric-key', SzDiagnosticTemplate>
 > = {
     "unknown-key": {
-        "args": {
-            "key": {},
-            "suggestion": {}
-        },
+        "args": "key suggestion?",
         "text": "`{key}` is not an sz property.",
         "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
     },
     "canonical-key": {
-        "args": {
-            "form": {},
-            "key": {}
-        },
+        "args": "form key",
         "text": {
             "alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
             "font": "`{key}` is not an sz key, and nothing is emitted for it.",
@@ -33,11 +27,7 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
         }
     },
     "removed-key": {
-        "args": {
-            "form": {},
-            "key": {},
-            "replacement": {}
-        },
+        "args": "form key replacement?",
         "text": {
             "runtime-alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.",
             "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
@@ -54,9 +44,7 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
         }
     },
     "numeric-key": {
-        "args": {
-            "key": {}
-        },
+        "args": "key",
         "text": "`sz` received a numeric key `{key}`, and its value is ignored.",
         "help": "pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
     }

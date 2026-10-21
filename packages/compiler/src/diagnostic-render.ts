@@ -19,7 +19,7 @@
  * @module diagnostic-render
  */
 
-import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
+import type { SzDiagnosticArgs, SzDiagnosticId } from './diagnostic-codes.generated.js';
 import {
     SZ_DIAGNOSTIC_RENDER_SPECS,
     type SzDiagnosticRenderSpec,
@@ -71,6 +71,16 @@ export interface RenderableDiagnostic {
     line?: number;
     column?: number;
 }
+
+/**
+ * A diagnostic of one id with the args the registry types for it, for a
+ * site that names its id: an arg left out or of another type fails to
+ * compile, where {@link RenderableDiagnostic} takes any object.
+ */
+export type SzTypedDiagnostic<C extends SzDiagnosticId> = RenderableDiagnostic & {
+    code: C;
+    args: SzDiagnosticArgs[C];
+};
 
 /** Any live id with its args: what the template renderer reads. */
 export interface IdentifiedDiagnostic {

@@ -212,6 +212,14 @@ export type NativeUnavailableArgs =
     | { readonly form: 'no-platform-package'; readonly platform: string }
     | { readonly form: 'not-installed' | 'stale-binding'; readonly packageName: string }
     | {
+          readonly form: 'stale-binding-versions';
+          readonly packageName: string;
+          /** The platform package's version. */
+          readonly nativeVersion: string;
+          /** The installed `@csszyx/core`'s version. */
+          readonly coreVersion: string;
+      }
+    | {
           readonly form: 'missing-export';
           readonly packageName: string;
           readonly exportName: string;

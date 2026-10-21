@@ -1020,7 +1020,7 @@ function generateNextConfig(): string {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack(config) {
-    config.plugins.unshift(...csszyxWebpack());
+    config.plugins.unshift(csszyxWebpack());
     return config;
   },
 };
@@ -1122,14 +1122,6 @@ function svelteKitConfigLines(): string {
  * @returns Instruction snippet for next.config.js.
  */
 function generateNextPluginInstructions(): string {
-    return `
-  const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
-
-  module.exports = {
-    webpack(config) {
-      config.plugins.unshift(...csszyxWebpack());
-      return config;
-    },
-  };
-`;
+    // The file init writes when there is none, so the two cannot disagree.
+    return `\n${generateNextConfig().replace(/^(?=.)/gm, '  ')}`;
 }

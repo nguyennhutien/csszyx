@@ -8,6 +8,7 @@ import {
     type CssVariableMangleValue,
     diagnosticPath,
     type SourceTransformResult,
+    type SzDiagnosticArgs,
     sortStrings,
     type TokenData,
     type TransformSourceCodeOptions,
@@ -163,7 +164,7 @@ import {
     registerRuntimeClassPrefix,
     runtimeHelperGroupsFromUsage,
 } from './next-runtime-injection.js';
-import { samePath } from './path-case.js';
+import { projectRelative as relativeToRoot, samePath } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import { isReadableProviderFile } from './provider-file.js';
 import {
@@ -986,7 +987,7 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string[
     const { collisions, orphans, selectorMatches = [] } = hazards;
     const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
     const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
-    const records: object[] = [];
+    const records: SzDiagnosticArgs['mangle-hybrid-hazard'][] = [];
     for (const [form, names] of [
         ['collision', collisions],
         ['orphan', orphans],
@@ -2258,9 +2259,17 @@ export function themeTypesTsconfigGap(rootDir: string): ThemeTypesTsconfigGap | 
     if (read.some(file => (readTsconfig(file) as string).includes('.csszyx'))) return null;
     const first = read[0];
     if (first === undefined) return atRoot;
-    const tsconfig = normalizePathSeparators(path.relative(rootDir, first));
+    // Named from the root by the file system's own rule: on one that folds
+    // case, a reference in another spelling of the root is still under it.
+    const tsconfig = relativeToRoot(rootDir, first);
     if (tsconfig.split('/').some(segment => GENERATED_TSCONFIG_DIRS.has(segment))) return atRoot;
-    const up = normalizePathSeparators(path.relative(path.dirname(first), rootDir));
+    // Back up from the config's directory to the root: `include` resolves
+    // from the config that holds it. A config outside the root is walked
+    // from where it is.
+    const outside = tsconfig.startsWith('../') || path.isAbsolute(tsconfig);
+    const up = outside
+        ? normalizePathSeparators(path.relative(path.dirname(first), rootDir))
+        : path.posix.relative(path.posix.dirname(tsconfig), '.');
     return {
         tsconfig,
         includePath: up === '' ? ROOT_THEME_TYPES_INCLUDE : `${up}/.csszyx/theme.d.ts`,
@@ -6247,13 +6256,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * A file path the way the author writes it: relative to the project root,
-     * with forward slashes.
+     * with forward slashes, a root spelled in another case included where the
+     * file system folds case.
      *
      * @param file - Absolute path.
      * @returns The relative name.
      */
     function projectRelative(file: string): string {
-        return path.relative(state.rootDir, file).split(path.sep).join('/');
+        return relativeToRoot(state.rootDir, file);
     }
 
     /**

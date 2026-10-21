@@ -1788,6 +1788,15 @@ const INTERNAL_STACK_FRAME =
     /node_modules|node:internal|@csszyx|packages\/(?:compiler|runtime|dynamic|core|vars)\/(?:dist|src)|\btransform|\bszJoin\b|\b_sz\w*|\bdynamic\b|runtimeSzWarnContext|firstUserStackFrame/;
 
 /**
+ * Frames that are never the user's code on a script-tag page: the CDN
+ * bundles, by file name (`browser.dev.iife.js` from unpkg), since the bundle
+ * compiles from its own DOMContentLoaded and MutationObserver callbacks, and a
+ * built-in, which a V8 stack names with no file (`NodeList.forEach (<anonymous>)`).
+ */
+const CDN_STACK_FRAME = /\/browser(?:\.dev)?\.iife\.js/;
+const BUILTIN_STACK_FRAME = '(<anonymous>)';
+
+/**
  * The first stack frame outside csszyx/runtime/node internals — the user's
  * component or module that passed the offending sz object. Derived from a
  * captured stack (dev-only, called only when a warning fires) rather than React
@@ -1805,7 +1814,12 @@ function firstUserStackFrame(): string | undefined {
     // Line 0 is "Error"; frames follow as "    at <fn> (<loc>)".
     for (const line of stack.split('\n').slice(1)) {
         const trimmed = line.trim();
-        if (!trimmed.startsWith('at ') || INTERNAL_STACK_FRAME.test(trimmed)) {
+        if (
+            !trimmed.startsWith('at ') ||
+            INTERNAL_STACK_FRAME.test(trimmed) ||
+            CDN_STACK_FRAME.test(trimmed) ||
+            trimmed.endsWith(BUILTIN_STACK_FRAME)
+        ) {
             continue;
         }
         return trimmed.slice(3).trim();

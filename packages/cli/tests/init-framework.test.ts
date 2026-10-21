@@ -9,6 +9,7 @@
  * imported `@tailwindcss/vite`, a package the project then did not have.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
@@ -101,6 +102,21 @@ describe('csszyx init --framework', () => {
         // The flag chose it, so init does not claim to have detected it.
         expect(lines.join('\n')).not.toContain('Detected:');
         expect(lines.join('\n')).toContain('Framework: Next.js (App Router) (from `--framework`)');
+    });
+
+    it('writes a next.config.js that loads and adds the csszyx plugin', async () => {
+        printed();
+        const cwd = project(REACT_VITE);
+        await init({ yes: true, cwd, framework: 'nextjs-app' });
+
+        // Run as Node runs it, `@csszyx/unplugin` resolved as the app would.
+        const source = readFileSync(join(cwd, 'next.config.js'), 'utf8');
+        const loaded = { exports: {} as { webpack?: (config: object) => object } };
+        new Function('require', 'module', source)(createRequire(import.meta.url), loaded);
+        const config = { plugins: [] as Array<{ apply?: unknown }> };
+        expect(loaded.exports.webpack?.(config)).toBe(config);
+        expect(config.plugins).toHaveLength(1);
+        expect(typeof config.plugins[0]?.apply).toBe('function');
     });
 
     it('refuses a framework it does not know before asking or installing anything', async () => {

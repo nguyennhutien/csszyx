@@ -20,6 +20,12 @@ const CASES = [
         exportName: 'transformBatch',
     },
     { form: 'stale-binding', packageName: '@csszyx/core-linux-x64-gnu' },
+    {
+        form: 'stale-binding-versions',
+        packageName: '@csszyx/core-linux-x64-gnu',
+        nativeVersion: '0.17.0',
+        coreVersion: '0.18.0',
+    },
 ] as const;
 
 describe('CsszyxNativeUnavailableError words', () => {

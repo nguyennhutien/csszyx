@@ -157,7 +157,14 @@ describe('csszyx/browser standalone runtime', () => {
         await loadRuntime();
 
         expect(errorLog.mock.calls).toEqual([
-            [productionMessage('sz-attribute-syntax', { input: 'w: 1/2', char: '/', index: 4 })],
+            [
+                productionMessage('sz-attribute-syntax', {
+                    form: 'char',
+                    input: 'w: 1/2',
+                    char: '/',
+                    index: 4,
+                }),
+            ],
         ]);
     });
 

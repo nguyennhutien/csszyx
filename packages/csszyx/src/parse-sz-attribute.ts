@@ -8,6 +8,9 @@
 import { brandCsszyxError } from '@csszyx/compiler/errors';
 import { SZ_ATTRIBUTE_SYNTAX, szRender } from '@csszyx/compiler/report';
 
+/** What an `sz-attribute-syntax` error names, as the registry types it. */
+export type SzAttributeSyntaxArgs = NonNullable<(typeof SZ_ATTRIBUTE_SYNTAX)['argsType']>;
+
 /**
  * Safe JS object literal parser for sz attributes. Handles single-quoted
  * strings, unquoted keys, numbers, booleans, nested objects, and arbitrary
@@ -33,14 +36,19 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     // Maps a position in `input` back to `rawInput`: undo the added `{` and
     // the leading whitespace `trim` removed, so the report points at the
     // character the author wrote.
-    const offset = rawInput.length - rawInput.trimStart().length - (wrapped ? 1 : 0);
+    const leading = rawInput.length - rawInput.trimStart().length;
+    const offset = leading - (wrapped ? 1 : 0);
     let pos = 0;
 
-    // Only called inside a loop that runs while `pos` is in range. The
-    // error stays a `SyntaxError` and carries the code and args of the
-    // runtime's line (`sz-attribute-syntax`).
+    // The error stays a `SyntaxError` and carries the code and args of the
+    // runtime's line (`sz-attribute-syntax`). A key that never reaches its
+    // `:` runs `pos` off the end, where there is no character to name, so the
+    // line names where the attribute ends instead.
     const unexpected = (): never => {
-        const args = { input: rawInput, char: input[pos] as string, index: pos + offset };
+        const args: SzAttributeSyntaxArgs =
+            pos < input.length
+                ? { form: 'char', input: rawInput, char: input[pos] as string, index: pos + offset }
+                : { form: 'end', input: rawInput, index: leading + trimmed.length };
         throw brandCsszyxError(
             new SyntaxError(
                 process.env.NODE_ENV !== 'production'

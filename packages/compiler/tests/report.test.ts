@@ -15,7 +15,6 @@ import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.
 import type { SzDiagnosticSpec } from '../src/diagnostic-spec.generated.js';
 import {
     type ArgValue,
-    fillSzDiagnosticTemplate,
     type SzBrowserDiagnostic,
     szDiagnosticBody,
 } from '../src/diagnostic-template.js';
@@ -27,6 +26,7 @@ import {
     UNKNOWN_KEY,
 } from '../src/report.js';
 import { argSets } from './helpers/diagnostic-arg-samples.js';
+import { legacyFillSzDiagnosticTemplate } from './helpers/legacy-diagnostic-template.js';
 
 /**
  * Every id's entry, by id, from the registry itself: the Node registry module
@@ -122,8 +122,10 @@ describe('szReport', () => {
                 warn.mockClear();
                 error.mockClear();
                 szReport({ diagnostic, args });
+                // Filled from the registry's own arg objects, apart from the
+                // encoded args and joiners the browser entry carries.
                 const body = szDiagnosticBody(
-                    fillSzDiagnosticTemplate(
+                    legacyFillSzDiagnosticTemplate(
                         spec,
                         { code: spec.id, args },
                         SZ_DIAGNOSTIC_COMPUTED_VALUES,

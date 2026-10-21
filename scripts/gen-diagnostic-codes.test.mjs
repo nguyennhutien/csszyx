@@ -57,7 +57,7 @@ function entry(overrides = {}) {
         surfaces: { engine: {} },
         position: 'site',
         args: { key: { type: 'string' } },
-        sources: ['packages/core/src/transform/engine.rs:1'],
+        sources: ['packages/core/src/transform/engine.rs'],
         ...overrides,
     };
 }
@@ -228,8 +228,8 @@ test('a console line and a throw say where they run, and their sources agree', (
             registryOf([entry({ surfaces, sources, position: surfaces.engine ? 'site' : 'none' })]),
             browserFiles,
         ).join('\n');
-    const RUNTIME = 'packages/runtime/src/hydration.ts:1';
-    const NODE = 'packages/unplugin/src/unplugin.ts:1';
+    const RUNTIME = 'packages/runtime/src/hydration.ts';
+    const NODE = 'packages/unplugin/src/unplugin.ts';
     assert.equal(at({ runtime: { production: true, host: 'browser' } }, [RUNTIME]), '');
     assert.equal(at({ runtime: { production: false, host: 'node' } }, [NODE]), '');
     assert.equal(at({ runtime: { production: true, host: 'both' } }, [RUNTIME, NODE]), '');
@@ -244,7 +244,7 @@ test('a console line and a throw say where they run, and their sources agree', (
     // An engine or check id renders in Node too.
     assert.equal(
         at({ engine: {}, runtime: { production: true, host: 'browser' } }, [
-            'packages/core/src/transform/engine.rs:1',
+            'packages/core/src/transform/engine.rs',
             RUNTIME,
         ]),
         '',
@@ -262,6 +262,15 @@ test('a console line and a throw say where they run, and their sources agree', (
         at({ runtime: { production: true, host: 'browser' } }, [RUNTIME, NODE]),
         /runs in browser by its surfaces, but its sources run in browser and node/,
     );
+});
+
+test('a source names a file, never a line, which goes stale with the next edit above it', () => {
+    const problems = validateRegistry(
+        registryOf([entry({ sources: ['packages/core/src/transform/engine.rs:12'] })]),
+    );
+    assert.deepEqual(problems, [
+        'diagnostic "unknown-key": source packages/core/src/transform/engine.rs:12 names a line; name the file alone',
+    ]);
 });
 
 test('the browser files are the ones a browser entry reaches', () => {
@@ -591,9 +600,15 @@ test('each engine form gets a constructor that names its args in registry order'
     const ts = renderTypeScript(input);
     assert.match(
         ts,
-        /'mangle-vars-hoist-skipped': \{ readonly form: 'a' \| 'b'; readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' \| 'max-depth'; readonly maxDepth\?: number; readonly parts: readonly string\[\]; \};/,
+        /'mangle-vars-hoist-skipped': \{ readonly form: 'a' \| 'b'; readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' \| 'max-depth'; readonly maxDepth\?: number; readonly parts: readonly string\[\] \};/,
     );
-    assert.match(ts, /'style-override': \{ {2}\};/);
+    // Not `{}`, which any object satisfies: an id with no args takes none.
+    assert.match(ts, /'style-override': Readonly<Record<string, never>>;/);
+    // Every live id is typed, and the engine's are picked from them.
+    assert.match(
+        ts,
+        /export type SzDiagnosticArgsByCode = Pick<SzDiagnosticArgs, SzDiagnosticCode>;/,
+    );
 });
 
 test('the TypeScript ids follow the registry', () => {
@@ -633,6 +648,28 @@ test('the spec module carries the public data and no review metadata', () => {
     assert.ok(renderSpecModule(input).includes(JSON.stringify(data.diagnostics, null, 4)));
     // The render specs carry an arg's joiner alone, never its type.
     assert.ok(!renderRegistryModule(input).includes('"type"'));
+    // Args as one string in registry order, an optional one marked `?`, and
+    // the joiners apart, only where a list arg has one.
+    const listed = renderRegistryModule(
+        registryOf([
+            entry({
+                args: {
+                    key: { type: 'string' },
+                    parts: { type: 'string[]', joiner: ', ', optional: true },
+                    hint: { type: 'string', optional: true },
+                },
+                text: '`{key}` takes {parts}.',
+                help: 'did you mean "{hint}"?',
+            }),
+        ]),
+    );
+    assert.ok(
+        listed.includes(
+            '"args": "key parts? hint?",\n        "joiners": {\n            "parts": ", "\n        },',
+        ),
+        listed,
+    );
+    assert.ok(!renderRegistryModule(input).includes('"joiners"'));
 });
 
 test('a sentence starts upper-case or with a code span, and ends with a period', () => {
@@ -740,14 +777,14 @@ test('a browser export is a plain literal holding what the dev renderer reads', 
     const source = generator.renderBrowserModule?.(input) ?? '';
     const removed =
         '/** `removed-key`: A key no sz table knows. */\n' +
-        "export const REMOVED_KEY: SzBrowserDiagnostic<{ readonly form: 'a' | 'b'; readonly key: string; readonly parts?: readonly string[] }> = " +
-        '{"id":"removed-key","args":{"form":{},"key":{},"parts":{"joiner":", "}},' +
+        "export const REMOVED_KEY: SzBrowserDiagnostic<SzDiagnosticArgs['removed-key']> = " +
+        '{"id":"removed-key","args":"form key parts?","joiners":{"parts":", "},' +
         '"text":{"a":"`{key}` went.","b":"`{key}` moved."},"help":"write {parts}.","console":"error"};';
     assert.ok(source.includes(removed), source);
     assert.ok(
         source.includes(
-            'export const MANGLE_CENSUS_UNREADABLE: SzBrowserDiagnostic<Record<never, never>> = ' +
-                '{"id":"mangle-census-unreadable","args":{},"text":"The census is unreadable."};',
+            "export const MANGLE_CENSUS_UNREADABLE: SzBrowserDiagnostic<SzDiagnosticArgs['mangle-census-unreadable']> = " +
+                '{"id":"mangle-census-unreadable","args":"","text":"The census is unreadable."};',
         ),
         source,
     );
@@ -762,10 +799,13 @@ test('a browser export is a plain literal holding what the dev renderer reads', 
     // A bare `Object.freeze` survives a production build in esbuild, Vite and
     // webpack (measured, PR C council): plain literals only.
     assert.ok(!source.includes('Object.freeze'));
-    // The one import is a type, erased before any bundler sees it.
+    // Every import is a type, erased before any bundler sees it.
     assert.deepEqual(
         [...source.matchAll(/^import .*$/gm)].map(([line]) => line),
-        ["import type { SzBrowserDiagnostic } from './diagnostic-template.js';"],
+        [
+            "import type { SzDiagnosticArgs } from './diagnostic-codes.generated.js';",
+            "import type { SzBrowserDiagnostic } from './diagnostic-template.js';",
+        ],
     );
 });
 
@@ -798,9 +838,12 @@ test('the editor module carries the editor ids only, each as the registry words 
         assert.ok(source.includes(JSON.stringify(text, null, 4).split('\n')[0]), id);
     }
     assert.ok(!source.includes('"dead-class"'));
-    // An arg carries what filling reads, its joiner, as the browser module's do.
+    // An entry carries what filling reads, as the browser module's do: its
+    // args as one string, each optional one marked, and no arg type.
     assert.ok(!source.includes('"type"'));
-    assert.ok(source.includes('"args": {\n            "key": {},'), source);
+    assert.ok(source.includes('"unknown-key": {\n        "args": "key suggestion?",'), source);
+    assert.ok(source.includes('"canonical-key": {\n        "args": "form key",'), source);
+    assert.ok(!source.includes('"joiners"'), source);
     assert.throws(
         () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
         /editor id unknown-key is not in the registry/,

@@ -18,7 +18,7 @@
 
 import { type SzObject, transform } from '@csszyx/compiler/browser';
 import { SZ_ATTRIBUTE_SYNTAX, szReport } from '@csszyx/compiler/report';
-import { parseSzAttribute } from './parse-sz-attribute.js';
+import { parseSzAttribute, type SzAttributeSyntaxArgs } from './parse-sz-attribute.js';
 
 declare global {
     /**
@@ -92,7 +92,7 @@ function processElement(el: Element): void {
  * @param error - What the parse or the transform threw.
  */
 function reportUnreadable(error: unknown): void {
-    const args = (error as { args?: { input: string; char: string; index: number } }).args;
+    const args = (error as { args?: SzAttributeSyntaxArgs }).args;
     if (!(error instanceof SyntaxError) || args === undefined) {
         console.error(error);
     } else if (process.env.NODE_ENV !== 'production') {

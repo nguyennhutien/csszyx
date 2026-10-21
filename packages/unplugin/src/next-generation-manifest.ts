@@ -35,10 +35,7 @@ export interface NextGenerationManifestExpectation {
 }
 
 /** Manifest validation result with an actionable reason on mismatch. */
-export interface NextGenerationManifestValidation {
-    ok: boolean;
-    reason?: string;
-}
+export type NextGenerationManifestValidation = { ok: true } | { ok: false; reason: string };
 
 /**
  * Resolve the generation manifest path for a Next app cache directory.

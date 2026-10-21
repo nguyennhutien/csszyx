@@ -1399,6 +1399,72 @@ test('production carries no template, and a development build of a site carries 
     }
 });
 
+test('the leak gate reads the built bytes of shipped files and of the installed app', async () => {
+    const template = JSON.stringify(LEAK_DIAGNOSTIC.text);
+    const root = makeFixture({
+        ...reportingPackage(false),
+        'packages/thing/dist/cdn.js': `(()=>{window.t=${template}})();\n`,
+        'packages/thing/dist/editor.js': `exports.t=${template};\n`,
+        'packages/thing/dist/dev.js': `(()=>{window.t=${template}})();\n`,
+    });
+    const file = (target, templateFree) => ({
+        name: target,
+        kind: 'file',
+        target: `packages/thing/dist/${target}`,
+        maxGzipBytes: 100_000,
+        ...(templateFree === undefined ? {} : { templateFree }),
+    });
+    const installed = {
+        name: 'thing installed app',
+        kind: 'installed-app',
+        target: 'packages/thing',
+        imports: ['@csszyx/lib/report'],
+        maxGzipBytes: 100_000,
+    };
+    try {
+        const { failures, bundles } = await sizeGate.checkTemplateLeaks(
+            [
+                file('cdn.js', {}),
+                // An editor reports these ids with their words, by design.
+                file('editor.js', { allowedIds: ['gone-key'] }),
+                // A development artifact carries templates and is not read.
+                file('dev.js'),
+                installed,
+            ],
+            root,
+            leakOptions(),
+        );
+        assert.equal(bundles, 3);
+        assert.deepEqual(
+            failures.map(failure => /^[^:]*/.exec(failure)[0]),
+            ['cdn.js', 'thing installed app', 'thing installed app'],
+            failures.join('\n'),
+        );
+        assert.match(
+            failures[0],
+            /^cdn\.js: the production bundle carries the development text "The `\{key\}` marker sentence/,
+        );
+        const missing = await sizeGate.checkTemplateLeaks(
+            [file('absent.js', {})],
+            root,
+            leakOptions(),
+        );
+        assert.match(missing.failures.join('\n'), /^absent\.js: .*run `pnpm build` first\?/m);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('the shipped production files are read for templates, the editor ids named', () => {
+    const byName = name => SIZE_BUDGETS.find(budget => budget.name === name);
+    assert.deepEqual(byName('csszyx CDN bundle').templateFree, {});
+    assert.deepEqual(byName('@csszyx/vscode extension bundle').templateFree, {
+        allowedIds: ['unknown-key', 'canonical-key', 'removed-key', 'numeric-key'],
+    });
+    // The development bundle carries its templates by design.
+    assert.equal(byName('csszyx CDN development bundle').templateFree, undefined);
+});
+
 test('the app bundles and the leak gate resolve packages as an install does, not by tsconfig paths', async () => {
     // A repository tsconfig that points the library and a helper at sources
     // that do not build: a build that read it would fail, an install never does.

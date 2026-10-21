@@ -223,6 +223,12 @@ function validateEntry(entry, groups, problems, computed = new Map(), browserFil
         // It becomes one rustdoc line in the generated enum.
         problems.push(`${at}: summary spans more than one line`);
     }
+    for (const source of entry.sources ?? []) {
+        // A line anchor goes stale with the next edit above it, and nothing reads it.
+        if (/:\d+$/.test(source)) {
+            problems.push(`${at}: source ${source} names a line; name the file alone`);
+        }
+    }
     const surfaces = Object.keys(entry.surfaces ?? {});
     if (surfaces.length === 0) problems.push(`${at}: appears on no surface`);
     for (const surface of surfaces) {
@@ -372,9 +378,7 @@ function validateHosts(entry, at, problems, browserFiles) {
     const declared = [...declaredPlaces(entry)].sort().join(' and ');
     const actual = [
         ...new Set(
-            (entry.sources ?? []).map(source =>
-                browserFiles.has(source.replace(/:\d+$/, '')) ? 'browser' : 'node',
-            ),
+            (entry.sources ?? []).map(source => (browserFiles.has(source) ? 'browser' : 'node')),
         ),
     ]
         .sort()
@@ -781,23 +785,15 @@ function tsArgType(arg) {
 }
 
 /**
- * One member of \`SzDiagnosticArgsByCode\` per engine id.
+ * One member of \`SzDiagnosticArgs\` per live id, so a site that passes an
+ * id with its args has them checked: a required arg left out, a form the id
+ * does not have, or an arg of another type fails to compile.
  *
  * @param {typeof registry} input - The registry module.
  * @returns {string} The interface body.
  */
-function engineArgTypes(input) {
-    return input.DIAGNOSTICS.filter(entry => entry.surfaces.engine)
-        .map(entry => {
-            const fields = Object.entries(entry.args ?? {})
-                .map(
-                    ([name, arg]) =>
-                        `readonly ${name}${arg.optional ? '?' : ''}: ${tsArgType(arg)};`,
-                )
-                .join(' ');
-            return `    '${entry.id}': { ${fields} };`;
-        })
-        .join('\n');
+function argTypes(input) {
+    return input.DIAGNOSTICS.map(entry => `    '${entry.id}': ${argsTypeOf(entry)};`).join('\n');
 }
 
 /**
@@ -854,12 +850,16 @@ export type SzDiagnosticCode =
 ${union(codes)};
 
 /**
- * The named values each engine code carries in \`issue.args\`, by code. An
- * optional value the diagnostic has nothing for is absent, never \`null\`.
+ * The named values each live id carries, by id: what a site passes with it,
+ * and what an engine code carries in \`issue.args\`. An optional value the
+ * diagnostic has nothing for is absent, never \`null\`.
  */
-export interface SzDiagnosticArgsByCode {
-${engineArgTypes(input)}
+export interface SzDiagnosticArgs {
+${argTypes(input)}
 }
+
+/** The named values each engine code carries in \`issue.args\`, by code. */
+export type SzDiagnosticArgsByCode = Pick<SzDiagnosticArgs, SzDiagnosticCode>;
 
 /** Every code \`csszyx check\` reports under its \`sz-diagnostic\` pass, in registry order. */
 export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
@@ -997,10 +997,19 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
 /**
  * The fields of an entry the renderer reads: what a line is rendered from,
  * and nothing about where or when it is reported. The render specs carry
- * these alone, so a Node entry loads no summary, surface or form; an arg
- * keeps only its joiner.
+ * these alone, so a Node entry loads no summary, surface or form; the args
+ * are encoded by {@link templateArgs} and {@link templateJoiners}.
  */
-export const RENDER_FIELDS = ['id', 'position', 'args', 'variesBy', 'text', 'help', 'note'];
+export const RENDER_FIELDS = [
+    'id',
+    'position',
+    'args',
+    'joiners',
+    'variesBy',
+    'text',
+    'help',
+    'note',
+];
 
 /**
  * An entry cut down to {@link RENDER_FIELDS}.
@@ -1011,16 +1020,10 @@ export const RENDER_FIELDS = ['id', 'position', 'args', 'variesBy', 'text', 'hel
 function renderSpecOf(entry) {
     const spec = {};
     for (const field of RENDER_FIELDS) {
-        if (entry[field] === undefined) continue;
-        spec[field] =
-            field === 'args'
-                ? Object.fromEntries(
-                      Object.entries(entry.args).map(([name, arg]) => [
-                          name,
-                          arg.joiner === undefined ? {} : { joiner: arg.joiner },
-                      ]),
-                  )
-                : entry[field];
+        let value = entry[field];
+        if (field === 'args') value = templateArgs(entry);
+        else if (field === 'joiners') value = templateJoiners(entry);
+        if (value !== undefined) spec[field] = value;
     }
     return spec;
 }
@@ -1066,8 +1069,10 @@ export interface SzDiagnosticRenderSpec {
     readonly id: string;
     /** What a record's \`start\` points at. */
     readonly position: 'site' | 'file' | 'none';
-    /** Every arg, by name, in registry order; a list arg with its separator. */
-    readonly args: Readonly<Record<string, { readonly joiner?: string }>>;
+    /** Every arg name in registry order, space-separated, one the entry may leave out followed by \`?\`. */
+    readonly args: string;
+    /** The separator each list arg is written with; absent when it has none. */
+    readonly joiners?: Readonly<Record<string, string>>;
     /** The enum arg a per-variant template is keyed by, when it is not \`form\`. */
     readonly variesBy?: string;
     /** What the diagnostic says: one template, or one per variant. */
@@ -1198,8 +1203,9 @@ export function browserDiagnostics(input) {
 
 /**
  * What the development renderer reads of one entry: the id its line is headed
- * by, each arg in registry order with its joiner when it is a list, the
- * templates, and the console method when it is not \`warn\`.
+ * by, its args and list joiners as {@link templateArgs} and
+ * {@link templateJoiners} encode them, the templates, and the console method
+ * when it is not \`warn\`.
  *
  * @param {Record<string, any>} entry - A registry entry.
  * @returns {Record<string, unknown>} The data; absent fields are left out.
@@ -1209,6 +1215,7 @@ function browserEntry(entry) {
     return {
         id,
         args: templateArgs(entry),
+        joiners: templateJoiners(entry),
         variesBy,
         text,
         help,
@@ -1218,34 +1225,51 @@ function browserEntry(entry) {
 }
 
 /**
- * What filling a template reads of an entry's args: each name, in registry
- * order, with its joiner when it is a list.
+ * What filling a template reads of an entry's args, as one string: each name
+ * in registry order, separated by a space, followed by \`?\` when the entry
+ * may leave it out, so a development fill can refuse a required one missing
+ * (\`'form key replacement?'\`; \`''\` for none). One string per entry, not an
+ * object per arg: every browser bundle carries these, and the per-arg objects
+ * cost more than the names themselves. Arg names are camelCase
+ * ({@link validateRegistry}), so neither the space nor \`?\` can be part of one.
  *
  * @param {Record<string, any>} entry - A registry entry.
- * @returns {Record<string, { joiner?: string }>} The args.
+ * @returns {string} The args.
  */
 function templateArgs(entry) {
-    return Object.fromEntries(
-        Object.entries(entry.args).map(([name, arg]) => [
-            name,
-            arg.joiner === undefined ? {} : { joiner: arg.joiner },
-        ]),
-    );
+    return Object.entries(entry.args)
+        .map(([name, arg]) => (arg.optional ? `${name}?` : name))
+        .join(' ');
 }
 
 /**
- * The TypeScript type of an entry's args, for \`szReport\` to check a call's
- * args against.
+ * The separator each list arg of an entry is written with.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {Record<string, string> | undefined} The joiners, by arg name;
+ *     \`undefined\` when no arg is a list, so the field is left out.
+ */
+function templateJoiners(entry) {
+    const joiners = Object.entries(entry.args).filter(([, arg]) => arg.joiner !== undefined);
+    return joiners.length === 0
+        ? undefined
+        : Object.fromEntries(joiners.map(([name, arg]) => [name, arg.joiner]));
+}
+
+/**
+ * The TypeScript type of an entry's args.
  *
  * @param {Record<string, any>} entry - A registry entry.
  * @returns {string} The type.
  */
-function browserArgsType(entry) {
+function argsTypeOf(entry) {
     const fields = Object.entries(entry.args).map(
         ([name, arg]) => `readonly ${name}${arg.optional ? '?' : ''}: ${tsArgType(arg)};`,
     );
+    // Not \`Record<never, never>\`, which is \`{}\`: any object passes for that,
+    // so an id that takes no args would take every arg a site invents.
     return fields.length === 0
-        ? 'Record<never, never>'
+        ? 'Readonly<Record<string, never>>'
         : `{ ${fields.join(' ').replace(/;$/, '')} }`;
 }
 
@@ -1283,7 +1307,7 @@ export function renderBrowserModule(input) {
     const exports = browserDiagnostics(input).map(
         entry =>
             `/** \`${entry.id}\`: ${entry.summary} */\n` +
-            `export const ${browserConstName(entry.id)}: SzBrowserDiagnostic<${browserArgsType(entry)}> = ` +
+            `export const ${browserConstName(entry.id)}: SzBrowserDiagnostic<SzDiagnosticArgs['${entry.id}']> = ` +
             `${JSON.stringify(browserEntry(entry))};`,
     );
     return `// @generated by scripts/gen-diagnostic-codes.mjs
@@ -1293,6 +1317,7 @@ export function renderBrowserModule(input) {
 // does not use, and no value is imported. Node code reads the whole registry
 // from its own module instead.
 
+import type { SzDiagnosticArgs } from './diagnostic-codes.generated.js';
 import type { SzBrowserDiagnostic } from './diagnostic-template.js';
 
 ${exports.join('\n\n')}
@@ -1348,7 +1373,17 @@ export function renderEditorTemplates(input) {
         const entry = input.DIAGNOSTICS.find(candidate => candidate.id === id);
         if (entry === undefined) throw new Error(`editor id ${id} is not in the registry`);
         const { variesBy, text, help, note } = entry;
-        return [id, { args: templateArgs(entry), variesBy, text, help, note }];
+        return [
+            id,
+            {
+                args: templateArgs(entry),
+                joiners: templateJoiners(entry),
+                variesBy,
+                text,
+                help,
+                note,
+            },
+        ];
     });
     return `// @generated by scripts/gen-diagnostic-codes.mjs
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.

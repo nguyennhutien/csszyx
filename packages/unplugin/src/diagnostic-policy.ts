@@ -49,7 +49,6 @@
  * @module diagnostic-policy
  */
 import {
-    type IdentifiedDiagnostic,
     isSzDiagnosticId,
     nearestName,
     renderSzDiagnosticBody,
@@ -61,6 +60,7 @@ import {
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticId,
     type SzRemovedDiagnosticId,
+    type SzTypedDiagnostic,
 } from '@csszyx/compiler';
 import type {
     CsszyxFileConfig,
@@ -128,10 +128,14 @@ export function isRemovedRuleId(id: string): id is SzRemovedDiagnosticId {
 export function removedRuleIdDiagnostic(
     id: string,
     replacedBy: string | undefined,
-): IdentifiedDiagnostic {
-    const args =
-        replacedBy === undefined ? { form: 'removed', id } : { form: 'replaced', id, replacedBy };
-    return { code: 'removed-rule-id', args };
+): SzTypedDiagnostic<'removed-rule-id'> {
+    return {
+        code: 'removed-rule-id',
+        args:
+            replacedBy === undefined
+                ? { form: 'removed', id }
+                : { form: 'replaced', id, replacedBy },
+    };
 }
 
 /**

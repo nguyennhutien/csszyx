@@ -12,8 +12,9 @@
  * the console of deployed apps. Renaming one is a breaking change, and the old
  * id moves to `REMOVED`, never out of this file.
  *
- * `sources` records where each id is produced, `packages/<path>:<line>`,
- * re-anchored to the current lines on 2026-10-21.
+ * `sources` records the files each id is produced in, `packages/<path>`. No
+ * line numbers: every consumer reads the file only, and an unchecked line
+ * went stale with the next edit above it.
  *
  * @module
  */
@@ -190,7 +191,7 @@ export const COMPUTED = {
  * @property {Record<string, Arg>} args - Named, camelCase. Never a position.
  * @property {string[]} [forms] - Shapes of the sentence; `args.form` is then the enum of these.
  * @property {string[]} [gaps] - Surfaces the condition belongs to that do not report it.
- * @property {string[]} sources - Where it is produced today, `packages/<path>:<line>`.
+ * @property {string[]} sources - The files it is produced in today, `packages/<path>`.
  */
 
 /**
@@ -290,7 +291,7 @@ export const DIAGNOSTICS = [
         text: '`{key}` is not an sz property.',
         help: "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
-        sources: [`${ENGINE}:1188`, `${CORE_TS}:3407`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'canonical-key',
@@ -310,7 +311,7 @@ export const DIAGNOSTICS = [
             'scrollbar-color':
                 'write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour.',
         },
-        sources: [`${ENGINE}:1172`, `${ENGINE}:1177`, `${ENGINE}:1179`, `${CORE_TS}:3401`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'removed-key',
@@ -342,14 +343,7 @@ export const DIAGNOSTICS = [
             removed: '{note}.',
             replaced: 'write `{ {replacement} }` instead, or run `csszyx migrate`.',
         },
-        sources: [
-            `${ENGINE}:969`,
-            `${ENGINE}:1142`,
-            `${ENGINE}:1144`,
-            `${ENGINE}:1160`,
-            `${ENGINE}:1168`,
-            `${CORE_TS}:4032`,
-        ],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'numeric-key',
@@ -359,7 +353,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: '`sz` received a numeric key `{key}`, and its value is ignored.',
         help: 'pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.',
-        sources: [`${ENGINE}:1183`, `${CORE_TS}:3403`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'closed-enum-value',
@@ -403,18 +397,7 @@ export const DIAGNOSTICS = [
             'sibling-group': '`{key}` takes one of: {enumAllowed}.',
             dead: 'the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.',
         },
-        sources: [
-            `${ENGINE}:1212`,
-            `${ENGINE}:1215`,
-            `${ENGINE}:1218`,
-            `${ENGINE}:1226`,
-            `${ENGINE}:1237`,
-            `${CORE_TS}:619`,
-            `${CORE_TS}:2431`,
-            `${CORE_TS}:2589`,
-            `${CORE_TS}:2635`,
-            `${CORE_TS}:2647`,
-        ],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'slash-opacity-string',
@@ -426,7 +409,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, color: STRING, opacity: STRING },
         text: "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
         help: "use the object form: `{ color: '{color}', op: {opacity} }`.",
-        sources: [`${ENGINE}:1248`, 'packages/compiler/src/color-validation.ts:72'],
+        sources: [ENGINE, 'packages/compiler/src/color-validation.ts'],
     },
     {
         id: 'off-scale-value',
@@ -436,7 +419,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, value: STRING },
         text: "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
         help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
-        sources: [`${ENGINE}:772`, `${CORE_TS}:832`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'numeric-font-weight',
@@ -446,7 +429,7 @@ export const DIAGNOSTICS = [
         args: { value: STRING },
         text: "`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.",
         help: 'write `weight: {value}` as a number; it emits `font-[{value}]`.',
-        sources: [`${ENGINE}:1122`, `${CORE_TS}:947`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'per-side-border-style',
@@ -456,7 +439,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, value: STRING },
         text: "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
         help: "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width.",
-        sources: [`${ENGINE}:779`, `${CORE_TS}:914`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'property-object',
@@ -466,7 +449,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, nestedKeys: { type: 'string[]', joiner: ', ' } },
         text: '`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.',
         help: "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
-        sources: [`${ENGINE}:786`, `${CORE_TS}:3896`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'non-variant-object',
@@ -476,7 +459,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: '`{key}` is not a variant, so its object emits `{key}:` classes that produce no CSS.',
         help: 'a `--*` key takes a declaration value; `container` takes `true`.',
-        sources: [`${ENGINE}:1196`, `${CORE_TS}:3828`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'unknown-field',
@@ -488,7 +471,7 @@ export const DIAGNOSTICS = [
         args: { owner: STRING, member: STRING, allowed: { type: 'string[]', joiner: ', ' } },
         text: '`{owner}` has no field `{member}`, and nothing is emitted for it.',
         help: '`{owner}` takes `{ {allowed} }`.',
-        sources: [`${ENGINE}:797`, `${CORE_TS}:3060`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'runtime-value',
@@ -499,7 +482,7 @@ export const DIAGNOSTICS = [
         text: '`{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.',
         help: 'name the values with `szv()`, or use `dynamic()` for open-ended data.',
         note: 'no class or variable is emitted for `{key}`.',
-        sources: [`${ENGINE}:716`],
+        sources: [ENGINE],
     },
     {
         id: 'unresolvable-spread',
@@ -510,7 +493,7 @@ export const DIAGNOSTICS = [
         text: 'This `sz` object spreads a value the build cannot read, so the object falls back to the runtime.',
         help: 'use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.',
         note: 'the classes of the spread value were not collected, so they produce no CSS unless another source names them.',
-        sources: [`${ENGINE}:659`],
+        sources: [ENGINE],
     },
     {
         id: 'style-override',
@@ -520,7 +503,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.',
         help: 'move the spread `style` to an explicit `style` prop, so csszyx merges both values.',
-        sources: [`${ENGINE}:687`],
+        sources: [ENGINE],
     },
     {
         id: 'szs-slot-map',
@@ -542,7 +525,7 @@ export const DIAGNOSTICS = [
                 'write every slot as an identifier key with a static object literal or class string; for a value known only at runtime, pass the class string `dynamic()` returns.',
         },
         note: 'the attribute is left unchanged.',
-        sources: [`${ENGINE}:544`, `${ENGINE}:546`],
+        sources: [ENGINE],
     },
     {
         id: 'sz-recover',
@@ -560,7 +543,7 @@ export const DIAGNOSTICS = [
             'unknown-mode': 'use `"csr"` or `"dev-only"`.',
         },
         note: 'no `data-sz-recovery-token` is written for this element.',
-        sources: [`${ENGINE}:1346`, `${ENGINE}:1348`],
+        sources: [ENGINE],
     },
     {
         id: 'class-precedence',
@@ -572,7 +555,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: "`sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.",
         help: 'state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.',
-        sources: [`${ENGINE}:1312`],
+        sources: [ENGINE],
     },
     {
         id: 'duplicate-sz',
@@ -584,7 +567,7 @@ export const DIAGNOSTICS = [
         args: { elementName: STRING, count: NUMBER },
         text: '`<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.',
         help: 'fold them into one `sz` array, so the order is written down.',
-        sources: [`${ENGINE}:1107`],
+        sources: [ENGINE],
     },
     {
         id: 'spread-split-class',
@@ -607,7 +590,7 @@ export const DIAGNOSTICS = [
         text: '`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.',
         help: 'write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.',
         note: 'in Vue JSX every class is merged, so every side applies there.',
-        sources: [`${ENGINE}:1084`],
+        sources: [ENGINE],
     },
     {
         id: 'moved-value',
@@ -633,7 +616,7 @@ export const DIAGNOSTICS = [
             'mask-layer':
                 'write this layer on `{layerKey}`; `mask` takes only `none`, a `url()` or a CSS variable.',
         },
-        sources: [`${ENGINE}:991`, `${ENGINE}:999`, `${CORE_TS}:2510`, `${CORE_TS}:3245`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'global-before-group',
@@ -650,7 +633,7 @@ export const DIAGNOSTICS = [
         text: '`{global}: {valueLiteral}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.',
         help: 'to override the group, layer it: `sz={[base, { {global}: {valueLiteral} }]}`.',
         note: 'a spread such as `{ ...base, {global}: {valueLiteral} }` keeps the same key order, so it does not fix this.',
-        sources: [`${ENGINE}:982`, `${CORE_TS}:2557`],
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'runtime-family-conflict',
@@ -664,7 +647,7 @@ export const DIAGNOSTICS = [
             'key-first': 'layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.',
             'other-first': 'layer them, later wins: `sz={[{ {other}: … }, { {key}: … }]}`.',
         },
-        sources: [`${ENGINE}:1065`, `${ENGINE}:1067`],
+        sources: [ENGINE],
     },
     {
         id: 'fallback-missing-css',
@@ -696,7 +679,7 @@ export const DIAGNOSTICS = [
             szr: 'its classes were not collected, so they produce no CSS unless another source names them.',
             szv: 'none of its variant classes were collected, so they produce no CSS unless another source names them.',
         },
-        sources: [`${ENGINE}:568`, `${ENGINE}:605`, `${ENGINE}:661`],
+        sources: [ENGINE],
     },
     {
         id: 'fallback-nudge',
@@ -726,7 +709,7 @@ export const DIAGNOSTICS = [
             sz: 'the runtime still turns the value into classes.',
             'sz-array-element': 'its classes are still collected, best-effort.',
         },
-        sources: [`${ENGINE}:663`, `${ENGINE}:1331`],
+        sources: [ENGINE],
     },
     {
         id: 'merge-classifier-unavailable',
@@ -749,7 +732,7 @@ export const DIAGNOSTICS = [
         },
         help: 'install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.',
         note: 'every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.',
-        sources: [`${ENGINE}:157`, `${ENGINE}:160`],
+        sources: [ENGINE],
     },
     {
         id: 'parse-error',
@@ -789,12 +772,10 @@ export const DIAGNOSTICS = [
             prescan: 'its classes produce no CSS unless another source names them.',
         },
         sources: [
-            'packages/core/src/transform/parser.rs:203',
-            'packages/core/src/transform/parser.rs:208',
-            'packages/core/src/transform/parser.rs:210',
-            'packages/compiler/src/template-sz.ts:242',
-            'packages/cli/src/commands/explain.ts:101',
-            `${UNPLUGIN}:4803`,
+            'packages/core/src/transform/parser.rs',
+            'packages/compiler/src/template-sz.ts',
+            'packages/cli/src/commands/explain.ts',
+            UNPLUGIN,
         ],
     },
     {
@@ -806,7 +787,7 @@ export const DIAGNOSTICS = [
         text: 'Source nesting exceeds {maxNestingDepth} levels (found {depth}).',
         help: 'flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.',
         note: 'the file is left unchanged and contributes no classes.',
-        sources: [`${ENGINE}:178`],
+        sources: [ENGINE],
     },
     {
         id: 'unsupported-dynamic-sz',
@@ -817,7 +798,7 @@ export const DIAGNOSTICS = [
         text: 'This `sz` attribute has no value, or a JSX element as its value.',
         help: 'give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.',
         note: 'the attribute is left as written; the rest of the file is still transformed.',
-        sources: [`${ENGINE}:534`],
+        sources: [ENGINE],
     },
     {
         id: 'ast-budget',
@@ -839,7 +820,7 @@ export const DIAGNOSTICS = [
             transform: 'the file is left unchanged, and none of its classes are collected.',
             prescan: 'its classes produce no CSS unless another source names them.',
         },
-        sources: [`${ENGINE}:336`, `${UNPLUGIN}:1210`],
+        sources: [ENGINE, UNPLUGIN],
     },
     {
         id: 'mangle-vars-hoist-skipped',
@@ -867,7 +848,7 @@ export const DIAGNOSTICS = [
             'max-depth': 'raise `production.mangleVarHoistMaxDepth` to hoist it.',
         },
         note: 'each element that uses it keeps its own scoped variable, and every class is still emitted.',
-        sources: ['packages/core/src/transform/css_var_planner.rs:330'],
+        sources: ['packages/core/src/transform/css_var_planner.rs'],
     },
     {
         id: 'color-slash-opacity',
@@ -902,7 +883,7 @@ export const DIAGNOSTICS = [
             'op-given': 'the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.',
             'op-absent': 'the class still applies opacity {opacity}.',
         },
-        sources: [`${ENGINE}:1267`, `${ENGINE}:1268`, `${CORE_TS}:2130`],
+        sources: [ENGINE, CORE_TS],
     },
 
     // --- check: kinds a non-engine `csszyx check` pass reports ---
@@ -915,7 +896,7 @@ export const DIAGNOSTICS = [
         text: "`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.",
         help: "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
         note: 'the class is still emitted, and it styles nothing.',
-        sources: [`${CHECK}:634`, 'packages/unplugin/src/dead-class.ts:390'],
+        sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
     },
     {
         id: 'dead-class',
@@ -926,7 +907,7 @@ export const DIAGNOSTICS = [
         text: "`{className}` produces no CSS: this project's Tailwind serves no such utility.",
         help: "fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.",
         note: 'the class is still emitted, and it styles nothing.',
-        sources: [`${CHECK}:763`, 'packages/unplugin/src/dead-class.ts:367'],
+        sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
     },
     {
         id: 'prefix-disagreement',
@@ -951,11 +932,7 @@ export const DIAGNOSTICS = [
             next: 'no module was transformed, and nothing was written.',
             check: 'the dead-class check did not run.',
         },
-        sources: [
-            `${CHECK}:423`,
-            `${UNPLUGIN}:5604`,
-            'packages/unplugin/src/next-stylesheet-facts.ts:376',
-        ],
+        sources: [CHECK, UNPLUGIN, 'packages/unplugin/src/next-stylesheet-facts.ts'],
     },
     {
         id: 'sibling-keyword',
@@ -971,7 +948,7 @@ export const DIAGNOSTICS = [
         text: "`{key}: '{value}'` emits `{className}`, which sets {sets}, not the property `{key}` sets.",
         help: 'move the value to the key that sets {sets}, or declare a theme token named `{value}` if the spelling was deliberate.',
         note: '`{className}` produces CSS, so no other check reports it.',
-        sources: [`${CHECK}:1070`],
+        sources: [CHECK],
     },
     {
         id: 'broken-opacity',
@@ -985,7 +962,7 @@ export const DIAGNOSTICS = [
         gaps: ['engine'],
         text: '`{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.',
         help: "wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`.",
-        sources: [`${CHECK}:789`, `${CORE_TS}:2215`],
+        sources: [CHECK, CORE_TS],
     },
     {
         id: 'unserved-variant',
@@ -1020,7 +997,7 @@ export const DIAGNOSTICS = [
             unknown: 'check the spelling of `{variant}`.',
         },
         note: 'the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`.',
-        sources: [`${CHECK}:686`, 'packages/unplugin/src/dead-class.ts:417', `${CORE_TS}:3979`],
+        sources: [CHECK, 'packages/unplugin/src/dead-class.ts', CORE_TS],
     },
     {
         id: 'theme-collision',
@@ -1048,7 +1025,7 @@ export const DIAGNOSTICS = [
         },
         help: 'rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.',
         note: 'a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only.',
-        sources: [`${CHECK}:1145`, 'packages/runtime/src/merge-groups.ts:510'],
+        sources: [CHECK, 'packages/runtime/src/merge-groups.ts'],
     },
     {
         id: 'merge-covered-key',
@@ -1064,9 +1041,9 @@ export const DIAGNOSTICS = [
         text: 'The build removes `{className}`, written as `{key}`, because a later key in the same sz object sets every property it sets.',
         help: 'delete `{key}` from the object; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.',
         sources: [
-            'packages/cli/src/scanner/merge-audit-report.ts:42',
-            'packages/unplugin/src/merge-audit.ts:124',
-            `${UNPLUGIN}:4026`,
+            'packages/cli/src/scanner/merge-audit-report.ts',
+            'packages/unplugin/src/merge-audit.ts',
+            UNPLUGIN,
         ],
     },
     {
@@ -1084,9 +1061,9 @@ export const DIAGNOSTICS = [
         text: 'The build removes `{className}` from `className`, because an `sz` class on the same element sets every property it sets.',
         help: 'delete `{className}` from `className`; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.',
         sources: [
-            'packages/cli/src/scanner/merge-audit-report.ts:42',
-            'packages/unplugin/src/merge-audit.ts:135',
-            `${UNPLUGIN}:4026`,
+            'packages/cli/src/scanner/merge-audit-report.ts',
+            'packages/unplugin/src/merge-audit.ts',
+            UNPLUGIN,
         ],
     },
 
@@ -1118,7 +1095,7 @@ export const DIAGNOSTICS = [
             parse: 'pass the manifest the build wrote, unchanged.',
         },
         note: { json: 'the browser reported: {error}.', parse: 'the parser reported: {error}.' },
-        sources: ['packages/runtime/src/verify.ts:157', 'packages/compiler/src/manifest.ts:261'],
+        sources: ['packages/runtime/src/verify.ts', 'packages/compiler/src/manifest.ts'],
     },
     {
         id: 'mangle-map-unreadable',
@@ -1135,7 +1112,7 @@ export const DIAGNOSTICS = [
         },
         help: 'serve the HTML as the build wrote it; a census that cannot be read means the page was changed or cut short after the build.',
         note: { json: 'the browser reported: {error}.' },
-        sources: [`${HYDRATION}:275`],
+        sources: [HYDRATION],
     },
     {
         id: 'mangle-census-unreadable',
@@ -1145,7 +1122,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The class census on this page could not be read, so the mangle checksum was not verified.',
         help: 'serve the HTML as the build wrote it; the line before this one says what is wrong with the census.',
-        sources: [`${HYDRATION}:430`],
+        sources: [HYDRATION],
     },
     {
         id: 'mangle-checksum-mismatch',
@@ -1156,7 +1133,7 @@ export const DIAGNOSTICS = [
         text: 'The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.',
         help: 'deploy the HTML and the bundle from one build.',
         note: 'this detects a damaged or stale page, not an attacker; the checksum is not signed.',
-        sources: [`${HYDRATION}:419`],
+        sources: [HYDRATION],
     },
     {
         id: 'mangle-map-unavailable',
@@ -1166,7 +1143,7 @@ export const DIAGNOSTICS = [
         args: { checksum: STRING },
         text: 'This page carries the checksum `{checksum}` but neither a class census nor a bundled mangle map to recompute it from, so nothing was verified.',
         help: 'keep `production.hydrationCensus` on, its default, when the build sets `production.mangleVars` without `production.mangle`, since such a build bundles no map; otherwise, load the bundle that registers the map on this page.',
-        sources: [`${HYDRATION}:452`],
+        sources: [HYDRATION],
     },
     {
         id: 'web-crypto-unavailable',
@@ -1177,7 +1154,7 @@ export const DIAGNOSTICS = [
         text: 'Web Crypto is unavailable, so csszyx cannot recompute the mangle checksum.',
         help: 'serve the page over HTTPS, or from `localhost`.',
         note: '`crypto.subtle` exists only in a secure context; `verifyMangleChecksumAsync` answers `false` without checking.',
-        sources: [`${HYDRATION}:419`, `${HYDRATION}:42`],
+        sources: [HYDRATION],
     },
     {
         id: 'hydration-aborted',
@@ -1214,7 +1191,7 @@ export const DIAGNOSTICS = [
             'invalid-token':
                 'the caller reported: {message}; csszyx only marks the element, and nothing skips hydrating it unless your code checks `isHydrationAborted`.',
         },
-        sources: [`${HYDRATION}:504`],
+        sources: [HYDRATION],
     },
     {
         id: 'csr-recovery-unmarked',
@@ -1224,7 +1201,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.',
         help: 'add `szRecover="csr"` to recover it, or `szRecover="dev-only"` to recover it in development only.',
-        sources: [`${HYDRATION}:617`],
+        sources: [HYDRATION],
     },
     {
         id: 'csr-recovery-dev-only',
@@ -1251,7 +1228,7 @@ export const DIAGNOSTICS = [
             stripped: 'use `szRecover="csr"` on any of them whose recovery must run in production.',
         },
         note: { stripped: 'this is expected in a production build; the tokens are at {sites}.' },
-        sources: [`${HYDRATION}:633`, `${UNPLUGIN}:7934`],
+        sources: [HYDRATION, UNPLUGIN],
     },
     {
         id: 'csr-recovery-used',
@@ -1261,7 +1238,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The hydration-abort marks on this element were cleared, so your code can render it on the client.',
         help: 'fix the cause of the mismatch; with `szRecover="csr"`, this recovery also runs in production.',
-        sources: [`${HYDRATION}:617`],
+        sources: [HYDRATION],
     },
     {
         id: 'merge-table-format-skew',
@@ -1273,7 +1250,7 @@ export const DIAGNOSTICS = [
         args: { format: NUMBER, expected: NUMBER },
         text: 'The merge table was written in format {format}, and this csszyx version reads format {expected}, so `szcn` ignores the table and removes only exact repeats.',
         help: 'run the build, or `csszyx next prebuild` on Next.js, with the installed csszyx to write it again.',
-        sources: ['packages/runtime/src/merge-signatures.ts:57'],
+        sources: ['packages/runtime/src/merge-signatures.ts'],
     },
     {
         id: 'merge-table-missing',
@@ -1284,7 +1261,7 @@ export const DIAGNOSTICS = [
         text: "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
         help: 'use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.',
         note: 'the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.',
-        sources: ['packages/runtime/src/merge-classes.ts:207'],
+        sources: ['packages/runtime/src/merge-classes.ts'],
     },
     {
         id: 'uncompiled-sz',
@@ -1295,7 +1272,7 @@ export const DIAGNOSTICS = [
         text: 'A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.',
         help: 'add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.',
         note: 'csszyx dropped the object, so the DOM does not get `sz="[object Object]"`.',
-        sources: ['packages/runtime/src/strip-sz-props.ts:42'],
+        sources: ['packages/runtime/src/strip-sz-props.ts'],
     },
     {
         id: 'register-szcn-groups-ignored',
@@ -1306,7 +1283,7 @@ export const DIAGNOSTICS = [
         text: '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and the groups you register only name the property that `classify` and `splitBox` read.',
         help: 'declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.',
         note: '`szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats.',
-        sources: ['packages/runtime/src/merge-groups.ts:383'],
+        sources: ['packages/runtime/src/merge-groups.ts'],
     },
     {
         id: 'theme-token-ambiguous',
@@ -1328,7 +1305,7 @@ export const DIAGNOSTICS = [
             'font-family-weight':
                 'a `font:family` or `font:weight` placement in `splitBox` does not match `font-{name}`; `szcn` merges on the compiled CSS and is not affected.',
         },
-        sources: ['packages/runtime/src/merge-groups.ts:533'],
+        sources: ['packages/runtime/src/merge-groups.ts'],
     },
     {
         id: 'split-box-selector-invalid',
@@ -1363,7 +1340,7 @@ export const DIAGNOSTICS = [
                 "use one of `{properties}`; `classify('<a class>')` shows the one a class carries.",
             'sz-qualified': 'pass `{name}`.',
         },
-        sources: [`${SPLIT_BOX}:657`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-unknown-category',
@@ -1384,7 +1361,7 @@ export const DIAGNOSTICS = [
             'property-hint':
                 'use the category `{hint}`, or `{hint}:{name}` to match that property only.',
         },
-        sources: [`${SPLIT_BOX}:707`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-placement-variant',
@@ -1395,7 +1372,7 @@ export const DIAGNOSTICS = [
         args: { selector: STRING, side: { type: ['enum', 'inner', 'outer'] }, base: STRING },
         text: 'A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.',
         help: "write `{ {side}: ['{base}'] }`; it places every variant of `{base}`.",
-        sources: [`${SPLIT_BOX}:935`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-peer-on-frame',
@@ -1407,7 +1384,7 @@ export const DIAGNOSTICS = [
         args: { token: STRING, base: STRING, reaching: STRING },
         text: '`splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.',
         help: 'target the content from the frame instead: `{reaching}`.',
-        sources: [`${SPLIT_BOX}:1067`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-unclassified',
@@ -1433,7 +1410,7 @@ export const DIAGNOSTICS = [
             'raw-css':
                 "if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`.",
         },
-        sources: [`${SPLIT_BOX}:1087`, `${SPLIT_BOX}:1326`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-unbounded-scroll',
@@ -1443,7 +1420,7 @@ export const DIAGNOSTICS = [
         args: { scroller: STRING },
         text: '`splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.',
         help: 'give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content.',
-        sources: [`${SPLIT_BOX}:1146`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-unclipped-corners',
@@ -1453,7 +1430,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.',
         help: 'add `overflow-hidden` to the frame.',
-        sources: [`${SPLIT_BOX}:1155`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'split-box-hidden-content',
@@ -1463,7 +1440,7 @@ export const DIAGNOSTICS = [
         args: { hidden: STRING },
         text: '`splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.',
         help: "pass `{ outer: ['hidden'] }` if the whole box should disappear.",
-        sources: [`${SPLIT_BOX}:1168`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'szv-config-invalid',
@@ -1507,7 +1484,7 @@ export const DIAGNOSTICS = [
                 'make `variants.{dimension}` an object that maps each value to an sz object.',
             'variant-value': 'make it an sz object, such as `{ p: 4 }`, or `null` to add nothing.',
         },
-        sources: [`${VARIANTS}:293`],
+        sources: [VARIANTS],
     },
     {
         id: 'sz-object-depth',
@@ -1530,18 +1507,12 @@ export const DIAGNOSTICS = [
                 'flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data.',
         },
         sources: [
-            'packages/compiler/src/sz-limits.ts:38',
-            `${CORE_TS}:1961`,
-            `${VARIANTS}:296`,
-            'packages/dynamic/src/purify.ts:119',
-            'packages/dynamic/src/purify.ts:185',
-            'packages/runtime/src/core.ts:181',
-            `${SPLIT_BOX}:1414`,
-            `${SPLIT_BOX}:1436`,
-            `${SPLIT_BOX}:1479`,
-            `${SPLIT_BOX}:1585`,
-            `${SPLIT_BOX}:1612`,
-            `${VARIANTS}:128`,
+            'packages/compiler/src/sz-limits.ts',
+            CORE_TS,
+            VARIANTS,
+            'packages/dynamic/src/purify.ts',
+            'packages/runtime/src/core.ts',
+            SPLIT_BOX,
         ],
     },
     {
@@ -1552,7 +1523,7 @@ export const DIAGNOSTICS = [
         args: { where: STRING, key: STRING },
         text: '`{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.',
         help: 'remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`.',
-        sources: [`${VARIANTS}:300`],
+        sources: [VARIANTS],
     },
     {
         id: 'szv-unknown-variant',
@@ -1562,7 +1533,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING },
         text: 'The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.',
         help: 'declare `variants.{key}`, or remove `{key}` from the selection.',
-        sources: ['packages/runtime/src/selection-value.ts:69'],
+        sources: ['packages/runtime/src/selection-value.ts'],
     },
     {
         id: 'szv-unknown-variant-value',
@@ -1581,7 +1552,7 @@ export const DIAGNOSTICS = [
             listed: 'add `{value}` to `variants.{key}`, or use one of `{allowed}`.',
             none: 'add `{value}` to `variants.{key}`, which defines no value yet.',
         },
-        sources: ['packages/runtime/src/selection-value.ts:79'],
+        sources: ['packages/runtime/src/selection-value.ts'],
     },
     {
         id: 'szv-object-as-string',
@@ -1592,7 +1563,7 @@ export const DIAGNOSTICS = [
         text: 'An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.',
         help: 'pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.',
         note: 'a development build renders an empty string in its place.',
-        sources: [`${VARIANTS}:509`],
+        sources: [VARIANTS],
     },
     {
         id: 'dynamic-injection-growth',
@@ -1604,7 +1575,7 @@ export const DIAGNOSTICS = [
         args: { count: NUMBER },
         text: '`dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.',
         help: 'drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.',
-        sources: ['packages/dynamic/src/injector.ts:217'],
+        sources: ['packages/dynamic/src/injector.ts'],
     },
     {
         id: 'dynamic-unsafe-arbitrary',
@@ -1615,7 +1586,7 @@ export const DIAGNOSTICS = [
         text: 'The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.',
         help: 'keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.',
         note: 'only the first dropped value of a session is reported.',
-        sources: ['packages/dynamic/src/css-generator.ts:33'],
+        sources: ['packages/dynamic/src/css-generator.ts'],
     },
     {
         id: 'dynamic-non-boolean',
@@ -1625,7 +1596,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, and only a boolean toggles this class, so it is omitted.',
         help: 'pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.',
-        sources: ['packages/compiler/src/bool-class.ts:50'],
+        sources: ['packages/compiler/src/bool-class.ts'],
     },
     {
         id: 'dynamic-unresolvable',
@@ -1635,7 +1606,7 @@ export const DIAGNOSTICS = [
         args: { key: STRING, valueType: STRING },
         text: 'The runtime value of `{key}` has type `{valueType}`, which cannot be resolved to CSS, so the property is omitted.',
         help: 'pass a number, a token or a CSS length; for a responsive object, use `dynamic()`.',
-        sources: ['packages/compiler/src/spacing-var.ts:68'],
+        sources: ['packages/compiler/src/spacing-var.ts'],
     },
     {
         id: 'dev-warnings-partial',
@@ -1646,7 +1617,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The `sz` key warning above has no source location, so it does not name the file that triggered it.',
         help: 'run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line.',
-        sources: [`${CORE_TS}:1773`],
+        sources: [CORE_TS],
     },
     {
         id: 'diagnostics-capped',
@@ -1677,9 +1648,9 @@ export const DIAGNOSTICS = [
                 'look above for one key repeating with different names; sz keys built from data are the usual cause.',
         },
         sources: [
-            'packages/unplugin/src/diagnostic-limiter.ts:89',
-            'packages/runtime/src/dev-warn.ts:51',
-            `${CORE_TS}:3384`,
+            'packages/unplugin/src/diagnostic-limiter.ts',
+            'packages/runtime/src/dev-warn.ts',
+            CORE_TS,
         ],
     },
     {
@@ -1690,14 +1661,21 @@ export const DIAGNOSTICS = [
             error: { host: 'browser' },
         },
         position: 'site',
-        // `index` is where in `input` the parser met `char`.
-        args: { input: STRING, char: STRING, index: NUMBER },
-        text: 'The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.',
+        // `index` is where in `input` the parser met `char`, or, for `end`,
+        // where the attribute stopped before it was complete.
+        forms: ['char', 'end'],
+        args: {
+            form: formArg(['char', 'end']),
+            input: STRING,
+            char: OPTIONAL_STRING,
+            index: NUMBER,
+        },
+        text: {
+            char: 'The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.',
+            end: 'The `sz` attribute `{input}` ends at offset {index} before it is complete, so the element gets no classes from it.',
+        },
         help: 'write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
-        sources: [
-            'packages/csszyx/src/browser.ts:99',
-            'packages/csszyx/src/parse-sz-attribute.ts:44',
-        ],
+        sources: ['packages/csszyx/src/browser.ts', 'packages/csszyx/src/parse-sz-attribute.ts'],
     },
 
     // --- error: thrown, no console line of their own ---
@@ -1727,7 +1705,7 @@ export const DIAGNOSTICS = [
             'csszyx-turbopack-option':
                 'use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.',
         },
-        sources: [`${CORE_TS}:1928`, 'packages/unplugin/src/next-config.ts:129'],
+        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts'],
     },
     {
         id: 'lowering-not-loaded',
@@ -1737,7 +1715,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.',
         help: "add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.",
-        sources: ['packages/runtime/src/core.ts:218'],
+        sources: ['packages/runtime/src/core.ts'],
     },
     {
         id: 'lite-sz-object',
@@ -1748,7 +1726,7 @@ export const DIAGNOSTICS = [
         text: '`{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.',
         help: "write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.",
         note: 'a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`.',
-        sources: ['packages/runtime/src/lite.ts:47'],
+        sources: ['packages/runtime/src/lite.ts'],
     },
     {
         id: 'split-box-sz-string',
@@ -1759,7 +1737,7 @@ export const DIAGNOSTICS = [
         text: '`splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.',
         help: 'use `splitBox()` for a class string.',
         note: 'a production build drops the string instead of throwing.',
-        sources: [`${SPLIT_BOX}:1442`],
+        sources: [SPLIT_BOX],
     },
     {
         id: 'runtime-prefix-conflict',
@@ -1780,7 +1758,7 @@ export const DIAGNOSTICS = [
                 'Two builds sharing one JavaScript runtime registered different Tailwind prefixes, `{first}` and none, so csszyx cannot tell which prefix their classes take.',
         },
         help: 'keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix.',
-        sources: ['packages/runtime/src/lowering-slot.ts:157'],
+        sources: ['packages/runtime/src/lowering-slot.ts'],
     },
     {
         id: 'dynamic-manifest-unreachable',
@@ -1791,7 +1769,7 @@ export const DIAGNOSTICS = [
         text: 'The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.',
         help: 'serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.',
         note: 'the error is caught and nothing is printed; csszyx does not fetch it again this session until you call `resetManifest`.',
-        sources: ['packages/dynamic/src/manifest.ts:66'],
+        sources: ['packages/dynamic/src/manifest.ts'],
     },
     {
         id: 'native-engine-unavailable',
@@ -1809,6 +1787,7 @@ export const DIAGNOSTICS = [
             'not-installed',
             'missing-export',
             'stale-binding',
+            'stale-binding-versions',
             'wasm-fallback',
         ],
         args: {
@@ -1817,11 +1796,14 @@ export const DIAGNOSTICS = [
                 'not-installed',
                 'missing-export',
                 'stale-binding',
+                'stale-binding-versions',
                 'wasm-fallback',
             ]),
             platform: OPTIONAL_STRING,
             packageName: OPTIONAL_STRING,
             exportName: OPTIONAL_STRING,
+            nativeVersion: OPTIONAL_STRING,
+            coreVersion: OPTIONAL_STRING,
         },
         text: {
             'no-platform-package':
@@ -1831,6 +1813,8 @@ export const DIAGNOSTICS = [
                 '`{packageName}` does not export `{exportName}()`, which the installed `@csszyx/core` calls, so the `rust` parser cannot run.',
             'stale-binding':
                 '`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so the `rust` parser cannot run.',
+            'stale-binding-versions':
+                '`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so the `rust` parser cannot run.',
             'wasm-fallback':
                 'The native engine is not available here, so the default `rust` parser runs on the wasm engine.',
         },
@@ -1843,22 +1827,13 @@ export const DIAGNOSTICS = [
                 "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
             'stale-binding':
                 "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
+            'stale-binding-versions':
+                "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
             'wasm-fallback':
                 "reinstall without skipping optional dependencies to get the native engine, or set `build.parser: 'wasm'` to hide this line.",
         },
         note: 'the wasm engine produces the same output; only parsing is slower.',
-        sources: [
-            `${NATIVE}:88`,
-            `${NATIVE}:96`,
-            `${NATIVE}:103`,
-            `${NATIVE}:132`,
-            `${NATIVE}:162`,
-            'packages/compiler/src/transform-rust.ts:253',
-            'packages/compiler/src/transform-rust.ts:377',
-            'packages/compiler/src/transform-rust.ts:417',
-            'packages/compiler/src/transform-rust.ts:446',
-            `${UNPLUGIN}:3528`,
-        ],
+        sources: [NATIVE, 'packages/compiler/src/transform-rust.ts', UNPLUGIN],
     },
     {
         id: 'wasm-engine-unavailable',
@@ -1869,27 +1844,33 @@ export const DIAGNOSTICS = [
         text: 'The wasm engine in `@csszyx/core` did not load, so the `wasm` parser cannot run.',
         help: 'reinstall `@csszyx/core`; the wasm engine ships inside it as `parser-wasm`.',
         note: 'the loader reported: {detail}.',
-        sources: [
-            'packages/compiler/src/transform-wasm.ts:122',
-            'packages/compiler/src/transform-wasm.ts:169',
-        ],
+        sources: ['packages/compiler/src/transform-wasm.ts'],
     },
     {
         id: 'native-migrate-unavailable',
         summary: 'A native engine csszyx migrate needs and cannot load; migrate has no wasm lane.',
         surfaces: { error: { host: 'node', classes: ['RustMigrateUnavailableError'] } },
         position: 'none',
-        forms: ['no-platform-package', 'not-installed', 'missing-export', 'stale-binding'],
+        forms: [
+            'no-platform-package',
+            'not-installed',
+            'missing-export',
+            'stale-binding',
+            'stale-binding-versions',
+        ],
         args: {
             form: formArg([
                 'no-platform-package',
                 'not-installed',
                 'missing-export',
                 'stale-binding',
+                'stale-binding-versions',
             ]),
             platform: OPTIONAL_STRING,
             packageName: OPTIONAL_STRING,
             exportName: OPTIONAL_STRING,
+            nativeVersion: OPTIONAL_STRING,
+            coreVersion: OPTIONAL_STRING,
         },
         text: {
             'no-platform-package':
@@ -1899,6 +1880,8 @@ export const DIAGNOSTICS = [
                 '`{packageName}` predates migrate and does not export `{exportName}()`, so migrate cannot run.',
             'stale-binding':
                 '`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so migrate cannot run.',
+            'stale-binding-versions':
+                '`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so migrate cannot run.',
         },
         help: {
             'no-platform-package':
@@ -1909,12 +1892,11 @@ export const DIAGNOSTICS = [
                 'update `@csszyx/core` and `{packageName}` together, to a version that carries migrate.',
             'stale-binding':
                 'update `@csszyx/core` and `{packageName}` together, to the same version.',
+            'stale-binding-versions':
+                'update `@csszyx/core` and `{packageName}` together, to the same version.',
         },
         note: 'no file was changed; migrate runs on the native engine only, and builds and the runtime do not need it.',
-        sources: [
-            'packages/compiler/src/migrate-rust.ts:163',
-            'packages/compiler/src/migrate-rust.ts:279',
-        ],
+        sources: ['packages/compiler/src/migrate-rust.ts'],
     },
     {
         id: 'engine-version-skew',
@@ -1949,10 +1931,7 @@ export const DIAGNOSTICS = [
                 'install `@csszyx/core@{expectedVersion}`; it installs its platform package at the same version.',
             source: 'rebuild the engine from this checkout: `pnpm --filter @csszyx/core native:build` for native, `pnpm --filter @csszyx/core build` for wasm.',
         },
-        sources: [
-            'packages/compiler/src/engine-identity.ts:79',
-            'packages/compiler/src/engine-identity.ts:119',
-        ],
+        sources: ['packages/compiler/src/engine-identity.ts'],
     },
     {
         id: 'runtime-version-skew',
@@ -1962,10 +1941,7 @@ export const DIAGNOSTICS = [
         args: { pluginVersion: STRING, runtimeVersion: STRING, runtimeDir: STRING },
         text: '`@csszyx/unplugin` {pluginVersion} found `@csszyx/runtime` {runtimeVersion} at `{runtimeDir}`, and the two must come from the same release, so the build stops.',
         help: 'install `@csszyx/runtime@{pluginVersion}`.',
-        sources: [
-            'packages/unplugin/src/runtime-version.ts:45',
-            'packages/unplugin/src/runtime-version.ts:116',
-        ],
+        sources: ['packages/unplugin/src/runtime-version.ts'],
     },
     {
         id: 'peer-module-unresolved',
@@ -1975,7 +1951,7 @@ export const DIAGNOSTICS = [
         args: { requiredBy: STRING, request: STRING, install: STRING },
         text: '`{requiredBy}` reads templates with `{request}`, which does not resolve from it, so no template is read.',
         help: 'install `{install}` in the project.',
-        sources: ['packages/compiler/src/peer-module.ts:60'],
+        sources: ['packages/compiler/src/peer-module.ts'],
     },
     {
         id: 'tailwind-v3-unavailable',
@@ -2008,11 +1984,7 @@ export const DIAGNOSTICS = [
                 '`tailwind.config.js` and the `resolveConfig` helper this command calls were removed in Tailwind v4.',
             'broken-entry': 'loading the entry reported: {reason}.',
         },
-        sources: [
-            'packages/cli/src/scanner/tailwind-availability.ts:241',
-            'packages/cli/src/scanner/tailwind-availability.ts:246',
-            'packages/cli/src/scanner/tailwind-availability.ts:271',
-        ],
+        sources: ['packages/cli/src/scanner/tailwind-availability.ts'],
     },
     {
         id: 'explain-input-invalid',
@@ -2037,10 +2009,7 @@ export const DIAGNOSTICS = [
             'runtime-only':
                 'write its values as literals to see the classes the build emits; a warning printed below, when there is one, names the value that needs the runtime.',
         },
-        sources: [
-            'packages/cli/src/commands/explain.ts:108',
-            'packages/cli/src/commands/explain.ts:117',
-        ],
+        sources: ['packages/cli/src/commands/explain.ts'],
     },
     {
         id: 'template-sz-invalid',
@@ -2052,9 +2021,9 @@ export const DIAGNOSTICS = [
         text: 'This file has {count} `sz` error(s), so the build stops.',
         help: 'fix each error listed below.',
         sources: [
-            'packages/compiler/src/template-sz.ts:497',
-            'packages/svelte-adapter/src/index.ts:103',
-            `${UNPLUGIN}:6879`,
+            'packages/compiler/src/template-sz.ts',
+            'packages/svelte-adapter/src/index.ts',
+            UNPLUGIN,
         ],
     },
     {
@@ -2066,7 +2035,7 @@ export const DIAGNOSTICS = [
         text: 'This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.',
         help: 'write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.',
         note: 'the attribute is left as written.',
-        sources: ['packages/compiler/src/template-sz.ts:240'],
+        sources: ['packages/compiler/src/template-sz.ts'],
     },
     {
         id: 'template-unparsable',
@@ -2098,8 +2067,8 @@ export const DIAGNOSTICS = [
             'svelte-preprocess': 'the Svelte compiler reported: {parserMessage}.',
         },
         sources: [
-            'packages/vue-adapter/src/template-ast.ts:123',
-            'packages/svelte-adapter/src/markup-ast.ts:92',
+            'packages/vue-adapter/src/template-ast.ts',
+            'packages/svelte-adapter/src/markup-ast.ts',
         ],
     },
     {
@@ -2110,7 +2079,7 @@ export const DIAGNOSTICS = [
         args: { lang: STRING },
         text: 'This template is `<template lang="{lang}">`, and csszyx reads `sz` in HTML templates only, so no `sz` attribute in it gets a class.',
         help: 'write the template in HTML, or bind `class` yourself in it.',
-        sources: ['packages/vue-adapter/src/template-ast.ts:130'],
+        sources: ['packages/vue-adapter/src/template-ast.ts'],
     },
     {
         id: 'svelte-version-unsupported',
@@ -2120,7 +2089,7 @@ export const DIAGNOSTICS = [
         args: { version: STRING },
         text: 'Svelte {version} resolves here, and csszyx reads Svelte 5 markup only, so no `sz` attribute in this file gets a class.',
         help: 'install `svelte@5`.',
-        sources: ['packages/svelte-adapter/src/markup-ast.ts:77'],
+        sources: ['packages/svelte-adapter/src/markup-ast.ts'],
     },
     {
         id: 'ignore-package-incompatible',
@@ -2131,7 +2100,7 @@ export const DIAGNOSTICS = [
         args: { pinned: STRING },
         text: 'The installed `ignore` package lacks the internal matcher csszyx calls, so csszyx cannot read `.gitignore` and stops.',
         help: 'remove any override or resolution that forces another version of `ignore`, so csszyx gets `ignore@{pinned}`, the version it pins.',
-        sources: ['packages/tailwind-oracle/src/project-walk.ts:197'],
+        sources: ['packages/tailwind-oracle/src/project-walk.ts'],
     },
     {
         id: 'internal-error',
@@ -2148,23 +2117,18 @@ export const DIAGNOSTICS = [
         help: 'report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.',
         note: 'the check that failed: {detail}.',
         sources: [
-            'packages/compiler/src/transform-rust.ts:120',
-            'packages/compiler/src/transform-wasm.ts:290',
-            'packages/compiler/src/transform-wasm.ts:360',
-            'packages/unplugin/src/next-source-transformer.ts:81',
-            `${UNPLUGIN}:1914`,
-            `${UNPLUGIN}:2946`,
-            `${UNPLUGIN}:4327`,
-            `${UNPLUGIN}:5763`,
-            'packages/unplugin/src/next-watcher.ts:132',
-            'packages/unplugin/src/stable-file-snapshot.ts:44',
-            'packages/tailwind-oracle/src/map-concurrent.ts:41',
-            'packages/tailwind-oracle/src/project-resolver.ts:121',
-            'packages/core/src/lib.rs:158',
-            'packages/core/src/native.rs:444',
-            'packages/unplugin/src/next-watcher.ts:142',
-            'packages/unplugin/src/next-generation-manifest.ts:155',
-            'packages/unplugin/src/next-watcher-cycle.ts:75',
+            'packages/compiler/src/transform-rust.ts',
+            'packages/compiler/src/transform-wasm.ts',
+            'packages/unplugin/src/next-source-transformer.ts',
+            UNPLUGIN,
+            'packages/unplugin/src/next-watcher.ts',
+            'packages/unplugin/src/stable-file-snapshot.ts',
+            'packages/tailwind-oracle/src/map-concurrent.ts',
+            'packages/tailwind-oracle/src/project-resolver.ts',
+            'packages/core/src/lib.rs',
+            'packages/core/src/native.rs',
+            'packages/unplugin/src/next-generation-manifest.ts',
+            'packages/unplugin/src/next-watcher-cycle.ts',
         ],
     },
     {
@@ -2176,7 +2140,7 @@ export const DIAGNOSTICS = [
         text: 'The prescan could not transform `{file}`, so none of its classes reached the safelist.',
         help: 'fix the error the transform reported; under Tailwind `source(none)`, no class of this file gets CSS until then.',
         note: 'the transform reported: {detail}.',
-        sources: [`${UNPLUGIN}:4608`],
+        sources: [UNPLUGIN],
     },
 
     // --- node: build, config and CLI lines of the Node packages ---
@@ -2195,11 +2159,7 @@ export const DIAGNOSTICS = [
                 'This file has {count} problem(s), so it is not applied and the `recommended` levels apply.',
         },
         help: 'https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.',
-        sources: [
-            `${POLICY}:706`,
-            'packages/unplugin/src/sync-lane-policy.ts:250',
-            `${CHECK}:1434`,
-        ],
+        sources: [POLICY, 'packages/unplugin/src/sync-lane-policy.ts', CHECK],
     },
     {
         id: 'unknown-rule-id',
@@ -2217,7 +2177,7 @@ export const DIAGNOSTICS = [
             cli: 'No rule or diagnostic is named `{ids}`, so the selection would match nothing and `csszyx check` stops.',
         },
         help: '{spellingHint}; https://csszyx.com/docs/reference/warnings/ lists every id.',
-        sources: [`${POLICY}:403`, `${CHECK}:1301`],
+        sources: [POLICY, CHECK],
     },
     {
         id: 'config-id-not-settable',
@@ -2227,7 +2187,7 @@ export const DIAGNOSTICS = [
         args: { id: STRING },
         text: '`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.',
         help: 'remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.',
-        sources: [`${POLICY}:365`],
+        sources: [POLICY],
     },
     {
         id: 'removed-rule-id',
@@ -2241,7 +2201,7 @@ export const DIAGNOSTICS = [
             replaced: 'name `{replacedBy}` instead, which reports what `{id}` did.',
             removed: 'remove it.',
         },
-        sources: [`${POLICY}:394`, `${CHECK}:1291`],
+        sources: [POLICY, CHECK],
     },
     {
         id: 'config-level-invalid',
@@ -2251,7 +2211,7 @@ export const DIAGNOSTICS = [
         args: { id: STRING, level: STRING },
         text: '`{id}` is set to `{level}`, which is not a level, so that setting is ignored.',
         help: "use `'off'`, `'info'`, `'warn'` or `'error'`.",
-        sources: [`${POLICY}:405`],
+        sources: [POLICY],
     },
     {
         id: 'config-preset-unknown',
@@ -2261,7 +2221,7 @@ export const DIAGNOSTICS = [
         args: { preset: STRING },
         text: '`{preset}` is not a preset, so the `recommended` levels apply.',
         help: "use `'recommended'` or `'atomic'`.",
-        sources: [`${POLICY}:669`],
+        sources: [POLICY],
     },
     {
         id: 'config-field-unknown',
@@ -2289,13 +2249,7 @@ export const DIAGNOSTICS = [
             diagnostics: 'use `preset`, `rules`, `allow` or `overrides`.',
             allow: 'use `classes` or `tokens`.',
         },
-        sources: [
-            `${POLICY}:452`,
-            `${POLICY}:588`,
-            `${POLICY}:601`,
-            `${POLICY}:608`,
-            `${POLICY}:658`,
-        ],
+        sources: [POLICY],
     },
     {
         id: 'config-field-invalid',
@@ -2339,16 +2293,7 @@ export const DIAGNOSTICS = [
             override: "write it as `{ files: 'src/legacy/**', rules: { 'dead-class': 'off' } }`.",
             globs: "write a glob relative to the project root, such as `'src/legacy/**'`, or a list of them.",
         },
-        sources: [
-            `${POLICY}:388`,
-            `${POLICY}:430`,
-            `${POLICY}:443`,
-            `${POLICY}:536`,
-            `${POLICY}:547`,
-            `${POLICY}:552`,
-            `${POLICY}:632`,
-            `${POLICY}:648`,
-        ],
+        sources: [POLICY],
     },
     {
         id: 'config-glob-unmatchable',
@@ -2358,7 +2303,7 @@ export const DIAGNOSTICS = [
         args: { glob: STRING },
         text: '`{glob}` is absolute or steps out of the project root with `..`, so it matches no file.',
         help: 'write it relative to the project root, such as `src/legacy/**`; csszyx matches each file by its path from there.',
-        sources: [`${POLICY}:509`],
+        sources: [POLICY],
     },
     {
         id: 'config-file-duplicate',
@@ -2368,7 +2313,7 @@ export const DIAGNOSTICS = [
         args: { read: STRING },
         text: '`{read}` is read first, so this file is not read and nothing in it applies.',
         help: 'keep one config file: move what this file sets into `{read}`, then delete this file.',
-        sources: [`${CONFIG_FILE}:573`],
+        sources: [CONFIG_FILE],
     },
     {
         id: 'config-unloadable',
@@ -2398,12 +2343,7 @@ export const DIAGNOSTICS = [
             worker: 'make the file load in plain Node; `csszyx next prebuild` and `csszyx next watch` write `.csszyx/diagnostic-policy.json` for {lane}.',
         },
         note: 'the loader reported: {reason}.',
-        sources: [
-            `${CONFIG_FILE}:585`,
-            `${CONFIG_FILE}:591`,
-            'packages/unplugin/src/sync-lane-policy.ts:112',
-            'packages/unplugin/src/sync-lane-policy.ts:245',
-        ],
+        sources: [CONFIG_FILE, 'packages/unplugin/src/sync-lane-policy.ts'],
     },
     {
         id: 'config-no-default-export',
@@ -2413,7 +2353,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This file has no default export, so nothing in it applies.',
         help: 'write `export default defineConfig({ … })`, importing `defineConfig` from `csszyx`.',
-        sources: [`${CONFIG_FILE}:603`],
+        sources: [CONFIG_FILE],
     },
     {
         id: 'policy-state-format-skew',
@@ -2424,7 +2364,7 @@ export const DIAGNOSTICS = [
         text: 'This policy file was written in format {format}, and this csszyx version reads format {expected}, so the levels in it are not used.',
         help: 'run `csszyx next prebuild` or `csszyx next watch` with the installed csszyx to write it again.',
         note: 'until then csszyx loads the config file itself, in a child process, or applies the `recommended` levels when the project has none.',
-        sources: [`${CONFIG_FILE}:85`],
+        sources: [CONFIG_FILE],
     },
     {
         id: 'safelist-shard-format-skew',
@@ -2435,7 +2375,7 @@ export const DIAGNOSTICS = [
         text: 'This safelist shard was written in format {format}, and this csszyx version reads format {expected}, so its classes are left out of the safelist.',
         help: 'run `csszyx next prebuild` with the installed csszyx to write every shard again.',
         note: 'until then a class only this shard lists gets no CSS.',
-        sources: ['packages/unplugin/src/next-safelist-state.ts:56'],
+        sources: ['packages/unplugin/src/next-safelist-state.ts'],
     },
     {
         id: 'diagnostics-held',
@@ -2446,7 +2386,7 @@ export const DIAGNOSTICS = [
         text: 'This build held back {count} finding(s) at `info` and listed none of them.',
         help: 'run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.',
         note: 'they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.',
-        sources: ['packages/unplugin/src/transform-diagnostics.ts:100'],
+        sources: ['packages/unplugin/src/transform-diagnostics.ts'],
     },
     {
         id: 'merge-covered-held',
@@ -2462,7 +2402,7 @@ export const DIAGNOSTICS = [
         text: 'The build removed {classes} class(es) in {files} file(s), because another class on the same element sets every property they set.',
         help: '`csszyx check --rule {kinds}` lists them; `build.mergeCoveredClasses: false` in the plugin options keeps every one.',
         note: "this line stays until each id after `--rule` is `'off'` in `diagnostics.rules` of `{configFile}`.",
-        sources: ['packages/unplugin/src/merge-audit.ts:174', `${UNPLUGIN}:4033`],
+        sources: ['packages/unplugin/src/merge-audit.ts', UNPLUGIN],
     },
     {
         id: 'removed-option',
@@ -2487,12 +2427,7 @@ export const DIAGNOSTICS = [
             'mangle-map-delivery':
                 "a strict `script-src 'self'` policy needs no exception; `window.__csszyx` is opt-in through `production.mangleDebugGlobal`.",
         },
-        sources: [
-            'packages/unplugin/src/mangle-delivery.ts:65',
-            'packages/unplugin/src/mangle-delivery.ts:85',
-            `${UNPLUGIN}:3202`,
-            `${UNPLUGIN}:3196`,
-        ],
+        sources: ['packages/unplugin/src/mangle-delivery.ts', UNPLUGIN],
     },
     {
         id: 'transform-cache-disabled',
@@ -2503,7 +2438,7 @@ export const DIAGNOSTICS = [
         text: 'The build could not read the installed version of `@csszyx/unplugin` or `@csszyx/compiler`, so the transform cache is off and every build transforms each file again.',
         help: 'reinstall `@csszyx/unplugin` and `@csszyx/compiler`, or set `build.cache: false` to hide this line.',
         note: 'the build output is the same; only rebuilds are slower.',
-        sources: [`${UNPLUGIN}:3236`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'active-parser',
@@ -2518,7 +2453,7 @@ export const DIAGNOSTICS = [
             degraded:
                 'This build parses with the wasm engine in place of the default native engine.',
         },
-        sources: [`${UNPLUGIN}:3550`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'project-reload',
@@ -2541,7 +2476,7 @@ export const DIAGNOSTICS = [
             'prefix-removed':
                 'This file removed the Tailwind prefix `{before}`, so csszyx recompiled every module and reloaded the page.',
         },
-        sources: [`${UNPLUGIN}:3470`, `${UNPLUGIN}:6333`, `${UNPLUGIN}:6342`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'watch-prefix-changed',
@@ -2564,7 +2499,7 @@ export const DIAGNOSTICS = [
         },
         help: 'restart the watch session.',
         note: 'every rebuild fails with this error until the restart, or until the prefix is changed back.',
-        sources: [`${UNPLUGIN}:5702`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'watch-merge-groups-changed',
@@ -2576,7 +2511,7 @@ export const DIAGNOSTICS = [
         text: '`{changed}` changed which sz keys cover each other, and this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or lack one a later key no longer covers.',
         help: 'restart the watch session.',
         note: 'this rebuild finished, and only sz objects that use those keys are stale until the restart.',
-        sources: [`${UNPLUGIN}:6487`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'safelist-unwritable',
@@ -2587,7 +2522,7 @@ export const DIAGNOSTICS = [
         text: 'The generated safelist could not be written, so the CSS Tailwind generates is missing the classes csszyx found.',
         help: 'check that the directory exists and is writable.',
         note: 'the file system reported: {reason}.',
-        sources: [`${UNPLUGIN}:4722`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'safelist-capped',
@@ -2598,7 +2533,7 @@ export const DIAGNOSTICS = [
         text: 'The safelist reached its cap of {max} classes, so the build left out every class it found after that.',
         help: 'look for `sz` values that write a different arbitrary value per element, such as `w-[137px]`, and replace them with theme values.',
         note: 'the classes left out produce no CSS unless another source names them; the cap is fixed, and no option raises it.',
-        sources: [`${UNPLUGIN}:7540`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'utility-collision',
@@ -2618,7 +2553,7 @@ export const DIAGNOSTICS = [
             'theme-token': 'rename the `@utility` or the theme token.',
         },
         note: 'every use of `{name}` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.',
-        sources: [`${UNPLUGIN}:2298`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'theme-scan-without-typescript',
@@ -2628,7 +2563,7 @@ export const DIAGNOSTICS = [
         args: { tsconfig: STRING, includePath: STRING },
         text: '`{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.',
         help: 'add `"{includePath}"` to its `include` array.',
-        sources: [`${UNPLUGIN}:2341`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'esbuild-mangle-unsupported',
@@ -2639,7 +2574,7 @@ export const DIAGNOSTICS = [
         text: 'The esbuild adapter does not support `production.mangle`, so class mangling is off for this build.',
         help: 'use the Vite, Rollup or webpack plugin when the build needs mangled class names.',
         note: 'emitted JS and CSS keep the original class names, so they still match.',
-        sources: [`${UNPLUGIN}:8569`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'mangle-selector-unparsable',
@@ -2650,7 +2585,7 @@ export const DIAGNOSTICS = [
         text: 'The class mangler could not parse the selector `{selector}`, so this rule keeps the original class names, which the mangled markup no longer carries.',
         help: 'add the classes of this selector to `production.manglePreserve`, which keeps them unmangled in the markup and the CSS; if your CSS wrote the selector, fix its syntax.',
         note: 'the parser reported: {error}.',
-        sources: ['packages/unplugin/src/css-mangler.ts:330'],
+        sources: ['packages/unplugin/src/css-mangler.ts'],
     },
     {
         id: 'mangle-preserve-invalid',
@@ -2673,10 +2608,7 @@ export const DIAGNOSTICS = [
             'lone-star':
                 'name a prefix, such as `bg-tag-*`, or set `production.mangle: false` to turn mangling off.',
         },
-        sources: [
-            'packages/unplugin/src/mangle-preserve.ts:84',
-            'packages/unplugin/src/mangle-preserve.ts:90',
-        ],
+        sources: ['packages/unplugin/src/mangle-preserve.ts'],
     },
     {
         id: 'mangle-global-vars-options-invalid',
@@ -2705,7 +2637,7 @@ export const DIAGNOSTICS = [
             schema: 'the problems:\n    - {errors}',
             'tokens-required': 'csszyx aliases only the custom properties listed in `tokens`.',
         },
-        sources: [`${UNPLUGIN}:2916`, `${UNPLUGIN}:2922`, `${UNPLUGIN}:2928`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'mangle-global-vars-plan-invalid',
@@ -2716,7 +2648,7 @@ export const DIAGNOSTICS = [
         text: '`production.mangleGlobalVars` cannot alias every listed property safely, so the build stops.',
         help: 'fix each usage listed below, or take that property out of `tokens`.',
         note: 'the findings:\n    - {findings}',
-        sources: [`${UNPLUGIN}:1841`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'mangle-map-too-large',
@@ -2726,7 +2658,7 @@ export const DIAGNOSTICS = [
         args: { size: NUMBER, maxBytes: NUMBER },
         text: 'The CSS variable mangle map is {size} bytes, over its safety cap of {maxBytes} bytes, so the build stops.',
         help: 'turn `production.mangleVars` off or split the bundle; to accept this size, raise the `CSSZYX_VAR_MANGLE_MAP_MAX_BYTES` environment variable above {size}.',
-        sources: [`${UNPLUGIN}:2066`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'mangle-census-late',
@@ -2750,7 +2682,7 @@ export const DIAGNOSTICS = [
             'census-changed':
                 'move every file that uses csszyx under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.',
         },
-        sources: [`${UNPLUGIN}:5867`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'mangle-hybrid-hazard',
@@ -2792,7 +2724,7 @@ export const DIAGNOSTICS = [
                 'a prefix or substring selector can match tokens a later build allocates too, so the data attribute is the lasting fix.',
             orphan: 'a class that no stylesheet styles had no CSS before the rename either, so it changes nothing.',
         },
-        sources: [`${UNPLUGIN}:8094`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'merge-hook-late',
@@ -2803,7 +2735,7 @@ export const DIAGNOSTICS = [
         text: '`{className}` was removed from this file before csszyx read a rule that selects on it, so the page would lose that class, and the build stops.',
         help: 'set `build.mergeCoveredClasses: false` to keep every class, or restart the watch session.',
         note: 'csszyx reads such rules during the prescan, before it merges; this one came later, from a module the prescan did not reach or from an edit during a watch session.',
-        sources: [`${UNPLUGIN}:5737`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'merge-origin-unreadable',
@@ -2815,7 +2747,7 @@ export const DIAGNOSTICS = [
         text: "This Tailwind stylesheet did not compile once csszyx took out its `@utility` blocks and plugin classes, so csszyx cannot tell Tailwind's classes from the project's and merges no class in this build.",
         help: 'report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message and the plugin or `@utility` block the stylesheet uses.',
         note: 'every class is kept, so `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays beside the `sz` classes, and `szcn` removes only exact repeats; the compile reported: {reason}.',
-        sources: [`${UNPLUGIN}:5624`, 'packages/unplugin/src/next-stylesheet-facts.ts:435'],
+        sources: [UNPLUGIN, 'packages/unplugin/src/next-stylesheet-facts.ts'],
     },
     {
         id: 'tailwind-stylesheet-missing',
@@ -2825,7 +2757,7 @@ export const DIAGNOSTICS = [
         args: { setting: STRING, missing: { type: 'string[]', joiner: '`, `' }, root: STRING },
         text: 'The stylesheet(s) `{missing}` named by {setting} do not exist under `{root}`, so the build stops.',
         help: 'list the Tailwind stylesheet this build loads, relative to the project root.',
-        sources: ['packages/unplugin/src/next-stylesheet-facts.ts:347', `${UNPLUGIN}:5586`],
+        sources: ['packages/unplugin/src/next-stylesheet-facts.ts', UNPLUGIN],
     },
     {
         id: 'tailwind-stylesheet-absent',
@@ -2836,7 +2768,7 @@ export const DIAGNOSTICS = [
         args: { count: NUMBER },
         text: 'This build emitted {count} class(es) for `sz` props and processed no Tailwind stylesheet, so none of those classes produces CSS.',
         help: 'add `@import "tailwindcss";` to a stylesheet the app loads; csszyx adds the `@source` for its safelist there itself.',
-        sources: [`${UNPLUGIN}:7490`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'tailwind-stylesheet-broken',
@@ -2847,7 +2779,7 @@ export const DIAGNOSTICS = [
         text: 'A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.',
         help: 'fix the stylesheet; if this build does not load it, list the stylesheets it does load with {setting}.',
         note: 'each failure, as Tailwind reported it:\n    {stylesheets}',
-        sources: [`${UNPLUGIN}:5604`, 'packages/unplugin/src/next-stylesheet-facts.ts:376'],
+        sources: [UNPLUGIN, 'packages/unplugin/src/next-stylesheet-facts.ts'],
     },
     {
         id: 'tailwind-config-missing',
@@ -2867,8 +2799,8 @@ export const DIAGNOSTICS = [
                 'the search looks in this directory only, for `tailwind.config.ts`, `.js`, `.cjs` and `.mjs`.',
         },
         sources: [
-            'packages/cli/src/scanner/tailwind-scanner.ts:109',
-            'packages/cli/src/commands/generate-types.ts:65',
+            'packages/cli/src/scanner/tailwind-scanner.ts',
+            'packages/cli/src/commands/generate-types.ts',
         ],
     },
     {
@@ -2880,7 +2812,7 @@ export const DIAGNOSTICS = [
         text: 'This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.',
         help: 'fix the error below so that Node can import the config.',
         note: 'the import failed with: {reason}.',
-        sources: ['packages/cli/src/scanner/tailwind-scanner.ts:123'],
+        sources: ['packages/cli/src/scanner/tailwind-scanner.ts'],
     },
     {
         id: 'legacy-source-directive',
@@ -2892,9 +2824,9 @@ export const DIAGNOSTICS = [
         help: "remove this line; on Next.js, also list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.",
         note: 'csszyx adds the `@source` for `.csszyx/csszyx-classes.txt` itself: the Vite, Rollup and webpack plugins inject it, and on Next.js `@csszyx/unplugin/postcss` does.',
         sources: [
-            'packages/unplugin/src/safelist-source.ts:248',
-            'packages/unplugin/src/postcss.ts:79',
-            `${UNPLUGIN}:6732`,
+            'packages/unplugin/src/safelist-source.ts',
+            'packages/unplugin/src/postcss.ts',
+            UNPLUGIN,
         ],
     },
     {
@@ -2906,7 +2838,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: '`@csszyx/unplugin/postcss` is listed after `@tailwindcss/postcss`, so Tailwind compiles the stylesheet before csszyx adds the safelist, and the build stops.',
         help: "list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.",
-        sources: ['packages/unplugin/src/postcss.ts:110'],
+        sources: ['packages/unplugin/src/postcss.ts'],
     },
     {
         id: 'postcss-plugin-missing',
@@ -2917,7 +2849,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'The PostCSS config Next.js reads does not list `@csszyx/unplugin/postcss`, so Tailwind never reads the safelist and no `sz` class produces CSS.',
         help: 'add `@csszyx/unplugin/postcss` to its plugins, before `@tailwindcss/postcss`.',
-        sources: ['packages/unplugin/src/next-prebuild.ts:151'],
+        sources: ['packages/unplugin/src/next-prebuild.ts'],
     },
     {
         id: 'ignore-pattern-negated',
@@ -2928,7 +2860,7 @@ export const DIAGNOSTICS = [
         text: 'The ignore pattern `{pattern}` is negated, and an ignore list cannot take one, so csszyx stops.',
         help: 'narrow the pattern that covers too much, so that nothing has to be taken back out.',
         note: 'each pattern only adds paths to leave out.',
-        sources: ['packages/unplugin/src/root-ignore-matcher.ts:63'],
+        sources: ['packages/unplugin/src/root-ignore-matcher.ts'],
     },
     {
         id: 'compile-sources-unresolved',
@@ -2938,7 +2870,7 @@ export const DIAGNOSTICS = [
         args: { paths: { type: 'string[]', joiner: '`, `' }, root: STRING },
         text: 'The `compileSources` path(s) `{paths}` do not resolve to a directory from `{root}`, so the build compiles nothing from them and adds none of their classes to the safelist.',
         help: "point each path at a directory, relative to the project root or absolute, such as `compileSources: ['../../packages/vui']`.",
-        sources: [`${UNPLUGIN}:3789`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'compile-sources-skipped',
@@ -2960,7 +2892,7 @@ export const DIAGNOSTICS = [
             'szv-exports':
                 'of these, {szvCount} may export `szv` factories, so another module that calls one runs it at runtime instead of getting its classes compiled in; the skipped files:\n    {files}',
         },
-        sources: [`${UNPLUGIN}:7527`],
+        sources: [UNPLUGIN],
     },
     {
         id: 'css-source-unstable',
@@ -2970,7 +2902,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This CSS file changed on every read, so the build stops.',
         help: 'stop the tool that rewrites it during the build, such as a formatter or a second watcher.',
-        sources: ['packages/unplugin/src/stable-file-snapshot.ts:61'],
+        sources: ['packages/unplugin/src/stable-file-snapshot.ts'],
     },
     {
         id: 'rsc-boundary-violation',
@@ -2980,10 +2912,7 @@ export const DIAGNOSTICS = [
         args: { symbol: STRING, chain: { type: 'string[]', joiner: '` -> `' } },
         text: 'This Server Component reaches `{symbol}` through its imports, and `{symbol}` runs only on the client, so the build stops.',
         help: "add `'use client'` to the module of `{chain}` that uses `{symbol}`, or keep that module out of server code; csszyx inserts `{symbol}` where an `sz` prop's value is known only at runtime.",
-        sources: [
-            'packages/unplugin/src/rsc-boundary.ts:222',
-            'packages/unplugin/src/rsc-boundary.ts:272',
-        ],
+        sources: ['packages/unplugin/src/rsc-boundary.ts'],
     },
     {
         id: 'next-prefix-unread',
@@ -3013,9 +2942,8 @@ export const DIAGNOSTICS = [
             'turbopack-loader': 'this module was not transformed.',
         },
         sources: [
-            'packages/unplugin/src/next-prebuild.ts:164',
-            'packages/unplugin/src/next-turbo-loader.ts:218',
-            'packages/unplugin/src/next-turbo-loader.ts:644',
+            'packages/unplugin/src/next-prebuild.ts',
+            'packages/unplugin/src/next-turbo-loader.ts',
         ],
     },
     {
@@ -3034,11 +2962,7 @@ export const DIAGNOSTICS = [
         text: 'Process {pid} on `{host}` holds the csszyx safelist lock for `{root}` in {mode} mode, so this process cannot write the safelist.',
         help: 'stop that process, such as a running `csszyx next watch`, or wait for it to finish; a lock not refreshed for 30 seconds is taken over by the next run.',
         note: 'the lock was last refreshed at {updatedAt}.',
-        sources: [
-            'packages/unplugin/src/next-safelist-state.ts:362',
-            'packages/unplugin/src/next-safelist-state.ts:370',
-            'packages/unplugin/src/next-safelist-state.ts:838',
-        ],
+        sources: ['packages/unplugin/src/next-safelist-state.ts'],
     },
     {
         id: 'next-mangle-vars-unsupported',
@@ -3060,8 +2984,8 @@ export const DIAGNOSTICS = [
                 'set `config: { mangleVars: false }` in `csszyxTurbopack`, or build with webpack (`next build --webpack`), which mangles them.',
         },
         sources: [
-            'packages/unplugin/src/next-prebuild.ts:260',
-            'packages/unplugin/src/next-turbo-loader.ts:599',
+            'packages/unplugin/src/next-prebuild.ts',
+            'packages/unplugin/src/next-turbo-loader.ts',
         ],
     },
     {
@@ -3074,7 +2998,7 @@ export const DIAGNOSTICS = [
         text: 'The Turbopack production build of `{root}` has no current safelist from `csszyx next prebuild`, so it stops.',
         help: 'run `csszyx next prebuild` before `next build`, such as `"build": "csszyx next prebuild \'app/**/*.tsx\' && next build"` in `package.json`.',
         note: 'the safelist check reported: {reason}.',
-        sources: ['packages/unplugin/src/next-turbo-loader.ts:565'],
+        sources: ['packages/unplugin/src/next-turbo-loader.ts'],
     },
     {
         id: 'next-sz-untransformed',
@@ -3084,7 +3008,7 @@ export const DIAGNOSTICS = [
         args: {},
         text: 'This module still holds `sz` syntax after the csszyx transform, so the build stops.',
         help: 'fix the warning reported for this file, such as a syntax error or an `ast-budget` warning for a file too large to transform; if `sz` here is not the `sz` prop, such as an object key of your own, rename it.',
-        sources: ['packages/unplugin/src/next-source-transformer.ts:126'],
+        sources: ['packages/unplugin/src/next-source-transformer.ts'],
     },
     {
         id: 'next-watcher-unclosed',
@@ -3095,7 +3019,7 @@ export const DIAGNOSTICS = [
         text: 'The Next safelist watcher failed while closing, so `csszyx next watch` exits with code 1.',
         help: 'run `csszyx next prebuild` to write the safelist from every source again.',
         note: 'the watcher reported: {detail}; a file saved after its last finished cycle may be missing from the safelist.',
-        sources: ['packages/cli/src/commands/next-watch.ts:553'],
+        sources: ['packages/cli/src/commands/next-watch.ts'],
     },
     {
         id: 'no-source-files',
@@ -3106,8 +3030,8 @@ export const DIAGNOSTICS = [
         text: 'No source file under `{root}` matches `{pattern}`, so there is nothing to scan for classes.',
         help: 'pass a glob, relative to `{root}`, that matches your sources as the `[pattern]` argument, or point `--root` at the Next app; files under an `--ignore` pattern do not count.',
         sources: [
-            'packages/cli/src/commands/next-watch.ts:269',
-            'packages/cli/src/commands/next-prebuild.ts:153',
+            'packages/cli/src/commands/next-watch.ts',
+            'packages/cli/src/commands/next-prebuild.ts',
         ],
     },
     {
@@ -3147,11 +3071,11 @@ export const DIAGNOSTICS = [
                 '`nuxt`, `sveltekit` and `astro` are accepted too; for them `csszyx init` prints the Vite plugin lines to add by hand.',
         },
         sources: [
-            'packages/cli/src/commands/next-prebuild.ts:227',
-            'packages/cli/src/commands/next-options.ts:21',
-            'packages/cli/src/commands/next-watch.ts:725',
-            `${CHECK}:1407`,
-            'packages/cli/src/commands/init.ts:226',
+            'packages/cli/src/commands/next-prebuild.ts',
+            'packages/cli/src/commands/next-options.ts',
+            'packages/cli/src/commands/next-watch.ts',
+            CHECK,
+            'packages/cli/src/commands/init.ts',
         ],
     },
 ];

@@ -25,8 +25,15 @@ export interface TemplatedDiagnostic {
  * entry is one; so is each export of the browser module.
  */
 export interface SzDiagnosticTemplate {
-    /** Every arg, by name; a list arg with the separator it is written with. */
-    readonly args: Readonly<Record<string, { readonly joiner?: string }>>;
+    /**
+     * Every arg name in registry order, separated by one space, each one the
+     * entry may leave out followed by `?`: `'form key replacement?'`. Names
+     * are camelCase (the generator refuses any other), so neither mark can
+     * be part of one.
+     */
+    readonly args: string;
+    /** The separator each list arg is written with; absent when it has none. */
+    readonly joiners?: Readonly<Record<string, string>>;
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
     /** What the diagnostic says: one template, or one per variant. */
@@ -73,6 +80,8 @@ type CompiledField = Segments | Readonly<Record<string, Segments>>;
 /** An entry's fields split into segments, and its list joiners. */
 interface CompiledTemplate {
     joiners: Readonly<Record<string, string>>;
+    /** The args the entry may not leave out. */
+    required: readonly string[];
     text?: CompiledField;
     help?: CompiledField;
     note?: CompiledField;
@@ -118,6 +127,16 @@ function compileField(text: SzDiagnosticTemplateText | undefined): CompiledField
 }
 
 /**
+ * An entry's arg names in registry order, each optional one still marked `?`.
+ *
+ * @param spec - The entry.
+ * @returns The names; none for an entry with no args (`args: ''`).
+ */
+export function argNamesOf(spec: Pick<SzDiagnosticTemplate, 'args'>): string[] {
+    return spec.args === '' ? [] : spec.args.split(' ');
+}
+
+/**
  * An entry compiled: its fields split, and how each list arg joins.
  *
  * @param spec - The entry.
@@ -126,12 +145,9 @@ function compileField(text: SzDiagnosticTemplateText | undefined): CompiledField
 function compiledOf(spec: SzDiagnosticTemplate): CompiledTemplate {
     let compiled = COMPILED.get(spec);
     if (compiled === undefined) {
-        const joiners: Record<string, string> = {};
-        for (const [name, arg] of Object.entries(spec.args)) {
-            if (arg.joiner !== undefined) joiners[name] = arg.joiner;
-        }
         compiled = {
-            joiners,
+            joiners: spec.joiners ?? {},
+            required: argNamesOf(spec).filter(name => !name.endsWith('?')),
             text: compileField(spec.text),
             help: compileField(spec.help),
             note: compileField(spec.note),
@@ -205,7 +221,42 @@ export interface SzDiagnosticParts {
 }
 
 /**
- * Fill a code's templates for one diagnostic.
+ * Refuse a diagnostic its templates cannot word: a required arg left out, or
+ * a form the sentence has no text for. Filled anyway, either prints an empty
+ * space where the value or the sentence belongs. The types refuse the same
+ * calls at a site that names its id; this catches args built at run time,
+ * such as an engine issue's.
+ *
+ * Reads what {@link compiledOf} kept, so a render allocates nothing for it.
+ *
+ * @param template - The code's entry.
+ * @param required - Its required args, from its compiled form.
+ * @param code - The code.
+ * @param args - The issue's args.
+ * @param variant - The form its templates are keyed by, when they have forms.
+ */
+function assertFillable(
+    template: SzDiagnosticTemplate,
+    required: readonly string[],
+    code: string,
+    args: Readonly<Record<string, ArgValue>>,
+    variant: ArgValue | undefined,
+): void {
+    for (const name of required) {
+        if (args[name] === undefined) {
+            throw new Error(`[csszyx] \`${code}\` was reported without its \`${name}\` arg`);
+        }
+    }
+    const { text } = template;
+    if (typeof text === 'object' && (typeof variant !== 'string' || text[variant] === undefined)) {
+        throw new Error(`[csszyx] \`${code}\` has no sentence for the form \`${String(variant)}\``);
+    }
+}
+
+/**
+ * Fill a code's templates for one diagnostic. Outside production it throws
+ * on a diagnostic it cannot word ({@link assertFillable}); a production
+ * build fills what it has, so a user is never stopped by a wording slip.
  *
  * @param template - The code's entry: its args and templates.
  * @param diagnostic - The diagnostic: the code its page is named by, and its args.
@@ -220,6 +271,9 @@ export function fillSzDiagnosticTemplate(
     const args = diagnostic.args as Readonly<Record<string, ArgValue>>;
     const compiled = compiledOf(template);
     const variant = args[template.variesBy ?? 'form'];
+    if (process.env.NODE_ENV !== 'production') {
+        assertFillable(template, compiled.required, diagnostic.code, args, variant);
+    }
     const part = (field: 'text' | 'help' | 'note'): string | undefined => {
         const segments = segmentsFor(compiled[field], variant);
         return segments === undefined

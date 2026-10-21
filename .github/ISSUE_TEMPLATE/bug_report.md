@@ -13,9 +13,11 @@ A clear description of the bug.
 ## Reproduction
 
 The smallest `sz` input / config that reproduces it, ideally a minimal repo
-or StackBlitz. Include the engine artifact if relevant: the parser named in the
-build's `[csszyx] active parser:` line (rust / wasm), which can differ
-from `build.parser` when a default build falls back to wasm.
+or StackBlitz. Include the engine artifact if relevant: paste the sentence
+under the build's `[csszyx] active-parser:` line. It reads
+"This build parses with the native engine." or "... with the wasm engine.",
+and "... with the wasm engine in place of the default native engine." when a
+default build fell back to wasm, which can differ from `build.parser`.
 
 ```tsx
 // e.g. <div sz={{ ... }} />

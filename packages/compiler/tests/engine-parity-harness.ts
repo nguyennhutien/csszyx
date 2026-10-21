@@ -36,6 +36,7 @@ import {
     transformWasmUnrendered,
     type UnrenderedTransformResult,
 } from '../src/internal.js';
+import { nativeLaneRequired, REQUIRE_NATIVE_ENV } from './helpers/native-lane.js';
 
 /** The result surface parity assertions read, common to both artifacts. */
 export interface EngineParityResult {
@@ -72,7 +73,8 @@ export const WASM_ONLY_ENV = 'CSSZYX_TEST_WASM_ONLY';
  *
  * Without the binding every parity suite would pass on one artifact, so a RED
  * run could be red on wasm alone. A machine that cannot build the addon opts
- * out by name; CI never can, because its native build step must have run.
+ * out by name; CI never can, because its native build step must have run,
+ * and neither can a run that sets `CSSZYX_REQUIRE_NATIVE=1`.
  *
  * @param available Whether the native binding loaded.
  * @param env The environment to read the opt-out and `CI` from.
@@ -82,10 +84,10 @@ export function assertRustLane(available: boolean, env: NodeJS.ProcessEnv): bool
     if (available) {
         return true;
     }
-    if (env.CI) {
+    if (nativeLaneRequired(env)) {
         throw new Error(
-            'engine parity harness: the rust lane is unavailable under CI — the native ' +
-                'engine build step failed or was skipped.',
+            `engine parity harness: the rust lane is unavailable under CI or ${REQUIRE_NATIVE_ENV}=1 — ` +
+                'the native engine build step failed or was skipped.',
         );
     }
     if (env[WASM_ONLY_ENV] !== '1') {

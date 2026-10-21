@@ -7,10 +7,11 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { foldsCase } from '../src/path-case.js';
 import { themeTypesTsconfigGap } from '../src/unplugin.js';
 
 const tempDirs: string[] = [];
@@ -117,6 +118,46 @@ describe('themeTypesTsconfigGap', () => {
         expect(themeTypesTsconfigGap(root)).toEqual({
             tsconfig: 'packages/web/tsconfig.json',
             includePath: '../../.csszyx/theme.d.ts',
+        });
+    });
+
+    it('names a reference spelled with the root in another case as under the root, where the file system folds case', () => {
+        // On macOS `/Users/me/App` and `/users/me/app` are one directory, so a
+        // reference written in the other spelling is a config of this
+        // project, named from its root and not by a walk out of it.
+        const root = project({
+            'tsconfig.json': '{}',
+        });
+        const other = join(dirname(root), basename(root).toUpperCase());
+        tempDirs.push(other);
+        mkdirSync(join(other, 'packages/web'), { recursive: true });
+        writeFileSync(join(other, 'packages/web/tsconfig.json'), '{ "include": ["src"] }');
+        writeFileSync(
+            join(root, 'tsconfig.json'),
+            JSON.stringify({ files: [], references: [{ path: join(other, 'packages/web') }] }),
+        );
+        // This file system does not fold case; the root's answer is kept, so
+        // the one asked here is the one the gap reads.
+        expect(foldsCase(root, { stat: () => ({ dev: 1, ino: 1 }) })).toBe(true);
+        expect(themeTypesTsconfigGap(root)).toEqual({
+            tsconfig: 'packages/web/tsconfig.json',
+            includePath: '../../.csszyx/theme.d.ts',
+        });
+    });
+
+    it('walks back into the root from a referenced config outside it', () => {
+        const root = project({ 'tsconfig.json': '{}' });
+        const shared = `${root}-shared`;
+        tempDirs.push(shared);
+        mkdirSync(shared);
+        writeFileSync(join(shared, 'tsconfig.json'), '{ "include": ["src"] }');
+        writeFileSync(
+            join(root, 'tsconfig.json'),
+            JSON.stringify({ files: [], references: [{ path: `../${basename(shared)}` }] }),
+        );
+        expect(themeTypesTsconfigGap(root)).toEqual({
+            tsconfig: `../${basename(shared)}/tsconfig.json`,
+            includePath: `../${basename(root)}/.csszyx/theme.d.ts`,
         });
     });
 

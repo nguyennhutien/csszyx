@@ -2167,12 +2167,24 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "char",
+            "end"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "char",
+                    "end"
+                ]
+            },
             "input": {
                 "type": "string"
             },
             "char": {
-                "type": "string"
+                "type": "string",
+                "optional": true
             },
             "index": {
                 "type": "number"
@@ -2322,6 +2334,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "not-installed",
             "missing-export",
             "stale-binding",
+            "stale-binding-versions",
             "wasm-fallback"
         ],
         "args": {
@@ -2332,6 +2345,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "not-installed",
                     "missing-export",
                     "stale-binding",
+                    "stale-binding-versions",
                     "wasm-fallback"
                 ]
             },
@@ -2344,6 +2358,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true
             },
             "exportName": {
+                "type": "string",
+                "optional": true
+            },
+            "nativeVersion": {
+                "type": "string",
+                "optional": true
+            },
+            "coreVersion": {
                 "type": "string",
                 "optional": true
             }
@@ -2384,7 +2406,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "no-platform-package",
             "not-installed",
             "missing-export",
-            "stale-binding"
+            "stale-binding",
+            "stale-binding-versions"
         ],
         "args": {
             "form": {
@@ -2393,7 +2416,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "no-platform-package",
                     "not-installed",
                     "missing-export",
-                    "stale-binding"
+                    "stale-binding",
+                    "stale-binding-versions"
                 ]
             },
             "platform": {
@@ -2405,6 +2429,14 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true
             },
             "exportName": {
+                "type": "string",
+                "optional": true
+            },
+            "nativeVersion": {
+                "type": "string",
+                "optional": true
+            },
+            "coreVersion": {
                 "type": "string",
                 "optional": true
             }

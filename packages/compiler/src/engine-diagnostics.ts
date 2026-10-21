@@ -11,6 +11,7 @@
 import { SZ_DIAGNOSTIC_RENDER_SPECS } from './diagnostic-registry.generated.js';
 import { renderSzDiagnostic } from './diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+import { argNamesOf } from './diagnostic-template.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
 import { suggestSzKey } from './sz-key-suggestion.js';
 import type { SourceTransformResult } from './transform-core.js';
@@ -26,7 +27,9 @@ const DERIVED_ARGS: Readonly<Record<string, string>> = { 'unknown-key': 'suggest
 const ARG_ORDER: ReadonlyMap<string, readonly string[]> = new Map(
     SZ_DIAGNOSTIC_RENDER_SPECS.map(spec => [
         spec.id,
-        Object.keys(spec.args).filter(name => name !== DERIVED_ARGS[spec.id]),
+        argNamesOf(spec)
+            .map(name => (name.endsWith('?') ? name.slice(0, -1) : name))
+            .filter(name => name !== DERIVED_ARGS[spec.id]),
     ]),
 );
 
@@ -48,9 +51,9 @@ function comparablePath(path: string, windows: boolean): string {
 
 /**
  * A file's path as a diagnostic names it: relative to the project root when it
- * sits under it, as given otherwise. A Windows root matches whatever its
- * separators and the case of its letters, because bundlers spell one file both
- * ways there.
+ * sits under it, with `/` separators on Windows too, and as given otherwise. A
+ * Windows root matches whatever its separators and the case of its letters,
+ * because bundlers spell one file both ways there.
  *
  * @param filename - The path the bundler passed.
  * @param rootDir - The project root, when known.
@@ -69,7 +72,11 @@ export function diagnosticPath(filename: string, rootDir?: string): string {
     }
     const rest = filename.slice(end);
     if (!rest.startsWith('/') && !rest.startsWith('\\')) return filename;
-    return rest.slice(1);
+    // One file reads the same from every bundler: webpack and Jest pass a
+    // Windows path backslashed, Vite with `/`. On POSIX `\` is a filename
+    // character, so only a Windows path is respelled.
+    const relative = rest.slice(1);
+    return windows ? relative.replace(/\\/g, '/') : relative;
 }
 
 /**

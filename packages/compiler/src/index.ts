@@ -18,6 +18,7 @@ export {
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzDiagnosticArgs,
     type SzDiagnosticArgsByCode,
     type SzDiagnosticCode,
     type SzDiagnosticGroupId,
@@ -37,6 +38,7 @@ export {
     SZ_DIAGNOSTIC_URL_BASE,
     type SzDiagnosticComputed,
     type SzDiagnosticParts,
+    type SzTypedDiagnostic,
     szDiagnosticPositionOf,
 } from './diagnostic-render.js';
 export { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';

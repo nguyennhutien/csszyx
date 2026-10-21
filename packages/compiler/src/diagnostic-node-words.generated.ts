@@ -124,6 +124,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "not-installed": "`{packageName}` is not installed, so the `rust` parser cannot run.",
             "missing-export": "`{packageName}` does not export `{exportName}()`, which the installed `@csszyx/core` calls, so the `rust` parser cannot run.",
             "stale-binding": "`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so the `rust` parser cannot run.",
+            "stale-binding-versions": "`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so the `rust` parser cannot run.",
             "wasm-fallback": "The native engine is not available here, so the default `rust` parser runs on the wasm engine."
         },
         "help": {
@@ -131,6 +132,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "not-installed": "reinstall without skipping optional dependencies, which installs `{packageName}` with `@csszyx/core`, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
             "missing-export": "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
             "stale-binding": "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
+            "stale-binding-versions": "update `@csszyx/core` and `{packageName}` together, to the same version, or set the parser to `wasm` (`build.parser: 'wasm'` in the plugin options, `parserMode: 'wasm'` in `csszyxTurbopack`, or `--parser-mode wasm` on `csszyx next`).",
             "wasm-fallback": "reinstall without skipping optional dependencies to get the native engine, or set `build.parser: 'wasm'` to hide this line."
         },
         "note": "the wasm engine produces the same output; only parsing is slower."
@@ -145,13 +147,15 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "no-platform-package": "No prebuilt native engine covers `{platform}`, so migrate cannot run.",
             "not-installed": "`{packageName}` is not installed, so migrate cannot run.",
             "missing-export": "`{packageName}` predates migrate and does not export `{exportName}()`, so migrate cannot run.",
-            "stale-binding": "`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so migrate cannot run."
+            "stale-binding": "`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so migrate cannot run.",
+            "stale-binding-versions": "`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so migrate cannot run."
         },
         "help": {
             "no-platform-package": "run migrate on Linux, macOS or Windows, on x64 or arm64, where a prebuilt native engine exists.",
             "not-installed": "reinstall without skipping optional dependencies, which installs `{packageName}` with `@csszyx/core`.",
             "missing-export": "update `@csszyx/core` and `{packageName}` together, to a version that carries migrate.",
-            "stale-binding": "update `@csszyx/core` and `{packageName}` together, to the same version."
+            "stale-binding": "update `@csszyx/core` and `{packageName}` together, to the same version.",
+            "stale-binding-versions": "update `@csszyx/core` and `{packageName}` together, to the same version."
         },
         "note": "no file was changed; migrate runs on the native engine only, and builds and the runtime do not need it."
     },

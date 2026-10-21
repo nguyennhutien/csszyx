@@ -21,7 +21,7 @@ const CODE = NATIVE_ENGINE_UNAVAILABLE.id;
  * the code's page. The compiler's suite renders every form through its
  * renderer and checks this prints the same (`native-unavailable-words.test.ts`).
  *
- * @param {{form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding', platform?: string, packageName?: string, exportName?: string}} args
+ * @param {{form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding' | 'stale-binding-versions', platform?: string, packageName?: string, exportName?: string, nativeVersion?: string, coreVersion?: string}} args
  * @returns {string} The message.
  */
 function messageOf(args) {
@@ -113,6 +113,36 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
 }
 
 /**
+ * The `version` of a package manifest, or undefined when it cannot be read.
+ *
+ * @param {string} specifier - The manifest, as `require` resolves it.
+ * @returns {string | undefined} The version.
+ */
+function manifestVersion(specifier) {
+    try {
+        return require(specifier).version;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * The args of a platform package older than `@csszyx/core`: both versions
+ * when both manifests can be read, since those are what the user brings
+ * together, and the package alone otherwise.
+ *
+ * @param {string} packageName - The platform package that answered.
+ * @returns {{form: 'stale-binding-versions', packageName: string, nativeVersion: string, coreVersion: string} | {form: 'stale-binding', packageName: string}} The args.
+ */
+function staleArgs(packageName) {
+    const nativeVersion = manifestVersion(`${packageName}/package.json`);
+    const coreVersion = manifestVersion('../package.json');
+    return nativeVersion !== undefined && coreVersion !== undefined
+        ? { form: 'stale-binding-versions', packageName, nativeVersion, coreVersion }
+        : { form: 'stale-binding', packageName };
+}
+
+/**
  * Refuse a result an older platform package returned. Such a package still
  * exports the function, so the loader's export check passes; only the result
  * tells. Without this the caller fails on the first missing field, or, for
@@ -129,10 +159,7 @@ function currentResults(results, current) {
     // first that has an issue, and the first result when none does.
     const judged = results.find(result => result.issues?.length > 0) ?? results[0];
     if (judged === undefined || current(judged)) return results;
-    throw new CsszyxNativeUnavailableError({
-        form: 'stale-binding',
-        packageName: cachedPackageName,
-    });
+    throw new CsszyxNativeUnavailableError(staleArgs(cachedPackageName));
 }
 
 export function transformBatch(_files, options) {

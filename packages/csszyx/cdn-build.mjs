@@ -68,6 +68,11 @@ export function cdnBuildOptions(mode) {
             // A script-tag page cannot set an environment variable, so the
             // switch that mutes sz warnings is never on here.
             'process.env.CSSZYX_QUIET_SZ_WARNINGS': 'undefined',
+            // A script-tag page has no server render, so the development sz
+            // warnings that every other bundle keeps to Node print in the
+            // browser here (`szNodeWarningsUnmuted`). The production bundle
+            // folds them out on `NODE_ENV` before this is read.
+            ...(mode === 'development' ? { __CSSZYX_SZ_WARNINGS_IN_BROWSER__: 'true' } : {}),
         },
     };
 }

@@ -17,6 +17,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack from 'webpack';
 
+import { foldsCase } from '../src/path-case.js';
 import { vitePlugin, webpackPlugin } from '../src/unplugin.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
@@ -338,6 +339,26 @@ describe('a Vite dev server', () => {
             'the edit read',
         );
         expect(count(dev.lines, saved)).toBe(1);
+    }, 60_000);
+
+    it('names the config relative to the root when the watcher spells the root in another case', async () => {
+        const dev = await devSession(UNKNOWN_OFF);
+        // macOS and Windows fold case by default; this file system is told to.
+        const spellings = new Set([dev.root.toLowerCase(), dev.root.toUpperCase()]);
+        foldsCase(dev.root, {
+            stat: file =>
+                spellings.has(file.toLowerCase()) || spellings.has(file.toUpperCase())
+                    ? { dev: 1, ino: 1 }
+                    : undefined,
+        });
+        rewrite(join(dev.root, 'csszyx.config.mjs'), UNKNOWN_WARN);
+        dev.server.watcher.emit('change', join(dev.root.toUpperCase(), 'csszyx.config.mjs'));
+
+        await until(async () => {
+            await dev.request();
+            return count(dev.lines, UNKNOWN_LINE) > 0;
+        }, 'the finding at its new level');
+        expect(dev.lines.join('\n')).toContain('[csszyx] project-reload: csszyx.config.mjs\n');
     }, 60_000);
 
     it('ignores a file beside the config that is not one', async () => {

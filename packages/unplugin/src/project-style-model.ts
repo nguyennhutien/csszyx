@@ -286,17 +286,18 @@ export function unresolvedImportWarning(
  *          every root can tell.
  */
 export function originWarning(model: ProjectStyleModel, root: string): string | null {
-    const failed = model.entries.filter(entry => entry.originFailure !== undefined);
-    if (failed.length === 0) return null;
-    return failed
-        .map(entry =>
-            diagnosticMessage(
-                'merge-origin-unreadable',
-                { reason: entry.originFailure },
-                relativeName(root, entry.file),
-            ),
-        )
-        .join('\n');
+    const lines = model.entries.flatMap(({ originFailure, file }) =>
+        originFailure === undefined
+            ? []
+            : [
+                  diagnosticMessage(
+                      'merge-origin-unreadable',
+                      { reason: originFailure },
+                      relativeName(root, file),
+                  ),
+              ],
+    );
+    return lines.length === 0 ? null : lines.join('\n');
 }
 
 /**

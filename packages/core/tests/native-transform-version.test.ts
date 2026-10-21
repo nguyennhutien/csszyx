@@ -11,6 +11,8 @@
  * result without the diagnostic codes used to reach the caller and fail there
  * as a bare `TypeError` on a missing field, which names neither package.
  */
+import { readFileSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const packageName = vi.hoisted(() => ({ current: '' }));
@@ -20,6 +22,13 @@ vi.mock('../native/platforms.js', () => ({
 }));
 
 const fixture = (name: string) => new URL(`fixtures/${name}`, import.meta.url).pathname;
+
+/** The installed `@csszyx/core` version, which the versions form names. */
+const CORE_VERSION = (
+    JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+        version: string;
+    }
+).version;
 
 describe('@csszyx/core/native transformBatch', () => {
     beforeEach(() => {
@@ -37,14 +46,27 @@ describe('@csszyx/core/native transformBatch', () => {
         expect(transformBatch([])).toEqual([]);
     });
 
-    it('names the platform package when the binding is older', async () => {
-        // A real platform package carries a manifest beside its binary.
+    it('names both versions when the platform package and `@csszyx/core` carry manifests', async () => {
+        // A real platform package carries a manifest beside its binary, and
+        // the two versions are what the user has to bring together.
         packageName.current = fixture('native-binding-0.17');
-        const { transformBatch } = await import('../native/index.js');
+        const { transformBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
+        const coreVersion = CORE_VERSION;
+        const files = [{ filename: '/p/a.tsx', source: '' }];
 
-        expect(() => transformBatch([{ filename: '/p/a.tsx', source: '' }])).toThrow(
-            `\`${packageName.current}\` is older than the installed \`@csszyx/core\` and returns results it cannot read, so the \`rust\` parser cannot run.`,
+        expect(() => transformBatch(files)).toThrow(
+            `\`${packageName.current}\` 0.17.0 is older than the installed \`@csszyx/core\` ${coreVersion} and returns results it cannot read, so the \`rust\` parser cannot run.`,
         );
+        try {
+            transformBatch(files);
+        } catch (err) {
+            expect((err as InstanceType<typeof CsszyxNativeUnavailableError>).args).toEqual({
+                form: 'stale-binding-versions',
+                packageName: packageName.current,
+                nativeVersion: '0.17.0',
+                coreVersion,
+            });
+        }
     });
 
     it('refuses a binding whose issues carry no args, judged on the first issue', async () => {
@@ -101,7 +123,7 @@ describe('@csszyx/core/native scanModuleLinks', () => {
             CsszyxNativeUnavailableError,
         );
         expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
-            `\`${packageName.current}\` is older than the installed \`@csszyx/core\` and returns results it cannot read`,
+            `\`${packageName.current}\` 0.17.2 is older than the installed \`@csszyx/core\` ${CORE_VERSION} and returns results it cannot read`,
         );
     });
 

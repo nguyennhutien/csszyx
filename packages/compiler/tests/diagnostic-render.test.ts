@@ -1,7 +1,7 @@
 /**
  * The diagnostic renderer and its computed values (ADR 0031).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { COMPUTED } from '../../../scripts/diagnostics/registry.mjs';
 import { casingProblems, PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagnostic-codes.mjs';
@@ -175,21 +175,35 @@ describe('renderSzDiagnostic', () => {
         expect(message).toContain('docs: https://csszyx.com/e/numeric-key');
     });
 
-    it('prints nothing for a per-form field when the issue names no form', () => {
-        expect(
+    it('refuses an issue that names no form, or one with no sentence, outside production', () => {
+        expect(() =>
             renderSzDiagnosticBody(
                 { code: 'closed-enum-value', args: { key: 'k', value: 'v' } },
                 computed,
             ),
-        ).toBe('');
+        ).toThrow('`closed-enum-value` was reported without its `form` arg');
+        expect(() =>
+            renderSzDiagnosticBody(
+                { code: 'closed-enum-value', args: { form: 'nope', key: 'k', value: 'v' } },
+                computed,
+            ),
+        ).toThrow('`closed-enum-value` has no sentence for the form `nope`');
     });
 
-    it('prints nothing for a field the variant has no template for', () => {
-        const body = renderSzDiagnosticBody(
-            { code: 'closed-enum-value', args: { form: 'nope', key: 'k', value: 'v' } },
-            computed,
-        );
-        expect(body).toBe('');
+    it('prints nothing for a per-form field it has no template for, in production', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        try {
+            for (const args of [
+                { key: 'k', value: 'v' },
+                { form: 'nope', key: 'k', value: 'v' },
+            ]) {
+                expect(renderSzDiagnosticBody({ code: 'closed-enum-value', args }, computed)).toBe(
+                    '',
+                );
+            }
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 });
 
@@ -339,13 +353,22 @@ describe('diagnosticPath', () => {
     });
 
     it('matches a Windows root whatever its separators and drive-letter case', () => {
-        expect(diagnosticPath('C:\\repo\\src\\A.tsx', 'C:/repo')).toBe('src\\A.tsx');
+        expect(diagnosticPath('C:\\repo\\src\\A.tsx', 'C:/repo')).toBe('src/A.tsx');
         expect(diagnosticPath('C:/repo/src/A.tsx', 'C:\\repo\\')).toBe('src/A.tsx');
         expect(diagnosticPath('c:\\Repo\\A.tsx', 'C:\\repo')).toBe('A.tsx');
         expect(diagnosticPath('D:\\repo\\A.tsx', 'C:\\repo')).toBe('D:\\repo\\A.tsx');
         expect(diagnosticPath('C:\\repository\\A.tsx', 'c:\\repo')).toBe('C:\\repository\\A.tsx');
         expect(diagnosticPath('c:\\A.tsx', 'C:\\')).toBe('A.tsx');
         expect(diagnosticPath('C:\\\u0130x\\A.tsx', 'C:\\i\u0307x')).toBe('C:\\\u0130x\\A.tsx');
+    });
+
+    it('prints a Windows path under the root with `/`, as Vite spells it', () => {
+        // webpack and Jest pass backslashed resource paths, Vite forward ones:
+        // one file must read the same in both.
+        expect(diagnosticPath('C:\\repo\\src\\ui\\A.tsx', 'C:\\repo')).toBe('src/ui/A.tsx');
+        expect(diagnosticPath('C:/repo/src/ui/A.tsx', 'C:\\repo')).toBe('src/ui/A.tsx');
+        // A backslash is a filename character on POSIX, kept as given.
+        expect(diagnosticPath('/repo/src/a\\b.tsx', '/repo')).toBe('src/a\\b.tsx');
     });
 
     it('keeps the case of a POSIX root significant', () => {

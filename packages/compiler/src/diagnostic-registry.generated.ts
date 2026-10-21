@@ -11,8 +11,10 @@ export interface SzDiagnosticRenderSpec {
     readonly id: string;
     /** What a record's `start` points at. */
     readonly position: 'site' | 'file' | 'none';
-    /** Every arg, by name, in registry order; a list arg with its separator. */
-    readonly args: Readonly<Record<string, { readonly joiner?: string }>>;
+    /** Every arg name in registry order, space-separated, one the entry may leave out followed by `?`. */
+    readonly args: string;
+    /** The separator each list arg is written with; absent when it has none. */
+    readonly joiners?: Readonly<Record<string, string>>;
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
     /** What the diagnostic says: one template, or one per variant. */
@@ -43,10 +45,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unknown-key",
         "position": "site",
-        "args": {
-            "key": {},
-            "suggestion": {}
-        },
+        "args": "key suggestion?",
         "text": "`{key}` is not an sz property.",
         "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
@@ -54,10 +53,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "canonical-key",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {}
-        },
+        "args": "form key",
         "text": {
             "alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
             "font": "`{key}` is not an sz key, and nothing is emitted for it.",
@@ -72,11 +68,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "removed-key",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {},
-            "replacement": {}
-        },
+        "args": "form key replacement?",
         "text": {
             "runtime-alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.",
             "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
@@ -95,23 +87,14 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "numeric-key",
         "position": "site",
-        "args": {
-            "key": {}
-        },
+        "args": "key",
         "text": "`sz` received a numeric key `{key}`, and its value is ignored.",
         "help": "pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
     },
     {
         "id": "closed-enum-value",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {},
-            "value": {},
-            "suggestion": {},
-            "groupKey": {},
-            "groupValue": {}
-        },
+        "args": "form key value suggestion? groupKey? groupValue?",
         "text": {
             "sibling-group": "`{key}: '{value}'` is not a `{key}` value; its class `{bare}` belongs to `{ {groupKey}: {groupLiteral} }`.",
             "dead": "`{key}: '{value}'` is not a `{key}` value.",
@@ -134,51 +117,37 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "slash-opacity-string",
         "position": "site",
-        "args": {
-            "key": {},
-            "color": {},
-            "opacity": {}
-        },
+        "args": "key color opacity",
         "text": "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
         "help": "use the object form: `{ color: '{color}', op: {opacity} }`."
     },
     {
         "id": "off-scale-value",
         "position": "site",
-        "args": {
-            "key": {},
-            "value": {}
-        },
+        "args": "key value",
         "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
         "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
     },
     {
         "id": "numeric-font-weight",
         "position": "site",
-        "args": {
-            "value": {}
-        },
+        "args": "value",
         "text": "`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.",
         "help": "write `weight: {value}` as a number; it emits `font-[{value}]`."
     },
     {
         "id": "per-side-border-style",
         "position": "site",
-        "args": {
-            "key": {},
-            "value": {}
-        },
+        "args": "key value",
         "text": "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
         "help": "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."
     },
     {
         "id": "property-object",
         "position": "site",
-        "args": {
-            "key": {},
-            "nestedKeys": {
-                "joiner": ", "
-            }
+        "args": "key nestedKeys",
+        "joiners": {
+            "nestedKeys": ", "
         },
         "text": "`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.",
         "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
@@ -186,21 +155,16 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "non-variant-object",
         "position": "site",
-        "args": {
-            "key": {}
-        },
+        "args": "key",
         "text": "`{key}` is not a variant, so its object emits `{key}:` classes that produce no CSS.",
         "help": "a `--*` key takes a declaration value; `container` takes `true`."
     },
     {
         "id": "unknown-field",
         "position": "site",
-        "args": {
-            "owner": {},
-            "member": {},
-            "allowed": {
-                "joiner": ", "
-            }
+        "args": "owner member allowed",
+        "joiners": {
+            "allowed": ", "
         },
         "text": "`{owner}` has no field `{member}`, and nothing is emitted for it.",
         "help": "`{owner}` takes `{ {allowed} }`."
@@ -208,9 +172,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "runtime-value",
         "position": "site",
-        "args": {
-            "key": {}
-        },
+        "args": "key",
         "text": "`{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.",
         "help": "name the values with `szv()`, or use `dynamic()` for open-ended data.",
         "note": "no class or variable is emitted for `{key}`."
@@ -218,7 +180,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unresolvable-spread",
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "This `sz` object spreads a value the build cannot read, so the object falls back to the runtime.",
         "help": "use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.",
         "note": "the classes of the spread value were not collected, so they produce no CSS unless another source names them."
@@ -226,16 +188,14 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "style-override",
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.",
         "help": "move the spread `style` to an explicit `style` prop, so csszyx merges both values."
     },
     {
         "id": "szs-slot-map",
         "position": "site",
-        "args": {
-            "form": {}
-        },
+        "args": "form",
         "text": {
             "host-element": "`szs` has no effect on a host element; it maps the slot names of a custom component.",
             "unreadable-slot": "A slot value in `szs` could not be read at build time, so no slot classes were compiled."
@@ -249,10 +209,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "sz-recover",
         "position": "site",
-        "args": {
-            "form": {},
-            "mode": {}
-        },
+        "args": "form mode?",
         "text": {
             "non-literal": "`szRecover` takes only a string literal.",
             "unknown-mode": "`szRecover` has an unknown mode `\"{mode}\"`."
@@ -266,34 +223,24 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "class-precedence",
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "`sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.",
         "help": "state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
     },
     {
         "id": "duplicate-sz",
         "position": "site",
-        "args": {
-            "elementName": {},
-            "count": {}
-        },
+        "args": "elementName count",
         "text": "`<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.",
         "help": "fold them into one `sz` array, so the order is written down."
     },
     {
         "id": "spread-split-class",
         "position": "site",
-        "args": {
-            "elementName": {},
-            "classes": {
-                "joiner": " and "
-            },
-            "szCount": {},
-            "szAt": {},
-            "spread": {},
-            "parts": {
-                "joiner": ", "
-            }
+        "args": "elementName classes szCount szAt spread? parts",
+        "joiners": {
+            "classes": " and ",
+            "parts": ", "
         },
         "text": "`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.",
         "help": "write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.",
@@ -302,12 +249,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "moved-value",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {},
-            "value": {},
-            "layerKey": {}
-        },
+        "args": "form key value layerKey?",
         "text": {
             "value": "`{key}: '{value}'` moved to `{movedKey}`, and nothing is emitted for it.",
             "mask-layer": "`mask: '{value}'` names a gradient layer, which moved to `{layerKey}`, and nothing is emitted for it."
@@ -320,12 +262,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "global-before-group",
         "position": "site",
-        "args": {
-            "global": {},
-            "value": {},
-            "valueType": {},
-            "group": {}
-        },
+        "args": "global value valueType group",
         "text": "`{global}: {valueLiteral}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.",
         "help": "to override the group, layer it: `sz={[base, { {global}: {valueLiteral} }]}`.",
         "note": "a spread such as `{ ...base, {global}: {valueLiteral} }` keeps the same key order, so it does not fix this."
@@ -333,11 +270,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "runtime-family-conflict",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {},
-            "other": {}
-        },
+        "args": "form key other",
         "text": "`{key}` takes a runtime value beside `{other}` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.",
         "help": {
             "key-first": "layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.",
@@ -347,13 +280,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "fallback-missing-css",
         "position": "site",
-        "args": {
-            "site": {},
-            "shape": {},
-            "detail": {},
-            "path": {},
-            "keyPath": {}
-        },
+        "args": "site shape? detail? path? keyPath?",
         "variesBy": "site",
         "text": {
             "sz": "`sz` falls back to the runtime: {fallbackReason}.",
@@ -376,12 +303,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "fallback-nudge",
         "position": "site",
-        "args": {
-            "site": {},
-            "shape": {},
-            "detail": {},
-            "path": {}
-        },
+        "args": "site shape? detail? path?",
         "variesBy": "site",
         "text": {
             "sz": "`sz` falls back to the runtime: {fallbackReason}.",
@@ -399,11 +321,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "merge-classifier-unavailable",
         "position": "file",
-        "args": {
-            "form": {},
-            "error": {},
-            "tableFormat": {}
-        },
+        "args": "form error? tableFormat?",
         "text": {
             "unreadable": "The merge table is not one this engine reads ({error}), so the build removes no class that a later sz key covers.",
             "format-mismatch": "The merge table is in format {tableFormat}, and this csszyx version reads format {mergeTableFormat}, so the build removes no class that a later sz key covers."
@@ -414,11 +332,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "parse-error",
         "position": "site",
-        "args": {
-            "form": {},
-            "message": {},
-            "errorCount": {}
-        },
+        "args": "form message? errorCount?",
         "text": {
             "syntax": "Syntax error: {parserMessage}.",
             "summary": "This file could not be parsed (syntax errors: {errorCount}).",
@@ -444,9 +358,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "nesting-depth",
         "position": "file",
-        "args": {
-            "depth": {}
-        },
+        "args": "depth",
         "text": "Source nesting exceeds {maxNestingDepth} levels (found {depth}).",
         "help": "flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.",
         "note": "the file is left unchanged and contributes no classes."
@@ -454,7 +366,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unsupported-dynamic-sz",
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "This `sz` attribute has no value, or a JSX element as its value.",
         "help": "give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.",
         "note": "the attribute is left as written; the rest of the file is still transformed."
@@ -462,9 +374,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "ast-budget",
         "position": "file",
-        "args": {
-            "form": {}
-        },
+        "args": "form",
         "text": {
             "transform": "This file exceeds the AST node budget.",
             "prescan": "The prescan skipped this file because it exceeds the AST node budget, so none of its classes reached the safelist."
@@ -478,12 +388,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "mangle-vars-hoist-skipped",
         "position": "site",
-        "args": {
-            "name": {},
-            "usageCount": {},
-            "reason": {},
-            "maxDepth": {}
-        },
+        "args": "name usageCount reason maxDepth?",
         "variesBy": "reason",
         "text": {
             "no-lca": "`mangleVars` did not hoist `{name}`: its {usageCount} usages share no common JSX ancestor.",
@@ -498,14 +403,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "color-slash-opacity",
         "position": "site",
-        "args": {
-            "form": {},
-            "key": {},
-            "base": {},
-            "opacity": {},
-            "important": {},
-            "op": {}
-        },
+        "args": "form key base opacity important? op?",
         "text": {
             "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
             "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
@@ -522,1015 +420,692 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unsigned-value",
         "position": "file",
-        "args": {
-            "className": {},
-            "utility": {}
-        }
+        "args": "className utility"
     },
     {
         "id": "dead-class",
         "position": "file",
-        "args": {
-            "className": {}
-        }
+        "args": "className"
     },
     {
         "id": "prefix-disagreement",
         "position": "none",
-        "args": {
-            "form": {},
-            "entries": {
-                "joiner": ", "
-            },
-            "setting": {},
-            "ignoreSetting": {}
+        "args": "form entries setting? ignoreSetting?",
+        "joiners": {
+            "entries": ", "
         }
     },
     {
         "id": "sibling-keyword",
         "position": "site",
-        "args": {
-            "key": {},
-            "value": {},
-            "className": {},
-            "sets": {
-                "joiner": ", "
-            }
+        "args": "key value className sets",
+        "joiners": {
+            "sets": ", "
         }
     },
     {
         "id": "broken-opacity",
         "position": "site",
-        "args": {
-            "className": {},
-            "value": {}
-        }
+        "args": "className value"
     },
     {
         "id": "unserved-variant",
         "position": "site",
-        "args": {
-            "form": {},
-            "variant": {},
-            "className": {}
-        }
+        "args": "form variant className"
     },
     {
         "id": "theme-collision",
         "position": "site",
-        "args": {
-            "form": {},
-            "name": {},
-            "classes": {
-                "joiner": "`, `"
-            }
+        "args": "form name classes?",
+        "joiners": {
+            "classes": "`, `"
         }
     },
     {
         "id": "merge-covered-key",
         "position": "site",
-        "args": {
-            "key": {},
-            "className": {}
-        }
+        "args": "key className"
     },
     {
         "id": "merge-covered-class",
         "position": "site",
-        "args": {
-            "className": {}
-        }
+        "args": "className"
     },
     {
         "id": "recovery-manifest-unreadable",
         "position": "none",
-        "args": {
-            "form": {},
-            "error": {},
-            "missing": {
-                "joiner": "`, `"
-            }
+        "args": "form error? missing?",
+        "joiners": {
+            "missing": "`, `"
         }
     },
     {
         "id": "mangle-map-unreadable",
         "position": "none",
-        "args": {
-            "form": {},
-            "error": {}
-        }
+        "args": "form error?"
     },
     {
         "id": "mangle-census-unreadable",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "mangle-checksum-mismatch",
         "position": "none",
-        "args": {
-            "computed": {},
-            "expected": {}
-        }
+        "args": "computed expected"
     },
     {
         "id": "mangle-map-unavailable",
         "position": "none",
-        "args": {
-            "checksum": {}
-        }
+        "args": "checksum"
     },
     {
         "id": "web-crypto-unavailable",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "hydration-aborted",
         "position": "none",
-        "args": {
-            "form": {},
-            "tagName": {},
-            "message": {}
-        }
+        "args": "form tagName message?"
     },
     {
         "id": "csr-recovery-unmarked",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "csr-recovery-dev-only",
         "position": "none",
-        "args": {
-            "form": {},
-            "count": {},
-            "sites": {
-                "joiner": ", "
-            }
+        "args": "form count? sites?",
+        "joiners": {
+            "sites": ", "
         }
     },
     {
         "id": "csr-recovery-used",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "merge-table-format-skew",
         "position": "none",
-        "args": {
-            "format": {},
-            "expected": {}
-        }
+        "args": "format expected"
     },
     {
         "id": "merge-table-missing",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "uncompiled-sz",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "register-szcn-groups-ignored",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "theme-token-ambiguous",
         "position": "none",
-        "args": {
-            "form": {},
-            "name": {}
-        }
+        "args": "form name"
     },
     {
         "id": "split-box-selector-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "selector": {},
-            "property": {},
-            "categories": {
-                "joiner": ", "
-            },
-            "properties": {
-                "joiner": "`, `"
-            },
-            "name": {}
+        "args": "form selector? property? categories? properties? name?",
+        "joiners": {
+            "categories": ", ",
+            "properties": "`, `"
         }
     },
     {
         "id": "split-box-unknown-category",
         "position": "none",
-        "args": {
-            "form": {},
-            "name": {},
-            "hint": {}
-        }
+        "args": "form name hint?"
     },
     {
         "id": "split-box-placement-variant",
         "position": "none",
-        "args": {
-            "selector": {},
-            "side": {},
-            "base": {}
-        }
+        "args": "selector side base"
     },
     {
         "id": "split-box-peer-on-frame",
         "position": "none",
-        "args": {
-            "token": {},
-            "base": {},
-            "reaching": {}
-        }
+        "args": "token base reaching"
     },
     {
         "id": "split-box-unclassified",
         "position": "none",
-        "args": {
-            "form": {},
-            "token": {},
-            "node": {},
-            "side": {}
-        }
+        "args": "form token? node side"
     },
     {
         "id": "split-box-unbounded-scroll",
         "position": "none",
-        "args": {
-            "scroller": {}
-        }
+        "args": "scroller"
     },
     {
         "id": "split-box-unclipped-corners",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "split-box-hidden-content",
         "position": "none",
-        "args": {
-            "hidden": {}
-        }
+        "args": "hidden"
     },
     {
         "id": "szv-config-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "dimension": {},
-            "token": {},
-            "got": {}
-        }
+        "args": "form dimension? token? got"
     },
     {
         "id": "sz-object-depth",
         "position": "none",
-        "args": {
-            "form": {},
-            "maxDepth": {},
-            "where": {}
-        }
+        "args": "form maxDepth where?"
     },
     {
         "id": "szv-forbidden-key",
         "position": "none",
-        "args": {
-            "where": {},
-            "key": {}
-        }
+        "args": "where key"
     },
     {
         "id": "szv-unknown-variant",
         "position": "none",
-        "args": {
-            "key": {}
-        }
+        "args": "key"
     },
     {
         "id": "szv-unknown-variant-value",
         "position": "none",
-        "args": {
-            "form": {},
-            "key": {},
-            "value": {},
-            "allowed": {
-                "joiner": "`, `"
-            }
+        "args": "form key value allowed?",
+        "joiners": {
+            "allowed": "`, `"
         }
     },
     {
         "id": "szv-object-as-string",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "dynamic-injection-growth",
         "position": "none",
-        "args": {
-            "count": {}
-        }
+        "args": "count"
     },
     {
         "id": "dynamic-unsafe-arbitrary",
         "position": "none",
-        "args": {
-            "utility": {}
-        }
+        "args": "utility"
     },
     {
         "id": "dynamic-non-boolean",
         "position": "none",
-        "args": {
-            "key": {},
-            "valueType": {}
-        }
+        "args": "key valueType"
     },
     {
         "id": "dynamic-unresolvable",
         "position": "none",
-        "args": {
-            "key": {},
-            "valueType": {}
-        }
+        "args": "key valueType"
     },
     {
         "id": "dev-warnings-partial",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "diagnostics-capped",
         "position": "none",
-        "args": {
-            "form": {},
-            "id": {},
-            "count": {}
-        }
+        "args": "form id? count?"
     },
     {
         "id": "sz-attribute-syntax",
         "position": "site",
-        "args": {
-            "input": {},
-            "char": {},
-            "index": {}
-        }
+        "args": "form input char? index"
     },
     {
         "id": "options-object-required",
         "position": "none",
-        "args": {
-            "form": {},
-            "options": {
-                "joiner": "`, `"
-            }
+        "args": "form options?",
+        "joiners": {
+            "options": "`, `"
         }
     },
     {
         "id": "lowering-not-loaded",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "lite-sz-object",
         "position": "none",
-        "args": {
-            "fnName": {},
-            "received": {}
-        }
+        "args": "fnName received"
     },
     {
         "id": "split-box-sz-string",
         "position": "none",
-        "args": {
-            "value": {}
-        }
+        "args": "value"
     },
     {
         "id": "runtime-prefix-conflict",
         "position": "none",
-        "args": {
-            "form": {},
-            "first": {},
-            "second": {}
-        }
+        "args": "form first second?"
     },
     {
         "id": "dynamic-manifest-unreachable",
         "position": "none",
-        "args": {
-            "status": {}
-        }
+        "args": "status"
     },
     {
         "id": "native-engine-unavailable",
         "position": "none",
-        "args": {
-            "form": {},
-            "platform": {},
-            "packageName": {},
-            "exportName": {}
-        }
+        "args": "form platform? packageName? exportName? nativeVersion? coreVersion?"
     },
     {
         "id": "wasm-engine-unavailable",
         "position": "none",
-        "args": {
-            "detail": {}
-        }
+        "args": "detail"
     },
     {
         "id": "native-migrate-unavailable",
         "position": "none",
-        "args": {
-            "form": {},
-            "platform": {},
-            "packageName": {},
-            "exportName": {}
-        }
+        "args": "form platform? packageName? exportName? nativeVersion? coreVersion?"
     },
     {
         "id": "engine-version-skew",
         "position": "none",
-        "args": {
-            "form": {},
-            "artifact": {},
-            "expectedVersion": {},
-            "expectedDigest": {},
-            "foundVersion": {},
-            "foundDigest": {},
-            "platformPackage": {}
-        }
+        "args": "form artifact expectedVersion expectedDigest foundVersion? foundDigest? platformPackage?"
     },
     {
         "id": "runtime-version-skew",
         "position": "none",
-        "args": {
-            "pluginVersion": {},
-            "runtimeVersion": {},
-            "runtimeDir": {}
-        }
+        "args": "pluginVersion runtimeVersion runtimeDir"
     },
     {
         "id": "peer-module-unresolved",
         "position": "none",
-        "args": {
-            "requiredBy": {},
-            "request": {},
-            "install": {}
-        }
+        "args": "requiredBy request install"
     },
     {
         "id": "tailwind-v3-unavailable",
         "position": "none",
-        "args": {
-            "form": {},
-            "version": {},
-            "reason": {}
-        }
+        "args": "form version? reason?"
     },
     {
         "id": "explain-input-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "input": {},
-            "diagnostics": {
-                "joiner": "\n"
-            }
+        "args": "form input diagnostics?",
+        "joiners": {
+            "diagnostics": "\n"
         }
     },
     {
         "id": "template-sz-invalid",
         "position": "file",
-        "args": {
-            "count": {}
-        }
+        "args": "count"
     },
     {
         "id": "template-runtime-value",
         "position": "site",
-        "args": {}
+        "args": ""
     },
     {
         "id": "template-unparsable",
         "position": "site",
-        "args": {
-            "form": {},
-            "message": {}
-        }
+        "args": "form message"
     },
     {
         "id": "template-lang-unsupported",
         "position": "site",
-        "args": {
-            "lang": {}
-        }
+        "args": "lang"
     },
     {
         "id": "svelte-version-unsupported",
         "position": "site",
-        "args": {
-            "version": {}
-        }
+        "args": "version"
     },
     {
         "id": "ignore-package-incompatible",
         "position": "none",
-        "args": {
-            "pinned": {}
-        }
+        "args": "pinned"
     },
     {
         "id": "internal-error",
         "position": "none",
-        "args": {
-            "where": {},
-            "detail": {}
-        }
+        "args": "where detail"
     },
     {
         "id": "engine-call-failed",
         "position": "none",
-        "args": {
-            "file": {},
-            "detail": {}
-        }
+        "args": "file detail"
     },
     {
         "id": "config-invalid",
         "position": "file",
-        "args": {
-            "form": {},
-            "count": {}
-        }
+        "args": "form count"
     },
     {
         "id": "unknown-rule-id",
         "position": "none",
-        "args": {
-            "form": {},
-            "ids": {
-                "joiner": "` or `"
-            },
-            "suggestion": {}
+        "args": "form ids suggestion?",
+        "joiners": {
+            "ids": "` or `"
         }
     },
     {
         "id": "config-id-not-settable",
         "position": "file",
-        "args": {
-            "id": {}
-        }
+        "args": "id"
     },
     {
         "id": "removed-rule-id",
         "position": "file",
-        "args": {
-            "form": {},
-            "id": {},
-            "replacedBy": {}
-        }
+        "args": "form id replacedBy?"
     },
     {
         "id": "config-level-invalid",
         "position": "file",
-        "args": {
-            "id": {},
-            "level": {}
-        }
+        "args": "id level"
     },
     {
         "id": "config-preset-unknown",
         "position": "file",
-        "args": {
-            "preset": {}
-        }
+        "args": "preset"
     },
     {
         "id": "config-field-unknown",
         "position": "file",
-        "args": {
-            "form": {},
-            "key": {},
-            "suggestion": {}
-        }
+        "args": "form key suggestion?"
     },
     {
         "id": "config-field-invalid",
         "position": "file",
-        "args": {
-            "field": {},
-            "expected": {}
-        },
+        "args": "field expected",
         "variesBy": "expected"
     },
     {
         "id": "config-glob-unmatchable",
         "position": "file",
-        "args": {
-            "glob": {}
-        }
+        "args": "glob"
     },
     {
         "id": "config-file-duplicate",
         "position": "file",
-        "args": {
-            "read": {}
-        }
+        "args": "read"
     },
     {
         "id": "config-unloadable",
         "position": "file",
-        "args": {
-            "form": {},
-            "reason": {},
-            "lane": {},
-            "renameTo": {}
-        }
+        "args": "form reason lane? renameTo?"
     },
     {
         "id": "config-no-default-export",
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "policy-state-format-skew",
         "position": "file",
-        "args": {
-            "format": {},
-            "expected": {}
-        }
+        "args": "format expected"
     },
     {
         "id": "safelist-shard-format-skew",
         "position": "file",
-        "args": {
-            "format": {},
-            "expected": {}
-        }
+        "args": "format expected"
     },
     {
         "id": "diagnostics-held",
         "position": "none",
-        "args": {
-            "count": {}
-        }
+        "args": "count"
     },
     {
         "id": "merge-covered-held",
         "position": "none",
-        "args": {
-            "classes": {},
-            "files": {},
-            "kinds": {
-                "joiner": " --rule "
-            },
-            "configFile": {}
+        "args": "classes files kinds configFile",
+        "joiners": {
+            "kinds": " --rule "
         }
     },
     {
         "id": "removed-option",
         "position": "none",
-        "args": {
-            "form": {}
-        }
+        "args": "form"
     },
     {
         "id": "transform-cache-disabled",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "active-parser",
         "position": "none",
-        "args": {
-            "form": {}
-        }
+        "args": "form"
     },
     {
         "id": "project-reload",
         "position": "file",
-        "args": {
-            "form": {},
-            "before": {},
-            "after": {}
-        }
+        "args": "form before? after?"
     },
     {
         "id": "watch-prefix-changed",
         "position": "none",
-        "args": {
-            "form": {},
-            "changed": {
-                "joiner": "`, `"
-            },
-            "before": {},
-            "after": {}
+        "args": "form changed before? after?",
+        "joiners": {
+            "changed": "`, `"
         }
     },
     {
         "id": "watch-merge-groups-changed",
         "position": "none",
-        "args": {
-            "changed": {
-                "joiner": "`, `"
-            }
+        "args": "changed",
+        "joiners": {
+            "changed": "`, `"
         }
     },
     {
         "id": "safelist-unwritable",
         "position": "file",
-        "args": {
-            "reason": {}
-        }
+        "args": "reason"
     },
     {
         "id": "safelist-capped",
         "position": "none",
-        "args": {
-            "max": {}
-        }
+        "args": "max"
     },
     {
         "id": "utility-collision",
         "position": "none",
-        "args": {
-            "form": {},
-            "name": {}
-        }
+        "args": "form name"
     },
     {
         "id": "theme-scan-without-typescript",
         "position": "none",
-        "args": {
-            "tsconfig": {},
-            "includePath": {}
-        }
+        "args": "tsconfig includePath"
     },
     {
         "id": "esbuild-mangle-unsupported",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "mangle-selector-unparsable",
         "position": "none",
-        "args": {
-            "selector": {},
-            "error": {}
-        }
+        "args": "selector error"
     },
     {
         "id": "mangle-preserve-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "index": {},
-            "got": {}
-        }
+        "args": "form index? got?"
     },
     {
         "id": "mangle-global-vars-options-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "errors": {
-                "joiner": "\n    - "
-            }
+        "args": "form errors?",
+        "joiners": {
+            "errors": "\n    - "
         }
     },
     {
         "id": "mangle-global-vars-plan-invalid",
         "position": "none",
-        "args": {
-            "findings": {
-                "joiner": "\n    - "
-            }
+        "args": "findings",
+        "joiners": {
+            "findings": "\n    - "
         }
     },
     {
         "id": "mangle-map-too-large",
         "position": "none",
-        "args": {
-            "size": {},
-            "maxBytes": {}
-        }
+        "args": "size maxBytes"
     },
     {
         "id": "mangle-census-late",
         "position": "none",
-        "args": {
-            "form": {},
-            "classes": {
-                "joiner": "`, `"
-            }
+        "args": "form classes?",
+        "joiners": {
+            "classes": "`, `"
         }
     },
     {
         "id": "mangle-hybrid-hazard",
         "position": "none",
-        "args": {
-            "form": {},
-            "count": {},
-            "names": {
-                "joiner": "`, `"
-            },
-            "selectors": {
-                "joiner": "`; `"
-            },
-            "entries": {
-                "joiner": ", "
-            }
+        "args": "form count names? selectors? entries?",
+        "joiners": {
+            "names": "`, `",
+            "selectors": "`; `",
+            "entries": ", "
         }
     },
     {
         "id": "merge-hook-late",
         "position": "file",
-        "args": {
-            "className": {}
-        }
+        "args": "className"
     },
     {
         "id": "merge-origin-unreadable",
         "position": "file",
-        "args": {
-            "reason": {}
-        }
+        "args": "reason"
     },
     {
         "id": "tailwind-stylesheet-missing",
         "position": "none",
-        "args": {
-            "setting": {},
-            "missing": {
-                "joiner": "`, `"
-            },
-            "root": {}
+        "args": "setting missing root",
+        "joiners": {
+            "missing": "`, `"
         }
     },
     {
         "id": "tailwind-stylesheet-absent",
         "position": "none",
-        "args": {
-            "count": {}
-        }
+        "args": "count"
     },
     {
         "id": "tailwind-stylesheet-broken",
         "position": "none",
-        "args": {
-            "stylesheets": {
-                "joiner": "\n    "
-            },
-            "setting": {}
+        "args": "stylesheets setting",
+        "joiners": {
+            "stylesheets": "\n    "
         }
     },
     {
         "id": "tailwind-config-missing",
         "position": "file",
-        "args": {
-            "form": {},
-            "root": {}
-        }
+        "args": "form root?"
     },
     {
         "id": "tailwind-config-unloadable",
         "position": "file",
-        "args": {
-            "reason": {}
-        }
+        "args": "reason"
     },
     {
         "id": "legacy-source-directive",
         "position": "file",
-        "args": {
-            "target": {}
-        }
+        "args": "target"
     },
     {
         "id": "postcss-plugin-order",
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "postcss-plugin-missing",
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "ignore-pattern-negated",
         "position": "none",
-        "args": {
-            "pattern": {}
-        }
+        "args": "pattern"
     },
     {
         "id": "compile-sources-unresolved",
         "position": "none",
-        "args": {
-            "paths": {
-                "joiner": "`, `"
-            },
-            "root": {}
+        "args": "paths root",
+        "joiners": {
+            "paths": "`, `"
         }
     },
     {
         "id": "compile-sources-skipped",
         "position": "none",
-        "args": {
-            "form": {},
-            "count": {},
-            "files": {
-                "joiner": "\n    "
-            },
-            "szvCount": {}
+        "args": "form count files szvCount?",
+        "joiners": {
+            "files": "\n    "
         }
     },
     {
         "id": "css-source-unstable",
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "rsc-boundary-violation",
         "position": "file",
-        "args": {
-            "symbol": {},
-            "chain": {
-                "joiner": "` -> `"
-            }
+        "args": "symbol chain",
+        "joiners": {
+            "chain": "` -> `"
         }
     },
     {
         "id": "next-prefix-unread",
         "position": "none",
-        "args": {
-            "lane": {},
-            "root": {},
-            "reason": {}
-        },
+        "args": "lane root reason",
         "variesBy": "lane"
     },
     {
         "id": "next-safelist-locked",
         "position": "none",
-        "args": {
-            "pid": {},
-            "root": {},
-            "mode": {},
-            "host": {},
-            "updatedAt": {},
-            "command": {}
-        }
+        "args": "pid root mode host updatedAt command?"
     },
     {
         "id": "next-mangle-vars-unsupported",
         "position": "file",
-        "args": {
-            "form": {}
-        }
+        "args": "form"
     },
     {
         "id": "next-turbo-cache-unseeded",
         "position": "none",
-        "args": {
-            "root": {},
-            "reason": {}
-        }
+        "args": "root reason"
     },
     {
         "id": "next-sz-untransformed",
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "next-watcher-unclosed",
         "position": "none",
-        "args": {
-            "detail": {}
-        }
+        "args": "detail"
     },
     {
         "id": "no-source-files",
         "position": "none",
-        "args": {
-            "pattern": {},
-            "root": {}
-        }
+        "args": "pattern root"
     },
     {
         "id": "cli-option-invalid",
         "position": "none",
-        "args": {
-            "form": {},
-            "value": {}
-        }
+        "args": "form value?"
     }
 ];

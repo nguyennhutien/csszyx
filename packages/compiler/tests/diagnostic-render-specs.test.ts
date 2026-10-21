@@ -18,7 +18,7 @@ import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 import { compilerEntry, compilerSrc, reachable } from './helpers/value-import-graph.js';
 
 /** The fields a line is rendered from, and nothing else. */
-const RENDER_FIELDS = ['id', 'position', 'args', 'variesBy', 'text', 'help', 'note'];
+const RENDER_FIELDS = ['id', 'position', 'args', 'joiners', 'variesBy', 'text', 'help', 'note'];
 
 describe('the render specs', () => {
     it('are the registry cut down to the fields a line is rendered from', () => {
@@ -35,15 +35,20 @@ describe('the render specs', () => {
             for (const field of ['text', 'help', 'note'] as const) {
                 expect(rendered[field], `${spec.id}.${field}`).toEqual(spec[field]);
             }
-            // Every arg in registry order, carrying its joiner alone.
-            expect(rendered.args).toEqual(
-                Object.fromEntries(
-                    Object.entries(spec.args).map(([name, arg]) => [
-                        name,
-                        arg.joiner === undefined ? {} : { joiner: arg.joiner },
-                    ]),
-                ),
+            // Every arg in registry order as one string, each one the entry
+            // may leave out marked `?`, and nothing else.
+            const args = Object.entries(spec.args);
+            expect(rendered.args, spec.id).toBe(
+                args.map(([name, arg]) => (arg.optional ? `${name}?` : name)).join(' '),
             );
+            // Each list arg's joiner, and no `joiners` at all where none has one.
+            const joiners = args.filter(([, arg]) => arg.joiner !== undefined);
+            expect(rendered.joiners, spec.id).toEqual(
+                joiners.length === 0
+                    ? undefined
+                    : Object.fromEntries(joiners.map(([name, arg]) => [name, arg.joiner])),
+            );
+            expect('joiners' in rendered, spec.id).toBe(joiners.length > 0);
         }
     });
 

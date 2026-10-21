@@ -34,8 +34,8 @@ export const MERGE_AUDIT_KINDS: readonly MergeAuditKind[] = [
     'merge-covered-class',
 ];
 
-/** One class a merge removes, and where. */
-export interface MergeAuditFinding {
+/** What every finding carries, whichever merge removed the class. */
+interface MergeAuditFindingBase {
     /** The file, as the caller named it. */
     file: string;
     /**
@@ -43,12 +43,23 @@ export interface MergeAuditFinding {
      * class-name attribute.
      */
     line: number;
-    kind: MergeAuditKind;
     /** The class removed. */
     className: string;
-    /** For `merge-covered-key`, the `sz` key the class was written as. */
-    key?: string;
 }
+
+/**
+ * One class a merge removes, and where. A key merge always names the key,
+ * which its line words; a class-name merge has none.
+ */
+export type MergeAuditFinding = MergeAuditFindingBase &
+    (
+        | {
+              kind: 'merge-covered-key';
+              /** The `sz` key the class was written as. */
+              key: string;
+          }
+        | { kind: 'merge-covered-class'; key?: undefined }
+    );
 
 /** One source file to audit. */
 export interface MergeAuditFile {

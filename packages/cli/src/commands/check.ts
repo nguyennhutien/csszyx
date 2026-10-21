@@ -16,14 +16,15 @@ import path from 'node:path';
 
 import {
     nearestName,
-    type RenderableDiagnostic,
     renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_URL_BASE,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
     type SzDiagnosticCode,
+    type SzDiagnosticId,
     type SzDiagnosticIssue,
+    type SzTypedDiagnostic,
     szDiagnosticPositionOf,
 } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
@@ -1385,7 +1386,7 @@ function nearestId(id: string, known: ReadonlySet<string>): string | null {
  * @param out - Reporter the failure is written to; stderr in `--json`.
  * @param diagnostic - Why the run cannot start.
  */
-function refuse(out: Reporter, diagnostic: RenderableDiagnostic): void {
+function refuse<C extends SzDiagnosticId>(out: Reporter, diagnostic: SzTypedDiagnostic<C>): void {
     out.runWarn(`\u2716 ${registryMessage(diagnostic)}`);
     process.exitCode = 1;
 }

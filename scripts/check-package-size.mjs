@@ -11,7 +11,7 @@ import ts from 'typescript';
 import { cdnBuildOptions, INSTALLED_RESOLUTION } from '../packages/csszyx/cdn-build.mjs';
 import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
 import * as registry from './diagnostics/registry.mjs';
-import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
+import { browserDiagnostics, EDITOR_IDS } from './gen-diagnostic-codes.mjs';
 
 /**
  * Size gate for the JS that ships to end users. Bytes are the one performance
@@ -530,6 +530,10 @@ export const SIZE_BUDGETS = [
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
         maxGzipBytes: 49_950,
+        // Built as production, so the leak gate reads it, except for the ids
+        // whose words the extension shows as its own editor diagnostics
+        // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
+        templateFree: { allowedIds: EDITOR_IDS },
     },
     // The CDN bundles, which a `<script>` tag loads whole: unpkg and jsdelivr
     // serve the production one at the package root, and nothing priced it.
@@ -553,6 +557,8 @@ export const SIZE_BUDGETS = [
         kind: 'file',
         target: 'packages/csszyx/dist/browser.iife.js',
         maxGzipBytes: 16_200,
+        // A `<script>` tag loads it as built, so the leak gate reads its bytes.
+        templateFree: {},
         build: cdnBuildOptions('production'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
         // Its sinks are read as an app's (ADR 0031 §6): every line it prints
@@ -627,12 +633,23 @@ export const SIZE_BUDGETS = [
     // `diagnostic-browser.generated.ts`, which the bundle keeps alone
     // (`tests/engine-entry-isolation.test.ts` pins which). Kept in full on
     // the user's call (2026-10-21) rather than cut to a compact line.
+    //
+    // Raised 2026-10-21 from 27,250 / 30,250, measured 27,103 / 30,135
+    // (+139 / +131 against 26,964 / 30,004): a development render refuses a
+    // diagnostic missing a required arg or a form with no sentence
+    // (`assertFillable`, +189), the registry gained the
+    // `stale-binding-versions` and `sz-attribute-syntax` `end` forms (+60),
+    // and `diagnosticPath` changed (+11). Marking each arg's optionality as
+    // an object per arg cost a further +221 / +234; the generator now writes
+    // an entry's args as one string (`'form key replacement?'`) and its list
+    // joiners apart (`templateArgs`, `templateJoiners`), which removes that
+    // and keeps the check's semantics. Budgets the usual ~300 above.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 27_250,
+        maxGzipBytes: 27_400,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -640,7 +657,7 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 30_250,
+        maxGzipBytes: 30_450,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];
@@ -1807,7 +1824,54 @@ export async function checkTemplateLeaks(budgets, rootDir, options = {}) {
         }
         failures.push(...(await controlFailures(lane, rootDir, control, texts)));
     }
-    return { failures, templates: texts.length, bundles };
+    const shipped = shippedTemplateFailures(budgets, rootDir, texts);
+    failures.push(...shipped.failures);
+    return { failures, templates: texts.length, bundles: bundles + shipped.bundles };
+}
+
+/** The leak gate over what ships built rather than what an app builds: each
+ * `kind: 'file'` budget that declares `templateFree`, read from its bytes on
+ * disk, and the installed app, built for production. A file's `allowedIds`
+ * names the ids it carries the words of by design.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @param {Array<{ id: string, text: string }>} texts every template
+ * @returns {{ failures: string[], bundles: number }} failures, and how many were read
+ */
+function shippedTemplateFailures(budgets, rootDir, texts) {
+    const failures = [];
+    let bundles = 0;
+    for (const budget of budgets) {
+        const scan =
+            budget.kind === 'installed-app'
+                ? {}
+                : budget.kind === 'file'
+                  ? budget.templateFree
+                  : undefined;
+        if (scan === undefined) continue;
+        let code;
+        try {
+            code =
+                budget.kind === 'installed-app'
+                    ? installedAppBuild(budget, rootDir).code
+                    : readFileSync(path.join(rootDir, budget.target), 'utf8');
+        } catch (error) {
+            failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
+            continue;
+        }
+        bundles += 1;
+        const allowed = new Set(scan.allowedIds ?? []);
+        for (const { id, text } of templateLeaks(code, texts)) {
+            if (allowed.has(id)) continue;
+            failures.push(
+                `${budget.name}: the production bundle carries the development text "${text}" ` +
+                    `of \`${id}\`. Report it with \`szReport\` only inside a ` +
+                    "`process.env.NODE_ENV !== 'production'` branch, and keep the template a plain literal.",
+            );
+        }
+    }
+    return { failures, bundles };
 }
 
 /** The control's failures in one lane: its development build must carry each
@@ -1880,7 +1944,7 @@ async function main() {
     }
     console.log(
         `Template leak gate: ${leaks.templates} templates looked for in ${leaks.bundles} ` +
-            'production app bundles and the development control.',
+            'production app bundles and shipped files, and the development control.',
     );
     if (failures.length > 0) {
         throw new Error(`Package size check failed:\n- ${failures.join('\n- ')}`);
