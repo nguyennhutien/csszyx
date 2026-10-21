@@ -199,10 +199,15 @@ const POSTCSS_CONFIG_FILES = [
 /**
  * @param cwd - Project root directory.
  * @param name - Package name.
- * @returns Whether package.json lists it as a dependency of any kind.
+ * @returns Whether package.json lists it as a dependency of any kind;
+ *   false when there is no package.json.
  */
 async function hasDependency(cwd: string, name: string): Promise<boolean> {
-    const packageJson = JSON.parse(await fs.readFile(path.join(cwd, 'package.json'), 'utf8')) as {
+    // `--framework` sets a project up without detection, which is what read
+    // package.json, so there may be none: it then lists nothing.
+    const text = await readFileOrNull(path.join(cwd, 'package.json'));
+    if (text === null) return false;
+    const packageJson = JSON.parse(text) as {
         dependencies?: Record<string, string>;
         devDependencies?: Record<string, string>;
     };
@@ -630,11 +635,7 @@ async function injectPlugin(
 ): Promise<void> {
     const { framework } = projectInfo;
     if (VITE_FRAMEWORKS.has(framework)) {
-        const injected = await injectVitePlugin(cwd);
-        if (!injected) {
-            printWarn('Could not auto-inject csszyx plugin. Add manually to vite.config.ts:');
-            console.log(generateVitePluginInstructions());
-        }
+        await setupViteConfig(cwd, projectInfo, setup.tailwindJustInstalled);
     } else if (NEXTJS_FRAMEWORKS.has(framework)) {
         const injected = await injectNextPlugin(cwd);
         if (!injected) {
@@ -646,8 +647,67 @@ async function injectPlugin(
     } else {
         // Unknown/other frameworks: print manual instructions
         printInfo('Add csszyx plugin to your bundler config:');
-        console.log(generateVitePluginInstructions());
+        console.log(viteConfigLines());
     }
+}
+
+/**
+ * Add csszyx to the project's `vite.config`, or print the lines when init
+ * cannot, and say how to add `@tailwindcss/vite` when what init wrote or
+ * printed imports it and the project does not list it.
+ *
+ * @param cwd - Project root directory.
+ * @param projectInfo - Detected project metadata, for the package manager.
+ * @param tailwindJustInstalled - Whether this run installed Tailwind and
+ *   `@tailwindcss/vite`.
+ */
+async function setupViteConfig(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    tailwindJustInstalled: boolean,
+): Promise<void> {
+    const injected = await injectVitePlugin(cwd);
+    if (injected === null) {
+        printWarn('Could not auto-inject csszyx plugin. Add manually to vite.config.ts:');
+        console.log(viteConfigLines());
+        await printTailwindViteStep(
+            cwd,
+            projectInfo,
+            'The lines above import',
+            tailwindJustInstalled,
+        );
+    } else if (injected.addedTailwindImport) {
+        await printTailwindViteStep(
+            cwd,
+            projectInfo,
+            `\`${injected.file}\` now imports`,
+            tailwindJustInstalled,
+        );
+    }
+}
+
+/**
+ * Say how to add `@tailwindcss/vite` when the project does not list it.
+ *
+ * A project already on Tailwind through another integration does not have
+ * the plugin, and init installs it only alongside Tailwind itself.
+ *
+ * @param cwd - Project root directory.
+ * @param projectInfo - Detected project metadata, for the package manager.
+ * @param subject - What imports it, as the sentence begins: the lines init
+ *   printed, or the file it edited.
+ * @param tailwindJustInstalled - Whether this run installed the plugin.
+ */
+async function printTailwindViteStep(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    subject: string,
+    tailwindJustInstalled: boolean,
+): Promise<void> {
+    if (tailwindJustInstalled || (await hasDependency(cwd, '@tailwindcss/vite'))) return;
+    printInfo(
+        `${subject} \`@tailwindcss/vite\`, which this project does not list: run \`${projectInfo.packageManager} add -D @tailwindcss/vite\`.`,
+    );
 }
 
 /**
@@ -672,22 +732,23 @@ async function printFrameworkViteLines(
     if (setup.stylesheet !== null && printed.stylesheetStep !== undefined) {
         printInfo(printed.stylesheetStep(setup.stylesheet));
     }
-    // A project already on Tailwind through another integration does not
-    // have the plugin the lines import, and init did not install it.
-    if (!setup.tailwindJustInstalled && !(await hasDependency(cwd, '@tailwindcss/vite'))) {
-        printInfo(
-            `The lines above import \`@tailwindcss/vite\`, which this project does not list: run \`${projectInfo.packageManager} add -D @tailwindcss/vite\`.`,
-        );
-    }
+    await printTailwindViteStep(
+        cwd,
+        projectInfo,
+        'The lines above import',
+        setup.tailwindJustInstalled,
+    );
 }
 
 /**
  * Inject csszyx + tailwindcss into vite.config.ts / vite.config.js.
- * Returns true if injection succeeded.
  * @param cwd - Project root directory.
- * @returns True if injection succeeded.
+ * @returns The config's file name and whether init added the
+ *   `@tailwindcss/vite` import to it, or null when injection failed.
  */
-async function injectVitePlugin(cwd: string): Promise<boolean> {
+async function injectVitePlugin(
+    cwd: string,
+): Promise<{ file: string; addedTailwindImport: boolean } | null> {
     const candidates = [
         path.join(cwd, 'vite.config.ts'),
         path.join(cwd, 'vite.config.js'),
@@ -700,27 +761,27 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
     let content = found?.content ?? null;
 
     if (!configPath || content === null) {
-        return false;
+        return null;
     }
+    const file = path.basename(configPath);
 
     // Skip if already has csszyx import
     if (content.includes('csszyx')) {
-        return true;
+        return { file, addedTailwindImport: false };
     }
 
     // Inject import statements after the last existing import line
+    const addedTailwindImport = !content.includes('@tailwindcss/vite');
     const importBlock = [
         "import csszyx from 'csszyx/vite';",
-        content.includes('@tailwindcss/vite')
-            ? null
-            : "import tailwindcss from '@tailwindcss/vite';",
+        addedTailwindImport ? "import tailwindcss from '@tailwindcss/vite';" : null,
     ]
         .filter(Boolean)
         .join('\n');
 
     const lastImportMatch = [...content.matchAll(/^import .+$/gm)].pop();
     if (lastImportMatch?.index === undefined) {
-        return false;
+        return null;
     }
 
     const insertAt = lastImportMatch.index + lastImportMatch[0].length;
@@ -729,7 +790,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
     // Inject ...csszyx() as first plugin, before tailwindcss() if present
     const pluginsMatch = /plugins\s*:\s*\[/.exec(content);
     if (pluginsMatch?.index === undefined) {
-        return false;
+        return null;
     }
 
     const pluginsInsertAt = pluginsMatch.index + pluginsMatch[0].length;
@@ -740,8 +801,8 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
         content.slice(pluginsInsertAt);
 
     await fs.writeFile(configPath, content);
-    printInfo(`Injected csszyx plugin into ${path.basename(configPath)}`);
-    return true;
+    printInfo(`Injected csszyx plugin into ${file}`);
+    return { file, addedTailwindImport };
 }
 
 /**
@@ -912,11 +973,21 @@ module.exports = nextConfig;
 }
 
 /**
- * Generate manual Vite plugin installation instructions as a string.
+ * The lines for a `vite.config.ts` that loads as pasted: `defineConfig` is
+ * imported, and csszyx comes before Tailwind.
+ *
+ * @param framework - The framework's own plugin, which goes after both; a
+ *   placeholder for the project's other plugins when there is none.
+ * @param framework.importLine - The line that imports it.
+ * @param framework.plugin - The call that adds it.
  * @returns Instruction snippet for vite.config.ts.
  */
-function generateVitePluginInstructions(): string {
+function viteConfigLines(framework?: { importLine: string; plugin: string }): string {
+    const frameworkImport = framework === undefined ? '' : `  ${framework.importLine}\n`;
+    const lastPlugin =
+        framework === undefined ? '// ...your other plugins' : `${framework.plugin},`;
     return `
+${frameworkImport}  import { defineConfig } from 'vite';
   import csszyx from 'csszyx/vite';
   import tailwindcss from '@tailwindcss/vite';
 
@@ -924,7 +995,7 @@ function generateVitePluginInstructions(): string {
     plugins: [
       ...csszyx(),      // csszyx MUST come before tailwindcss
       tailwindcss(),
-      // ...your other plugins
+      ${lastPlugin}
     ],
   });
 `;
@@ -983,20 +1054,10 @@ ${NESTED_VITE_PLUGINS}`;
  * @returns Instruction snippet for that file.
  */
 function svelteKitConfigLines(): string {
-    return `
-  import { sveltekit } from '@sveltejs/kit/vite';
-  import { defineConfig } from 'vite';
-  import csszyx from 'csszyx/vite';
-  import tailwindcss from '@tailwindcss/vite';
-
-  export default defineConfig({
-    plugins: [
-      ...csszyx(),      // csszyx MUST come before tailwindcss
-      tailwindcss(),
-      sveltekit(),
-    ],
-  });
-`;
+    return viteConfigLines({
+        importLine: "import { sveltekit } from '@sveltejs/kit/vite';",
+        plugin: 'sveltekit()',
+    });
 }
 
 /**

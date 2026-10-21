@@ -2851,13 +2851,25 @@ export const DIAGNOSTICS = [
     },
     {
         id: 'tailwind-config-missing',
-        summary: 'A Tailwind config path that does not exist.',
+        summary: 'A Tailwind config path that does not exist, or a directory with no config.',
         surfaces: { error: { host: 'node' } },
         position: 'file',
-        args: {},
-        text: 'This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.',
+        forms: ['path', 'not-found'],
+        args: { form: formArg(['path', 'not-found']), root: OPTIONAL_STRING },
+        text: {
+            path: 'This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.',
+            'not-found':
+                'No Tailwind config is in `{root}`, so `csszyx generate-types` cannot read the theme.',
+        },
         help: "pass the path of the project's Tailwind config with `--config`, such as `--config ./tailwind.config.js`.",
-        sources: ['packages/cli/src/scanner/tailwind-scanner.ts:109'],
+        note: {
+            'not-found':
+                'the search looks in this directory only, for `tailwind.config.ts`, `.js`, `.cjs` and `.mjs`.',
+        },
+        sources: [
+            'packages/cli/src/scanner/tailwind-scanner.ts:109',
+            'packages/cli/src/commands/generate-types.ts:65',
+        ],
     },
     {
         id: 'tailwind-config-unloadable',

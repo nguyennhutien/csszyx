@@ -18,11 +18,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('execa', () => ({ execa: vi.fn(async () => ({ stdout: '', stderr: '' })) }));
 
-const prompted = vi.hoisted(() => ({ questions: [] as Array<{ name: string }> }));
+const prompted = vi.hoisted(() => ({
+    questions: [] as Array<{ name: string }>,
+    answers: {} as Record<string, unknown>,
+}));
 vi.mock('prompts', () => ({
     default: vi.fn(async (questions: Array<{ name: string }>) => {
         prompted.questions.push(...questions);
-        return {};
+        return prompted.answers;
     }),
 }));
 
@@ -72,6 +75,7 @@ function installs(): string[][] {
 afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
     prompted.questions.length = 0;
+    prompted.answers = {};
     process.exitCode = undefined;
     vi.clearAllMocks();
     vi.restoreAllMocks();
@@ -296,5 +300,127 @@ describe('the config lines init prints for Nuxt, SvelteKit and Astro', () => {
                 '\n' +
                 'ℹ The lines above import `@tailwindcss/vite`, which this project does not list: run `pnpm add -D @tailwindcss/vite`.',
         );
+    });
+});
+
+describe('csszyx init for a Vite project on Tailwind without `@tailwindcss/vite`', () => {
+    // A project already on Tailwind through PostCSS does not have the plugin
+    // the edited config or the printed lines import, and init installs nothing
+    // for Tailwind when Tailwind is there.
+    const POSTCSS_TAILWIND = { tailwindcss: '^4', '@tailwindcss/postcss': '^4' };
+
+    it('says how to add it after writing its import into `vite.config.ts`', async () => {
+        const lines = printed();
+        const cwd = project({
+            ...REACT_VITE,
+            'package.json': JSON.stringify({
+                dependencies: { react: '^19', vite: '^7' },
+                devDependencies: POSTCSS_TAILWIND,
+            }),
+            'pnpm-lock.yaml': '',
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(readFileSync(join(cwd, 'vite.config.ts'), 'utf8')).toContain(
+            "import tailwindcss from '@tailwindcss/vite';",
+        );
+        expect(lines.join('\n')).toContain(
+            'ℹ Injected csszyx plugin into vite.config.ts\n' +
+                'ℹ `vite.config.ts` now imports `@tailwindcss/vite`, which this project does not list: run `pnpm add -D @tailwindcss/vite`.',
+        );
+    });
+
+    it('says nothing when the config already imported it', async () => {
+        const lines = printed();
+        const cwd = project({
+            'package.json': JSON.stringify({
+                dependencies: { react: '^19', vite: '^7' },
+                devDependencies: POSTCSS_TAILWIND,
+            }),
+            'vite.config.ts':
+                "import { defineConfig } from 'vite';\nimport tailwindcss from '@tailwindcss/vite';\nexport default defineConfig({ plugins: [tailwindcss()] });\n",
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(lines.join('\n')).toContain('Injected csszyx plugin into vite.config.ts');
+        expect(lines.join('\n')).not.toContain('which this project does not list');
+    });
+
+    it('says how to add it under the lines it prints when it cannot edit the config', async () => {
+        const lines = printed();
+        const cwd = project({
+            'package.json': JSON.stringify({
+                dependencies: { vue: '^3', vite: '^7' },
+                devDependencies: POSTCSS_TAILWIND,
+            }),
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(lines.join('\n')).toContain(
+            '  });\n' +
+                '\n' +
+                'ℹ The lines above import `@tailwindcss/vite`, which this project does not list: run `npm add -D @tailwindcss/vite`.',
+        );
+    });
+
+    it.each(['vite-react', 'astro'] as const)(
+        'finishes for a project with no package.json that `--framework %s` names',
+        async framework => {
+            // Declining Tailwind leaves the plugin to the project, and a project
+            // with no package.json lists nothing: there is nothing to read.
+            const lines = printed();
+            prompted.answers = { installTailwind: false };
+            const cwd = project({});
+
+            await init({ cwd, framework });
+
+            const output = lines.join('\n');
+            expect(output).toContain(
+                'ℹ The lines above import `@tailwindcss/vite`, which this project does not list: run `npm add -D @tailwindcss/vite`.',
+            );
+            expect(output).toContain('All done!');
+        },
+    );
+});
+
+describe('the vite.config lines init prints when it edits none', () => {
+    // Pasted as printed, the file must load: `defineConfig` is Vite's, and an
+    // unimported name is a ReferenceError when Vite loads the config.
+    const LINES =
+        "  import { defineConfig } from 'vite';\n" +
+        "  import csszyx from 'csszyx/vite';\n" +
+        "  import tailwindcss from '@tailwindcss/vite';\n" +
+        '\n' +
+        '  export default defineConfig({\n' +
+        '    plugins: [\n' +
+        '      ...csszyx(),      // csszyx MUST come before tailwindcss\n' +
+        '      tailwindcss(),\n' +
+        '      // ...your other plugins\n' +
+        '    ],\n' +
+        '  });\n';
+
+    const VUE_VITE = JSON.stringify({ dependencies: { vue: '^3', vite: '^7' } });
+
+    it.each([
+        ['an unknown framework', { 'package.json': JSON.stringify({ name: 'plain' }) }],
+        ['a Vite project without a vite.config', { 'package.json': VUE_VITE }],
+        [
+            'a vite.config with no `plugins` list to add to',
+            {
+                'package.json': VUE_VITE,
+                'vite.config.ts':
+                    "import { defineConfig } from 'vite';\nexport default defineConfig({});\n",
+            },
+        ],
+    ])('import `defineConfig` for %s', async (_name, files) => {
+        const lines = printed();
+        const cwd = project(files);
+
+        await init({ yes: true, cwd });
+
+        expect(lines.join('\n')).toContain(`:\n\n${LINES}`);
     });
 });

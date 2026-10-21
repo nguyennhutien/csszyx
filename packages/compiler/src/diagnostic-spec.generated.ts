@@ -3621,14 +3621,30 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "tailwind-config-missing",
-        "summary": "A Tailwind config path that does not exist.",
+        "summary": "A Tailwind config path that does not exist, or a directory with no config.",
         "surfaces": {
             "error": {
                 "host": "node"
             }
         },
         "position": "file",
-        "args": {}
+        "forms": [
+            "path",
+            "not-found"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "path",
+                    "not-found"
+                ]
+            },
+            "root": {
+                "type": "string",
+                "optional": true
+            }
+        }
     },
     {
         "id": "tailwind-config-unloadable",

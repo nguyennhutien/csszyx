@@ -7,13 +7,14 @@
  * @module commands/generate-types
  */
 
-import { dirname, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import { isCsszyxError } from '@csszyx/compiler/errors';
 
 import { type GeneratorOptions, generateAndWriteTypes } from '../generator/type-generator.js';
 import { resolveTailwindV3, tailwindLoaderFor } from '../scanner/tailwind-availability.js';
 import { findConfigFile, scanTailwindConfig } from '../scanner/tailwind-scanner.js';
+import { registryMessage } from '../utils/registry-words.js';
 
 /**
  * Command options for generate-types.
@@ -58,10 +59,11 @@ export async function generateTypes(options: GenerateTypesOptions = {}): Promise
     // project has no `tailwind.config.js` by design, and "could not find" sends
     // its author hunting for a file that cannot exist — the availability
     // message says the command has no job there at all.
-    await requireTailwindV3(configPath ? dirname(configPath) : cwd, error);
+    await requireTailwindV3(configPath ? dirname(configPath) : cwd, cwd, error);
     if (!configPath) {
-        error('❌ Could not find tailwind.config.js in current directory');
-        error('   Please specify the path with --config flag');
+        error(
+            `✖ ${registryMessage({ code: 'tailwind-config-missing', args: { form: 'not-found', root: cwd } })}`,
+        );
         process.exit(1);
     }
 
@@ -72,13 +74,13 @@ export async function generateTypes(options: GenerateTypesOptions = {}): Promise
 
     // Generate types
     const outputPath = options.output || './csszyx.d.ts';
-    const generatorOptions: GeneratorOptions = {
+    const generatorOptions = {
         output: resolve(cwd, outputPath),
         includeComments: true,
-    };
+    } satisfies GeneratorOptions;
 
     log('\n📝 Generating TypeScript declarations...');
-    await writeDeclarations(scanResult, generatorOptions, log, error);
+    await writeDeclarations(scanResult, generatorOptions, { cwd, log, error });
 }
 
 /**
@@ -118,16 +120,36 @@ function resolveConfigPath(
 
 /**
  * Stop with the availability message when Tailwind v3 is not there to call.
- * @param cwd - Project directory, whose own Tailwind is the one asked about.
+ * @param projectDir - Project directory, whose own Tailwind is the one asked about.
+ * @param cwd - The command working directory, which the message names the project from.
  * @param error - The error-output logger.
  */
-async function requireTailwindV3(cwd: string, error: CommandLogger): Promise<void> {
+async function requireTailwindV3(
+    projectDir: string,
+    cwd: string,
+    error: CommandLogger,
+): Promise<void> {
     try {
-        await resolveTailwindV3(tailwindLoaderFor(cwd));
+        await resolveTailwindV3(tailwindLoaderFor(projectDir));
     } catch (cause) {
-        error(`❌ ${errorMessage(cause)}`);
-        process.exit(1);
+        // The lookup resolves from the project's package.json.
+        const manifest = relative(cwd, join(projectDir, 'package.json'));
+        stop(error, cause, `Could not look up Tailwind from \`${manifest}\``);
     }
+}
+
+/**
+ * Print a failure in the shared `✖` form and exit.
+ *
+ * @param error - The error-output logger.
+ * @param cause - What was thrown.
+ * @param context - What failed, naming the file, for a failure the registry
+ *   has no words for; a csszyx error says what failed in its own.
+ */
+function stop(error: CommandLogger, cause: unknown, context: string): never {
+    const reason = isCsszyxError(cause) ? cause.message : `${context}: ${errorMessage(cause)}`;
+    error(`✖ ${reason}`);
+    process.exit(1);
 }
 
 /**
@@ -145,12 +167,7 @@ async function loadTailwindConfig(
     try {
         return await scanTailwindConfig(configPath);
     } catch (cause) {
-        // A csszyx error says what failed in the registry's words already.
-        const reason = isCsszyxError(cause)
-            ? cause.message
-            : `Could not read \`${relative(cwd, configPath)}\`: ${errorMessage(cause)}`;
-        error(`✖ ${reason}`);
-        process.exit(1);
+        return stop(error, cause, `Could not read \`${relative(cwd, configPath)}\``);
     }
 }
 
@@ -172,14 +189,15 @@ function logCustomThemeParts(scanResult: TailwindScanResult, log: CommandLogger)
  * Generates the declarations and prints the successful command summary.
  * @param scanResult - The normalized Tailwind scan result.
  * @param generatorOptions - The declaration generator options.
- * @param log - The normal-output logger.
- * @param error - The error-output logger.
+ * @param output - Where the command runs and prints.
+ * @param output.cwd - The command working directory, which the message names the output from.
+ * @param output.log - The normal-output logger.
+ * @param output.error - The error-output logger.
  */
 async function writeDeclarations(
     scanResult: TailwindScanResult,
-    generatorOptions: GeneratorOptions,
-    log: CommandLogger,
-    error: CommandLogger,
+    generatorOptions: GeneratorOptions & { output: string },
+    { cwd, log, error }: CommandOutput & { cwd: string },
 ): Promise<void> {
     try {
         const writtenPath = await generateAndWriteTypes(scanResult.theme, generatorOptions);
@@ -188,8 +206,7 @@ async function writeDeclarations(
         log('\n💡 Add this to your tsconfig.json "include" array:');
         log('   "include": ["src", "csszyx.d.ts"]');
     } catch (cause) {
-        error(`❌ Failed to generate types: ${errorMessage(cause)}`);
-        process.exit(1);
+        stop(error, cause, `Could not write \`${relative(cwd, generatorOptions.output)}\``);
     }
 }
 

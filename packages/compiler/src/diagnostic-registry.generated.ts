@@ -1395,7 +1395,10 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "tailwind-config-missing",
         "position": "file",
-        "args": {}
+        "args": {
+            "form": {},
+            "root": {}
+        }
     },
     {
         "id": "tailwind-config-unloadable",

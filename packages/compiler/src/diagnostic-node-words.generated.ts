@@ -541,8 +541,14 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "note": "each failure, as Tailwind reported it:\n    {stylesheets}"
     },
     "tailwind-config-missing": {
-        "text": "This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.",
-        "help": "pass the path of the project's Tailwind config with `--config`, such as `--config ./tailwind.config.js`."
+        "text": {
+            "path": "This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.",
+            "not-found": "No Tailwind config is in `{root}`, so `csszyx generate-types` cannot read the theme."
+        },
+        "help": "pass the path of the project's Tailwind config with `--config`, such as `--config ./tailwind.config.js`.",
+        "note": {
+            "not-found": "the search looks in this directory only, for `tailwind.config.ts`, `.js`, `.cjs` and `.mjs`."
+        }
     },
     "tailwind-config-unloadable": {
         "text": "This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.",

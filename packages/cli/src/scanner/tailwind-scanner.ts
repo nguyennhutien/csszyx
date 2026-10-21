@@ -106,7 +106,7 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
     const absolutePath = resolve(configPath);
 
     if (!existsSync(absolutePath)) {
-        throw registryError('tailwind-config-missing', {}, { file: absolutePath });
+        throw registryError('tailwind-config-missing', { form: 'path' }, { file: absolutePath });
     }
 
     // For TypeScript configs, we need to use tsx or esbuild-register

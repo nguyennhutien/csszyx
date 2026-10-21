@@ -1721,7 +1721,7 @@ a prefix its name gives no hint of.
 
 ### `generate-types` and Tailwind v3
 
-`generate-types` reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig`. Tailwind v3 is an optional peer of `@csszyx/cli` — 12 MB across 37 packages that only this command touches — and no package manager warns when an optional peer is missing, so the command checks before it reads a config — and before it reports that it found none, since a v4 project has none by design — and stops with one of three messages. Each is the whole explanation, printed under a `❌` prefix.
+`generate-types` reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig`. Tailwind v3 is an optional peer of `@csszyx/cli` — 12 MB across 37 packages that only this command touches — and no package manager warns when an optional peer is missing, so the command checks before it reads a config — and before it reports that it found none, since a v4 project has none by design — and stops with one of three messages. Each is the whole explanation, printed under a `✖` prefix.
 
 No Tailwind at all:
 
@@ -1750,7 +1750,7 @@ v3 is installed and its entry did not load — a patched copy, a blocked `export
   note: loading the entry reported: {reason}.
 ```
 
-A config path the command cannot read stops it the same way, headed by the path: `tailwind-config-missing` (``This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.``) for a `--config` that names no file, and `tailwind-config-unloadable` (``This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.``, with what the import threw) for one that throws.
+A config path the command cannot read stops it the same way, headed by the path: `tailwind-config-missing` (``This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.``) for a `--config` that names no file, the same code headed by no path (``No Tailwind config is in `{root}`, so `csszyx generate-types` cannot read the theme.``) when no `--config` was passed and the working directory has none, and `tailwind-config-unloadable` (``This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.``, with what the import threw) for one that throws.
 
 The same messages are thrown as csszyx errors from `scanTailwindConfig` when it is called as a library, so a host such as the MCP server shows the explanation rather than a bare resolver error. `csszyx doctor` reports the state under `🧰 Optional tooling` as a line that never counts as an issue: `generate-types available (tailwindcss {version})`, `generate-types unavailable — tailwindcss v3 is an optional peer and is not installed. Only needed to read a v3 tailwind.config.js.`, `generate-types unavailable — tailwindcss {version} has no JavaScript config to read. Not needed on v4.`, or — as a warning, since a reinstall is due — `generate-types unavailable — tailwindcss {version} is installed but its resolveConfig entry did not load: {reason}. Reinstall it: npm install --force tailwindcss@3`.
 
