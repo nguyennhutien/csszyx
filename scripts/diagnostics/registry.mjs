@@ -1662,7 +1662,7 @@ export const DIAGNOSTICS = [
         },
         position: 'site',
         // `index` is where in `input` the parser met `char`, or, for `end`,
-        // where the attribute stopped before it was complete.
+        // where the attribute stopped before a key or value was complete.
         forms: ['char', 'end'],
         args: {
             form: formArg(['char', 'end']),
@@ -1672,9 +1672,12 @@ export const DIAGNOSTICS = [
         },
         text: {
             char: 'The `sz` attribute `{input}` has an unexpected `{char}` at offset {index}, so the element gets no classes from it.',
-            end: 'The `sz` attribute `{input}` ends at offset {index} before it is complete, so the element gets no classes from it.',
+            end: 'The `sz` attribute `{input}` ends at offset {index} before a key or value is complete, so the element gets no classes from it.',
         },
-        help: 'write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+        help: {
+            char: 'write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+            end: 'give every key a `:` and a value, and close every `[` and quote, such as `sz="p: 4, [&>span]: { m: 2 }"`.',
+        },
         sources: ['packages/csszyx/src/browser.ts', 'packages/csszyx/src/parse-sz-attribute.ts'],
     },
 
@@ -1812,9 +1815,9 @@ export const DIAGNOSTICS = [
             'missing-export':
                 '`{packageName}` does not export `{exportName}()`, which the installed `@csszyx/core` calls, so the `rust` parser cannot run.',
             'stale-binding':
-                '`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so the `rust` parser cannot run.',
+                '`{packageName}` returns results the installed `@csszyx/core` cannot read, so the `rust` parser cannot run.',
             'stale-binding-versions':
-                '`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so the `rust` parser cannot run.',
+                '`{packageName}` {nativeVersion} returns results the installed `@csszyx/core` {coreVersion} cannot read, so the `rust` parser cannot run.',
             'wasm-fallback':
                 'The native engine is not available here, so the default `rust` parser runs on the wasm engine.',
         },
@@ -1879,9 +1882,9 @@ export const DIAGNOSTICS = [
             'missing-export':
                 '`{packageName}` predates migrate and does not export `{exportName}()`, so migrate cannot run.',
             'stale-binding':
-                '`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so migrate cannot run.',
+                '`{packageName}` returns results the installed `@csszyx/core` cannot read, so migrate cannot run.',
             'stale-binding-versions':
-                '`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so migrate cannot run.',
+                '`{packageName}` {nativeVersion} returns results the installed `@csszyx/core` {coreVersion} cannot read, so migrate cannot run.',
         },
         help: {
             'no-platform-package':

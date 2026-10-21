@@ -11,7 +11,9 @@
  * result without the diagnostic codes used to reach the caller and fail there
  * as a bare `TypeError` on a missing field, which names neither package.
  */
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,6 +31,25 @@ const CORE_VERSION = (
         version: string;
     }
 ).version;
+
+/**
+ * A platform package directory in a temp dir: a manifest at `version` whose
+ * binary is one of the fixtures, so a test controls the version it names.
+ * @param version - The manifest version.
+ * @param binding - The fixture file the manifest points at.
+ * @returns The directory, which the caller removes.
+ */
+function platformPackage(version: string, binding: string): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'csszyx-platform-'));
+    writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ version, main: fixture(binding) }),
+    );
+    return dir;
+}
+
+/** A version no release of `@csszyx/core` carries, so it differs from the installed one. */
+const OTHER_VERSION = '0.0.1-fixture';
 
 describe('@csszyx/core/native transformBatch', () => {
     beforeEach(() => {
@@ -55,7 +76,7 @@ describe('@csszyx/core/native transformBatch', () => {
         const files = [{ filename: '/p/a.tsx', source: '' }];
 
         expect(() => transformBatch(files)).toThrow(
-            `\`${packageName.current}\` 0.17.0 is older than the installed \`@csszyx/core\` ${coreVersion} and returns results it cannot read, so the \`rust\` parser cannot run.`,
+            `\`${packageName.current}\` 0.17.0 returns results the installed \`@csszyx/core\` ${coreVersion} cannot read, so the \`rust\` parser cannot run.`,
         );
         try {
             transformBatch(files);
@@ -66,6 +87,30 @@ describe('@csszyx/core/native transformBatch', () => {
                 nativeVersion: '0.17.0',
                 coreVersion,
             });
+        }
+    });
+
+    it('names no versions when both manifests carry the same one', async () => {
+        // A binary built from older source than its manifest says, such as a
+        // stale local build: the two numbers match, so naming them explains
+        // nothing and the package alone is named.
+        const dir = platformPackage(CORE_VERSION, 'native-binding.cjs');
+        packageName.current = dir;
+        const { transformBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
+        const files = [{ filename: '/p/a.tsx', source: '' }];
+
+        try {
+            expect(() => transformBatch(files)).toThrow(CsszyxNativeUnavailableError);
+            try {
+                transformBatch(files);
+            } catch (err) {
+                expect((err as InstanceType<typeof CsszyxNativeUnavailableError>).args).toEqual({
+                    form: 'stale-binding',
+                    packageName: dir,
+                });
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
         }
     });
 
@@ -95,7 +140,7 @@ describe('@csszyx/core/native transformBatch', () => {
             const name = packageName.current;
             expect(error.message).toBe(
                 '[csszyx] native-engine-unavailable:\n' +
-                    `  \`${name}\` is older than the installed \`@csszyx/core\` and returns results it cannot read, so the \`rust\` parser cannot run.\n` +
+                    `  \`${name}\` returns results the installed \`@csszyx/core\` cannot read, so the \`rust\` parser cannot run.\n` +
                     `  help: update \`@csszyx/core\` and \`${name}\` together, to the same version, or set the parser to \`wasm\` (\`build.parser: 'wasm'\` in the plugin options, \`parserMode: 'wasm'\` in \`csszyxTurbopack\`, or \`--parser-mode wasm\` on \`csszyx next\`).\n` +
                     '  note: the wasm engine produces the same output; only parsing is slower.\n' +
                     '  docs: https://csszyx.com/e/native-engine-unavailable',
@@ -113,18 +158,27 @@ describe('@csszyx/core/native scanModuleLinks', () => {
 
     it('names the platform package when the binding predates registry entries', async () => {
         // The 0.17 scan ignores the query, so nothing but the result tells.
-        packageName.current = fixture('native-binding-0.17.2');
-        const { scanModuleLinks, CsszyxNativeUnavailableError } = await import(
-            '../native/index.js'
-        );
+        // Its version is named only when it differs from the core's.
         const files = [{ filename: '/p/a.ts', source: 'export const a = { p: 4 };' }];
+        const other = platformPackage(OTHER_VERSION, 'native-binding-links.cjs');
+        const same = platformPackage(CORE_VERSION, 'native-binding-links.cjs');
+        try {
+            packageName.current = other;
+            const first = await import('../native/index.js');
+            expect(() => first.scanModuleLinks(files, { registryEntries: true })).toThrow(
+                `\`${other}\` ${OTHER_VERSION} returns results the installed \`@csszyx/core\` ${CORE_VERSION} cannot read, so the \`rust\` parser cannot run.`,
+            );
 
-        expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
-            CsszyxNativeUnavailableError,
-        );
-        expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
-            `\`${packageName.current}\` 0.17.2 is older than the installed \`@csszyx/core\` ${CORE_VERSION} and returns results it cannot read`,
-        );
+            vi.resetModules();
+            packageName.current = same;
+            const second = await import('../native/index.js');
+            expect(() => second.scanModuleLinks(files, { registryEntries: true })).toThrow(
+                `\`${same}\` returns results the installed \`@csszyx/core\` cannot read, so the \`rust\` parser cannot run.`,
+            );
+        } finally {
+            rmSync(other, { recursive: true, force: true });
+            rmSync(same, { recursive: true, force: true });
+        }
     });
 
     it('answers when the query asks nothing the binding predates', async () => {

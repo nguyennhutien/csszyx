@@ -40,4 +40,19 @@ describe('CsszyxNativeUnavailableError words', () => {
             }),
         );
     });
+
+    it('says only that the core cannot read the results, with or without versions', () => {
+        expect(new CsszyxNativeUnavailableError(CASES[3]).message).toContain(
+            '`@csszyx/core-linux-x64-gnu` returns results the installed `@csszyx/core` cannot read, so the `rust` parser cannot run.',
+        );
+    });
+
+    it('names the two versions without ranking them', () => {
+        // Either package can be the newer one, so the line says only that
+        // they do not read each other.
+        const error = new CsszyxNativeUnavailableError(CASES[4]);
+        expect(error.message).toContain(
+            '`@csszyx/core-linux-x64-gnu` 0.17.0 returns results the installed `@csszyx/core` 0.18.0 cannot read, so the `rust` parser cannot run.',
+        );
+    });
 });

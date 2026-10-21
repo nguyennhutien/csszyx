@@ -127,9 +127,11 @@ function manifestVersion(specifier) {
 }
 
 /**
- * The args of a platform package older than `@csszyx/core`: both versions
- * when both manifests can be read, since those are what the user brings
- * together, and the package alone otherwise.
+ * The args of a platform package whose results `@csszyx/core` cannot read:
+ * both versions when both manifests can be read and differ, since those are
+ * what the user brings together, and the package alone otherwise. Equal
+ * versions (a stale local build) would name two matching numbers, which
+ * explains nothing.
  *
  * @param {string} packageName - The platform package that answered.
  * @returns {{form: 'stale-binding-versions', packageName: string, nativeVersion: string, coreVersion: string} | {form: 'stale-binding', packageName: string}} The args.
@@ -137,7 +139,7 @@ function manifestVersion(specifier) {
 function staleArgs(packageName) {
     const nativeVersion = manifestVersion(`${packageName}/package.json`);
     const coreVersion = manifestVersion('../package.json');
-    return nativeVersion !== undefined && coreVersion !== undefined
+    return nativeVersion !== undefined && coreVersion !== undefined && nativeVersion !== coreVersion
         ? { form: 'stale-binding-versions', packageName, nativeVersion, coreVersion }
         : { form: 'stale-binding', packageName };
 }

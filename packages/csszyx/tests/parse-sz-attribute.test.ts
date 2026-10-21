@@ -139,7 +139,7 @@ describe('parseSzAttribute', () => {
         expect(thrownBy('{ list: [1, /] }').args).toMatchObject({ char: '/', index: 12 });
     });
 
-    it('names where an attribute ends before it is complete, with no character to name', () => {
+    it('names where an attribute ends before a key or value is complete, with no character to name', () => {
         process.env.NODE_ENV = 'development';
         // `[` reads as a key that never reaches its `:`; the end is after
         // the attribute's last character, the trailing space aside.
@@ -149,11 +149,23 @@ describe('parseSzAttribute', () => {
         expect(error.message).toBe(
             runtimeMessage(
                 'sz-attribute-syntax',
-                'The `sz` attribute ` [ ` ends at offset 2 before it is complete, so the element gets no classes from it.',
-                'help: write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+                'The `sz` attribute ` [ ` ends at offset 2 before a key or value is complete, so the element gets no classes from it.',
+                'help: give every key a `:` and a value, and close every `[` and quote, such as `sz="p: 4, [&>span]: { m: 2 }"`.',
             ),
         );
         expect(thrownBy('{ p').args).toEqual({ form: 'end', input: '{ p', index: 3 });
+    });
+
+    // Brace-less input is parsed inside a `{ }` the parser adds. That `}` is
+    // not the author's, so it is never the character a report names: input
+    // that runs into it ends there, at the end of the attribute as written.
+    it.each([
+        ['p', 1],
+        ['w: [1, 2', 8],
+        ['  p: 4, m  ', 9],
+    ])('reports %j as ending at offset %i, not at the `}` the parser added', (input, at) => {
+        expect(strayInputsEnd).toBe(true);
+        expect(thrownBy(input).args).toEqual({ form: 'end', input, index: at });
     });
 
     it('is the compact line in production', () => {

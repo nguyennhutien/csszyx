@@ -113,7 +113,7 @@ describe('the native migrate on an install without it', () => {
             'a binding older than the package',
             'migrateRustParseClass',
             message(
-                `\`${PACKAGE}\` is older than the installed \`@csszyx/core\` and returns results it cannot read, so migrate cannot run.`,
+                `\`${PACKAGE}\` returns results the installed \`@csszyx/core\` cannot read, so migrate cannot run.`,
                 `update \`@csszyx/core\` and \`${PACKAGE}\` together, to the same version.`,
             ),
         ],

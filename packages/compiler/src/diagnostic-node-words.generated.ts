@@ -123,8 +123,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "no-platform-package": "No prebuilt native engine covers `{platform}`, so the `rust` parser cannot run.",
             "not-installed": "`{packageName}` is not installed, so the `rust` parser cannot run.",
             "missing-export": "`{packageName}` does not export `{exportName}()`, which the installed `@csszyx/core` calls, so the `rust` parser cannot run.",
-            "stale-binding": "`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so the `rust` parser cannot run.",
-            "stale-binding-versions": "`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so the `rust` parser cannot run.",
+            "stale-binding": "`{packageName}` returns results the installed `@csszyx/core` cannot read, so the `rust` parser cannot run.",
+            "stale-binding-versions": "`{packageName}` {nativeVersion} returns results the installed `@csszyx/core` {coreVersion} cannot read, so the `rust` parser cannot run.",
             "wasm-fallback": "The native engine is not available here, so the default `rust` parser runs on the wasm engine."
         },
         "help": {
@@ -147,8 +147,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "no-platform-package": "No prebuilt native engine covers `{platform}`, so migrate cannot run.",
             "not-installed": "`{packageName}` is not installed, so migrate cannot run.",
             "missing-export": "`{packageName}` predates migrate and does not export `{exportName}()`, so migrate cannot run.",
-            "stale-binding": "`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so migrate cannot run.",
-            "stale-binding-versions": "`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so migrate cannot run."
+            "stale-binding": "`{packageName}` returns results the installed `@csszyx/core` cannot read, so migrate cannot run.",
+            "stale-binding-versions": "`{packageName}` {nativeVersion} returns results the installed `@csszyx/core` {coreVersion} cannot read, so migrate cannot run."
         },
         "help": {
             "no-platform-package": "run migrate on Linux, macOS or Windows, on x64 or arm64, where a prebuilt native engine exists.",

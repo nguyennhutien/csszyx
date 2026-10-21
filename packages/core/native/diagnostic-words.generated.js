@@ -15,9 +15,9 @@ export const NATIVE_ENGINE_UNAVAILABLE = {
         'missing-export':
             '`{packageName}` does not export `{exportName}()`, which the installed `@csszyx/core` calls, so the `rust` parser cannot run.',
         'stale-binding':
-            '`{packageName}` is older than the installed `@csszyx/core` and returns results it cannot read, so the `rust` parser cannot run.',
+            '`{packageName}` returns results the installed `@csszyx/core` cannot read, so the `rust` parser cannot run.',
         'stale-binding-versions':
-            '`{packageName}` {nativeVersion} is older than the installed `@csszyx/core` {coreVersion} and returns results it cannot read, so the `rust` parser cannot run.',
+            '`{packageName}` {nativeVersion} returns results the installed `@csszyx/core` {coreVersion} cannot read, so the `rust` parser cannot run.',
         'wasm-fallback':
             'The native engine is not available here, so the default `rust` parser runs on the wasm engine.',
     },
