@@ -9,12 +9,15 @@
  * size gate alone would not catch the drift.
  *
  * The capability rows share their chunk with the property category map
- * (`property-types.ts`), which spells the same keys and goes first. Left in the
- * lowering's chunk it landed after the tables, and `./browser` measured 16,425
- * against 16,332 with it at the front (16,405 against 16,316 in a Vite build).
- * Both numbers pass their budgets, so these tests hold the layout in the
- * source; `moduleOrder` in `scripts/check-package-size.mjs` holds it in what
- * esbuild and Vite lay out from the build.
+ * (`property-types.ts`), which spells the same keys. Left in the lowering's
+ * chunk it landed after the tables, and `./browser` measured 16,425 against
+ * 16,332 with it in the rows' chunk (16,405 against 16,316 in a Vite build).
+ * Which of the two the chunk holds first is not pinned: swapping their imports
+ * built a byte-identical chunk (2026-10-21), so the group, not the import
+ * order, decides it. Both numbers pass their budgets, so these tests hold the
+ * layout in the source; `moduleOrder` in `scripts/check-package-size.mjs`
+ * holds it in what esbuild and Vite lay out from the build, in the CDN
+ * bundles and in an installed app.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -31,11 +34,6 @@ describe('the browser lowering imports the capability table first', () => {
     it.each(['./sz-key-tables.js', './closed-enum-tables.js'])('%s comes after it', table => {
         expect(capabilities).toBeGreaterThanOrEqual(0);
         expect(specs.indexOf(table)).toBeGreaterThan(capabilities);
-    });
-
-    it('the property category map comes before it', () => {
-        expect(specs.indexOf('./property-types.js')).toBeGreaterThanOrEqual(0);
-        expect(specs.indexOf('./property-types.js')).toBeLessThan(capabilities);
     });
 });
 

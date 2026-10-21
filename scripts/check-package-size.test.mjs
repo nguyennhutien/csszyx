@@ -6,6 +6,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
+import { buildSync } from 'esbuild';
+
 import * as sizeGate from './check-package-size.mjs';
 import {
     appBundle,
@@ -549,8 +551,8 @@ test('a file budget whose artifact is missing fails instead of passing silently'
 
 test('committed budgets cover the user-shipped surfaces and the engine entries', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
-    // A budget's module order is checked only where its entries are measured.
-    for (const budget of SIZE_BUDGETS.filter(b => b.moduleOrder)) {
+    // An app bundle's module order is checked only where its entries are measured.
+    for (const budget of SIZE_BUDGETS.filter(b => b.kind === 'app-bundle' && b.moduleOrder)) {
         for (const subpath of Object.keys(budget.moduleOrder)) {
             assert.ok(
                 Object.hasOwn(budget.entryBudgets ?? {}, subpath),
@@ -567,9 +569,9 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ['per-key-rows-', 'closed-enum-tables-'],
     );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 9);
+    assert.equal(SIZE_BUDGETS.length, 10);
     for (const budget of SIZE_BUDGETS) {
-        assert.ok(['app-bundle', 'file', 'node-entry'].includes(budget.kind));
+        assert.ok(['app-bundle', 'installed-app', 'file', 'node-entry'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
         assert.ok(!path.isAbsolute(budget.target), 'targets are repo-relative');
     }
@@ -586,15 +588,40 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ]),
         [['file', 'packages/vscode/dist/extension.js']],
     );
-    // A script tag loads the CDN bundles whole, the development one too.
+    // A script tag loads the CDN bundles whole, the development one too, and
+    // each keeps the compiler's chunk layout, read back from the build that
+    // writes it: a bundle built from the compiler's source has neither chunk.
+    const cdn = SIZE_BUDGETS.filter(budget => budget.target.startsWith('packages/csszyx/dist/'));
     assert.deepEqual(
-        SIZE_BUDGETS.filter(budget => budget.target.startsWith('packages/csszyx/')).map(budget => [
-            budget.kind,
+        cdn.map(budget => [budget.kind, budget.target, budget.moduleOrder]),
+        [
+            [
+                'file',
+                'packages/csszyx/dist/browser.iife.js',
+                ['per-key-rows-', 'closed-enum-tables-'],
+            ],
+            [
+                'file',
+                'packages/csszyx/dist/browser.dev.iife.js',
+                ['per-key-rows-', 'closed-enum-tables-'],
+            ],
+        ],
+    );
+    for (const budget of cdn) assert.equal(budget.build?.tsconfigRaw, '{}', budget.name);
+    // The runtime and the dynamic layer as an app that installs csszyx ships
+    // them, the compiler bundled in once, with the same chunk layout.
+    assert.deepEqual(
+        SIZE_BUDGETS.filter(budget => budget.kind === 'installed-app').map(budget => [
             budget.target,
+            budget.imports,
+            budget.moduleOrder,
         ]),
         [
-            ['file', 'packages/csszyx/dist/browser.iife.js'],
-            ['file', 'packages/csszyx/dist/browser.dev.iife.js'],
+            [
+                'packages/csszyx',
+                ['@csszyx/runtime', '@csszyx/dynamic'],
+                ['per-key-rows-', 'closed-enum-tables-'],
+            ],
         ],
     );
     // The compiler leaves out its build-time code, `.`, `./engine`,
@@ -616,10 +643,11 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         SIZE_BUDGETS.filter(budget => budget.kind === 'node-entry').map(budget => [
             budget.target,
             budget.subpath,
+            budget.excludedModules,
         ]),
         [
-            ['packages/compiler', './engine'],
-            ['packages/compiler', './internal'],
+            ['packages/compiler', './engine', ['src/state-variants.generated.ts']],
+            ['packages/compiler', './internal', ['src/state-variants.generated.ts']],
         ],
     );
     // Every app bundle prices each entry on its own, no entry ceiling is
@@ -1056,6 +1084,188 @@ test('an entry whose bundle lays modules out against its order fails in both lan
     }
 });
 
+/** A file budget over `packages/ordered/dist/cdn.js`, which `options` builds
+ * from the fixture's entry, with the module order it must keep.
+ * @param {string} root fixture root
+ * @param {string[]} order file-name prefixes, in the order required
+ * @returns {typeof SIZE_BUDGETS} a one-entry budget list
+ */
+function cdnBudget(root, order) {
+    return [
+        {
+            name: 'ordered cdn',
+            kind: 'file',
+            target: 'packages/ordered/dist/cdn.js',
+            maxGzipBytes: 100_000,
+            build: {
+                entryPoints: [path.join(root, 'packages/ordered/dist/index.mjs')],
+                bundle: true,
+                minify: true,
+                format: 'iife',
+            },
+            moduleOrder: order,
+        },
+    ];
+}
+
+test('a file built by esbuild keeps its module order, read from the build that wrote it', () => {
+    const root = makeFixture(orderedPackage());
+    const file = path.join(root, 'packages/ordered/dist/cdn.js');
+    try {
+        const [{ build }] = cdnBudget(root, []);
+        writeFileSync(file, buildSync({ ...build, write: false }).outputFiles[0].text);
+        assert.deepEqual(checkBudgets(cdnBudget(root, ['a.', 'b.']), root).failures, []);
+
+        const swapped = checkBudgets(cdnBudget(root, ['b.', 'a.']), root).failures;
+        assert.equal(swapped.length, 1);
+        assert.match(swapped[0], /ordered cdn: bundles `a\.` before `b\.`/);
+
+        // The order is read from a build in memory, so it says something
+        // about the file only while the two are the same bytes.
+        writeFileSync(file, '(()=>{})();\n');
+        const stale = checkBudgets(cdnBudget(root, ['a.', 'b.']), root).failures;
+        assert.equal(stale.length, 1);
+        assert.match(stale[0], /ordered cdn: the file is not what its build options write/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** An app that installs `@csszyx/lib`, whose entry imports `a.mjs` then
+ * `b.mjs` and a peer dependency the app brings itself, and a plugin that
+ * names the library as its own peer, under a tsconfig whose
+ * `paths` point the package at a source that does not build.
+ * @returns {Record<string, string>} fixture files
+ */
+function installedPackage() {
+    const lib = 'packages/app/node_modules/@csszyx/lib';
+    return {
+        'tsconfig.json': JSON.stringify({
+            compilerOptions: { paths: { '@csszyx/lib': ['./packages/lib-src/index.ts'] } },
+        }),
+        'packages/lib-src/index.ts': 'export const broken: = ;\n',
+        'packages/app/package.json': JSON.stringify({
+            name: 'app',
+            dependencies: { '@csszyx/lib': 'workspace:*', '@csszyx/plugin': 'workspace:*' },
+        }),
+        // A build plugin the app also installs names the library as a peer,
+        // which must not leave the library out of the app's bundle.
+        'packages/app/node_modules/@csszyx/plugin/package.json': JSON.stringify({
+            name: '@csszyx/plugin',
+            peerDependencies: { '@csszyx/lib': '*' },
+        }),
+        [`${lib}/package.json`]: JSON.stringify({
+            name: '@csszyx/lib',
+            peerDependencies: { 'peer-ui': '*' },
+            exports: { '.': { import: './dist/index.mjs' } },
+        }),
+        [`${lib}/dist/index.mjs`]:
+            "import { a } from './a.mjs';\nimport { b } from './b.mjs';\nimport ui from 'peer-ui';\n" +
+            'export const both = a + b + ui;\n',
+        [`${lib}/dist/a.mjs`]: "export const a = 'first-module';\n",
+        [`${lib}/dist/b.mjs`]: "export const b = 'second-module';\n",
+    };
+}
+
+/** An installed-app budget over {@link installedPackage}.
+ * @param {Partial<typeof SIZE_BUDGETS[number]>} [extra] extra budget fields
+ * @returns {typeof SIZE_BUDGETS} a one-entry budget list
+ */
+function installedBudget(extra = {}) {
+    return [
+        {
+            name: 'installed app',
+            kind: 'installed-app',
+            target: 'packages/app',
+            imports: ['@csszyx/lib'],
+            maxGzipBytes: 100_000,
+            moduleOrder: ['a.', 'b.'],
+            ...extra,
+        },
+    ];
+}
+
+test('an installed app bundles the csszyx packages from their dist, as npm resolves them', () => {
+    const root = makeFixture(installedPackage());
+    try {
+        const { failures, results } = checkBudgets(installedBudget(), root);
+        assert.deepEqual(failures, []);
+        assert.ok(results[0].gzipBytes > 0);
+
+        const swapped = checkBudgets(installedBudget({ moduleOrder: ['b.', 'a.'] }), root);
+        assert.equal(swapped.failures.length, 1);
+        assert.match(swapped.failures[0], /installed app: bundles `a\.` before `b\.`/);
+
+        const over = checkBudgets(installedBudget({ maxGzipBytes: 8 }), root);
+        assert.equal(over.failures.length, 1);
+        assert.match(over.failures[0], /installed app: \d+ gzip bytes exceeds the 8-byte budget/);
+
+        const missing = checkBudgets(installedBudget({ imports: ['@csszyx/gone'] }), root);
+        assert.equal(missing.failures.length, 1);
+        assert.match(missing.failures[0], /installed app: [\s\S]*@csszyx\/gone/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** A package whose `./engine` loads two files, each with the source regions
+ * a Rolldown build marks, and keeps `src/table.ts` in a file it never loads.
+ * @param {boolean} leak whether the loaded chunk holds `src/table.ts`
+ * @returns {Record<string, string>} fixture files
+ */
+function regionPackage(leak) {
+    const region = (name, body) => `//#region ${name}\n${body}\n//#endregion\n`;
+    return {
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: { './engine': './dist/engine.mjs' },
+        }),
+        'packages/thing/src/table.ts': 'export const table = 1;\n',
+        'packages/thing/dist/engine.mjs':
+            "import { keys } from './keys.mjs';\n" +
+            region('src/engine.ts', 'export const run = () => keys;'),
+        'packages/thing/dist/keys.mjs':
+            region('src/keys.ts', 'export const keys = 1;') +
+            (leak ? region('src/table.ts', 'export const table = 1;') : ''),
+        'packages/thing/dist/lowering.mjs': region('src/table.ts', 'export const table = 1;'),
+    };
+}
+
+test('a node-entry budget fails when a file it loads holds a module kept out of it', () => {
+    const kept = makeFixture(regionPackage(false));
+    const leaked = makeFixture(regionPackage(true));
+    try {
+        const budget = extra => engineBudget({ excludedModules: ['src/table.ts'], ...extra });
+        assert.deepEqual(checkBudgets(budget(), kept).failures, []);
+
+        const failures = checkBudgets(budget(), leaked).failures;
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /thing engine: loads `src\/table\.ts` \(dist\/keys\.mjs\)/);
+
+        // A name no source file has is a stale entry, which would pass forever.
+        const stale = checkBudgets(budget({ excludedModules: ['src/gone.ts'] }), kept).failures;
+        assert.equal(stale.length, 1);
+        assert.match(stale[0], /thing engine: `src\/gone\.ts` names no source file/);
+    } finally {
+        rmSync(kept, { recursive: true, force: true });
+        rmSync(leaked, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry budget whose files carry no region marker cannot read its layout', () => {
+    const root = makeFixture({ ...enginePackage(), 'packages/thing/src/table.ts': '' });
+    try {
+        const failures = checkBudgets(
+            engineBudget({ excludedModules: ['src/table.ts'] }),
+            root,
+        ).failures;
+        assert.equal(failures.length, 1);
+        assert.match(failures[0], /thing engine: no file it loads carries a `\/\/#region` marker/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 /** A diagnostic as the generator's browser list carries it. */
 const LEAK_DIAGNOSTIC = {
     id: 'gone-key',
@@ -1186,6 +1396,49 @@ test('production carries no template, and a development build of a site carries 
     } finally {
         rmSync(clean, { recursive: true, force: true });
         rmSync(leaky, { recursive: true, force: true });
+    }
+});
+
+test('the app bundles and the leak gate resolve packages as an install does, not by tsconfig paths', async () => {
+    // A repository tsconfig that points the library and a helper at sources
+    // that do not build: a build that read it would fail, an install never does.
+    const broken = 'export const broken: = ;\n';
+    const root = makeFixture({
+        ...reportingPackage(false),
+        'tsconfig.json': JSON.stringify({
+            compilerOptions: {
+                paths: {
+                    '@csszyx/lib/report': ['./src/lib-report.ts'],
+                    helper: ['./src/helper.ts'],
+                },
+            },
+        }),
+        'src/lib-report.ts': broken,
+        'src/helper.ts': broken,
+        'packages/thing/node_modules/helper/package.json': JSON.stringify({
+            name: 'helper',
+            exports: { '.': './index.mjs' },
+        }),
+        'packages/thing/node_modules/helper/index.mjs': 'export const helper = 1;\n',
+        'packages/thing/dist/helped.mjs':
+            "import { helper } from 'helper';\nexport const x = helper;\n",
+        'packages/thing/package.json': JSON.stringify({
+            name: 'thing',
+            exports: {
+                '.': { import: { default: './dist/index.mjs' } },
+                './helped': { import: { default: './dist/helped.mjs' } },
+            },
+        }),
+    });
+    try {
+        const prints = { productionMessages: ['warn: [csszyx] gone-key: '] };
+        assert.deepEqual(checkBudgets(appBudget('thing', prints), root).failures, []);
+        assert.deepEqual(
+            (await sizeGate.checkTemplateLeaks(appBudget('thing'), root, leakOptions())).failures,
+            [],
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
     }
 });
 

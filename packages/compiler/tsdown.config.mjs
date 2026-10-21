@@ -81,14 +81,14 @@ export default defineBuild([
         format: ['esm'],
         // The per-key rows in a chunk of their own, so an app bundle can place
         // them before the key tables' chunk, which the engine entries share:
-        // the property category map, then the capability table. Both spell
-        // PROPERTY_MAP's keys, and gzip measured smaller with the category
-        // map ahead of the other two. Without the group the browser entry
+        // the property category map and the capability table, which both
+        // spell PROPERTY_MAP's keys. Without the group the browser entry
         // measured 214 bytes larger (16,639 against 16,425); with the
         // capability table alone in it, the category map stayed in the
         // lowering's chunk, after the tables, and measured 93 larger (16,425
-        // against 16,332). The order comes from the imports in
-        // `src/transform-core.ts`. The test names `.ts` sources: the
+        // against 16,332). Where the chunk lands comes from the imports in
+        // `src/transform-core.ts`; the order inside it does not (swapping the
+        // two imports built the same chunk). The test names `.ts` sources: the
         // declaration build runs these groups over a module per `.d.ts`, and
         // a match put its placeholder code in the chunk.
         outputOptions: {

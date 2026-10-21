@@ -8,6 +8,7 @@ import { buildSync } from 'esbuild';
 
 import ts from 'typescript';
 
+import { cdnBuildOptions, INSTALLED_RESOLUTION } from '../packages/csszyx/cdn-build.mjs';
 import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
 import * as registry from './diagnostics/registry.mjs';
 import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
@@ -67,6 +68,11 @@ import { browserDiagnostics } from './gen-diagnostic-codes.mjs';
  * file it reaches through a static import. Node compiles each of them whole
  * before the first call returns, so a heavy import added to a build-time
  * entry is start-up time for every build, dev server and CLI run.
+ *
+ * A fifth, `kind: 'installed-app'`, bundles the csszyx packages together the
+ * way an app that installed them gets them, each from its built `dist` and
+ * the compiler in once, so a chunk layout that only shows when the packages
+ * meet is measured somewhere.
  *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
@@ -331,6 +337,26 @@ export const SIZE_BUDGETS = [
         // string, and the two dynamic values the runtime helpers cannot lower.
         productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('compiler')),
     },
+    // What an app that installs csszyx ships when it imports the runtime and
+    // the dynamic layer: both resolved from `packages/csszyx`'s
+    // `node_modules` to their built `dist`, the compiler bundled in once,
+    // which no budget above measures (each leaves the other csszyx packages
+    // external). It is where the compiler's chunk layout lands in a real app:
+    // moving the closed-enum import to the top of `transform-core.ts`, where
+    // the import sort puts it, measured +234 here; dropping the per-key-rows
+    // chunk group +286; building `./report` with the entries +276. Each is
+    // under the usual headroom, so the module order is what fails: the first
+    // two lose a chunk, the third lays the key tables first (it fails the
+    // Node budgets below too). Measured 39,733 on 2026-10-21. Budget the
+    // usual ~300 above.
+    {
+        name: 'csszyx installed app bundle (runtime + dynamic, compiler bundled)',
+        kind: 'installed-app',
+        target: 'packages/csszyx',
+        imports: ['@csszyx/runtime', '@csszyx/dynamic'],
+        maxGzipBytes: 40_050,
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
+    },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
     // 2026-08-12 at 460,116 gzip bytes un-optimized (the release workflow's
@@ -493,22 +519,42 @@ export const SIZE_BUDGETS = [
     // extension, built without `NODE_ENV`, carried those templates (53,138)
     // to print warnings into the extension host's log. `esbuild.mjs` now
     // builds it as production, which folds them out.
+    //
+    // Raised from 49,500 on 2026-10-21, measured 49,629: the extension keeps
+    // the tooling metadata of the 0.18 registry, the editor words of each id
+    // (+468 raw) and the canonical key forms with their value types (+438
+    // raw). A module order that measured smaller was a compression accident
+    // nothing would hold, so it was not taken. Budget the usual ~300 above.
     {
         name: '@csszyx/vscode extension bundle',
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
-        maxGzipBytes: 49_500,
+        maxGzipBytes: 49_950,
     },
     // The CDN bundles, which a `<script>` tag loads whole: unpkg and jsdelivr
     // serve the production one at the package root, and nothing priced it.
     // Measured 2026-10-20: 16,097 production, 24,368 development (the
     // sentences and the development warnings the production one folds out).
     // Budget the usual ~300 above.
+    //
+    // Lowered from 16,400 and 25,400 on 2026-10-21, measured 15,854 and
+    // 22,351 (16,117 and 25,355 before): both are built from the compiler's
+    // `dist` instead of its source (`packages/csszyx/cdn-build.mjs`), so they
+    // get the chunk layout the compiler's build sets up for gzip and one copy
+    // of `errors` (the source's and `dist/errors.mjs` before), and the
+    // development one one copy of the reporter and its templates (the
+    // source's `report.ts` and `dist/report.mjs` before). `build` names the
+    // options the file is written from, so the gate reads the layout back
+    // from the same build: the per-key rows have to come before the key
+    // tables, as in the compiler's own budget, and a bundle built from the
+    // source again has neither chunk and fails here.
     {
         name: 'csszyx CDN bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.iife.js',
-        maxGzipBytes: 16_400,
+        maxGzipBytes: 16_200,
+        build: cdnBuildOptions('production'),
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
         // Its sinks are read as an app's (ADR 0031 §6): every line it prints
         // and every error it throws carries a code the registry lets print in
         // production. The file holds only what `browser.ts` reaches, so the
@@ -534,7 +580,9 @@ export const SIZE_BUDGETS = [
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 25_400,
+        maxGzipBytes: 22_700,
+        build: cdnBuildOptions('development'),
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry
@@ -561,12 +609,21 @@ export const SIZE_BUDGETS = [
     // (`tests/diagnostic-render-specs.test.ts`). Importing `./engine` took
     // 4.95 ms p50 against 5.30 ms before, p50 of 60 fresh processes on the
     // devcontainer, where the 1.76 ms above measures about 5 ms.
+    //
+    // The state-variant table (`unserved-variant`, its forms generated from
+    // Tailwind) stays in the lowering's chunk, which the root loads and
+    // neither entry does. Grouped into the key tables' chunk, which both
+    // load, it cost `./engine` +166 and `./internal` +165 gzip bytes on
+    // 2026-10-21, under the ~300 headroom of each. `excludedModules` reads the
+    // `//#region` markers of the files each entry loads, so the drift fails
+    // at any size.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
         maxGzipBytes: 25_950,
+        excludedModules: ['src/state-variants.generated.ts'],
     },
     {
         name: '@csszyx/compiler `./internal`, loaded by Node',
@@ -574,6 +631,7 @@ export const SIZE_BUDGETS = [
         target: 'packages/compiler',
         subpath: './internal',
         maxGzipBytes: 29_000,
+        excludedModules: ['src/state-variants.generated.ts'],
     },
 ];
 
@@ -721,6 +779,7 @@ function appBuild(entryPaths, packageDir) {
         minify: true,
         treeShaking: true,
         metafile: true,
+        ...INSTALLED_RESOLUTION,
         external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
         define: { 'process.env.NODE_ENV': '"production"' },
         logLevel: 'silent',
@@ -760,6 +819,22 @@ export function moduleOrderProblems(moduleIds, prefixes) {
     return problems;
 }
 
+/** The failures of one module order, worded for the gate.
+ *
+ * @param {string} label who lays the modules out: the budget's name, and its subpath if any
+ * @param {string[]} moduleIds module paths in bundle order
+ * @param {string[]} prefixes file-name prefixes, in the order required
+ * @returns {string[]} failure messages
+ */
+function orderFailures(label, moduleIds, prefixes) {
+    return moduleOrderProblems(moduleIds, prefixes).map(
+        problem =>
+            `${label} ${problem}. The order keeps tables within gzip's reach of the code ` +
+            'that repeats their keys; restore it in the import order or the chunk groups ' +
+            'before moving the budget.',
+    );
+}
+
 /** The failures of a budget's `moduleOrder` for one lane.
  *
  * @param {{ name: string, moduleOrder?: Record<string, string[]> }} budget the budget
@@ -775,15 +850,128 @@ function moduleOrderFailures(budget, name, entries, modulesBySubpath) {
             failures.push(`${name}: \`${subpath}\` has a module order but no export`);
             continue;
         }
-        for (const problem of moduleOrderProblems(modulesBySubpath.get(subpath) ?? [], prefixes)) {
-            failures.push(
-                `${name}: \`${subpath}\` ${problem}. The order keeps tables within gzip's ` +
-                    'reach of the code that repeats their keys; restore it in the import order ' +
-                    'or the chunk groups before moving the budget.',
-            );
-        }
+        failures.push(
+            ...orderFailures(
+                `${name}: \`${subpath}\``,
+                modulesBySubpath.get(subpath) ?? [],
+                prefixes,
+            ),
+        );
     }
     return failures;
+}
+
+/** The failures of a file budget that names the esbuild options its file is
+ * written from (`build`): the file has to be what those options write, and
+ * the modules of that build laid out in its `moduleOrder`. The order is read
+ * from esbuild's metafile, which a written file does not keep, so the build
+ * runs again in memory and is compared byte for byte with the file first.
+ *
+ * @param {{ name: string, build: object, moduleOrder?: string[] }} budget the budget
+ * @param {string} target absolute path of the file
+ * @returns {string[]} failure messages
+ */
+function builtFileFailures(budget, target) {
+    const result = buildSync({
+        ...budget.build,
+        outfile: target,
+        write: false,
+        metafile: true,
+        logLevel: 'silent',
+    });
+    if (result.outputFiles[0].text !== readFileSync(target, 'utf8')) {
+        return [
+            `${budget.name}: the file is not what its build options write, so the order ` +
+                'of its modules cannot be read from them. Rebuild it, or build it from the ' +
+                'options the budget names.',
+        ];
+    }
+    const [output] = Object.values(result.metafile.outputs);
+    return orderFailures(`${budget.name}:`, Object.keys(output.inputs), budget.moduleOrder ?? []);
+}
+
+/** Bundle the csszyx packages an app imports the way an app that installed
+ * them ships them: each specifier imported as a namespace from the package
+ * that depends on them, so they resolve through its `node_modules` to their
+ * built `dist`, the compiler bundled in ({@link INSTALLED_RESOLUTION}).
+ * Production, minified, the
+ * peer dependencies left to the app. A build error throws.
+ *
+ * @param {{ target: string, imports: string[] }} budget the budget
+ * @param {string} rootDir absolute repository root
+ * @returns {{ code: string, moduleIds: string[] }} the bundle and its modules in order
+ */
+function installedAppBuild(budget, rootDir) {
+    const packageDir = path.join(rootDir, budget.target);
+    const result = buildSync({
+        stdin: { contents: namespaceEntry(budget.imports), resolveDir: packageDir, loader: 'js' },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        minify: true,
+        treeShaking: true,
+        metafile: true,
+        ...INSTALLED_RESOLUTION,
+        external: appPeers(packageDir),
+        define: { 'process.env.NODE_ENV': '"production"' },
+        logLevel: 'silent',
+    });
+    const [output] = Object.values(result.metafile.outputs);
+    return {
+        code: result.outputFiles[0].text,
+        moduleIds: Object.keys(output.inputs)
+            .filter(id => id !== '<stdin>')
+            .map(id => path.resolve(id)),
+    };
+}
+
+/** The modules a build marks in its output, one `//#region <source>` line
+ * each (Rolldown, and so tsdown, writes them), by the file that holds them.
+ *
+ * @param {string[]} files absolute file paths
+ * @returns {Map<string, string[]>} file → the sources it holds
+ */
+function regionsOf(files) {
+    return new Map(
+        files.map(file => [
+            file,
+            [...readFileSync(file, 'utf8').matchAll(/^\/\/#region (\S+)$/gm)].map(m => m[1]),
+        ]),
+    );
+}
+
+/** Where the files a Node entry loads hold a module its budget keeps out of
+ * them (`excludedModules`, package-relative source paths). Read from the
+ * region markers, so a files list with none fails rather than passing; and a
+ * name no source file has fails too, or a rename would leave an exclusion
+ * that holds nothing.
+ *
+ * @param {string[]} files absolute files the entry loads
+ * @param {string[]} excluded package-relative source paths kept out
+ * @param {string} packageDir absolute package directory
+ * @returns {string[]} one problem per mismatch
+ */
+export function excludedModuleProblems(files, excluded, packageDir) {
+    const regions = regionsOf(files);
+    const problems = [];
+    if (![...regions.values()].some(sources => sources.length > 0)) {
+        problems.push(
+            'no file it loads carries a `//#region` marker, so which modules it holds cannot be read',
+        );
+    }
+    for (const source of excluded) {
+        if (!existsSync(path.join(packageDir, source))) {
+            problems.push(`\`${source}\` names no source file`);
+            continue;
+        }
+        for (const [file, sources] of regions) {
+            if (sources.includes(source)) {
+                problems.push(`loads \`${source}\` (${path.relative(packageDir, file)})`);
+            }
+        }
+    }
+    return problems;
 }
 
 /** The id of the entry module the Vite lane bundles from. */
@@ -1283,6 +1471,22 @@ export function checkBudgets(budgets, rootDir) {
                 }
                 files = nodeEntryFiles(entry.file);
                 gzipBytes = gzipTotalBytes(files);
+                const excluded = budget.excludedModules ?? [];
+                for (const problem of excluded.length > 0
+                    ? excludedModuleProblems(files, excluded, target)
+                    : []) {
+                    failures.push(
+                        `${budget.name}: ${problem}. A module kept out of what Node loads ` +
+                            'costs every build its bytes; see the budget for where it belongs.',
+                    );
+                }
+            } else if (budget.kind === 'installed-app') {
+                const { code, moduleIds } = installedAppBuild(budget, rootDir);
+                files = moduleIds;
+                gzipBytes = gzipSync(code, { level: 9 }).length;
+                failures.push(
+                    ...orderFailures(`${budget.name}:`, moduleIds, budget.moduleOrder ?? []),
+                );
             } else if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
                 // bundle, but its absence is still a failure, never a pass.
@@ -1293,6 +1497,7 @@ export function checkBudgets(budgets, rootDir) {
                 if (budget.productionCodes !== undefined) {
                     failures.push(...sinkFailures(budget, readFileSync(target, 'utf8')));
                 }
+                if (budget.build !== undefined) failures.push(...builtFileFailures(budget, target));
             } else {
                 files = listExportEntries(target, budget.excludeSubpaths);
                 if (files.length === 0) {
@@ -1486,27 +1691,34 @@ export function templateLeaks(code, texts) {
 
 /** The peer dependencies an app brings itself, for a package and the csszyx
  * packages it depends on: a build that bundles the siblings leaves these out.
+ * Each sibling is read where the package resolves it, its `node_modules`. A
+ * csszyx package is never one of them, though one names another as its peer
+ * (`@csszyx/unplugin` names `@csszyx/runtime`): the csszyx packages are what
+ * the build bundles.
  *
  * @param {string} packageDir absolute package directory
- * @param {string} rootDir absolute repository root
  * @returns {string[]} the package names
  */
-function appPeers(packageDir, rootDir) {
+function appPeers(packageDir) {
     const read = dir => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
     const manifest = read(packageDir);
     const peers = new Set(Object.keys(manifest.peerDependencies ?? {}));
     for (const name of Object.keys(manifest.dependencies ?? {})) {
-        const sibling = path.join(rootDir, 'packages', name.replace(/^@csszyx\//, ''));
+        const sibling = path.join(packageDir, 'node_modules', name);
         if (!name.startsWith('@csszyx/') || !existsSync(path.join(sibling, 'package.json'))) {
             continue;
         }
         for (const peer of Object.keys(read(sibling).peerDependencies ?? {})) peers.add(peer);
     }
-    return [...peers];
+    return [...peers].filter(name => !name.startsWith('@csszyx/'));
 }
 
 /** Bundle a site the way an app ships it, csszyx siblings included, so code
- * a package imports from another csszyx package is in the bundle.
+ * a package imports from another csszyx package is in the bundle, each
+ * sibling from its built `dist` ({@link INSTALLED_RESOLUTION}): through the
+ * repository's tsconfig `paths` the runtime's bundle held the compiler's
+ * source, a layout no user gets, with a second copy of `errors` and
+ * `sz-limits` beside the `dist` ones its subpath imports reach.
  *
  * @param {object} options what to build
  * @param {string} options.contents the entry's source
@@ -1525,6 +1737,7 @@ function siteBundle(options) {
         platform: 'browser',
         minify: true,
         treeShaking: true,
+        ...INSTALLED_RESOLUTION,
         external,
         define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
         logLevel: 'silent',
@@ -1567,7 +1780,7 @@ export async function checkTemplateLeaks(budgets, rootDir, options = {}) {
                     contents: lane.entry(entries),
                     resolveDir: target,
                     nodeEnv: 'production',
-                    external: appPeers(target, rootDir),
+                    external: appPeers(target),
                 });
             } catch (error) {
                 failures.push(`${name}: ${error.message} — run \`pnpm build\` first?`);
@@ -1604,7 +1817,7 @@ async function controlFailures(lane, rootDir, control, texts) {
             contents: control.contents,
             resolveDir: dir,
             nodeEnv,
-            external: appPeers(dir, rootDir),
+            external: appPeers(dir),
         });
     const failures = [];
     try {
