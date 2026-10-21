@@ -37,14 +37,13 @@ describe('@csszyx/core/native transformBatch', () => {
         expect(transformBatch([])).toEqual([]);
     });
 
-    it('names both packages and their versions when the binding is older', async () => {
+    it('names the platform package when the binding is older', async () => {
         // A real platform package carries a manifest beside its binary.
         packageName.current = fixture('native-binding-0.17');
         const { transformBatch } = await import('../native/index.js');
-        const { version } = await import('../package.json');
 
         expect(() => transformBatch([{ filename: '/p/a.tsx', source: '' }])).toThrow(
-            `csszyx native package ${packageName.current} 0.17.0 is older than @csszyx/core ${version} and returns a result it cannot read`,
+            `\`${packageName.current}\` is older than the installed \`@csszyx/core\` and returns results it cannot read, so the \`rust\` parser cannot run.`,
         );
     });
 
@@ -64,7 +63,6 @@ describe('@csszyx/core/native transformBatch', () => {
         // The 0.17 result: no `issues`, and each merge group a bare class list.
         packageName.current = fixture('native-binding.cjs');
         const { transformBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
-        const { version } = await import('../package.json');
         const files = [{ filename: '/p/a.tsx', source: '<div sz={{ p: 4 }} />' }];
 
         expect(() => transformBatch(files)).toThrow(CsszyxNativeUnavailableError);
@@ -72,19 +70,16 @@ describe('@csszyx/core/native transformBatch', () => {
             transformBatch(files);
         } catch (err) {
             const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
-            expect(error.message.split('\n')).toEqual([
-                // No manifest to read the binding's version from: named alone.
-                `[csszyx] native-engine-unavailable: csszyx native package ${packageName.current} is older than @csszyx/core ${version} and returns a result it cannot read`,
-                'help: update @csszyx/core and its platform package together, to the same version',
-                'note: the wasm engine ships inside @csszyx/core and produces the same output',
-            ]);
-            expect(error.packageName).toBe(packageName.current);
-            expect(error.helpIsExplicit).toBe(true);
-            expect(error.args).toEqual({
-                form: 'stale-binding',
-                packageName: packageName.current,
-                detail: error.detail,
-            });
+            const name = packageName.current;
+            expect(error.message).toBe(
+                '[csszyx] native-engine-unavailable:\n' +
+                    `  \`${name}\` is older than the installed \`@csszyx/core\` and returns results it cannot read, so the \`rust\` parser cannot run.\n` +
+                    `  help: update \`@csszyx/core\` and \`${name}\` together, to the same version, or set the parser to \`wasm\` (\`build.parser: 'wasm'\` in the plugin options, \`parserMode: 'wasm'\` in \`csszyxTurbopack\`, or \`--parser-mode wasm\` on \`csszyx next\`).\n` +
+                    '  note: the wasm engine produces the same output; only parsing is slower.\n' +
+                    '  docs: https://csszyx.com/e/native-engine-unavailable',
+            );
+            expect(error.packageName).toBe(name);
+            expect(error.args).toEqual({ form: 'stale-binding', packageName: name });
         }
     });
 });
@@ -94,20 +89,19 @@ describe('@csszyx/core/native scanModuleLinks', () => {
         vi.resetModules();
     });
 
-    it('names both packages when the binding predates registry entries', async () => {
+    it('names the platform package when the binding predates registry entries', async () => {
         // The 0.17 scan ignores the query, so nothing but the result tells.
         packageName.current = fixture('native-binding-0.17.2');
         const { scanModuleLinks, CsszyxNativeUnavailableError } = await import(
             '../native/index.js'
         );
-        const { version } = await import('../package.json');
         const files = [{ filename: '/p/a.ts', source: 'export const a = { p: 4 };' }];
 
         expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
             CsszyxNativeUnavailableError,
         );
         expect(() => scanModuleLinks(files, { registryEntries: true })).toThrow(
-            `csszyx native package ${packageName.current} 0.17.2 is older than @csszyx/core ${version} and returns a result it cannot read`,
+            `\`${packageName.current}\` is older than the installed \`@csszyx/core\` and returns results it cannot read`,
         );
     });
 

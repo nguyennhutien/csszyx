@@ -103,6 +103,14 @@ function loaderContext(
     };
 }
 
+/**
+ * @param text - Any text.
+ * @returns It, matched literally inside a RegExp.
+ */
+function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 describe('the Next Turbopack loader and the Tailwind prefix', () => {
     it('validates stylesheet facts once for every compilation', async () => {
         const { root, page, cacheDir } = app(PREFIXED);
@@ -172,7 +180,12 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
         const { root, page } = app(PREFIXED);
 
         expect(() => runNextTurboLoader(APP, loaderContext(root, page), OPTIONS)).toThrow(
-            /Tailwind prefix[\s\S]*csszyx next prebuild/,
+            new RegExp(
+                `^\\[csszyx\\] next-prefix-unread:\\n {2}The Turbopack loader has no Tailwind prefix for \`${escapeRegExp(root)}\` \\(.+\\), so it stops\\.\\n` +
+                    ' {2}help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first\\.\\n' +
+                    ' {2}note: this module was not transformed\\.\\n' +
+                    ' {2}docs: https://csszyx\\.com/e/next-prefix-unread$',
+            ),
         );
         let error: unknown;
         try {
@@ -300,6 +313,19 @@ describe('the Next prebuild and the Tailwind prefix', () => {
 
         expect(() =>
             runNextPrebuild({ files: [page], explicitRoot: root, cwd: root, ...OPTIONS }),
-        ).toThrow(/the Next prebuild has not read the Tailwind prefix[\s\S]*csszyx next prebuild/);
+        ).toThrow(
+            expect.objectContaining({
+                code: 'next-prefix-unread',
+                args: { lane: 'prebuild', root, reason: expect.any(String) },
+                message: expect.stringMatching(
+                    new RegExp(
+                        `^\\[csszyx\\] next-prefix-unread:\\n {2}The Next prebuild has no Tailwind prefix for \`${escapeRegExp(root)}\` \\(.+\\), so it stops\\.\\n` +
+                            ' {2}help: run it through `csszyx next prebuild`, which reads the stylesheets first; from a script, call `prepareNextStylesheetFacts` before `runNextPrebuild`\\.\\n' +
+                            ' {2}note: no file was transformed, and the safelist was not written\\.\\n' +
+                            ' {2}docs: https://csszyx\\.com/e/next-prefix-unread$',
+                    ),
+                ),
+            }),
+        );
     }, 60_000);
 });

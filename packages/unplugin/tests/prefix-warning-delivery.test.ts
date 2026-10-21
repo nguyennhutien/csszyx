@@ -1,20 +1,16 @@
 /**
- * The `important` warning reaches a project that authored nothing of its own.
+ * An `important` Tailwind entry builds quietly.
  *
- * `@import "tailwindcss" important` makes every utility `!important`, so a
- * class csszyx emits cannot override one the project already applies. A
- * project in that state builds green and the override silently loses, so the
- * warning is the only thing standing between the author and an afternoon of
- * searching.
+ * `@import "tailwindcss" important` makes every utility `!important`, csszyx's
+ * classes included: they reach Tailwind through the same compile (the
+ * safelist `@source`), land in the same `@layer utilities` in the same order,
+ * so the cascade between a `sz` class and a project class is the one it is
+ * without `important`. Measured with tailwindcss 4.3.3. The build used to warn
+ * that a csszyx class "cannot override" one the project applies; that was
+ * false, and its help (drop `important`) would have made every Tailwind class
+ * lose to the third-party CSS the project added `important` to beat.
  *
- * It is computed beside the unserved-class list, and that step returns early
- * when the project authored no class names. Nothing about the stylesheet
- * depends on an authored class, so the warning is emitted BEFORE that return —
- * an ordering a later "consolidate the early returns" edit would undo without
- * a failing test. Hence this one: a fixture with no authored class at all.
- *
- * A prefix used to share the warning. It no longer does: the build reads it and
- * the engine writes it, so a prefixed project must build quietly.
+ * A prefix needs no word either: the build reads it and the engine writes it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,40 +45,31 @@ async function warningsFrom(css: string, source?: string): Promise<string> {
     return warn.mock.calls.map(args => args.join(' ')).join('\n');
 }
 
-describe('the important warning', () => {
-    it('is printed for a project that authored no class of its own', async () => {
-        // No `className`, no `sz` — the case the authored-class early return
-        // would swallow if the warning moved below it.
-        const printed = await warningsFrom('@import "tailwindcss" important;\n');
-
-        expect(printed).toContain('important');
-        expect(printed).toContain('cannot override');
-    }, 60_000);
-
-    it('is printed for a project that did author classes', async () => {
-        const printed = await warningsFrom(
+describe('an entry whose import line sets important or a prefix', () => {
+    it.each([
+        ['important, nothing authored', '@import "tailwindcss" important;\n', undefined],
+        [
+            'important, with authored classes',
             '@import "tailwindcss" important;\n',
             'export const A = () => <div className="card p-4" />;',
-        );
-
-        expect(printed).toContain('cannot override');
-    }, 60_000);
-
-    it('says nothing for a stock Tailwind entry', async () => {
-        const printed = await warningsFrom(
+        ],
+        [
+            'a stock entry',
             '@import "tailwindcss";\n',
             'export const A = () => <div className="card p-4" />;',
-        );
-
-        expect(printed).not.toContain('does not emit for yet');
-    }, 60_000);
-
-    it('says nothing for a prefixed entry', async () => {
-        const printed = await warningsFrom(
+        ],
+        [
+            'a prefixed entry',
             '@import "tailwindcss" prefix(tw);\n',
             'export const A = () => <div className="tw:card tw:p-4" />;',
-        );
+        ],
+    ])(
+        'builds without a word about it: %s',
+        async (_label, css, source) => {
+            const printed = await warningsFrom(css, source);
 
-        expect(printed).not.toContain('does not emit for yet');
-    }, 60_000);
+            expect(printed).not.toMatch(/important|cannot override|does not emit for yet/);
+        },
+        60_000,
+    );
 });

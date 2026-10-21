@@ -134,7 +134,7 @@ Without it: \`Property 'sz' does not exist on type 'DetailedHTMLProps<...>'\`.
 \`\`\`
 
 ## Troubleshooting
-- **"No prebuilt native binary" warning / \`native engine unavailable\`**: the
+- **\`native-engine-unavailable\` warning** ("The native engine is not available here, so the default \`rust\` parser runs on the wasm engine."): the
   default \`rust\` parser's native binary is missing (unsupported arch, optional
   deps omitted, or a lockfile npm <= 11.2 wrote without the other platforms).
   It is NOT broken and classes are UNCHANGED — there is ONE engine shipped in two builds, native and wasm, and

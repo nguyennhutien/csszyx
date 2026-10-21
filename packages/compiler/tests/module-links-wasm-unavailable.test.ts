@@ -27,7 +27,7 @@ describe('the wasm module-link scan without its artifact', () => {
             WasmTransformUnavailableError,
         );
         expect(() => scanModuleLinksWasm([{ filename: '/p/a.ts', source: '' }])).toThrow(
-            "transformWasm: wasm engine unavailable - Cannot find module '@csszyx/core/parser-wasm'",
+            "  note: the loader reported: Cannot find module '@csszyx/core/parser-wasm'.\n",
         );
     });
 

@@ -262,29 +262,30 @@ describe('collectMangleHybridHazards', () => {
         );
         expect(hazards.collisions).toEqual([]);
         expect(hazards.orphans).toEqual([]);
-        expect(mangleHybridHazardMessage(hazards)).toBeNull();
+        expect(mangleHybridHazardMessage(hazards)).toEqual([]);
     });
 
-    it('guides hotfix-first, then rename (preferred) over exclude (libs only)', () => {
-        const message = mangleHybridHazardMessage({
-            collisions: ['x', 'y'],
-            orphans: ['bg-violet-a-100'],
-        });
-        expect(message).toContain('collide');
-        expect(message).toContain('no emitted CSS rule');
-        // Hotfix to unblock prod comes first.
-        expect(message).toContain('HOTFIX');
-        expect(message).toContain('production: { mangle: false }');
-        // Renaming is the preferred real fix; exclude is the library escape hatch.
-        expect(message).toContain('rename');
-        expect(message).toContain('third-party');
-        expect(message).toContain('mangleExclude');
-        // CLI to discover the offending names.
-        expect(message).toContain('scan-collisions');
+    it('prints one registry record per hazard kind', () => {
+        expect(
+            mangleHybridHazardMessage({ collisions: ['x', 'y'], orphans: ['bg-violet-a-100'] }),
+        ).toEqual([
+            '[csszyx] mangle-hybrid-hazard:\n' +
+                '  Mangling renamed classes to 2 token(s) that CSS outside csszyx also uses as class names, such as `x`, `y`, so the renamed elements pick up that CSS and the elements it was written for pick up the csszyx rules.\n' +
+                '  help: rename those classes in your own CSS to something specific, such as `.x` to `.resize-handle-x`, and list the ones in a stylesheet you cannot edit in `production.mangleExclude`; until then, pass `production: { mangle: false }` to the csszyx plugin.\n' +
+                '  note: `csszyx scan-collisions` lists every class name in your stylesheets that a token could take, as a `mangleExclude` list you can paste.\n' +
+                '  docs: https://csszyx.com/e/mangle-hybrid-hazard',
+            '[csszyx] mangle-hybrid-hazard:\n' +
+                '  Mangling renamed 1 class(es) that no stylesheet in this build has a rule for, such as `bg-violet-a-100`, so a stylesheet outside this build that styles them by name, such as one a separate Tailwind run writes, no longer matches them.\n' +
+                '  help: build that stylesheet through this bundler, so csszyx renames its rules too; until then, pass `production: { mangle: false }` to the csszyx plugin.\n' +
+                '  note: a class that no stylesheet styles had no CSS before the rename either, so it changes nothing.\n' +
+                '  docs: https://csszyx.com/e/mangle-hybrid-hazard',
+        ]);
     });
 
-    it('suggests disabling mangle when there are only orphans, no collisions', () => {
-        const message = mangleHybridHazardMessage({ collisions: [], orphans: ['bg-violet-a-100'] });
-        expect(message).toContain('production: { mangle: false }');
+    it('names at most eight classes, and counts them all', () => {
+        const names = Array.from({ length: 10 }, (_, i) => `c${i}`);
+        const [record] = mangleHybridHazardMessage({ collisions: [], orphans: names });
+        expect(record).toContain('Mangling renamed 10 class(es)');
+        expect(record).toContain('`c0`, `c1`, `c2`, `c3`, `c4`, `c5`, `c6`, `c7`, so');
     });
 });

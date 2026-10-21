@@ -3948,7 +3948,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "mode",
             "parser-mode",
             "debounce-ms",
-            "framework"
+            "framework",
+            "fail-on"
         ],
         "args": {
             "form": {
@@ -3957,7 +3958,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "mode",
                     "parser-mode",
                     "debounce-ms",
-                    "framework"
+                    "framework",
+                    "fail-on"
                 ]
             },
             "value": {

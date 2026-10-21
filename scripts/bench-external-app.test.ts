@@ -110,7 +110,7 @@ test('runs both engine artifacts without touching external source files', async 
         `import { mkdirSync, writeFileSync } from 'node:fs';
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/result.txt', process.env.CSSZYX_PARSER + ':' + process.env.CSSZYX_BENCH_MANGLE_VARS);
-console.log('[csszyx] active parser: ' + process.env.CSSZYX_PARSER);
+console.log('[csszyx] active-parser:\\n  This build parses with the ' + (process.env.CSSZYX_PARSER === 'rust' ? 'native' : 'wasm') + ' engine.');
 if (process.env.CSSZYX_BENCH_TRACE === '1') console.log('[csszyx:bench] prescan 1.234ms fixture');
 `,
     );
@@ -142,7 +142,10 @@ if (process.env.CSSZYX_BENCH_TRACE === '1') console.log('[csszyx:bench] prescan 
 test('fails a row whose declared build output was never created', async t => {
     const app = mkdtempSync(path.join(os.tmpdir(), 'csszyx-external-missing-output-'));
     t.after(() => rmSync(app, { recursive: true, force: true }));
-    writeFileSync(path.join(app, 'build.mjs'), "console.log('[csszyx] active parser: rust');\n");
+    writeFileSync(
+        path.join(app, 'build.mjs'),
+        "console.log('[csszyx] active-parser:\\n  This build parses with the native engine.');\n",
+    );
 
     const payload = await runExternalBenchmark({
         cwd: app,

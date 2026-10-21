@@ -72,7 +72,7 @@
           "type": "string"
         },
         "args": {
-          "description": "For an `sz-diagnostic` finding, the values its sentence names, by name. The page at `url` lists them.",
+          "description": "The values its sentence names, by name. The page at `url` lists them.",
           "type": "object"
         },
         "url": {

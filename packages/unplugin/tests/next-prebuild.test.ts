@@ -51,7 +51,18 @@ describe('Next Turbopack prebuild upgrade guard', () => {
         );
         expect(() =>
             runNextPrebuild({ files: [source], explicitRoot: root, cwd: root, parserMode: 'auto' }),
-        ).toThrow(/names the old safelist/);
+        ).toThrow(
+            expect.objectContaining({
+                code: 'legacy-source-directive',
+                args: { target: '../csszyx-classes.html' },
+                message:
+                    '[csszyx] legacy-source-directive: app/globals.css\n' +
+                    '  `@source "../csszyx-classes.html"` names the old safelist, which csszyx no longer writes, so the build stops.\n' +
+                    "  help: remove this line; on Next.js, also list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.\n" +
+                    '  note: csszyx adds the `@source` for `.csszyx/csszyx-classes.txt` itself: the Vite, Rollup and webpack plugins inject it, and on Next.js `@csszyx/unplugin/postcss` does.\n' +
+                    '  docs: https://csszyx.com/e/legacy-source-directive',
+            }),
+        );
         expect(existsSync(join(root, '.csszyx/csszyx-classes.txt'))).toBe(false);
     });
 
@@ -75,9 +86,14 @@ describe('Next Turbopack prebuild upgrade guard', () => {
             parserMode: 'auto',
             warn,
         });
-        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).toContain(
-            "'@csszyx/unplugin/postcss'",
-        );
+        expect(warn.mock.calls).toEqual([
+            [
+                '[csszyx] postcss-plugin-missing: postcss.config.mjs\n' +
+                    '  The PostCSS config Next.js reads does not list `@csszyx/unplugin/postcss`, so Tailwind never reads the safelist and no `sz` class produces CSS.\n' +
+                    '  help: add `@csszyx/unplugin/postcss` to its plugins, before `@tailwindcss/postcss`.\n' +
+                    '  docs: https://csszyx.com/e/postcss-plugin-missing',
+            ],
+        ]);
     });
 
     it('prints through console.warn when no sink is given', () => {
@@ -94,7 +110,9 @@ describe('Next Turbopack prebuild upgrade guard', () => {
         );
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         runNextPrebuild({ files: [source], explicitRoot: root, cwd: root, parserMode: 'auto' });
-        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).toContain('postcss.config.cjs');
+        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).toContain(
+            '[csszyx] postcss-plugin-missing: postcss.config.cjs\n',
+        );
         warn.mockRestore();
     });
 
@@ -317,7 +335,17 @@ describe('Next Turbopack prebuild core', () => {
                 mode: 'production',
                 compilerOptions: { mangleVars: true },
             }),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(
+            expect.objectContaining({
+                code: 'next-mangle-vars-unsupported',
+                args: { form: 'prebuild' },
+                message:
+                    '[csszyx] next-mangle-vars-unsupported:\n' +
+                    '  The Next prebuild cannot mangle CSS variables in production, and `config.mangleVars` is on, so it stops.\n' +
+                    '  help: pass `config: { mangleVars: false }` to `runNextPrebuild`, or build with webpack (`next build --webpack`), which mangles them.\n' +
+                    '  docs: https://csszyx.com/e/next-mangle-vars-unsupported',
+            }),
+        );
     });
 
     it('runs with no csszyx config at all, the way an unconfigured app starts', () => {

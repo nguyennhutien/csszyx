@@ -58,8 +58,20 @@ describe.each(PARSERS)('the %s artifact', parser => {
         const result = run(source);
         expect(result.code).toBe(source);
         expect(result.diagnostics).toHaveLength(1);
-        expect(result.diagnostics[0].severity).toBe('error');
-        expect(result.diagnostics[0].message).toContain('sz={{ p: 4 }}');
+        const [diagnostic] = result.diagnostics;
+        expect(diagnostic).toMatchObject({
+            severity: 'error',
+            code: 'template-unparsable',
+            args: { form: 'svelte-quoted', message: expect.any(String) },
+        });
+        const { message } = diagnostic.args as { message: string };
+        expect(diagnostic.message).toBe(
+            `[csszyx] template-unparsable: App.svelte:${diagnostic.line}:${diagnostic.column}\n` +
+                '  Svelte cannot parse this file, so no `sz` attribute in it gets a class.\n' +
+                '  help: write a quoted sz object as an expression, `sz={{ p: 4 }}`; Svelte does not parse `sz="{ p: 4 }"`.\n' +
+                `  note: the Svelte compiler reported: ${message.replace(/\.$/, '')}.\n` +
+                '  docs: https://csszyx.com/e/template-unparsable',
+        );
     });
 
     it('reports markup Svelte cannot parse instead of skipping it', () => {
@@ -67,6 +79,13 @@ describe.each(PARSERS)('the %s artifact', parser => {
         const result = run(source);
         expect(result.code).toBe(source);
         expect(result.diagnostics.map(d => d.severity)).toEqual(['error']);
+        expect(result.diagnostics[0]).toMatchObject({
+            code: 'template-unparsable',
+            args: { form: 'svelte-preprocess' },
+        });
+        expect(result.diagnostics[0].message).toContain(
+            '  help: run csszyx after the preprocessors that turn this file into Svelte, such as TypeScript without `lang="ts"`, or pug.\n',
+        );
     });
 });
 
@@ -77,8 +96,8 @@ describe('the Vite plugin', () => {
         };
         const context = {
             warn: () => {},
-            error: (m: string) => {
-                throw new Error(m);
+            error: (error: Error) => {
+                throw error;
             },
         };
         const result = plugin.transform.call(context, '<div sz={{ p: 4 }}></div>', '/a.svelte');

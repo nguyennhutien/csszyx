@@ -61,7 +61,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`touch-action` keys, `contain`](#touch-action-takes-one-key-per-group-contain-gains-keys) | `[csszyx] moved-value:` on `touch: pan-x` | the build, `csszyx check` | `migrate --keys-only` |
 | [`szv()` returns `SzProps`](#szv-returns-szprops-and-checks-every-row) | type errors in `szv` rows | `tsc` | you |
 | [`transform` options](#transform-takes-an-options-object) | `[csszyx] options-object-required:` thrown | `tsc`, runtime throw | you |
-| [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `csszyxTurbopack takes one object` thrown | `tsc`, runtime throw | you |
+| [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-nine-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find package '@csszyx/core'` | `tsc`, the bundler, the import of `@csszyx/compiler/engine` | you |
@@ -119,11 +119,11 @@ the prefix, so a test that selects `.p-4` stops matching. When two Tailwind entr
 set different prefixes, the build stops before it transforms anything:
 
 ```text
-[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:
-  src/index.css      prefix(tw)
-  fixtures/old.css   no prefix
-  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.
-  note: the build stopped before transforming any module; nothing was written.
+[csszyx] prefix-disagreement:
+  The Tailwind stylesheets of this project set different prefixes (`src/index.css` with `prefix(tw)`, `fixtures/old.css` with none), so no class csszyx emits is served by all of them.
+  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, or list the stylesheets this build loads with the csszyx `tailwindStylesheet` option.
+  note: no module was transformed, and nothing was written.
+  docs: https://csszyx.com/e/prefix-disagreement
 ```
 
 A stylesheet that imports Tailwind and fails to compile also stops the build, since
@@ -140,7 +140,7 @@ csszyx({ tailwindStylesheet: "src/index.css" });
 
 On Next.js with Turbopack, pass the same list to the loader and to the two
 commands, and run `csszyx next prebuild` before `next build`. Without it the build
-stops with `has not read the Tailwind prefix`:
+stops with `next-prefix-unread`:
 
 ```js
 // next.config.mjs
@@ -192,7 +192,7 @@ build wrote.
 each removal at the line and key you wrote:
 
 ```text
-src/App.tsx:3: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.
+src/App.tsx:3: The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.
 ```
 
 Values the runtime resolves keep every class, and so do `szv` factories and the
@@ -229,7 +229,7 @@ and neither is a Tailwind class that one of your own CSS rules selects on.
 the merge audit:
 
 ```text
-src/App.tsx:2: `pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.
+src/App.tsx:2: The build removes `pb-2` from `className`, because an `sz` class on the same element sets every property it sets.
 ```
 
 **The edit.** Move the refinement into `sz`, after the key that covers it:
@@ -529,8 +529,10 @@ For a config alone, write `csszyxTurbopack({ turbopack: existingConfig })`.
 option, throws when Next loads the config:
 
 ```text
-[csszyx] csszyxTurbopack takes one object: the config to extend goes in it, under `turbopack`.
-  help: csszyxTurbopack({ turbopack: <your config>, ...options }) — put loader options beside `turbopack`.
+[csszyx] options-object-required:
+  `csszyxTurbopack` has no option(s) `rules`, so the call is refused.
+  help: use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.
+  docs: https://csszyx.com/e/options-object-required
 ```
 
 **Tooling.** `tsc` on a typed `next.config.ts`; the throw otherwise.
@@ -799,7 +801,11 @@ caught before still matches: `SzDepthError` is still an `SzDepthError`, and
 `CsszyxNativeUnavailableError` from `@csszyx/core/native` changes its `code`
 from `CSSZYX_NATIVE_UNAVAILABLE` to `native-engine-unavailable`, and its
 message starts `[csszyx] native-engine-unavailable:` instead of
-`csszyx native engine unavailable:`.
+`csszyx native engine unavailable:`. Its `detail`, `help` and `helpIsExplicit`
+fields are gone: `args` names what is missing (`form`, and `platform`,
+`packageName` or `exportName`), and the constructor takes those args.
+`RustMigrateUnavailableError` from `@csszyx/compiler/migrate` takes the same
+args in place of its detail string.
 
 **The edit.** Match on the code, and recognise the error with `isCsszyxError`,
 from `csszyx` or `@csszyx/runtime`. Two copies of csszyx in one app have two
@@ -897,9 +903,11 @@ conditional, a call, an array value such as `{ p: [4] }` and a template string
 with `${}`. The message names the file and the position in it:
 
 ```text
-[csszyx] src/Card.vue:3:15: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it
-help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime
-note: the attribute is left as written; no class is generated for it
+[csszyx] template-runtime-value: src/Card.vue:3:15
+  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.
+  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.
+  note: the attribute is left as written.
+  docs: https://csszyx.com/e/template-runtime-value
 ```
 
 The other `sz` attributes of the file still get their classes, and the class

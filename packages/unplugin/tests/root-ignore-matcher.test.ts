@@ -107,7 +107,16 @@ describe('createRootIgnoreMatcher', () => {
         // Each pattern is matched on its own, so `!legacy/keep.css` would match
         // every path but that one, the app's real entry included.
         expect(() => createRootIgnoreMatcher(ROOT, ['legacy/**', '!legacy/keep.css'])).toThrow(
-            /`!legacy\/keep\.css`.*negated/s,
+            expect.objectContaining({
+                code: 'ignore-pattern-negated',
+                args: { pattern: '!legacy/keep.css' },
+                message:
+                    '[csszyx] ignore-pattern-negated:\n' +
+                    '  The ignore pattern `!legacy/keep.css` is negated, and an ignore list cannot take one, so csszyx stops.\n' +
+                    '  help: narrow the pattern that covers too much, so that nothing has to be taken back out.\n' +
+                    '  note: each pattern only adds paths to leave out.\n' +
+                    '  docs: https://csszyx.com/e/ignore-pattern-negated',
+            }),
         );
     });
 

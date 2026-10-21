@@ -15,6 +15,10 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { WASM_ENGINE_UNAVAILABLE } from './diagnostic-browser.generated.js';
 import {
     diagnosticPath,
     type EngineDiagnosticFieldsOf,
@@ -31,10 +35,12 @@ import type {
     GlobalVarUsageQuery,
 } from './global-var-diagnostics.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
+import { renderThrown } from './thrown-words.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
     aggregateCssVariableMap,
     encodeCrossModuleStatics,
+    internalError,
     normalizeGlobalVarAliases,
     type TransformRustFile,
     thrownMessage,
@@ -107,18 +113,16 @@ export class WasmTransformUnavailableError extends CsszyxError {
      */
     constructor(detail: string, options: { cause?: unknown; where?: string } = {}) {
         const { cause, where } = options;
-        super({
-            ...(cause === undefined || where !== undefined
-                ? ({
-                      code: 'internal-error',
-                      args: { where: where ?? 'transformWasm', detail },
-                  } as const)
-                : ({ code: 'wasm-engine-unavailable', args: { detail } } as const)),
-            // The registry has no words for these ids yet; the message stays
-            // the lane's own until they are worded (ADR 0031).
-            message: `transformWasm: wasm engine unavailable - ${detail}`,
-            cause,
-        });
+        super(
+            cause === undefined || where !== undefined
+                ? internalError({ where: where ?? 'transformWasm', detail }, cause)
+                : {
+                      code: 'wasm-engine-unavailable',
+                      args: { detail },
+                      message: renderThrown(WASM_ENGINE_UNAVAILABLE, { detail }),
+                      cause,
+                  },
+        );
         this.name = 'WasmTransformUnavailableError';
     }
 }
@@ -144,7 +148,8 @@ function loadParserWasm(): ParserWasmModule | null {
         const requireFromHere = createRequire(import.meta.url);
         wasmModule = requireFromHere('@csszyx/core/parser-wasm') as ParserWasmModule;
     } catch (err) {
-        wasmLoadError = thrownMessage(err);
+        // Its first line: Node's resolver appends the require stack.
+        wasmLoadError = thrownMessage(err).split('\n')[0];
         wasmLoadCause = err;
         wasmModule = null;
     }
@@ -167,7 +172,6 @@ function requireParserWasm(): ParserWasmModule {
         assertEngineIdentity({
             expected: EXPECTED_ENGINE,
             reported: wasmEngineIdentity(wasm),
-            artifact: 'wasm',
         });
         wasmIdentityChecked = true;
     }
@@ -283,7 +287,7 @@ function transformWasmOne(
         fields,
     );
     if (!result) {
-        throw new WasmTransformUnavailableError('wasm transform returned no result');
+        throw new WasmTransformUnavailableError('the wasm transform returned no result');
     }
     return result;
 }

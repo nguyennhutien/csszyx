@@ -29,7 +29,10 @@ describe('nextWatch command lifecycle', () => {
         });
         const code = await nextWatch({ cwd: tempRoot(), silent: true });
         expect(code).toBe(1);
-        expect(errors.join('\n')).toContain('No source files matched');
+        expect(errors.join('\n')).toContain('[csszyx] no-source-files:');
+        expect(errors.join('\n')).toMatch(
+            /No source file under `[^`]+` matches `\{app,pages,src\}\/\*\*\/\*\.\{ts,tsx,js,jsx,mjs,cjs\}`, so there is nothing to scan for classes\./,
+        );
     });
 
     it('starts, prints the banner, and shuts down cleanly on SIGINT', async () => {

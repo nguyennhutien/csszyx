@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
     type CssVariableMangleValue,
+    diagnosticPath,
     type SourceTransformResult,
     sortStrings,
     type TokenData,
@@ -17,6 +18,7 @@ import {
     isRustTransformAvailable,
     isWasmTransformAvailable,
 } from '@csszyx/compiler/engine';
+import { type CsszyxError, isCsszyxError } from '@csszyx/compiler/errors';
 import {
     diagnosticFileOf,
     reportTemplateSzDiagnostics,
@@ -58,7 +60,10 @@ import {
     collectMergeCallClassNames,
     findBalancedCodeEnd,
 } from './authored-class-scanner.js';
-import { findClassNameAuthorConflicts } from './class-name-authors.js';
+import {
+    classNameAuthorConflictMessage,
+    findClassNameAuthorConflicts,
+} from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
     type CrossModuleForwardIndex,
@@ -86,6 +91,7 @@ import {
     szClassSites,
 } from './dead-class.js';
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
+import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
 import {
     createDiagnosticPolicy,
     type DiagnosticPolicy,
@@ -175,7 +181,7 @@ import {
     computeSafelistRelPath,
     cssImportsTailwind,
     findLegacySourceDirective,
-    legacySourceMessage,
+    legacySourceError,
     removeLegacySafelists,
     SAFELIST_FILE,
 } from './safelist-source.js';
@@ -191,7 +197,7 @@ import {
     type MergeAuditFinding,
     type MergeAuditKind,
     mergeFindingsOf,
-    mergeRemovalMessage,
+    mergeRemovalLine,
     mergeRemovalSummaryMessage,
 } from './merge-audit.js';
 import { loadsCsszyxRuntime, writeMergeRegistrationModule } from './merge-registration.js';
@@ -211,14 +217,13 @@ import {
 import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
 import {
-    missingTailwindStylesheetMessage,
+    missingTailwindStylesheetError,
     openProjectStyleModel,
     originWarning,
     type ProjectStyleModel,
     styleModelError,
     styleModelWarning,
     unresolvedImportWarning,
-    unsupportedStylesheetFactsMessage,
 } from './project-style-model.js';
 import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
@@ -352,6 +357,8 @@ interface PluginState {
     sawAnyCss: boolean;
     /** Guards the missing-Tailwind-entry warning so it fires at most once. */
     tailwindWarningEmitted: boolean;
+    /** Whether this build said it stripped `szRecover="dev-only"` tokens. */
+    recoveryStripWarned: boolean;
     /** Whether a Tailwind entry scoped content detection (source()/@source not). */
     tailwindEntryScoped: boolean;
     /** Guards the unscoped-monorepo warning so it fires at most once. */
@@ -691,17 +698,13 @@ export function shouldWarnMissingTailwindEntry(
 }
 
 /**
- * Build the missing-Tailwind-entry warning message.
+ * The missing-Tailwind-entry warning: the registry's `tailwind-stylesheet-absent`.
+ *
  * @param ownedClassCount - number of csszyx-generated classes this build produced.
  * @returns the warning string.
  */
 export function missingTailwindEntryMessage(ownedClassCount: number): string {
-    return (
-        `[csszyx] generated ${ownedClassCount} sz class(es) but found no CSS entry ` +
-        'importing "tailwindcss" — those classes will produce no CSS. Import "tailwindcss" ' +
-        'in a CSS file (csszyx auto-injects @source for the generated classes) so Tailwind ' +
-        'emits their styles.'
-    );
+    return diagnosticMessage('tailwind-stylesheet-absent', { count: ownedClassCount });
 }
 
 /**
@@ -952,88 +955,67 @@ function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
     return hazard.renamed.map(quote);
 }
 
+/** Classes a hazard record names; the count covers the rest. */
+const HAZARD_NAME_SAMPLE = 8;
+
+/** Selectors a hazard record names; the count covers the rest. */
+const HAZARD_SELECTOR_SAMPLE = 3;
+
 /**
- * Build the hybrid-mangle hazard warning, or null when there is nothing to warn.
+ * A selector hazard as a record names it: the selector and the first classes
+ * or tokens it matches.
  *
- * @param hazards - the detected collisions and orphans.
- * @returns a warning string, or null when both lists are empty.
+ * @param hazard - The selector hazard.
+ * @param names - The classes it stops matching, or the tokens it starts to.
+ * @returns `selector → a, b`.
  */
-export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string | null {
+function selectorSample(hazard: MangleSelectorHazard, names: readonly string[]): string {
+    return `${hazard.selector} → ${names.slice(0, 4).join(', ')}`;
+}
+
+/**
+ * The hybrid-mangle hazard warnings: one `mangle-hybrid-hazard` record per
+ * kind found, each with its own fix, in the order collision, orphan, renamed
+ * selector, matched selector.
+ *
+ * @param hazards - the detected collisions, orphans and selector matches.
+ * @returns the records; none when every list is empty.
+ */
+export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string[] {
     const { collisions, orphans, selectorMatches = [] } = hazards;
-    if (collisions.length === 0 && orphans.length === 0 && selectorMatches.length === 0) {
-        return null;
-    }
     const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
     const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
-    // One paragraph per hazard kind, each closing with the fix for that kind.
-    // Listing every finding and then every fix let a reader attach the wrong
-    // one: with an orphan and a selector both reported, the orphan's remedy
-    // landed after the selector list and read as a claim about its classes.
-    const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
-    if (collisions.length > 0) {
-        const sample = collisions.slice(0, 8).join(', ');
-        // Guide the prod hotfix first, then the two real fixes. Renaming is
-        // preferred because single-letter / common class names collide with
-        // mangle tokens AND risk specificity clashes with other libraries; an
-        // exclude is the escape hatch only for names in code you cannot change.
-        parts.push(
-            `${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
-                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
-                'elements.',
-            'HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
-                ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
-                ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
-                ' also clash on specificity with other libraries. Only for names in a' +
-                ' third-party stylesheet you cannot edit, list them in' +
-                ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
-                ' to find every offending name.',
-        );
-    }
-    if (orphans.length > 0) {
-        const sample = orphans.slice(0, 8).join(', ');
-        parts.push(
-            `${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
-                'those elements lose styling.',
-            'Those classes are csszyx-owned but no CSS was emitted for them' +
-                ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
-                ' a real utility). Ensure that CSS is generated, or pass' +
-                ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
-                ' are reconciled.',
-        );
+    const records: object[] = [];
+    for (const [form, names] of [
+        ['collision', collisions],
+        ['orphan', orphans],
+    ] as const) {
+        if (names.length === 0) continue;
+        records.push({ form, count: names.length, names: names.slice(0, HAZARD_NAME_SAMPLE) });
     }
     if (broken.length > 0) {
-        const sample = broken
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
-            .join('; ');
-        const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
-        parts.push(
-            `${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
-                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
-            `Keep those classes readable with production.manglePreserve: [${entries}] ` +
-                '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
-                'production.mangleExclude cannot help here: it reserves token names and does not ' +
-                'keep a class from being renamed.',
-        );
+        records.push({
+            form: 'selector-renamed',
+            count: broken.length,
+            selectors: broken
+                .slice(0, HAZARD_SELECTOR_SAMPLE)
+                .map(hazard => selectorSample(hazard, hazard.renamed)),
+            entries: [...new Set(broken.flatMap(preserveEntriesFor))],
+        });
     }
     if (newlyMatched.length > 0) {
-        const sample = newlyMatched
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
-            .join('; ');
-        const tokens = [...new Set(newlyMatched.flatMap(hazard => hazard.matchedTokens))]
-            .map(quoteForConfig)
-            .join(', ');
-        parts.push(
-            `${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
-                `instead (e.g. ${sample}).`,
-            `Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
-                'so no class is renamed to one of them, or key the rule off a data attribute, ' +
-                'which mangling never touches; a prefix or substring selector goes on matching ' +
-                'other tokens, so the data attribute is the durable fix.',
-        );
+        records.push({
+            form: 'selector-matched',
+            count: newlyMatched.length,
+            selectors: newlyMatched
+                .slice(0, HAZARD_SELECTOR_SAMPLE)
+                .map(hazard => selectorSample(hazard, hazard.matchedTokens)),
+            entries: [...new Set(newlyMatched.flatMap(hazard => hazard.matchedTokens))].map(
+                quoteForConfig,
+            ),
+        });
     }
-    return parts.join('\n');
+    return records.map(args => diagnosticMessage('mangle-hybrid-hazard', args));
 }
 
 /**
@@ -1199,19 +1181,6 @@ function normalizeForMatch(p: string): string {
  */
 function findJsxExpressionEnd(code: string, bodyStart: number): number {
     return findBalancedCodeEnd(code, bodyStart);
-}
-
-/**
- * Warn that a prescan dropped a whole file after exceeding the AST node budget.
- *
- * @param filePath Source file the prescan skipped.
- */
-function warnPrescanBudgetSkip(filePath: string): void {
-    console.warn(
-        `[csszyx] prescan skipped ${filePath}: the file exceeds the AST node budget, so ` +
-            'NONE of its classes reached the safelist and their CSS will not be generated. ' +
-            'Raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
-    );
 }
 
 /**
@@ -1459,11 +1428,11 @@ export function isPackagesSkippedSource(id: string, sourceDirs: readonly string[
 }
 
 /**
- * Build the workspace-package skip warning. Lists the skipped files that use
- * csszyx so the developer can add the package directory to `compileSources`
- * instead of silently shipping no CSS for them.
+ * The workspace-package skip warning, `compile-sources-skipped`: it lists the
+ * skipped files that use csszyx, so the developer can add the package
+ * directory to `compileSources` instead of silently shipping no CSS for them.
  *
- * @param files - skipped `/packages/` file paths that use csszyx.
+ * @param files - skipped `/packages/` files that use csszyx, project-relative.
  * @param szvExportFiles - the subset that may export `szv` factories, whose
  *   skip also costs every importer its cross-module precompile.
  * @returns the warning string.
@@ -1472,24 +1441,16 @@ export function skippedSzFilesMessage(
     files: readonly string[],
     szvExportFiles: readonly string[] = [],
 ): string {
-    const list = files.map(file => `  - ${file}`).join('\n');
-    const registryClause =
-        szvExportFiles.length === 0
-            ? ''
-            : `\n${szvExportFiles.length} of them may export \`szv\` factories, so they stay ` +
-              'out of the cross-module registry and every importer falls back to the ' +
-              'runtime path.';
-    return (
-        `[csszyx] ${files.length} file(s) under packages/ use csszyx but were ` +
-        `skipped by ignore rules:\n${list}\n` +
-        'Add the package directory to `compileSources` (or move the file out of ' +
-        'packages/) — otherwise their classes never reach the safelist.' +
-        registryClause
-    );
+    return diagnosticMessage('compile-sources-skipped', {
+        form: szvExportFiles.length === 0 ? 'sz' : 'szv-exports',
+        count: files.length,
+        files,
+        szvCount: szvExportFiles.length,
+    });
 }
 
 /**
- * Explains a class census that grew after the mangle map was already frozen.
+ * The error for a class census that grew after the mangle map was already frozen.
  *
  * The map is settled right after the prescan because the CSS a build ships is
  * hashed while it is still being transformed. A class discovered later would be
@@ -1498,23 +1459,16 @@ export function skippedSzFilesMessage(
  *
  * @param lateOwned csszyx-owned classes first seen after the freeze.
  * @param lateAuthored raw author classes first seen after the freeze.
- * @returns the error text.
+ * @returns the `mangle-census-late` error.
  */
-export function lateMangleCensusMessage(
+export function lateMangleCensusError(
     lateOwned: readonly string[],
     lateAuthored: readonly string[],
-): string {
-    const sections = [
-        lateOwned.length > 0 ? `csszyx-owned classes: ${lateOwned.join(', ')}` : '',
-        lateAuthored.length > 0 ? `author classes: ${lateAuthored.join(', ')}` : '',
-    ].filter(Boolean);
-    const found = sections.length > 0 ? sections.join('\n') : 'the class census changed';
-    return (
-        '[csszyx] production.mangle: classes appeared after the mangle map was ' +
-        `frozen, so the emitted CSS was hashed against a different map:\n${found}\n` +
-        'The prescan walks the project root and every `compileSources` directory. ' +
-        'Move the file that owns these classes under one of them, or turn off ' +
-        '`production.mangle` for this build.'
+): CsszyxError {
+    const classes = sortStrings(new Set([...lateOwned, ...lateAuthored]));
+    return diagnosticError(
+        'mangle-census-late',
+        classes.length > 0 ? { form: 'classes', classes } : { form: 'census-changed' },
     );
 }
 
@@ -1838,9 +1792,7 @@ function assertNoGlobalVarAliasValidationErrors(result: GlobalVarAliasValidation
     ];
 
     if (messages.length > 0) {
-        throw new Error(
-            `[csszyx] production.mangleGlobalVars validation failed:\n${messages.join('\n')}`,
-        );
+        throw diagnosticError('mangle-global-vars-plan-invalid', { findings: messages });
     }
 }
 
@@ -1898,7 +1850,7 @@ function isCssSyntaxError(error: unknown): boolean {
  * @param result Validated CSS/source result.
  * @param expectedEntries Early original-to-alias entries.
  */
-function assertGlobalVarPlanMatchesEarlyAliases(
+export function assertGlobalVarPlanMatchesEarlyAliases(
     result: GlobalVarAliasValidationResult,
     expectedEntries: ReadonlyArray<readonly [string, string]>,
 ): void {
@@ -1911,10 +1863,10 @@ function assertGlobalVarPlanMatchesEarlyAliases(
     const expectedJson = JSON.stringify(expected);
     const actualJson = JSON.stringify(actualEntries);
     if (expectedJson !== actualJson) {
-        throw new Error(
-            '[csszyx] production.mangleGlobalVars validation failed:\n' +
-                `CSS alias plan ${actualJson} does not match source-transform alias table ${expectedJson}.`,
-        );
+        throw diagnosticError('internal-error', {
+            where: 'mangleGlobalVars alias plan',
+            detail: `the CSS alias plan ${actualJson} does not match the source alias table ${expectedJson}`,
+        });
     }
 }
 
@@ -2063,11 +2015,7 @@ function assertVarMangleMapSize(
     if (size <= maxBytes) {
         return;
     }
-    throw new Error(
-        `[csszyx] CSS variable mangle map is ${size} bytes, which exceeds the ` +
-            `${maxBytes} byte safety cap. Reduce production.mangleVars usage, split the bundle, ` +
-            'or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.',
-    );
+    throw diagnosticError('mangle-map-too-large', { size, maxBytes });
 }
 
 /**
@@ -2247,6 +2195,53 @@ function traceBenchTiming(label: string, filename: string, elapsedMs: number): v
 }
 
 /**
+ * A tsconfig's text, or null when it is not there or cannot be read.
+ *
+ * @param file - Its path.
+ * @returns The text.
+ */
+function readTsconfig(file: string): string | null {
+    try {
+        return fs.readFileSync(file, 'utf-8');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The tsconfig that should include `.csszyx/theme.d.ts` and does not: the
+ * root `tsconfig.json` (or a Vite/Vue `tsconfig.app.json` without one). A
+ * solution-style root, as Vite's template writes it (`files: []` and
+ * `references`), includes nothing itself, so the configs it references are
+ * read, and the first of them is named when none mentions it.
+ *
+ * Text, not a parsed config: a tsconfig may carry comments, and the question
+ * is only whether `.csszyx` appears in it.
+ *
+ * @param rootDir - The project root.
+ * @returns The config's path, relative to the root, or null when one
+ *          mentions `.csszyx` or the project has no tsconfig.
+ */
+export function themeTypesTsconfigGap(rootDir: string): string | null {
+    const name = ['tsconfig.json', 'tsconfig.app.json'].find(
+        file => readTsconfig(path.join(rootDir, file)) !== null,
+    );
+    if (name === undefined) return null;
+    const content = readTsconfig(path.join(rootDir, name)) as string;
+    if (content.includes('.csszyx')) return null;
+    if (!/"references"\s*:/.test(content)) return name;
+    const references = [...content.matchAll(/"path"\s*:\s*"([^"]+)"/g)].map(match => {
+        const target = path.resolve(rootDir, match[1] as string);
+        return target.endsWith('.json') ? target : path.join(target, 'tsconfig.json');
+    });
+    const read = references.filter(file => readTsconfig(file) !== null);
+    if (read.some(file => (readTsconfig(file) as string).includes('.csszyx'))) return null;
+    return read.length === 0
+        ? name
+        : normalizePathSeparators(path.relative(rootDir, read[0] as string));
+}
+
+/**
  * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
  * Called once at startup and again on HMR when a watched CSS file changes.
  * No-ops silently if scanCss is not configured or if files can't be read.
@@ -2295,13 +2290,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
             const key = `${rootDir}\u0000${conflict.name}`;
             if (_warnedClassNameAuthors.has(key)) continue;
             _warnedClassNameAuthors.add(key);
-            console.warn(
-                `[csszyx] "@utility ${conflict.name}" collides — ${conflict.reason}. Tailwind ` +
-                    'merges both declarations into one rule and reports nothing, so the class ' +
-                    'carries styles no single place in your CSS shows. Every use is affected, ' +
-                    'including sz props that spell it correctly. Rename it; if a multi-property ' +
-                    'class is the point, declare it under a name nothing else claims.',
-            );
+            console.warn(classNameAuthorConflictMessage(conflict));
         }
     }
 
@@ -2323,35 +2312,12 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
     writeThemeDts({ outputPath, theme: merged, sourceFiles });
 
-    // Smart Warning: Check if TypeScript knows about the generated theme file
+    // TypeScript types the theme only when a config it reads includes the file.
     if (!_hasWarnedTsConfig) {
         _hasWarnedTsConfig = true;
-        try {
-            const checkFile = (cfgPath: string): boolean => {
-                let content: string;
-                try {
-                    content = fs.readFileSync(cfgPath, 'utf-8');
-                } catch (err) {
-                    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
-                        return false;
-                    }
-                    throw err;
-                }
-                if (!content.includes('.csszyx')) {
-                    console.warn(
-                        '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
-                    );
-                }
-                return true;
-            };
-
-            // Try standard Next.js / tsc config first
-            if (!checkFile(path.join(rootDir, 'tsconfig.json'))) {
-                // Fallback to Vite/Vue app config
-                checkFile(path.join(rootDir, 'tsconfig.app.json'));
-            }
-        } catch {
-            // Ignore file read errors
+        const tsconfig = themeTypesTsconfigGap(rootDir);
+        if (tsconfig !== null) {
+            console.warn(diagnosticMessage('theme-scan-without-typescript', { tsconfig }));
         }
     }
     return merged;
@@ -2913,22 +2879,19 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
     const config = options.production?.mangleGlobalVars;
     const errors = validateGlobalVarMangleConfig(config);
     if (errors.length > 0) {
-        throw new Error(
-            `[csszyx] Invalid production.mangleGlobalVars config:\n${errors.join('\n')}`,
-        );
+        throw diagnosticError('mangle-global-vars-options-invalid', { form: 'schema', errors });
     }
     if (config?.enabled === true) {
+        // Aliasing a property csszyx was not told about would rename
+        // references it cannot see.
         if (!config.tokens || config.tokens.length === 0) {
-            throw new Error(
-                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens. Aliasing ' +
-                    'a property csszyx was not told about would rename references it cannot see.',
-            );
+            throw diagnosticError('mangle-global-vars-options-invalid', {
+                form: 'tokens-required',
+            });
         }
+        // Choosing tokens by prefix needs a CSS pre-scan that does not exist yet.
         if (config.autoPrefix !== undefined && config.autoPrefix !== '') {
-            throw new Error(
-                '[csszyx] production.mangleGlobalVars.autoPrefix is not available: choosing tokens ' +
-                    'by prefix needs a CSS pre-scan that does not exist yet. List the tokens instead.',
-            );
+            throw diagnosticError('mangle-global-vars-options-invalid', { form: 'auto-prefix' });
         }
     }
 }
@@ -2943,9 +2906,10 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
  * @returns The error to throw.
  */
 function unreadStylesheetsError(): Error {
-    return new Error(
-        "[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.",
-    );
+    return diagnosticError('internal-error', {
+        where: 'style model',
+        detail: "a lane asked for the Tailwind prefix before it read the project's stylesheets",
+    });
 }
 
 /**
@@ -2956,6 +2920,23 @@ function unreadStylesheetsError(): Error {
  */
 function describePrefix(prefix: string | null): string {
     return prefix === null ? 'no prefix' : `\`${prefix}\``;
+}
+
+/**
+ * How a prefix changed, by the args a prefix change's forms take: set where
+ * there was none, removed, or changed from one to another.
+ *
+ * @param before - The prefix the modules were compiled with, or null.
+ * @param after - The prefix the stylesheets set now, or null; not `before`.
+ * @returns The change and the prefixes it names.
+ */
+function prefixChange(
+    before: string | null,
+    after: string | null,
+): { change: 'added' | 'removed' | 'changed'; before?: string; after?: string } {
+    if (before === null) return { change: 'added', after: after as string };
+    if (after === null) return { change: 'removed', before };
+    return { change: 'changed', before, after };
 }
 
 /**
@@ -3175,7 +3156,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let styleModelStamps = new Map<string, string>();
     // Set when a watch rebuild finds the prefix changed under modules it
     // keeps; reported on every rebuild until the prefix is back.
-    let styleModelRebuildError: string | null = null;
+    let styleModelRebuildError: CsszyxError | null = null;
     // Ownership evidence gathered while CSS modules were rewritten, reported
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
@@ -3233,9 +3214,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     );
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
-        console.warn(
-            '[csszyx] Transform cache disabled because package versions could not be resolved.',
-        );
+        console.warn(diagnosticMessage('transform-cache-disabled', {}));
     }
     // Source locations opted into compilation by path (relaxes the /packages/
     // hard-ignore + adds prescan roots). Resolved to absolute realpath'd dirs
@@ -3468,7 +3447,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Ungated, like the prefix line: a reload that drops the
             // page's state with no explanation would be its own surprise.
             console.warn(
-                `[csszyx] ${path.basename(file)} changed: read its levels again, recompiled every module and reloaded the page.`,
+                diagnosticMessage('project-reload', { form: 'config' }, projectRelative(file)),
             );
             // Said at start only, so said again when the edit moved it.
             if (mergeRemovalLevels() !== removalLevels) reportMergeRemovals(false);
@@ -3526,28 +3505,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             _hasWarnedNativeFallback = true;
             if (parserMode === 'wasm') {
                 console.warn(
-                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                        'platform, so the default `rust` parser fell back to its wasm build. ' +
-                        'Same engine, same output; only parse speed differs. To use the native ' +
-                        'engine, install the matching @csszyx/core-<platform> package (or do ' +
-                        'not omit optional dependencies). Set `build.parser` explicitly to ' +
-                        'silence this.',
+                    diagnosticMessage('native-engine-unavailable', { form: 'wasm-fallback' }),
                 );
             }
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
-            let detail: string = parserMode;
-            if (parserDegraded) {
-                detail = 'wasm (degraded from default `rust`: same engine, wasm build)';
-            } else if (parserMode === 'rust') {
-                detail = 'rust (native engine)';
-            } else if (parserMode === 'wasm') {
-                detail = 'wasm (wasm build of the native engine)';
-            }
+            let form: 'native' | 'wasm' | 'degraded' = 'wasm';
+            if (parserDegraded) form = 'degraded';
+            else if (parserMode === 'rust') form = 'native';
             // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
             // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
-            console.warn(`[csszyx] active parser: ${detail}`);
+            console.warn(diagnosticMessage('active-parser', { form }));
         }
     }
     let evictedCacheRoot: string | null = null;
@@ -3588,6 +3557,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         tailwindEntryFiles: new Set<string>(),
         sawAnyCss: false,
         tailwindWarningEmitted: false,
+        recoveryStripWarned: false,
         tailwindEntryScoped: false,
         contentScopeWarningEmitted: false,
         spreadWarnings: new Set<string>(),
@@ -3787,9 +3757,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         compileSourceDirs = dirs;
         if (missing.length > 0) {
             emitWarning(
-                `[csszyx] compileSources: ${missing.length} path(s) did not resolve to a ` +
-                    `directory (relative to ${state.rootDir}): ${missing.join(', ')}. ` +
-                    'Their `sz`/`szv` will not be compiled or safelisted.',
+                diagnosticMessage('compile-sources-unresolved', {
+                    paths: missing,
+                    root: state.rootDir,
+                }),
             );
         }
     }
@@ -4023,9 +3994,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     key: finding.className,
                 });
                 if (!admitted) continue;
-                console.warn(
-                    `[csszyx] ${file}:${finding.line}: ${mergeRemovalMessage(finding)} (${finding.kind})`,
-                );
+                console.warn(mergeRemovalLine(finding));
             }
         }
         if (serving) capFlush.schedule();
@@ -4225,21 +4194,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let walkReadsHooksFrom: (file: string) => boolean = () => true;
 
     /**
-     * What a build must say when it removed a class a rule it read later
-     * selects on.
+     * What a build stops with when it removed a class a rule it read later
+     * selects on: `merge-hook-late`.
      *
-     * @returns The message, or null when every removal still holds.
+     * @returns The error, or null when every removal still holds.
      */
-    function lateHookMessage(): string | null {
+    function lateHookError(): CsszyxError | null {
         const model = styleModel;
         if (model === undefined) return null;
         for (const [file, classes] of mergeRemovedClasses) {
             const hooked = classes.find(candidate => model.mergeSignature(candidate) === null);
             if (hooked === undefined) continue;
-            return (
-                `[csszyx] \`${hooked}\` was removed from ${projectRelative(file)} before csszyx read a rule that selects on it, so the page would lose it.\n` +
-                '  help: set `build.mergeCoveredClasses: false` to keep every class, or restart a watch session.\n' +
-                '  note: csszyx reads every source for such rules before it merges; this one came later, from a module outside the project walk or an edit during a watch.'
+            return diagnosticError(
+                'merge-hook-late',
+                { className: hooked },
+                { at: projectRelative(file) },
             );
         }
         return null;
@@ -4606,8 +4575,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // itself must be visible: every class in this file is silently
                 // dead under Tailwind `source(none)`.
                 console.warn(
-                    `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
-                        `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
+                    diagnosticMessage('engine-call-failed', {
+                        file: projectRelative(file.filePath),
+                        detail: err instanceof Error ? err.message : String(err),
+                    }),
                 );
             }
         }
@@ -4719,11 +4690,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             _warnedSafelistWriteFailures.add(safelistPath);
             const reason = error instanceof Error ? error.message : String(error);
+            // Tailwind scans that file for the classes csszyx found.
             console.warn(
-                `[csszyx] could not write the generated safelist to ${safelistPath}: ${reason}. ` +
-                    'Tailwind scans that file for the classes csszyx found, so the CSS it ' +
-                    'generates will be missing them. Check that the directory exists and is ' +
-                    'writable.',
+                diagnosticMessage('safelist-unwritable', { reason }, projectRelative(safelistPath)),
             );
         }
     }
@@ -4769,6 +4738,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Say that the prescan dropped a whole file, at the level the project's
+     * policy gives the engine id it read: the file's classes never reach the
+     * safelist, so under Tailwind `source(none)` none of them produces CSS.
+     *
+     * @param code - What dropped it: its size, or a syntax error.
+     * @param filePath - The file the prescan skipped.
+     */
+    function reportPrescanSkip(code: 'ast-budget' | 'parse-error', filePath: string): void {
+        const file = projectRelative(filePath);
+        const level = diagnosticPolicy.levelOf({ rule: code, file });
+        const channel = channelOfLevel(
+            level,
+            quiet,
+            shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+        );
+        if (channel === 'held') state.suppressedAdvisories += 1;
+        if (channel !== 'list') return;
+        console.warn(diagnosticMessage(code, { form: 'prescan' }, file));
+    }
+
+    /**
      * Process one compiler result produced by the prescan batch.
      *
      * @param filePath Source file path.
@@ -4795,16 +4785,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             prescanResultHandoff.set(normalizeSourceFilename(filePath), { inputSha256, result });
         }
         if (budgetExceeded) {
-            warnPrescanBudgetSkip(filePath);
+            reportPrescanSkip('ast-budget', filePath);
             return;
         }
         const parseFailed = codes.has('parse-error');
         if (result.classes.size === 0 && result.rawClassNames.size === 0 && parseFailed) {
-            console.warn(
-                `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
-                    'none of its classes reached the safelist. Fix the syntax error ' +
-                    '(or check the file extension matches its contents).',
-            );
+            reportPrescanSkip('parse-error', filePath);
             return;
         }
         if (!result.transformed && result.classes.size === 0) {
@@ -5583,7 +5569,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             .filter(entry => !fs.existsSync(entry.absolute))
             .map(entry => entry.file);
         if (missing.length > 0) {
-            throw new Error(missingTailwindStylesheetMessage(missing, state.rootDir));
+            throw missingTailwindStylesheetError(missing, state.rootDir);
         }
         // A named list is the whole answer. The walk also meets fixtures and
         // old copies, which is exactly why an author names the real ones.
@@ -5601,7 +5587,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const problem = styleModelError(opened, state.rootDir);
         // Thrown before the model is kept: a build started again after this
         // error has to read the stylesheets again, not lower with this model.
-        if (problem !== null) throw new Error(problem);
+        if (problem !== null) throw problem;
         // What the sources select on is read against the new design system:
         // a variant's rule can change with a stylesheet edit.
         const withSources = opened.withSourceHooks(sourceHooks.hooksFor(opened));
@@ -5699,7 +5685,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (activeFramework === 'webpack') return;
         const changed = changedStyleModelFiles();
         if (changed.length > 0) await followStyleModelRebuild(styleModel, changed);
-        if (styleModelRebuildError !== null) throw new Error(styleModelRebuildError);
+        if (styleModelRebuildError !== null) throw styleModelRebuildError;
     }
 
     /**
@@ -5733,8 +5719,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         // A dev server sends every module through again instead; see
         // `followSourceHooks`.
-        const late = serving ? null : lateHookMessage();
-        if (late !== null) throw new Error(late);
+        const late = serving ? null : lateHookError();
+        if (late !== null) throw late;
         settleUnservedClasses(scanned);
         mergeTableSettled = true;
         // The same module the chunk embeds, as a file: jest has no bundler to
@@ -5761,13 +5747,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // class" and places each name wrong without a word.
         const model = styleModel;
         if (model === undefined) throw unreadStylesheetsError();
-        // Said before the early return below: a project whose Tailwind renames
-        // or forces every utility gets classes that style nothing, whether or
-        // not it authored any className of its own.
-        if (model.facts !== null) {
-            const unsupported = unsupportedStylesheetFactsMessage(model.facts);
-            if (unsupported !== null) emitWarning(unsupported);
-        }
         // Settled from scratch every time: a rebuild or a stylesheet edit that
         // leaves no design system must not keep serving the last good answer.
         mergeSignatureTable = [{}, []];
@@ -5864,7 +5843,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const lateAuthored = sortStrings(
             [...state.authoredClasses].filter(className => !frozenAuthoredClasses.has(className)),
         );
-        throw new Error(lateMangleCensusMessage(lateOwned, lateAuthored));
+        throw lateMangleCensusError(lateOwned, lateAuthored);
     }
 
     /**
@@ -6254,8 +6233,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * What a running session says when an edit leaves the stylesheets
      * unreadable, and it keeps the prefix it had.
      *
-     * The build-time message ends with a note that nothing was written, which
-     * is not true of a session that is still serving, so that line is replaced.
+     * A disagreement's build-time note says nothing was written, which is not
+     * true of a session that is still serving, so that note is dropped; the
+     * session's own note goes above the link either way.
      *
      * @param error - What opening the model threw.
      * @param previous - The model the session keeps.
@@ -6267,8 +6247,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         previous: ProjectStyleModel,
         session: string,
     ): string {
-        const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
-        return `${message}\n  note: ${session} keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`;
+        let message = (error as Error).message;
+        if (isCsszyxError(error) && error.code === 'prefix-disagreement') {
+            message = message.replace(/^ {2}note: .*\n/m, '');
+        }
+        const note = `  note: ${session} keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`;
+        // Above the closing `docs:` line, or last when there is none.
+        return message.replace(/(\n {2}docs: [^\n]*)?$/, (docs = '') => `\n${note}${docs}`);
     }
 
     /**
@@ -6331,7 +6316,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Ungated, like the prefix line below: a reload that drops the
             // page's state with no explanation would be its own surprise.
             console.warn(
-                `[csszyx] ${projectRelative(ctx.file)} changed which sz keys cover each other: recompiled every module and reloaded the page.`,
+                diagnosticMessage(
+                    'project-reload',
+                    { form: 'merge-groups' },
+                    projectRelative(ctx.file),
+                ),
             );
             return;
         }
@@ -6339,8 +6328,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         recompileEveryModule(ctx.server);
         // Ungated, like the active-parser line: a reload that drops the page's
         // state with no explanation would be its own surprise.
+        const { change, ...prefixes } = prefixChange(before, after);
         console.warn(
-            `[csszyx] ${projectRelative(ctx.file)} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
+            diagnosticMessage(
+                'project-reload',
+                { form: change === 'changed' ? 'prefix' : `prefix-${change}`, ...prefixes },
+                projectRelative(ctx.file),
+            ),
         );
     }
 
@@ -6485,18 +6479,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // are stale, where a changed prefix leaves every class unstyled.
             if (objectRuleTable(previous) !== objectRuleTable(current)) {
                 emitWarning(
-                    `[csszyx] ${changed.map(projectRelative).join(', ')} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.\n` +
-                        '  help: stop the watch and start it again.\n' +
-                        '  note: this rebuild finished; only the objects whose keys changed cover are stale until then.',
+                    diagnosticMessage('watch-merge-groups-changed', {
+                        changed: changed.map(projectRelative),
+                    }),
                 );
             }
             return;
         }
         styleModel = previous;
-        styleModelRebuildError =
-            `[csszyx] ${changed.map(projectRelative).join(', ')} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}, but this watch session compiled its modules under the old one, so their classes would style nothing.\n` +
-            '  help: stop the watch and start it again.\n' +
-            '  note: modules keep the classes they were compiled with until the restart.';
+        const { change, ...prefixes } = prefixChange(before, after);
+        styleModelRebuildError = diagnosticError('watch-prefix-changed', {
+            form: change,
+            changed: changed.map(projectRelative),
+            ...prefixes,
+        });
     }
 
     /**
@@ -6729,7 +6725,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const [cssFile] = id.split('?');
         const legacy = findLegacySourceDirective(code, cssFile);
         if (legacy !== null) {
-            throw new Error(legacySourceMessage(cssFile, legacy.target));
+            throw legacySourceError(projectRelative(cssFile), legacy.target);
         }
         if (!cssImportsTailwind(code)) return null;
         state.sawTailwindEntry = true;
@@ -6868,7 +6864,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // A template has no csszyx runtime: a value the engine cannot
             // resolve at build time is an error, and the build stops on it.
             const adapterOptions = {
-                filename: id,
+                // Every line names the file as the project reads it.
+                filename: diagnosticPath(id, state.rootDir),
                 parser: activeParser().parser,
                 classPrefix: createCompilerOptions().classPrefix,
             };
@@ -6878,8 +6875,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             reportTemplateSzDiagnostics(
                 {
                     warn,
-                    error: message => {
-                        throw new Error(message);
+                    error: error => {
+                        throw error;
                     },
                 },
                 result.diagnostics,
@@ -7526,8 +7523,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // production build said nothing.
                     emitWarning(
                         skippedSzFilesMessage(
-                            sortStrings(state.skippedSzFiles),
-                            sortStrings(state.skippedSzvExportFiles),
+                            sortStrings(state.skippedSzFiles).map(projectRelative),
+                            sortStrings(state.skippedSzvExportFiles).map(projectRelative),
                         ),
                         { devOnly: state.skippedSzvExportFiles.size === 0 },
                     );
@@ -7537,9 +7534,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // it so the (otherwise silent) truncation is visible.
                 if (state.classesCapped) {
                     emitWarning(
-                        `[csszyx] safelist exceeded ${MAX_SAFELIST_CLASSES} classes; ` +
-                            'additional classes were dropped. This usually means an ' +
-                            'unbounded set of arbitrary values reached an sz prop.',
+                        diagnosticMessage('safelist-capped', { max: MAX_SAFELIST_CLASSES }),
                     );
                 }
                 // Surface unresolvable-spread warnings to the build log in every
@@ -7683,7 +7678,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                     if (styleModelRebuildError !== null) {
                         compilation.errors.push(
-                            new compiler.webpack.WebpackError(styleModelRebuildError),
+                            new compiler.webpack.WebpackError(styleModelRebuildError.message),
                         );
                     }
                 });
@@ -7930,12 +7925,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     mangleChecksum: state.checksum,
                                 },
                             );
-                            if (strippedDevOnlyPaths.length > 0) {
+                            // Vite runs this once per HTML entry, and the tokens
+                            // are the build's: said once, not once per page.
+                            if (strippedDevOnlyPaths.length > 0 && !state.recoveryStripWarned) {
+                                state.recoveryStripWarned = true;
                                 console.warn(
-                                    `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
-                                        'szRecover="dev-only" token(s) from the production manifest. ' +
-                                        'Recovery for these elements is disabled in production by design. ' +
-                                        `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                                    diagnosticMessage('csr-recovery-dev-only', {
+                                        form: 'stripped',
+                                        count: strippedDevOnlyPaths.length,
+                                        sites: strippedDevOnlyPaths.map(projectRelative),
+                                    }),
                                 );
                             }
                             result = injectRecoveryManifest(result, manifest);
@@ -8086,12 +8085,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         attributeSelectors: Map<string, ClassAttributeSelector>,
     ): void {
         if (!shouldMangle) return;
-        const message = mangleHybridHazardMessage(
+        const records = mangleHybridHazardMessage(
             collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses, [
                 ...attributeSelectors.values(),
             ]),
         );
-        if (message) console.warn(message);
+        for (const record of records) console.warn(record);
     }
 
     /**
@@ -8566,10 +8565,7 @@ export const rollupPlugin = (options: PartialCsszyxConfig = {}): InputPluginOpti
  */
 export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin => {
     if (options.production?.mangle === true) {
-        console.warn(
-            '[csszyx] production.mangle is not supported by the esbuild adapter; ' +
-                'class mangling is disabled so emitted JS and CSS keep matching names.',
-        );
+        console.warn(diagnosticMessage('esbuild-mangle-unsupported', {}));
     }
     const safeOptions: PartialCsszyxConfig = {
         ...options,

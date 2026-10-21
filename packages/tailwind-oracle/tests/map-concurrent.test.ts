@@ -38,7 +38,16 @@ describe('mapConcurrent', () => {
     it.each([0, -1, Number.NaN, 1.5])('refuses a concurrency of %s', async concurrency => {
         await expect(
             mapConcurrent([1], concurrency, item => Promise.resolve(item)),
-        ).rejects.toThrow(RangeError);
+        ).rejects.toMatchObject({
+            code: 'internal-error',
+            args: {
+                where: 'mapConcurrent',
+                detail: `concurrency must be a positive integer, got ${concurrency}`,
+            },
+            message: expect.stringMatching(
+                /^\[csszyx\] internal-error:\n {2}An internal check failed in `mapConcurrent`, so csszyx stops\.\n/,
+            ),
+        });
     });
 
     it('rejects with the first failure', async () => {

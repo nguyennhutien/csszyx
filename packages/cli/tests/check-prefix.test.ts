@@ -103,8 +103,11 @@ describe('csszyx check and the Tailwind prefix', () => {
 
         const report = await reportFor(cwd);
 
-        expect(report).toContain('admin/admin.css');
-        expect(report).toContain('cannot be checked against all of them');
+        expect(report).toContain(
+            '\u2716 The Tailwind stylesheets of this project set different prefixes (`admin/admin.css` with `prefix(ad)`, `legacy/old.css` with none, `src/app.css` with `prefix(tw)`), so no class csszyx emits is served by all of them.\n' +
+                '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line.\n' +
+                '  note: the dead-class check did not run.',
+        );
         expect(report).not.toContain('both');
     }, 60_000);
 
@@ -117,8 +120,9 @@ describe('csszyx check and the Tailwind prefix', () => {
 
         const report = await reportFor(cwd, { ignoreRule: ['prefix-disagreement'] });
 
-        expect(report).toContain('Dead-class check skipped');
-        expect(report).toContain('--ignore-rule prefix-disagreement');
+        expect(report).toContain(
+            'Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--ignore-rule prefix-disagreement` left that finding out.',
+        );
         expect(report).not.toContain('✖');
         expect(process.exitCode).not.toBe(1);
     }, 60_000);

@@ -617,12 +617,22 @@ export const SIZE_BUDGETS = [
     // 2026-10-21, under the ~300 headroom of each. `excludedModules` reads the
     // `//#region` markers of the files each entry loads, so the drift fails
     // at any size.
+    //
+    // Raised 2026-10-21 from 25,950 / 29,000, measured 26,936 / 29,974
+    // (+1,284 / +1,296 against 25,652 / 28,678): the errors these entries
+    // throw now carry the registry's words in full — `engine-version-skew`,
+    // `internal-error`, `wasm-engine-unavailable`, and on `./internal`
+    // `template-sz-invalid`, `template-runtime-value` and
+    // `peer-module-unresolved` — each one plain literal of
+    // `diagnostic-browser.generated.ts`, which the bundle keeps alone
+    // (`tests/engine-entry-isolation.test.ts` pins which). Kept in full on
+    // the user's call (2026-10-21) rather than cut to a compact line.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 25_950,
+        maxGzipBytes: 27_250,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -630,7 +640,7 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 29_000,
+        maxGzipBytes: 30_250,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

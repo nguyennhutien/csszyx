@@ -23,6 +23,7 @@ import { transformSource } from '@csszyx/compiler/engine';
 import { CsszyxError } from '@csszyx/compiler/errors';
 import { findEmittedClassName } from '@csszyx/compiler/internal';
 
+import { registryMessage } from '../utils/registry-words.js';
 import { printError, printInfo, printWarn } from '../utils/terminal-ui.js';
 
 /** Why `csszyx explain` refuses its input, by the registry's ids and args. */
@@ -31,8 +32,12 @@ export type ExplainParseFailure =
     | {
           readonly code: 'explain-input-invalid';
           readonly args:
-              | { readonly form: 'not-one-expression' }
-              | { readonly form: 'runtime-only'; readonly diagnostics?: readonly string[] };
+              | { readonly form: 'not-one-expression'; readonly input: string }
+              | {
+                    readonly form: 'runtime-only';
+                    readonly input: string;
+                    readonly diagnostics?: readonly string[];
+                };
       };
 
 /**
@@ -43,13 +48,13 @@ export type ExplainParseFailure =
  */
 export class ExplainParseError extends CsszyxError {
     /**
-     * @param message - The reason, as the command prints it.
-     * @param failure - Its registry id and args.
+     * @param failure - Its registry id and args; the message is the
+     *        registry's words for them.
      */
-    constructor(message: string, failure: ExplainParseFailure) {
-        // The registry has no words for the explain forms yet; the message
-        // stays the command's own until they are worded (ADR 0031).
-        super({ ...failure, message });
+    constructor(failure: ExplainParseFailure) {
+        // No place: the synthesized module's file and positions mean nothing
+        // to the reader.
+        super({ ...failure, message: registryMessage(failure) });
         this.name = 'ExplainParseError';
     }
 }
@@ -93,33 +98,29 @@ function emittedClassName(code: string): string | null {
 export function explainSz(input: string, engine: ExplainEngine = transformSource): SzExplanation {
     const result = engine(`${PREFIX}${input}${SUFFIX}`, FILENAME);
     if (result.issues?.some(issue => issue.code === 'parse-error')) {
-        throw new ExplainParseError('could not be parsed as a JavaScript expression', {
-            code: 'parse-error',
-            args: { form: 'expression' },
-        });
+        throw new ExplainParseError({ code: 'parse-error', args: { form: 'expression' } });
     }
     // Rendered without a place: the synthesized module's file and positions
     // mean nothing to the reader.
     const diagnostics = (result.issues ?? []).map(renderUnplacedDiagnostic);
     if (result.code.match(/ (?:className|sz)=[{"]/g)?.length !== 1) {
-        throw new ExplainParseError('the input is not one sz expression', {
+        throw new ExplainParseError({
             code: 'explain-input-invalid',
-            args: { form: 'not-one-expression' },
+            args: { form: 'not-one-expression', input },
         });
     }
     const className = emittedClassName(result.code);
     if (className === null) {
-        const reason = diagnostics.length > 0 ? `: ${diagnostics.join('\n')}` : '';
-        throw new ExplainParseError(
-            `the build emits no classes for it; it is resolved at runtime by \`_sz()\`${reason}`,
-            {
-                code: 'explain-input-invalid',
-                args: {
-                    form: 'runtime-only',
-                    ...(diagnostics.length > 0 ? { diagnostics } : {}),
-                },
+        // The diagnostics are whole messages of their own, so they stay in
+        // `args` for the command to print under this one, not in its words.
+        throw new ExplainParseError({
+            code: 'explain-input-invalid',
+            args: {
+                form: 'runtime-only',
+                input,
+                ...(diagnostics.length > 0 ? { diagnostics } : {}),
             },
-        );
+        });
     }
     const runtimeValues = [...result.code.matchAll(/"(--_sz-[\w-]+)":/g)].map(match => match[1]);
     return { className, runtimeValues, diagnostics };
@@ -134,9 +135,15 @@ export function explain(sz: string): void {
     try {
         explained = explainSz(sz);
     } catch (error) {
-        const reason = error instanceof ExplainParseError ? error.message : String(error);
-        printError(`Could not explain sz: ${reason}`);
         process.exitCode = 1;
+        if (!(error instanceof ExplainParseError)) {
+            printError(`Could not explain sz: ${String(error)}`);
+            return;
+        }
+        // The registry's words carry their own header, so no mark of ours.
+        console.log(error.message);
+        const { diagnostics = [] } = error.args as { diagnostics?: readonly string[] };
+        for (const diagnostic of diagnostics) printWarn(diagnostic);
         return;
     }
     console.log(explained.className === '' ? '(no classes)' : explained.className);

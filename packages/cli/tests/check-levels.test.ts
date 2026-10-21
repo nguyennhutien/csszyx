@@ -373,11 +373,20 @@ describe('the prose of a pass whose findings are below --fail-on', () => {
     // The sz-issue report already marked a quieter finding; every other pass
     // printed its failure cross over a run that exited 0.
     it.each([
-        ['dead-class', /\n! 1 emitted class\(es\) style nothing\./],
-        ['broken-opacity', /\n! 1 emitted class\(es\) carry an opacity modifier/],
-        ['sibling-keyword', /\n! 1 value\(s\) written on a key that does not own them\./],
-        ['theme-collision', /\n! 1 theme token\(s\) shadow a built-in utility\./],
-        ['prefix-disagreement', /\n! The Tailwind entries in this project set different prefixes/],
+        ['dead-class', /\n! 1 emitted class\(es\) produce no CSS: fix the sz key or value/],
+        [
+            'broken-opacity',
+            /\n! 1 emitted class\(es\) carry an opacity modifier that does not apply\./,
+        ],
+        [
+            'sibling-keyword',
+            /\n! 1 value\(s\) emit a class that sets another property than their key:/,
+        ],
+        ['theme-collision', /\n! 1 theme token\(s\) share a name with a built-in utility:/],
+        [
+            'prefix-disagreement',
+            /\n! The Tailwind stylesheets of this project set different prefixes/,
+        ],
     ])('marks a %s finding set to warn, and says why the run passes', async (id, summary) => {
         const [, files] = PARITY.find(([name]) => name === id) as (typeof PARITY)[number];
         const cwd = tailwindProject({
@@ -414,11 +423,16 @@ describe('the prose of a pass whose findings are below --fail-on', () => {
 
         const { exitCode, printed } = await run(cwd, { rule: ['dead-class'] });
 
-        expect(printed).toMatch(/\n\u2716 1 emitted class\(es\) style nothing\./);
+        expect(printed).toMatch(/\n\u2716 1 emitted class\(es\) produce no CSS: fix the sz key/);
         expect(printed).not.toContain('below --fail-on');
         expect(exitCode).toBe(1);
     });
 });
+
+/** The lines that close every `config-invalid` block, after its problems. */
+const CONFIG_INVALID_TAIL =
+    '  help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.\n' +
+    '  docs: https://csszyx.com/e/config-invalid\n';
 
 describe('a config check cannot trust', () => {
     it('fails the run on an id it does not know, naming the one it most likely means', async () => {
@@ -431,7 +445,9 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('did you mean `dead-class`?');
+        expect(printed).toContain(
+            '    help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
+        );
         expect(exitCode).toBe(1);
     });
 
@@ -445,7 +461,9 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('  - (error) diagnostics.rules: `dead-clas` is not a rule id');
+        expect(printed).toContain(
+            '  - (error) diagnostics.rules: No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.',
+        );
         const lines = printed.trimEnd().split('\n');
         expect(lines.at(-1)).toContain(
             '\u2716 1 config error(s) in csszyx.config.mjs, which fail the run.',
@@ -464,10 +482,12 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('did you mean `diagnostics`?');
-        expect(printed).toContain('[csszyx] config-invalid: csszyx.config.mjs');
         expect(printed).toContain(
-            'This file has 1 problem(s), so it is not applied and the `recommended` levels apply.',
+            '\u26a0 [csszyx] config-invalid: csszyx.config.mjs\n' +
+                '  This file has 1 problem(s), so it is not applied and the `recommended` levels apply.\n' +
+                '  - (error) default export: `diagnostic` is not a field csszyx reads, so nothing under it applies.\n' +
+                '    help: rename it to `diagnostics`.\n' +
+                CONFIG_INVALID_TAIL,
         );
         expect(printed).not.toContain('the rest of the file applies');
         expect(exitCode).toBe(1);
@@ -516,7 +536,9 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('`development` is not read from this file');
+        expect(printed).toContain(
+            '  - (warning) development: `development` is a plugin option, and this file does not set plugin options, so it is ignored.',
+        );
         expect(exitCode).toBeUndefined();
     });
 
@@ -545,19 +567,23 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('could not be loaded');
-        expect(printed).toContain('`csszyx init`');
+        expect(printed).toContain(
+            '  - (warning) This is the file `csszyx init` 0.17 and earlier wrote, which does not load, so it is ignored.',
+        );
         expect(exitCode).toBeUndefined();
     });
 
-    it('refuses a --fail-on level it does not know, saying nothing was scanned', async () => {
+    it('refuses a --fail-on level it does not know, and scans nothing', async () => {
         const cwd = tailwindProject({ 'src/app.css': CSS, 'src/A.tsx': PRECEDENCE });
 
         const { exitCode, printed } = await run(cwd, { failOn: 'fatal' as 'error' });
 
         expect(printed).toContain(
-            '--fail-on "fatal" is not a level: use info, warn or error. Nothing was scanned.',
+            '\u2716 [csszyx] cli-option-invalid:\n' +
+                '  `--fail-on fatal` is not a level this command takes, so the command did not run.\n' +
+                '  help: pass `--fail-on info`, `--fail-on warn` or `--fail-on error`, or leave it out for `error`.',
         );
+        expect(printed).not.toContain('Found 1 files');
         expect(exitCode).toBe(1);
     });
 
@@ -567,7 +593,7 @@ describe('a config check cannot trust', () => {
         const { exitCode, printed } = await run(cwd, { failOn: 'off' });
 
         expect(printed).toContain(
-            '--fail-on "off" cannot be a threshold: use info, warn or error. Nothing was scanned.',
+            '  `--fail-on off` is not a level this command takes, so the command did not run.',
         );
         expect(exitCode).toBe(1);
     });
@@ -581,10 +607,12 @@ describe('a config check cannot trust', () => {
 
         const { exitCode, printed } = await run(cwd);
 
-        expect(printed).toContain('has no default export');
-        expect(printed).toContain('[csszyx] config-invalid: csszyx.config.mjs');
         expect(printed).toContain(
-            'This file has 1 problem(s), so it is not applied and the `recommended` levels apply.',
+            '\u26a0 [csszyx] config-invalid: csszyx.config.mjs\n' +
+                '  This file has 1 problem(s), so it is not applied and the `recommended` levels apply.\n' +
+                '  - (error) This file has no default export, so nothing in it applies.\n' +
+                '    help: write `export default defineConfig({ … })`, importing `defineConfig` from `csszyx`.\n' +
+                CONFIG_INVALID_TAIL,
         );
         expect(exitCode).toBe(1);
     });

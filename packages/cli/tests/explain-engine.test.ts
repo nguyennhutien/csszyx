@@ -126,17 +126,20 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
     ])('%s is left to the runtime, as the build leaves it', (sz, reason) => {
         expect(() => buildClassName(engine, sz)).toThrow(/left .* to the runtime/);
         expect(() => explainSz(sz, engine)).toThrow(ExplainParseError);
-        expect(() => explainSz(sz, engine)).toThrow(/resolved at runtime by `_sz\(\)`/);
-        expect(() => explainSz(sz, engine)).toThrow(reason);
+        expect(() => explainSz(sz, engine)).toThrow(
+            `The build emits no classes for \`${sz}\`, because \`_sz()\` resolves it at runtime.`,
+        );
         expect(() => explainSz(sz, engine)).not.toThrow(/\d:\d/);
         expect(thrown(() => explainSz(sz, engine))).toMatchObject({
             code: 'explain-input-invalid',
-            args: { form: 'runtime-only', diagnostics: [expect.stringMatching(reason)] },
+            args: { form: 'runtime-only', input: sz, diagnostics: [expect.stringMatching(reason)] },
         });
     });
 
     it.each(['{ p:', '{{{{', 'not an object', '{ p: 4 } }'])('%s is a syntax error', sz => {
-        expect(() => explainSz(sz, engine)).toThrow(/could not be parsed/);
+        expect(() => explainSz(sz, engine)).toThrow(
+            'This `sz` value could not be parsed as a JavaScript expression.',
+        );
         const error = thrown(() => explainSz(sz, engine));
         expect(isCsszyxError(error)).toBe(true);
         expect(error).toMatchObject({ code: 'parse-error', args: { form: 'expression' } });
@@ -152,11 +155,11 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
 
     it('refuses input that closes the sz expression and opens another element', () => {
         expect(() => explainSz('{ p: 4 }} /><b sz={{ m: 2 }', engine)).toThrow(
-            /not one sz expression/,
+            '`{ p: 4 }} /><b sz={{ m: 2 }` is not one sz expression, so `csszyx explain` has nothing to resolve.',
         );
         expect(thrown(() => explainSz('{ p: 4 }} /><b sz={{ m: 2 }', engine))).toMatchObject({
             code: 'explain-input-invalid',
-            args: { form: 'not-one-expression' },
+            args: { form: 'not-one-expression', input: '{ p: 4 }} /><b sz={{ m: 2 }' },
         });
     });
 });
@@ -170,11 +173,12 @@ describe('explainSz on a runtime fallback the engine gives no reason for', () =>
             issues: undefined,
         });
         expect(() => explainSz('x', silent)).toThrow(
-            /^the build emits no classes for it; it is resolved at runtime by `_sz\(\)`$/,
+            'The build emits no classes for `x`, because `_sz()` resolves it at runtime.',
         );
         // No diagnostics, so no arg for them: absent, never empty.
         expect((thrown(() => explainSz('x', silent)) as { args: unknown }).args).toEqual({
             form: 'runtime-only',
+            input: 'x',
         });
     });
 });

@@ -109,11 +109,22 @@ describe('transformIndexHtml recovery injection', () => {
         );
         const html = '<html><head></head><body></body></html>';
         const result = (await h.invoke('transformIndexHtml', html)) as string;
+        // A second HTML entry of the same build: the tokens are the build's,
+        // so the line is said once, not once per page.
+        await h.invoke('transformIndexHtml', html);
 
         expect(result).not.toContain('__SZ_RECOVERY_MANIFEST__');
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            'Stripped 1 szRecover="dev-only" token',
-        );
+        expect(
+            warn.mock.calls
+                .map(call => String(call[0]))
+                .filter(line => line.startsWith('[csszyx] csr-recovery-dev-only:')),
+        ).toEqual([
+            '[csszyx] csr-recovery-dev-only:\n' +
+                '  The production manifest leaves out 1 `szRecover="dev-only"` token(s), so recovery for those elements is off in production.\n' +
+                '  help: use `szRecover="csr"` on any of them whose recovery must run in production.\n' +
+                '  note: this is expected in a production build; the tokens are at src/DevOnly.tsx:1:21.\n' +
+                '  docs: https://csszyx.com/e/csr-recovery-dev-only',
+        ]);
     });
 });
 

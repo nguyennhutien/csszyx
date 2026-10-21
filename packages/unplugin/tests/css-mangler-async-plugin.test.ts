@@ -83,12 +83,15 @@ describe('debug and selector-error paths', () => {
         expect(pluginResult.css).toContain('.a]');
     });
 
-    it('recovers from the same selector in silence when debug is off', async () => {
+    it('says so without debug too, and recovers', async () => {
         const { mangleCSSSync } = await import('../src/css-mangler');
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const result = mangleCSSSync('.a] { color: red } .p-4 { padding: 1rem }', map);
 
-        expect(warn).not.toHaveBeenCalled();
+        // The rule keeps names the mangled markup no longer carries, so it
+        // silently stops matching: a line a reader needs, `debug` or not.
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]?.[0]).toMatch(/^\[csszyx\] mangle-selector-unparsable:\n/);
         expect(result.css).toContain('.a]');
         // The rule csszyx can read is still mangled, so one unreadable
         // selector costs that rule and nothing else.

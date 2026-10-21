@@ -4,6 +4,7 @@
  * time: a template has no csszyx runtime for the rest. Every other value is an
  * error placed in the `.vue` file, and its attribute is left as written.
  */
+import type { CsszyxError } from '@csszyx/compiler/errors';
 import { describe, expect, it, vi } from 'vitest';
 
 import { preprocess, transformTemplate, vitePlugin } from '../src/index.js';
@@ -19,10 +20,20 @@ function sfc(line: string): string {
     return `<script setup>const size = 4;</script>\n<template>${line}</template>\n`;
 }
 
-const RUNTIME =
-    'this sz value is only known at runtime, and a template has no csszyx runtime to resolve it\n' +
-    'help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime\n' +
-    'note: the attribute is left as written; no class is generated for it';
+/**
+ * The error for a value only the runtime knows, as the registry words it.
+ * @param where - Where it is: `file:line:column`.
+ * @returns The message.
+ */
+function runtime(where: string): string {
+    return (
+        `[csszyx] template-runtime-value: ${where}\n` +
+        '  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.\n' +
+        '  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.\n' +
+        '  note: the attribute is left as written.\n' +
+        '  docs: https://csszyx.com/e/template-runtime-value'
+    );
+}
 
 describe.each(PARSERS)('the %s artifact', parser => {
     const run = (source: string) => preprocess(source, { filename: 'App.vue', parser });
@@ -93,7 +104,10 @@ describe.each(PARSERS)('the %s artifact', parser => {
         expect(result.diagnostics).toEqual([
             {
                 severity: 'error',
-                message: `[csszyx] App.vue:2:21: ${RUNTIME}`,
+                message: runtime('App.vue:2:21'),
+                code: 'template-runtime-value',
+                args: {},
+                file: 'App.vue',
                 line: 2,
                 column: 21,
             },
@@ -130,8 +144,14 @@ describe.each(PARSERS)('the %s artifact', parser => {
             {
                 severity: 'error',
                 message:
-                    '[csszyx] App.vue:2:47: this sz value could not be parsed as a JavaScript expression\n' +
-                    'note: the attribute is left as written; no class is generated for it',
+                    '[csszyx] parse-error: App.vue:2:47\n' +
+                    '  This `sz` value could not be parsed as a JavaScript expression.\n' +
+                    '  help: write the value as an object literal, such as `{ p: 4 }`.\n' +
+                    '  note: the attribute is left as written, and no class is generated for it.\n' +
+                    '  docs: https://csszyx.com/e/parse-error',
+                code: 'parse-error',
+                args: { form: 'expression' },
+                file: 'App.vue',
                 line: 2,
                 column: 47,
             },
@@ -162,7 +182,7 @@ describe.each(PARSERS)('the %s artifact', parser => {
 describe('transformTemplate', () => {
     it('places a diagnostic in the template string when no file is named', () => {
         const result = transformTemplate('<div :sz="{ p: size }" />');
-        expect(result.diagnostics[0].message.startsWith('[csszyx] 1:11: this sz value')).toBe(true);
+        expect(result.diagnostics[0].message).toBe(runtime('1:11'));
     });
 
     it('leaves a plain sz string that is not an object or an array alone', () => {
@@ -178,7 +198,7 @@ describe('transformTemplate', () => {
 });
 
 describe('the Vite plugin', () => {
-    type Context = { error: (message: string) => never; warn: (message: string) => void };
+    type Context = { error: (error: CsszyxError) => never; warn: (message: string) => void };
     type Transform = (this: Context, code: string, id: string) => { code: string } | null;
 
     /**
@@ -188,8 +208,8 @@ describe('the Vite plugin', () => {
      */
     function transform(code: string) {
         const context = {
-            error: vi.fn((message: string): never => {
-                throw new Error(message);
+            error: vi.fn((error: CsszyxError): never => {
+                throw error;
             }),
             warn: vi.fn(),
         };
@@ -206,7 +226,18 @@ describe('the Vite plugin', () => {
     it('fails the build on an error, naming the file and position', () => {
         const { result, context } = transform(sfc('<div :sz="{ p: size }" />'));
         expect(result).toBeInstanceOf(Error);
-        expect(context.error).toHaveBeenCalledWith(`[csszyx] /src/App.vue:2:21: ${RUNTIME}`);
+        expect(context.error).toHaveBeenCalledWith(
+            expect.objectContaining({
+                code: 'template-sz-invalid',
+                args: { count: 1 },
+                message:
+                    '[csszyx] template-sz-invalid: /src/App.vue\n' +
+                    '  This file has 1 `sz` error(s), so the build stops.\n' +
+                    '  help: fix each error listed below.\n' +
+                    '  docs: https://csszyx.com/e/template-sz-invalid\n\n' +
+                    runtime('/src/App.vue:2:21'),
+            }),
+        );
     });
 
     it('passes a warning to the bundler and keeps the output', () => {

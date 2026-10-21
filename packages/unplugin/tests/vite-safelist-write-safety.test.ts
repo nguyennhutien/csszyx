@@ -141,9 +141,10 @@ describe('when the safelist cannot be written', () => {
             });
 
             const said = warn.mock.calls.map(call => String(call[0])).join('\n');
-            expect(said).toContain('could not write the generated safelist');
-            expect(said, 'the message must name the path').toContain(root);
-            expect(said, 'and what it costs the reader').toContain('missing them');
+            expect(root).not.toBe('');
+            expect(said).toMatch(
+                /^\[csszyx\] safelist-unwritable: \.csszyx\/[^\n]+\n {2}The generated safelist could not be written, so the CSS Tailwind generates is missing the classes csszyx found\.\n {2}help: check that the directory exists and is writable\.\n {2}note: the file system reported: .+\.\n {2}docs: https:\/\/csszyx\.com\/e\/safelist-unwritable$/m,
+            );
         } finally {
             warn.mockRestore();
         }
@@ -164,7 +165,7 @@ describe('when the safelist cannot be written', () => {
             }, 2);
 
             const said = warn.mock.calls.filter(call =>
-                String(call[0]).includes('could not write the generated safelist'),
+                String(call[0]).startsWith('[csszyx] safelist-unwritable:'),
             );
             expect(said).toHaveLength(1);
         } finally {

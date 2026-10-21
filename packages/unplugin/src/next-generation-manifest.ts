@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
+import { diagnosticError } from './diagnostic-message.js';
 import { type AtomicWriteOptions, atomicWriteFileSync } from './next-safelist-state.js';
 
 /** Mode represented by a Next Turbopack generation manifest. */
@@ -152,7 +152,10 @@ function normalizeManifest(manifest: NextGenerationManifest): NextGenerationMani
         typeof manifest.completed !== 'boolean' ||
         typeof manifest.createdAt !== 'string'
     ) {
-        throw new Error('Invalid csszyx Next generation manifest.');
+        throw diagnosticError('internal-error', {
+            where: 'Next generation manifest',
+            detail: 'the manifest to write does not have the schema 1 fields',
+        });
     }
 
     return {

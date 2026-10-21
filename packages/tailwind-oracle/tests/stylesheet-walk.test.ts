@@ -13,7 +13,10 @@ import fs, {
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 
+import { isCsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import packageJson from '../package.json' with { type: 'json' };
 
 import { walkProject, walkProjectStylesheets } from '../src/project-walk.js';
 
@@ -376,13 +379,21 @@ describe('an `ignore` release that no longer matches a path apart from its paren
         }));
         const fresh = await import('../src/project-walk.js');
         const root = tree({ '.gitignore': 'gen/\n', 'src/app.css': '.a {}\n' });
-        expect(() =>
-            fresh.walkProject(root, { skipDirs: new Set(), gitignore: 'skip' }, () => {}),
-        ).toThrow(/no longer matches one path apart from its parent folders/);
-        expect(() =>
-            fresh.walkProject(root, { skipDirs: new Set(), gitignore: 'skip' }, () => {}),
-        ).toThrow(
-            /\n {2}help: install ignore@7\.0\.6, the version @csszyx\/unplugin pins, and remove any override that forces another\.$/,
-        );
+        let thrown: unknown;
+        try {
+            fresh.walkProject(root, { skipDirs: new Set(), gitignore: 'skip' }, () => {});
+        } catch (error) {
+            thrown = error;
+        }
+        expect(isCsszyxError(thrown)).toBe(true);
+        expect(thrown).toMatchObject({
+            code: 'ignore-package-incompatible',
+            args: { pinned: packageJson.dependencies.ignore },
+            message:
+                '[csszyx] ignore-package-incompatible:\n' +
+                '  The installed `ignore` package lacks the internal matcher csszyx calls, so csszyx cannot read `.gitignore` and stops.\n' +
+                `  help: remove any override or resolution that forces another version of \`ignore\`, so csszyx gets \`ignore@${packageJson.dependencies.ignore}\`, the version it pins.\n` +
+                '  docs: https://csszyx.com/e/ignore-package-incompatible',
+        });
     });
 });

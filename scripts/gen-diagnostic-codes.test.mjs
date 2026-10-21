@@ -11,11 +11,13 @@ import {
     casingProblems,
     docsData,
     EDITOR_IDS,
+    NATIVE_IDS,
     PLACEHOLDER_PATTERN,
     placeholdersOf,
     publicData,
     RENDER_FIELDS,
     renderEditorTemplates,
+    renderNativeWordsModule,
     renderRegistryModule,
     renderRust,
     renderSpecModule,
@@ -802,6 +804,37 @@ test('the editor module carries the editor ids only, each as the registry words 
     assert.throws(
         () => renderEditorTemplates({ ...registry, DIAGNOSTICS: [] }),
         /editor id unknown-key is not in the registry/,
+    );
+});
+
+test('the native words module carries the ids `@csszyx/core/native` throws, as the registry words them', async () => {
+    const source = renderNativeWordsModule(registry);
+    const words = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+    for (const id of NATIVE_IDS) {
+        const { text, help, note } = registry.DIAGNOSTICS.find(entry => entry.id === id);
+        assert.deepEqual(words[generator.browserConstName(id)], { id, text, help, note });
+    }
+    assert.deepEqual(Object.keys(words), NATIVE_IDS.map(generator.browserConstName));
+    assert.throws(
+        () => renderNativeWordsModule({ ...registry, DIAGNOSTICS: [] }),
+        /native id native-engine-unavailable is not in the registry/,
+    );
+});
+
+test('the native words module refuses a template it cannot fill: one naming a computed value', () => {
+    const entry = registry.DIAGNOSTICS.find(
+        candidate => candidate.id === 'native-engine-unavailable',
+    );
+    const computed = { ...entry, note: 'see {spellingHint}.' };
+    assert.throws(
+        () =>
+            renderNativeWordsModule({
+                ...registry,
+                DIAGNOSTICS: registry.DIAGNOSTICS.map(candidate =>
+                    candidate === entry ? computed : candidate,
+                ),
+            }),
+        /native-engine-unavailable: note names \{spellingHint\}, which is not an arg/,
     );
 });
 

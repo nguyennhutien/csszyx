@@ -49,9 +49,10 @@ describe('transformMarkup parser edges', () => {
         const result = transformMarkup(source);
         expect(result.code).toBe(source);
         expect(result.diagnostics).toHaveLength(1);
-        expect(result.diagnostics[0].message).toContain(
-            'write a quoted sz object as an expression',
-        );
+        expect(result.diagnostics[0]).toMatchObject({
+            code: 'template-unparsable',
+            args: { form: 'svelte-quoted' },
+        });
     });
 
     it('leaves sz written as text at the start of the source as written', () => {

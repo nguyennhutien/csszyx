@@ -18,6 +18,8 @@ import path from 'node:path';
 
 import { CsszyxError } from '@csszyx/compiler/errors';
 
+import { diagnosticMessage } from './diagnostic-message.js';
+
 const RUNTIME = '@csszyx/runtime';
 
 /** The runtime a project resolves. */
@@ -46,11 +48,15 @@ export class RuntimeVersionSkewError extends CsszyxError {
     declare readonly code: 'runtime-version-skew';
 
     /**
-     * @param message - The full message.
-     * @param args - Both versions and where the runtime is; csszyx always passes them.
+     * @param args - Both versions and where the runtime is; the message is the
+     *        registry's words for them.
      */
-    constructor(message: string, args: Partial<RuntimeVersionSkewArgs> = {}) {
-        super({ code: 'runtime-version-skew', args, message });
+    constructor(args: RuntimeVersionSkewArgs) {
+        super({
+            code: 'runtime-version-skew',
+            args: { ...args },
+            message: diagnosticMessage('runtime-version-skew', args),
+        });
         this.name = 'RuntimeVersionSkewError';
     }
 }
@@ -113,9 +119,9 @@ export function assertRuntimeMatchesPlugin(input: AssertRuntimeMatchesPluginInpu
     if (pluginVersion === '0.0.0') return;
     const runtime = installedRuntime(root);
     if (runtime === null || runtime.version === pluginVersion) return;
-    throw new RuntimeVersionSkewError(
-        `[csszyx] runtime-version-skew: @csszyx/unplugin ${pluginVersion} found @csszyx/runtime ${runtime.version} at ${runtime.dir}\n` +
-            `help: install @csszyx/runtime@${pluginVersion}; the build and the runtime lower sz objects with rules from the same release`,
-        { pluginVersion, runtimeVersion: runtime.version, runtimeDir: runtime.dir },
-    );
+    throw new RuntimeVersionSkewError({
+        pluginVersion,
+        runtimeVersion: runtime.version,
+        runtimeDir: runtime.dir,
+    });
 }

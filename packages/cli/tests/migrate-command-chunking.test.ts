@@ -49,7 +49,10 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
                 customMapJson: (options as { customMapJson?: unknown } | undefined)?.customMapJson,
             });
             const unavailable = () =>
-                new actual.RustMigrateUnavailableError('the engine went away mid-run');
+                new actual.RustMigrateUnavailableError({
+                    form: 'not-installed',
+                    packageName: '@csszyx/core-gone-mid-run',
+                });
             if (control.unavailableAfterProbe && files.length > 0) throw unavailable();
             if (control.unavailableOnSingle && files.length === 1) throw unavailable();
             if (names.some(name => control.refuse.has(name))) {
@@ -217,7 +220,9 @@ describe('an engine that becomes unavailable after the probe let the run start',
         await migrate({ cwd });
 
         expect(readFileSync(join(cwd, 'src/A.tsx'), 'utf8')).toContain('className="p-4 btn"');
-        expect(logs.join('\n')).toContain('went away mid-run');
+        expect(logs.join('\n')).toContain(
+            '`@csszyx/core-gone-mid-run` is not installed, so migrate cannot run.',
+        );
         expect(process.exitCode).toBe(1);
     });
 
@@ -229,7 +234,9 @@ describe('an engine that becomes unavailable after the probe let the run start',
 
         await migrate({ cwd });
 
-        expect(logs.join('\n')).toContain('went away mid-run');
+        expect(logs.join('\n')).toContain(
+            '`@csszyx/core-gone-mid-run` is not installed, so migrate cannot run.',
+        );
         expect(process.exitCode).toBe(1);
     });
 });

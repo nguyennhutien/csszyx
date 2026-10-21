@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 
+import { NATIVE_ENGINE_UNAVAILABLE } from './diagnostic-words.generated.js';
 import { getNativePackageName } from './platforms.js';
 
 const require = createRequire(import.meta.url);
@@ -7,98 +8,74 @@ const require = createRequire(import.meta.url);
 let cachedBinding;
 let cachedPackageName;
 
-const CODE = 'native-engine-unavailable';
-const PREFIX = `[csszyx] ${CODE}: `;
 // The key `@csszyx/compiler/errors` brands every csszyx error under. This
 // module cannot import the compiler, which imports it, so it writes the same
 // key; the compiler's suite checks its `isCsszyxError` accepts this error.
 const BRAND = Symbol.for('csszyx.error');
-const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the same output';
-// migrate exists only on the native engine, so the note above would promise a
-// fallback that is not there and the install help would send a reader to
-// reinstall a package they already have.
-const MIGRATE_NOTE = 'note: migrate runs on the native engine only; there is no wasm lane for it';
-const UPDATE_TOGETHER =
-    'update @csszyx/core and its platform package together, to a version that carries ';
-const MIGRATE_HELP = `${UPDATE_TOGETHER}migrate`;
-const INSTALL_HELP =
-    'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
-const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
-const LINKS_HELP = `${UPDATE_TOGETHER}scanModuleLinks`;
-const GLOBAL_VAR_HELP = `${UPDATE_TOGETHER}scanGlobalVarUsages`;
-const RESULT_HELP = 'update @csszyx/core and its platform package together, to the same version';
-
-/** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
-function missingText(what, packageName) {
-    return what === undefined ? defaultMissing(packageName) : what;
-}
-
-/** @param {string | null} packageName @returns {string} What is missing, absent a more specific reason. */
-function defaultMissing(packageName) {
-    return packageName
-        ? `${packageName} is not installed`
-        : 'no prebuilt package covers this platform';
-}
-
-/** @param {string | undefined} help @param {string | null} packageName @returns {string} What to do. */
-function helpText(help, packageName) {
-    return help === undefined ? defaultHelp(packageName) : help;
-}
-
-/** @param {string | null} packageName @returns {string} What to do, absent a more specific action. */
-function defaultHelp(packageName) {
-    return packageName ? INSTALL_HELP : WASM_HELP;
-}
+const CODE = NATIVE_ENGINE_UNAVAILABLE.id;
 
 /**
- * The registry form of an error the loader builds: a missing package unless
- * the caller says what is missing, which only the loader's own sites do.
+ * The message of a {@link CsszyxNativeUnavailableError}: the registry's words
+ * (`diagnostic-words.generated.js`), laid out as the compiler lays out a
+ * thrown diagnostic: the code, the sentence, `help:`, `note:` and the link to
+ * the code's page. The compiler's suite renders every form through its
+ * renderer and checks this prints the same (`native-unavailable-words.test.ts`).
  *
- * @param {string | undefined} what @param {string | null} packageName
- * @returns {'no-platform-package' | 'not-installed' | 'missing-export'} The form.
+ * @param {{form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding', platform?: string, packageName?: string, exportName?: string}} args
+ * @returns {string} The message.
  */
-function formOf(what, packageName) {
-    if (what !== undefined) return 'missing-export';
-    return packageName ? 'not-installed' : 'no-platform-package';
+function messageOf(args) {
+    const fill = template => template.replace(/\{(\w+)\}/g, (_, name) => args[name]);
+    const { text, help, note } = NATIVE_ENGINE_UNAVAILABLE;
+    return [
+        `[csszyx] ${CODE}:`,
+        `  ${fill(text[args.form])}`,
+        `  help: ${fill(help[args.form])}`,
+        `  note: ${fill(note)}`,
+        `  docs: https://csszyx.com/e/${CODE}`,
+    ].join('\n');
 }
 
 /**
- * One line per thing the reader needs: what is missing, what to do, what
- * still holds. `detail` is the message without the fixed prefix, for a
- * caller that re-prefixes it under its own name.
+ * The host as a platform package names it: `linux-x64`, `darwin-arm64`.
  *
- * A csszyx error: `code` is the registry id `native-engine-unavailable`,
- * `args` its form, the package and the detail, and it carries the brand
- * `isCsszyxError` recognises.
+ * @returns {string} The platform and the architecture.
+ */
+function hostPlatform() {
+    return `${process.platform}-${process.arch}`;
+}
+
+/**
+ * The args of a missing engine: the platform package that is not installed,
+ * or the platform no prebuilt package covers.
+ *
+ * @param {string | null} packageName - The package the loader looked for.
+ * @returns {{form: 'not-installed', packageName: string} | {form: 'no-platform-package', platform: string}} The args.
+ */
+function missingArgs(packageName) {
+    return packageName
+        ? { form: 'not-installed', packageName }
+        : { form: 'no-platform-package', platform: hostPlatform() };
+}
+
+/**
+ * The native engine cannot run here. A csszyx error: `code` is the registry
+ * id `native-engine-unavailable`, `args` its form and what that form names,
+ * and it carries the brand `isCsszyxError` recognises.
  */
 export class CsszyxNativeUnavailableError extends Error {
-    // `help` carries an explicit `undefined` rather than nothing: every
-    // parameter after a defaulted one has to be defaulted too, or a reader has
-    // to count positions to know which of them may be omitted.
-    constructor(what, packageName = getNativePackageName(), help = undefined, note = NOTE) {
-        const detail = [
-            missingText(what, packageName),
-            `help: ${helpText(help, packageName)}`,
-            note,
-        ].join('\n');
-        super(PREFIX + detail);
+    /**
+     * @param {Parameters<typeof messageOf>[0]} [args]
+     *   What is missing; by default the host's platform package, or the
+     *   platform no prebuilt package covers.
+     */
+    constructor(args = missingArgs(getNativePackageName())) {
+        super(messageOf(args));
         this.name = 'CsszyxNativeUnavailableError';
         this[BRAND] = true;
         this.code = CODE;
-        this.args = {
-            form: formOf(what, packageName),
-            ...(packageName ? { packageName } : {}),
-            detail,
-        };
-        this.packageName = packageName;
-        this.detail = detail;
-        this.help = helpText(help, packageName);
-        // A caller that rewrites this message for its own lane still has to
-        // keep advice written for one specific failure. Without this flag the
-        // only way to tell "the generic install help" from "update both
-        // packages together" is to read the words, and the wrapper that does
-        // rewrite kept sending a reader to reinstall a package they had.
-        this.helpIsExplicit = help !== undefined;
+        this.args = args;
+        this.packageName = args.packageName ?? null;
     }
 }
 
@@ -108,7 +85,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     }
 
     if (!packageName) {
-        throw new CsszyxNativeUnavailableError(undefined, null);
+        throw new CsszyxNativeUnavailableError(missingArgs(null));
     }
 
     let loaded;
@@ -116,40 +93,23 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
         loaded = require(packageName);
     } catch (err) {
         if (isModuleNotFoundForPackage(err, packageName)) {
-            throw new CsszyxNativeUnavailableError(undefined, packageName);
+            throw new CsszyxNativeUnavailableError(missingArgs(packageName));
         }
         throw err;
     }
 
     const binding = loaded?.default ?? loaded;
     if (typeof binding?.transformBatch !== 'function') {
-        const error = new CsszyxNativeUnavailableError(
-            `${packageName} does not export transformBatch()`,
+        throw new CsszyxNativeUnavailableError({
+            form: 'missing-export',
             packageName,
-            `reinstall ${packageName} at the version of @csszyx/core, or set build.parser: "wasm"`,
-        );
-        error.args = { ...error.args, exportName: 'transformBatch' };
-        throw error;
+            exportName: 'transformBatch',
+        });
     }
 
     cachedBinding = binding;
     cachedPackageName = packageName;
     return binding;
-}
-
-/**
- * A package's name with its version, read only to word an error.
- *
- * @param {string} name - The package.
- * @param {string} manifest - Its `package.json`, as `require` resolves it.
- * @returns {string} `name version`, or the name alone when the manifest cannot be read.
- */
-function named(name, manifest) {
-    try {
-        return `${name} ${require(manifest).version}`;
-    } catch {
-        return name;
-    }
 }
 
 /**
@@ -169,16 +129,10 @@ function currentResults(results, current) {
     // first that has an issue, and the first result when none does.
     const judged = results.find(result => result.issues?.length > 0) ?? results[0];
     if (judged === undefined || current(judged)) return results;
-    // Versions when the manifests can be read, which a fixture's cannot.
-    const native = named(cachedPackageName, `${cachedPackageName}/package.json`);
-    const core = named('@csszyx/core', '../package.json');
-    const error = new CsszyxNativeUnavailableError(
-        `csszyx native package ${native} is older than ${core} and returns a result it cannot read`,
-        cachedPackageName,
-        RESULT_HELP,
-    );
-    error.args = { ...error.args, form: 'stale-binding' };
-    throw error;
+    throw new CsszyxNativeUnavailableError({
+        form: 'stale-binding',
+        packageName: cachedPackageName,
+    });
 }
 
 export function transformBatch(_files, options) {
@@ -192,8 +146,9 @@ export function transformBatch(_files, options) {
 }
 
 /**
- * The migrate entry points arrived after the first native packages shipped,
- * so a binding may load and still lack them.
+ * An entry point a platform package may predate: the binding loads, and the
+ * function the caller needs is not on it. The migrate entry points and the
+ * scans arrived after the first native packages shipped.
  *
  * What an unavailable engine means for migrate is decided by the caller that
  * knows: `@csszyx/compiler`'s migrate wrapper, which has no wasm lane to offer.
@@ -201,31 +156,14 @@ export function transformBatch(_files, options) {
  * @param {string} name - The export the caller needs.
  * @returns {Function} The binding's function.
  */
-function migrateExport(name) {
-    return laterExport(name, 'migrate', MIGRATE_HELP, MIGRATE_NOTE);
-}
-
-/**
- * An entry point a platform package may predate: the binding loads, and the
- * function the caller needs is not on it.
- *
- * @param {string} name - The export the caller needs.
- * @param {string} feature - What the export belongs to, as the reader knows it.
- * @param {string} help - What to do.
- * @param {string} note - What still holds.
- * @returns {Function} The binding's function.
- */
-function laterExport(name, feature, help, note) {
+function laterExport(name) {
     const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
-        const error = new CsszyxNativeUnavailableError(
-            `csszyx native package ${cachedPackageName} predates ${feature} and does not export ${name}()`,
-            cachedPackageName,
-            help,
-            note,
-        );
-        error.args = { ...error.args, exportName: name };
-        throw error;
+        throw new CsszyxNativeUnavailableError({
+            form: 'missing-export',
+            packageName: cachedPackageName,
+            exportName: name,
+        });
     }
     return binding[name];
 }
@@ -239,7 +177,7 @@ function laterExport(name, feature, help, note) {
  * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>, registryEntriesJson: string}>} One answer per module.
  */
 export function scanModuleLinks(files, query) {
-    const scan = laterExport('scanModuleLinks', 'the module-link scan', LINKS_HELP, NOTE);
+    const scan = laterExport('scanModuleLinks');
     // The 0.17 scan takes no query and answers without the registry entries.
     return currentResults(
         scan(files, query),
@@ -268,28 +206,23 @@ export function engineIdentity() {
  * @returns {Array<Array<{kind: string, name: string, location: {filePath: string, line: number, column: number}, message: string}>>} One list per module.
  */
 export function scanGlobalVarUsages(files, query) {
-    return laterExport(
-        'scanGlobalVarUsages',
-        'the global-var usage scan',
-        GLOBAL_VAR_HELP,
-        NOTE,
-    )(files, query);
+    return laterExport('scanGlobalVarUsages')(files, query);
 }
 
 export function migrateBatch(files, options) {
-    return migrateExport('migrateBatch')(files, options);
+    return laterExport('migrateBatch')(files, options);
 }
 
 export function migrateHtml(source, options) {
-    return migrateExport('migrateHtml')(source, options);
+    return laterExport('migrateHtml')(source, options);
 }
 
 export function migrateClassName(className, customMapJson) {
-    return migrateExport('migrateClassName')(className, customMapJson);
+    return laterExport('migrateClassName')(className, customMapJson);
 }
 
 export function migrateParseClass(className) {
-    return migrateExport('migrateParseClass')(className);
+    return laterExport('migrateParseClass')(className);
 }
 
 function isModuleNotFoundForPackage(err, packageName) {

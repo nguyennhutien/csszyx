@@ -104,12 +104,13 @@ describe('the native loader error', () => {
     // `@csszyx/core/native` cannot import the compiler, so it writes the
     // brand's key itself; this is the check that the two keys are one.
     it('carries the same brand as CsszyxError', () => {
-        const error = new CsszyxNativeUnavailableError('no binary', null);
+        const error = new CsszyxNativeUnavailableError({
+            form: 'no-platform-package',
+            platform: 'freebsd-x64',
+        });
         expect(isCsszyxError(error)).toBe(true);
         expect(error.code).toBe('native-engine-unavailable');
-        expect(error.message.startsWith('[csszyx] native-engine-unavailable: no binary')).toBe(
-            true,
-        );
+        expect(error.args).toEqual({ form: 'no-platform-package', platform: 'freebsd-x64' });
     });
 });
 

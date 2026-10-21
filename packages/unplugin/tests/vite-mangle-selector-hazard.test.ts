@@ -55,7 +55,7 @@ describe('selector hazard on the Vite build lane', () => {
         ]);
         await hookOf('csszyx:post', 'generateBundle')?.apply(ctx, [{}, {}]);
 
-        const hazard = warnings.find(w => w.includes('hybrid hazards'));
+        const hazard = warnings.find(w => w.includes('Mangling broke'));
         expect(hazard).toContain('[class*="m-"] → m-3');
         expect(hazard).toContain("manglePreserve: ['m-*']");
     });

@@ -70,7 +70,7 @@ describe('the plugin reading csszyx.config', () => {
 
         const said = warn.mock.calls.map(call => call.join(' ')).join('\n');
         expect(said).toContain('[csszyx] config-invalid: csszyx.config.mjs');
-        expect(said).toContain('did you mean `dead-class`?');
+        expect(said).toContain('write `dead-class` if you meant it;');
     });
 
     it('says it once per build, however many hooks read the config', async () => {
@@ -121,7 +121,7 @@ describe('the plugin reading csszyx.config', () => {
         });
         await Promise.all(compiles);
 
-        expect(warn.mock.calls.flat().join('\n')).toContain('did you mean `dead-class`?');
+        expect(warn.mock.calls.flat().join('\n')).toContain('write `dead-class` if you meant it;');
     });
 });
 

@@ -126,11 +126,14 @@ describe('a Tailwind prefix that changes during a webpack watch session', () => 
 
         expect(builds).toHaveLength(2);
         const errors = (builds[1] ?? []).join('\n');
-        expect(errors).toContain('changed the Tailwind prefix from no prefix to `tw`');
-        expect(errors).toContain('help: stop the watch and start it again');
+        expect(errors).toContain(
+            '[csszyx] watch-prefix-changed:\n' +
+                '  `src/index.css` set the Tailwind prefix `tw`, and this watch session compiled its modules without one, so their classes would style nothing.\n' +
+                '  help: restart the watch session.\n',
+        );
         // Reported by the compile hook alone, not again by the build-start hook.
         const reported = (builds[1] ?? []).filter(message =>
-            message.includes('changed the Tailwind prefix'),
+            message.includes('[csszyx] watch-prefix-changed:'),
         );
         expect(reported).toHaveLength(1);
     }, 60_000);
@@ -157,7 +160,7 @@ describe('a Tailwind prefix that changes during a webpack watch session', () => 
         const { builds, warned } = await watchThroughEdit(`${STOCK}@import "./gone.css";\n`);
 
         expect(builds).toHaveLength(2);
-        expect(builds[1]?.join('\n')).not.toContain('changed the Tailwind prefix');
+        expect(builds[1]?.join('\n')).not.toContain('watch-prefix-changed');
         expect(warned).toContain('did not compile');
         expect(warned).toContain('keeps the prefix it last read');
     }, 60_000);

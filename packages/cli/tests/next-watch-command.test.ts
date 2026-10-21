@@ -248,12 +248,16 @@ describe('csszyx next-watch command', () => {
         );
         try {
             const said = warn.mock.calls.map(call => String(call[0]));
-            expect(said.join('\n')).toContain('did you mean `dead-class`?');
+            expect(said.join('\n')).toContain(
+                '    help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
+            );
             // The line, column and key, as the Vite lane names them.
             const column = 'export const App = () => <div sz={{ '.length + 1;
             expect(
                 said.filter(line =>
-                    line.includes(`src/App.tsx:1:${column}: \`break-bogus\` (sz key \`break\`)`),
+                    line.includes(
+                        `[csszyx] dead-class: src/App.tsx:1:${column}\n  \`break-bogus\` produces no CSS`,
+                    ),
                 ),
             ).toHaveLength(1);
         } finally {
@@ -481,7 +485,9 @@ describe('csszyx next-watch command', () => {
             { watch: recordingWatch([]) },
         );
         try {
-            expect(warnings.join('\n')).toContain('could not write .csszyx/merge-registration.mjs');
+            expect(warnings[0]).toMatch(
+                /^\u26a0 \[csszyx\] could not write \.csszyx\/merge-registration\.mjs: EISDIR: .*\n {2}note: the safelist is written; until the file can be written, `szcn` under Turbopack and jest removes only exact repeats, and a Turbopack build keeps every key of an sz object rather than merging one a later key covers\.$/,
+            );
         } finally {
             await session.close();
         }
@@ -514,7 +520,15 @@ describe('csszyx next-watch command', () => {
             // The build's note says nothing was written; a watch that goes on
             // says what it goes on with instead.
             expect(warnings.join('\n')).not.toContain('nothing was written');
-            expect(warnings.join('\n')).toContain('`csszyx next watch` keeps watching');
+            expect(warnings.at(-1)).toBe(
+                '\u26a0 [csszyx] tailwind-stylesheet-broken:\n' +
+                    '  A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.\n' +
+                    '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load with the `--tailwind-stylesheet` flag.\n' +
+                    '  note: each failure, as Tailwind reported it:\n' +
+                    `    app/globals.css: ENOENT: no such file or directory, open '${join(root, 'app/gone.css')}'\n` +
+                    '  docs: https://csszyx.com/e/tailwind-stylesheet-broken\n' +
+                    '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.',
+            );
         } finally {
             await session.close();
             vi.restoreAllMocks();
@@ -591,7 +605,9 @@ describe('csszyx next-watch command', () => {
                 parserMode: 'wasm',
                 silent: true,
             }),
-        ).rejects.toThrow('No source files matched');
+        ).rejects.toThrow(
+            `No source file under \`${realpathSync(root)}\` matches \`src/**/*.tsx\`, so there is nothing to scan for classes.`,
+        );
     });
 
     it('rejects invalid parser mode before starting chokidar', async () => {
@@ -605,7 +621,13 @@ describe('csszyx next-watch command', () => {
                 parserMode: 'swc' as 'rust',
                 silent: true,
             }),
-        ).rejects.toThrow('Invalid --parser-mode');
+        ).rejects.toMatchObject({
+            code: 'cli-option-invalid',
+            args: { form: 'parser-mode', value: 'swc' },
+            message: expect.stringContaining(
+                '`--parser-mode swc` is not a parser this command takes, so the command did not run.',
+            ),
+        });
     });
 
     it('rejects invalid debounce values before starting chokidar', async () => {
@@ -620,6 +642,13 @@ describe('csszyx next-watch command', () => {
                 debounceMs: '-1',
                 silent: true,
             }),
-        ).rejects.toThrow('Invalid --debounce-ms');
+        ).rejects.toMatchObject({
+            code: 'cli-option-invalid',
+            args: { form: 'debounce-ms', value: '-1' },
+            message: expect.stringContaining(
+                '`--debounce-ms -1` is not a whole number of milliseconds from 0 to 60000, so the command did not run.\n' +
+                    '  help: pass a whole number from 0 to 60000, such as `--debounce-ms 100`, or leave it out for 50.',
+            ),
+        });
     });
 });

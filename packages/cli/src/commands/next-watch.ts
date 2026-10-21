@@ -30,10 +30,12 @@ import {
 import { type ChokidarOptions, watch } from 'chokidar';
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
+import { registryError, registryMessage } from '../utils/registry-words.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { type NextFileWatcher, watchRecursively } from './native-recursive-watcher.js';
 import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
+import { nextParserMode } from './next-options.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/i;
@@ -253,7 +255,7 @@ export async function startNextWatch(
     const root = (dependencies.realpath ?? canonicalWatchRoot)(path.resolve(options.root ?? cwd));
     const pattern = withPosixSeparators(options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN);
     const ignore = [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])];
-    const parserMode = normalizeParserMode(options.parserMode);
+    const parserMode = nextParserMode(options.parserMode);
     const debounceMs = normalizeDebounceMs(options.debounceMs);
     const files = await fg(pattern, {
         cwd: root,
@@ -264,7 +266,7 @@ export async function startNextWatch(
     });
 
     if (files.length === 0) {
-        throw new Error(`No source files matched pattern \`${pattern}\` under ${root}.`);
+        throw registryError('no-source-files', { pattern, root });
     }
 
     let model: Awaited<ReturnType<typeof prepareNextStylesheetFacts>>['model'] | null = null;
@@ -513,13 +515,17 @@ export function printWatcherNotice(message: string): void {
  * Run the Next watcher until SIGINT/SIGTERM or a fatal watcher error.
  *
  * @param options Command options.
+ * @param dependencies Injectable watcher factory, as {@link startNextWatch} takes.
  * @returns Exit code (0 for signal shutdown, 1 for startup/runtime failure).
  */
-export async function nextWatch(options: NextWatchCommandOptions = {}): Promise<number> {
+export async function nextWatch(
+    options: NextWatchCommandOptions = {},
+    dependencies: NextWatchDependencies = {},
+): Promise<number> {
     let session: NextWatchSession | undefined;
     let exitCode = 0;
     try {
-        session = await startNextWatch(options);
+        session = await startNextWatch(options, dependencies);
         if (!options.silent) {
             console.log(`${colors.success(icons.success)} csszyx next watch ready`);
             console.log(`  root:     ${session.root}`);
@@ -543,7 +549,9 @@ export async function nextWatch(options: NextWatchCommandOptions = {}): Promise<
         await session?.close();
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`${colors.error(icons.error)} Failed to close Next watcher: ${message}`);
+        console.error(
+            `${colors.error(icons.error)} ${registryMessage({ code: 'next-watcher-unclosed', args: { detail: message } })}`,
+        );
         exitCode = 1;
     }
     return exitCode;
@@ -703,23 +711,6 @@ function createIgnoredMatcher(
 }
 
 /**
- *
- * @param parserMode Requested source parser.
- * @returns Valid parser mode or undefined for the default.
- */
-function normalizeParserMode(
-    parserMode: NextWatchCommandOptions['parserMode'],
-): 'rust' | 'wasm' | undefined {
-    if (parserMode === undefined) {
-        return undefined;
-    }
-    if (parserMode === 'rust' || parserMode === 'wasm') {
-        return parserMode;
-    }
-    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust" or "wasm".`);
-}
-
-/**
  * Normalize the CLI debounce option before it reaches timer APIs.
  *
  * @param debounceMs Numeric or CLI string value.
@@ -731,7 +722,10 @@ function normalizeDebounceMs(debounceMs: number | string | undefined): number | 
     }
     const parsed = typeof debounceMs === 'number' ? debounceMs : Number(debounceMs);
     if (!Number.isInteger(parsed) || parsed < 0 || parsed > 60_000) {
-        throw new Error('Invalid --debounce-ms. Expected an integer between 0 and 60000.');
+        throw registryError('cli-option-invalid', {
+            form: 'debounce-ms',
+            value: String(debounceMs),
+        });
     }
     return parsed;
 }

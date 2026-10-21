@@ -33,13 +33,14 @@ const UNKNOWN_LINE = '`workBreak` is not an sz property.';
 const UNKNOWN_OFF = 'export default { diagnostics: { rules: { "unknown-key": "off" } } };\n';
 const UNKNOWN_WARN = 'export default { diagnostics: { rules: { "unknown-key": "warn" } } };\n';
 const DEAD_OFF = 'export default { diagnostics: { rules: { "dead-class": "off" } } };\n';
-const DEAD_LINE = '`break-bogus` (sz key `break`) is emitted by an sz prop';
+const DEAD_LINE = "`break-bogus` produces no CSS: this project's Tailwind serves no such utility.";
 
 /** An `sz` object whose later key covers an earlier one: the merge removes `pb-2`. */
 const COVERED = 'export const C = () => <div sz={{ pb: 2, p: 4 }} />;\n';
 const MERGE_OFF = 'export default { diagnostics: { rules: { "merge-covered-key": "off" } } };\n';
 const MERGE_WARN = 'export default { diagnostics: { rules: { "merge-covered-key": "warn" } } };\n';
-const MERGE_LINE = 'src/C.tsx:1: `pb` (`pb-2`) removed: a later key in the same `sz` object';
+const MERGE_LINE =
+    '[csszyx] merge-covered-key: src/C.tsx:1\n  The build removes `pb-2`, written as `pb`, because a later key';
 
 /** A config whose levels live in a module it imports. */
 const LEVELS = 'csszyx.levels.mjs';
@@ -197,7 +198,9 @@ describe('a Vite dev server', () => {
         expect(count(dev.lines, UNKNOWN_LINE)).toBe(1);
         expect(dev.sent).toContainEqual(expect.objectContaining({ type: 'full-reload' }));
         expect(dev.lines.join('\n')).toContain(
-            '[csszyx] csszyx.config.mjs changed: read its levels again, recompiled every module and reloaded the page.',
+            '[csszyx] project-reload: csszyx.config.mjs\n' +
+                '  This file changed, so csszyx read its levels again, recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
         );
     }, 60_000);
 
@@ -237,7 +240,10 @@ describe('a Vite dev server', () => {
 
         // Vite answers a created file with a reload of its own; the config's
         // read is the one that says so.
-        await until(() => count(dev.lines, '[csszyx] csszyx.config.mjs changed:') > 0, 'the read');
+        await until(
+            () => count(dev.lines, '[csszyx] project-reload: csszyx.config.mjs\n') > 0,
+            'the read',
+        );
         expect(dev.sent).toContainEqual(expect.objectContaining({ type: 'full-reload' }));
         await dev.request();
         expect(count(dev.lines, UNKNOWN_LINE)).toBe(1);
@@ -283,7 +289,7 @@ describe('a Vite dev server', () => {
             await dev.request();
             return count(dev.lines, UNKNOWN_LINE) > 0;
         }, 'the finding at the level the imported module now sets');
-        expect(dev.lines.join('\n')).toContain(`[csszyx] ${LEVELS} changed:`);
+        expect(dev.lines.join('\n')).toContain(`[csszyx] project-reload: ${LEVELS}\n`);
     }, 60_000);
 
     it('reads the modules a config imports as they are now, not as this process first loaded them', async () => {
@@ -320,14 +326,17 @@ describe('a Vite dev server', () => {
         // An editor that saves by replacing the file reports a delete and a
         // create; each read alone printed its own line and reloaded the page.
         const dev = await devSession(LEVELS_CONFIG, { [LEVELS]: LEVELS_OFF });
-        const saved = '[csszyx] csszyx.config.mjs changed:';
+        const saved = '[csszyx] project-reload: csszyx.config.mjs\n';
         dev.announce('unlink', 'csszyx.config.mjs');
         dev.announce('add', 'csszyx.config.mjs');
         await until(() => count(dev.lines, saved) > 0, 'the save read');
         // A later edit is its own read, and is said after the save's.
         rewrite(join(dev.root, LEVELS), LEVELS_WARN);
         dev.announce('change', LEVELS);
-        await until(() => count(dev.lines, `[csszyx] ${LEVELS} changed:`) > 0, 'the edit read');
+        await until(
+            () => count(dev.lines, `[csszyx] project-reload: ${LEVELS}\n`) > 0,
+            'the edit read',
+        );
         expect(count(dev.lines, saved)).toBe(1);
     }, 60_000);
 

@@ -17,7 +17,6 @@ import {
     projectStylesheetGitignore,
     readNextStylesheetFacts,
     resolveNextClassPrefix,
-    unreadNextPrefixMessage,
     writeNextStylesheetFacts,
 } from '../src/next-stylesheet-facts.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
@@ -144,9 +143,6 @@ describe('the stylesheet facts a Next command writes', () => {
         expect(prefix.ok).toBe(false);
         const reason = prefix.ok ? '' : prefix.reason;
         expect(reason).toContain('an older csszyx');
-        expect(unreadNextPrefixMessage(root, reason, 'the loader')).toContain(
-            'csszyx next prebuild',
-        );
     }, 60_000);
 
     it('read as stale once a recorded .gitignore is deleted', async () => {

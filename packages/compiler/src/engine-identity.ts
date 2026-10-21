@@ -13,7 +13,12 @@
  * @module engine-identity
  */
 
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { ENGINE_VERSION_SKEW } from './diagnostic-browser.generated.js';
 import { CsszyxError } from './errors.js';
+import { renderThrown } from './thrown-words.js';
 
 /** Replaced at build time by tsdown's `define`; absent when run from source. */
 declare const __CSSZYX_ENGINE_VERSION__: string | undefined;
@@ -39,6 +44,12 @@ export const EXPECTED_ENGINE: EngineIdentity | null =
 
 /** What an {@link EngineVersionSkewError} names, by the registry's arg names. */
 export interface EngineVersionSkewArgs {
+    /**
+     * Which skew: another release (`version`, or `platform-package` when a
+     * platform package answered), one too old to report (`unreported`), or
+     * the same release built from other source (`source`).
+     */
+    readonly form: 'version' | 'platform-package' | 'unreported' | 'source';
     /** Which artifact answered. */
     readonly artifact: 'native' | 'wasm';
     /** The engine version the compiler was built for. */
@@ -76,8 +87,6 @@ export interface AssertEngineIdentityInput {
     expected: EngineIdentity | null;
     /** What the engine reported; null for one older than the report itself. */
     reported: EngineIdentity | null;
-    /** Which artifact answered, for the message: `native (@csszyx/core-…)` or `wasm`. */
-    artifact: string;
     /**
      * For the native artifact, the platform package that answered (null when
      * none covers the host); absent for wasm. It picks the fix the message
@@ -93,14 +102,11 @@ export interface AssertEngineIdentityInput {
  * @throws {EngineVersionSkewError} naming both and what to install.
  */
 export function assertEngineIdentity(input: AssertEngineIdentityInput): void {
-    const { expected, reported, artifact } = input;
+    const { expected, reported } = input;
     if (expected === null) return;
     if (reported?.version === expected.version && reported.digest === expected.digest) return;
-    const found =
-        reported === null
-            ? `the ${artifact} engine, from a release before 0.18 that does not report its version`
-            : `the ${artifact} engine ${reported.version} (source ${reported.digest})`;
     const args: EngineVersionSkewArgs = {
+        form: skewForm(input, expected),
         // Only the native artifact is given a platform package, `null` included.
         artifact: input.platformPackage === undefined ? 'wasm' : 'native',
         expectedVersion: expected.version,
@@ -110,32 +116,26 @@ export function assertEngineIdentity(input: AssertEngineIdentityInput): void {
             : { foundVersion: reported.version, foundDigest: reported.digest }),
         ...(input.platformPackage ? { platformPackage: input.platformPackage } : {}),
     };
-    throw new EngineVersionSkewError(
-        `[csszyx] engine-version-skew: @csszyx/compiler ${expected.version} was built for engine source ${expected.digest} and found ${found}\n${skewHelp(input, expected)}`,
-        args,
-    );
+    throw new EngineVersionSkewError(renderThrown(ENGINE_VERSION_SKEW, args), args);
 }
 
 /**
- * The fix for a skew: rebuild when only the source differs, which happens in a
- * checkout of csszyx itself; otherwise install the engine at the compiler's
- * version, naming the platform package, which a lockfile can keep at an older
- * version beside a current `@csszyx/core`.
+ * Which skew it is, which picks the fix: rebuild when only the source
+ * differs, which happens in a checkout of csszyx itself; otherwise install
+ * the engine at the compiler's version, naming the platform package, which a
+ * lockfile can keep at an older version beside a current `@csszyx/core`.
  *
  * @param input - Both identities and the artifact.
  * @param expected - The identity the compiler was built for.
- * @returns The `help:` line.
+ * @returns The form.
  */
-function skewHelp(input: AssertEngineIdentityInput, expected: EngineIdentity): string {
-    const native = input.platformPackage !== undefined;
-    if (input.reported?.version === expected.version) {
-        const task = native ? 'native:build' : 'build';
-        return `help: rebuild the engine from this checkout with \`pnpm --filter @csszyx/core ${task}\` after changing its source`;
-    }
-    if (native && input.platformPackage) {
-        return `help: install @csszyx/core@${expected.version}; ${input.platformPackage} must be ${expected.version} too, so reinstall it if your lockfile holds another version`;
-    }
-    return `help: install @csszyx/core@${expected.version}; it installs its platform package at the same version`;
+function skewForm(
+    input: AssertEngineIdentityInput,
+    expected: EngineIdentity,
+): EngineVersionSkewArgs['form'] {
+    if (input.reported === null) return 'unreported';
+    if (input.reported.version === expected.version) return 'source';
+    return input.platformPackage ? 'platform-package' : 'version';
 }
 
 /** The identity exports of the wasm engine; `engine_digest` is absent before 0.18. */

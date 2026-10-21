@@ -81,6 +81,20 @@ async function childProblem(config: string): Promise<string> {
     return loaded.problems[0]?.message as string;
 }
 
+/**
+ * The problem a config that did not load gets, in the registry's words.
+ *
+ * @param reason - What the loader reported.
+ * @returns The problem's message.
+ */
+function loadFailed(reason: string): string {
+    return (
+        'This file could not be loaded, so the `recommended` levels apply.\n' +
+        '  help: fix the error the loader reported.\n' +
+        `  note: the loader reported: ${reason}.`
+    );
+}
+
 describe('a config load in a child process', () => {
     it('reads the file, the levels and the problems as a load in this process would', async () => {
         const root = project({
@@ -104,18 +118,18 @@ describe('a config load in a child process', () => {
         const message = await childProblem(
             'process.stderr.write("boom\\nsecond\\n");\nprocess.exit(3);\n',
         );
-        expect(message).toBe('could not be loaded: the config loader exited with status 3 (boom)');
+        expect(message).toBe(loadFailed('the config loader exited with status 3 (boom)'));
     });
 
     it('says the loader exited without a detail when it printed nothing', async () => {
         expect(await childProblem('process.exit(4);\n')).toBe(
-            'could not be loaded: the config loader exited with status 4',
+            loadFailed('the config loader exited with status 4'),
         );
     });
 
     it('says the loader printed no result', async () => {
         expect(await childProblem('process.exit(0);\nexport default {};\n')).toBe(
-            'could not be loaded: the config loader printed no result',
+            loadFailed('the config loader printed no result'),
         );
     });
 
@@ -125,14 +139,16 @@ describe('a config load in a child process', () => {
             await childProblem(
                 'setInterval(() => {}, 1000);\nawait new Promise(() => {});\nexport default {};\n',
             ),
-        ).toBe('could not be loaded: it did not finish loading within 0.3 s');
+        ).toBe(loadFailed('it did not finish loading within 0.3 s'));
     }, 30_000);
 
     it('stops reading a config that prints more than a lane keeps', async () => {
         const message = await childProblem(
             'process.stdout.write("x".repeat(17 * 1024 * 1024));\nexport default {};\n',
         );
-        expect(message).toMatch(/^could not be loaded: stdout maxBuffer length exceeded/);
+        expect(message).toMatch(
+            /^This file could not be loaded, so the `recommended` levels apply\.\n {2}help: fix the error the loader reported\.\n {2}note: the loader reported: stdout maxBuffer length exceeded/,
+        );
     }, 30_000);
 });
 
@@ -260,7 +276,7 @@ describe('a config load that reads every imported module as it is now', () => {
         expect(loaded.problems).toEqual([
             expect.objectContaining({
                 severity: 'error',
-                message: expect.stringContaining('could not be loaded'),
+                message: expect.stringContaining('This file could not be loaded'),
             }),
         ]);
         expect(loaded.policy.levelOf({ rule: 'sz-diagnostic', kind: 'unknown-key' })).toBe(
@@ -358,7 +374,7 @@ describe('a state file a sync lane reads', () => {
         ask();
         const lines = warn.mock.calls.map(call => String(call[0]));
         expect(lines).toHaveLength(1);
-        expect(lines[0]).toContain('is in format 7');
+        expect(lines[0]).toContain('This policy file was written in format 7');
         expect(lines[0]).toContain('`csszyx next prebuild`');
         warn.mockRestore();
     });

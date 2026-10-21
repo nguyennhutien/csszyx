@@ -139,16 +139,18 @@ describe('the count a dev server prints at start', () => {
         for (let index = 0; index < starts; index++) {
             await call('configResolved', { root, command });
         }
-        return warnings.filter(line => line.includes('removed'));
+        return warnings.filter(line => /^\[csszyx\] merge-covered-(key|class|held):/.test(line));
     }
 
     it('says once how many classes the build removed, which ids they are, and how to hide it', async () => {
         expect(await start('serve')).toEqual([
-            '[csszyx] 2 class(es) in 1 file(s) were removed: another class on the same element sets every property they set.\n' +
-                '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
+            '[csszyx] merge-covered-held:\n' +
+                '  The build removed 2 class(es) in 1 file(s), because another class on the same element sets every property they set.\n' +
+                '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them; `build.mergeCoveredClasses: false` in the plugin options keeps every one.\n' +
                 // No config and no tsconfig.json or `"type": "module"`: the
                 // name `csszyx init` would give this project.
-                "  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of `csszyx.config.mjs` to hide this line; `build.mergeCoveredClasses: false` keeps the classes.",
+                "  note: this line stays until each id after `--rule` is `'off'` in `diagnostics.rules` of `csszyx.config.mjs`.\n" +
+                '  docs: https://csszyx.com/e/merge-covered-held',
         ]);
     }, 60_000);
 
@@ -170,16 +172,22 @@ describe('the count a dev server prints at start', () => {
             {},
             'export default { diagnostics: { rules: { "merge-covered-class": "off" } } };\n',
         );
-        expect(line).toContain('1 class(es) in 1 file(s) were removed');
-        expect(line).toContain('`csszyx check --rule merge-covered-key` lists them.');
+        expect(line).toContain('The build removed 1 class(es) in 1 file(s)');
+        expect(line).toContain('`csszyx check --rule merge-covered-key` lists them;');
         expect(line).not.toContain('merge-covered-class');
     }, 60_000);
 
     it('lists each site with its file, line and key under the atomic preset, on a build too', async () => {
         const atomic = 'export default { diagnostics: { preset: "atomic" } };\n';
         const expected = [
-            '[csszyx] src/App.tsx:1: `pb-2` removed from `className`: an `sz` class on the same element sets every property it sets. (merge-covered-class)',
-            '[csszyx] src/App.tsx:3: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets. (merge-covered-key)',
+            '[csszyx] merge-covered-class: src/App.tsx:1\n' +
+                '  The build removes `pb-2` from `className`, because an `sz` class on the same element sets every property it sets.\n' +
+                '  help: delete `pb-2` from `className`; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.\n' +
+                '  docs: https://csszyx.com/e/merge-covered-class',
+            '[csszyx] merge-covered-key: src/App.tsx:3\n' +
+                '  The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.\n' +
+                '  help: delete `px` from the object; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.\n' +
+                '  docs: https://csszyx.com/e/merge-covered-key',
         ];
         expect(await start('serve', {}, atomic)).toEqual(expected);
         expect(await start('build', {}, atomic)).toEqual(expected);
@@ -224,7 +232,7 @@ describe('the count a webpack build prints at start', () => {
             },
         });
         await Promise.all(compiles);
-        return warnings.filter(line => line.includes('were removed:'));
+        return warnings.filter(line => line.startsWith('[csszyx] merge-covered-held:'));
     }
 
     it('says it once on a development build and never on a production one', async () => {

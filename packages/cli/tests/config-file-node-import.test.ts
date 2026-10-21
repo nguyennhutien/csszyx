@@ -143,7 +143,8 @@ describe('csszyx.config under plain Node', () => {
         expect(loaded.problems[0]).toMatchObject({ severity: 'error', path: 'csszyx.config.js' });
         // Node's SyntaxError names no file; the loader says what to do.
         expect(loaded.problems[0]?.message).toContain(
-            '`csszyx.config.js` holds TypeScript syntax; rename it to `csszyx.config.mts`.',
+            'This file holds TypeScript syntax under a JavaScript name, so it could not be loaded and the `recommended` levels apply.\n' +
+                '  help: rename it to `csszyx.config.mts`.',
         );
     });
 
@@ -156,8 +157,8 @@ describe('csszyx.config under plain Node', () => {
             ),
         );
 
-        expect(loaded.problems[0]?.message).toBe(
-            'could not be loaded: defineConfig is not defined (at csszyx.config.ts:2:16)',
+        expect(loaded.problems[0]?.message).toContain(
+            '  note: the loader reported: defineConfig is not defined (at csszyx.config.ts:2:16).',
         );
     });
 });

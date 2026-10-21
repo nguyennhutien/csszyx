@@ -139,7 +139,7 @@ describe('the disagreement message on a lane that can ignore', () => {
                 ignoreSetting: 'the `--ignore` flag',
             }),
         ).rejects.toThrow(
-            "list the stylesheets this build loads in the `--tailwind-stylesheet` flag, or leave another app's directory out with the `--ignore` flag.",
+            '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, list the stylesheets this build loads with the `--tailwind-stylesheet` flag, or leave another app\'s directory out with the `--ignore` flag.\n',
         );
     }, 60_000);
 
@@ -147,7 +147,7 @@ describe('the disagreement message on a lane that can ignore', () => {
         const { root, cacheDir } = appBesideAnother();
 
         await expect(writeNextStylesheetFacts({ root, cacheDir })).rejects.toThrow(
-            /or list the stylesheets this build loads in [^\n]*\.\n {2}note:/,
+            /, or list the stylesheets this build loads with the csszyx `tailwindStylesheet` option\.\n {2}note:/,
         );
     }, 60_000);
 });

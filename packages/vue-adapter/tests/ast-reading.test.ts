@@ -68,15 +68,40 @@ describe.each(PARSERS)('the %s artifact', parser => {
         const result = run(source);
         expect(result.code).toBe(source);
         expect(result.diagnostics).toHaveLength(1);
-        expect(result.diagnostics[0]).toMatchObject({ severity: 'error', line: 1, column: 1 });
-        expect(result.diagnostics[0].message).toContain('lang="pug"');
+        expect(result.diagnostics[0]).toMatchObject({
+            severity: 'error',
+            code: 'template-lang-unsupported',
+            args: { lang: 'pug' },
+            line: 1,
+            column: 1,
+        });
+        expect(result.diagnostics[0].message).toBe(
+            '[csszyx] template-lang-unsupported: App.vue:1:1\n' +
+                '  This template is `<template lang="pug">`, and csszyx reads `sz` in HTML templates only, so no `sz` attribute in it gets a class.\n' +
+                '  help: write the template in HTML, or bind `class` yourself in it.\n' +
+                '  docs: https://csszyx.com/e/template-lang-unsupported',
+        );
     });
 
     it('reports a template Vue cannot parse instead of skipping it', () => {
         const source = sfc('<div sz="{ p: 4 }"><p></div>');
         const result = run(source);
         expect(result.code).toBe(source);
-        expect(result.diagnostics.map(d => d.severity)).toContain('error');
+        expect(result.diagnostics).toHaveLength(1);
+        const [diagnostic] = result.diagnostics;
+        expect(diagnostic).toMatchObject({
+            severity: 'error',
+            code: 'template-unparsable',
+            args: { form: 'vue', message: expect.any(String) },
+        });
+        const { message } = diagnostic.args as { message: string };
+        expect(diagnostic.message).toBe(
+            `[csszyx] template-unparsable: App.vue:${diagnostic.line}:${diagnostic.column}\n` +
+                '  Vue cannot parse this file, so no `sz` attribute in it gets a class.\n' +
+                '  help: fix the error the Vue compiler reports; the file does not compile without csszyx either.\n' +
+                `  note: the Vue compiler reported: ${message.replace(/\.$/, '')}.\n` +
+                '  docs: https://csszyx.com/e/template-unparsable',
+        );
     });
 });
 
@@ -87,8 +112,8 @@ describe('the Vite plugin', () => {
         };
         const context = {
             warn: () => {},
-            error: (m: string) => {
-                throw new Error(m);
+            error: (error: Error) => {
+                throw error;
             },
         };
         const result = plugin.transform.call(context, sfc('<div sz="{ p: 4 }"></div>'), '/a.vue');
@@ -111,6 +136,8 @@ describe('reading edges', () => {
     it('places a parse error in a bare template', () => {
         const result = transformTemplate('<div sz="{ p: 4 }"><p></div>');
         expect(result.diagnostics.map(d => [d.severity, d.line])).toEqual([['error', 1]]);
-        expect(result.diagnostics[0].message).toContain('Vue cannot parse this file');
+        expect(result.diagnostics[0].message).toContain(
+            'Vue cannot parse this file, so no `sz` attribute in it gets a class.',
+        );
     });
 });

@@ -348,10 +348,12 @@ There is no second implementation behind it. On a platform with no prebuilt
 binary, or after an install that skipped optional packages, migrate stops
 before touching any file:
 
-```
-✗ migrate: native engine unavailable: @csszyx/core-linux-x64-gnu is not installed
-help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages
-note: no file was changed; build and runtime do not use this engine
+```text
+[csszyx] native-migrate-unavailable:
+  `@csszyx/core-linux-x64-gnu` is not installed, so migrate cannot run.
+  help: reinstall without skipping optional dependencies, which installs `@csszyx/core-linux-x64-gnu` with `@csszyx/core`.
+  note: no file was changed; migrate runs on the native engine only, and builds and the runtime do not need it.
+  docs: https://csszyx.com/e/native-migrate-unavailable
 ```
 
 Building and the runtime are unaffected by this — those fall back to the WASM

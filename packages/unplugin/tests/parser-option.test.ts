@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { vitePlugin } from '../src/unplugin.js';
+import { assertGlobalVarPlanMatchesEarlyAliases, vitePlugin } from '../src/unplugin.js';
 import { RESOLVED_VIRTUAL_MODULE_ID } from '../src/virtual-modules.js';
 
 type TransformHook = {
@@ -91,7 +91,18 @@ describe('csszyx parser selection', () => {
                     },
                 },
             } as never),
-        ).toThrow("production.mangleGlobalVars.mode only supports 'alias'");
+        ).toThrow(
+            expect.objectContaining({
+                code: 'mangle-global-vars-options-invalid',
+                args: {
+                    form: 'schema',
+                    errors: [expect.stringContaining("only supports 'alias'")],
+                },
+                message: expect.stringMatching(
+                    /^\[csszyx\] mangle-global-vars-options-invalid:\n {2}The `production\.mangleGlobalVars` options break the rules listed below, so the build stops\.\n {2}help: fix each option the list names\.\n {2}note: the problems:\n {4}- production\.mangleGlobalVars\.mode only supports 'alias'\./,
+                ),
+            }),
+        );
     });
 
     it('rejects enabled global variable alias config without explicit tokens', () => {
@@ -105,7 +116,18 @@ describe('csszyx parser selection', () => {
                     },
                 },
             }),
-        ).toThrow('production.mangleGlobalVars.enabled requires explicit tokens');
+        ).toThrow(
+            expect.objectContaining({
+                code: 'mangle-global-vars-options-invalid',
+                args: { form: 'tokens-required' },
+                message:
+                    '[csszyx] mangle-global-vars-options-invalid:\n' +
+                    '  `production.mangleGlobalVars.enabled` is `true` with no `tokens`, so the build stops.\n' +
+                    "  help: list the custom properties to alias in `tokens`, such as `tokens: ['--brand']`.\n" +
+                    '  note: csszyx aliases only the custom properties listed in `tokens`.\n' +
+                    '  docs: https://csszyx.com/e/mangle-global-vars-options-invalid',
+            }),
+        );
     });
 
     it('rejects enabled global variable autoPrefix until CSS pre-scan support exists', () => {
@@ -119,7 +141,17 @@ describe('csszyx parser selection', () => {
                     },
                 },
             }),
-        ).toThrow('production.mangleGlobalVars.autoPrefix is not available');
+        ).toThrow(
+            expect.objectContaining({
+                code: 'mangle-global-vars-options-invalid',
+                args: { form: 'auto-prefix' },
+                message:
+                    '[csszyx] mangle-global-vars-options-invalid:\n' +
+                    '  `production.mangleGlobalVars.autoPrefix` is set, and choosing tokens by prefix is not available yet, so the build stops.\n' +
+                    '  help: remove `autoPrefix` and list the custom properties in `tokens`.\n' +
+                    '  docs: https://csszyx.com/e/mangle-global-vars-options-invalid',
+            }),
+        );
     });
 
     it('threads explicit global variable aliases into source transforms', async () => {
@@ -202,7 +234,14 @@ describe('csszyx parser selection', () => {
                     },
                 },
             ),
-        ).toThrow('Global variable token --brand-primary is not defined in scanned CSS');
+        ).toThrow(
+            expect.objectContaining({
+                code: 'mangle-global-vars-plan-invalid',
+                message: expect.stringMatching(
+                    /^\[csszyx\] mangle-global-vars-plan-invalid:\n {2}`production\.mangleGlobalVars` cannot alias every listed property safely, so the build stops\.\n {2}help: fix each usage listed below, or take that property out of `tokens`\.\n {2}note: the findings:\n {4}- \[[a-z-]+\] --brand-primary: Global variable token --brand-primary is not defined in scanned CSS\.\n {2}docs: https:\/\/csszyx\.com\/e\/mangle-global-vars-plan-invalid$/,
+                ),
+            }),
+        );
     });
 
     it('accepts explicit tokens defined by configured scanCss sources', async () => {
@@ -613,7 +652,13 @@ describe('csszyx parser selection', () => {
         );
 
         expect(() => prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID)).toThrow(
-            'CSS variable mangle map',
+            expect.objectContaining({
+                code: 'mangle-map-too-large',
+                args: { size: expect.any(Number), maxBytes: 16 },
+                message: expect.stringMatching(
+                    /^\[csszyx\] mangle-map-too-large:\n {2}The CSS variable mangle map is (\d+) bytes, over its safety cap of 16 bytes, so the build stops\.\n {2}help: turn `production\.mangleVars` off or split the bundle; to accept this size, raise the `CSSZYX_VAR_MANGLE_MAP_MAX_BYTES` environment variable above \1\.\n {2}docs: https:\/\/csszyx\.com\/e\/mangle-map-too-large$/,
+                ),
+            }),
         );
     });
 
@@ -777,5 +822,33 @@ describe('csszyx parser selection', () => {
 
         expect(result.code).toContain('className="p-4"');
         expect(result.code).not.toContain(' sz=');
+    });
+});
+
+describe('the alias plan against the source alias table', () => {
+    // No input reaches this: the source transform and the CSS plan read the
+    // same `tokens`. It stays a check, worded as csszyx's own failure.
+    it('stops with internal-error when they disagree', () => {
+        const plan = {
+            plan: { aliases: new Map([['--brand', '---a']]) },
+        } as unknown as Parameters<typeof assertGlobalVarPlanMatchesEarlyAliases>[0];
+        expect(() => assertGlobalVarPlanMatchesEarlyAliases(plan, [['--brand', '---b']])).toThrow(
+            expect.objectContaining({
+                code: 'internal-error',
+                args: {
+                    where: 'mangleGlobalVars alias plan',
+                    detail: 'the CSS alias plan [["--brand","---a"]] does not match the source alias table [["--brand","---b"]]',
+                },
+                message:
+                    '[csszyx] internal-error:\n' +
+                    '  An internal check failed in `mangleGlobalVars alias plan`, so csszyx stops.\n' +
+                    '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
+                    '  note: the check that failed: the CSS alias plan [["--brand","---a"]] does not match the source alias table [["--brand","---b"]].\n' +
+                    '  docs: https://csszyx.com/e/internal-error',
+            }),
+        );
+        expect(() =>
+            assertGlobalVarPlanMatchesEarlyAliases(plan, [['--brand', '---a']]),
+        ).not.toThrow();
     });
 });

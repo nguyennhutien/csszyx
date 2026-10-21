@@ -126,7 +126,11 @@ describe('a config that does more than export its levels', () => {
         const ends = 'process.exit(0);\nexport default {};\n';
         const lines = jest({ ...project(UNKNOWN, ends), source: UNKNOWN }).join('\n');
         expect(lines).toContain(
-            '[csszyx] jest could not read the levels csszyx.config.mjs sets: the config loader printed no result.',
+            '[csszyx] config-unloadable: csszyx.config.mjs\n' +
+                '  This file could not be loaded in jest, so the levels in `.csszyx/diagnostic-policy.json` apply, or the `recommended` levels when that file does not exist.\n' +
+                '  help: make the file load in plain Node; `csszyx next prebuild` and `csszyx next watch` write `.csszyx/diagnostic-policy.json` for jest.\n' +
+                '  note: the loader reported: the config loader printed no result.\n' +
+                '  docs: https://csszyx.com/e/config-unloadable',
         );
         expect(lines).toContain('is not an sz property.');
     });
@@ -136,8 +140,9 @@ describe('a config that does more than export its levels', () => {
         const hangs =
             'setInterval(() => {}, 1000);\nawait new Promise(() => {});\nexport default {};\n';
         const lines = jest({ ...project(UNKNOWN, hangs), source: UNKNOWN }).join('\n');
+        expect(lines).toContain('This file could not be loaded in jest');
         expect(lines).toContain(
-            '[csszyx] jest could not read the levels csszyx.config.mjs sets: it did not finish loading within 0.3 s.',
+            '  note: the loader reported: it did not finish loading within 0.3 s.',
         );
         expect(lines).toContain('is not an sz property.');
     }, 30_000);
@@ -154,9 +159,8 @@ describe('a config that does more than export its levels', () => {
     it('stops reading a config that prints more than a worker keeps', () => {
         const floods = 'process.stdout.write("x".repeat(17 * 1024 * 1024));\nexport default {};\n';
         const lines = jest({ ...project(UNKNOWN, floods), source: UNKNOWN }).join('\n');
-        expect(lines).toContain(
-            '[csszyx] jest could not read the levels csszyx.config.mjs sets: spawnSync',
-        );
+        expect(lines).toContain('[csszyx] config-unloadable: csszyx.config.mjs');
+        expect(lines).toContain('  note: the loader reported: spawnSync');
         expect(lines).toContain('ENOBUFS');
         expect(lines).toContain('is not an sz property.');
     }, 30_000);
@@ -229,7 +233,7 @@ describe('the jest transform with a state file', () => {
         writeFileSync(diagnosticPolicyStatePath(root), JSON.stringify({ ...state, format: 1 }));
         // Said once, and the levels are the config's, which turns the finding off.
         expect(jest({ root, file, source: UNKNOWN })).toEqual([
-            expect.stringContaining('diagnostic-policy.json is in format 1'),
+            expect.stringContaining('This policy file was written in format 1,'),
         ]);
     });
 

@@ -86,7 +86,12 @@ describe('a stylesheet still pointing at the old safelist', () => {
     it('fails the Vite build and says what to do instead', async () => {
         const root = projectRoot();
         await expect(viteTransform(root, LEGACY_CSS)).rejects.toThrow(
-            /@source "\.\.\/csszyx-classes\.html".*no longer writes.*\.csszyx\/csszyx-classes\.txt.*'@csszyx\/unplugin\/postcss'/s,
+            expect.objectContaining({
+                code: 'legacy-source-directive',
+                message: expect.stringMatching(
+                    /^\[csszyx\] legacy-source-directive: src\/styles\.css\n {2}`@source "\.\.\/csszyx-classes\.html"` names the old safelist, which csszyx no longer writes, so the build stops\./,
+                ),
+            }),
         );
     });
 
@@ -102,6 +107,16 @@ describe('a stylesheet still pointing at the old safelist', () => {
         const run = postcss([csszyxPostcss({ root })]).process(LEGACY_CSS, {
             from: path.join(root, 'src/styles.css'),
         });
-        await expect(run).rejects.toThrow(/no longer writes.*\.csszyx\/csszyx-classes\.txt/s);
+        await expect(run).rejects.toThrow(
+            expect.objectContaining({
+                code: 'legacy-source-directive',
+                message:
+                    '[csszyx] legacy-source-directive: src/styles.css\n' +
+                    '  `@source "../csszyx-classes.html"` names the old safelist, which csszyx no longer writes, so the build stops.\n' +
+                    "  help: remove this line; on Next.js, also list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.\n" +
+                    '  note: csszyx adds the `@source` for `.csszyx/csszyx-classes.txt` itself: the Vite, Rollup and webpack plugins inject it, and on Next.js `@csszyx/unplugin/postcss` does.\n' +
+                    '  docs: https://csszyx.com/e/legacy-source-directive',
+            }),
+        );
     });
 });

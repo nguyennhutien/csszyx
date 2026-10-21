@@ -28,7 +28,19 @@ describe('stable file snapshot', () => {
         };
 
         expect(() => readStableTextFileSnapshotSync('/theme.css', maxAttempts, fsApi)).toThrow(
-            'maxAttempts must be a positive integer',
+            expect.objectContaining({
+                code: 'internal-error',
+                args: {
+                    where: 'readStableTextFileSnapshotSync',
+                    detail: `maxAttempts is ${maxAttempts}, not a positive integer`,
+                },
+                message:
+                    '[csszyx] internal-error:\n' +
+                    '  An internal check failed in `readStableTextFileSnapshotSync`, so csszyx stops.\n' +
+                    '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
+                    `  note: the check that failed: maxAttempts is ${maxAttempts}, not a positive integer.\n` +
+                    '  docs: https://csszyx.com/e/internal-error',
+            }),
         );
         expect(fsApi.openSync).not.toHaveBeenCalled();
     });
@@ -75,7 +87,15 @@ describe('stable file snapshot', () => {
         };
 
         expect(() => readStableTextFileSnapshotSync('/theme.css', 2, fsApi)).toThrow(
-            'CSS source changed while being read',
+            expect.objectContaining({
+                code: 'css-source-unstable',
+                args: {},
+                message:
+                    '[csszyx] css-source-unstable: /theme.css\n' +
+                    '  This CSS file changed on every read, so the build stops.\n' +
+                    '  help: stop the tool that rewrites it during the build, such as a formatter or a second watcher.\n' +
+                    '  docs: https://csszyx.com/e/css-source-unstable',
+            }),
         );
         expect(fsApi.closeSync).toHaveBeenCalledTimes(2);
     });

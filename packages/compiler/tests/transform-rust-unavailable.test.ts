@@ -3,30 +3,25 @@
  *
  * On a machine with the platform package the unavailable path never runs,
  * so it is exercised here with a binding that fails the way a missing
- * package fails. The fake speaks the loader's words: the wrapper must keep
- * them as they are, re-prefixed once, and must not name the package a
- * second time.
+ * package fails. The wrapper keeps the loader's code, args and words.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isCsszyxError } from '../src/errors.js';
 
-const LOADER_LINES = [
-    '[csszyx] native-engine-unavailable: @csszyx/core-darwin-arm64 is not installed',
-    'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"',
-    'note: the wasm engine ships inside @csszyx/core and produces the same output',
-];
+/** The loader's message: the transform's words, which the wrapper keeps. */
+const LOADER_MESSAGE =
+    '[csszyx] native-engine-unavailable:\n  `@csszyx/core-darwin-arm64` is not installed, so the `rust` parser cannot run.';
 
 class FakeUnavailable extends Error {
     packageName = '@csszyx/core-darwin-arm64';
-    detail = LOADER_LINES.join('\n').replace('[csszyx] native-engine-unavailable: ', '');
     // A csszyx error, as the loader's is: its brand, code and args.
     [Symbol.for('csszyx.error')] = true;
     code = 'native-engine-unavailable';
-    args = { form: 'not-installed', packageName: this.packageName, detail: this.detail };
+    args = { form: 'not-installed', packageName: this.packageName };
 
     constructor() {
-        super(LOADER_LINES.join('\n'));
+        super(LOADER_MESSAGE);
         this.name = 'CsszyxNativeUnavailableError';
     }
 }
@@ -115,7 +110,14 @@ describe('the native transform on an install without it', () => {
             '../src/transform-rust.js'
         );
         expect(() => transformRust('<div />', 'a.tsx')).toThrow(
-            new RustTransformUnavailableError('native transform returned no result'),
+            new RustTransformUnavailableError('the native transform returned no result'),
+        );
+        expect(() => transformRust('<div />', 'a.tsx')).toThrow(
+            '[csszyx] internal-error:\n' +
+                '  An internal check failed in `transformRust`, so csszyx stops.\n' +
+                '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
+                '  note: the check that failed: the native transform returned no result.\n' +
+                '  docs: https://csszyx.com/e/internal-error',
         );
     });
 
@@ -131,7 +133,7 @@ describe('the native transform on an install without it', () => {
         expect(error).toMatchObject({
             name: 'RustTransformUnavailableError',
             code: 'internal-error',
-            args: { where: 'transformRust', detail: 'native transform returned no result' },
+            args: { where: 'transformRust', detail: 'the native transform returned no result' },
         });
         expect((error as Error).cause).toBeUndefined();
     });
@@ -172,42 +174,17 @@ describe('the native transform on an install without it', () => {
         expect(isRustTransformAvailable()).toBe(false);
     });
 
-    it("keeps the loader's three lines under the transform prefix", async () => {
-        const { transformRust, RustTransformUnavailableError } = await import(
-            '../src/transform-rust.js'
-        );
-        expect(() => transformRust('<div />', 'a.tsx')).toThrow(RustTransformUnavailableError);
-        try {
-            transformRust('<div />', 'a.tsx');
-        } catch (error) {
-            const { message } = error as Error;
-            expect(message.split('\n')).toEqual([
-                'transformRust: native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
-                LOADER_LINES[1],
-                LOADER_LINES[2],
-            ]);
-            // Named once. The wrapper used to append "; native package: ..."
-            // after a message that had already named it.
-            expect(message.match(/@csszyx\/core-darwin-arm64/g)).toHaveLength(1);
-        }
-    });
-
-    it('reports the module-link scan unavailable in the same words', async () => {
-        const { scanModuleLinksRust, RustTransformUnavailableError } = await import(
-            '../src/transform-rust.js'
-        );
-        expect(() => scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
-            RustTransformUnavailableError,
-        );
-        try {
-            scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }]);
-        } catch (error) {
-            expect((error as Error).message.split('\n')).toEqual([
-                'transformRust: native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
-                LOADER_LINES[1],
-                LOADER_LINES[2],
-            ]);
-        }
+    it.each([
+        ['transformRust', (m: TransformRust) => m.transformRust('<div />', 'a.tsx')],
+        [
+            'scanModuleLinksRust',
+            (m: TransformRust) => m.scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }]),
+        ],
+    ])("%s keeps the loader's words", async (_name, call) => {
+        const module = await import('../src/transform-rust.js');
+        const error = thrown(() => call(module));
+        expect(error).toBeInstanceOf(module.RustTransformUnavailableError);
+        expect((error as Error).message).toBe(LOADER_MESSAGE);
     });
 
     it('reports the global-var usage scan unavailable as the same error', async () => {

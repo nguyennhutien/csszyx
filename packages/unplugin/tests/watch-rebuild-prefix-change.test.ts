@@ -67,7 +67,28 @@ describe('a Tailwind prefix that changes during a rollup watch session', () => {
         writeFileSync(join(root, 'src/index.css'), PREFIXED);
 
         await expect(call('buildStart')).rejects.toThrow(
-            'src/index.css changed the Tailwind prefix from no prefix to `tw`',
+            expect.objectContaining({
+                code: 'watch-prefix-changed',
+                args: { form: 'added', changed: ['src/index.css'], after: 'tw' },
+                message:
+                    '[csszyx] watch-prefix-changed:\n' +
+                    '  `src/index.css` set the Tailwind prefix `tw`, and this watch session compiled its modules without one, so their classes would style nothing.\n' +
+                    '  help: restart the watch session.\n' +
+                    '  note: every rebuild fails with this error until the restart, or until the prefix is changed back.\n' +
+                    '  docs: https://csszyx.com/e/watch-prefix-changed',
+            }),
+        );
+    }, 60_000);
+
+    it('names both prefixes when one replaces another', async () => {
+        const { root } = project(PREFIXED);
+        const call = rollupSession();
+        await call('buildStart');
+
+        writeFileSync(join(root, 'src/index.css'), '@import "tailwindcss" prefix(ui);\n');
+
+        await expect(call('buildStart')).rejects.toThrow(
+            '  `src/index.css` changed the Tailwind prefix from `tw` to `ui`, and this watch session compiled its modules under the old one, so their classes would style nothing.\n',
         );
     }, 60_000);
 
@@ -76,10 +97,10 @@ describe('a Tailwind prefix that changes during a rollup watch session', () => {
         const call = rollupSession();
         await call('buildStart');
         writeFileSync(join(root, 'src/index.css'), PREFIXED);
-        await expect(call('buildStart')).rejects.toThrow('help: stop the watch');
+        await expect(call('buildStart')).rejects.toThrow('help: restart the watch session.');
 
         // A rebuild no stylesheet caused still ships modules under the old prefix.
-        await expect(call('buildStart')).rejects.toThrow('help: stop the watch');
+        await expect(call('buildStart')).rejects.toThrow('help: restart the watch session.');
 
         writeFileSync(join(root, 'src/index.css'), `${STOCK}/* back */\n`);
         await expect(call('buildStart')).resolves.toBeUndefined();
@@ -119,7 +140,7 @@ describe('a prefixed stylesheet deleted during a rollup watch session', () => {
         rmSync(join(root, 'src/index.css'));
 
         await expect(call('buildStart')).rejects.toThrow(
-            'src/index.css changed the Tailwind prefix from `tw` to no prefix',
+            '  `src/index.css` removed the Tailwind prefix `tw`, and this watch session compiled its modules under it, so their classes would style nothing.\n',
         );
     }, 60_000);
 });
@@ -144,7 +165,7 @@ describe('a Tailwind prefix that changes during a vite build --watch session', (
 
         writeFileSync(join(root, 'src/index.css'), PREFIXED);
 
-        await expect(call('buildStart')).rejects.toThrow('changed the Tailwind prefix');
+        await expect(call('buildStart')).rejects.toThrow('set the Tailwind prefix `tw`');
     }, 60_000);
 });
 
@@ -163,7 +184,7 @@ describe('a Tailwind prefix that changes between esbuild context rebuilds', () =
             await ctx.rebuild();
             writeFileSync(join(root, 'src/index.css'), PREFIXED);
 
-            await expect(ctx.rebuild()).rejects.toThrow('changed the Tailwind prefix');
+            await expect(ctx.rebuild()).rejects.toThrow('set the Tailwind prefix `tw`');
         } finally {
             await ctx.dispose();
         }

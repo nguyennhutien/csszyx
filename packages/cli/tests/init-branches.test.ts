@@ -317,8 +317,6 @@ describe('init interactive prompts and default cwd', () => {
         mute();
         vi.doMock('prompts', () => ({
             default: vi.fn(async () => ({
-                enableSSR: true,
-                enableRecovery: true,
                 setupGitignore: true,
                 setupTsconfig: true,
             })),

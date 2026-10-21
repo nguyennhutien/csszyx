@@ -169,10 +169,15 @@ describe('the unsigned-value report', () => {
             deadClassMessage('break-bogus', 'src/A.tsx'),
         ]);
         expect(unsignedValueMessage('-p-2', 'p-2', 'src/A.tsx', SITE)).toBe(
-            "[csszyx] src/A.tsx:1:34: `-p-2` (sz key `p`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `p-2`; drop the sign, or define it with @utility (unsigned-value).\n" +
-                '  help: `csszyx check --rule unsigned-value` lists every one.',
+            '[csszyx] unsigned-value: src/A.tsx:1:34\n' +
+                "  `-p-2` produces no CSS: this project's Tailwind serves `p-2` but no negative form of it.\n" +
+                "  help: drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.\n" +
+                '  note: the class is still emitted, and it styles nothing.\n' +
+                '  docs: https://csszyx.com/e/unsigned-value',
         );
-        expect(unsignedValueMessage('-p-2', 'p-2', 'src/A.tsx')).toContain('src/A.tsx: `-p-2` is');
+        expect(unsignedValueMessage('-p-2', 'p-2', 'src/A.tsx')).toMatch(
+            /^\[csszyx\] unsigned-value: src\/A\.tsx\n/,
+        );
     });
 
     it('reads the level of unsigned-value, under the dead-class pass', () => {

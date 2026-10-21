@@ -6,6 +6,8 @@ import * as path from 'node:path';
 import { CsszyxError } from '@csszyx/compiler/errors';
 import lockfile from 'proper-lockfile';
 import { type AtomicWriteOptions, atomicWriteFileSync } from './atomic-write.js';
+import { diagnosticMessage } from './diagnostic-message.js';
+import { projectRelative } from './path-case.js';
 import { renderSafelistFile } from './safelist-format.js';
 import { removeLegacySafelists, SAFELIST_FILE } from './safelist-source.js';
 import { sortStrings } from './sort.js';
@@ -52,10 +54,12 @@ function warnUnreadShard(rootDir: string, filePath: string, format: number): voi
     const key = `${filePath}\0${format}`;
     if (unreadShards.has(key)) return;
     unreadShards.add(key);
-    const named = path.relative(rootDir, filePath).split(path.sep).join('/');
     console.warn(
-        `[csszyx] ${named} is a safelist shard in format ${format}, and this version reads format ${NEXT_SAFELIST_SHARD_READ_FORMAT}: its classes are left out of the safelist.\n` +
-            '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes every shard again.',
+        diagnosticMessage(
+            'safelist-shard-format-skew',
+            { format, expected: NEXT_SAFELIST_SHARD_READ_FORMAT },
+            projectRelative(rootDir, filePath),
+        ),
     );
 }
 
@@ -844,18 +848,18 @@ export class NextSafelistStateLockedError extends CsszyxError {
      * @param holder - metadata read from the lock file.
      */
     constructor(holder: NextSafelistStateLockMetadata) {
+        const args = {
+            pid: holder.pid,
+            root: holder.root,
+            mode: holder.mode,
+            host: holder.hostname,
+            updatedAt: holder.updatedAt,
+            command: holder.command,
+        };
         super({
             code: 'next-safelist-locked',
-            args: {
-                pid: holder.pid,
-                root: holder.root,
-                mode: holder.mode,
-                host: holder.hostname,
-                updatedAt: holder.updatedAt,
-            },
-            // The registry has no words for this id yet; the message stays
-            // the lock's own until it is worded (ADR 0031).
-            message: formatLiveLockError(holder),
+            args,
+            message: diagnosticMessage('next-safelist-locked', args),
         });
         this.name = 'NextSafelistStateLockedError';
         this.holder = holder;
@@ -877,17 +881,3 @@ export const NEXT_TURBO_LOADER_LOCK_COMMAND = 'csszyx next turbo-loader';
  * standalone prebuild has no such follow-up.
  */
 export const NEXT_PREBUILD_LOCK_COMMAND = 'csszyx next prebuild';
-
-/**
- *
- * @param metadata
- */
-function formatLiveLockError(metadata: NextSafelistStateLockMetadata): string {
-    return [
-        `csszyx Next safelist state is already locked by process ${metadata.pid}.`,
-        `root=${metadata.root}`,
-        `mode=${metadata.mode}`,
-        `host=${metadata.hostname}`,
-        `updatedAt=${metadata.updatedAt}`,
-    ].join(' ');
-}

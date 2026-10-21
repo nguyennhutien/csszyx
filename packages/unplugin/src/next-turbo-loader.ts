@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { SourceTransformResult } from '@csszyx/compiler';
 import { CsszyxError } from '@csszyx/compiler/errors';
 import { diagnosticFileOf } from '@csszyx/compiler/internal';
+import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     callsSzcn as callsMergeHelper,
@@ -16,7 +17,6 @@ import {
     mergeTablePath,
 } from './merge-registration.js';
 import { mergeGroupsOf, mergeOverridesOf } from './merge-signature.js';
-import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
     normalizeProviderPaths,
@@ -26,7 +26,7 @@ import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
 } from './next-generation-manifest.js';
-import type { NextLaneOptions } from './next-lane-options.js';
+import { assertNextMangleBoundary, type NextLaneOptions } from './next-lane-options.js';
 import { reportNextLoaderDiagnostics } from './next-loader-diagnostics.js';
 import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
@@ -49,7 +49,6 @@ import {
     projectStylesheetGitignore,
     recordedStylesheetIgnore,
     resolveNextClassPrefix,
-    unreadNextPrefixMessage,
     writeNextStylesheetFacts,
 } from './next-stylesheet-facts.js';
 import {
@@ -57,6 +56,7 @@ import {
     createNextSafelistShardFromMetadata,
 } from './next-transform-metadata.js';
 import { runNextWatcherCycle } from './next-watcher-cycle.js';
+import { projectRelative } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import { assertRuntimeMatchesPlugin } from './runtime-version.js';
 import { ensureThemeGroupsFile, themeGroupsSpecifier } from './theme-groups-file.js';
@@ -188,7 +188,6 @@ export function runNextTurboLoader(
     explicitOptions: NextTurboLoaderOptions = {},
 ): NextTurboLoaderResult {
     const options = normalizeOptions(loaderContext, explicitOptions);
-    assertTurbopackMangleBoundary(options, loaderContext.resourcePath);
 
     const context = createNextStateContext({
         explicitRoot: options.root,
@@ -209,6 +208,12 @@ export function runNextTurboLoader(
         mode: options.mode ?? normalizeMode(loaderContext.mode),
     });
 
+    assertNextMangleBoundary(
+        options,
+        options.mode === 'production' || process.env.NODE_ENV === 'production',
+        'turbopack',
+        projectRelative(context.root, loaderContext.resourcePath),
+    );
     assertRuntimeOnce(context.root);
     assertProductionManifestReady(context, options);
 
@@ -216,7 +221,6 @@ export function runNextTurboLoader(
     const prefix = prefixForCompilation(context, tailwindStylesheet, loaderContext._compilation);
     if (!prefix.ok) {
         throw new NextStylesheetFactsPending(
-            unreadNextPrefixMessage(context.root, prefix.reason, 'the Next Turbopack loader'),
             {
                 root: context.root,
                 cacheDir: context.cacheDir,
@@ -562,55 +566,11 @@ function assertProductionManifestReady(
         context.manifestExpectation,
     );
     if (!validation.ok) {
-        throw new Error(
-            [
-                `[csszyx] Next Turbopack production cache is not ready for ${context.root}: ${validation.reason}.`,
-                'Production builds with Turbopack need the csszyx safelist seeded first:',
-                '',
-                "  npx csszyx next prebuild 'app/**/*.tsx'",
-                '',
-                'Wire it into package.json so plain builds keep working:',
-                '',
-                '  "build": "csszyx next prebuild \'app/**/*.tsx\' && next build"',
-                '',
-                'Docs: https://csszyx.com/docs/installation#nextjs-turbopack-setup',
-            ].join('\n'),
-        );
+        throw diagnosticError('next-turbo-cache-unseeded', {
+            root: context.root,
+            reason: validation.reason,
+        });
     }
-}
-
-/**
- *
- * @param options
- * @param resourcePath
- */
-function assertTurbopackMangleBoundary(
-    options: NextTurboLoaderOptions,
-    resourcePath: string,
-): void {
-    if (options.allowProductionMangling) {
-        return;
-    }
-    const productionMode = options.mode === 'production' || process.env.NODE_ENV === 'production';
-    if (!productionMode) {
-        return;
-    }
-    if (options.compilerOptions?.mangleVars === true || hasEnabledMangleVars(options.config)) {
-        throw new Error(
-            `[csszyx] Next Turbopack does not support production CSS variable mangling for ${resourcePath}. Use Next Webpack mode for full csszyx parity.`,
-        );
-    }
-}
-
-/**
- *
- * @param config
- */
-function hasEnabledMangleVars(config: JsonLike | undefined): boolean {
-    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-        return false;
-    }
-    return (config as { readonly mangleVars?: unknown }).mangleVars === true;
 }
 
 /**
@@ -645,15 +605,15 @@ class NextStylesheetFactsPending extends CsszyxError {
     readonly input: NextStylesheetFactsInput;
 
     /**
-     * @param message - What the loader would report if nobody can wait.
      * @param input - What reading the stylesheets needs.
      * @param reason - Why the prefix is unread.
      */
-    constructor(message: string, input: NextStylesheetFactsInput, reason: string) {
+    constructor(input: NextStylesheetFactsInput, reason: string) {
+        const args = { lane: 'turbopack-loader', root: input.root, reason } as const;
         super({
             code: 'next-prefix-unread',
-            args: { lane: 'turbopack-loader', root: input.root, reason },
-            message,
+            args,
+            message: diagnosticMessage('next-prefix-unread', args),
         });
         this.name = 'NextStylesheetFactsPending';
         this.input = input;

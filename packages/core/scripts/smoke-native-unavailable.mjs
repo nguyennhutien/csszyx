@@ -54,11 +54,11 @@ function assertUnavailableError(err, packageName) {
   if (err[Symbol.for("csszyx.error")] !== true) {
     fail("Unavailable error does not carry the csszyx error brand.");
   }
-  if (!err.message.startsWith("[csszyx] native-engine-unavailable: ")) {
+  if (!err.message.startsWith("[csszyx] native-engine-unavailable:\n")) {
     fail(`Unavailable error is not headed by its code: ${err.message}`);
   }
-  const help = err.message.split("\n")[1] ?? "";
-  if (!help.startsWith("help: ") || !help.includes('build.parser: "wasm"')) {
+  const help = err.message.split("\n")[2] ?? "";
+  if (!help.startsWith("  help: ") || !help.includes("`build.parser: 'wasm'`")) {
     fail(`Unavailable error missed the wasm engine on its help line: ${err.message}`);
   }
 }

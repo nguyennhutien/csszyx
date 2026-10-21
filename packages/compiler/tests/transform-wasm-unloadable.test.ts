@@ -40,7 +40,12 @@ describe('a wasm artifact that cannot load', () => {
         expect(isCsszyxError(error)).toBe(true);
         expect(error).toMatchObject({
             name: 'WasmTransformUnavailableError',
-            message: `transformWasm: wasm engine unavailable - ${loadFailure.message}`,
+            message:
+                '[csszyx] wasm-engine-unavailable:\n' +
+                '  The wasm engine in `@csszyx/core` did not load, so the `wasm` parser cannot run.\n' +
+                '  help: reinstall `@csszyx/core`; the wasm engine ships inside it as `parser-wasm`.\n' +
+                `  note: the loader reported: ${loadFailure.message}.\n` +
+                '  docs: https://csszyx.com/e/wasm-engine-unavailable',
             code: 'wasm-engine-unavailable',
             args: { detail: loadFailure.message },
         });

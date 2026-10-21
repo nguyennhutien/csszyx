@@ -1,3 +1,4 @@
+import { NATIVE_ENGINE_UNAVAILABLE } from '@csszyx/compiler/report';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listResources, RESOURCE_URIS, readResource } from '../src/resources/index.js';
@@ -24,6 +25,16 @@ describe('mcp resources', () => {
         expect(text).toContain('/// <reference types="@csszyx/types/jsx" />');
         expect(text).toContain('csszyxTurbopack');
         expect(text).toContain('Do NOT set an `as`');
+    });
+
+    it('names the native-engine fallback line by the code and words a build prints', () => {
+        const text = readResource('csszyx://setup').contents[0]?.text ?? '';
+        const fallback = (NATIVE_ENGINE_UNAVAILABLE.text as Readonly<Record<string, string>>)[
+            'wasm-fallback'
+        ];
+        expect(text).toContain('`native-engine-unavailable`');
+        expect(text).toContain(fallback);
+        expect(text).not.toContain('native engine unavailable');
     });
 
     it('throws on an unknown resource uri', () => {

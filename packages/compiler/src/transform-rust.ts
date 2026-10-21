@@ -7,6 +7,10 @@ import {
     scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { INTERNAL_ERROR } from './diagnostic-browser.generated.js';
 import {
     diagnosticPath,
     type EngineDiagnosticFieldsOf,
@@ -16,13 +20,19 @@ import {
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
-import { CsszyxError, isCsszyxError } from './errors.js';
+import {
+    CsszyxError,
+    type CsszyxErrorFields,
+    type CsszyxErrorOptions,
+    isCsszyxError,
+} from './errors.js';
 import type {
     GlobalVarSourceFile,
     GlobalVarUsageDiagnostic,
     GlobalVarUsageQuery,
 } from './global-var-diagnostics.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
+import { renderThrown } from './thrown-words.js';
 import type {
     CssVariableMangleValue,
     GlobalVarAliasTableInput,
@@ -57,32 +67,59 @@ export function thrownMessage(thrown: unknown): string {
  * artifact's counterpart is `WasmTransformUnavailableError`.
  *
  * A csszyx error. Wrapping the loader's error, it keeps that error as its
- * `cause` and takes its `code` and `args` (`native-engine-unavailable`):
- * the wrapper renames the failure for this lane, it does not reclassify it.
- * Without a csszyx error to wrap, as when the binding answers a file with no
- * result or the engine refuses the batch, the state is a csszyx bug:
- * `internal-error`, with `detail` as the check that failed.
+ * `cause` and takes its `code`, `args` and message
+ * (`native-engine-unavailable`): the wrapper renames the failure for this
+ * lane, it does not reclassify it. Without a csszyx error to wrap, as when
+ * the binding answers a file with no result or the engine refuses the batch,
+ * the state is a csszyx bug: `internal-error`, with `detail` as the check
+ * that failed.
  */
 export class RustTransformUnavailableError extends CsszyxError {
     /**
-     * @param detail Native loader or transform failure detail.
+     * @param detail The check that failed; unused when `cause` is a csszyx error.
      * @param options What it wraps.
      * @param options.cause The loader's error, or what the engine threw.
      * @param options.where Where a csszyx bug was found; `transformRust` by default.
      */
     constructor(detail: string, options: { cause?: unknown; where?: string } = {}) {
         const { cause, where = 'transformRust' } = options;
-        const wrapped = isCsszyxError(cause) ? cause : undefined;
-        super({
-            code: wrapped?.code ?? 'internal-error',
-            args: wrapped?.args ?? { where, detail },
-            // The registry has no words for these ids yet; the message stays
-            // the lane's own until they are worded (ADR 0031).
-            message: `transformRust: native engine unavailable: ${detail}`,
-            cause,
-        });
+        super(isCsszyxError(cause) ? wrapping(cause) : internalError({ where, detail }, cause));
         this.name = 'RustTransformUnavailableError';
     }
+}
+
+/**
+ * A csszyx error renamed for another lane: its code, args and words, with it
+ * as the cause.
+ *
+ * @param cause - The error to wrap.
+ * @returns What to construct the wrapper from.
+ */
+function wrapping(cause: Error & CsszyxErrorFields): CsszyxErrorOptions {
+    return { code: cause.code, args: cause.args, message: cause.message, cause };
+}
+
+/**
+ * An `internal-error` in the registry's words: a state only a csszyx bug
+ * reaches.
+ *
+ * @internal Shared with the wasm lane; not a stable API.
+ * @param args - Where it was found and the check that failed.
+ * @param args.where - Where it was found.
+ * @param args.detail - The check that failed.
+ * @param cause - What was thrown, when something was.
+ * @returns What to construct the error from.
+ */
+export function internalError(
+    args: { where: string; detail: string },
+    cause?: unknown,
+): CsszyxErrorOptions {
+    return {
+        code: 'internal-error',
+        args,
+        message: renderThrown(INTERNAL_ERROR, args),
+        cause,
+    };
 }
 
 /**
@@ -151,7 +188,7 @@ function transformRustOne(
         fields,
     );
     if (!result) {
-        throw new RustTransformUnavailableError('native transform returned no result');
+        throw new RustTransformUnavailableError('the native transform returned no result');
     }
     return result;
 }
@@ -181,7 +218,6 @@ export function checkNativeEngine(): void {
     assertEngineIdentity({
         expected: EXPECTED_ENGINE,
         reported: typeof engineIdentity === 'function' ? engineIdentity() : null,
-        artifact: `native (${platformPackage ?? 'no platform package'})`,
         platformPackage,
     });
     nativeIdentityChecked = true;
@@ -214,10 +250,7 @@ export function ensureRustTransformAvailable(): void {
         transformBatch([{ filename: 'csszyx-probe.tsx', source: '' }]);
         rustAvailability = true;
     } catch (err) {
-        if (err instanceof CsszyxNativeUnavailableError) {
-            throw new RustTransformUnavailableError(err.detail, { cause: err });
-        }
-        throw err;
+        throw asRustUnavailable(err);
     }
 }
 
@@ -422,7 +455,7 @@ export function scanGlobalVarUsagesRust(
  */
 function asRustUnavailable(err: unknown): unknown {
     return err instanceof CsszyxNativeUnavailableError
-        ? new RustTransformUnavailableError(err.detail, { cause: err })
+        ? new RustTransformUnavailableError(err.message, { cause: err })
         : err;
 }
 

@@ -26,10 +26,12 @@ PG_DIR="playground/vite-react"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
-# $1 = lane name (also the CSSZYX_PARSER value), $2 = exact active-parser
-# banner the build must print. An explicit CSSZYX_PARSER is fail-loud, and the
-# banner assert catches the silent failure mode a typo'd env var would cause:
-# falling back to the default lane and comparing rust against rust.
+# $1 = lane name (also the CSSZYX_PARSER value), $2 = exact sentence of the
+# `active-parser` line the build must print (the `degraded` form, a wasm
+# build in place of the native default, words it differently). An explicit
+# CSSZYX_PARSER is fail-loud, and the sentence assert catches the silent
+# failure mode a typo'd env var would cause: falling back to the default lane
+# and comparing rust against rust.
 build_lane() {
     local lane="$1" banner="$2"
     rm -rf "$PG_DIR/dist"
@@ -41,15 +43,15 @@ build_lane() {
     fi
     if ! grep -qF "$banner" "$OUT/$lane.log"; then
         echo "[smoke-wasm-lane] $lane build did not print '$banner' — wrong lane ran?" >&2
-        grep -F "active parser" "$OUT/$lane.log" >&2 || true
+        grep -A1 -F "active-parser" "$OUT/$lane.log" >&2 || true
         exit 1
     fi
     mkdir -p "$OUT/$lane"
     cp "$PG_DIR"/dist/assets/*.css "$OUT/$lane/"
 }
 
-build_lane rust '[csszyx] active parser: rust (native engine)'
-build_lane wasm '[csszyx] active parser: wasm (wasm build of the native engine)'
+build_lane rust 'This build parses with the native engine.'
+build_lane wasm 'This build parses with the wasm engine.'
 
 if diff -r "$OUT/rust" "$OUT/wasm" >"$OUT/css.diff" 2>&1; then
     echo "[smoke-wasm-lane] OK — CSS byte-identical across the native and wasm artifacts:"

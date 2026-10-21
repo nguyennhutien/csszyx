@@ -76,7 +76,16 @@ describe('csszyx PostCSS plugin', () => {
                 '@import "tailwindcss" source(none);\n',
                 { from: join(root, 'app/after.css') },
             ),
-        ).rejects.toThrow(/before '@tailwindcss\/postcss'/);
+        ).rejects.toThrow(
+            expect.objectContaining({
+                code: 'postcss-plugin-order',
+                message:
+                    '[csszyx] postcss-plugin-order:\n' +
+                    '  `@csszyx/unplugin/postcss` is listed after `@tailwindcss/postcss`, so Tailwind compiles the stylesheet before csszyx adds the safelist, and the build stops.\n' +
+                    "  help: list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.\n" +
+                    '  docs: https://csszyx.com/e/postcss-plugin-order',
+            }),
+        );
     });
 
     /**

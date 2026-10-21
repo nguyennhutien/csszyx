@@ -20,6 +20,7 @@
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
     addClassHooks,
     appliedCandidatesIn,
@@ -41,6 +42,7 @@ import {
     type StylesheetImportCandidates,
     type TailwindLoader,
 } from '@csszyx/tailwind-oracle';
+import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
 import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { sortStrings } from './sort.js';
@@ -153,31 +155,13 @@ export interface ProjectStyleModel {
     withSourceHooks(hooks: ClassHooks): ProjectStyleModel;
 }
 
-/**
- * What the build must say when the project's Tailwind is configured in a way
- * csszyx does not emit for yet.
- *
- * `important` makes every declaration `!important`, so a `sz` class loses to the
- * library class it is meant to override: a green build whose overrides silently
- * lose, with nothing in the log to search for. A prefix is not on this list —
- * the build reads it and the engine writes it before every class.
- *
- * @param facts - What the project's import line settled.
- * @returns The message, or null when nothing is unsupported.
- */
-export function unsupportedStylesheetFactsMessage(facts: StylesheetFacts): string | null {
-    if (!facts.important) return null;
-    return (
-        '[csszyx] your Tailwind entry sets important, which csszyx does not emit for yet: every utility is `!important`, so a class csszyx emits cannot override one the project already applies.\n' +
-        '  help: drop important from the `@import "tailwindcss"` line, or keep it and style those elements with `className` until csszyx supports it.'
-    );
-}
-
 /** What a message calls the setting that names the stylesheets an app loads, by default. */
 export const TAILWIND_STYLESHEET_OPTION = 'the csszyx `tailwindStylesheet` option';
 
 /**
- * What stops the build when the project's stylesheets give no single answer.
+ * What stops the build when the project's stylesheets give no single answer:
+ * `tailwind-stylesheet-broken` for a stylesheet that reaches Tailwind and did
+ * not compile, `prefix-disagreement` for roots that set different prefixes.
  *
  * @param model - The opened style model.
  * @param root - Project root, so the message names files the way the author does.
@@ -185,24 +169,19 @@ export const TAILWIND_STYLESHEET_OPTION = 'the csszyx `tailwindStylesheet` optio
  *        a command-line lane takes a flag where a bundler takes an option.
  * @param ignoreSetting - What the help calls the setting that leaves a
  *        directory out, on a lane that has one; other lanes are not told of it.
- * @returns The message, or null when the stylesheets agree.
+ * @returns The error to throw, or null when the stylesheets agree.
  */
 export function styleModelError(
     model: ProjectStyleModel,
     root: string,
     setting: string = TAILWIND_STYLESHEET_OPTION,
     ignoreSetting?: string,
-): string | null {
+): CsszyxError | null {
     // First: a broken entry leaves the facts of the others unreliable, so a
     // disagreement between those is not the thing to fix.
     const broken = failedStylesheets(model, root, true);
     if (broken.length > 0) {
-        return [
-            '[csszyx] stylesheets that reach Tailwind did not compile, so csszyx cannot read the prefix its classes need:',
-            ...broken,
-            `  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in ${setting}.`,
-            '  note: no module was transformed; without the prefix every emitted class could style nothing.',
-        ].join('\n');
+        return diagnosticError('tailwind-stylesheet-broken', { stylesheets: broken, setting });
     }
     const roots: Array<{ file: string; facts: StylesheetFacts }> = [];
     for (const entry of model.entries) {
@@ -215,19 +194,16 @@ export function styleModelError(
     // `important` is left out on purpose: it forces declarations, it renames
     // no class, so a disagreement over it cannot make one of them dead.
     if (new Set(roots.map(entry => entry.facts.prefix)).size <= 1) return null;
-    const named = roots.map(entry => ({
-        file: relativeName(root, entry.file),
-        prefix: entry.facts.prefix === null ? 'no prefix' : `prefix(${entry.facts.prefix})`,
-    }));
-    const width = Math.max(...named.map(entry => entry.file.length));
-    return [
-        '[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:',
-        ...named.map(entry => `  ${entry.file.padEnd(width)}   ${entry.prefix}`),
+    const entries = roots.map(entry => {
+        const prefix = entry.facts.prefix === null ? 'none' : `\`prefix(${entry.facts.prefix})\``;
+        return `\`${relativeName(root, entry.file)}\` with ${prefix}`;
+    });
+    return diagnosticError(
+        'prefix-disagreement',
         ignoreSetting === undefined
-            ? `  help: give every entry the same \`@import "tailwindcss"\` line, or list the stylesheets this build loads in ${setting}.`
-            : `  help: give every entry the same \`@import "tailwindcss"\` line, list the stylesheets this build loads in ${setting}, or leave another app's directory out with ${ignoreSetting}.`,
-        '  note: the build stopped before transforming any module; nothing was written.',
-    ].join('\n');
+            ? { form: 'build', entries, setting }
+            : { form: 'next', entries, setting, ignoreSetting },
+    );
 }
 
 /**
@@ -248,7 +224,7 @@ export function styleModelWarning(
     if (skipped.length === 0) return null;
     return [
         '[csszyx] these stylesheets did not compile and never reached Tailwind, so csszyx read the prefix without them:',
-        ...skipped,
+        ...skipped.map(line => `  ${line}`),
         `  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in ${setting}.`,
     ].join('\n');
 }
@@ -306,19 +282,21 @@ export function unresolvedImportWarning(
  *
  * @param model - The opened style model.
  * @param root - Project root, so the message names files the way the author does.
- * @returns The message, or null when every root can tell.
+ * @returns One `merge-origin-unreadable` record per such root, or null when
+ *          every root can tell.
  */
 export function originWarning(model: ProjectStyleModel, root: string): string | null {
     const failed = model.entries.filter(entry => entry.originFailure !== undefined);
     if (failed.length === 0) return null;
-    return [
-        ...failed.map(
-            entry =>
-                `[csszyx] csszyx merges no class in this build: ${relativeName(root, entry.file)} did not compile with its \`@utility\` blocks and plugin classes taken out (${entry.originFailure}).`,
-        ),
-        '  help: report it at https://github.com/nguyennhutien/csszyx/issues with the plugin or `@utility` block the stylesheet uses.',
-        '  note: every class is kept: `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays next to the `sz` classes, and `szcn` removes only exact repeats.',
-    ].join('\n');
+    return failed
+        .map(entry =>
+            diagnosticMessage(
+                'merge-origin-unreadable',
+                { reason: entry.originFailure },
+                relativeName(root, entry.file),
+            ),
+        )
+        .join('\n');
 }
 
 /**
@@ -331,7 +309,7 @@ export function originWarning(model: ProjectStyleModel, root: string): string | 
  * @param model - The opened style model.
  * @param root - Project root, for the names.
  * @param reachedTailwind - Which half to return.
- * @returns One indented `file: reason` line per stylesheet.
+ * @returns One `file: reason` line per stylesheet.
  */
 function failedStylesheets(
     model: ProjectStyleModel,
@@ -352,7 +330,7 @@ function failedStylesheets(
         const [first = ''] = failure.reason
             .replace(/^the stylesheet did not compile: /, '')
             .split('\n');
-        lines.push(`  ${relativeName(root, entry.file)}: ${first}`);
+        lines.push(`${relativeName(root, entry.file)}: ${first}`);
     }
     return lines;
 }
@@ -376,17 +354,14 @@ function relativeName(root: string, file: string): string {
  * @param missing - The listed paths that do not exist, as the author wrote them.
  * @param root - The project root they were resolved against.
  * @param setting - What the message calls the setting that listed them.
- * @returns The message.
+ * @returns The `tailwind-stylesheet-missing` error to throw.
  */
-export function missingTailwindStylesheetMessage(
+export function missingTailwindStylesheetError(
     missing: readonly string[],
     root: string,
     setting: string = TAILWIND_STYLESHEET_OPTION,
-): string {
-    return (
-        `[csszyx] ${setting} lists stylesheets that are not there: ${missing.join(', ')} (relative to ${root}).\n` +
-        '  help: list the stylesheet that imports Tailwind for this build, relative to the project root.'
-    );
+): CsszyxError {
+    return diagnosticError('tailwind-stylesheet-missing', { setting, missing, root });
 }
 
 /** One entry's compiled answers. */

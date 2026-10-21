@@ -124,27 +124,31 @@ describe('attribute selectors against the mangle map', () => {
 
 describe('the hazard message', () => {
     it('names the selector, the classes and a paste-ready manglePreserve', () => {
-        const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(MAP, ALL, NONE, [
-                { operator: '*=', value: 'bg-tag', insensitive: false },
-                { operator: '~=', value: 'p-4', insensitive: false },
-            ]),
-        );
-        expect(message).toContain('[class*="bg-tag"]');
-        expect(message).toContain('bg-tag-blue-bg');
-        // Every renamed class starts with the value, so a prefix entry covers them.
-        expect(message).toContain("manglePreserve: ['bg-tag*', 'p-4']");
-        expect(message).toContain('mangleExclude');
+        expect(
+            mangleHybridHazardMessage(
+                collectMangleHybridHazards(MAP, ALL, NONE, [
+                    { operator: '*=', value: 'bg-tag', insensitive: false },
+                    { operator: '~=', value: 'p-4', insensitive: false },
+                ]),
+            ),
+        ).toEqual([
+            '[csszyx] mangle-hybrid-hazard:\n' +
+                '  Mangling broke 2 attribute selector(s) that match class names by text, such as `[class*="bg-tag"] → bg-tag-blue-bg, bg-tag-red-bg`; `[class~="p-4"] → p-4`, so those rules stop matching and the elements lose those styles.\n' +
+                "  help: keep those classes readable with `production.manglePreserve: ['bg-tag*', 'p-4']`, or select on a data attribute, which mangling never changes.\n" +
+                '  note: `production.mangleExclude` does not help here: it reserves token names and still lets the class be renamed.\n' +
+                '  docs: https://csszyx.com/e/mangle-hybrid-hazard',
+        ]);
     });
 
     it('lists exact names when no prefix covers them, and escapes quotes', () => {
-        const message = mangleHybridHazardMessage(
+        // `it's` is no utility of ALL, so an orphan record comes first.
+        const [, record] = mangleHybridHazardMessage(
             collectMangleHybridHazards({ ...MAP, "it's": 'c' }, ALL, NONE, [
                 { operator: '$=', value: '-fg', insensitive: false },
                 { operator: '*=', value: "it'", insensitive: false },
             ]),
         );
-        expect(message).toContain("manglePreserve: ['text-tag-blue-fg', 'it\\'*']");
+        expect(record).toContain("manglePreserve: ['text-tag-blue-fg', 'it\\'*']");
     });
 
     it('collapses to one prefix when the only outliers carry a variant', () => {
@@ -155,98 +159,61 @@ describe('the hazard message', () => {
         // preserve matcher has looked past a variant prefix since the bracket
         // scan landed, so the suggestion was recommending work already covered.
         const map = { ...MAP, 'dark:bg-tag-blue-bg': 'z1' };
-        const message = mangleHybridHazardMessage(
+        const [record] = mangleHybridHazardMessage(
             collectMangleHybridHazards(map, new Set(Object.keys(map)), NONE, [
                 { operator: '*=', value: 'bg-tag', insensitive: false },
             ]),
         );
-        expect(message).toContain("manglePreserve: ['bg-tag*']");
-        expect(message).not.toContain("'dark:bg-tag-blue-bg'");
+        expect(record).toContain("manglePreserve: ['bg-tag*']");
+        expect(record).not.toContain("'dark:bg-tag-blue-bg'");
     });
 
-    it('puts each hazard paragraph on its own line', () => {
-        // One console line held the finding and its remedy for every kind at
-        // once, so a narrow terminal wrapped the lot into a single block.
-        const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['a']), [
+    it('names at most three selectors, and counts them all', () => {
+        const [record] = mangleHybridHazardMessage(
+            collectMangleHybridHazards(MAP, ALL, NONE, [
                 { operator: '*=', value: 'bg-tag', insensitive: false },
+                { operator: '~=', value: 'p-4', insensitive: false },
+                { operator: '$=', value: '-fg', insensitive: false },
+                { operator: '*=', value: 'md:p', insensitive: false },
             ]),
         );
-        const lines = (message ?? '').split('\n');
-        expect(lines.length).toBeGreaterThan(2);
-        expect(lines.every(line => line.trim().length > 0)).toBe(true);
+        expect(record).toContain('Mangling broke 4 attribute selector(s)');
+        // In selector order; the fourth, `[class~="p-4"]`, is only counted.
+        expect(record).toContain('`[class*="md:p"] → md:p-4`, so');
+        expect(record).not.toContain('[class~="p-4"]');
     });
 
     it('says when a selector would start matching tokens instead', () => {
-        const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(MAP, ALL, NONE, [
+        expect(
+            mangleHybridHazardMessage(
+                collectMangleHybridHazards(MAP, ALL, NONE, [
+                    { operator: '^=', value: 'y', insensitive: false },
+                ]),
+            ),
+        ).toEqual([
+            '[csszyx] mangle-hybrid-hazard:\n' +
+                '  Mangling made 1 attribute selector(s) match the tokens it renamed classes to, such as `[class^="y"] → y4, y5`, so their rules style elements they were not written for.\n' +
+                "  help: reserve those tokens with `production.mangleExclude: ['y4', 'y5']`, or select on a data attribute, which mangling never changes.\n" +
+                '  note: a prefix or substring selector can match tokens a later build allocates too, so the data attribute is the lasting fix.\n' +
+                '  docs: https://csszyx.com/e/mangle-hybrid-hazard',
+        ]);
+    });
+
+    // Every hazard kind carries its own fix: a record per kind, in the order
+    // collision, orphan, renamed selector, matched selector, so a remedy never
+    // lands after another kind's finding.
+    it('keeps each remedy with the finding it answers', () => {
+        const records = mangleHybridHazardMessage(
+            collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4']), [
+                { operator: '*=', value: 'bg-tag', insensitive: false },
                 { operator: '^=', value: 'y', insensitive: false },
             ]),
         );
-        expect(message).toContain('would start matching mangled tokens');
-        expect(message).toContain('[class^="y"] → y4, y5');
-        // The remedy for a token the selector would catch is to keep the
-        // allocator from producing it — the option the paragraph above
-        // says cannot help with a renamed class is exactly the one here.
-        expect(message.indexOf("mangleExclude: ['y4', 'y5']")).toBeGreaterThan(
-            message.indexOf('would start matching mangled tokens'),
-        );
-        expect(message).toContain('data attribute');
-        expect(message).not.toContain('manglePreserve');
-    });
-
-    it('still reports collisions and orphans the same way', () => {
-        const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4'])),
-        );
-        expect(message).toContain('collide');
-        expect(message).toContain('no emitted CSS rule');
-        expect(message).not.toContain('manglePreserve');
-    });
-
-    // Every hazard kind carries its own fix. Listing all the findings and then
-    // all the fixes let a reader attach the wrong one: the orphan remedy
-    // ("those classes are csszyx-owned") landed straight after the selector
-    // list, where it reads as a claim about the selector's classes.
-    it('keeps each remedy with the finding it answers', () => {
-        const message =
-            mangleHybridHazardMessage(
-                collectMangleHybridHazards(MAP, NONE, new Set(['y4']), [
-                    { operator: '*=', value: 'bg-tag', insensitive: false },
-                ]),
-            ) ?? '';
-        const orphanFinding = message.indexOf('no emitted CSS rule');
-        const orphanRemedy = message.indexOf('csszyx-owned');
-        const selectorFinding = message.indexOf('attribute selector(s) match class names');
-        const selectorRemedy = message.indexOf('manglePreserve');
-        expect(orphanFinding).toBeGreaterThanOrEqual(0);
-        expect(orphanRemedy).toBeGreaterThan(orphanFinding);
-        expect(selectorFinding).toBeGreaterThan(orphanRemedy);
-        expect(selectorRemedy).toBeGreaterThan(selectorFinding);
-    });
-
-    // The paragraphs were once joined with nothing between them, so each began
-    // with a space to keep the words apart. Joined by newlines, that space
-    // became a one-column indent on every line but the first.
-    it('starts no line with a space', () => {
-        const message =
-            mangleHybridHazardMessage(
-                collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4']), [
-                    { operator: '*=', value: 'bg-tag', insensitive: false },
-                ]),
-            ) ?? '';
-        const lines = message.split('\n');
-        expect(lines.length).toBeGreaterThan(4);
-        expect(lines.filter(line => line.startsWith(' '))).toEqual([]);
-    });
-
-    // An orphan reported next to a collision used to lose its fix entirely:
-    // the collision branch answered both, and only the collision was addressed.
-    it('answers an orphan even when a collision is reported too', () => {
-        const message =
-            mangleHybridHazardMessage(
-                collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4'])),
-            ) ?? '';
-        expect(message).toContain('csszyx-owned');
+        expect(records.map(record => record.split('\n')[1]?.slice(0, 23))).toEqual([
+            '  Mangling renamed clas',
+            '  Mangling renamed 4 cl',
+            '  Mangling broke 1 attr',
+            '  Mangling made 1 attri',
+        ]);
     });
 });

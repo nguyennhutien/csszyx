@@ -164,7 +164,16 @@ describe('next stylesheet facts', () => {
 
         await expect(
             writeNextStylesheetFacts({ root, cacheDir, tailwindStylesheet: ['app/gone.css'] }),
-        ).rejects.toThrow('app/gone.css');
+        ).rejects.toThrow(
+            expect.objectContaining({
+                code: 'tailwind-stylesheet-missing',
+                args: {
+                    setting: 'the csszyx `tailwindStylesheet` option',
+                    missing: ['app/gone.css'],
+                    root,
+                },
+            }),
+        );
     });
 });
 
@@ -404,6 +413,8 @@ describe('prepareNextStylesheetFacts messages', () => {
                 tailwindStylesheet: ['app/gone.css'],
                 setting: 'the `--tailwind-stylesheet` flag',
             }),
-        ).rejects.toThrow('the `--tailwind-stylesheet` flag lists stylesheets that are not there');
+        ).rejects.toThrow(
+            'The stylesheet(s) `app/gone.css` named by the `--tailwind-stylesheet` flag do not exist under',
+        );
     }, 60_000);
 });

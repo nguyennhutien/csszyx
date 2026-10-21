@@ -487,7 +487,14 @@ describe('a lane that learns of a hook after it merged', () => {
         );
         await call('configResolved', { root: app, command: 'build' });
         await call('transform', COVERED, join(app, 'src/A.tsx'));
-        await expect(call('renderStart')).rejects.toThrow(/`shadow-md`.*src\/A\.tsx/);
+        await expect(call('renderStart')).rejects.toThrow(
+            expect.objectContaining({
+                code: 'merge-hook-late',
+                message: expect.stringMatching(
+                    /^\[csszyx\] merge-hook-late: src\/A\.tsx\n {2}`shadow-md` was removed from this file/,
+                ),
+            }),
+        );
     }, 60_000);
 
     it('stops the build and names the class, the file and the switch', async () => {
@@ -513,7 +520,16 @@ describe('a lane that learns of a hook after it merged', () => {
         writeFileSync(join(root, 'src/B.tsx'), late);
         await call('transform', late, join(root, 'src/B.tsx'));
         await expect(call('renderStart')).rejects.toThrow(
-            /`shadow-md`.*src\/A\.tsx[\s\S]*mergeCoveredClasses: false/,
+            expect.objectContaining({
+                code: 'merge-hook-late',
+                args: { className: 'shadow-md' },
+                message:
+                    '[csszyx] merge-hook-late: src/A.tsx\n' +
+                    '  `shadow-md` was removed from this file before csszyx read a rule that selects on it, so the page would lose that class, and the build stops.\n' +
+                    '  help: set `build.mergeCoveredClasses: false` to keep every class, or restart the watch session.\n' +
+                    '  note: csszyx reads such rules during the prescan, before it merges; this one came later, from a module the prescan did not reach or from an edit during a watch session.\n' +
+                    '  docs: https://csszyx.com/e/merge-hook-late',
+            }),
         );
     }, 60_000);
 });

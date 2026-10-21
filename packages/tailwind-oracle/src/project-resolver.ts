@@ -19,6 +19,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { szDiagnosticError } from '@csszyx/compiler';
+
 /** A plugin or config module handed back to Tailwind's loader. */
 export interface ProjectModule {
     path: string;
@@ -114,8 +116,14 @@ async function createProjectResolver(resolveFrom: string): Promise<ProjectResolv
         return {
             resolveStylesheet(id, base) {
                 const resolved = css.resolveSync({}, base, id);
-                /* v8 ignore next -- narrowing only: false comes from a browser-field alias, which a style resolver never reads. */
-                if (resolved === false) throw new Error(`Cannot resolve '${id}' from ${base}`);
+                /* v8 ignore start -- narrowing only: false comes from a browser-field alias, which a style resolver never reads. */
+                if (resolved === false) {
+                    throw szDiagnosticError('internal-error', {
+                        where: 'resolveStylesheet',
+                        detail: `the style resolver answered false for '${id}' from ${base}`,
+                    });
+                }
+                /* v8 ignore stop */
                 return resolved;
             },
             loadModule: (id, base) => loadModule(id, base, () => {}),

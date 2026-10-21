@@ -26,6 +26,11 @@ export {
     type SzSettableDiagnosticId,
 } from './diagnostic-codes.generated.js';
 export {
+    type SzDiagnosticErrorOptions,
+    szDiagnosticError,
+    szDiagnosticMessage,
+} from './diagnostic-error.js';
+export {
     type IdentifiedDiagnostic,
     isSzDiagnosticId,
     type RenderableDiagnostic,

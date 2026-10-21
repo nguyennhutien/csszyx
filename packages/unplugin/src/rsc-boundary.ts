@@ -1,6 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import type { CsszyxError } from '@csszyx/compiler/errors';
+
+import { diagnosticError } from './diagnostic-message.js';
 import { normalizePathSeparators } from './path-normalization.js';
 
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
@@ -219,7 +222,7 @@ export function assertNoRSCGraphViolation(records: Map<string, RSCModuleRecord>)
         return;
     }
 
-    throw new Error(formatRSCViolation(violation));
+    throw rscViolationError(violation);
 }
 
 /**
@@ -269,19 +272,21 @@ export function assertNoRSCBoundaryViolation(code: string, id: string): void {
         return;
     }
 
-    throw new Error(formatRSCViolation(violation));
+    throw rscViolationError(violation);
 }
 
 /**
- * Formats a violation using the public spec error shape.
+ * The build error for a violation, in the registry's words
+ * (`rsc-boundary-violation`), headed by the Server Component.
  *
  * @param violation violation details
- * @returns fatal build error message
+ * @returns the error to throw
  */
-function formatRSCViolation(violation: RSCBoundaryViolation): string {
-    return (
-        `csszyxRSCViolation: ${violation.symbol} imported in Server Component ${violation.path}\n` +
-        `  Import chain: ${violation.importChain.join(' -> ')}`
+function rscViolationError(violation: RSCBoundaryViolation): CsszyxError {
+    return diagnosticError(
+        'rsc-boundary-violation',
+        { symbol: violation.symbol, chain: violation.importChain },
+        { at: violation.path },
     );
 }
 

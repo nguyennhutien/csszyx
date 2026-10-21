@@ -44,9 +44,12 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
 
         const report = await reportFor(cwd);
 
-        expect(report).toContain("color: 'balance'");
-        expect(report).toContain('text-balance');
-        expect(report).toContain('text-wrap');
+        expect(report).toContain(
+            "    `color: 'balance'` emits `text-balance`, which sets `text-wrap`, not the property `color` sets.",
+        );
+        expect(report).toContain(
+            '\u2716 1 value(s) emit a class that sets another property than their key: move each to the key that sets that property, or declare a theme token named after it if the spelling was deliberate.',
+        );
         // A linter that names a file but no line leaves an editor and a CI
         // annotation with nowhere to point.
         expect(report).toContain('src/App.tsx:1');
@@ -109,6 +112,6 @@ describe('csszyx check — a project with more than one stylesheet', () => {
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
         });
 
-        expect(await reportFor(cwd)).not.toContain("color: 'balance' emits text-balance");
+        expect(await reportFor(cwd)).not.toContain("`color: 'balance'` emits `text-balance`");
     });
 });

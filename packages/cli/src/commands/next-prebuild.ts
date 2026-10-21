@@ -14,9 +14,11 @@ import { createDiagnosticLimiter } from '@csszyx/unplugin/diagnostics';
 import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
+import { registryError, registryMessage } from '../utils/registry-words.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
+import { nextParserMode } from './next-options.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 /** Options accepted by the `next-prebuild` CLI command. */
@@ -48,7 +50,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
 
     try {
         const mode = normalizeMode(options.mode);
-        const parserMode = normalizeParserMode(options.parserMode);
+        const parserMode = nextParserMode(options.parserMode);
         const matches = await fg(pattern, {
             cwd: root,
             absolute: true,
@@ -148,7 +150,7 @@ function reportNoFilesMatched(
         return;
     }
     console.error(
-        `${colors.error(icons.error)} No source files matched pattern \`${pattern}\` under ${root}.`,
+        `${colors.error(icons.error)} ${registryMessage({ code: 'no-source-files', args: { pattern, root } })}`,
     );
 }
 
@@ -208,6 +210,13 @@ function reportPrebuildFailure(json: boolean | undefined, message: string): void
     else console.error(`${colors.error(icons.error)} ${message}`);
 }
 
+/**
+ * Read `--mode`.
+ *
+ * @param mode - The value given, if any.
+ * @returns The mode; `production` when none was given.
+ * @throws {CsszyxError} `cli-option-invalid` for any other value.
+ */
 function normalizeMode(mode: NextPrebuildCommandOptions['mode']): 'development' | 'production' {
     if (mode === undefined) {
         return 'production';
@@ -215,17 +224,5 @@ function normalizeMode(mode: NextPrebuildCommandOptions['mode']): 'development' 
     if (mode === 'development' || mode === 'production') {
         return mode;
     }
-    throw new Error(`Invalid --mode "${mode}". Expected "development" or "production".`);
-}
-
-function normalizeParserMode(
-    parserMode: NextPrebuildCommandOptions['parserMode'],
-): 'rust' | 'wasm' | undefined {
-    if (parserMode === undefined) {
-        return undefined;
-    }
-    if (parserMode === 'rust' || parserMode === 'wasm') {
-        return parserMode;
-    }
-    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust" or "wasm".`);
+    throw registryError('cli-option-invalid', { form: 'mode', value: String(mode) });
 }

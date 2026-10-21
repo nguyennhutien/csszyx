@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack, { type WebpackPluginInstance } from 'webpack';
 
 import {
-    lateMangleCensusMessage,
+    lateMangleCensusError,
     realContentHashDisabledMessage,
     vitePlugin,
     watchModeMangleMessage,
@@ -135,14 +135,25 @@ describe('a class discovered after the freeze fails the build', () => {
         ).not.toThrow();
     });
 
-    it('reports both halves of the census, and stays readable with neither', () => {
-        expect(lateMangleCensusMessage(['gap-7'], ['legacy-card'])).toContain(
-            'csszyx-owned classes: gap-7',
-        );
-        expect(lateMangleCensusMessage(['gap-7'], ['legacy-card'])).toContain(
-            'author classes: legacy-card',
-        );
-        expect(lateMangleCensusMessage([], [])).toContain('the class census changed');
+    it('names both halves of the census as one list, and the change alone with neither', () => {
+        const error = lateMangleCensusError(['gap-7'], ['legacy-card']);
+        expect(error).toMatchObject({
+            code: 'mangle-census-late',
+            args: { form: 'classes', classes: ['gap-7', 'legacy-card'] },
+            message:
+                '[csszyx] mangle-census-late:\n' +
+                '  `gap-7`, `legacy-card` appeared after the mangle map was frozen, so the CSS emitted before then used another map, and the build stops.\n' +
+                '  help: move the file that uses them under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.\n' +
+                '  docs: https://csszyx.com/e/mangle-census-late',
+        });
+        expect(lateMangleCensusError([], [])).toMatchObject({
+            args: { form: 'census-changed' },
+            message:
+                '[csszyx] mangle-census-late:\n' +
+                '  The class census changed after the mangle map was frozen, so the CSS emitted before then used another map, and the build stops.\n' +
+                '  help: move every file that uses csszyx under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.\n' +
+                '  docs: https://csszyx.com/e/mangle-census-late',
+        });
     });
 });
 

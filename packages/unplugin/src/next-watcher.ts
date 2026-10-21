@@ -1,6 +1,6 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as path from 'node:path';
-
+import { diagnosticError } from './diagnostic-message.js';
 import type { NextWatcherCycleResult } from './next-watcher-cycle.js';
 import { NextWatcherLoop, type NextWatcherLoopOptions } from './next-watcher-loop.js';
 
@@ -129,7 +129,10 @@ export class NextSafelistWatcher {
      */
     start(): NextWatcherCycleResult | undefined {
         if (this.closed) {
-            throw new Error('[csszyx] Cannot start a closed Next safelist watcher.');
+            throw diagnosticError('internal-error', {
+                where: 'Next safelist watcher start',
+                detail: 'the watcher was started after it was closed',
+            });
         }
         if (this.started && this.loop.lastResult) {
             return this.loop.lastResult;
@@ -139,7 +142,10 @@ export class NextSafelistWatcher {
         this.loop.notify('initial');
         const result = this.loop.flushOrQueue();
         if (!result && !this.loop.pending) {
-            throw new Error('[csszyx] Next safelist watcher failed to run its initial cycle.');
+            throw diagnosticError('internal-error', {
+                where: 'Next safelist watcher start',
+                detail: 'the initial cycle neither ran nor was queued behind the lock',
+            });
         }
         return result;
     }

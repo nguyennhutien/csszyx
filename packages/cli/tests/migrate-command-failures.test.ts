@@ -36,18 +36,20 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
             // one, and this is the branch a user on an uncovered platform
             // takes on their first run.
             if (control.unavailable) {
-                throw new actual.RustMigrateUnavailableError(
-                    'install the optional package for this platform: @csszyx/core-sunos-x64.',
-                );
+                throw new actual.RustMigrateUnavailableError({
+                    form: 'not-installed',
+                    packageName: '@csszyx/core-sunos-x64',
+                });
             }
             if (control.other) throw new Error('the engine refused the resolution map');
             return actual.migrateRustBatch(...args);
         },
         migrateRustHtml: (...args: Parameters<typeof actual.migrateRustHtml>) => {
             if (control.htmlUnavailable) {
-                throw new actual.RustMigrateUnavailableError(
-                    'install the optional package for this platform: @csszyx/core-sunos-x64.',
-                );
+                throw new actual.RustMigrateUnavailableError({
+                    form: 'not-installed',
+                    packageName: '@csszyx/core-sunos-x64',
+                });
             }
             if (control.htmlNonError) throw 'the engine said no';
             if (control.html) throw new Error('the engine refused the markup');
@@ -111,8 +113,11 @@ describe('an install with no native engine', () => {
         await expect(migrate({ cwd })).resolves.toBeUndefined();
 
         const printed = logs.join('\n');
-        expect(printed).toContain('native engine unavailable');
-        expect(printed).toContain('@csszyx/core-sunos-x64');
+        expect(printed).toContain(
+            '[csszyx] native-migrate-unavailable:\n' +
+                '  `@csszyx/core-sunos-x64` is not installed, so migrate cannot run.\n' +
+                '  help: reinstall without skipping optional dependencies, which installs `@csszyx/core-sunos-x64` with `@csszyx/core`.',
+        );
         // The message is the whole value of this path; a stack frame in the
         // output means the crash dump came back.
         expect(printed).not.toContain('at migrateRustBatch');
@@ -270,7 +275,7 @@ describe('markup that meets an engine which cannot run at all', () => {
         await expect(migrate({ cwd: withMarkup() })).resolves.toBeUndefined();
 
         const printed = logs.join('\n');
-        expect(printed).toContain('native engine unavailable');
+        expect(printed).toContain('[csszyx] native-migrate-unavailable:');
         expect(printed).not.toContain('Could not migrate src/page.html');
     });
 

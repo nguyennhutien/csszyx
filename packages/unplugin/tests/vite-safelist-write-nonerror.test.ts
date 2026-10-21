@@ -71,7 +71,7 @@ describe('a writer that throws something other than an Error', () => {
         });
 
         const said = warn.mock.calls.map(entry => String(entry[0])).join('\n');
-        expect(said).toContain('could not write the generated safelist');
-        expect(said).toContain('the disk said no');
+        expect(said).toContain('[csszyx] safelist-unwritable: ');
+        expect(said).toContain('  note: the file system reported: the disk said no.\n');
     });
 });

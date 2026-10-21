@@ -16,14 +16,20 @@
  */
 
 import MagicString, { type SourceMap } from 'magic-string';
-
-import type { SzDiagnosticCode } from './diagnostic-codes.generated.js';
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { TEMPLATE_RUNTIME_VALUE, TEMPLATE_SZ_INVALID } from './diagnostic-browser.generated.js';
+import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
 import { renderSzDiagnostic } from './diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+import type { SzBrowserDiagnostic } from './diagnostic-template.js';
 import { findEmittedClassName } from './emitted-class-name.js';
 import { chooseEngine } from './engine-choice.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
+import { CsszyxError } from './errors.js';
 import type { ParserMode } from './parser-mode.js';
+import { renderThrown } from './thrown-words.js';
 import type { SourceTransformResult } from './transform-core.js';
 import { transformRustBatch } from './transform-rust.js';
 import { transformWasmBatch } from './transform-wasm.js';
@@ -65,15 +71,16 @@ export interface TemplateSzDiagnostic {
     /** `error` when the value got no class; `warning` when it did. */
     severity: 'error' | 'warning';
     /**
-     * The full message. An engine diagnostic reads `[csszyx] <code>:
-     * <file>:<line>:<column>` then its sentence; one of the template's own,
-     * `[csszyx] <file>:<line>:<column>: <sentence>`.
+     * The full message: `[csszyx] <code>: <file>:<line>:<column>`, then its
+     * sentence, `help:` and `note:` lines, and the link to the code's page.
      */
     message: string;
-    /** The engine's code, for an engine diagnostic. */
-    code?: SzDiagnosticCode;
-    /** The values its sentence names, for an engine diagnostic. */
-    args?: object;
+    /** The registry id. */
+    code: SzDiagnosticId;
+    /** The values its sentence names. */
+    args: object;
+    /** The template file's name, when known. */
+    file?: string;
     /** 1-based line in the template file. */
     line: number;
     /** 1-based column in UTF-16 code units. */
@@ -100,13 +107,6 @@ const SUFFIX = '} />;\n';
  */
 const EMITTED_HEAD = 'export const A = () => <div';
 const EMITTED_TAIL = ' />;\n';
-
-const RUNTIME_VALUE = [
-    'this sz value is only known at runtime, and a template has no csszyx runtime to resolve it',
-    'help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime',
-];
-const NOT_AN_EXPRESSION = ['this sz value could not be parsed as a JavaScript expression'];
-const LEFT_AS_WRITTEN = 'note: the attribute is left as written; no class is generated for it';
 
 /** One `sz` attribute an adapter found in a template file. */
 export interface TemplateSzAttribute {
@@ -224,6 +224,7 @@ function lowerTemplateSz(
         { classPrefix: options.classPrefix },
     );
     const place = placer(file, options.filename);
+    const locate = locator(file);
     values.forEach((value, index) => {
         const result = results[index];
         // Both artifacts always report the issue list.
@@ -234,28 +235,22 @@ function lowerTemplateSz(
         const className = parseError === -1 ? emittedClassName(result.code) : null;
         lowering.classNames.push(className);
         if (className === null) {
-            const reason = parseError === -1 ? RUNTIME_VALUE : NOT_AN_EXPRESSION;
-            const text = [...reason, LEFT_AS_WRITTEN].join('\n');
-            lowering.diagnostics.push(place('error', at(Math.max(parseError, 0)), text));
+            lowering.diagnostics.push(
+                parseError === -1
+                    ? place('error', at(0), TEMPLATE_RUNTIME_VALUE, {})
+                    : engineDiagnostic('error', locate(at(parseError)), options.filename, {
+                          code: 'parse-error',
+                          args: { form: 'expression' },
+                      }),
+            );
             return;
         }
         // Rendered again for the template file: the lane's message names the
         // synthesized module and its positions.
         issues.forEach((issue, index) => {
-            const { line, column } = place('warning', at(index), '');
-            const message = renderSzDiagnostic({
-                diagnostic: { code: issue.code, args: issue.args, line, column },
-                file: options.filename ?? '',
-                computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
-            });
-            lowering.diagnostics.push({
-                severity: 'warning',
-                message,
-                line,
-                column,
-                code: issue.code,
-                args: issue.args,
-            });
+            lowering.diagnostics.push(
+                engineDiagnostic('warning', locate(at(index)), options.filename, issue),
+            );
         });
     });
     return lowering;
@@ -312,28 +307,91 @@ function fileOffset(value: TemplateSzValue, index: number): number {
 }
 
 /**
- * Build the function that places a diagnostic in the template file. The
- * file's line starts are found on the first diagnostic, not before.
+ * Build the function that finds the line and column of an offset in a
+ * template file. The file's line starts are found on the first call, not
+ * before.
+ *
+ * @param file - The whole template file.
+ * @returns A function from offset to its 1-based line and column.
+ */
+function locator(file: string): (offset: number) => TemplatePlace {
+    let lineStarts: number[] | undefined;
+    return offset => {
+        lineStarts ??= lineStartsOf(file);
+        const line = lineIndexOf(lineStarts, offset);
+        return { line: line + 1, column: offset - lineStarts[line] + 1 };
+    };
+}
+
+/** A place in a template file, 1-based. */
+interface TemplatePlace {
+    line: number;
+    column: number;
+}
+
+/**
+ * Build the function that places one of the template's own diagnostics in
+ * the template file, in the registry's words.
  *
  * @param file - The whole template file.
  * @param filename - Its name, when known.
- * @returns A function from severity, offset and text to a diagnostic.
+ * @returns A function from severity, offset, registry entry and args to a diagnostic.
  */
 function placer(
     file: string,
     filename: string | undefined,
-): (
+): <Args extends object>(
     severity: TemplateSzDiagnostic['severity'],
     offset: number,
-    text: string,
+    diagnostic: SzBrowserDiagnostic<Args>,
+    args: NoInfer<Args>,
 ) => TemplateSzDiagnostic {
-    let lineStarts: number[] | undefined;
-    return (severity, offset, text) => {
-        lineStarts ??= lineStartsOf(file);
-        const line = lineIndexOf(lineStarts, offset);
-        const column = offset - lineStarts[line] + 1;
-        const where = [filename, line + 1, column].filter(part => part !== undefined).join(':');
-        return { severity, message: `[csszyx] ${where}: ${text}`, line: line + 1, column };
+    const locate = locator(file);
+    return (severity, offset, diagnostic, args) => {
+        const { line, column } = locate(offset);
+        return {
+            severity,
+            message: renderThrown(diagnostic, args, { file: filename ?? '', line, column }),
+            code: diagnostic.id,
+            args,
+            line,
+            column,
+            ...(filename === undefined ? {} : { file: filename }),
+        };
+    };
+}
+
+/**
+ * An engine diagnostic placed in the template file, in the engine's words.
+ *
+ * @param severity - `error` when the value got no class.
+ * @param place - Where it is in the template file.
+ * @param filename - The file's name, when known.
+ * @param issue - The engine's code and args.
+ * @param issue.code - The code.
+ * @param issue.args - Its args.
+ * @returns The diagnostic.
+ */
+function engineDiagnostic(
+    severity: TemplateSzDiagnostic['severity'],
+    place: TemplatePlace,
+    filename: string | undefined,
+    issue: { code: SzDiagnosticId; args: object },
+): TemplateSzDiagnostic {
+    const { line, column } = place;
+    const message = renderSzDiagnostic({
+        diagnostic: { code: issue.code, args: issue.args, line, column },
+        file: filename ?? '',
+        computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    });
+    return {
+        severity,
+        message,
+        code: issue.code,
+        args: issue.args,
+        line,
+        column,
+        ...(filename === undefined ? {} : { file: filename }),
     };
 }
 
@@ -369,7 +427,7 @@ function lineStartsOf(text: string): number[] {
 }
 
 /** Input to {@link placeTemplateDiagnostic}. */
-export interface PlaceTemplateDiagnosticInput {
+export interface PlaceTemplateDiagnosticInput<Args extends object> {
     /** The whole template file. */
     file: string;
     /** Its name, when known. */
@@ -378,32 +436,45 @@ export interface PlaceTemplateDiagnosticInput {
     severity: TemplateSzDiagnostic['severity'];
     /** UTF-16 offset in the file. */
     offset: number;
-    /** The message, without the `[csszyx] <file>:<line>:<column>:` head. */
-    text: string;
+    /** The registry entry, as `@csszyx/compiler/report` exports it. */
+    diagnostic: SzBrowserDiagnostic<Args>;
+    /** Its args. */
+    args: NoInfer<Args>;
 }
 
 /**
  * A diagnostic placed in a template file, for what an adapter reports itself:
  * a file its framework's parser rejects, say.
  *
- * @param input - The file, the place and the text.
+ * @param input - The file, the place, the registry entry and its args.
  * @returns The diagnostic.
  */
-export function placeTemplateDiagnostic(input: PlaceTemplateDiagnosticInput): TemplateSzDiagnostic {
-    return placer(input.file, input.filename)(input.severity, input.offset, input.text);
+export function placeTemplateDiagnostic<Args extends object>(
+    input: PlaceTemplateDiagnosticInput<Args>,
+): TemplateSzDiagnostic {
+    return placer(input.file, input.filename)(
+        input.severity,
+        input.offset,
+        input.diagnostic,
+        input.args,
+    );
 }
 
 /** Where an adapter hands its diagnostics: a bundler plugin context, say. */
 export interface TemplateSzReporter {
     /** Reports a warning. */
     warn: (message: string) => void;
-    /** Fails the build; does not return. */
-    error: (message: string) => never;
+    /**
+     * Fails the build with the file's `template-sz-invalid` error, which
+     * carries its code and args; does not return.
+     */
+    error: (error: CsszyxError) => never;
 }
 
 /**
  * Hand a file's diagnostics on: each warning as a warning, then every error
- * at once as the one error that fails the build.
+ * at once as the one error that fails the build, headed by
+ * `template-sz-invalid` with their count.
  *
  * @param reporter - Where they go.
  * @param diagnostics - The file's diagnostics.
@@ -412,12 +483,22 @@ export function reportTemplateSzDiagnostics(
     reporter: TemplateSzReporter,
     diagnostics: readonly TemplateSzDiagnostic[],
 ): void {
-    const errors: string[] = [];
+    const errors: TemplateSzDiagnostic[] = [];
     for (const diagnostic of diagnostics) {
-        if (diagnostic.severity === 'error') errors.push(diagnostic.message);
+        if (diagnostic.severity === 'error') errors.push(diagnostic);
         else reporter.warn(diagnostic.message);
     }
-    if (errors.length > 0) reporter.error(errors.join('\n\n'));
+    if (errors.length === 0) return;
+    // Headed by the file's count, each error after it as it was placed.
+    const args = { count: errors.length };
+    const head = renderThrown(TEMPLATE_SZ_INVALID, args, { file: errors[0].file ?? '' });
+    reporter.error(
+        new CsszyxError({
+            code: 'template-sz-invalid',
+            args,
+            message: [head, ...errors.map(error => error.message)].join('\n\n'),
+        }),
+    );
 }
 
 /**

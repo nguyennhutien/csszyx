@@ -119,3 +119,52 @@ describe('generate-types: the Tailwind guard', () => {
         expect(logs.join('\n')).not.toContain('Reading config');
     });
 });
+
+describe('generate-types: a config it cannot read', () => {
+    it('names a --config path that does not exist, in the registry words', async () => {
+        availability.resolveTailwindV3.mockResolvedValue({ version: '3.4.19' });
+        const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));
+        try {
+            const { errors } = await run({ cwd, config: './nope.js' });
+            expect(errors).toBe(
+                `❌ [csszyx] tailwind-config-missing: ${join(cwd, 'nope.js')}\n` +
+                    '  This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.\n' +
+                    "  help: pass the path of the project's Tailwind config with `--config`, such as `--config ./tailwind.config.js`.\n" +
+                    '  docs: https://csszyx.com/e/tailwind-config-missing',
+            );
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    it('names a config that throws while loading, with what it threw', async () => {
+        availability.resolveTailwindV3.mockResolvedValue({ version: '3.4.19' });
+        const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));
+        writeFileSync(join(cwd, 'tailwind.config.mjs'), "throw new Error('theme is broken');\n");
+        try {
+            const { errors } = await run({ cwd, config: 'tailwind.config.mjs' });
+            expect(errors).toBe(
+                `❌ [csszyx] tailwind-config-unloadable: ${join(cwd, 'tailwind.config.mjs')}\n` +
+                    '  This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.\n' +
+                    '  help: fix the error below so that Node can import the config.\n' +
+                    '  note: the import failed with: theme is broken.\n' +
+                    '  docs: https://csszyx.com/e/tailwind-config-unloadable',
+            );
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    it('says it could not read the config for a failure with no registry words', async () => {
+        // The guard answers with no `resolveConfig`, so resolving the theme throws.
+        availability.resolveTailwindV3.mockResolvedValue({ version: '3.4.19' });
+        const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));
+        writeFileSync(join(cwd, 'tailwind.config.mjs'), 'export default {};\n');
+        try {
+            const { errors } = await run({ cwd, config: 'tailwind.config.mjs' });
+            expect(errors).toMatch(/^❌ Failed to read Tailwind config: .*resolveConfig/);
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+});

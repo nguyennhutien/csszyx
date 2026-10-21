@@ -178,7 +178,9 @@ describe('csszyx next-prebuild command', () => {
                 'csszyx.config.mjs',
                 'csszyx.levels.mjs',
             ]);
-            expect(warnSpy.mock.calls.flat().join('\n')).toContain('did you mean `dead-class`?');
+            expect(warnSpy.mock.calls.flat().join('\n')).toContain(
+                '    help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
+            );
         } finally {
             logSpy.mockRestore();
             warnSpy.mockRestore();
@@ -207,7 +209,7 @@ describe('csszyx next-prebuild command', () => {
                 ).toBe(0);
                 return warnSpy.mock.calls
                     .map(call => String(call[0]))
-                    .filter(line => line.includes('(dead-class)'));
+                    .filter(line => line.startsWith('[csszyx] dead-class: '));
             } finally {
                 logSpy.mockRestore();
                 warnSpy.mockRestore();
@@ -222,10 +224,10 @@ describe('csszyx next-prebuild command', () => {
                 ) + 1;
             expect(lines).toHaveLength(2);
             expect(lines[0]).toContain(
-                `[csszyx] app/page.tsx:1:${column('break')}: \`break-bogus\` (sz key \`break\`) is emitted by an sz prop`,
+                `[csszyx] dead-class: app/page.tsx:1:${column('break')}\n  \`break-bogus\` produces no CSS: this project's Tailwind serves no such utility.`,
             );
             expect(lines[1]).toContain(
-                `app/page.tsx:1:${column('justify')}: \`justify-safe-center\` (sz key \`justify\`)`,
+                `[csszyx] dead-class: app/page.tsx:1:${column('justify')}\n  \`justify-safe-center\` produces no CSS`,
             );
         }, 60_000);
 
@@ -449,7 +451,11 @@ describe('csszyx next-prebuild command', () => {
             const printed = logSpy.mock.calls.flat().join('\n');
             const summary = JSON.parse(printed) as { ok: boolean; reason: string };
             expect(summary.ok).toBe(false);
-            expect(summary.reason).toContain('Invalid --mode');
+            expect(summary.reason).toContain(
+                '[csszyx] cli-option-invalid:\n' +
+                    '  `--mode staging` is not a mode this command takes, so the command did not run.\n' +
+                    '  help: pass `--mode development` or `--mode production`, or leave it out for `production`.',
+            );
         } finally {
             logSpy.mockRestore();
         }
@@ -470,7 +476,10 @@ describe('csszyx next-prebuild command', () => {
             const printed = logSpy.mock.calls.flat().join('\n');
             const summary = JSON.parse(printed) as { ok: boolean; reason: string };
             expect(summary.ok).toBe(false);
-            expect(summary.reason).toContain('Invalid --parser-mode');
+            expect(summary.reason).toContain(
+                '  `--parser-mode swc` is not a parser this command takes, so the command did not run.\n' +
+                    '  help: pass `--parser-mode rust` or `--parser-mode wasm`, or leave it out for `rust`.',
+            );
         } finally {
             logSpy.mockRestore();
         }

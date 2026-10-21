@@ -139,7 +139,7 @@ describe('Next safelist advisory lock across processes', { retry: 2 }, () => {
 
         const winners = results.filter(result => result.stdout.includes('acquired:'));
         const locked = results.filter(
-            result => result.code === 2 && result.stderr.includes('already locked'),
+            result => result.code === 2 && result.stderr.includes('[csszyx] next-safelist-locked:'),
         );
         expect(winners).toHaveLength(1);
         expect(winners[0]?.code).toBe(0);
@@ -183,7 +183,8 @@ describe('Next safelist advisory lock across processes', { retry: 2 }, () => {
         expect(ownerResult.stdout).toContain('acquired:');
         expect(
             contenderResults.every(
-                result => result.code === 2 && result.stderr.includes('already locked'),
+                result =>
+                    result.code === 2 && result.stderr.includes('[csszyx] next-safelist-locked:'),
             ),
         ).toBe(true);
     }, 45_000);

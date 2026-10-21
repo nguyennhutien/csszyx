@@ -30,8 +30,8 @@ describe('@csszyx/core/native scanModuleLinks', () => {
     });
 
     it('names the missing export, and keeps the wasm note, when the binding predates the scan', async () => {
-        // Unlike migrate, the scan has a wasm lane, so the note that the wasm
-        // engine produces the same output still holds for this call.
+        // The scan has a wasm lane, so the note that the wasm engine produces
+        // the same output holds for this call.
         packageName.current = fixture('native-binding.cjs');
         const { scanModuleLinks, CsszyxNativeUnavailableError } = await import(
             '../native/index.js'
@@ -42,17 +42,17 @@ describe('@csszyx/core/native scanModuleLinks', () => {
             scanModuleLinks([]);
         } catch (err) {
             const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
-            expect(error.message).toContain('predates the module-link scan');
-            expect(error.message).toContain('scanModuleLinks()');
-            expect(error.args).toMatchObject({
+            expect(error.message).toContain('`scanModuleLinks()`');
+            expect(error.args).toEqual({
                 form: 'missing-export',
+                packageName: packageName.current,
                 exportName: 'scanModuleLinks',
             });
             expect(error.message).toContain(
-                'update @csszyx/core and its platform package together',
+                `update \`@csszyx/core\` and \`${packageName.current}\` together, to the same version`,
             );
             expect(error.message).toContain(
-                'the wasm engine ships inside @csszyx/core and produces the same output',
+                'note: the wasm engine produces the same output; only parsing is slower.',
             );
             expect(error.packageName).toBe(packageName.current);
         }
@@ -89,12 +89,9 @@ describe('@csszyx/core/native scanGlobalVarUsages', () => {
         }
         expect(caught).toBeInstanceOf(CsszyxNativeUnavailableError);
         const message = (caught as Error).message;
-        expect(message).toContain('predates the global-var usage scan');
+        expect(message).toContain('does not export `scanGlobalVarUsages()`');
         expect(message).toContain(
-            'update @csszyx/core and its platform package together, to a version that carries scanGlobalVarUsages',
-        );
-        expect(message).toContain(
-            'the wasm engine ships inside @csszyx/core and produces the same output',
+            'note: the wasm engine produces the same output; only parsing is slower.',
         );
     });
 });

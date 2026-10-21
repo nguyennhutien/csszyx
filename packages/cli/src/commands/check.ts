@@ -15,7 +15,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-    renderSzDiagnostic,
+    nearestName,
+    type RenderableDiagnostic,
     renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_COMPUTED_VALUES,
     SZ_DIAGNOSTIC_URL_BASE,
@@ -62,7 +63,9 @@ import {
     type CheckRule,
     createReporter,
     type FindingInput,
+    partLines,
     type Reporter,
+    registryFinding,
     renderJsonReport,
 } from '../scanner/check-report.js';
 import {
@@ -72,6 +75,7 @@ import {
 } from '../scanner/merge-audit-report.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
+import { registryMessage } from '../utils/registry-words.js';
 import { printHeader, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -339,13 +343,14 @@ export async function openOracles(cwd: string): Promise<OpenedOracles> {
 }
 
 /**
- * A prefix the way an `@import "tailwindcss"` line spells it.
+ * One entry and the prefix it sets, as `prefix-disagreement` lists it.
  *
- * @param prefix - A prefix, or null.
- * @returns `prefix(tw)`, or `no prefix`.
+ * @param entry - The entry and its prefix.
+ * @returns `` `src/app.css` with `prefix(tw)` ``, or `` `src/app.css` with none ``.
  */
-function prefixLabel(prefix: string | null): string {
-    return prefix === null ? 'no prefix' : `prefix(${prefix})`;
+function prefixEntry(entry: OpenedOracles['prefixes'][number]): string {
+    const prefix = entry.prefix === null ? 'none' : `\`prefix(${entry.prefix})\``;
+    return `\`${entry.entry}\` with ${prefix}`;
 }
 
 /**
@@ -357,23 +362,17 @@ function prefixLabel(prefix: string | null): string {
  * pass the half it did, so the disagreement is the finding.
  *
  * @param opened - The project's compiled design systems.
- * @returns The agreed prefix, or null with the message naming each entry.
+ * @returns The agreed prefix, or null with each entry and the prefix it sets.
  */
 function agreedPrefix(opened: OpenedOracles): {
     prefix: string | null;
-    disagreement: string | null;
+    disagreement: string[] | null;
 } {
     const [first, ...rest] = opened.prefixes;
     if (rest.every(entry => entry.prefix === first?.prefix)) {
         return { prefix: first?.prefix ?? null, disagreement: null };
     }
-    const listed = opened.prefixes
-        .map(entry => `${entry.entry}: ${prefixLabel(entry.prefix)}`)
-        .join('; ');
-    return {
-        prefix: null,
-        disagreement: `The Tailwind entries in this project set different prefixes (${listed}), so sz cannot be checked against all of them. Give every entry the same @import "tailwindcss" line.`,
-    };
+    return { prefix: null, disagreement: opened.prefixes.map(prefixEntry) };
 }
 
 /**
@@ -393,7 +392,8 @@ function agreedPrefix(opened: OpenedOracles): {
  * @param origins - Emitted class mapped to the file that first emitted it.
  * @param allow - Classes the project vouched for.
  * @param wants - Whether the run reports findings of a rule.
- * @param disagreement - Why the entries give no single prefix, or null.
+ * @param disagreement - Each entry and the prefix it sets when they give no
+ *        single prefix, or null.
  * @param failOn - The quietest level that fails the run.
  * @returns Whether the pass could not run on a project stylesheet, which
  *          fails the run whatever the levels say.
@@ -404,25 +404,32 @@ function reportDeadClasses(
     origins: Map<string, string>,
     allow: readonly string[],
     wants: RuleSelection,
-    disagreement: string | null,
+    disagreement: readonly string[] | null,
     failOn: SzDiagnosticLevel,
 ): boolean {
     if (origins.size === 0) return false;
 
     const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
     if (!hadEntries) {
-        out.runInfo(
-            'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
-                'there is no design system to ask which classes are real.',
-        );
+        out.runInfo('Dead-class check skipped: this project has no Tailwind stylesheet.');
         return false;
     }
     if (disagreement !== null) {
         const level = out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT });
         if (level === 'off') return false;
         const { mark, below } = summaryMark([level], failOn);
-        out.warn(`\n${mark} ${disagreement}${belowNote(below, failOn)}`);
-        out.push({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT, message: disagreement });
+        const finding = registryFinding({
+            rule: 'dead-class',
+            code: PREFIX_DISAGREEMENT,
+            args: { form: 'check', entries: disagreement },
+        });
+        out.warn(
+            [
+                `\n${mark} ${finding.message}${belowNote(below, failOn)}`,
+                ...partLines(finding, '  '),
+            ].join('\n'),
+        );
+        out.push(finding);
         return false;
     }
     if (oracles.length === 0) {
@@ -438,9 +445,8 @@ function reportDeadClasses(
         // there would break every consumer who does not build with one.
         if (stylesheetFailed) {
             out.runWarn(
-                '\n✖ The dead-class check did not run. Its stylesheet is part of this project, ' +
-                    'so this is reported as a failure rather than a skip — otherwise a check ' +
-                    'that never runs is indistinguishable from one that found nothing.',
+                '\n✖ A Tailwind stylesheet of this project did not compile (named above), so ' +
+                    'the dead-class check did not run and `csszyx check` fails until it compiles.',
             );
         }
         return stylesheetFailed;
@@ -622,12 +628,15 @@ function printUnsignedValues(
     if (shown.length === 0) return;
     out.warn("\nNegative values this project's Tailwind does not serve:");
     for (const { token, origin, level } of shown) {
-        out.push({
-            rule: 'dead-class',
-            kind: 'unsigned-value',
-            file: origin,
-            message: `"${token}" is emitted, and this project's Tailwind serves no negative "${hoistedSignUtility(token)}": drop the sign, or define it with @utility.`,
-        });
+        out.push(
+            registryFinding({
+                rule: 'dead-class',
+                code: 'unsigned-value',
+                file: origin,
+                // Only a class with a hoisted sign reaches this list.
+                args: { className: token, utility: hoistedSignUtility(token) as string },
+            }),
+        );
         out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
     }
     const { mark, below } = summaryMark(
@@ -635,8 +644,9 @@ function printUnsignedValues(
         failOn,
     );
     out.warn(
-        `\n${mark} ${shown.length} emitted class(es) carry a sign this project's Tailwind serves no negative utility for: ` +
-            `drop the sign, or define the negative with Tailwind's @utility.${belowNote(below, failOn)}`,
+        `\n${mark} ${shown.length} emitted class(es) produce no CSS: this project's Tailwind serves no ` +
+            "negative form of their utility; drop the sign, or define the negative with Tailwind's " +
+            `\`@utility\`.${belowNote(below, failOn)}`,
     );
 }
 
@@ -671,32 +681,24 @@ function printUnservedVariants(
     if (shown.length === 0) return;
     out.warn("\nVariants this project's Tailwind does not serve:");
     for (const { token, origin, variant, level } of shown) {
-        const args = { form: variant.form, variant: variant.name, className: token };
-        const { text, help, note } = renderSzDiagnosticParts(
-            { code: 'unserved-variant', args },
-            SZ_DIAGNOSTIC_COMPUTED_VALUES,
-        );
-        out.push({
+        const finding = registryFinding({
             rule: 'dead-class',
-            kind: 'unserved-variant',
+            code: 'unserved-variant',
             file: origin,
-            message: text,
-            help,
-            note,
-            args,
-            url: `${SZ_DIAGNOSTIC_URL_BASE}unserved-variant`,
+            args: { form: variant.form, variant: variant.name, className: token },
         });
+        out.push(finding);
         out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
         // The advice depends on the name, so each line carries its own.
-        out.info(`      help: ${help}`);
+        out.info(`      help: ${finding.help}`);
     }
     const { mark, below } = summaryMark(
         shown.map(entry => entry.level),
         failOn,
     );
     out.warn(
-        `\n${mark} ${shown.length} emitted class(es) use a variant this project's Tailwind does not ` +
-            `serve, so each styles nothing.${belowNote(below, failOn)}`,
+        `\n${mark} ${shown.length} emitted class(es) produce no CSS: each uses a variant this ` +
+            `project's Tailwind does not serve.${belowNote(below, failOn)}`,
     );
 }
 
@@ -755,11 +757,14 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
     if (shownDead.length > 0) {
         out.warn('\nClasses that produce no CSS:');
         for (const { token, origin, level } of shownDead) {
-            out.push({
-                rule: 'dead-class',
-                file: origin,
-                message: `"${token}" is emitted but produces no CSS under this project's Tailwind.`,
-            });
+            out.push(
+                registryFinding({
+                    rule: 'dead-class',
+                    code: 'dead-class',
+                    file: origin,
+                    args: { className: token },
+                }),
+            );
             out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
         }
         const { mark, below } = summaryMark(
@@ -767,8 +772,8 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
             failOn,
         );
         out.warn(
-            `\n${mark} ${shownDead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
-                `nothing: fix the sz key, or define the class with Tailwind's @utility.${belowNote(below, failOn)}`,
+            `\n${mark} ${shownDead.length} emitted class(es) produce no CSS: fix the sz key or value, ` +
+                `or define the class with Tailwind's \`@utility\`.${belowNote(below, failOn)}`,
         );
     }
 
@@ -777,17 +782,21 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
         // v4 wraps the modifier in color-mix(), which dims any valid color, so
         // the only broken shape is a var() chain ending in a bare comma
         // triplet — invalid inside color-mix(), silently dropped by browsers.
-        out.warn('\nOpacity modifiers the compiled stylesheet drops:');
+        out.warn('\nOpacity modifiers that do not apply:');
         for (const entry of shownBroken) {
-            out.push({
+            const finding = registryFinding({
                 rule: 'broken-opacity',
+                code: 'broken-opacity',
                 file: entry.origin,
-                message: `"${entry.token}" carries an opacity modifier this stylesheet drops.`,
+                args: { className: entry.token, value: entry.value },
             });
-            out.info(`  ${levelTag(entry.level)}${entry.token.padEnd(28)} ${entry.origin}`);
+            out.push(finding);
             out.info(
-                `      its theme token resolves to the bare triplet "${entry.value}", which ` +
-                    'color-mix() cannot dim — wrap the variable, e.g. rgb(var(--your-triplet)).',
+                [
+                    `  ${levelTag(entry.level)}${entry.token.padEnd(28)} ${entry.origin}`,
+                    `      ${finding.message}`,
+                    ...partLines(finding, '      '),
+                ].join('\n'),
             );
         }
         const { mark, below } = summaryMark(
@@ -795,8 +804,8 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
             failOn,
         );
         out.warn(
-            `\n${mark} ${shownBroken.length} emitted class(es) carry an opacity modifier that does not ` +
-                `survive compilation.${belowNote(below, failOn)}`,
+            `\n${mark} ${shownBroken.length} emitted class(es) carry an opacity modifier that does ` +
+                `not apply.${belowNote(below, failOn)}`,
         );
     }
 }
@@ -1056,29 +1065,31 @@ function reportSiblingKeywords(
 
     out.warn('\nValues that belong to a different sz key:');
     for (const { file, finding, level } of found) {
-        out.push({
+        const reported = registryFinding({
             rule: 'sibling-keyword',
+            code: 'sibling-keyword',
             file,
             line: finding.line,
-            message:
-                `${finding.key}: '${finding.value}' emits ${finding.className}, which sets ` +
-                `${finding.sets.join(', ')} — not what ${finding.key} sets.`,
+            args: {
+                key: finding.key,
+                value: finding.value,
+                className: finding.className,
+                // CSS property names, each a code span in the sentence.
+                sets: finding.sets.map(property => `\`${property}\``),
+            },
         });
+        out.push(reported);
         out.info(`  ${levelTag(level)}${file}:${finding.line}`);
-        out.info(
-            `    ${finding.key}: '${finding.value}' emits ${finding.className}, which sets ` +
-                `${finding.sets.join(', ')} — not what ${finding.key} sets.`,
-        );
+        out.info(`    ${reported.message}`);
     }
     const { mark, below } = summaryMark(
         found.map(entry => entry.level),
         failOn,
     );
     out.warn(
-        `\n${mark} ${found.length} value(s) written on a key that does not own them. Each one ` +
-            'compiles, ships CSS and renders, so nothing else reports it; the style asked for ' +
-            'is simply absent. Move the value to the key that owns it, or declare a theme ' +
-            `token by that name if the spelling was deliberate.${belowNote(below, failOn)}`,
+        `\n${mark} ${found.length} value(s) emit a class that sets another property than their key: ` +
+            'move each to the key that sets that property, or declare a theme token named after ' +
+            `it if the spelling was deliberate.${belowNote(below, failOn)}`,
     );
 }
 
@@ -1129,23 +1140,25 @@ async function reportThemeCollisions(
 
     out.warn('\nTheme tokens a built-in utility already claims:');
     for (const { finding, level } of found) {
-        const message =
-            `"${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
-            'both meanings into one rule, so a later class that sets only one of them does ' +
-            'not replace it in szcn and the stylesheet decides which wins — not the order ' +
-            'you wrote.';
-        out.push({ rule: 'theme-collision', file: finding.file, line: finding.line, message });
+        const reported = registryFinding({
+            rule: 'theme-collision',
+            code: 'theme-collision',
+            file: finding.file,
+            line: finding.line,
+            args: { form: 'classes', name: finding.name, classes: finding.classes },
+        });
+        out.push(reported);
         out.info(`  ${levelTag(level)}${finding.file}:${finding.line}`);
-        out.info(`    ${message}`);
+        out.info(`    ${reported.message}`);
     }
     const { mark, below } = summaryMark(
         found.map(entry => entry.level),
         failOn,
     );
     out.warn(
-        `\n${mark} ${found.length} theme token(s) shadow a built-in utility. Rename them; no ` +
-            'spelling of the merge can fix this while the name is shared. To keep one anyway, ' +
-            `pass --allow-token <name>.${belowNote(below, failOn)}`,
+        `\n${mark} ${found.length} theme token(s) share a name with a built-in utility: rename ` +
+            'them, or keep one with `--allow-token <name>` or `diagnostics.allow.tokens` in ' +
+            `\`csszyx.config\`.${belowNote(below, failOn)}`,
     );
 }
 
@@ -1169,17 +1182,17 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
     const stat = statSync(root, { throwIfNoEntry: false });
     let refusal: string;
     if (options.files) {
-        refusal = `A directory and --files both choose the files to check. Pass "${dir}" or --files, not both.`;
+        refusal = `A directory and \`--files\` both choose the files to check: pass \`${dir}\` or \`--files\`, not both.`;
     } else if (options.pattern !== undefined && path.win32.isAbsolute(options.pattern)) {
         // fast-glob reads an absolute pattern as absolute whatever root it is
         // given, so the scan would leave the directory without saying so.
-        refusal = `--pattern "${options.pattern}" is an absolute path, so it would not stay inside "${dir}". Pass a pattern relative to the directory.`;
+        refusal = `\`--pattern ${options.pattern}\` is an absolute path, so it would not stay inside \`${dir}\`: pass a pattern relative to the directory.`;
     } else if (stat?.isDirectory()) {
         return root;
     } else if (stat) {
-        refusal = `"${dir}" is a file, not a directory. To check single files, pass --files ${dir}.`;
+        refusal = `\`${dir}\` is a file: to check single files, pass \`--files ${dir}\`.`;
     } else {
-        refusal = `"${dir}" does not exist under ${cwd}, so there is nothing to check.`;
+        refusal = `\`${dir}\` does not exist under \`${cwd}\`, so there is nothing to check.`;
     }
     out.runWarn(`\u2716 ${refusal}`);
     process.exitCode = 1;
@@ -1225,7 +1238,9 @@ async function resolveScanFiles(
         }
     } catch (err) {
         s?.fail('File scan failed');
-        out.runWarn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
+        out.runWarn(
+            `\u2716 Could not list the files to check: ${err instanceof Error ? err.message : String(err)}`,
+        );
         process.exitCode = 1;
         return null;
     }
@@ -1233,13 +1248,11 @@ async function resolveScanFiles(
 
     if (missing.length === 0) return files;
 
-    out.runWarn('Files that could not be read:');
+    out.runWarn('Files given to `--files` that do not exist:');
     for (const file of missing) out.runInfo(`  ${file}`);
     out.runWarn(
-        `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
-            'checked. A pass here would report a subset as if it were the whole list. ' +
-            'Check the paths, and note that a separator is normalised rather than ' +
-            'trusted, so this is a missing file rather than a Windows path.',
+        `\u2716 ${missing.length} file(s) given to \`--files\` do not exist, so no file was checked: ` +
+            'fix each path above; a relative path is read from `--cwd`, or the current directory.',
     );
     process.exitCode = 1;
     return null;
@@ -1253,7 +1266,7 @@ type RuleSelection = (rule: CheckRule, kind: string) => boolean;
  * id like a diagnostic kind, which skips the dead-class pass: that pass needs
  * one prefix to ask about.
  */
-const PREFIX_DISAGREEMENT = 'prefix-disagreement';
+const PREFIX_DISAGREEMENT = 'prefix-disagreement' as const;
 
 /**
  * Read `--rule` and `--ignore-rule` into one predicate, or fail the run.
@@ -1275,20 +1288,23 @@ function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | nu
     // A removed id shipped once, so a script naming it keeps running; it
     // selects nothing, and the warning names the id to use instead.
     for (const id of new Set([...include, ...exclude].filter(isRemovedRuleId))) {
-        const diagnostic = removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id]);
-        out.runWarn(
-            renderSzDiagnostic({ diagnostic, file: '', computed: SZ_DIAGNOSTIC_COMPUTED_VALUES }),
-        );
+        out.runWarn(registryMessage(removedRuleIdDiagnostic(id, SZ_REMOVED_DIAGNOSTIC_IDS[id])));
     }
-    const unknown = [...include, ...exclude].filter(id => !known.has(id) && !isRemovedRuleId(id));
+    const unknown = [
+        ...new Set([...include, ...exclude].filter(id => !known.has(id) && !isRemovedRuleId(id))),
+    ];
     if (unknown.length > 0) {
-        const given = unknown.map(id => `"${id}"`).join(', ');
-        const ids = [...known].join(', ');
-        out.runWarn(
-            `\u2716 ${given} is not a rule or a diagnostic kind, so it would select nothing. ` +
-                `Known ids: ${ids}.`,
-        );
-        process.exitCode = 1;
+        // One id is likely a typo of a near one; for several the help says
+        // to check the spelling, since one guess would fit only one of them.
+        const suggestion = unknown.length === 1 ? nearestId(unknown[0] as string, known) : null;
+        refuse(out, {
+            code: 'unknown-rule-id',
+            args: {
+                form: 'cli',
+                ids: unknown,
+                ...(suggestion === null ? {} : { suggestion }),
+            },
+        });
         return null;
     }
     return (rule, kind) =>
@@ -1343,10 +1359,36 @@ function reportSelectedIssues(
             : `No selected sz issues across ${fileCount} files; ${leftOut} left out by --rule or --ignore-rule.`,
     );
     out.info(
-        'Scope: static sz props and szv()/szr() catalog definitions. Keys that ' +
-            'only exist at runtime (an array or spread built from runtime data, a ' +
-            'dynamic() value) cannot be checked statically.',
+        'Scope: static `sz` props and `szv()`/`szr()` catalogs; keys built from runtime data ' +
+            '(an array, a spread, a `dynamic()` value) cannot be checked.',
     );
+}
+
+/**
+ * The id a misspelt one most likely means, by the distance the config lane
+ * allows for its rule ids.
+ *
+ * @param id - The id as written.
+ * @param known - The ids it could mean.
+ * @returns The nearest, or null when none is near.
+ */
+function nearestId(id: string, known: ReadonlySet<string>): string | null {
+    return nearestName(
+        id,
+        [...known].map(entry => [entry, entry] as const),
+        Math.max(1, Math.floor(id.length / 4)),
+    );
+}
+
+/**
+ * Fail the run before it scans anything, in the registry's words.
+ *
+ * @param out - Reporter the failure is written to; stderr in `--json`.
+ * @param diagnostic - Why the run cannot start.
+ */
+function refuse(out: Reporter, diagnostic: RenderableDiagnostic): void {
+    out.runWarn(`\u2716 ${registryMessage(diagnostic)}`);
+    process.exitCode = 1;
 }
 
 /** The levels `--fail-on` accepts; `off` is never reported, so it cannot be one. */
@@ -1362,11 +1404,7 @@ const FAIL_ON_LEVELS: ReadonlySet<SzDiagnosticLevel> = new Set(['info', 'warn', 
 function failOnLevel(options: CheckOptions, out: Reporter): SzDiagnosticLevel | null {
     const level = options.failOn ?? 'error';
     if (FAIL_ON_LEVELS.has(level)) return level;
-    const refusal = level === 'off' ? 'cannot be a threshold' : 'is not a level';
-    out.runWarn(
-        `\u2716 --fail-on "${level}" ${refusal}: use info, warn or error. Nothing was scanned.`,
-    );
-    process.exitCode = 1;
+    refuse(out, { code: 'cli-option-invalid', args: { form: 'fail-on', value: String(level) } });
     return null;
 }
 
@@ -1478,7 +1516,7 @@ function runDeadClassPass(
     pass: {
         allow: readonly string[];
         wants: RuleSelection;
-        disagreement: string | null;
+        disagreement: readonly string[] | null;
         failOn: SzDiagnosticLevel;
     },
 ): void {
@@ -1493,7 +1531,7 @@ function runDeadClassPass(
     if (!deadClassPass) return;
     if (disagreementLeftOut) {
         out.runInfo(
-            `Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule ${PREFIX_DISAGREEMENT} left that finding out.`,
+            `Dead-class check skipped: the Tailwind stylesheets set different prefixes, and \`--ignore-rule ${PREFIX_DISAGREEMENT}\` left that finding out.`,
         );
         return;
     }
@@ -1531,7 +1569,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // "run `csszyx check`" hint while it runs over every file.
     process.env.CSSZYX_NO_PROJECT_SCAN_HINT = '1';
 
-    if (!json) printHeader('csszyx check — static sz diagnostics');
+    if (!json) printHeader('csszyx check');
     const { policy, failure: configFailure } = await loadCheckPolicy(cwd, json);
     const out = createReporter(json, policy);
 
@@ -1579,13 +1617,14 @@ export async function check(options: CheckOptions = {}): Promise<void> {
         );
     }
 
-    await reportMergeAudit(out, {
+    const mergeAuditFailed = await reportMergeAudit(out, {
         cwd,
         files,
         selected: mergeAuditRules(options, wantsRule, policy),
+        failOn,
     });
 
-    if (out.findings.some(finding => isAtLeastLevel(finding.level, failOn))) {
+    if (mergeAuditFailed || out.findings.some(finding => isAtLeastLevel(finding.level, failOn))) {
         process.exitCode = 1;
     }
     // Last, so a run whose passes all came back clean does not end on a tick

@@ -672,8 +672,11 @@ describe('the dead-class report', () => {
         expect(
             deadClassMessage('break-bogus', 'src/A.tsx', { line: 3, column: 9, key: 'break' }),
         ).toBe(
-            "[csszyx] src/A.tsx:3:9: `break-bogus` (sz key `break`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n" +
-                "  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.",
+            '[csszyx] dead-class: src/A.tsx:3:9\n' +
+                "  `break-bogus` produces no CSS: this project's Tailwind serves no such utility.\n" +
+                "  help: fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.\n" +
+                '  note: the class is still emitted, and it styles nothing.\n' +
+                '  docs: https://csszyx.com/e/dead-class',
         );
     });
 });

@@ -21,8 +21,12 @@ import {
     migrateParseClass,
     type NativeMigrateResult,
 } from '@csszyx/core/native';
-
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { NATIVE_MIGRATE_UNAVAILABLE } from './diagnostic-browser.generated.js';
 import { CsszyxError } from './errors.js';
+import { renderThrown } from './thrown-words.js';
 import { checkNativeEngine } from './transform-rust.js';
 
 /**
@@ -137,24 +141,26 @@ export interface MigrateRustParsedClass {
     extra?: { prop: string; value: unknown };
 }
 
+/** What a {@link RustMigrateUnavailableError} names, as the loader's error names it. */
+export type RustMigrateUnavailableArgs = CsszyxNativeUnavailableError['args'];
+
 /**
  * The native migrate cannot run in this install. A csszyx error,
  * `native-migrate-unavailable`: migrate has no wasm lane, so it is its own
- * id rather than the loader's, whose error it keeps as its `cause`.
+ * id rather than the loader's, whose error it keeps as its `cause` and whose
+ * args it names.
  */
 export class RustMigrateUnavailableError extends CsszyxError {
     /**
-     * @param detail - What the install is missing.
+     * @param args - What the install is missing, as the loader's error names it.
      * @param options - What it wraps.
      * @param options.cause - The loader's error.
      */
-    constructor(detail: string, options: { cause?: unknown } = {}) {
+    constructor(args: RustMigrateUnavailableArgs, options: { cause?: unknown } = {}) {
         super({
             code: 'native-migrate-unavailable',
-            args: { detail },
-            // The registry has no words for this id yet; the message stays
-            // migrate's own until it is worded (ADR 0031).
-            message: `migrate: native engine unavailable: ${detail}`,
+            args,
+            message: renderThrown(NATIVE_MIGRATE_UNAVAILABLE, args),
             cause: options.cause,
         });
         this.name = 'RustMigrateUnavailableError';
@@ -162,47 +168,6 @@ export class RustMigrateUnavailableError extends CsszyxError {
 }
 
 let availability: boolean | undefined;
-
-/**
- * What an install without the engine means for migrate, in migrate's terms.
- *
- * The loader's own message offers `build.parser: "wasm"`, and for a transform
- * that is a real answer — the wasm build of the engine ships inside
- * `@csszyx/core`. It is built WITHOUT the migrate feature, so for migrate the
- * same sentence points at a bundler option that cannot help with the command
- * the user ran. The recourse here is the platform package or nothing. The
- * loader's first line is kept, though: it already says whether the package is
- * missing, too old, or built without this export.
- *
- * @param packageName - Package the loader looked for, or null when no
- *   prebuilt package covers this platform at all.
- * @param diagnosis - The loader's own first line: it already knows whether
- *   the package is missing, too old, or built without this export.
- * @param loaderHelp - Help the loader wrote for this specific failure, kept as
- *   it stands; absent when the loader only had its default to offer.
- * @returns Three lines: what is missing, what to do, what did not happen.
- */
-function unavailableDetail(
-    packageName: string | null,
-    diagnosis: string,
-    loaderHelp?: string,
-): string {
-    // The loader's DEFAULT help offers `build.parser: "wasm"`, which migrate
-    // does not have — that is why this rewrites it. Help the loader wrote for
-    // one specific failure is kept: a package that is installed but predates
-    // migrate is not fixed by reinstalling it, and telling a reader to do that
-    // sends them round a loop that cannot end.
-    const help =
-        loaderHelp ??
-        (packageName === null
-            ? 'prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
-            : 'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages');
-    return [
-        diagnosis,
-        `help: ${help}`,
-        'note: no file was changed; build and runtime do not use this engine',
-    ].join('\n');
-}
 
 /**
  * Whether the native migrate can run here: the platform package is installed
@@ -308,15 +273,10 @@ function guarded<T>(call: () => T): T {
         checkNativeEngine();
         return call();
     } catch (error) {
+        // The loader words it for the transform, which can fall back to the
+        // wasm engine; migrate cannot, so it gets words of its own.
         if (error instanceof CsszyxNativeUnavailableError) {
-            throw new RustMigrateUnavailableError(
-                unavailableDetail(
-                    error.packageName,
-                    error.detail.split('\n')[0],
-                    error.helpIsExplicit ? error.help : undefined,
-                ),
-                { cause: error },
-            );
+            throw new RustMigrateUnavailableError(error.args, { cause: error });
         }
         throw error;
     }

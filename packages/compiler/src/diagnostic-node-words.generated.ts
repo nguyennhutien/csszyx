@@ -639,13 +639,15 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "mode": "`--mode {value}` is not a mode this command takes, so the command did not run.",
             "parser-mode": "`--parser-mode {value}` is not a parser this command takes, so the command did not run.",
             "debounce-ms": "`--debounce-ms {value}` is not a whole number of milliseconds from 0 to 60000, so the command did not run.",
-            "framework": "`--framework {value}` is not a framework `csszyx init` knows, so the command did not run."
+            "framework": "`--framework {value}` is not a framework `csszyx init` knows, so the command did not run.",
+            "fail-on": "`--fail-on {value}` is not a level this command takes, so the command did not run."
         },
         "help": {
             "mode": "pass `--mode development` or `--mode production`, or leave it out for `production`.",
             "parser-mode": "pass `--parser-mode rust` or `--parser-mode wasm`, or leave it out for `rust`.",
             "debounce-ms": "pass a whole number from 0 to 60000, such as `--debounce-ms 100`, or leave it out for 50.",
-            "framework": "pass `vite-react`, `vite-vue`, `vite-svelte`, `nextjs-app` or `nextjs-pages`, or leave it out for the detected one."
+            "framework": "pass `vite-react`, `vite-vue`, `vite-svelte`, `nextjs-app` or `nextjs-pages`, or leave it out for the detected one.",
+            "fail-on": "pass `--fail-on info`, `--fail-on warn` or `--fail-on error`, or leave it out for `error`."
         },
         "note": {
             "framework": "`nuxt`, `sveltekit` and `astro` are accepted too; for them `csszyx init` prints the Vite plugin lines to add by hand."

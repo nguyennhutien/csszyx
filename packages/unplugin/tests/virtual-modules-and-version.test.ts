@@ -124,14 +124,14 @@ describe('small guard branches', () => {
                 patterns: [],
                 compilerOptions: { mangleVars: true },
             } as never),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(/^\[csszyx\] next-mangle-vars-unsupported:\n {2}The Next prebuild cannot/);
         expect(() =>
             runNextPrebuild({
                 root: resolve('test-fixtures/next-prebuild'),
                 patterns: [],
                 config: { mangleVars: true },
             } as never),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(/^\[csszyx\] next-mangle-vars-unsupported:\n {2}The Next prebuild cannot/);
     });
 
     it('generation manifest validation names each failure', async () => {

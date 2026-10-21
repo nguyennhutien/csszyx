@@ -19,6 +19,7 @@ import {
     getProjectInfo,
     type ProjectInfo,
 } from '../utils/framework-detector.js';
+import { registryMessage } from '../utils/registry-words.js';
 import {
     printError,
     printHeader,
@@ -28,16 +29,64 @@ import {
     spinner,
 } from '../utils/terminal-ui.js';
 
-/**
- *
- */
+/** Options for the `init` command. */
 export interface InitOptions {
-    framework?: Framework;
+    /**
+     * The framework to set up instead of the detected one: a {@link Framework}
+     * other than `unknown`. Any other value stops init before it asks or
+     * installs anything.
+     */
+    framework?: string;
     yes?: boolean;
     cwd?: string;
 }
 
 const VITE_FRAMEWORKS = new Set<Framework>(['vite-react', 'vite-vue', 'vite-svelte']);
+
+/**
+ * Frameworks that build through Vite in a config init does not edit: it
+ * prints the plugin lines instead, for the file each one keeps them in.
+ * Tailwind's own guide for each adds `@tailwindcss/vite`, so that is the
+ * integration init installs for them, and the one the lines import.
+ */
+const PRINTED_VITE_CONFIGS: Partial<Record<Framework, PrintedViteConfig>> = {
+    nuxt: { file: 'nuxt.config.ts', shape: 'nested' },
+    sveltekit: { file: 'vite.config.ts', shape: 'sveltekit' },
+    astro: { file: 'astro.config.mjs', shape: 'nested' },
+};
+
+/** Where a framework keeps its Vite plugins, for the lines init prints. */
+interface PrintedViteConfig {
+    /** The config file the lines go in. */
+    file: string;
+    /**
+     * `nested` for a framework config holding Vite's under `vite`, and
+     * `sveltekit` for a `vite.config` that also lists `sveltekit()`.
+     */
+    shape: 'nested' | 'sveltekit';
+}
+
+/** Every value `--framework` takes: a framework init knows how to set up. */
+const FRAMEWORKS: ReadonlySet<string> = new Set<Framework>([
+    'vite-react',
+    'vite-vue',
+    'vite-svelte',
+    'nextjs-app',
+    'nextjs-pages',
+    'nuxt',
+    'sveltekit',
+    'astro',
+]);
+
+/**
+ * Whether a value is one `--framework` takes.
+ *
+ * @param value - The value given.
+ * @returns True for a framework init sets up.
+ */
+function isFramework(value: string): value is Exclude<Framework, 'unknown'> {
+    return FRAMEWORKS.has(value);
+}
 
 /**
  * Read a file as utf8 if it exists, otherwise return null.
@@ -160,8 +209,6 @@ const CSS_ENTRY_CANDIDATES = [
 
 /** Setup choices gathered from defaults or prompts. */
 interface InitConfig {
-    enableSSR: boolean;
-    enableRecovery: boolean;
     installTailwind: boolean;
     setupGitignore: boolean;
     setupTsconfig: boolean;
@@ -171,12 +218,31 @@ interface InitConfig {
  * @param options - Command line options
  */
 export async function init(options: InitOptions = {}): Promise<void> {
+    // Before anything is asked or installed: a value no framework has would
+    // otherwise run the whole setup for the detected one.
+    if (options.framework !== undefined && !isFramework(options.framework)) {
+        printError(
+            registryMessage({
+                code: 'cli-option-invalid',
+                args: { form: 'framework', value: options.framework },
+            }),
+        );
+        process.exitCode = 1;
+        return;
+    }
     const cwd = options.cwd || process.cwd();
-    const projectInfo = getProjectInfo(cwd);
+    const detected = getProjectInfo(cwd);
+    const projectInfo: ProjectInfo = {
+        ...detected,
+        framework: options.framework ?? detected.framework,
+    };
 
     printHeader('csszyx Setup Wizard');
 
-    if (projectInfo.framework !== 'unknown') {
+    if (options.framework !== undefined) {
+        printSuccess(`Framework: ${getFrameworkName(projectInfo.framework)} (from --framework)`);
+        printInfo(`Package Manager: ${projectInfo.packageManager}`);
+    } else if (projectInfo.framework !== 'unknown') {
         printSuccess(`Detected: ${getFrameworkName(projectInfo.framework)}`);
         printInfo(`Package Manager: ${projectInfo.packageManager}`);
     }
@@ -214,8 +280,6 @@ async function resolveInitConfig(
     acceptDefaults = false,
 ): Promise<InitConfig> {
     const defaults: InitConfig = {
-        enableSSR: true,
-        enableRecovery: true,
         installTailwind: !projectInfo.hasTailwind,
         setupGitignore: true,
         setupTsconfig: projectInfo.hasTypeScript,
@@ -226,18 +290,6 @@ async function resolveInitConfig(
             type: projectInfo.hasTailwind ? null : 'confirm',
             name: 'installTailwind',
             message: 'Install Tailwind CSS v4?',
-            initial: true,
-        },
-        {
-            type: 'confirm',
-            name: 'enableSSR',
-            message: 'Enable SSR Hydration Guard?',
-            initial: true,
-        },
-        {
-            type: 'confirm',
-            name: 'enableRecovery',
-            message: 'Enable development mode recovery?',
             initial: true,
         },
         {
@@ -282,9 +334,11 @@ async function installInitPackages(
             await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
         }
         if (config.installTailwind) {
-            const integration = VITE_FRAMEWORKS.has(projectInfo.framework)
-                ? '@tailwindcss/vite'
-                : '@tailwindcss/postcss';
+            const integration =
+                VITE_FRAMEWORKS.has(projectInfo.framework) ||
+                PRINTED_VITE_CONFIGS[projectInfo.framework] !== undefined
+                    ? '@tailwindcss/vite'
+                    : '@tailwindcss/postcss';
             await execa(projectInfo.packageManager, ['add', '-D', 'tailwindcss', integration], {
                 cwd,
             });
@@ -531,6 +585,10 @@ async function injectPlugin(cwd: string, framework: Framework): Promise<void> {
             printWarn('Could not auto-inject csszyx plugin. Add manually to next.config.js:');
             console.log(generateNextPluginInstructions());
         }
+    } else if (PRINTED_VITE_CONFIGS[framework] !== undefined) {
+        const printed = PRINTED_VITE_CONFIGS[framework];
+        printInfo(`Add csszyx to ${printed.file}:`);
+        console.log(generateFrameworkViteInstructions(printed));
     } else {
         // Unknown/other frameworks: print manual instructions
         printInfo('Add csszyx plugin to your bundler config:');
@@ -783,6 +841,43 @@ function generateVitePluginInstructions(): string {
       tailwindcss(),
       // ...your other plugins
     ],
+  });
+`;
+}
+
+/**
+ * The Vite plugin lines for a framework that keeps them in its own config.
+ *
+ * @param config - Where the framework keeps its Vite plugins.
+ * @returns Instruction snippet for that file.
+ */
+function generateFrameworkViteInstructions(config: PrintedViteConfig): string {
+    if (config.shape === 'sveltekit') {
+        return `
+  import { sveltekit } from '@sveltejs/kit/vite';
+  import csszyx from 'csszyx/vite';
+  import tailwindcss from '@tailwindcss/vite';
+
+  export default defineConfig({
+    plugins: [
+      ...csszyx(),      // csszyx MUST come before tailwindcss
+      tailwindcss(),
+      sveltekit(),
+    ],
+  });
+`;
+    }
+    return `
+  import csszyx from 'csszyx/vite';
+  import tailwindcss from '@tailwindcss/vite';
+
+  export default defineConfig({
+    vite: {
+      plugins: [
+        ...csszyx(),      // csszyx MUST come before tailwindcss
+        tailwindcss(),
+      ],
+    },
   });
 `;
 }

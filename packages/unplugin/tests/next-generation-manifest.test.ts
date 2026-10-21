@@ -11,6 +11,7 @@ import {
     validateNextGenerationManifest,
     writeNextGenerationManifest,
 } from '../src/next-generation-manifest.js';
+import { internalErrorMessage } from './helpers/internal-error.js';
 
 const tempDirs: string[] = [];
 
@@ -47,6 +48,23 @@ describe('Next generation manifest', () => {
             ...overrides,
         };
     }
+
+    it('refuses to write a manifest without the schema 1 fields', () => {
+        const root = tempRoot();
+        const bad = { ...manifest(root), schema: 2 } as unknown as NextGenerationManifest;
+
+        expect(() =>
+            writeNextGenerationManifest(join(root, 'generation-manifest.json'), bad),
+        ).toThrow(
+            expect.objectContaining({
+                code: 'internal-error',
+                message: internalErrorMessage(
+                    'Next generation manifest',
+                    'the manifest to write does not have the schema 1 fields',
+                ),
+            }),
+        );
+    });
 
     it('resolves under the explicit app root cache directory', () => {
         const root = tempRoot();

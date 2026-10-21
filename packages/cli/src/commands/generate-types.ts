@@ -9,6 +9,8 @@
 
 import { dirname, resolve } from 'node:path';
 
+import { isCsszyxError } from '@csszyx/compiler/errors';
+
 import { type GeneratorOptions, generateAndWriteTypes } from '../generator/type-generator.js';
 import { resolveTailwindV3, tailwindLoaderFor } from '../scanner/tailwind-availability.js';
 import { findConfigFile, scanTailwindConfig } from '../scanner/tailwind-scanner.js';
@@ -141,7 +143,11 @@ async function loadTailwindConfig(
     try {
         return await scanTailwindConfig(configPath);
     } catch (cause) {
-        error(`❌ Failed to read Tailwind config: ${errorMessage(cause)}`);
+        // A csszyx error says what failed in the registry's words already.
+        const reason = isCsszyxError(cause)
+            ? cause.message
+            : `Failed to read Tailwind config: ${errorMessage(cause)}`;
+        error(`❌ ${reason}`);
         process.exit(1);
     }
 }

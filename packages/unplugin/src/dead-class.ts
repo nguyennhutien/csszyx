@@ -42,8 +42,8 @@ import {
     sortStrings,
     stateVariantForm,
 } from '@csszyx/compiler';
-
 import type { DiagnosticLimiter, LimitedFinding } from './diagnostic-limiter.js';
+import { diagnosticMessage } from './diagnostic-message.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { channelOfLevel, type QuietMode } from './transform-diagnostics.js';
@@ -369,12 +369,7 @@ export function deadClassMessage(
     file: string,
     site: Omit<DeadClassSite, 'file'> = {},
 ): string {
-    const where = [file, site.line, site.column].filter(part => part !== undefined).join(':');
-    const from = site.key === undefined ? '' : ` (sz key \`${site.key}\`)`;
-    return (
-        `[csszyx] ${where}: \`${className}\`${from} is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n` +
-        "  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one."
-    );
+    return diagnosticMessage('dead-class', { className }, siteOf(file, site));
 }
 
 /**
@@ -393,12 +388,19 @@ export function unsignedValueMessage(
     file: string,
     site: Omit<DeadClassSite, 'file'> = {},
 ): string {
-    const where = [file, site.line, site.column].filter(part => part !== undefined).join(':');
-    const from = site.key === undefined ? '' : ` (sz key \`${site.key}\`)`;
-    return (
-        `[csszyx] ${where}: \`${className}\`${from} is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative \`${utility}\`; drop the sign, or define it with @utility (unsigned-value).\n` +
-        '  help: `csszyx check --rule unsigned-value` lists every one.'
-    );
+    return diagnosticMessage('unsigned-value', { className, utility }, siteOf(file, site));
+}
+
+/**
+ * Where a build line points: the file, and the line and column when the
+ * engine recorded them.
+ *
+ * @param file - The file that emits the class.
+ * @param site - The line and column, when known.
+ * @returns `file`, or `file:line:column`.
+ */
+function siteOf(file: string, site: Omit<DeadClassSite, 'file'>): string {
+    return [file, site.line, site.column].filter(part => part !== undefined).join(':');
 }
 
 /**

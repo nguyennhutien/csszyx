@@ -77,7 +77,7 @@ describe('resolveTailwindV3', () => {
 
     it('tells an absent install to add v3, and why it was not installed for it', async () => {
         await expect(resolveTailwindV3(loaderFor({ kind: 'absent' }))).rejects.toThrow(
-            /needs Tailwind CSS v3, and this project has none installed/,
+            '`csszyx generate-types` reads a Tailwind v3 config, and this project has no Tailwind installed.',
         );
         const error = await resolveTailwindV3(loaderFor({ kind: 'absent' })).catch(e => e);
         expect(error.state).toBe('absent');
@@ -87,10 +87,13 @@ describe('resolveTailwindV3', () => {
             code: 'tailwind-v3-unavailable',
             args: { form: 'absent' },
         });
-        expect(error.message).toContain('npm  install -D tailwindcss@3');
-        expect(error.message).toContain('optional peer');
-        // A v4 project reading this must not be told to downgrade.
-        expect(error.message).toContain('Do not install v3');
+        expect(error.message).toBe(
+            '[csszyx] tailwind-v3-unavailable:\n' +
+                '  `csszyx generate-types` reads a Tailwind v3 config, and this project has no Tailwind installed.\n' +
+                '  help: install `tailwindcss@3` as a dev dependency, such as `npm install -D tailwindcss@3`; on Tailwind v4 the theme lives in CSS under `@theme`, and this command is not needed.\n' +
+                '  note: `@csszyx/cli` lists Tailwind v3 as an optional peer, so installing the CLI does not install it.\n' +
+                '  docs: https://csszyx.com/e/tailwind-v3-unavailable',
+        );
     });
 
     it('tells a v4 install that nothing is broken and not to downgrade', async () => {
@@ -103,12 +106,15 @@ describe('resolveTailwindV3', () => {
             code: 'tailwind-v3-unavailable',
             args: { form: 'wrong-major', version: '4.3.3' },
         });
-        expect(error.message).toContain('this project has 4.3.3');
-        expect(error.message).toContain('Nothing is broken');
-        expect(error.message).toContain(
-            'npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types',
+        expect(error.message).toBe(
+            '[csszyx] tailwind-v3-unavailable:\n' +
+                '  `csszyx generate-types` reads a Tailwind v3 config, and this project has Tailwind 4.3.3, which has no JavaScript config to read.\n' +
+                '  help: declare the theme in CSS under `@theme`, which needs no generated types; to type a v3 config left over from a migration, run `npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js`.\n' +
+                '  note: `tailwind.config.js` and the `resolveConfig` helper this command calls were removed in Tailwind v4.\n' +
+                '  docs: https://csszyx.com/e/tailwind-v3-unavailable',
         );
-        expect(error.message).not.toContain('npm  install -D tailwindcss@3');
+        // A v4 project reading this must not be told to install v3.
+        expect(error.message).not.toContain('npm install -D tailwindcss@3');
     });
 
     it('reports a v3 whose entry does not load, with the reason', async () => {
@@ -125,9 +131,13 @@ describe('resolveTailwindV3', () => {
         ).catch(e => e);
         expect(error.state).toBe('broken');
         expect(error.version).toBe('3.4.19');
-        expect(error.message).toContain('found Tailwind CSS 3.4.19 but could not load');
-        expect(error.message).toContain('No "exports" main defined');
-        expect(error.message).toContain('reinstall');
+        expect(error.message).toBe(
+            '[csszyx] tailwind-v3-unavailable:\n' +
+                '  `csszyx generate-types` found Tailwind 3.4.19 but could not load its `resolveConfig` entry, so it cannot read the config.\n' +
+                '  help: reinstall it, such as `npm install --force tailwindcss@3`; if the error stays, report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message.\n' +
+                '  note: loading the entry reported: No "exports" main defined.\n' +
+                '  docs: https://csszyx.com/e/tailwind-v3-unavailable',
+        );
     });
 
     // The version probe has located a v3, so whatever loading its entry then
@@ -152,9 +162,11 @@ describe('resolveTailwindV3', () => {
                 }),
             ).catch(e => e);
             expect(error.state).toBe('broken');
-            expect(error.message).toContain('found Tailwind CSS 3.4.19 but could not load');
             expect(error.message).toContain(
-                failure instanceof Error ? failure.message : String(failure),
+                'found Tailwind 3.4.19 but could not load its `resolveConfig` entry',
+            );
+            expect(error.message).toContain(
+                `note: loading the entry reported: ${failure instanceof Error ? failure.message : String(failure)}.`,
             );
             // The registry's form for the state, and what the entry threw as
             // the cause: wrapped, never relabelled.

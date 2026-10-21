@@ -125,7 +125,13 @@ describe('next prebuild with a pattern it cannot honour', () => {
 
         await nextPrebuild({ root, cwd: root, parserMode: 'wasm', json: true });
 
-        expect(log.mock.calls.flat().join('\n')).toContain('with the `--ignore` flag');
+        expect(JSON.parse(String(log.mock.calls[0]?.[0])).reason).toBe(
+            '[csszyx] prefix-disagreement:\n' +
+                '  The Tailwind stylesheets of this project set different prefixes (`app/globals.css` with `prefix(tw)`, `other/entry.css` with `prefix(old)`), so no class csszyx emits is served by all of them.\n' +
+                '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, list the stylesheets this build loads with the `--tailwind-stylesheet` flag, or leave another app\'s directory out with the `--ignore` flag.\n' +
+                '  note: no module was transformed, and nothing was written.\n' +
+                '  docs: https://csszyx.com/e/prefix-disagreement',
+        );
     }, 60_000);
 });
 

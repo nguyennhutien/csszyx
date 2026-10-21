@@ -404,7 +404,7 @@ behaviour before relying on it.
 
 4. **Keep the Tailwind safelist fresh.** Run the csszyx watcher/prebuild
    around Next. Production builds fail-closed
-   (`Next Turbopack production cache is not ready`) until
+   (`next-turbo-cache-unseeded`) until
    `csszyx next prebuild` has seeded the safelist and generation manifest,
    so wire both flows into your scripts:
 

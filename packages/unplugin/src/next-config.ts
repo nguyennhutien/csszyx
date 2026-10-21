@@ -20,6 +20,9 @@
  * @module
  */
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+import { OPTIONS_OBJECT_REQUIRED, szRender } from '@csszyx/compiler/report';
+
 /** Options forwarded to the csszyx Next Turbopack loader. */
 export interface CsszyxTurbopackOptions {
     /** Parser lane for the loader — the native addon or its wasm build.
@@ -78,12 +81,6 @@ const OPTION_KEYS = new Set(
     } satisfies Record<keyof CsszyxTurbopackOptions, true>),
 );
 
-/** What the helper says when Turbopack settings are outside the options object. */
-const LEGACY_CALL_MESSAGE = [
-    '[csszyx] csszyxTurbopack takes one object: the config to extend goes in it, under `turbopack`.',
-    '  help: csszyxTurbopack({ turbopack: <your config>, ...options }) — put loader options beside `turbopack`.',
-].join('\n');
-
 /** Minimal shape of a Next.js `turbopack` config block (only what we touch). */
 export interface TurbopackConfig {
     rules?: Record<string, unknown>;
@@ -105,7 +102,8 @@ export interface TurbopackConfig {
  * @param options - csszyx loader options, and the config to extend.
  * @param rest - nothing; a second argument is what the previous shape took.
  * @returns a `turbopack` config to assign to `next.config`'s `turbopack` field.
- * @throws {Error} When passed extra arguments or unrecognized top-level options.
+ * @throws {CsszyxError} `options-object-required`, when passed extra arguments or
+ *         unrecognized top-level options.
  *
  * @example
  * // next.config.mjs
@@ -125,8 +123,20 @@ export function csszyxTurbopack(
     // is the failure this shape exists to remove.
     ...rest: never[]
 ): TurbopackConfig {
-    if (rest.length > 0 || Object.keys(options).some(key => !OPTION_KEYS.has(key))) {
-        throw new Error(LEGACY_CALL_MESSAGE);
+    const unknown = Object.keys(options).filter(key => !OPTION_KEYS.has(key));
+    if (rest.length > 0 || unknown.length > 0) {
+        const args =
+            rest.length > 0
+                ? ({ form: 'csszyx-turbopack' } as const)
+                : ({ form: 'csszyx-turbopack-option', options: unknown } as const);
+        // This entry loads in `next.config`, so it words the error from the
+        // light `report` module rather than the plugin's renderer; `at: ''`
+        // lays it out as a Node line, the sentence under the code.
+        throw new CsszyxError({
+            code: 'options-object-required',
+            args,
+            message: szRender({ diagnostic: OPTIONS_OBJECT_REQUIRED, args, at: '' }),
+        });
     }
     const existing = options.turbopack ?? {};
     const { glob = '*.tsx', parserMode = 'rust', safelistOutputFile } = options;

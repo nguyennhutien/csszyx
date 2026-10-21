@@ -94,11 +94,18 @@ describe('nextTurboLoader default export', () => {
             },
         });
         expect(nextTurboLoader.call(withCallback, source)).toBeUndefined();
-        expect(String(callbackError)).toContain('production cache is not ready');
+        expect(callbackError).toMatchObject({
+            code: 'next-turbo-cache-unseeded',
+            // No manifest above the module: the root settles on its directory.
+            args: { root: join(root, 'src'), reason: 'missing or unreadable generation manifest' },
+            message: expect.stringMatching(
+                /^\[csszyx\] next-turbo-cache-unseeded:\n {2}The Turbopack production build of `.+` has no current safelist from `csszyx next prebuild`, so it stops\.\n {2}help: run `csszyx next prebuild` before `next build`, such as `"build": "csszyx next prebuild 'app\/\*\*\/\*\.tsx' && next build"` in `package\.json`\.\n {2}note: the safelist check reported: .+\.\n {2}docs: https:\/\/csszyx\.com\/e\/next-turbo-cache-unseeded$/,
+            ),
+        });
 
         const withoutCallback = loaderContext(root, filename, { getOptions: () => failing });
         expect(() => nextTurboLoader.call(withoutCallback, source)).toThrow(
-            /production cache is not ready/,
+            /^\[csszyx\] next-turbo-cache-unseeded:\n/,
         );
     });
 
@@ -124,7 +131,7 @@ describe('production guards', () => {
                 mode: 'production',
                 compilerOptions: { mangleVars: true },
             }),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(/^\[csszyx\] next-mangle-vars-unsupported: .+\n {2}Turbopack cannot mangle/);
         // Same signal when the config carries the flag instead.
         expect(() =>
             runNextTurboLoader(source, ctx, {
@@ -132,7 +139,7 @@ describe('production guards', () => {
                 mode: 'production',
                 config: { mangleVars: true },
             }),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(/^\[csszyx\] next-mangle-vars-unsupported: .+\n {2}Turbopack cannot mangle/);
     });
 
     it('allows it when the escape hatch is set (then fails on the manifest guard)', () => {
@@ -146,6 +153,6 @@ describe('production guards', () => {
                 compilerOptions: { mangleVars: true },
                 allowProductionMangling: true,
             }),
-        ).toThrow(/production cache is not ready/);
+        ).toThrow(/^\[csszyx\] next-turbo-cache-unseeded:\n/);
     });
 });

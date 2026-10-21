@@ -88,10 +88,20 @@ describe('transform hook branch edges', () => {
         ['Svelte component', '<div sz={styles}></div>', 'src/Comp.svelte', '1:10'],
     ])('stops the build on a %s sz value only the runtime knows', async (_n, code, file, at) => {
         const { root, transform } = await boot();
-        const id = path.join(root, file);
-        await expect(transform(code, id)).rejects.toThrow(
-            `[csszyx] ${id}:${at}: this sz value is only known at runtime`,
-        );
+        await expect(transform(code, path.join(root, file))).rejects.toMatchObject({
+            code: 'template-sz-invalid',
+            args: { count: 1 },
+            message:
+                `[csszyx] template-sz-invalid: ${file}\n` +
+                '  This file has 1 `sz` error(s), so the build stops.\n' +
+                '  help: fix each error listed below.\n' +
+                '  docs: https://csszyx.com/e/template-sz-invalid\n\n' +
+                `[csszyx] template-runtime-value: ${file}:${at}\n` +
+                '  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.\n' +
+                '  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.\n' +
+                '  note: the attribute is left as written.\n' +
+                '  docs: https://csszyx.com/e/template-runtime-value',
+        });
     });
 
     it('hands an info finding to the bundler with its code and page beside the line', async () => {

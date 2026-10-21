@@ -13,6 +13,8 @@ import * as path from 'node:path';
 import { stripCssBlockComments } from '@csszyx/tailwind-oracle/css-comments';
 import { DEPENDENCY_OUTPUT_DIRS } from '@csszyx/tailwind-oracle/project-walk';
 
+import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
+import { projectRelative } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 
 /**
@@ -240,12 +242,15 @@ const ROOTS_WITHOUT_LEGACY_SOURCE = new Set<string>();
  * Turbopack loader runs once per module.
  *
  * @param rootDir - project root.
- * @throws when a stylesheet under the root names an old safelist that is gone.
+ * @throws {CsszyxError} `legacy-source-directive`, when a stylesheet under the
+ *         root names an old safelist that is gone.
  */
 export function assertNoLegacySourceStylesheet(rootDir: string): void {
     if (ROOTS_WITHOUT_LEGACY_SOURCE.has(rootDir)) return;
     const found = findLegacySourceStylesheet(rootDir);
-    if (found !== null) throw new Error(legacySourceMessage(found.file, found.target));
+    if (found !== null) {
+        throw legacySourceError(projectRelative(rootDir, found.file), found.target);
+    }
     ROOTS_WITHOUT_LEGACY_SOURCE.add(rootDir);
 }
 
@@ -298,34 +303,25 @@ export function findPostcssConfigWithoutCsszyx(rootDir: string): string | null {
 }
 
 /**
- * @param configFile - the PostCSS config Next reads.
+ * @param configFile - the PostCSS config Next reads, as the reader should see
+ *   it (project-relative).
  * @returns the warning a Next producer prints when that config does not list
- *   the csszyx plugin.
+ *   the csszyx plugin: `postcss-plugin-missing`.
  */
 export function missingPostcssPluginMessage(configFile: string): string {
-    return (
-        `[csszyx] ${configFile} does not list '@csszyx/unplugin/postcss'. Next.js reads the ` +
-        `safelist only through that plugin: list it before '@tailwindcss/postcss', or no sz ` +
-        `class gets CSS.`
-    );
+    return diagnosticMessage('postcss-plugin-missing', {}, configFile);
 }
 
 /**
- * The message a build fails with when a stylesheet still points at an old
- * safelist. Names the new file and both ways of getting the directive
- * without writing it by hand.
+ * The error a build stops with when a stylesheet still points at an old
+ * safelist.
  *
- * @param cssFile - absolute path of the stylesheet.
+ * @param cssFile - the stylesheet, as the reader should see it.
  * @param target - the old path as written.
- * @returns the complete message.
+ * @returns the `legacy-source-directive` error.
  */
-export function legacySourceMessage(cssFile: string, target: string): string {
-    return (
-        `[csszyx] ${cssFile}: @source "${target}" names the old safelist, which csszyx no longer writes. ` +
-        `The safelist is now ${SAFELIST_FILE}, and csszyx adds the directive itself: remove this line. ` +
-        `Vite, Rollup and webpack inject it; on Next.js list '@csszyx/unplugin/postcss' before ` +
-        `'@tailwindcss/postcss' in postcss.config.`
-    );
+export function legacySourceError(cssFile: string, target: string): Error {
+    return diagnosticError('legacy-source-directive', { target }, { at: cssFile });
 }
 
 /**
