@@ -296,7 +296,7 @@ describe('csszyx check [dir]', () => {
 
         expect(process.exitCode).toBe(1);
         expect(printed).toContain(
-            `✖ \`scr\` does not exist under \`${cwd}\`, so there is nothing to check.`,
+            `✖ \`scr\` does not exist under \`${cwd}\`, so there is nothing to check: pass a directory under it, or leave \`[dir]\` out to check the whole project.`,
         );
     });
 

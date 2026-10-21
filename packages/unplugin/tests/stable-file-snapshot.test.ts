@@ -32,13 +32,13 @@ describe('stable file snapshot', () => {
                 code: 'internal-error',
                 args: {
                     where: 'readStableTextFileSnapshotSync',
-                    detail: `maxAttempts is ${maxAttempts}, not a positive integer`,
+                    detail: `maxAttempts must be a positive integer, got ${maxAttempts}`,
                 },
                 message:
                     '[csszyx] internal-error:\n' +
                     '  An internal check failed in `readStableTextFileSnapshotSync`, so csszyx stops.\n' +
                     '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
-                    `  note: the check that failed: maxAttempts is ${maxAttempts}, not a positive integer.\n` +
+                    `  note: the check that failed: maxAttempts must be a positive integer, got ${maxAttempts}.\n` +
                     '  docs: https://csszyx.com/e/internal-error',
             }),
         );

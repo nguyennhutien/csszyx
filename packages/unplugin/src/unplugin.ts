@@ -18,7 +18,7 @@ import {
     isRustTransformAvailable,
     isWasmTransformAvailable,
 } from '@csszyx/compiler/engine';
-import { type CsszyxError, isCsszyxError } from '@csszyx/compiler/errors';
+import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
     diagnosticFileOf,
     reportTemplateSzDiagnostics,
@@ -131,6 +131,7 @@ import {
     type ScannedSource,
     stylesheetsImportedBy,
 } from './js-stylesheet-imports.js';
+import { keptSessionMessage } from './kept-session-message.js';
 import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
@@ -1864,7 +1865,7 @@ export function assertGlobalVarPlanMatchesEarlyAliases(
     const actualJson = JSON.stringify(actualEntries);
     if (expectedJson !== actualJson) {
         throw diagnosticError('internal-error', {
-            where: 'mangleGlobalVars alias plan',
+            where: 'assertGlobalVarPlanMatchesEarlyAliases',
             detail: `the CSS alias plan ${actualJson} does not match the source alias table ${expectedJson}`,
         });
     }
@@ -2208,37 +2209,62 @@ function readTsconfig(file: string): string | null {
     }
 }
 
+/** A tsconfig that does not include the theme types, and the line it needs. */
+export interface ThemeTypesTsconfigGap {
+    /** The config's path, relative to the root. */
+    tsconfig: string;
+    /** `.csszyx/theme.d.ts` as that config's `include` reads it: from its own directory. */
+    includePath: string;
+}
+
+/** The theme types' `include` entry for a config in the project root. */
+const ROOT_THEME_TYPES_INCLUDE = './.csszyx/theme.d.ts';
+
+/**
+ * Directories a framework writes its tsconfig into and rewrites on every
+ * run, so a line added to a config there is lost.
+ */
+const GENERATED_TSCONFIG_DIRS: ReadonlySet<string> = new Set(['.nuxt', '.svelte-kit', '.astro']);
+
 /**
  * The tsconfig that should include `.csszyx/theme.d.ts` and does not: the
  * root `tsconfig.json` (or a Vite/Vue `tsconfig.app.json` without one). A
  * solution-style root, as Vite's template writes it (`files: []` and
  * `references`), includes nothing itself, so the configs it references are
- * read, and the first of them is named when none mentions it.
+ * read, and the first of them is named when none mentions it, unless a
+ * framework generates that one: then the root is named.
  *
  * Text, not a parsed config: a tsconfig may carry comments, and the question
  * is only whether `.csszyx` appears in it.
  *
  * @param rootDir - The project root.
- * @returns The config's path, relative to the root, or null when one
+ * @returns The config and the `include` entry it needs, or null when one
  *          mentions `.csszyx` or the project has no tsconfig.
  */
-export function themeTypesTsconfigGap(rootDir: string): string | null {
+export function themeTypesTsconfigGap(rootDir: string): ThemeTypesTsconfigGap | null {
     const name = ['tsconfig.json', 'tsconfig.app.json'].find(
         file => readTsconfig(path.join(rootDir, file)) !== null,
     );
     if (name === undefined) return null;
     const content = readTsconfig(path.join(rootDir, name)) as string;
     if (content.includes('.csszyx')) return null;
-    if (!/"references"\s*:/.test(content)) return name;
+    const atRoot = { tsconfig: name, includePath: ROOT_THEME_TYPES_INCLUDE };
+    if (!/"references"\s*:/.test(content)) return atRoot;
     const references = [...content.matchAll(/"path"\s*:\s*"([^"]+)"/g)].map(match => {
         const target = path.resolve(rootDir, match[1] as string);
         return target.endsWith('.json') ? target : path.join(target, 'tsconfig.json');
     });
     const read = references.filter(file => readTsconfig(file) !== null);
     if (read.some(file => (readTsconfig(file) as string).includes('.csszyx'))) return null;
-    return read.length === 0
-        ? name
-        : normalizePathSeparators(path.relative(rootDir, read[0] as string));
+    const first = read[0];
+    if (first === undefined) return atRoot;
+    const tsconfig = normalizePathSeparators(path.relative(rootDir, first));
+    if (tsconfig.split('/').some(segment => GENERATED_TSCONFIG_DIRS.has(segment))) return atRoot;
+    const up = normalizePathSeparators(path.relative(path.dirname(first), rootDir));
+    return {
+        tsconfig,
+        includePath: up === '' ? ROOT_THEME_TYPES_INCLUDE : `${up}/.csszyx/theme.d.ts`,
+    };
 }
 
 /**
@@ -2315,9 +2341,9 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     // TypeScript types the theme only when a config it reads includes the file.
     if (!_hasWarnedTsConfig) {
         _hasWarnedTsConfig = true;
-        const tsconfig = themeTypesTsconfigGap(rootDir);
-        if (tsconfig !== null) {
-            console.warn(diagnosticMessage('theme-scan-without-typescript', { tsconfig }));
+        const gap = themeTypesTsconfigGap(rootDir);
+        if (gap !== null) {
+            console.warn(diagnosticMessage('theme-scan-without-typescript', { ...gap }));
         }
     }
     return merged;
@@ -2903,12 +2929,13 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
  * Only a lane csszyx forgot to wire can get here, so the message says so
  * rather than guessing a prefix and shipping classes that style nothing.
  *
+ * @param where - The function that asked, as the report names it.
  * @returns The error to throw.
  */
-function unreadStylesheetsError(): Error {
+function unreadStylesheetsError(where: string): Error {
     return diagnosticError('internal-error', {
-        where: 'style model',
-        detail: "a lane asked for the Tailwind prefix before it read the project's stylesheets",
+        where,
+        detail: "the build asked for the Tailwind prefix before it read the project's stylesheets",
     });
 }
 
@@ -4293,7 +4320,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function createCompilerOptions(
         astBudget: number | undefined = astBudgetOverride,
     ): TransformSourceCodeOptions {
-        if (styleModel === undefined) throw unreadStylesheetsError();
+        if (styleModel === undefined) throw unreadStylesheetsError('createCompilerOptions');
         return {
             // Null, not undefined, when no stylesheet sets one: the engine
             // then emits exactly what it emitted before prefixes existed.
@@ -5746,7 +5773,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // the list would come back empty, which reads as "Tailwind serves every
         // class" and places each name wrong without a word.
         const model = styleModel;
-        if (model === undefined) throw unreadStylesheetsError();
+        if (model === undefined) throw unreadStylesheetsError('settleUnservedClasses');
         // Settled from scratch every time: a rebuild or a stylesheet edit that
         // leaves no design system must not keep serving the last good answer.
         mergeSignatureTable = [{}, []];
@@ -6233,10 +6260,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * What a running session says when an edit leaves the stylesheets
      * unreadable, and it keeps the prefix it had.
      *
-     * A disagreement's build-time note says nothing was written, which is not
-     * true of a session that is still serving, so that note is dropped; the
-     * session's own note goes above the link either way.
-     *
      * @param error - What opening the model threw.
      * @param previous - The model the session keeps.
      * @param session - Who keeps it, as the message names it.
@@ -6247,13 +6270,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         previous: ProjectStyleModel,
         session: string,
     ): string {
-        let message = (error as Error).message;
-        if (isCsszyxError(error) && error.code === 'prefix-disagreement') {
-            message = message.replace(/^ {2}note: .*\n/m, '');
-        }
-        const note = `  note: ${session} keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`;
-        // Above the closing `docs:` line, or last when there is none.
-        return message.replace(/(\n {2}docs: [^\n]*)?$/, (docs = '') => `\n${note}${docs}`);
+        return keptSessionMessage(
+            error,
+            `${session} keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`,
+        );
     }
 
     /**

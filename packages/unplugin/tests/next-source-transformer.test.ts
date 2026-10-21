@@ -55,7 +55,7 @@ describe('Next source transformer', () => {
                 code: 'internal-error',
                 message: internalErrorMessage(
                     'transformNextSource',
-                    "a Next lane asked the engine to lower a module before it read the project's Tailwind prefix",
+                    "a Next build asked the engine to transform a module before it read the project's Tailwind prefix",
                 ),
             }),
         );

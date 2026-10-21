@@ -319,11 +319,17 @@ describe('the webpack lane', () => {
     }, 60_000);
 });
 
-/** What a lane that never read the stylesheets stops with. */
-const UNREAD_STYLESHEETS = internalErrorMessage(
-    'style model',
-    "a lane asked for the Tailwind prefix before it read the project's stylesheets",
-);
+/**
+ * What a lane that never read the stylesheets stops with.
+ *
+ * @param where - The function that asked for the prefix.
+ * @returns The message.
+ */
+const unreadStylesheets = (where: string): string =>
+    internalErrorMessage(
+        where,
+        "the build asked for the Tailwind prefix before it read the project's stylesheets",
+    );
 
 describe('an unserved-class list asked for before the stylesheet was read', () => {
     // An empty list would read as "Tailwind serves every class", and each name
@@ -332,7 +338,9 @@ describe('an unserved-class list asked for before the stylesheet was read', () =
     it('fails loudly instead of reporting nothing', async () => {
         const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
 
-        await expect(call('renderStart')).rejects.toThrow(UNREAD_STYLESHEETS);
+        await expect(call('renderStart')).rejects.toThrow(
+            unreadStylesheets('settleUnservedClasses'),
+        );
     });
 });
 
@@ -357,6 +365,6 @@ describe('a transform that reaches the engine before the stylesheet was read', (
 
         expect(() =>
             plugin.transform.call({ warn() {} }, APP, '/never-started/src/App.tsx'),
-        ).toThrow(UNREAD_STYLESHEETS);
+        ).toThrow(unreadStylesheets('createCompilerOptions'));
     });
 });

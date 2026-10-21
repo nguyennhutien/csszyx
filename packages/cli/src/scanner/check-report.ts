@@ -137,6 +137,13 @@ export function partLines(finding: Pick<FindingInput, 'help' | 'note'>, indent: 
     ];
 }
 
+/**
+ * The finding for entries that set different prefixes. It can be left out by
+ * id like a diagnostic kind, which skips the dead-class pass: that pass needs
+ * one prefix to ask about.
+ */
+export const PREFIX_DISAGREEMENT = 'prefix-disagreement' as const;
+
 /** Where the JSON Schema of the document `--json` writes is published. */
 export const CHECK_REPORT_SCHEMA = 'https://csszyx.com/schemas/check-v2.json';
 

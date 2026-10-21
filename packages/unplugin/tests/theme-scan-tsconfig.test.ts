@@ -41,11 +41,14 @@ const VITE_ROOT = JSON.stringify({
     references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
 });
 
+/** The gap for a root `tsconfig.json` that does not mention `.csszyx`. */
+const ROOT_GAP = { tsconfig: 'tsconfig.json', includePath: './.csszyx/theme.d.ts' };
+
 describe('themeTypesTsconfigGap', () => {
     it('names the root tsconfig that does not mention `.csszyx`', () => {
-        expect(themeTypesTsconfigGap(project({ 'tsconfig.json': '{ "include": ["src"] }' }))).toBe(
-            'tsconfig.json',
-        );
+        expect(
+            themeTypesTsconfigGap(project({ 'tsconfig.json': '{ "include": ["src"] }' })),
+        ).toEqual(ROOT_GAP);
     });
 
     it('is satisfied by a root tsconfig that mentions it', () => {
@@ -78,7 +81,10 @@ describe('themeTypesTsconfigGap', () => {
             'tsconfig.app.json': '{ "include": ["src"] }',
             'tsconfig.node.json': '{ "include": ["vite.config.ts"] }',
         });
-        expect(themeTypesTsconfigGap(root)).toBe('tsconfig.app.json');
+        expect(themeTypesTsconfigGap(root)).toEqual({
+            tsconfig: 'tsconfig.app.json',
+            includePath: './.csszyx/theme.d.ts',
+        });
     });
 
     it('skips a reference it cannot read', () => {
@@ -96,13 +102,44 @@ describe('themeTypesTsconfigGap', () => {
         const root = project({
             'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './gone.json' }] }),
         });
-        expect(themeTypesTsconfigGap(root)).toBe('tsconfig.json');
+        expect(themeTypesTsconfigGap(root)).toEqual(ROOT_GAP);
     });
 
+    it('gives the include path from the referenced config, which resolves it', () => {
+        // `include` is read relative to the config that holds it.
+        const root = project({
+            'tsconfig.json': JSON.stringify({
+                files: [],
+                references: [{ path: './packages/web' }],
+            }),
+            'packages/web/tsconfig.json': '{ "include": ["src"] }',
+        });
+        expect(themeTypesTsconfigGap(root)).toEqual({
+            tsconfig: 'packages/web/tsconfig.json',
+            includePath: '../../.csszyx/theme.d.ts',
+        });
+    });
+
+    it.each(['.nuxt', '.svelte-kit', '.astro'])(
+        'names the root config over one the framework writes into `%s`',
+        dir => {
+            // The framework rewrites that file, so a line added there is lost.
+            const root = project({
+                'tsconfig.json': JSON.stringify({
+                    files: [],
+                    references: [{ path: `./${dir}/tsconfig.app.json` }],
+                }),
+                [`${dir}/tsconfig.app.json`]: '{ "include": ["../src"] }',
+            });
+            expect(themeTypesTsconfigGap(root)).toEqual(ROOT_GAP);
+        },
+    );
+
     it('falls back to tsconfig.app.json, and says nothing without a tsconfig', () => {
-        expect(themeTypesTsconfigGap(project({ 'tsconfig.app.json': '{}' }))).toBe(
-            'tsconfig.app.json',
-        );
+        expect(themeTypesTsconfigGap(project({ 'tsconfig.app.json': '{}' }))).toEqual({
+            tsconfig: 'tsconfig.app.json',
+            includePath: './.csszyx/theme.d.ts',
+        });
         expect(themeTypesTsconfigGap(project({}))).toBeNull();
     });
 });
@@ -133,6 +170,29 @@ describe('the theme scan line', () => {
                 '  help: add `"./.csszyx/theme.d.ts"` to its `include` array.\n' +
                 '  docs: https://csszyx.com/e/theme-scan-without-typescript',
         ]);
+    });
+
+    it('gives the path to include from the config it names', async () => {
+        vi.resetModules();
+        const { vitePlugin } = await import('../src/unplugin.js');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const [pre] = vitePlugin({
+            build: { scanCss: 'src/theme.css', parser: 'wasm', cache: false },
+        }) as unknown as [{ configResolved(config: { root: string }): Promise<void> }];
+        await pre.configResolved({
+            root: project({
+                'tsconfig.json': JSON.stringify({
+                    files: [],
+                    references: [{ path: 'packages/web' }],
+                }),
+                'packages/web/tsconfig.json': '{ "include": ["src"] }',
+                'src/theme.css': '@theme { --color-brand: #f00; }',
+            }),
+        });
+        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
+            '  `packages/web/tsconfig.json` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.\n' +
+                '  help: add `"../../.csszyx/theme.d.ts"` to its `include` array.\n',
+        );
     });
 
     it('says nothing for a Vite root whose app config mentions it', async () => {

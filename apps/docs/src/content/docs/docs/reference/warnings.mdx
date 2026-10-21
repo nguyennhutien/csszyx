@@ -304,7 +304,7 @@ finding, not only the fallbacks. That includes a finding your config lowered to
 [csszyx] diagnostics-held:
   This build held back {count} finding(s) at `info` and listed none of them.
   help: run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.
-  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class a later sz key covers, and any finding `csszyx.config` sets to `info`.
+  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.
   docs: https://csszyx.com/e/diagnostics-held
 ```
 
@@ -850,7 +850,7 @@ not cover `text-wrap`.
 | `[csszyx] compile-sources-unresolved:`, then ``The `compileSources` path(s) `{paths}` do not resolve to a directory from `{root}`, so the build compiles nothing from them and adds none of their classes to the safelist.`` — help: ``point each path at a directory, relative to the project root or absolute, such as `compileSources: ['../../packages/vui']`.`` | Warning, once per root |
 | `[csszyx] transform-cache-disabled:`, then ``The build could not read the installed version of `@csszyx/unplugin` or `@csszyx/compiler`, so the transform cache is off and every build transforms each file again.`` — help: ``reinstall `@csszyx/unplugin` and `@csszyx/compiler`, or set `build.cache: false` to hide this line.`` — note: ``the build output is the same; only rebuilds are slower.`` | Ungated, once |
 | `[csszyx] esbuild-mangle-unsupported:`, then ``The esbuild adapter does not support `production.mangle`, so class mangling is off for this build.`` — help: ``use the Vite, Rollup or webpack plugin when the build needs mangled class names.`` — note: ``emitted JS and CSS keep the original class names, so they still match.`` | Ungated |
-| `[csszyx] theme-scan-without-typescript:`, then `` `{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.`` — help: ``add `"./.csszyx/theme.d.ts"` to its `include` array.`` | Ungated, once per process |
+| `[csszyx] theme-scan-without-typescript:`, then `` `{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.`` — help: ``add `"{includePath}"` to its `include` array.`` | Ungated, once per process. `{includePath}` is `.csszyx/theme.d.ts` as that config reads it, from its own directory: `./.csszyx/theme.d.ts` for a config in the project root. A config a framework writes into `.nuxt/`, `.svelte-kit/` or `.astro/` is not named; the root `tsconfig.json` is. |
 
 The unrecognized-option check is worth its own note: csszyx does not silently
 accept a key it does not read, and it suggests the nearest real key for a typo.
@@ -1177,16 +1177,17 @@ there, not an error: the author is mid-edit, and the next save usually fixes it.
   note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.
 ```
 
-Closes the same two messages when `csszyx next watch` reads them after a
+Closes the same two messages, above their `docs:` line and in place of a
+disagreement's build note, when `csszyx next watch` reads them after a
 stylesheet edit. The watch goes on, but the stylesheet facts it records are not
 rewritten, so the Turbopack loader stops on the same error until the edit is
 fixed.
 
 ```text
 [csszyx] internal-error:
-  An internal check failed in `style model`, so csszyx stops.
+  An internal check failed in `createCompilerOptions`, so csszyx stops.
   help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
-  note: the check that failed: a lane asked for the Tailwind prefix before it read the project's stylesheets.
+  note: the check that failed: the build asked for the Tailwind prefix before it read the project's stylesheets.
   docs: https://csszyx.com/e/internal-error
 ```
 
@@ -1343,7 +1344,7 @@ instead of stopping.
 [csszyx] internal-error:
   An internal check failed in `transformNextSource`, so csszyx stops.
   help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
-  note: the check that failed: a Next lane asked the engine to lower a module before it read the project's Tailwind prefix.
+  note: the check that failed: a Next build asked the engine to transform a module before it read the project's Tailwind prefix.
   docs: https://csszyx.com/e/internal-error
 ```
 
@@ -1585,7 +1586,7 @@ silently unstyle whatever else reads it. They arrive together under one error:
 
 ```text
 [csszyx] internal-error:
-  An internal check failed in `mangleGlobalVars alias plan`, so csszyx stops.
+  An internal check failed in `assertGlobalVarPlanMatchesEarlyAliases`, so csszyx stops.
   help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
   note: the check that failed: the CSS alias plan {actual} does not match the source alias table {expected}.
   docs: https://csszyx.com/e/internal-error
@@ -1653,7 +1654,7 @@ from the project root, and `--pattern` is read relative to that directory.
 | ``✖ A directory and `--files` both choose the files to check: pass `{dir}` or `--files`, not both.`` | Exits non-zero, before any file is scanned. |
 | ``✖ `{dir}` is a file: to check single files, pass `--files {dir}`.`` | Exits non-zero, before any file is scanned. |
 | ``✖ `--pattern {pattern}` is an absolute path, so it would not stay inside `{dir}`: pass a pattern relative to the directory.`` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
-| ``✖ `{dir}` does not exist under `{cwd}`, so there is nothing to check.`` | Exits non-zero rather than passing on the zero files a missing directory would match. |
+| ``✖ `{dir}` does not exist under `{cwd}`, so there is nothing to check: pass a directory under it, or leave `[dir]` out to check the whole project.`` | Exits non-zero rather than passing on the zero files a missing directory would match. |
 | `✖ Could not list the files to check: {reason}` | The glob itself failed; exits non-zero. |
 | ``✖ {n} file(s) given to `--files` do not exist, so no file was checked: fix each path above; a relative path is read from `--cwd`, or the current directory.`` | Exits non-zero, before any file is scanned. |
 | `Values that belong to a different sz key:` + two lines per offender, the second reading ``\`{key}: '{value}'\` emits \`{className}\`, which sets {sets}, not the property \`{key}\` sets.`` | A value written on a key that owns neither it nor its CSS property: the registry's `sibling-keyword` sentence; `--json` adds its `help`, `note`, `args` and `url`. |
@@ -1662,9 +1663,9 @@ from the project root, and `--pattern` is read relative to that directory.
 | ``✖ {n} theme token(s) share a name with a built-in utility: rename them, or keep one with `--allow-token <name>` or `diagnostics.allow.tokens` in `csszyx.config`.`` | Exits non-zero at `error`. |
 | `Opacity modifiers that do not apply:` + three lines per class: the class and its origin, the registry's `broken-opacity` sentence, and its `help:` line | A theme token that resolves to a bare comma triplet; see below. |
 | `✖ {n} emitted class(es) carry an opacity modifier that does not apply.` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
-| `Classes the build removes because a later sz key covers them:` + one line per class reading `{file}:{line}: {sentence}`, then `note: a build with \`build.mergeCoveredClasses: false\` keeps these.` | The merge audit (`--rule merge-covered-key`, `--rule merge-covered-class`, or a config that reports them at `warn`): the registry's `merge-covered-key` / `merge-covered-class` sentence for each class. |
-| `! {n} class(es) are removed because a later sz key covers them.` | Printed under that list; `✖` when a config raises one of them to `--fail-on` or louder. |
-| `✖ Merge audit skipped: {reason}` | The audit was selected and the project's stylesheets would not open — one did not compile, or they set different prefixes. Exits non-zero, as the dead-class pass does: an audit that could not run must not pass. |
+| ``Classes the build removes because an `sz` class on the same element covers them:`` + one line per class reading `{file}:{line}: {sentence}`, then `note: a build with \`build.mergeCoveredClasses: false\` keeps these.` | The merge audit (`--rule merge-covered-key`, `--rule merge-covered-class`, or a config that reports them at `warn`): the registry's `merge-covered-key` / `merge-covered-class` sentence for each class. |
+| ``! {n} class(es) are removed because an `sz` class on the same element covers them.`` | Printed under that list; `✖` when a config raises one of them to `--fail-on` or louder. |
+| `✖ Merge audit did not run: {reason}` | The audit was selected and the project's stylesheets would not open — one did not compile, or they set different prefixes; for different prefixes a `help:` line follows, ``give every Tailwind stylesheet the same `@import "tailwindcss"` line.`` Exits non-zero, as the dead-class pass does: an audit that could not run must not pass. |
 
 Every pass marks its findings the way the sz-issue report does. A finding
 quieter than `error` is listed with `(info)` or `(warn)` in front of it. While
@@ -1960,12 +1961,17 @@ A `dead-class` finding of kind `prefix-disagreement`, and exit code 1: every
 class is dead under one of the prefixes, so there is no answer to report. The
 check skips the same build output the build walk does (`dist`, `build`,
 `target`, `coverage`, `storybook-static` and the framework caches), so a stale
-copy there does not cause it. `--ignore-rule prefix-disagreement` leaves the
-finding out, and the dead-class pass is skipped instead of run under a guess:
+copy there does not cause it. `--ignore-rule prefix-disagreement`, or a
+`--rule` list without it, leaves the finding out, and the dead-class pass is
+skipped instead of run under a guess:
 
 ```text
-Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--ignore-rule prefix-disagreement` left that finding out.
+Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--rule` or `--ignore-rule` leaves `prefix-disagreement` out of this run.
 ```
+
+A `csszyx.config` that sets `prefix-disagreement` to `'off'` silences the
+finding, not the pass: the dead-class check runs with the prefix of the first
+stylesheet, and reports a class only when no stylesheet serves it.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

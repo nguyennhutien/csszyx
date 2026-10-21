@@ -67,9 +67,10 @@ async function checkConfiguration(cwd: string): Promise<number> {
     const name = path.basename(loaded.file);
     printSuccess(`csszyx configuration found: ${name}`);
     for (const problem of loaded.problems) {
-        // A problem with the whole file is pathed by the file's name; its
-        // sentence starts "This file", so it reads after a colon too.
-        const line = `${problem.path}: ${problem.message}`;
+        // The path is a config key, a problem with the whole file is pathed
+        // by the file's name (its sentence starts "This file"), and one with
+        // a top-level field by `default export`.
+        const line = `\`${problem.path}\`: ${problem.message}`;
         if (problem.severity === 'error') printError(line);
         else printWarn(line);
     }

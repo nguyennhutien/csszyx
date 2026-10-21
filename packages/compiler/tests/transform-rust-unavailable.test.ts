@@ -95,7 +95,7 @@ describe('the native transform on an install without it', () => {
             name: 'RustTransformUnavailableError',
             code: 'internal-error',
             args: {
-                where: 'engine transform',
+                where: 'runNativeBatch',
                 detail: 'the native engine feature is not compiled in',
             },
         });

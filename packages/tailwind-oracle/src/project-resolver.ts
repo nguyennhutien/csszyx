@@ -120,7 +120,7 @@ async function createProjectResolver(resolveFrom: string): Promise<ProjectResolv
                 if (resolved === false) {
                     throw szDiagnosticError('internal-error', {
                         where: 'resolveStylesheet',
-                        detail: `the style resolver answered false for '${id}' from ${base}`,
+                        detail: `the style resolver answered false for \`${id}\` from \`${base}\``,
                     });
                 }
                 /* v8 ignore stop */

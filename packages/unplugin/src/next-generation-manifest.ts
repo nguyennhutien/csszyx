@@ -153,7 +153,7 @@ function normalizeManifest(manifest: NextGenerationManifest): NextGenerationMani
         typeof manifest.createdAt !== 'string'
     ) {
         throw diagnosticError('internal-error', {
-            where: 'Next generation manifest',
+            where: 'normalizeManifest',
             detail: 'the manifest to write does not have the schema 1 fields',
         });
     }

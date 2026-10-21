@@ -7,7 +7,7 @@
  * @module commands/generate-types
  */
 
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 
 import { isCsszyxError } from '@csszyx/compiler/errors';
 
@@ -66,7 +66,7 @@ export async function generateTypes(options: GenerateTypesOptions = {}): Promise
     }
 
     log(`📖 Reading config from: ${configPath}`);
-    const scanResult = await loadTailwindConfig(configPath, error);
+    const scanResult = await loadTailwindConfig(configPath, cwd, error);
     log('✅ Config loaded successfully');
     logCustomThemeParts(scanResult, log);
 
@@ -133,11 +133,13 @@ async function requireTailwindV3(cwd: string, error: CommandLogger): Promise<voi
 /**
  * Loads and normalizes a Tailwind config, reporting a CLI-friendly failure.
  * @param configPath - The absolute Tailwind config path.
+ * @param cwd - The command working directory, which the message names the config from.
  * @param error - The error-output logger.
  * @returns The normalized Tailwind scan result.
  */
 async function loadTailwindConfig(
     configPath: string,
+    cwd: string,
     error: CommandLogger,
 ): Promise<TailwindScanResult> {
     try {
@@ -146,8 +148,8 @@ async function loadTailwindConfig(
         // A csszyx error says what failed in the registry's words already.
         const reason = isCsszyxError(cause)
             ? cause.message
-            : `Failed to read Tailwind config: ${errorMessage(cause)}`;
-        error(`❌ ${reason}`);
+            : `Could not read \`${relative(cwd, configPath)}\`: ${errorMessage(cause)}`;
+        error(`✖ ${reason}`);
         process.exit(1);
     }
 }

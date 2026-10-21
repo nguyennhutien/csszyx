@@ -20,7 +20,7 @@
 
 import { renderUnplacedDiagnostic, type SourceTransformResult } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
-import { CsszyxError } from '@csszyx/compiler/errors';
+import { CsszyxError, isCsszyxError } from '@csszyx/compiler/errors';
 import { findEmittedClassName } from '@csszyx/compiler/internal';
 
 import { registryMessage } from '../utils/registry-words.js';
@@ -127,6 +127,24 @@ export function explainSz(input: string, engine: ExplainEngine = transformSource
 }
 
 /**
+ * Say why the engine could not explain the object. A csszyx error carries
+ * its registry words and header; any other throw is a csszyx bug.
+ *
+ * @param error - What the engine threw.
+ */
+function reportEngineFailure(error: unknown): void {
+    if (isCsszyxError(error)) {
+        console.log(error.message);
+        return;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    printError(
+        `Could not explain this sz object: ${reason}\n` +
+            '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the sz object you passed.',
+    );
+}
+
+/**
  * `csszyx explain` command — prints the className for an sz object literal.
  * @param sz - The sz object literal source string.
  */
@@ -137,7 +155,7 @@ export function explain(sz: string): void {
     } catch (error) {
         process.exitCode = 1;
         if (!(error instanceof ExplainParseError)) {
-            printError(`Could not explain sz: ${String(error)}`);
+            reportEngineFailure(error);
             return;
         }
         // The registry's words carry their own header, so no mark of ours.

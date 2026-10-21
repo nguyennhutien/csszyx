@@ -127,7 +127,7 @@ describe('generate-types: a config it cannot read', () => {
         try {
             const { errors } = await run({ cwd, config: './nope.js' });
             expect(errors).toBe(
-                `❌ [csszyx] tailwind-config-missing: ${join(cwd, 'nope.js')}\n` +
+                `✖ [csszyx] tailwind-config-missing: ${join(cwd, 'nope.js')}\n` +
                     '  This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.\n' +
                     "  help: pass the path of the project's Tailwind config with `--config`, such as `--config ./tailwind.config.js`.\n" +
                     '  docs: https://csszyx.com/e/tailwind-config-missing',
@@ -144,7 +144,7 @@ describe('generate-types: a config it cannot read', () => {
         try {
             const { errors } = await run({ cwd, config: 'tailwind.config.mjs' });
             expect(errors).toBe(
-                `❌ [csszyx] tailwind-config-unloadable: ${join(cwd, 'tailwind.config.mjs')}\n` +
+                `✖ [csszyx] tailwind-config-unloadable: ${join(cwd, 'tailwind.config.mjs')}\n` +
                     '  This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.\n' +
                     '  help: fix the error below so that Node can import the config.\n' +
                     '  note: the import failed with: theme is broken.\n' +
@@ -162,7 +162,7 @@ describe('generate-types: a config it cannot read', () => {
         writeFileSync(join(cwd, 'tailwind.config.mjs'), 'export default {};\n');
         try {
             const { errors } = await run({ cwd, config: 'tailwind.config.mjs' });
-            expect(errors).toMatch(/^❌ Failed to read Tailwind config: .*resolveConfig/);
+            expect(errors).toMatch(/^✖ Could not read `tailwind\.config\.mjs`: .*resolveConfig/);
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

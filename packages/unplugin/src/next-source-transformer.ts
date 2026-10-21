@@ -82,7 +82,7 @@ export function transformNextSource(input: NextSourceTransformInput): NextSource
     if (input.compilerOptions?.classPrefix === undefined) {
         throw diagnosticError('internal-error', {
             where: 'transformNextSource',
-            detail: "a Next lane asked the engine to lower a module before it read the project's Tailwind prefix",
+            detail: "a Next build asked the engine to transform a module before it read the project's Tailwind prefix",
         });
     }
     const filename = normalizeSourceFilename(input.filename);

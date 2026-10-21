@@ -377,7 +377,7 @@ function runNativeBatch(
             ? asRustUnavailable(err)
             : new RustTransformUnavailableError(thrownMessage(err), {
                   cause: err,
-                  where: 'engine transform',
+                  where: 'runNativeBatch',
               });
     }
     return results.map((result, index) =>

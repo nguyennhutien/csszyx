@@ -361,7 +361,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
     "diagnostics-held": {
         "text": "This build held back {count} finding(s) at `info` and listed none of them.",
         "help": "run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.",
-        "note": "they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class a later sz key covers, and any finding `csszyx.config` sets to `info`."
+        "note": "they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`."
     },
     "merge-covered-held": {
         "text": "The build removed {classes} class(es) in {files} file(s), because another class on the same element sets every property they set.",
@@ -440,7 +440,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
     },
     "theme-scan-without-typescript": {
         "text": "`{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.",
-        "help": "add `\"./.csszyx/theme.d.ts\"` to its `include` array."
+        "help": "add `\"{includePath}\"` to its `include` array."
     },
     "esbuild-mangle-unsupported": {
         "text": "The esbuild adapter does not support `production.mangle`, so class mangling is off for this build.",

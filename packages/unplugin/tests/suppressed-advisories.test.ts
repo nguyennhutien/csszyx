@@ -25,7 +25,7 @@ describe('suppressedAdvisoryMessage', () => {
             '[csszyx] diagnostics-held:\n' +
                 '  This build held back 3 finding(s) at `info` and listed none of them.\n' +
                 '  help: run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.\n' +
-                '  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class a later sz key covers, and any finding `csszyx.config` sets to `info`.\n' +
+                '  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.\n' +
                 '  docs: https://csszyx.com/e/diagnostics-held',
         );
     });

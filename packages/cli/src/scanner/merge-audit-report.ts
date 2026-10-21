@@ -13,6 +13,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { isCsszyxError } from '@csszyx/compiler/errors';
 import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 import { isAtLeastLevel } from '@csszyx/unplugin/diagnostics';
@@ -23,7 +24,13 @@ import {
     openStylesheetModel,
 } from '@csszyx/unplugin/next-prebuild';
 
-import { type FindingInput, type Reporter, registryFinding } from './check-report.js';
+import {
+    type FindingInput,
+    PREFIX_DISAGREEMENT,
+    partLines,
+    type Reporter,
+    registryFinding,
+} from './check-report.js';
 
 /** The rules this pass answers. */
 export const MERGE_AUDIT_RULES: readonly MergeAuditKind[] = MERGE_AUDIT_KINDS;
@@ -40,6 +47,42 @@ function removalFinding(finding: ReturnType<typeof auditMerges>[number]): Findin
     const { kind, file, line, key, className } = finding;
     // `key` is absent for a `className` class, and the JSON leaves it out.
     return registryFinding({ rule: kind, code: kind, file, line, args: { key, className } });
+}
+
+/**
+ * Why the audit could not open the project's stylesheets, as the rest of a
+ * `Merge audit did not run:` line.
+ *
+ * @param error - What opening the stylesheets threw.
+ * @returns The sentence that says why, and for a prefix disagreement the
+ *          `help:` line of its `check` form.
+ */
+function notRunReason(error: unknown): string {
+    if (isCsszyxError(error) && error.code === PREFIX_DISAGREEMENT) {
+        // The thrown help names a build setting `check` does not take.
+        const finding = registryFinding({
+            rule: 'dead-class',
+            code: PREFIX_DISAGREEMENT,
+            args: { form: 'check', entries: error.args.entries as string[] },
+        });
+        return [lowerFirst(finding.message), ...partLines({ help: finding.help }, '  ')].join('\n');
+    }
+    // A registry message opens with its `[csszyx] <id>:` header; the
+    // sentence that says why is the line after it.
+    const sentence = String(error instanceof Error ? error.message : error)
+        .replace(/^\[csszyx\] [a-z-]+:[^\n]*\n\s*/, '')
+        .split('\n')[0] as string;
+    // Only a registry sentence is lower-cased: another error's first word may
+    // be a code such as `ENOENT`.
+    return isCsszyxError(error) ? lowerFirst(sentence) : sentence;
+}
+
+/**
+ * @param sentence - A sentence that follows a colon.
+ * @returns It with a lower-case first letter.
+ */
+function lowerFirst(sentence: string): string {
+    return sentence.charAt(0).toLowerCase() + sentence.slice(1);
 }
 
 /**
@@ -77,12 +120,7 @@ export async function reportMergeAudit(
             cacheDir: path.join(input.cwd, '.csszyx/cache'),
         }));
     } catch (error) {
-        // A registry message opens with its `[csszyx] <id>:` header; the
-        // sentence that says why is the line after it.
-        const reason = String(error instanceof Error ? error.message : error)
-            .replace(/^\[csszyx\] [a-z-]+:[^\n]*\n\s*/, '')
-            .split('\n')[0];
-        out.runWarn(`\u2716 Merge audit skipped: ${reason}`);
+        out.runWarn(`\u2716 Merge audit did not run: ${notRunReason(error)}`);
         return true;
     }
     const files = await Promise.all(
@@ -103,10 +141,10 @@ export async function reportMergeAudit(
             out.levelOf({ rule: finding.kind, file: finding.file }) !== 'off',
     );
     if (findings.length === 0) {
-        out.success('No class is removed by a merge.');
+        out.success('No class is removed because another class covers it.');
         return false;
     }
-    out.warn('\nClasses the build removes because a later sz key covers them:');
+    out.warn('\nClasses the build removes because an `sz` class on the same element covers them:');
     for (const finding of findings) {
         const reported = removalFinding(finding);
         out.push(reported);
@@ -120,7 +158,7 @@ export async function reportMergeAudit(
     // audit's findings are `info` unless a config raises them.
     const mark = levels.some(level => isAtLeastLevel(level, input.failOn)) ? '\u2716' : '!';
     out.warn(
-        `\n${mark} ${findings.length} class(es) are removed because a later sz key covers them.`,
+        `\n${mark} ${findings.length} class(es) are removed because an \`sz\` class on the same element covers them.`,
     );
     return false;
 }

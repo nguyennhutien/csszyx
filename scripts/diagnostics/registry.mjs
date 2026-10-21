@@ -2445,7 +2445,7 @@ export const DIAGNOSTICS = [
         args: { count: NUMBER },
         text: 'This build held back {count} finding(s) at `info` and listed none of them.',
         help: 'run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.',
-        note: 'they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class a later sz key covers, and any finding `csszyx.config` sets to `info`.',
+        note: 'they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.',
         sources: ['packages/unplugin/src/transform-diagnostics.ts:100'],
     },
     {
@@ -2625,9 +2625,9 @@ export const DIAGNOSTICS = [
         summary: 'Theme auto-scan turned on in a project without TypeScript configured.',
         surfaces: { runtime: { production: false, host: 'node' } },
         position: 'none',
-        args: { tsconfig: STRING },
+        args: { tsconfig: STRING, includePath: STRING },
         text: '`{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.',
-        help: 'add `"./.csszyx/theme.d.ts"` to its `include` array.',
+        help: 'add `"{includePath}"` to its `include` array.',
         sources: [`${UNPLUGIN}:2341`],
     },
     {
@@ -3298,7 +3298,7 @@ export const REMOVED = [
 // - native-engine-unavailable: CsszyxNativeUnavailableError forms + RustTransformUnavailableError
 //   wrapper + unplugin wasm-fallback notice (unplugin.ts:3522).
 // - internal-error: next-source-transformer.ts:53, unplugin.ts:2940 (unreadStylesheetsError,
-//   thrown at 4321/5757), unplugin.ts:1914 (mangleGlobalVars alias plan vs source alias table,
+//   thrown at 4321/5757), unplugin.ts:1914 (assertGlobalVarPlanMatchesEarlyAliases: alias plan vs source alias table,
 //   once a site of mangle-global-vars-plan-invalid), next-watcher.ts:132 and :142 (once
 //   next-watcher-not-started), next-generation-manifest.ts:155 and next-watcher-cycle.ts:75
 //   (once next-generation-manifest-invalid), stable-file-snapshot.ts:44, map-concurrent.ts:39,

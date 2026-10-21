@@ -65,6 +65,10 @@ async function reportFor(
 
 const CARD = 'export const Card = () => <div sz={{ p: 4 }} />;\n';
 
+/** The skip line when `--rule` or `--ignore-rule` leaves the disagreement out. */
+const SKIPPED_BY_SELECTION =
+    'Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--rule` or `--ignore-rule` leaves `prefix-disagreement` out of this run.';
+
 describe('csszyx check and the Tailwind prefix', () => {
     it('finds nothing dead in a prefixed project whose sz keys are right', async () => {
         const cwd = projectWith({
@@ -120,11 +124,44 @@ describe('csszyx check and the Tailwind prefix', () => {
 
         const report = await reportFor(cwd, { ignoreRule: ['prefix-disagreement'] });
 
-        expect(report).toContain(
-            'Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--ignore-rule prefix-disagreement` left that finding out.',
-        );
+        expect(report).toContain(SKIPPED_BY_SELECTION);
         expect(report).not.toContain('✖');
         expect(process.exitCode).not.toBe(1);
+    }, 60_000);
+
+    it('names both flags when `--rule` is what left the disagreement out', async () => {
+        // `--rule unsigned-value` selects a dead-class kind and leaves
+        // `prefix-disagreement` out; the user never passed `--ignore-rule`.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss" prefix(tw);\n',
+            'legacy/old.css': '@import "tailwindcss";\n',
+            'src/Card.tsx': CARD,
+        });
+
+        const report = await reportFor(cwd, { rule: ['unsigned-value'] });
+
+        expect(report).toContain(SKIPPED_BY_SELECTION);
+    }, 60_000);
+
+    it("runs the dead-class check with the first stylesheet's prefix when the config sets the disagreement to off", async () => {
+        // `off` silences the finding, not the check: a class is dead only when
+        // no stylesheet serves it, so `tw:p-4` is served and
+        // `tw:pointer-none` is not.
+        const cwd = projectWith({
+            'app/app.css': '@import "tailwindcss" prefix(tw);\n',
+            'legacy/old.css': '@import "tailwindcss";\n',
+            'src/Card.tsx': "export const Card = () => <div sz={{ p: 4, pointer: 'none' }} />;\n",
+            'csszyx.config.mjs':
+                "export default { diagnostics: { rules: { 'prefix-disagreement': 'off' } } };\n",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).not.toContain('set different prefixes');
+        expect(report).toMatch(/ {2}tw:pointer-none +src\/Card\.tsx/);
+        expect(report).not.toMatch(/p-4 +src\/Card\.tsx/);
+        expect(report).toContain('1 emitted class(es) produce no CSS');
+        expect(process.exitCode).toBe(1);
     }, 60_000);
 
     it('records the disagreement as a finding in the JSON report', async () => {

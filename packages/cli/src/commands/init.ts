@@ -50,9 +50,19 @@ const VITE_FRAMEWORKS = new Set<Framework>(['vite-react', 'vite-vue', 'vite-svel
  * integration init installs for them, and the one the lines import.
  */
 const PRINTED_VITE_CONFIGS: Partial<Record<Framework, PrintedViteConfig>> = {
-    nuxt: { file: 'nuxt.config.ts', shape: 'nested' },
-    sveltekit: { file: 'vite.config.ts', shape: 'sveltekit' },
-    astro: { file: 'astro.config.mjs', shape: 'nested' },
+    nuxt: { file: 'nuxt.config.ts', lines: nuxtConfigLines },
+    sveltekit: {
+        file: 'vite.config.ts',
+        lines: svelteKitConfigLines,
+        stylesheetStep: stylesheet =>
+            `Import \`${stylesheet}\` in \`src/routes/+layout.svelte\`: \`import '${importFrom('src/routes', stylesheet)}';\` in its \`<script>\`.`,
+    },
+    astro: {
+        file: 'astro.config.mjs',
+        lines: astroConfigLines,
+        stylesheetStep: stylesheet =>
+            `Import \`${stylesheet}\` in your root layout, for example \`import '${importFrom('src/layouts', stylesheet)}';\` in the frontmatter of \`src/layouts/Layout.astro\`.`,
+    },
 };
 
 /** Where a framework keeps its Vite plugins, for the lines init prints. */
@@ -60,10 +70,30 @@ interface PrintedViteConfig {
     /** The config file the lines go in. */
     file: string;
     /**
-     * `nested` for a framework config holding Vite's under `vite`, and
-     * `sveltekit` for a `vite.config` that also lists `sveltekit()`.
+     * The lines to add to {@link file}.
+     *
+     * @param stylesheet - The stylesheet init created or edited, from the
+     *   project root, or `null` when init touched none.
      */
-    shape: 'nested' | 'sveltekit';
+    lines: (stylesheet: string | null) => string;
+    /**
+     * The step that makes the framework serve a stylesheet init created or
+     * edited, for a framework whose config does not list stylesheets.
+     */
+    stylesheetStep?: (stylesheet: string) => string;
+}
+
+/**
+ * The specifier that imports a stylesheet from a file in another directory.
+ *
+ * @param fromDir - The importing file's directory, from the project root.
+ * @param stylesheet - The stylesheet, from the project root.
+ * @returns A relative specifier such as `../index.css`.
+ */
+function importFrom(fromDir: string, stylesheet: string): string {
+    // Every stylesheet init writes sits outside these directories, so the
+    // path starts with `..` and needs no `./`.
+    return path.posix.relative(fromDir, stylesheet);
 }
 
 /** Every value `--framework` takes: a framework init knows how to set up. */
@@ -240,7 +270,9 @@ export async function init(options: InitOptions = {}): Promise<void> {
     printHeader('csszyx Setup Wizard');
 
     if (options.framework !== undefined) {
-        printSuccess(`Framework: ${getFrameworkName(projectInfo.framework)} (from --framework)`);
+        printSuccess(
+            `Framework: ${getFrameworkName(projectInfo.framework)} (from \`--framework\`)`,
+        );
         printInfo(`Package Manager: ${projectInfo.packageManager}`);
     } else if (projectInfo.framework !== 'unknown') {
         printSuccess(`Detected: ${getFrameworkName(projectInfo.framework)}`);
@@ -367,11 +399,14 @@ async function createInitFiles(
     const spin = spinner.start('Creating config files...');
     try {
         await writeCsszyxConfig(cwd, projectInfo.hasTypeScript);
-        if (config.installTailwind) await setupTailwindCss(cwd);
+        const stylesheet = config.installTailwind ? await setupTailwindCss(cwd) : null;
         if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) {
             await setupNextPostcss(cwd, projectInfo, config.installTailwind);
         }
-        await injectPlugin(cwd, projectInfo.framework);
+        await injectPlugin(cwd, projectInfo, {
+            stylesheet,
+            tailwindJustInstalled: config.installTailwind,
+        });
         if (config.setupGitignore) await setupGitignore(cwd);
         if (config.setupTsconfig) await setupTsconfig(cwd);
         if (projectInfo.hasTypeScript) await setupSzTypes(cwd);
@@ -506,8 +541,10 @@ export function tailwindImportBlock(cssDir: string, cwd: string, monorepo: boole
  * Inject Tailwind v4 @import into the main CSS entry file.
  * If no CSS entry file is found, creates src/index.css.
  * @param cwd - Project root directory.
+ * @returns The stylesheet init created or edited, from `cwd` with `/`
+ *   separators, or `null` when it already imported Tailwind.
  */
-async function setupTailwindCss(cwd: string): Promise<void> {
+async function setupTailwindCss(cwd: string): Promise<string | null> {
     const monorepo = await isInsideWorkspace(cwd);
     const found = await readFirstExisting(
         CSS_ENTRY_CANDIDATES.map(candidate => path.join(cwd, candidate)),
@@ -521,7 +558,7 @@ async function setupTailwindCss(cwd: string): Promise<void> {
         await fs.ensureDir(path.dirname(cssPath));
         await fs.writeFile(cssPath, tailwindImportBlock(path.dirname(cssPath), cwd, monorepo));
         printInfo(`Created ${path.relative(cwd, cssPath)} with Tailwind v4 import`);
-        return;
+        return toPosix(path.relative(cwd, cssPath));
     }
 
     if (!content.includes('@import "tailwindcss"') && !content.includes("@import 'tailwindcss'")) {
@@ -530,7 +567,17 @@ async function setupTailwindCss(cwd: string): Promise<void> {
             `${tailwindImportBlock(path.dirname(cssPath), cwd, monorepo)}\n${content}`,
         );
         printInfo(`Added Tailwind v4 import to ${path.relative(cwd, cssPath)}`);
+        return toPosix(path.relative(cwd, cssPath));
     }
+    return null;
+}
+
+/**
+ * @param relative - A path from the project root.
+ * @returns The same path with `/` separators, as config files write it.
+ */
+function toPosix(relative: string): string {
+    return relative.split(path.sep).join('/');
 }
 
 /**
@@ -570,9 +617,18 @@ async function setupNextPostcss(
  * Inject csszyx plugin into vite.config.ts/js or next.config.js/ts.
  * Falls back to printing manual instructions if injection fails.
  * @param cwd - Project root directory.
- * @param framework - Detected or specified framework.
+ * @param projectInfo - Detected project metadata, with the framework to set up.
+ * @param setup - What the earlier steps did.
+ * @param setup.stylesheet - The stylesheet init created or edited, or `null`.
+ * @param setup.tailwindJustInstalled - Whether this run installed Tailwind
+ *   and `@tailwindcss/vite`.
  */
-async function injectPlugin(cwd: string, framework: Framework): Promise<void> {
+async function injectPlugin(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    setup: { stylesheet: string | null; tailwindJustInstalled: boolean },
+): Promise<void> {
+    const { framework } = projectInfo;
     if (VITE_FRAMEWORKS.has(framework)) {
         const injected = await injectVitePlugin(cwd);
         if (!injected) {
@@ -586,13 +642,42 @@ async function injectPlugin(cwd: string, framework: Framework): Promise<void> {
             console.log(generateNextPluginInstructions());
         }
     } else if (PRINTED_VITE_CONFIGS[framework] !== undefined) {
-        const printed = PRINTED_VITE_CONFIGS[framework];
-        printInfo(`Add csszyx to ${printed.file}:`);
-        console.log(generateFrameworkViteInstructions(printed));
+        await printFrameworkViteLines(cwd, projectInfo, PRINTED_VITE_CONFIGS[framework], setup);
     } else {
         // Unknown/other frameworks: print manual instructions
         printInfo('Add csszyx plugin to your bundler config:');
         console.log(generateVitePluginInstructions());
+    }
+}
+
+/**
+ * Print the Vite plugin lines for a framework init does not edit the config
+ * of, and the steps the lines alone leave out.
+ *
+ * @param cwd - Project root directory.
+ * @param projectInfo - Detected project metadata, for the package manager.
+ * @param printed - Where the framework keeps its Vite plugins.
+ * @param setup - What the earlier steps did, as {@link injectPlugin} takes it.
+ * @param setup.stylesheet - The stylesheet init created or edited, or `null`.
+ * @param setup.tailwindJustInstalled - Whether this run installed Tailwind.
+ */
+async function printFrameworkViteLines(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    printed: PrintedViteConfig,
+    setup: { stylesheet: string | null; tailwindJustInstalled: boolean },
+): Promise<void> {
+    printInfo(`Add csszyx to \`${printed.file}\`:`);
+    console.log(printed.lines(setup.stylesheet));
+    if (setup.stylesheet !== null && printed.stylesheetStep !== undefined) {
+        printInfo(printed.stylesheetStep(setup.stylesheet));
+    }
+    // A project already on Tailwind through another integration does not
+    // have the plugin the lines import, and init did not install it.
+    if (!setup.tailwindJustInstalled && !(await hasDependency(cwd, '@tailwindcss/vite'))) {
+        printInfo(
+            `The lines above import \`@tailwindcss/vite\`, which this project does not list: run \`${projectInfo.packageManager} add -D @tailwindcss/vite\`.`,
+        );
     }
 }
 
@@ -845,16 +930,62 @@ function generateVitePluginInstructions(): string {
 `;
 }
 
+/** The plugin list a framework config holds under its `vite` key. */
+const NESTED_VITE_PLUGINS = `    vite: {
+      plugins: [
+        ...csszyx(),      // csszyx MUST come before tailwindcss
+        tailwindcss(),
+      ],
+    },
+  });
+`;
+
 /**
- * The Vite plugin lines for a framework that keeps them in its own config.
+ * The lines for `nuxt.config.ts`. Nuxt auto-imports `defineNuxtConfig`, and
+ * loads a global stylesheet only from its `css` option or an import.
  *
- * @param config - Where the framework keeps its Vite plugins.
+ * @param stylesheet - The stylesheet init created or edited, or `null`.
  * @returns Instruction snippet for that file.
  */
-function generateFrameworkViteInstructions(config: PrintedViteConfig): string {
-    if (config.shape === 'sveltekit') {
-        return `
+function nuxtConfigLines(stylesheet: string | null): string {
+    // `~~` is the project root in every Nuxt version; `~` is `app/` in Nuxt 4.
+    const css = stylesheet === null ? '' : `    css: ['~~/${stylesheet}'],\n`;
+    return `
+  import csszyx from 'csszyx/vite';
+  import tailwindcss from '@tailwindcss/vite';
+
+  export default defineNuxtConfig({
+    // ...your existing options
+${css}${NESTED_VITE_PLUGINS}`;
+}
+
+/**
+ * The lines for `astro.config.mjs`, as Tailwind's Astro guide writes it.
+ *
+ * @returns Instruction snippet for that file.
+ */
+function astroConfigLines(): string {
+    return `
+  // @ts-check
+  import { defineConfig } from 'astro/config';
+  import csszyx from 'csszyx/vite';
+  import tailwindcss from '@tailwindcss/vite';
+
+  export default defineConfig({
+    // ...your existing options
+${NESTED_VITE_PLUGINS}`;
+}
+
+/**
+ * The lines for a SvelteKit `vite.config.ts`, in the plugin order Tailwind's
+ * SvelteKit guide uses.
+ *
+ * @returns Instruction snippet for that file.
+ */
+function svelteKitConfigLines(): string {
+    return `
   import { sveltekit } from '@sveltejs/kit/vite';
+  import { defineConfig } from 'vite';
   import csszyx from 'csszyx/vite';
   import tailwindcss from '@tailwindcss/vite';
 
@@ -864,20 +995,6 @@ function generateFrameworkViteInstructions(config: PrintedViteConfig): string {
       tailwindcss(),
       sveltekit(),
     ],
-  });
-`;
-    }
-    return `
-  import csszyx from 'csszyx/vite';
-  import tailwindcss from '@tailwindcss/vite';
-
-  export default defineConfig({
-    vite: {
-      plugins: [
-        ...csszyx(),      // csszyx MUST come before tailwindcss
-        tailwindcss(),
-      ],
-    },
   });
 `;
 }

@@ -1270,7 +1270,8 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         "id": "theme-scan-without-typescript",
         "position": "none",
         "args": {
-            "tsconfig": {}
+            "tsconfig": {},
+            "includePath": {}
         }
     },
     {

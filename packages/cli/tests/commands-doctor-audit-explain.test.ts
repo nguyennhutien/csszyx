@@ -95,13 +95,26 @@ describe('doctor', () => {
 
         expect(output).toContain('csszyx configuration found: csszyx.config.mjs');
         expect(output).toContain(
-            '\u2717 diagnostics.rules: No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.\n' +
+            '\u2717 `diagnostics.rules`: No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.\n' +
                 '  help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
         );
         expect(output).toContain(
-            '\u26a0 development: `development` is a plugin option, and this file does not set plugin options, so it is ignored.',
+            '\u26a0 `development`: `development` is a plugin option, and this file does not set plugin options, so it is ignored.',
         );
         expect(output).toContain('Found 1 issue(s)');
+    });
+
+    it('paths a top-level field problem by `default export`, in a code span', async () => {
+        const { logs } = captureLogs();
+        const cwd = tempRoot();
+        writeFileSync(join(cwd, 'csszyx.config.mjs'), 'export default { diagnostic: {} };');
+        writeFileSync(join(cwd, 'package.json'), JSON.stringify({}));
+
+        await doctor({ cwd });
+
+        expect(logs.join('\n')).toContain(
+            '`default export`: `diagnostic` is not a field csszyx reads, so nothing under it applies.',
+        );
     });
 
     it('names the file when the config does not load', async () => {
@@ -113,7 +126,7 @@ describe('doctor', () => {
         await doctor({ cwd });
 
         expect(logs.join('\n')).toContain(
-            '\u2717 csszyx.config.mjs: This file could not be loaded, so the `recommended` levels apply.',
+            '\u2717 `csszyx.config.mjs`: This file could not be loaded, so the `recommended` levels apply.',
         );
     });
 

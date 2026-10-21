@@ -3322,6 +3322,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "tsconfig": {
                 "type": "string"
+            },
+            "includePath": {
+                "type": "string"
             }
         }
     },

@@ -73,7 +73,7 @@ export function runNextWatcherCycle(
         );
         if (!validation.ok) {
             throw diagnosticError('internal-error', {
-                where: 'Next generation manifest',
+                where: 'runNextWatcherCycle',
                 detail: `the manifest the watcher wrote reads back invalid (${validation.reason})`,
             });
         }

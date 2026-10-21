@@ -44,7 +44,7 @@ describe('Next watcher cycle', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 message: internalErrorMessage(
-                    'Next generation manifest',
+                    'runNextWatcherCycle',
                     'the manifest the watcher wrote reads back invalid (generation mismatch)',
                 ),
             }),

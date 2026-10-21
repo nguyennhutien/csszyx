@@ -578,7 +578,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         await check({ cwd: tailwindProject(files), rule: ['merge-covered-key'] });
         const printed = log.mock.calls.flat().join('\n');
         expect(printed).toContain(
-            'Classes the build removes because a later sz key covers them:\n',
+            'Classes the build removes because an `sz` class on the same element covers them:\n',
         );
         expect(printed).toContain(
             '  src/App.tsx:4: The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.\n',
@@ -587,7 +587,9 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
             '  note: a build with `build.mergeCoveredClasses: false` keeps these.\n',
         );
         // Below `--fail-on`, so the summary does not wear the failure cross.
-        expect(printed).toContain('! 1 class(es) are removed because a later sz key covers them.');
+        expect(printed).toContain(
+            '! 1 class(es) are removed because an `sz` class on the same element covers them.',
+        );
     });
 
     it('lists nothing when nothing merges', async () => {
@@ -601,7 +603,21 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         expect(report.findings).toEqual([]);
     });
 
-    it('is skipped, and says why, when the stylesheets do not compile', async () => {
+    it('says no class is removed when nothing merges', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({
+            cwd: tailwindProject({
+                ...files,
+                'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            }),
+            rule: ['merge-covered-class'],
+        });
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '✓ No class is removed because another class covers it.',
+        );
+    });
+
+    it('did not run, and says why and what to do, when the stylesheets disagree', async () => {
         const cwd = tailwindProject({
             ...files,
             // Two entries that set different prefixes give the build nothing
@@ -614,7 +630,8 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd, rule: ['merge-covered-class'] });
         expect(log.mock.calls.flat().join('\n')).toContain(
-            '\u2716 Merge audit skipped: The Tailwind stylesheets of this project set different prefixes (`src/app.css` with `prefix(tw)`, `src/other.css` with none), so no class csszyx emits is served by all of them.',
+            '\u2716 Merge audit did not run: the Tailwind stylesheets of this project set different prefixes (`src/app.css` with `prefix(tw)`, `src/other.css` with none), so no class csszyx emits is served by all of them.\n' +
+                '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line.',
         );
     });
 
@@ -629,7 +646,9 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd, rule: ['merge-covered-class'] });
-        expect(log.mock.calls.flat().join('\n')).toContain('Merge audit skipped');
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '\u2716 Merge audit did not run: a Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.',
+        );
         expect(process.exitCode).toBe(1);
     });
 
@@ -638,7 +657,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd, rule: ['merge-covered-class'] });
-        expect(log.mock.calls.flat().join('\n')).not.toContain('Merge audit skipped');
+        expect(log.mock.calls.flat().join('\n')).not.toContain('Merge audit did not run');
         expect(process.exitCode).toBeUndefined();
     });
 
@@ -651,7 +670,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         const report = await jsonFor(cwd, { rule: ['merge-covered-class'] });
         expect(report.findings).toEqual([]);
-        expect(error.mock.calls.flat().join('\n')).toContain('Merge audit skipped');
+        expect(error.mock.calls.flat().join('\n')).toContain('Merge audit did not run');
         expect(process.exitCode).toBe(1);
     });
 

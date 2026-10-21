@@ -200,7 +200,7 @@ describe('Next safelist watcher controller', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 message: internalErrorMessage(
-                    'Next safelist watcher start',
+                    'NextSafelistWatcher.start',
                     'the initial cycle neither ran nor was queued behind the lock',
                 ),
             }),
@@ -352,7 +352,7 @@ describe('Next safelist watcher controller', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 message: internalErrorMessage(
-                    'Next safelist watcher start',
+                    'NextSafelistWatcher.start',
                     'the watcher was started after it was closed',
                 ),
             }),

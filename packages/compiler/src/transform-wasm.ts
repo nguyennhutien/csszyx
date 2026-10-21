@@ -287,7 +287,7 @@ function transformWasmOne(
         fields,
     );
     if (!result) {
-        throw new WasmTransformUnavailableError('the wasm transform returned no result');
+        throw new WasmTransformUnavailableError('the wasm engine returned no result');
     }
     return result;
 }
@@ -359,7 +359,7 @@ function runWasmBatch(
         // both JSON strings, and the artifact was built with the engine.
         throw new WasmTransformUnavailableError(thrownMessage(err), {
             cause: err,
-            where: 'engine transform',
+            where: 'runWasmBatch',
         });
     }
     const results = JSON.parse(resultsJson) as WasmResultJson[];

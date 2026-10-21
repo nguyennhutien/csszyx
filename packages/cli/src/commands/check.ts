@@ -63,6 +63,7 @@ import {
     type CheckRule,
     createReporter,
     type FindingInput,
+    PREFIX_DISAGREEMENT,
     partLines,
     type Reporter,
     registryFinding,
@@ -359,17 +360,23 @@ function prefixEntry(entry: OpenedOracles['prefixes'][number]): string {
  * csszyx writes one prefix before every class, so a project whose entries set
  * different ones has classes that are dead under one of them whichever prefix
  * is used. Checking against a guess would report the half it did not guess, or
- * pass the half it did, so the disagreement is the finding.
+ * pass the half it did, so the disagreement is the finding — unless the config
+ * turns that finding off: then the first entry's prefix is read, and a class
+ * is still reported only when no entry serves it.
  *
  * @param opened - The project's compiled design systems.
- * @returns The agreed prefix, or null with each entry and the prefix it sets.
+ * @param disagreementOff - Whether the config sets `prefix-disagreement` to `off`.
+ * @returns The prefix to lower with, or null with each entry and the prefix it sets.
  */
-function agreedPrefix(opened: OpenedOracles): {
+function agreedPrefix(
+    opened: OpenedOracles,
+    disagreementOff: boolean,
+): {
     prefix: string | null;
     disagreement: string[] | null;
 } {
     const [first, ...rest] = opened.prefixes;
-    if (rest.every(entry => entry.prefix === first?.prefix)) {
+    if (disagreementOff || rest.every(entry => entry.prefix === first?.prefix)) {
         return { prefix: first?.prefix ?? null, disagreement: null };
     }
     return { prefix: null, disagreement: opened.prefixes.map(prefixEntry) };
@@ -416,7 +423,6 @@ function reportDeadClasses(
     }
     if (disagreement !== null) {
         const level = out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT });
-        if (level === 'off') return false;
         const { mark, below } = summaryMark([level], failOn);
         const finding = registryFinding({
             rule: 'dead-class',
@@ -1192,7 +1198,7 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
     } else if (stat) {
         refusal = `\`${dir}\` is a file: to check single files, pass \`--files ${dir}\`.`;
     } else {
-        refusal = `\`${dir}\` does not exist under \`${cwd}\`, so there is nothing to check.`;
+        refusal = `\`${dir}\` does not exist under \`${cwd}\`, so there is nothing to check: pass a directory under it, or leave \`[dir]\` out to check the whole project.`;
     }
     out.runWarn(`\u2716 ${refusal}`);
     process.exitCode = 1;
@@ -1260,13 +1266,6 @@ async function resolveScanFiles(
 
 /** Whether a run reports a finding of this rule and kind. */
 type RuleSelection = (rule: CheckRule, kind: string) => boolean;
-
-/**
- * The finding for entries that set different prefixes. It can be left out by
- * id like a diagnostic kind, which skips the dead-class pass: that pass needs
- * one prefix to ask about.
- */
-const PREFIX_DISAGREEMENT = 'prefix-disagreement' as const;
 
 /**
  * Read `--rule` and `--ignore-rule` into one predicate, or fail the run.
@@ -1497,7 +1496,7 @@ function openOraclesWhenAsked(cwd: string, scanned: SzDiagnostics): Promise<Open
  * Run the dead-class pass when the run selects it, and fail the run on what it finds.
  *
  * Selected by either `dead-class` or `broken-opacity`. When the entries
- * disagree on a prefix and `--ignore-rule` left that finding out, the pass is
+ * disagree on a prefix and `--rule` or `--ignore-rule` left that finding out, the pass is
  * skipped with a note instead: it needs one prefix to ask about.
  *
  * @param out - Where this pass sends its prose and its findings.
@@ -1531,7 +1530,7 @@ function runDeadClassPass(
     if (!deadClassPass) return;
     if (disagreementLeftOut) {
         out.runInfo(
-            `Dead-class check skipped: the Tailwind stylesheets set different prefixes, and \`--ignore-rule ${PREFIX_DISAGREEMENT}\` left that finding out.`,
+            `Dead-class check skipped: the Tailwind stylesheets set different prefixes, and \`--rule\` or \`--ignore-rule\` leaves \`${PREFIX_DISAGREEMENT}\` out of this run.`,
         );
         return;
     }
@@ -1588,7 +1587,10 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // Lowered without a prefix above, which is right only when no entry sets
     // one: a prefixed project serves `tw:p-4`, and asking about `p-4` would
     // call every class dead. Only a prefixed project pays for the second pass.
-    const { prefix, disagreement } = agreedPrefix(opened);
+    const { prefix, disagreement } = agreedPrefix(
+        opened,
+        out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off',
+    );
     const { issues, classOrigins, pairsByFile } =
         prefix === null ? unprefixed : await collectSzDiagnostics(files, cwd, prefix);
 

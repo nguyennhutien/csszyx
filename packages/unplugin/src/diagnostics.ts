@@ -66,6 +66,7 @@ export {
     diagnosticPolicyWatchFiles,
     isDiagnosticPolicyWatchFile,
 } from './diagnostic-policy-inputs.js';
+export { keptSessionMessage } from './kept-session-message.js';
 export { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
 export {
     type QuietMode,

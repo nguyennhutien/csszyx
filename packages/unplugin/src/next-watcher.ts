@@ -130,7 +130,7 @@ export class NextSafelistWatcher {
     start(): NextWatcherCycleResult | undefined {
         if (this.closed) {
             throw diagnosticError('internal-error', {
-                where: 'Next safelist watcher start',
+                where: 'NextSafelistWatcher.start',
                 detail: 'the watcher was started after it was closed',
             });
         }
@@ -143,7 +143,7 @@ export class NextSafelistWatcher {
         const result = this.loop.flushOrQueue();
         if (!result && !this.loop.pending) {
             throw diagnosticError('internal-error', {
-                where: 'Next safelist watcher start',
+                where: 'NextSafelistWatcher.start',
                 detail: 'the initial cycle neither ran nor was queued behind the lock',
             });
         }

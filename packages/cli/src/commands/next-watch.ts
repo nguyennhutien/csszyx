@@ -15,6 +15,7 @@ import {
     diagnosticPolicyInputsCurrent,
     isCsszyxConfigFile,
     isDiagnosticPolicyWatchFile,
+    keptSessionMessage,
 } from '@csszyx/unplugin/diagnostics';
 import {
     createRootIgnoreMatcher,
@@ -390,11 +391,11 @@ export async function startNextWatch(
             .then(recordStylesheetFacts)
             .then(writeRegistration)
             .catch((error: unknown) => {
-                // The build's note says nothing was written, which a watch
-                // that goes on is not; say what it goes on with instead.
-                const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
                 printWatcherNotice(
-                    `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
+                    keptSessionMessage(
+                        error,
+                        '`csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.',
+                    ),
                 );
             });
     };

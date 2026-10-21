@@ -836,12 +836,12 @@ describe('the alias plan against the source alias table', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 args: {
-                    where: 'mangleGlobalVars alias plan',
+                    where: 'assertGlobalVarPlanMatchesEarlyAliases',
                     detail: 'the CSS alias plan [["--brand","---a"]] does not match the source alias table [["--brand","---b"]]',
                 },
                 message:
                     '[csszyx] internal-error:\n' +
-                    '  An internal check failed in `mangleGlobalVars alias plan`, so csszyx stops.\n' +
+                    '  An internal check failed in `assertGlobalVarPlanMatchesEarlyAliases`, so csszyx stops.\n' +
                     '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
                     '  note: the check that failed: the CSS alias plan [["--brand","---a"]] does not match the source alias table [["--brand","---b"]].\n' +
                     '  docs: https://csszyx.com/e/internal-error',

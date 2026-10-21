@@ -47,7 +47,7 @@ export function readStableTextFileSnapshotSync(
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
         throw diagnosticError('internal-error', {
             where: 'readStableTextFileSnapshotSync',
-            detail: `maxAttempts is ${maxAttempts}, not a positive integer`,
+            detail: `maxAttempts must be a positive integer, got ${maxAttempts}`,
         });
     }
 

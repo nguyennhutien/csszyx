@@ -526,9 +526,43 @@ describe('csszyx next-watch command', () => {
                     '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load with the `--tailwind-stylesheet` flag.\n' +
                     '  note: each failure, as Tailwind reported it:\n' +
                     `    app/globals.css: ENOENT: no such file or directory, open '${join(root, 'app/gone.css')}'\n` +
-                    '  docs: https://csszyx.com/e/tailwind-stylesheet-broken\n' +
-                    '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.',
+                    '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.\n' +
+                    '  docs: https://csszyx.com/e/tailwind-stylesheet-broken',
             );
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
+    it('replaces the build note of a prefix disagreement with its own, above `docs:`', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        const warnings: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            warnings.push(args.map(String).join(' '));
+        });
+
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch(events) },
+        );
+        try {
+            writeFileSync(join(root, 'app/other.css'), '@import "tailwindcss" prefix(tw);\n');
+            await waitFor(() => warnings.join('\n').includes('prefix-disagreement'), {
+                describe: () => describeWatchState(events, []),
+            });
+            const warning = warnings.at(-1) as string;
+            expect(warning).not.toContain('nothing was written');
+            expect(warning.split('\n').slice(-2)).toEqual([
+                '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.',
+                '  docs: https://csszyx.com/e/prefix-disagreement',
+            ]);
+            expect(warning.match(/ note: /g)).toHaveLength(1);
         } finally {
             await session.close();
             vi.restoreAllMocks();

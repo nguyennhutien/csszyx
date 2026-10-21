@@ -96,7 +96,7 @@ describe('csszyx init --framework', () => {
         expect(readFileSync(join(cwd, 'vite.config.ts'), 'utf8')).not.toContain('csszyx');
         // The flag chose it, so init does not claim to have detected it.
         expect(lines.join('\n')).not.toContain('Detected:');
-        expect(lines.join('\n')).toContain('Framework: Next.js (App Router) (from --framework)');
+        expect(lines.join('\n')).toContain('Framework: Next.js (App Router) (from `--framework`)');
     });
 
     it('refuses a framework it does not know before asking or installing anything', async () => {
@@ -160,9 +160,141 @@ describe('csszyx init for a framework whose plugin lines it prints', () => {
             expect(installs().flat()).not.toContain('@tailwindcss/postcss');
             const output = lines.join('\n');
             expect(output).toContain(`Detected: ${name}`);
-            expect(output).toContain(`Add csszyx to ${file}:`);
+            expect(output).toContain(`Add csszyx to \`${file}\`:`);
             expect(output).toContain("import tailwindcss from '@tailwindcss/vite';");
             expect(output).toContain(shape);
         },
     );
+});
+
+describe('the config lines init prints for Nuxt, SvelteKit and Astro', () => {
+    // Pasted as printed, each file must load: Nuxt auto-imports only
+    // `defineNuxtConfig`, while Astro and SvelteKit import `defineConfig`
+    // from their own module. The stylesheet init created is served only once
+    // something imports it, so the lines say where.
+    it.each([
+        [
+            'nuxt',
+            'ℹ Add csszyx to `nuxt.config.ts`:\n' +
+                '\n' +
+                "  import csszyx from 'csszyx/vite';\n" +
+                "  import tailwindcss from '@tailwindcss/vite';\n" +
+                '\n' +
+                '  export default defineNuxtConfig({\n' +
+                '    // ...your existing options\n' +
+                "    css: ['~~/src/index.css'],\n" +
+                '    vite: {\n' +
+                '      plugins: [\n' +
+                '        ...csszyx(),      // csszyx MUST come before tailwindcss\n' +
+                '        tailwindcss(),\n' +
+                '      ],\n' +
+                '    },\n' +
+                '  });\n',
+        ],
+        [
+            'astro',
+            'ℹ Add csszyx to `astro.config.mjs`:\n' +
+                '\n' +
+                '  // @ts-check\n' +
+                "  import { defineConfig } from 'astro/config';\n" +
+                "  import csszyx from 'csszyx/vite';\n" +
+                "  import tailwindcss from '@tailwindcss/vite';\n" +
+                '\n' +
+                '  export default defineConfig({\n' +
+                '    // ...your existing options\n' +
+                '    vite: {\n' +
+                '      plugins: [\n' +
+                '        ...csszyx(),      // csszyx MUST come before tailwindcss\n' +
+                '        tailwindcss(),\n' +
+                '      ],\n' +
+                '    },\n' +
+                '  });\n' +
+                '\n' +
+                "ℹ Import `src/index.css` in your root layout, for example `import '../index.css';` in the frontmatter of `src/layouts/Layout.astro`.",
+        ],
+        [
+            '@sveltejs/kit',
+            'ℹ Add csszyx to `vite.config.ts`:\n' +
+                '\n' +
+                "  import { sveltekit } from '@sveltejs/kit/vite';\n" +
+                "  import { defineConfig } from 'vite';\n" +
+                "  import csszyx from 'csszyx/vite';\n" +
+                "  import tailwindcss from '@tailwindcss/vite';\n" +
+                '\n' +
+                '  export default defineConfig({\n' +
+                '    plugins: [\n' +
+                '      ...csszyx(),      // csszyx MUST come before tailwindcss\n' +
+                '      tailwindcss(),\n' +
+                '      sveltekit(),\n' +
+                '    ],\n' +
+                '  });\n' +
+                '\n' +
+                "ℹ Import `src/index.css` in `src/routes/+layout.svelte`: `import '../index.css';` in its `<script>`.",
+        ],
+    ])('prints lines for %s that load as pasted', async (dependency, expected) => {
+        const lines = printed();
+        const cwd = project({
+            'package.json': JSON.stringify({ dependencies: { [dependency]: '*' } }),
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(lines.join('\n')).toContain(expected);
+    });
+
+    it('names the stylesheet init edited, by its path from the config', async () => {
+        const lines = printed();
+        const cwd = project({
+            'package.json': JSON.stringify({ dependencies: { nuxt: '*' } }),
+            'app/globals.css': 'body { margin: 0; }\n',
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(lines.join('\n')).toContain("    css: ['~~/app/globals.css'],\n");
+    });
+
+    it.each([
+        ['nuxt', 'css: ['],
+        ['astro', 'in your root layout'],
+        ['@sveltejs/kit', '+layout.svelte'],
+    ])(
+        'leaves the stylesheet step out for %s when init did not touch a stylesheet',
+        async (dependency, step) => {
+            const lines = printed();
+            const cwd = project({
+                'package.json': JSON.stringify({
+                    dependencies: { [dependency]: '*' },
+                    devDependencies: { tailwindcss: '^4', '@tailwindcss/vite': '^4' },
+                }),
+            });
+
+            await init({ yes: true, cwd });
+
+            const output = lines.join('\n');
+            expect(output).toContain('Add csszyx to');
+            expect(output).not.toContain(step);
+            expect(output).not.toContain('which this project does not list');
+        },
+    );
+
+    it('says how to add `@tailwindcss/vite` when Tailwind is there without it', async () => {
+        const lines = printed();
+        const cwd = project({
+            'package.json': JSON.stringify({
+                dependencies: { astro: '*' },
+                devDependencies: { tailwindcss: '^4', '@tailwindcss/postcss': '^4' },
+            }),
+            'pnpm-lock.yaml': '',
+        });
+
+        await init({ yes: true, cwd });
+
+        expect(installs().flat()).not.toContain('@tailwindcss/vite');
+        expect(lines.join('\n')).toContain(
+            '  });\n' +
+                '\n' +
+                'ℹ The lines above import `@tailwindcss/vite`, which this project does not list: run `pnpm add -D @tailwindcss/vite`.',
+        );
+    });
 });

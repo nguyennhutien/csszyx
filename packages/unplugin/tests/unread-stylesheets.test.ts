@@ -25,8 +25,8 @@ describe('a transform before the stylesheets were read', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 message: internalErrorMessage(
-                    'style model',
-                    "a lane asked for the Tailwind prefix before it read the project's stylesheets",
+                    'createCompilerOptions',
+                    "the build asked for the Tailwind prefix before it read the project's stylesheets",
                 ),
             }),
         );

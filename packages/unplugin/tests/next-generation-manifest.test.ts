@@ -59,7 +59,7 @@ describe('Next generation manifest', () => {
             expect.objectContaining({
                 code: 'internal-error',
                 message: internalErrorMessage(
-                    'Next generation manifest',
+                    'normalizeManifest',
                     'the manifest to write does not have the schema 1 fields',
                 ),
             }),
