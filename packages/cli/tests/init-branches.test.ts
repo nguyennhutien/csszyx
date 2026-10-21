@@ -231,14 +231,96 @@ describe('init Next.js existing-config paths', () => {
     });
 });
 
+/**
+ * A project init does not recognise gets Tailwind through PostCSS, so the
+ * lines it prints have to set up that pipeline, not import `@tailwindcss/vite`,
+ * which init did not install.
+ */
 describe('init unknown framework', () => {
-    it('prints bundler-agnostic manual instructions', async () => {
+    /**
+     * Run init on a project and collect what it printed.
+     *
+     * @param files - The project's files, by path from its root.
+     * @returns The printed output, one line per `console.log` call.
+     */
+    async function initPrinted(files: Record<string, string>): Promise<string> {
         const logs: string[] = [];
         vi.spyOn(console, 'log').mockImplementation((...p: unknown[]) => logs.push(p.join(' ')));
         const cwd = tempRoot();
-        write(cwd, 'package.json', JSON.stringify({ name: 'plain', dependencies: {} }));
+        for (const [rel, content] of Object.entries(files)) write(cwd, rel, content);
         await init({ yes: true, cwd });
-        expect(logs.join('\n')).toContain('Add csszyx plugin to your bundler config');
+        return logs.join('\n');
+    }
+
+    /** @returns Every package init installed, across all its install commands. */
+    function installed(): string[] {
+        return vi.mocked(execa).mock.calls.flatMap(call => call[1] as string[]);
+    }
+
+    const PLAIN = { 'package.json': JSON.stringify({ name: 'plain', dependencies: {} }) };
+
+    it('prints a PostCSS config with csszyx before the Tailwind plugin it installed', async () => {
+        const out = await initPrinted(PLAIN);
+
+        expect(installed()).toContain('@tailwindcss/postcss');
+        expect(out).toContain('Create `postcss.config.mjs`');
+        const csszyxAt = out.indexOf("'@csszyx/unplugin/postcss': {},");
+        expect(csszyxAt).toBeGreaterThan(-1);
+        expect(out.indexOf("'@tailwindcss/postcss': {},")).toBeGreaterThan(csszyxAt);
+    });
+
+    it('installs the package the printed PostCSS config names', async () => {
+        await initPrinted(PLAIN);
+
+        // A strict package manager resolves only what the project lists.
+        expect(installed()).toContain('@csszyx/unplugin');
+    });
+
+    it('says how to load the stylesheet it created and to add the bundler plugin', async () => {
+        const out = await initPrinted(PLAIN);
+
+        expect(out).toContain("Import `src/index.css` from your app's entry file");
+        expect(out).toContain("`import csszyxWebpack from 'csszyx/webpack';`");
+    });
+
+    it('points a Vite build at the Vite lines and the plugin it lacks', async () => {
+        const out = await initPrinted(PLAIN);
+
+        expect(out).toContain(
+            'Building with Vite? Use these lines in `vite.config.ts` instead of the PostCSS lines above:',
+        );
+        expect(out).toContain("import tailwindcss from '@tailwindcss/vite';");
+        expect(out).toContain(
+            'The lines above import `@tailwindcss/vite`, which this project does not list: run `npm add -D @tailwindcss/vite`.',
+        );
+    });
+
+    it('keeps a PostCSS config the project has and prints the lines to add', async () => {
+        const out = await initPrinted({
+            ...PLAIN,
+            'postcss.config.cjs': 'module.exports = { plugins: {} };\n',
+        });
+
+        expect(out).not.toContain('Create `postcss.config.mjs`');
+        expect(out).toContain('Keeping your PostCSS config. Add csszyx BEFORE Tailwind');
+    });
+
+    it('names the PostCSS plugin a project already on Tailwind does not list', async () => {
+        const out = await initPrinted({
+            'package.json': JSON.stringify({ devDependencies: { tailwindcss: '^4' } }),
+        });
+
+        expect(out).toContain(
+            'The config above names `@tailwindcss/postcss`, which this project does not list: run `npm add -D @tailwindcss/postcss`.',
+        );
+        expect(out).not.toContain('Import `src/index.css`');
+    });
+
+    it('sets up a directory with no package.json', async () => {
+        const out = await initPrinted({});
+
+        expect(out).toContain('Create `postcss.config.mjs`');
+        expect(out).toContain('All done!');
     });
 });
 

@@ -30,8 +30,12 @@ build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
 or install it as a dev dependency. A Next.js project also adds
 `@csszyx/unplugin` directly, because its configs name that package (the
-Next.js steps below say where); `csszyx init` does this for you, and adds
-these packages to `dependencies`.
+Next.js steps below say where), and so does any project whose
+`postcss.config` lists `@csszyx/unplugin/postcss`; `csszyx init` does this
+for you, and adds these packages to `dependencies`. For a framework it does
+not detect, init installs Tailwind with `@tailwindcss/postcss` and prints a
+`postcss.config.mjs` that runs `@csszyx/unplugin/postcss` before it, plus the
+Vite lines for a project that builds with Vite.
 [Where each package goes](#where-each-package-goes) says which ones a
 production install can leave out.
 

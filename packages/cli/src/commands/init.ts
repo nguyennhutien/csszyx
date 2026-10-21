@@ -219,12 +219,10 @@ async function hasDependency(cwd: string, name: string): Promise<boolean> {
  * @returns Whether Next would already find a PostCSS config here.
  */
 async function hasPostcssConfig(cwd: string): Promise<boolean> {
-    // Framework detection has already read and parsed this file, so it is
-    // there and it is JSON by the time init reaches the PostCSS step.
-    const packageJson = JSON.parse(
-        await fs.readFile(path.join(cwd, 'package.json'), 'utf8'),
-    ) as Record<string, unknown>;
-    if ('postcss' in packageJson) return true;
+    // A framework init does not know may have no package.json at all; when
+    // there is one, installing into the project has already parsed it.
+    const text = await readFileOrNull(path.join(cwd, 'package.json'));
+    if (text !== null && 'postcss' in (JSON.parse(text) as object)) return true;
     return (
         (await readFirstExisting(POSTCSS_CONFIG_FILES.map(name => path.join(cwd, name)))) !== null
     );
@@ -360,12 +358,14 @@ async function installInitPackages(
     const spin = spinner.start('Installing csszyx...');
     try {
         // A Next.js project names `@csszyx/unplugin/...` in next.config and
-        // postcss.config by package, and a strict package manager (pnpm, Yarn
+        // postcss.config by package, as do the PostCSS lines init prints for a
+        // framework it does not know, and a strict package manager (pnpm, Yarn
         // PnP) resolves only what the project lists, not what `csszyx` depends
         // on; the other frameworks import through `csszyx/vite` and friends.
-        const packages = NEXTJS_FRAMEWORKS.has(projectInfo.framework)
-            ? ['csszyx', '@csszyx/runtime', '@csszyx/unplugin']
-            : ['csszyx', '@csszyx/runtime'];
+        const packages =
+            NEXTJS_FRAMEWORKS.has(projectInfo.framework) || projectInfo.framework === 'unknown'
+                ? ['csszyx', '@csszyx/runtime', '@csszyx/unplugin']
+                : ['csszyx', '@csszyx/runtime'];
         await execa(projectInfo.packageManager, ['add', ...packages], { cwd });
         if (projectInfo.hasTypeScript) {
             await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
@@ -612,21 +612,81 @@ async function setupNextPostcss(
         printInfo('Created postcss.config.mjs for Tailwind v4 and the csszyx safelist');
         return;
     }
-    // Rewriting someone's PostCSS config is too risky; say exactly what to add.
+    printPostcssPluginLines();
+}
+
+/**
+ * Say what to add to the PostCSS config a project already has.
+ *
+ * Rewriting someone's PostCSS config is too risky, so init prints the two
+ * plugin entries in the order they have to run.
+ */
+function printPostcssPluginLines(): void {
     printInfo('Keeping your PostCSS config. Add csszyx BEFORE Tailwind in its plugins:');
     console.log(`    ${CSSZYX_POSTCSS_PLUGIN_LINE}`);
     console.log("    '@tailwindcss/postcss': {},");
 }
 
 /**
+ * Print the setup for a framework init does not know: Tailwind through
+ * PostCSS, which is the integration init installs for it, with csszyx's
+ * PostCSS plugin first, and the Vite lines for a project that builds with
+ * Vite after all.
+ *
+ * @param cwd - Project root directory.
+ * @param projectInfo - Detected project metadata, for the package manager.
+ * @param setup - What the earlier steps did, as {@link injectPlugin} takes it.
+ * @param setup.stylesheet - The stylesheet init created or edited, or `null`.
+ * @param setup.tailwindJustInstalled - Whether this run installed Tailwind
+ *   and `@tailwindcss/postcss`.
+ */
+async function printPostcssSetup(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    setup: { stylesheet: string | null; tailwindJustInstalled: boolean },
+): Promise<void> {
+    if (await hasPostcssConfig(cwd)) {
+        printPostcssPluginLines();
+    } else {
+        printInfo('Create `postcss.config.mjs` so PostCSS runs csszyx before Tailwind:');
+        console.log(`\n${generatePostcssConfig().replace(/^(?=.)/gm, '  ')}`);
+    }
+    await printTailwindAdapterStep(cwd, projectInfo, {
+        subject: 'The config above names',
+        adapter: '@tailwindcss/postcss',
+        installed: setup.tailwindJustInstalled,
+    });
+    if (setup.stylesheet !== null) {
+        printInfo(
+            `Import \`${setup.stylesheet}\` from your app's entry file, so your bundler runs it through PostCSS.`,
+        );
+    }
+    printInfo(
+        "Add csszyx to your bundler too. For webpack, put `csszyxWebpack()` first in `plugins`, with `import csszyxWebpack from 'csszyx/webpack';`.",
+    );
+    printInfo(
+        'Building with Vite? Use these lines in `vite.config.ts` instead of the PostCSS lines above:',
+    );
+    console.log(viteConfigLines());
+    // Init installed the PostCSS adapter, not this one.
+    await printTailwindAdapterStep(cwd, projectInfo, {
+        subject: 'The lines above import',
+        adapter: '@tailwindcss/vite',
+        installed: false,
+    });
+}
+
+/**
  * Inject csszyx plugin into vite.config.ts/js or next.config.js/ts.
- * Falls back to printing manual instructions if injection fails.
+ * Falls back to printing manual instructions if injection fails, and prints
+ * the PostCSS setup for a framework init does not know.
  * @param cwd - Project root directory.
  * @param projectInfo - Detected project metadata, with the framework to set up.
  * @param setup - What the earlier steps did.
  * @param setup.stylesheet - The stylesheet init created or edited, or `null`.
  * @param setup.tailwindJustInstalled - Whether this run installed Tailwind
- *   and `@tailwindcss/vite`.
+ *   and the integration the framework gets: `@tailwindcss/vite`, or
+ *   `@tailwindcss/postcss` for Next.js and a framework init does not know.
  */
 async function injectPlugin(
     cwd: string,
@@ -645,9 +705,7 @@ async function injectPlugin(
     } else if (PRINTED_VITE_CONFIGS[framework] !== undefined) {
         await printFrameworkViteLines(cwd, projectInfo, PRINTED_VITE_CONFIGS[framework], setup);
     } else {
-        // Unknown/other frameworks: print manual instructions
-        printInfo('Add csszyx plugin to your bundler config:');
-        console.log(viteConfigLines());
+        await printPostcssSetup(cwd, projectInfo, setup);
     }
 }
 
@@ -670,43 +728,43 @@ async function setupViteConfig(
     if (injected === null) {
         printWarn('Could not auto-inject csszyx plugin. Add manually to vite.config.ts:');
         console.log(viteConfigLines());
-        await printTailwindViteStep(
-            cwd,
-            projectInfo,
-            'The lines above import',
-            tailwindJustInstalled,
-        );
+        await printTailwindAdapterStep(cwd, projectInfo, {
+            subject: 'The lines above import',
+            adapter: '@tailwindcss/vite',
+            installed: tailwindJustInstalled,
+        });
     } else if (injected.addedTailwindImport) {
-        await printTailwindViteStep(
-            cwd,
-            projectInfo,
-            `\`${injected.file}\` now imports`,
-            tailwindJustInstalled,
-        );
+        await printTailwindAdapterStep(cwd, projectInfo, {
+            subject: `\`${injected.file}\` now imports`,
+            adapter: '@tailwindcss/vite',
+            installed: tailwindJustInstalled,
+        });
     }
 }
 
 /**
- * Say how to add `@tailwindcss/vite` when the project does not list it.
+ * Say how to add a Tailwind integration, `@tailwindcss/vite` or
+ * `@tailwindcss/postcss`, when the project does not list it.
  *
  * A project already on Tailwind through another integration does not have
- * the plugin, and init installs it only alongside Tailwind itself.
+ * this one, and init installs one only alongside Tailwind itself.
  *
  * @param cwd - Project root directory.
  * @param projectInfo - Detected project metadata, for the package manager.
- * @param subject - What imports it, as the sentence begins: the lines init
- *   printed, or the file it edited.
- * @param tailwindJustInstalled - Whether this run installed the plugin.
+ * @param step - What names the integration, and whether init installed it.
+ * @param step.subject - What names it, as the sentence begins: the lines
+ *   init printed, or the file it edited.
+ * @param step.adapter - The integration's package name.
+ * @param step.installed - Whether this run installed it.
  */
-async function printTailwindViteStep(
+async function printTailwindAdapterStep(
     cwd: string,
     projectInfo: ProjectInfo,
-    subject: string,
-    tailwindJustInstalled: boolean,
+    step: { subject: string; adapter: string; installed: boolean },
 ): Promise<void> {
-    if (tailwindJustInstalled || (await hasDependency(cwd, '@tailwindcss/vite'))) return;
+    if (step.installed || (await hasDependency(cwd, step.adapter))) return;
     printInfo(
-        `${subject} \`@tailwindcss/vite\`, which this project does not list: run \`${projectInfo.packageManager} add -D @tailwindcss/vite\`.`,
+        `${step.subject} \`${step.adapter}\`, which this project does not list: run \`${projectInfo.packageManager} add -D ${step.adapter}\`.`,
     );
 }
 
@@ -732,12 +790,11 @@ async function printFrameworkViteLines(
     if (setup.stylesheet !== null && printed.stylesheetStep !== undefined) {
         printInfo(printed.stylesheetStep(setup.stylesheet));
     }
-    await printTailwindViteStep(
-        cwd,
-        projectInfo,
-        'The lines above import',
-        setup.tailwindJustInstalled,
-    );
+    await printTailwindAdapterStep(cwd, projectInfo, {
+        subject: 'The lines above import',
+        adapter: '@tailwindcss/vite',
+        installed: setup.tailwindJustInstalled,
+    });
 }
 
 /**
