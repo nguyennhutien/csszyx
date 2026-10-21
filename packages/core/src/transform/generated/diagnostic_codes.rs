@@ -182,13 +182,35 @@ pub mod issue {
         )
     }
 
-    /// `canonical-key`: An alias of a key, with the canonical spelling to write.
+    /// `canonical-key` (`alias`): An alias of a key, with the canonical spelling to write.
     #[must_use]
     #[inline]
-    pub fn canonical_key(key: &str) -> (DiagnosticCode, Args) {
+    pub fn canonical_key_alias(key: &str) -> (DiagnosticCode, Args) {
         (
             DiagnosticCode::CanonicalKey,
-            Args::default().text("key", key),
+            Args::default().text("form", "alias").text("key", key),
+        )
+    }
+
+    /// `canonical-key` (`font`): An alias of a key, with the canonical spelling to write.
+    #[must_use]
+    #[inline]
+    pub fn canonical_key_font(key: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::CanonicalKey,
+            Args::default().text("form", "font").text("key", key),
+        )
+    }
+
+    /// `canonical-key` (`scrollbar-color`): An alias of a key, with the canonical spelling to write.
+    #[must_use]
+    #[inline]
+    pub fn canonical_key_scrollbar_color(key: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::CanonicalKey,
+            Args::default()
+                .text("form", "scrollbar-color")
+                .text("key", key),
         )
     }
 
@@ -617,12 +639,19 @@ pub mod issue {
     /// `global-before-group`: A stand-alone keyword written before a group key that replaces it.
     #[must_use]
     #[inline]
-    pub fn global_before_group(global: &str, value: &str, group: &str) -> (DiagnosticCode, Args) {
+    pub fn global_before_group(
+        global: &str,
+        value: &str,
+        value_type: &'static str,
+        group: &str,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(["string", "number", "boolean"].contains(&value_type));
         (
             DiagnosticCode::GlobalBeforeGroup,
             Args::default()
                 .text("global", global)
                 .text("value", value)
+                .text("valueType", value_type)
                 .text("group", group),
         )
     }
@@ -945,12 +974,24 @@ mod tests {
         let (code, args) = issue::unknown_key("key", None);
         assert_eq!(code, DiagnosticCode::UnknownKey);
         assert_eq!(args.to_json(), r#"{"key":"key"}"#);
-        let (code, args) = issue::canonical_key("key");
+        let (code, args) = issue::canonical_key_alias("key");
         assert_eq!(code, DiagnosticCode::CanonicalKey);
-        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
-        let (code, args) = issue::canonical_key("key");
+        assert_eq!(args.to_json(), r#"{"form":"alias","key":"key"}"#);
+        let (code, args) = issue::canonical_key_alias("key");
         assert_eq!(code, DiagnosticCode::CanonicalKey);
-        assert_eq!(args.to_json(), r#"{"key":"key"}"#);
+        assert_eq!(args.to_json(), r#"{"form":"alias","key":"key"}"#);
+        let (code, args) = issue::canonical_key_font("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"form":"font","key":"key"}"#);
+        let (code, args) = issue::canonical_key_font("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"form":"font","key":"key"}"#);
+        let (code, args) = issue::canonical_key_scrollbar_color("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"form":"scrollbar-color","key":"key"}"#);
+        let (code, args) = issue::canonical_key_scrollbar_color("key");
+        assert_eq!(code, DiagnosticCode::CanonicalKey);
+        assert_eq!(args.to_json(), r#"{"form":"scrollbar-color","key":"key"}"#);
         let (code, args) = issue::removed_key_runtime_alias("key", Some("replacement"));
         assert_eq!(code, DiagnosticCode::RemovedKey);
         assert_eq!(
@@ -1257,17 +1298,17 @@ mod tests {
             args.to_json(),
             r#"{"form":"mask-layer","key":"key","value":"value"}"#
         );
-        let (code, args) = issue::global_before_group("global", "value", "group");
+        let (code, args) = issue::global_before_group("global", "value", "string", "group");
         assert_eq!(code, DiagnosticCode::GlobalBeforeGroup);
         assert_eq!(
             args.to_json(),
-            r#"{"global":"global","value":"value","group":"group"}"#
+            r#"{"global":"global","value":"value","valueType":"string","group":"group"}"#
         );
-        let (code, args) = issue::global_before_group("global", "value", "group");
+        let (code, args) = issue::global_before_group("global", "value", "string", "group");
         assert_eq!(code, DiagnosticCode::GlobalBeforeGroup);
         assert_eq!(
             args.to_json(),
-            r#"{"global":"global","value":"value","group":"group"}"#
+            r#"{"global":"global","value":"value","valueType":"string","group":"group"}"#
         );
         let (code, args) = issue::runtime_family_conflict_key_first("key", "other");
         assert_eq!(code, DiagnosticCode::RuntimeFamilyConflict);

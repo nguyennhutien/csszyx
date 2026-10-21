@@ -14,9 +14,11 @@ import {
     PLACEHOLDER_PATTERN,
     placeholdersOf,
     publicData,
+    RENDER_FIELDS,
     renderEditorTemplates,
     renderRegistryModule,
     renderRust,
+    renderSpecModule,
     renderTypeScript,
     settableIds,
     snakeName,
@@ -316,7 +318,8 @@ test('the Node registry keeps the engine words; Node-only words have a module of
     const registryOfModule = JSON.parse(
         source
             .slice(
-                source.indexOf('= [', source.indexOf('export const SZ_DIAGNOSTIC_REGISTRY:')) + 2,
+                source.indexOf('= [', source.indexOf('export const SZ_DIAGNOSTIC_RENDER_SPECS:')) +
+                    2,
             )
             .replace(/;\s*$/, ''),
     );
@@ -332,9 +335,30 @@ test('the Node registry keeps the engine words; Node-only words have a module of
     );
     assert.deepEqual(Object.keys(listed), ['node-one', 'both-one', 'thrown-in-node', 'checked']);
     assert.deepEqual(listed['node-one'], { text: 'It went.', help: 'do this.', note: 'it stays.' });
-    // The metadata stays for every id: a level, an arg or a surface is read in Node.
+    // The renderer reads only what a line is rendered from; the full
+    // specification, for tests and tools, keeps every id's metadata.
     const browser = registryOfModule.find(spec => spec.id === 'browser-one');
-    assert.deepEqual(Object.keys(browser), ['id', 'summary', 'surfaces', 'position', 'args']);
+    assert.deepEqual(Object.keys(browser), ['id', 'position', 'args']);
+    for (const spec of registryOfModule) {
+        for (const field of Object.keys(spec)) assert.ok(RENDER_FIELDS.includes(field), field);
+    }
+    const full = renderSpecModule(input);
+    const specOfModule = JSON.parse(
+        full
+            .slice(full.indexOf('= [', full.indexOf('export const SZ_DIAGNOSTIC_REGISTRY:')) + 2)
+            .replace(/;\s*$/, ''),
+    );
+    assert.deepEqual(Object.keys(specOfModule.find(spec => spec.id === 'browser-one')), [
+        'id',
+        'summary',
+        'surfaces',
+        'position',
+        'args',
+    ]);
+    assert.deepEqual(
+        specOfModule.filter(spec => spec.text !== undefined).map(spec => spec.id),
+        ['engine-one'],
+    );
     // The docs keep every word: their data is built from the registry, not this module.
     assert.equal(publicData(input).diagnostics[1].text, 'It went.');
 });
@@ -600,11 +624,13 @@ test('the TypeScript ids follow the registry', () => {
     assert.match(renderTypeScript(registryOf([entry()], [])), /export type SzErrorCode = never;/);
 });
 
-test('the Node registry module carries the public data and no review metadata', () => {
+test('the spec module carries the public data and no review metadata', () => {
     const input = registryOf([entry()]);
     const data = publicData(input);
     assert.equal(data.diagnostics[0].sources, undefined);
-    assert.ok(renderRegistryModule(input).includes(JSON.stringify(data.diagnostics, null, 4)));
+    assert.ok(renderSpecModule(input).includes(JSON.stringify(data.diagnostics, null, 4)));
+    // The render specs carry an arg's joiner alone, never its type.
+    assert.ok(!renderRegistryModule(input).includes('"type"'));
 });
 
 test('a sentence starts upper-case or with a code span, and ends with a period', () => {
@@ -671,11 +697,10 @@ test('the browser module names each worded console or thrown id as a constant', 
     assert.equal(generator.browserConstName?.('csr-recovery-dev-only'), 'CSR_RECOVERY_DEV_ONLY');
     const ids = generator.browserDiagnostics?.(registry).map(({ id }) => id) ?? [];
     // A runtime id and an engine id the runtime also prints are in it; an
-    // engine-only id, and an id with no words yet, are not.
+    // engine-only id is not.
     assert.ok(ids.includes('mangle-census-unreadable'));
     assert.ok(ids.includes('removed-key'));
     assert.ok(!ids.includes('runtime-value'));
-    assert.ok(!ids.includes('native-engine-unavailable'));
     for (const entry of registry.DIAGNOSTICS) {
         const expected =
             (entry.surfaces.runtime !== undefined || entry.surfaces.error !== undefined) &&

@@ -4,7 +4,7 @@
  * surrogates, empty values), each set also without its optional args. Shared
  * by the tests that render every id on two renderers and compare them.
  */
-import type { SzDiagnosticSpec } from '../../src/diagnostic-registry.generated.js';
+import type { SzDiagnosticSpec } from '../../src/diagnostic-spec.generated.js';
 
 /** Text values: real keys the computed values look up, and hostile text. */
 const STRINGS = [

@@ -19,7 +19,7 @@ export function unclassifiedLine(token: string, node: 'frame' | 'content'): stri
     return runtimeMessage(
         'split-box-unclassified',
         `\`${token}\` is not a utility csszyx knows, so it went to the ${node} node with everything else it could not classify.`,
-        `help: if it is a custom \`@utility\` that declares properties for both nodes, place it yourself with \`{ ${side}: ['${token}'] }\`; csszyx cannot split it, and no side is correct.`,
+        `help: if it belongs on the other node, place it there with \`{ ${side}: ['${token}'] }\`; a custom \`@utility\` that sets properties of both nodes has no correct side, so split it into two utilities.`,
     );
 }
 
@@ -149,7 +149,7 @@ export const SELECTOR_INVALID = {
         runtimeMessage(
             'split-box-selector-invalid',
             `\`${property}\` is not a property csszyx tells apart, so \`${selector}\` matches nothing.`,
-            `help: use one of: ${properties.join(', ')}; \`classify('<a class>')\` shows the one a class carries.`,
+            `help: use one of \`${properties.join('`, `')}\`; \`classify('<a class>')\` shows the one a class carries.`,
         ),
     szQualified: (selector: string, name: string): string =>
         runtimeMessage(

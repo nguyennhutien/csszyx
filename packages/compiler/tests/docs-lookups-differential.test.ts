@@ -20,7 +20,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SZ_NODE_DIAGNOSTIC_WORDS } from '../src/diagnostic-node-words.generated.js';
 import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
-import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 import { isRustTransformAvailable } from '../src/engine.js';
 import type { SzDiagnosticIssue } from '../src/engine-spans.js';
 import {

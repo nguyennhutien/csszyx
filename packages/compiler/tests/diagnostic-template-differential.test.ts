@@ -9,13 +9,9 @@
  * each optional arg, and the editor extension's own copies of its templates.
  */
 import { describe, expect, it } from 'vitest';
-
-import {
-    SZ_DIAGNOSTIC_REGISTRY,
-    type SzDiagnosticSpec,
-} from '../src/diagnostic-registry.generated.js';
 import { renderSzDiagnostic, renderSzDiagnosticParts } from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
+import { SZ_DIAGNOSTIC_REGISTRY, type SzDiagnosticSpec } from '../src/diagnostic-spec.generated.js';
 import { fillSzDiagnosticTemplate } from '../src/diagnostic-template.js';
 import { SZ_EDITOR_DIAGNOSTIC_TEMPLATES } from '../src/editor-diagnostic-templates.generated.js';
 import { argSets } from './helpers/diagnostic-arg-samples.js';

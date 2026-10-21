@@ -527,7 +527,6 @@ export const SUGGESTION_MAP = {
     "boxDecorationBreak": "boxDecoration",
     "objectPosition": "objectPos",
     "zIndex": "z",
-    "font": "weight (for font-weight) or fontFamily (for family)",
     "fontWeight": "weight",
     "fontSize": "text",
     "textDecoration": "decoration",
@@ -581,7 +580,6 @@ export const SUGGESTION_MAP = {
     "touchAction": "touch",
     "userSelect": "select",
     "captionSide": "caption",
-    "scrollbarColor": "scrollbarThumb (thumb color) or scrollbarTrack (track color)",
     "scrollbarWidth": "scrollbar",
     "flexWrapReverse": "flexWrap: 'wrap-reverse'",
     "flexNowrap": "flexWrap: 'nowrap'"

@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 
 import { DIAGNOSTICS as REGISTRY } from '../../../scripts/diagnostics/registry.mjs';
 import * as BROWSER from '../src/diagnostic-browser.generated.js';
-import type { SzDiagnosticSpec } from '../src/diagnostic-registry.generated.js';
 import { renderSzDiagnostic } from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
+import type { SzDiagnosticSpec } from '../src/diagnostic-spec.generated.js';
 import {
     type ArgValue,
     fillSzDiagnosticTemplate,
@@ -69,8 +69,8 @@ describe('szReport', () => {
 
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls[0]).toEqual([
-            '[csszyx] mangle-census-unreadable: The mangle census on this page is not a valid map, so nothing was verified.\n' +
-                '  help: serve the HTML as the build wrote it; a census that does not read means the page was changed or cut short after the build.\n' +
+            '[csszyx] mangle-census-unreadable: The class census on this page could not be read, so the mangle checksum was not verified.\n' +
+                '  help: serve the HTML as the build wrote it; the line before this one says what is wrong with the census.\n' +
                 '  docs: https://csszyx.com/e/mangle-census-unreadable',
         ]);
         expect(error).not.toHaveBeenCalled();

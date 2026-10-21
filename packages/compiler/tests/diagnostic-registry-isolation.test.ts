@@ -20,12 +20,15 @@ import {
 } from './helpers/value-import-graph.js';
 
 const REGISTRY = path.join(compilerSrc, 'diagnostic-registry.generated.ts');
+/** The full specification, which not even a Node entry loads. */
+const SPEC = path.join(compilerSrc, 'diagnostic-spec.generated.ts');
 
 describe('the diagnostic registry stays out of browser bundles', () => {
     it('is reached from no browser source, through any compiler subpath it imports', () => {
         const reached = reachable(browserRoots());
         expect(reached).toContain(path.join(compilerSrc, 'transform-core.ts'));
         expect(reached).not.toContain(REGISTRY);
+        expect(reached).not.toContain(SPEC);
     });
 
     it('is reached from no compiler browser entry, the development reporter included', () => {
@@ -40,6 +43,7 @@ describe('the diagnostic registry stays out of browser bundles', () => {
         expect(reached).toContain(path.join(compilerSrc, 'diagnostic-browser.generated.ts'));
         expect(reached).toContain(path.join(compilerSrc, 'diagnostic-computed.ts'));
         expect(reached).not.toContain(REGISTRY);
+        expect(reached).not.toContain(SPEC);
     });
 
     it('is found through a dynamic import and a compiler subpath', () => {
@@ -64,7 +68,8 @@ describe('the diagnostic registry stays out of browser bundles', () => {
     });
 
     it('would be reached if the compiler root re-exported it', () => {
-        const line = "export { SZ_DIAGNOSTIC_REGISTRY } from './diagnostic-registry.generated.js';";
+        const line =
+            "export { SZ_DIAGNOSTIC_RENDER_SPECS } from './diagnostic-registry.generated.js';";
         expect(valueImports(line)).toEqual(['./diagnostic-registry.generated.js']);
         expect(reachable([path.join(compilerSrc, 'index.ts')])).toContain(
             path.join(compilerSrc, 'diagnostic-codes.generated.ts'),

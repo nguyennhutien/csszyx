@@ -30,6 +30,14 @@ describe('csszyx_lookup', () => {
         expect(data.results.some((r: { szKey: string }) => r.szKey === 'p')).toBe(true);
     });
 
+    it.each([
+        ['font', ['weight', 'fontFamily']],
+        ['scrollbar-color', ['scrollbarThumb', 'scrollbarTrack']],
+    ])('finds both keys a split shorthand (%s) is written with', (query, keys) => {
+        const data = JSON.parse(handleLookup({ query }).content[0].text);
+        expect(data.results.map((r: { szKey: string }) => r.szKey)).toEqual(keys);
+    });
+
     it('returns examples for known keys', () => {
         const data = JSON.parse(handleLookup({ query: 'p' }).content[0].text);
         expect(data.results[0].examples.length).toBeGreaterThan(0);

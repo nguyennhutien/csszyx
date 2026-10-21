@@ -34,24 +34,24 @@ export function checksumMismatchLine(computed: string, expected: string): string
 export function mapUnavailableLine(checksum: string): string {
     return runtimeMessage(
         'mangle-map-unavailable',
-        `This page carries the checksum \`${checksum}\` but neither a census nor a bundled mangle map to recompute it from, so nothing was verified.`,
-        'help: turn `production.hydrationCensus` on when the build sets `production.mangleVars` without `production.mangle`, which ships no map; otherwise, load the bundle that registers the map on this page.',
+        `This page carries the checksum \`${checksum}\` but neither a class census nor a bundled mangle map to recompute it from, so nothing was verified.`,
+        'help: keep `production.hydrationCensus` on, its default, when the build sets `production.mangleVars` without `production.mangle`, since such a build bundles no map; otherwise, load the bundle that registers the map on this page.',
     );
 }
 
 /** `mangle-census-unreadable`: a census the page carries but nothing can read. */
 export const CENSUS_UNREADABLE_LINE = runtimeMessage(
     'mangle-census-unreadable',
-    'The mangle census on this page is not a valid map, so nothing was verified.',
-    `help: ${SERVE_AS_BUILT}; a census that does not read means the page was changed or cut short after the build.`,
+    'The class census on this page could not be read, so the mangle checksum was not verified.',
+    `help: ${SERVE_AS_BUILT}; the line before this one says what is wrong with the census.`,
 );
 
 /** `web-crypto-unavailable`: no Web Crypto, so nothing was verified. */
 export const WEB_CRYPTO_LINE = runtimeMessage(
     'web-crypto-unavailable',
-    'Web Crypto is unavailable, so the mangle checksum cannot be recomputed and nothing was verified.',
+    'Web Crypto is unavailable, so csszyx cannot recompute the mangle checksum.',
     'help: serve the page over HTTPS, or from `localhost`.',
-    'note: `crypto.subtle` exists only in a secure context.',
+    'note: `crypto.subtle` exists only in a secure context; `verifyMangleChecksumAsync` answers `false` without checking.',
 );
 
 /**
@@ -61,16 +61,16 @@ export const WEB_CRYPTO_LINE = runtimeMessage(
  * @returns The line.
  */
 export function mangleMapUnreadableLine(error?: string): string {
-    const help = `help: ${SERVE_AS_BUILT}; a map that does not read means the page was changed or cut short after the build.`;
+    const help = `help: ${SERVE_AS_BUILT}; a census that cannot be read means the page was changed or cut short after the build.`;
     return error === undefined
         ? runtimeMessage(
               'mangle-map-unreadable',
-              'The mangle map on this page is not a plain map of class names to class names, so it is ignored.',
+              'The class census on this page (`__CSSZYX_MANGLE_MAP__`) is not a map of class names to class names, so it is ignored.',
               help,
           )
         : runtimeMessage(
               'mangle-map-unreadable',
-              'The mangle map on this page is not valid JSON, so it is ignored.',
+              'The class census on this page (`__CSSZYX_MANGLE_MAP__`) is not valid JSON, so it is ignored.',
               help,
               `note: the browser reported: ${error}.`,
           );

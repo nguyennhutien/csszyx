@@ -32,7 +32,7 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         expect(w).toEqual([
             runtimeMessage(
                 'closed-enum-value',
-                "`self: 'flex-start'` is a CSS value, and `self-flex-start` generates no CSS.",
+                "`self: 'flex-start'` is a CSS value, and `self-flex-start` produces no CSS.",
                 "help: use the short form: `{ self: 'start' }`.",
             ),
         ]);
@@ -58,7 +58,7 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         expect(w).toEqual([
             runtimeMessage(
                 'closed-enum-value',
-                "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` generates no CSS.",
+                "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` produces no CSS.",
                 "help: use the short form: `{ justify: 'start' }`.",
             ),
         ]);

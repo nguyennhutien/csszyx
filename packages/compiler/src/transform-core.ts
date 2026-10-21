@@ -29,6 +29,7 @@ import {
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
     PROPERTY_MAP,
+    SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
 } from './sz-key-tables.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
@@ -53,6 +54,7 @@ export {
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
     PROPERTY_MAP,
+    SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
 } from './sz-key-tables.js';
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
@@ -2545,10 +2547,12 @@ function warnGlobalBeforeGroup(global: string, value: unknown, group: string): v
         }
     }
     const text = String(value as string | number | boolean);
-    const token = `${global}:${text}>${group}`;
+    // The type says how the line spells the value: `'7'` and `7` are two lines.
+    const valueType = typeof value as 'string' | 'number' | 'boolean';
+    const token = `${global}:${valueType}:${text}>${group}`;
     if (szWarningsQuiet() || _warnedGlobalsBeforeGroups.has(token)) return;
     _warnedGlobalsBeforeGroups.add(token);
-    const args = { global, value: text, group };
+    const args = { global, value: text, valueType, group };
     if (process.env.NODE_ENV !== 'production') {
         szReport({ diagnostic: GLOBAL_BEFORE_GROUP, args, at: szWarnLocation });
     } else {
@@ -3384,16 +3388,17 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
             return;
         }
         _warnedUnknownSzProperties.add(token);
-        // The key's spelling decides the code: an alias (`canonical-key`), a
-        // numeric key (`numeric-key`), or any other (`unknown-key`, with the
-        // known key it is most likely a typo of). A removed key never reaches
-        // here: `collectTransformProperty` reports it first. The unknown key's
+        // The key's spelling decides the code: an alias or a split shorthand
+        // (`canonical-key`, in the form its key takes), a numeric key
+        // (`numeric-key`), or any other (`unknown-key`, with the known key it
+        // is most likely a typo of). A removed key never reaches here: `collectTransformProperty` reports it first. The unknown key's
         // class is not dropped: it is lowered as a literal class exactly like a
         // known one, and a project can serve it with `@utility`, so the line
         // says it styles nothing rather than that it is ignored.
         const at = szWarnLocation ?? runtimeSzWarnContext(szProp);
-        if (SUGGESTION_MAP[key]) {
-            szReport({ diagnostic: CANONICAL_KEY, args: { key }, at });
+        const form = SUGGESTION_MAP[key] ? 'alias' : SPLIT_SHORTHAND_KEYS[key];
+        if (form !== undefined) {
+            szReport({ diagnostic: CANONICAL_KEY, args: { form, key }, at });
         } else if (/^\d+(?:\.\d+)?$/.test(key)) {
             szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
         } else {
@@ -4123,7 +4128,7 @@ function collectTransformProperty(
         warnRemovedKey(rawKey, 'replaced', `${SUGGESTION_MAP[rawKey]}: true`);
         return;
     }
-    if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {
+    if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES || rawKey in SPLIT_SHORTHAND_KEYS) {
         warnAliasOrRemovedKey(rawKey, value, szProp);
         return;
     }

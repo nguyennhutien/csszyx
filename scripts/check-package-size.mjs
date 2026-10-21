@@ -551,19 +551,29 @@ export const SIZE_BUDGETS = [
     // entries load `./errors` (394) and the code that fills those args
     // (`transform-rust` +192, `transform-select` +119). Branding the classes
     // without extending measured 30,594 / 33,510, still over (user accepted).
+    //
+    // Lowered 2026-10-21 from 31,250 / 34,200, measured 25,652 / 28,678
+    // (-6,320 / -6,320 against 31,972 / 34,998 with the 0.18 words in): the
+    // renderer reads `diagnostic-registry.generated.ts`, which now carries per
+    // id only what a line is rendered from (id, position, arg joiners,
+    // `variesBy`, words); the summaries, surfaces, forms and arg types moved
+    // to `diagnostic-spec.generated.ts`, which no compiler entry imports
+    // (`tests/diagnostic-render-specs.test.ts`). Importing `./engine` took
+    // 4.95 ms p50 against 5.30 ms before, p50 of 60 fresh processes on the
+    // devcontainer, where the 1.76 ms above measures about 5 ms.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 31_250,
+        maxGzipBytes: 25_950,
     },
     {
         name: '@csszyx/compiler `./internal`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 34_200,
+        maxGzipBytes: 29_000,
     },
 ];
 

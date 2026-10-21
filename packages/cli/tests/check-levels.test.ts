@@ -466,7 +466,9 @@ describe('a config check cannot trust', () => {
 
         expect(printed).toContain('did you mean `diagnostics`?');
         expect(printed).toContain('[csszyx] config-invalid: csszyx.config.mjs');
-        expect(printed).toContain('and it is not applied');
+        expect(printed).toContain(
+            'This file has 1 problem(s), so it is not applied and the `recommended` levels apply.',
+        );
         expect(printed).not.toContain('the rest of the file applies');
         expect(exitCode).toBe(1);
     });
@@ -581,7 +583,9 @@ describe('a config check cannot trust', () => {
 
         expect(printed).toContain('has no default export');
         expect(printed).toContain('[csszyx] config-invalid: csszyx.config.mjs');
-        expect(printed).toContain('and it is not applied');
+        expect(printed).toContain(
+            'This file has 1 problem(s), so it is not applied and the `recommended` levels apply.',
+        );
         expect(exitCode).toBe(1);
     });
 });

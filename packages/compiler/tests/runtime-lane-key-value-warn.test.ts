@@ -34,9 +34,9 @@ const DISPLAY_VALUES =
 const deadValue = (key: string, value: string, bare: string, values: string) =>
     runtimeMessage(
         'closed-enum-value',
-        `\`${key}: ${value}\` is not a \`${key}\` value.`,
+        `\`${key}: '${value}'\` is not a \`${key}\` value.`,
         `help: use one of: ${values}.`,
-        `note: the class \`${bare}\` is still emitted, and it styles nothing unless a rule of your own matches it.`,
+        `note: the class \`${bare}\` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.`,
     );
 
 beforeEach(() => {
@@ -112,7 +112,7 @@ describe('closed-enum values on the runtime lane', () => {
     it('reports a bad value nested under a variant', () => {
         const { warnings } = lower({ hover: { position: 'bogus' } } as SzObject);
         expect(parseSzConsoleLine(warnings[0] ?? '').text).toBe(
-            '`position: bogus` is not a `position` value.',
+            "`position: 'bogus'` is not a `position` value.",
         );
     });
 
@@ -151,7 +151,7 @@ describe('csszyx-owned keys holding an object on the runtime lane', () => {
         expect(warnings).toEqual([
             runtimeMessage(
                 'non-variant-object',
-                `\`${key}\` is not a variant, so its object emits \`${key}:\` classes that generate no CSS.`,
+                `\`${key}\` is not a variant, so its object emits \`${key}:\` classes that produce no CSS.`,
                 'help: a `--*` key takes a declaration value; `container` takes `true`.',
             ),
         ]);

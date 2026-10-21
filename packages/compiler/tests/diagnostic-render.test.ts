@@ -43,7 +43,10 @@ describe('the root renderer', () => {
             'this renderer has no words for `config-id-not-settable`',
         );
         // An engine id reads the same either way.
-        const engine = { code: 'canonical-key' as const, args: { key: 'padding' } };
+        const engine = {
+            code: 'canonical-key' as const,
+            args: { form: 'alias', key: 'padding' },
+        };
         expect(root.renderSzDiagnosticParts(engine, computed)).toEqual(
             renderSzDiagnosticParts(engine, computed),
         );
@@ -59,7 +62,10 @@ describe('the root renderer', () => {
 describe('renderSzDiagnosticParts', () => {
     it('returns each part bare, for a sink to lay out', () => {
         expect(
-            renderSzDiagnosticParts({ code: 'canonical-key', args: { key: 'padding' } }, computed),
+            renderSzDiagnosticParts(
+                { code: 'canonical-key', args: { form: 'alias', key: 'padding' } },
+                computed,
+            ),
         ).toEqual({
             text: '`padding` is an alias of `p`, and nothing is emitted for it.',
             help: 'write `p`.',
@@ -76,7 +82,10 @@ describe('renderSzDiagnosticParts', () => {
     });
 
     it('leaves out a field the code has no template for', () => {
-        const noNote = renderSzDiagnosticParts({ code: 'unresolvable-spread', args: {} }, computed);
+        const noNote = renderSzDiagnosticParts(
+            { code: 'numeric-key', args: { key: '0' } },
+            computed,
+        );
         expect(Object.keys(noNote)).toEqual(['text', 'help', 'docs']);
         const noHelp = renderSzDiagnosticParts(
             {

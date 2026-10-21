@@ -22,7 +22,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 import { isRustTransformAvailable } from '../src/engine.js';
 import type { SzDiagnosticIssue } from '../src/engine-spans.js';
 import {
@@ -97,10 +97,12 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         // Removed sugar is known only in its `true` form.
         { tabularNums: 'x' },
     ],
-    'canonical-key': [
+    'canonical-key/alias': [
         { backgroundColor: 'red-500' },
         { peer: { hover: { backgroundColor: 'red-500' } } },
     ],
+    'canonical-key/font': [{ font: 'bold' }, { md: { font: 'mono' } }],
+    'canonical-key/scrollbar-color': [{ scrollbarColor: 'red-500' }],
     'removed-key/sugar-replaced': [{ tabularNums: true }],
     'removed-key/sugar': [{ inlineFlex: true }],
     'removed-key/removed': [{ fontVariant: 'x' }, { has: { img: { fontVariant: 'x' } } }],
@@ -144,7 +146,12 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { touchAction: 'pan-y!' },
     ],
     'moved-value/mask-layer': [{ mask: 'linear-45' }],
-    'global-before-group': [{ contain: 'none', containPaint: true }],
+    'global-before-group': [
+        { contain: 'none', containPaint: true },
+        // A number or a boolean is written bare, a string quoted.
+        { contain: 3, containLayout: true },
+        { touch: true, touchPanX: 'x' },
+    ],
     'color-slash-opacity/op-given': [{ bg: { color: 'red-500/50', op: 30 } }],
     'color-slash-opacity/op-absent': [{ bg: { color: 'blue-500/40!' } }],
 };

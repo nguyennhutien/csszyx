@@ -37,6 +37,7 @@ import {
     encodeCrossModuleStatics,
     normalizeGlobalVarAliases,
     type TransformRustFile,
+    thrownMessage,
 } from './transform-rust.js';
 
 /** One merge group as the wasm JSON spells it. */
@@ -93,20 +94,25 @@ interface ParserWasmModule {
  * Thrown when the wasm parser artifact cannot be loaded.
  *
  * A csszyx error: `wasm-engine-unavailable`, with what loading the artifact
- * threw as its `cause`. Without a load failure to wrap, as when the artifact
- * answers a file with no result, the state is a csszyx bug: `internal-error`.
+ * threw as its `cause`. Given `where` instead, or without a load failure to
+ * wrap, as when the artifact answers a file with no result, the state is a
+ * csszyx bug: `internal-error`, with `detail` as the check that failed.
  */
 export class WasmTransformUnavailableError extends CsszyxError {
     /**
-     * @param detail Loader failure detail.
+     * @param detail Loader failure detail, or the check that failed.
      * @param options What it wraps.
-     * @param options.cause What loading the artifact threw.
+     * @param options.cause What loading the artifact threw, or what the engine threw.
+     * @param options.where Where a csszyx bug was found; the engine's refusal names it.
      */
-    constructor(detail: string, options: { cause?: unknown } = {}) {
-        const { cause } = options;
+    constructor(detail: string, options: { cause?: unknown; where?: string } = {}) {
+        const { cause, where } = options;
         super({
-            ...(cause === undefined
-                ? ({ code: 'internal-error', args: { where: 'transformWasm' } } as const)
+            ...(cause === undefined || where !== undefined
+                ? ({
+                      code: 'internal-error',
+                      args: { where: where ?? 'transformWasm', detail },
+                  } as const)
                 : ({ code: 'wasm-engine-unavailable', args: { detail } } as const)),
             // The registry has no words for these ids yet; the message stays
             // the lane's own until they are worded (ADR 0031).
@@ -138,7 +144,7 @@ function loadParserWasm(): ParserWasmModule | null {
         const requireFromHere = createRequire(import.meta.url);
         wasmModule = requireFromHere('@csszyx/core/parser-wasm') as ParserWasmModule;
     } catch (err) {
-        wasmLoadError = err instanceof Error ? err.message : String(err);
+        wasmLoadError = thrownMessage(err);
         wasmLoadCause = err;
         wasmModule = null;
     }
@@ -341,9 +347,18 @@ function runWasmBatch(
     );
     const optionsJson = JSON.stringify(wasmTransformOptions(options));
 
-    const results = JSON.parse(
-        wasm.transform_batch_json(filesJson, optionsJson),
-    ) as WasmResultJson[];
+    let resultsJson: string;
+    try {
+        resultsJson = wasm.transform_batch_json(filesJson, optionsJson);
+    } catch (err) {
+        // The engine refuses a batch only for a csszyx bug: this module wrote
+        // both JSON strings, and the artifact was built with the engine.
+        throw new WasmTransformUnavailableError(thrownMessage(err), {
+            cause: err,
+            where: 'engine transform',
+        });
+    }
+    const results = JSON.parse(resultsJson) as WasmResultJson[];
     return results.map((result, index) =>
         fromWasmResult(
             result,

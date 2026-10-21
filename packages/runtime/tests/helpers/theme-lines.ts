@@ -34,22 +34,22 @@ export function themeAmbiguousLine(
     name: string,
     form: 'color-text-size' | 'font-family-weight',
 ): string {
-    const [both, cls] =
+    const [both, cls, placements] =
         form === 'color-text-size'
-            ? ['a colour and a text size', `text-${name}`]
-            : ['a font family and a font weight', `font-${name}`];
+            ? ['a colour and a text size', `text-${name}`, '`text:color` or `text:size`']
+            : ['a font family and a font weight', `font-${name}`, '`font:family` or `font:weight`'];
     return runtimeMessage(
         'theme-token-ambiguous',
         `Theme token \`${name}\` is defined as both ${both}, so \`classify\` cannot name the property of \`${cls}\`, and Tailwind compiles that class for only one of them.`,
         'help: rename one of the tokens.',
-        'note: until then the token belongs to neither, so `szcn` keeps both classes instead of merging them.',
+        `note: a ${placements} placement in \`splitBox\` does not match \`${cls}\`; \`szcn\` merges on the compiled CSS and is not affected.`,
     );
 }
 
 /** `register-szcn-groups-ignored`: a hand registration, which no longer changes `szcn`. */
 export const REGISTER_IGNORED_LINE = runtimeMessage(
     'register-szcn-groups-ignored',
-    '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry only names the property `classify` and `splitBox` read.',
+    '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and the groups you register only name the property that `classify` and `splitBox` read.',
     'help: declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.',
     'note: `szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats.',
 );

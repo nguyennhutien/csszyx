@@ -41,9 +41,16 @@ const stale = vi.hoisted(() => ({ current: false }));
 /** Whether the fake binding answers every batch with no results at all. */
 const empty = vi.hoisted(() => ({ current: false }));
 
+/**
+ * What the fake binding's transform throws as the engine itself, the way napi
+ * hands a Rust error over: a plain `Error` carrying the engine's message.
+ */
+const engineFailure = vi.hoisted(() => ({ current: undefined as string | undefined }));
+
 vi.mock('@csszyx/core/native', () => ({
     CsszyxNativeUnavailableError: FakeUnavailable,
     transformBatch: (files: unknown[]) => {
+        if (engineFailure.current !== undefined) throw new Error(engineFailure.current);
         if (empty.current || (stale.current && files.length === 0)) {
             return [];
         }
@@ -79,6 +86,27 @@ describe('the native transform on an install without it', () => {
         vi.resetModules();
         stale.current = false;
         empty.current = false;
+        engineFailure.current = undefined;
+    });
+
+    it('reports an engine that refuses the batch as a csszyx bug, with its message', async () => {
+        engineFailure.current = 'the native engine feature is not compiled in';
+        const { transformRust, RustTransformUnavailableError } = await import(
+            '../src/transform-rust.js'
+        );
+        const error = thrown(() => transformRust('<div />', 'a.tsx'));
+        expect(error).toBeInstanceOf(RustTransformUnavailableError);
+        expect(error).toMatchObject({
+            name: 'RustTransformUnavailableError',
+            code: 'internal-error',
+            args: {
+                where: 'engine transform',
+                detail: 'the native engine feature is not compiled in',
+            },
+        });
+        expect(((error as Error).cause as Error).message).toBe(
+            'the native engine feature is not compiled in',
+        );
     });
 
     it('reports a binding that returns no result for the file as unavailable', async () => {
@@ -103,7 +131,7 @@ describe('the native transform on an install without it', () => {
         expect(error).toMatchObject({
             name: 'RustTransformUnavailableError',
             code: 'internal-error',
-            args: { where: 'transformRust' },
+            args: { where: 'transformRust', detail: 'native transform returned no result' },
         });
         expect((error as Error).cause).toBeUndefined();
     });

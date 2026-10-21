@@ -130,6 +130,7 @@ export {
     REPLACED_KEYS,
     type SourceTransformResult,
     SPECIAL_VARIANTS,
+    SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
     type SzObject,
     type SzValue,

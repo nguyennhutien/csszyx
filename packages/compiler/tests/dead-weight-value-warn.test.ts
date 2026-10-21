@@ -28,7 +28,7 @@ import { szCodeOf } from './helpers/sz-console-line.js';
  * @returns The sentence and the help.
  */
 const numericWeight = (value: string) => [
-    `\`weight: '${value}'\` is a numeric string, so \`font-${value}\` generates no CSS.`,
+    `\`weight: '${value}'\` is a numeric string, so \`font-${value}\` produces no CSS.`,
     `help: write \`weight: ${value}\` as a number; it emits \`font-[${value}]\`.`,
 ];
 

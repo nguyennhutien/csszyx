@@ -275,7 +275,7 @@ describe('readCsszyxFileConfig', () => {
                 severity: 'warning',
                 path: 'diagnostics.rules',
                 message:
-                    '`other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                    '`other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                     '  help: name `sz-diagnostic` instead, which reports what `other` did.',
             },
         ]);
@@ -289,7 +289,7 @@ describe('readCsszyxFileConfig', () => {
                 SZ_DIAGNOSTIC_COMPUTED_VALUES,
             ),
         ).toBe(
-            '`gone` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '`gone` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: remove it.',
         );
     });
@@ -519,7 +519,7 @@ describe('diagnosticConfigProblemsMessage', () => {
         ]);
         expect(message).toBe(
             '[csszyx] config-invalid: csszyx.config.mjs\n' +
-                '  This file has 1 problem(s), and it is not applied, so every finding keeps its default level.\n' +
+                '  This file has 1 problem(s), so it is not applied and the `recommended` levels apply.\n' +
                 '  - (error) could not be loaded: Unexpected token\n' +
                 `  help: ${CONFIG_HELP}\n` +
                 '  docs: https://csszyx.com/e/config-invalid',

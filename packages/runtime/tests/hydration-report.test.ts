@@ -231,7 +231,7 @@ describe('a client-side recovery', () => {
     );
     const USED = runtimeMessage(
         'csr-recovery-used',
-        'A hydration mismatch on this element was recovered by rendering it on the client.',
+        'The hydration-abort marks on this element were cleared, so your code can render it on the client.',
         'help: fix the cause of the mismatch; with `szRecover="csr"`, this recovery also runs in production.',
     );
 

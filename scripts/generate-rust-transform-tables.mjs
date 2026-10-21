@@ -100,6 +100,7 @@ function readTables() {
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
             suggestionMap: keyTables.stringObject('SUGGESTION_MAP'),
+            splitShorthandKeys: keyTables.stringObject('SPLIT_SHORTHAND_KEYS'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
             alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
             alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
@@ -171,6 +172,7 @@ function renderRust({
     ariaStates,
     specialVariants,
     suggestionMap,
+    splitShorthandKeys,
     cssVarTypeHints,
     alignmentKeys,
     alignmentCssValueHints,
@@ -207,6 +209,15 @@ ${renderMatchArms(variantMap)}
 pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
     match key {
 ${renderMatchArms(suggestionMap)}
+        _ => None,
+    }
+}
+
+/// The \`canonical-key\` form of a CSS shorthand csszyx writes as two keys,
+/// which emits nothing as an alias does. Mirrors \`SPLIT_SHORTHAND_KEYS\`.
+pub(crate) fn split_shorthand_form(key: &str) -> Option<&'static str> {
+    match key {
+${renderMatchArms(splitShorthandKeys)}
         _ => None,
     }
 }

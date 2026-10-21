@@ -11,7 +11,7 @@ export const MISSING_TABLE_LINE = runtimeMessage(
     'merge-table-missing',
     "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
     'help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.',
-    'note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.',
+    'note: the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.',
 );
 
 /**
@@ -23,7 +23,7 @@ export const MISSING_TABLE_LINE = runtimeMessage(
 export function formatSkewLine(format: number): string {
     return runtimeMessage(
         'merge-table-format-skew',
-        `The merge table was written in format ${format}, and this runtime reads format 1, so \`szcn\` ignores the table and removes only exact repeats.`,
-        'help: run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.',
+        `The merge table was written in format ${format}, and this csszyx version reads format 1, so \`szcn\` ignores the table and removes only exact repeats.`,
+        'help: run the build, or `csszyx next prebuild` on Next.js, with the installed csszyx to write it again.',
     );
 }

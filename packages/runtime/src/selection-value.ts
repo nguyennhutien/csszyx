@@ -75,9 +75,15 @@ function selectionValueReport(
     const table = typeof values === 'object' && values !== null ? values : {};
     const valueKey = selectionValueKey(value);
     if (valueKey !== null && valueKey in table) return undefined;
+    const allowed = Object.keys(table);
+    const shown = valueKey ?? describeValue(value);
     return {
         diagnostic: SZV_UNKNOWN_VARIANT_VALUE,
-        args: { key, value: valueKey ?? describeValue(value), allowed: Object.keys(table) },
+        // A dimension that defines no value has none to list.
+        args:
+            allowed.length > 0
+                ? { form: 'listed', key, value: shown, allowed }
+                : { form: 'none', key, value: shown },
     };
 }
 

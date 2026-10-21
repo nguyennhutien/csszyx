@@ -11,10 +11,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-    SZ_DIAGNOSTIC_REGISTRY,
-    SZ_DIAGNOSTIC_REGISTRY_FORMAT,
-} from '../src/diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_REGISTRY_FORMAT } from '../src/diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 import {
     SZ_DIAGNOSTIC_CODES,
     SZ_DIAGNOSTIC_DEFAULT_LEVELS,

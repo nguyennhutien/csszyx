@@ -6,10 +6,8 @@
  * holds the current renderer to; not used by any source.
  */
 import { PLACEHOLDER } from '../../src/diagnostic-placeholder.js';
-import type {
-    SzDiagnosticSpec,
-    SzDiagnosticTemplateText,
-} from '../../src/diagnostic-registry.generated.js';
+import type { SzDiagnosticTemplateText } from '../../src/diagnostic-registry.generated.js';
+import type { SzDiagnosticSpec } from '../../src/diagnostic-spec.generated.js';
 import type { SzDiagnosticComputed, SzDiagnosticTemplate } from '../../src/diagnostic-template.js';
 
 type ArgValue = string | number | readonly string[];

@@ -817,7 +817,7 @@ struct KeyValueFindings {
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
-    globals_before_groups: Vec<(String, String, &'static str, u32)>,
+    globals_before_groups: Vec<super::lower::GlobalBeforeGroup>,
     runtime_aliases: Vec<(String, u32)>,
 }
 
@@ -974,11 +974,14 @@ fn push_runtime_alias_diagnostics(found: &[(String, u32)], out: &mut Diagnostics
 
 /// A stand-alone key a group key written after it replaces.
 fn push_global_before_group_diagnostics(
-    found: &[(String, String, &'static str, u32)],
+    found: &[super::lower::GlobalBeforeGroup],
     out: &mut Diagnostics,
 ) {
-    for (global, value, group, offset) in found {
-        out.push_issue(issue::global_before_group(global, value, group), *offset);
+    for (global, value, value_type, group, offset) in found {
+        out.push_issue(
+            issue::global_before_group(global, value, value_type, group),
+            *offset,
+        );
     }
 }
 
@@ -1147,7 +1150,8 @@ fn push_removed_sugar_diagnostics(
 /// Report one unknown, removed, aliased, or numeric sz key.
 ///
 /// Four findings for one collector, because the remedy differs: a removed key
-/// has a replacement, an alias has a canonical spelling, a numeric key means an
+/// has a replacement, an alias (or a split shorthand) has the spelling to
+/// write, a numeric key means an
 /// array or spread leaked in, and anything else may still target a project's
 /// own `@utility`.
 fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
@@ -1165,7 +1169,16 @@ fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) 
                 *offset,
             );
         } else if super::generated::tables::key_suggestion(key).is_some() {
-            out.push_issue(issue::canonical_key(key), *offset);
+            out.push_issue(issue::canonical_key_alias(key), *offset);
+        } else if let Some(form) = super::generated::tables::split_shorthand_form(key) {
+            // A shorthand csszyx writes as two keys has no one canonical key:
+            // its form's help names both.
+            let issue = if form == "font" {
+                issue::canonical_key_font(key)
+            } else {
+                issue::canonical_key_scrollbar_color(key)
+            };
+            out.push_issue(issue, *offset);
         } else if is_numeric_key(key) {
             out.push_issue(issue::numeric_key(key), *offset);
         } else {
@@ -1459,7 +1472,10 @@ mod tests {
     fn resolved_branch_diagnostics_preserve_families_locations_and_occurrences() {
         let defects = [
             ("workBreak: 'all'", r#"unknown-key {"key":"workBreak"}"#),
-            ("wordBreak: 'all'", r#"canonical-key {"key":"wordBreak"}"#),
+            (
+                "wordBreak: 'all'",
+                r#"canonical-key {"form":"alias","key":"wordBreak"}"#,
+            ),
             ("zzzNotAKey: 'x'", r#"unknown-key {"key":"zzzNotAKey"}"#),
             (
                 "display: 'bogus'",
@@ -2128,7 +2144,7 @@ mod tests {
         assert_eq!(
             located(&result, &file.source, "backgroundColor"),
             [(
-                r#"canonical-key {"key":"backgroundColor"}"#.to_string(),
+                r#"canonical-key {"form":"alias","key":"backgroundColor"}"#.to_string(),
                 1,
                 43
             )],
@@ -4956,7 +4972,9 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
+            [
+                r#"global-before-group {"global":"contain","value":"none","valueType":"string","group":"containPaint"}"#
+            ]
         );
         let (classes, diagnostics) =
             layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
@@ -5065,7 +5083,9 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
+            [
+                r#"global-before-group {"global":"contain","value":"none","valueType":"string","group":"containPaint"}"#
+            ]
         );
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
@@ -5091,7 +5111,10 @@ mod tests {
             [r#"moved-value {"form":"value","key":"touchAction","value":"pan-x"}"#]
         );
         let (_, standing) = layers_run("{ touchAction: m ? 'none' : 'auto' }");
-        assert_eq!(standing, [r#"canonical-key {"key":"touchAction"}"#]);
+        assert_eq!(
+            standing,
+            [r#"canonical-key {"form":"alias","key":"touchAction"}"#]
+        );
         let (_, runtime) = layers_run("{ touchAction: m ? c : 'pan-y' }");
         assert_eq!(
             runtime,
@@ -5125,8 +5148,8 @@ mod tests {
         assert_eq!(
             named,
             [
-                r#"global-before-group {"global":"contain","value":"1","group":"containPaint"}"#,
-                r#"global-before-group {"global":"touch","value":"true","group":"touchPanX"}"#,
+                r#"global-before-group {"global":"contain","value":"1","valueType":"number","group":"containPaint"}"#,
+                r#"global-before-group {"global":"touch","value":"true","valueType":"boolean","group":"touchPanX"}"#,
             ],
             "{diagnostics:?}"
         );
@@ -5138,7 +5161,9 @@ mod tests {
         assert_eq!(classes, "touch-pan-left");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"touch","value":"pan-x","group":"touchPanX"}"#]
+            [
+                r#"global-before-group {"global":"touch","value":"pan-x","valueType":"string","group":"touchPanX"}"#
+            ]
         );
     }
 
@@ -5152,7 +5177,25 @@ mod tests {
     #[test]
     fn a_removed_key_with_a_runtime_value_keeps_its_own_report() {
         let (_, diagnostics) = layers_run("{ backgroundColor: c }");
-        assert_eq!(diagnostics, [r#"canonical-key {"key":"backgroundColor"}"#]);
+        assert_eq!(
+            diagnostics,
+            [r#"canonical-key {"form":"alias","key":"backgroundColor"}"#]
+        );
+    }
+
+    /// A CSS shorthand csszyx writes as two keys is dropped like an alias,
+    /// in the form whose help names both keys.
+    #[test]
+    fn a_split_shorthand_is_named_in_its_own_form() {
+        let (classes, diagnostics) = layers_run("{ font: 'bold', scrollbarColor: c, p: 2 }");
+        assert_eq!(classes, "p-2");
+        assert_eq!(
+            diagnostics,
+            [
+                r#"canonical-key {"form":"font","key":"font"}"#,
+                r#"canonical-key {"form":"scrollbar-color","key":"scrollbarColor"}"#,
+            ]
+        );
     }
 
     #[test]

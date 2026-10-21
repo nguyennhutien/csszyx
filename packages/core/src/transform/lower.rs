@@ -10,7 +10,7 @@ use super::{
     generated::tables::{
         boolean_class, css_var_type_hint, is_aria_state, is_known_variant,
         is_removed_boolean_sugar, is_special_variant, key_migration_note, key_suggestion,
-        property_prefix, variant_prefix,
+        property_prefix, split_shorthand_form, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
 };
@@ -279,7 +279,9 @@ fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
 /// guidance. Unlike an arbitrary unknown key, these names cannot be custom
 /// utility escape hatches: preserving them would silently keep legacy aliases.
 pub(crate) fn is_removed_sz_key(key: &str) -> bool {
-    key_suggestion(key).is_some() || key_migration_note(key).is_some()
+    key_suggestion(key).is_some()
+        || key_migration_note(key).is_some()
+        || split_shorthand_form(key).is_some()
 }
 
 /// Whether a key is a recognized sz property or variant name. Generous by
@@ -606,8 +608,13 @@ pub(crate) fn moved_value(key: &str, value: &str) -> Option<(&'static str, &'sta
         .or_else(|| super::generated::tables::closed_enum_value_move(key_suggestion(key)?, value))
 }
 
-/// Collect each stand-alone key a group key written after it replaces, as the
-/// key, its value, the group and the offset of the value.
+/// A stand-alone key a group key written after it replaces: the key, its
+/// value as text, the value's JavaScript type, the group and the offset of
+/// the value.
+#[cfg(feature = "native-engine")]
+pub(crate) type GlobalBeforeGroup = (String, String, &'static str, &'static str, u32);
+
+/// Collect each stand-alone key a group key written after it replaces.
 ///
 /// Written that way by hand the keyword is dead code; it is also the shape a
 /// spread override leaves, which keeps the overridden key at the place the
@@ -615,24 +622,32 @@ pub(crate) fn moved_value(key: &str, value: &str) -> Option<(&'static str, &'sta
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_globals_before_groups(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, &'static str, u32)>,
+    out: &mut Vec<GlobalBeforeGroup>,
 ) {
     for (global, group) in settle_global_keywords(object).replaced {
-        // Any literal, spelled as JavaScript's `String()` spells it; an object
-        // there is a different mistake, which its own report names.
-        let value = match &global.value {
+        // Any literal, spelled as JavaScript's `String()` spells it, with its
+        // type so the line quotes a string and writes a number or boolean
+        // bare; an object there is a different mistake, which its own report
+        // names.
+        let (value, value_type) = match &global.value {
             // Named as the group value it is, by the dead-value pass.
             StaticSzValue::String(value)
                 if is_stray_group_value(&global.key, value.strip_suffix('!').unwrap_or(value)) =>
             {
                 continue;
             }
-            StaticSzValue::String(value) => value.clone(),
-            StaticSzValue::Number(value) => value.to_string(),
-            StaticSzValue::Boolean(value) => value.to_string(),
+            StaticSzValue::String(value) => (value.clone(), "string"),
+            StaticSzValue::Number(value) => (value.to_string(), "number"),
+            StaticSzValue::Boolean(value) => (value.to_string(), "boolean"),
             StaticSzValue::Object(_) => continue,
         };
-        out.push((global.key.clone(), value, group, global.span.start));
+        out.push((
+            global.key.clone(),
+            value,
+            value_type,
+            group,
+            global.span.start,
+        ));
     }
     for property in &object.properties {
         if let StaticSzValue::Object(nested) = &property.value {
@@ -3335,6 +3350,9 @@ mod tests {
 
         assert!(is_removed_sz_key("padding"));
         assert!(is_removed_sz_key("maskFrom"));
+        // A split shorthand emits nothing either: its report names both keys.
+        assert!(is_removed_sz_key("font"));
+        assert!(is_removed_sz_key("scrollbarColor"));
         assert!(!is_removed_sz_key("customThing"));
         assert_eq!(
             unknown

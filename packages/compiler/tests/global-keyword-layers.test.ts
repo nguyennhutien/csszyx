@@ -121,15 +121,19 @@ describe('a later layer overrides a key an earlier layer holds', () => {
 /**
  * The body of the report a stand-alone key before one of its groups produces.
  * @param global - The stand-alone key.
- * @param value - Its value.
+ * @param value - Its value: a string prints quoted, a number or boolean bare,
+ *   as the author wrote it.
  * @param group - The group key written after it.
  * @returns The sentence, the help and the note.
  */
-const spreadLines = (global: string, value: string, group: string) => [
-    `\`${global}: ${value}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
-    `help: to override the group, layer it: \`sz={[base, { ${global}: '${value}' }]}\`.`,
-    `note: a spread such as \`{ ...base, ${global}: '${value}' }\` keeps the same key order, so it does not fix this.`,
-];
+const spreadLines = (global: string, value: string | number | boolean, group: string) => {
+    const literal = typeof value === 'string' ? `'${value}'` : String(value);
+    return [
+        `\`${global}: ${literal}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
+        `help: to override the group, layer it: \`sz={[base, { ${global}: ${literal} }]}\`.`,
+        `note: a spread such as \`{ ...base, ${global}: ${literal} }\` keeps the same key order, so it does not fix this.`,
+    ];
+};
 
 /**
  * The engine's message for a stand-alone key before one of its groups.
@@ -139,7 +143,12 @@ const spreadLines = (global: string, value: string, group: string) => [
  * @param column - The column of the stand-alone key on line 1.
  * @returns The message.
  */
-const engineSpread = (global: string, value: string, group: string, column: number) =>
+const engineSpread = (
+    global: string,
+    value: string | number | boolean,
+    group: string,
+    column: number,
+) =>
     engineMessage(
         'global-before-group',
         `/p/src/Layers.jsx:1:${column}`,
@@ -159,6 +168,7 @@ describe('a stand-alone key written before a group key of its family', () => {
             productionMessage('global-before-group', {
                 global: 'contain',
                 value: 'content',
+                valueType: 'string',
                 group: 'containPaint',
             }),
         ]);
@@ -199,8 +209,33 @@ describe('a stand-alone key written before a group key of its family', () => {
             productionMessage('global-before-group', {
                 global: 'contain',
                 value: '7',
+                valueType: 'number',
                 group: 'containPaint',
             }),
+        ]);
+    });
+
+    it('runtime writes a number or a boolean bare, as the author wrote it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('src/Bare.tsx:3');
+        try {
+            transform({ contain: 8, containPaint: true });
+            transform({ touch: true, touchPanY: 'up' });
+        } finally {
+            setSzWarnLocation(undefined);
+        }
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            engineMessage(
+                'global-before-group',
+                'src/Bare.tsx:3',
+                ...spreadLines('contain', 8, 'containPaint'),
+            ),
+            engineMessage(
+                'global-before-group',
+                'src/Bare.tsx:3',
+                ...spreadLines('touch', true, 'touchPanY'),
+            ),
         ]);
     });
 
@@ -260,7 +295,7 @@ describe('duplicate keys in a .jsx object', () => {
 describe('a moved value where the static pass used to miss it', () => {
     // The sentence names the key it moved to; the help line names the value to write.
     const moved = (value: string, key: string, replacement: string) =>
-        `\`touch: ${value}\` moved to \`${key}\`, and nothing is emitted for it.\n` +
+        `\`touch: '${value}'\` moved to \`${key}\`, and nothing is emitted for it.\n` +
         `  help: write \`{ ${key}: ${replacement} }\`, or run \`csszyx migrate\`.`;
 
     it.each(ENGINES)('%s names it in a property-level ternary', (_name, engine) => {
@@ -312,7 +347,7 @@ describe('a runtime value beside the other side of its family', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -382,7 +417,7 @@ describe('a value that belongs to a sibling group', () => {
         fix: string,
         values: string,
     ) => [
-        `\`${key}: ${value}\` is not a \`${key}\` value; its class \`${bare}\` belongs to \`{ ${fix} }\`.`,
+        `\`${key}: '${value}'\` is not a \`${key}\` value; its class \`${bare}\` belongs to \`{ ${fix} }\`.`,
         `help: write \`{ ${fix} }\`, so it combines with the other groups instead of resetting them.`,
         `note: \`${key}\` takes one of: ${values}.`,
     ];
@@ -650,7 +685,7 @@ describe('an alias holding a value that moved', () => {
             engineMessage(
                 'moved-value',
                 '/p/src/Layers.jsx:1:41',
-                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "`touchAction: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
                 "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
             ),
         ]);
@@ -663,7 +698,7 @@ describe('an alias holding a value that moved', () => {
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
             runtimeMessage(
                 'moved-value',
-                '`touchAction: pan-down` moved to `touchPanY`, and nothing is emitted for it.',
+                "`touchAction: 'pan-down'` moved to `touchPanY`, and nothing is emitted for it.",
                 "help: write `{ touchPanY: 'down' }`, or run `csszyx migrate`.",
             ),
         ]);
@@ -707,7 +742,7 @@ describe('a family conflict inside an sz array element', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -743,7 +778,7 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             engineMessage(
                 'moved-value',
                 at,
-                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "`touchAction: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
                 "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
             ),
         ]);
@@ -772,8 +807,8 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             engineMessage(
                 'removed-key',
                 at,
-                '`touchAction` was removed, and nothing is emitted for its runtime value.',
-                'help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.',
+                '`touchAction` is an alias of `touch`, and nothing is emitted for its runtime value.',
+                'help: write the values auto, none, manipulation on `touch`, and any other value on its own key: touchPanX, touchPanY, touchPinchZoom.',
             ),
         ]);
     });
@@ -787,8 +822,13 @@ describe('a stand-alone key of any literal type before its group', () => {
         );
 
         expect(run.warnings).toEqual([
-            engineSpread('contain', '1', 'containPaint', 41),
-            engineSpread('touch', 'true', 'touchPanX', 79),
+            engineSpread('contain', 1, 'containPaint', 41),
+            engineSpread('touch', true, 'touchPanX', 79),
+        ]);
+        // The value travels as text; its type says how the line spells it.
+        expect(run.result.issues?.map(issue => issue.args)).toEqual([
+            { global: 'contain', value: '1', valueType: 'number', group: 'containPaint' },
+            { global: 'touch', value: 'true', valueType: 'boolean', group: 'touchPanX' },
         ]);
     });
 });

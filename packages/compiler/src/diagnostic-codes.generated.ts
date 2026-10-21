@@ -42,7 +42,7 @@ export type SzDiagnosticCode =
  */
 export interface SzDiagnosticArgsByCode {
     'unknown-key': { readonly key: string; readonly suggestion?: string; };
-    'canonical-key': { readonly key: string; };
+    'canonical-key': { readonly form: 'alias' | 'font' | 'scrollbar-color'; readonly key: string; };
     'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string; };
     'numeric-key': { readonly key: string; };
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string; };
@@ -62,7 +62,7 @@ export interface SzDiagnosticArgsByCode {
     'duplicate-sz': { readonly elementName: string; readonly count: number; };
     'spread-split-class': { readonly elementName: string; readonly classes: readonly string[]; readonly szCount: number; readonly szAt: number; readonly spread?: string; readonly parts: readonly string[]; };
     'moved-value': { readonly form: 'value' | 'mask-layer'; readonly key: string; readonly value: string; readonly layerKey?: 'maskLinear' | 'maskRadial' | 'maskConic'; };
-    'global-before-group': { readonly global: string; readonly value: string; readonly group: string; };
+    'global-before-group': { readonly global: string; readonly value: string; readonly valueType: 'string' | 'number' | 'boolean'; readonly group: string; };
     'runtime-family-conflict': { readonly form: 'key-first' | 'other-first'; readonly key: string; readonly other: string; };
     'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string; };
     'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; };
@@ -345,7 +345,9 @@ export type SzDiagnosticId =
     | 'active-parser'
     | 'project-reload'
     | 'watch-prefix-changed'
+    | 'watch-merge-groups-changed'
     | 'safelist-unwritable'
+    | 'safelist-capped'
     | 'utility-collision'
     | 'theme-scan-without-typescript'
     | 'esbuild-mangle-unsupported'
@@ -355,23 +357,27 @@ export type SzDiagnosticId =
     | 'mangle-global-vars-plan-invalid'
     | 'mangle-map-too-large'
     | 'mangle-census-late'
+    | 'mangle-hybrid-hazard'
     | 'merge-hook-late'
+    | 'merge-origin-unreadable'
     | 'tailwind-stylesheet-missing'
+    | 'tailwind-stylesheet-absent'
     | 'tailwind-stylesheet-broken'
     | 'tailwind-config-missing'
     | 'tailwind-config-unloadable'
     | 'legacy-source-directive'
     | 'postcss-plugin-order'
+    | 'postcss-plugin-missing'
     | 'ignore-pattern-negated'
+    | 'compile-sources-unresolved'
+    | 'compile-sources-skipped'
     | 'css-source-unstable'
     | 'rsc-boundary-violation'
     | 'next-prefix-unread'
     | 'next-safelist-locked'
-    | 'next-generation-manifest-invalid'
     | 'next-mangle-vars-unsupported'
     | 'next-turbo-cache-unseeded'
     | 'next-sz-untransformed'
-    | 'next-watcher-not-started'
     | 'next-watcher-unclosed'
     | 'no-source-files'
     | 'cli-option-invalid';
@@ -408,7 +414,6 @@ export type SzErrorCode =
     | 'svelte-version-unsupported'
     | 'ignore-package-incompatible'
     | 'internal-error'
-    | 'engine-call-failed'
     | 'watch-prefix-changed'
     | 'mangle-preserve-invalid'
     | 'mangle-global-vars-options-invalid'
@@ -427,11 +432,9 @@ export type SzErrorCode =
     | 'rsc-boundary-violation'
     | 'next-prefix-unread'
     | 'next-safelist-locked'
-    | 'next-generation-manifest-invalid'
     | 'next-mangle-vars-unsupported'
     | 'next-turbo-cache-unseeded'
     | 'next-sz-untransformed'
-    | 'next-watcher-not-started'
     | 'no-source-files'
     | 'cli-option-invalid';
 

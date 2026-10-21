@@ -119,9 +119,9 @@ describe('touch-action and contain keys', () => {
             ['moved-value', { form: 'value', key: 'touch', value: 'pan-x' }],
             ['moved-value', { form: 'value', key: 'touch', value: 'pinch-zoom' }],
         ]);
-        expect(warnings).toContain('`touch: pan-x` moved to `touchPanX`');
+        expect(warnings).toContain("`touch: 'pan-x'` moved to `touchPanX`");
         expect(warnings).toContain("help: write `{ touchPanX: 'x' }`");
-        expect(warnings).toContain('`touch: pinch-zoom` moved to `touchPinchZoom`');
+        expect(warnings).toContain("`touch: 'pinch-zoom'` moved to `touchPinchZoom`");
         expect(warnings).toContain('help: write `{ touchPinchZoom: true }`');
     });
 
@@ -132,7 +132,7 @@ describe('touch-action and contain keys', () => {
         expect(String(warn.mock.calls[0]?.[0])).toBe(
             runtimeMessage(
                 'moved-value',
-                '`touch: pan-up` moved to `touchPanY`, and nothing is emitted for it.',
+                "`touch: 'pan-up'` moved to `touchPanY`, and nothing is emitted for it.",
                 "help: write `{ touchPanY: 'up' }`, or run `csszyx migrate`.",
             ),
         );
@@ -158,7 +158,7 @@ describe('touch-action and contain keys', () => {
             engineMessage(
                 'moved-value',
                 'src/Pan.tsx:4',
-                '`touch: pinch-zoom` moved to `touchPinchZoom`, and nothing is emitted for it.',
+                "`touch: 'pinch-zoom'` moved to `touchPinchZoom`, and nothing is emitted for it.",
                 'help: write `{ touchPinchZoom: true }`, or run `csszyx migrate`.',
             ),
             productionMessage('moved-value', { form: 'value', key: 'touch', value: 'pan-down' }),
@@ -227,6 +227,6 @@ describe('touch-action and contain keys', () => {
                     ? /^`([^`]+)`/.exec(line.text)?.[1]
                     : line.code;
             }),
-        ).toEqual(['contain: strict', 'contain: none', 'touch: none', 'touch: none']);
+        ).toEqual(["contain: 'strict'", "contain: 'none'", "touch: 'none'", "touch: 'none'"]);
     });
 });

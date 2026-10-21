@@ -87,7 +87,7 @@ describe('devWarn', () => {
             runtimeMessage(
                 'diagnostics-capped',
                 'This session has printed 512 distinct development warnings, so further ones are suppressed.',
-                'help: look above for one warning repeating with different values; a className built from data is the usual cause.',
+                'help: look above for one warning repeating with different values; a `className` built from data is the usual cause.',
             ),
         );
 

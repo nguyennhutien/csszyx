@@ -443,7 +443,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         // Still accepted, as the 0.18 upgrade guide says: it now selects nothing.
         expect(printed).toContain(
-            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: name `sz-diagnostic` instead, which reports what `other` did.\n' +
                 '  docs: https://csszyx.com/e/removed-rule-id',
         );
@@ -604,7 +604,7 @@ describe('csszyx check --json — what the run says about itself', () => {
         const { stdout, stderr } = await streamsFor({ rule: ['other'] });
 
         expect(stderr).toContain(
-            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: name `sz-diagnostic` instead, which reports what `other` did.',
         );
         const report = JSON.parse(stdout);

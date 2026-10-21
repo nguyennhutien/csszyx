@@ -309,7 +309,10 @@ describe('dedupe and the cap', () => {
         expect(limiter.pending).toBe(true);
         expect(limiter.flush()).toEqual([capOverflowMessage('unknown-key', 3)]);
         expect(capOverflowMessage('unknown-key', 3)).toBe(
-            '[csszyx] unknown-key: +3 more not listed\n  help: `csszyx check --rule unknown-key` lists every one.',
+            '[csszyx] diagnostics-capped:\n' +
+                '  This build left 3 more `unknown-key` finding(s) unlisted.\n' +
+                '  help: `csszyx check --rule unknown-key` lists every one.\n' +
+                '  docs: https://csszyx.com/e/diagnostics-capped',
         );
         // The cap is per start or build: a flush opens the next one.
         expect(limiter.pending).toBe(false);

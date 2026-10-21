@@ -18,10 +18,19 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
     },
     "canonical-key": {
         "args": {
+            "form": {},
             "key": {}
         },
-        "text": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
-        "help": "write `{canonical}`."
+        "text": {
+            "alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
+            "font": "`{key}` is not an sz key, and nothing is emitted for it.",
+            "scrollbar-color": "`{key}` is not an sz key, and nothing is emitted for it."
+        },
+        "help": {
+            "alias": "write `{canonical}`.",
+            "font": "write `weight` for the font weight, or `fontFamily` for the font family.",
+            "scrollbar-color": "write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour."
+        }
     },
     "removed-key": {
         "args": {
@@ -30,14 +39,14 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
             "replacement": {}
         },
         "text": {
-            "runtime-alias": "`{key}` was removed, and nothing is emitted for its runtime value.",
+            "runtime-alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.",
             "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
             "sugar": "The boolean shorthand `{key}` was removed, and nothing is emitted for it.",
             "removed": "`{key}` was removed, and nothing is emitted for it.",
             "replaced": "`{key}` was replaced, and nothing is emitted for it."
         },
         "help": {
-            "runtime-alias": "write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.",
+            "runtime-alias": "write the values {canonicalAllowed} on `{canonical}`, and any other value on its own key: {groups}.",
             "sugar-replaced": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "sugar": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "removed": "{note}.",

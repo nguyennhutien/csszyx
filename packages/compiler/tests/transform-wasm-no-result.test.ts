@@ -3,7 +3,8 @@
  * unavailable, on the rendering transform and the unrendered one alike.
  *
  * Only a broken artifact can do it, so the artifact is replaced here: the
- * module loader hands the transform a wasm module whose batch answers `[]`.
+ * module loader hands the transform a wasm module whose batch answers `[]`,
+ * or throws as the engine does when it refuses a batch.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -16,7 +17,15 @@ vi.mock('node:module', async importOriginal => {
             return Object.assign(
                 (id: string) =>
                     id === '@csszyx/core/parser-wasm'
-                        ? { transform_batch_json: () => '[]' }
+                        ? {
+                              // A string, as wasm-bindgen throws a Rust `JsValue::from_str`.
+                              transform_batch_json: (files: string) => {
+                                  if (files.includes('refused.tsx')) {
+                                      throw 'missing field `source` at line 1 column 25';
+                                  }
+                                  return '[]';
+                              },
+                          }
                         : real(id),
                 real,
             );
@@ -38,7 +47,33 @@ describe('a wasm batch that returns no result', () => {
         );
         // Only a broken artifact answers so: a csszyx bug, not a missing engine.
         expect(() => transform('export const a = 1;', 'a.tsx')).toThrow(
-            expect.objectContaining({ code: 'internal-error', args: { where: 'transformWasm' } }),
+            expect.objectContaining({
+                code: 'internal-error',
+                args: { where: 'transformWasm', detail: 'wasm transform returned no result' },
+            }),
         );
+    });
+});
+
+describe('a wasm batch the engine refuses', () => {
+    it.each([
+        ['transformWasm', transformWasm],
+        ['transformWasmUnrendered', transformWasmUnrendered],
+    ])('makes %s throw a csszyx bug that carries the message', (_name, transform) => {
+        let error: unknown;
+        try {
+            transform('export const a = 1;', 'refused.tsx');
+        } catch (thrown) {
+            error = thrown;
+        }
+        expect(error).toBeInstanceOf(WasmTransformUnavailableError);
+        expect(error).toMatchObject({
+            code: 'internal-error',
+            args: {
+                where: 'engine transform',
+                detail: 'missing field `source` at line 1 column 25',
+            },
+            cause: 'missing field `source` at line 1 column 25',
+        });
     });
 });

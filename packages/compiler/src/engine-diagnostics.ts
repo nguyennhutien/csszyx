@@ -8,7 +8,7 @@
  * @module engine-diagnostics
  */
 
-import { SZ_DIAGNOSTIC_REGISTRY } from './diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_RENDER_SPECS } from './diagnostic-registry.generated.js';
 import { renderSzDiagnostic } from './diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
 import type { SzDiagnosticIssue } from './engine-spans.js';
@@ -24,7 +24,7 @@ const DERIVED_ARGS: Readonly<Record<string, string>> = { 'unknown-key': 'suggest
 
 /** Each id's arg names that tell two diagnostics apart, in registry order. */
 const ARG_ORDER: ReadonlyMap<string, readonly string[]> = new Map(
-    SZ_DIAGNOSTIC_REGISTRY.map(spec => [
+    SZ_DIAGNOSTIC_RENDER_SPECS.map(spec => [
         spec.id,
         Object.keys(spec.args).filter(name => name !== DERIVED_ARGS[spec.id]),
     ]),

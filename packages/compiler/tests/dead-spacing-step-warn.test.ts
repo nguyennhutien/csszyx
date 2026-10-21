@@ -16,7 +16,7 @@ import { szCodeOf } from './helpers/sz-console-line.js';
  * @returns The sentence and the help.
  */
 const offScale = (key: string, value: string) => [
-    `\`${key}: ${value}\` is not on Tailwind's spacing scale, so the class generates no CSS.`,
+    `\`${key}: ${value}\` is not on Tailwind's spacing scale, so the class produces no CSS.`,
     `help: use a quarter step such as \`1.25\`, \`1.5\` or \`1.75\`, or a unit value such as \`'${value}rem'\`.`,
 ];
 

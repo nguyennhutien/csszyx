@@ -41,6 +41,18 @@ export interface TransformRustFile {
 }
 
 /**
+ * The message of anything thrown: an error's own, or the text of a thrown
+ * value that is not one, as wasm-bindgen throws a Rust error's string.
+ *
+ * @internal Shared with the wasm lane; not a stable API.
+ * @param thrown - Anything caught.
+ * @returns Its message.
+ */
+export function thrownMessage(thrown: unknown): string {
+    return thrown instanceof Error ? thrown.message : String(thrown);
+}
+
+/**
  * Thrown when the native engine cannot run on the current host. The wasm
  * artifact's counterpart is `WasmTransformUnavailableError`.
  *
@@ -48,20 +60,22 @@ export interface TransformRustFile {
  * `cause` and takes its `code` and `args` (`native-engine-unavailable`):
  * the wrapper renames the failure for this lane, it does not reclassify it.
  * Without a csszyx error to wrap, as when the binding answers a file with no
- * result, the state is a csszyx bug: `internal-error`.
+ * result or the engine refuses the batch, the state is a csszyx bug:
+ * `internal-error`, with `detail` as the check that failed.
  */
 export class RustTransformUnavailableError extends CsszyxError {
     /**
      * @param detail Native loader or transform failure detail.
      * @param options What it wraps.
-     * @param options.cause The loader's error.
+     * @param options.cause The loader's error, or what the engine threw.
+     * @param options.where Where a csszyx bug was found; `transformRust` by default.
      */
-    constructor(detail: string, options: { cause?: unknown } = {}) {
-        const { cause } = options;
+    constructor(detail: string, options: { cause?: unknown; where?: string } = {}) {
+        const { cause, where = 'transformRust' } = options;
         const wrapped = isCsszyxError(cause) ? cause : undefined;
         super({
             code: wrapped?.code ?? 'internal-error',
-            args: wrapped?.args ?? { where: 'transformRust' },
+            args: wrapped?.args ?? { where, detail },
             // The registry has no words for these ids yet; the message stays
             // the lane's own until they are worded (ADR 0031).
             message: `transformRust: native engine unavailable: ${detail}`,
@@ -313,25 +327,34 @@ function runNativeBatch(
     options: TransformSourceCodeOptions | undefined,
     fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult[] {
+    let results: NativeTransformResult[];
     try {
         checkNativeEngine();
-        return transformBatch(
+        results = transformBatch(
             files.map((file, index) => ({
                 filename: file.filename ?? `file-${index}.tsx`,
                 source: file.source,
             })),
             nativeTransformOptions(options),
-        ).map((result, index) =>
-            fromNativeResult(
-                result,
-                files[index].source,
-                diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
-                fields,
-            ),
         );
     } catch (err) {
-        throw asRustUnavailable(err);
+        // The loader and the identity check throw csszyx errors; anything else
+        // is the engine refusing the batch, which only a csszyx bug causes.
+        throw isCsszyxError(err)
+            ? asRustUnavailable(err)
+            : new RustTransformUnavailableError(thrownMessage(err), {
+                  cause: err,
+                  where: 'engine transform',
+              });
     }
+    return results.map((result, index) =>
+        fromNativeResult(
+            result,
+            files[index].source,
+            diagnosticPath(files[index].filename ?? `file-${index}.tsx`, options?.rootDir),
+            fields,
+        ),
+    );
 }
 
 /**

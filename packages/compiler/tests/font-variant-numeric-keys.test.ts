@@ -177,13 +177,16 @@ describe('font-variant-numeric keys', () => {
             engineMessage(
                 'global-before-group',
                 '/p/t.tsx:1:78',
-                '`nums: normal` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.',
+                "`nums: 'normal'` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.",
                 "help: to override the group, layer it: `sz={[base, { nums: 'normal' }]}`.",
                 "note: a spread such as `{ ...base, nums: 'normal' }` keeps the same key order, so it does not fix this.",
             ),
         ]);
         expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
-            ['global-before-group', { global: 'nums', value: 'normal', group: 'numOrdinal' }],
+            [
+                'global-before-group',
+                { global: 'nums', value: 'normal', valueType: 'string', group: 'numOrdinal' },
+            ],
         ]);
     });
 

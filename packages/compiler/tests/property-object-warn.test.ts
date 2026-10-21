@@ -19,7 +19,7 @@ import { szCodeOf } from './helpers/sz-console-line.js';
 const propertyObject = (key: string, nested: string) =>
     runtimeMessage(
         'property-object',
-        `\`${key}\` is a property, and its object \`{ ${nested} }\` emits \`${key}:*\` classes that match no Tailwind variant and generate no CSS.`,
+        `\`${key}\` sets a property and is not a variant, so its object \`{ ${nested} }\` emits \`${key}:*\` classes that produce no CSS.`,
         "help: move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
     );
 

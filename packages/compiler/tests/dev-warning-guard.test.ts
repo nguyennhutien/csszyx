@@ -37,7 +37,7 @@ import path from 'node:path';
 import { parseSync } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 
-import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-registry.generated.js';
+import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 
 const SRC = path.resolve(import.meta.dirname, '../src');
 const HELPER = 'szNodeWarningsUnmuted';

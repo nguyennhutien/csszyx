@@ -321,7 +321,7 @@ describe('what the transformer reports', () => {
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain('/repo/a.tsx');
         expect(lines[0]).toContain('closed-enum-value: /repo/a.tsx:1:');
-        expect(lines[0]).toContain('`display: bogus` is not a `display` value.');
+        expect(lines[0]).toContain("`display: 'bogus'` is not a `display` value.");
     });
 
     it('prints a dead value a cached entry recorded', () => {

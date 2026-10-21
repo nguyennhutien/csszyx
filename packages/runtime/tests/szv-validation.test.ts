@@ -83,6 +83,16 @@ describe('szv config/selection validation (dev)', () => {
         expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'xl', ['sm'])]]);
     });
 
+    it('names every value a dimension defines, each in its own code span', () => {
+        const f = szv({ variants: { size: { sm: { px: 2 }, lg: { px: 4 } } } });
+        // @ts-expect-error — `xl` is not a value of `size`
+        f({ size: 'xl' });
+        expect(String(warn.mock.calls[0]?.[0])).toContain(
+            'help: add `xl` to `variants.size`, or use one of `sm`, `lg`.',
+        );
+        expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'xl', ['sm', 'lg'])]]);
+    });
+
     it('describes an object selection without default object stringification', () => {
         const f = szv({ variants: { size: { sm: { px: 2 } } } });
         // @ts-expect-error — object values are structurally invalid selections

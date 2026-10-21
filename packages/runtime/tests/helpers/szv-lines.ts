@@ -25,14 +25,17 @@ export function unknownVariantLine(key: string): string {
  *
  * @param key - The dimension.
  * @param value - The value selected, as the line names it.
- * @param allowed - The values the dimension defines.
+ * @param allowed - The values the dimension defines; none gives the help
+ *   for a dimension with no value yet.
  * @returns The line.
  */
 export function unknownValueLine(key: string, value: string, allowed: readonly string[]): string {
     return runtimeMessage(
         'szv-unknown-variant-value',
         `The \`szv\` selection sets \`${key}\` to \`${value}\`, which \`variants.${key}\` does not define, so it adds no class.`,
-        `help: use one of: ${allowed.join(', ')}, or add \`${value}\` to \`variants.${key}\`.`,
+        allowed.length > 0
+            ? `help: add \`${value}\` to \`variants.${key}\`, or use one of \`${allowed.join('`, `')}\`.`
+            : `help: add \`${value}\` to \`variants.${key}\`, which defines no value yet.`,
     );
 }
 

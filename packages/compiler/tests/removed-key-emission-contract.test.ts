@@ -84,6 +84,43 @@ describe('removed sz key emission contract', () => {
         },
     );
 
+    // `font` and `scrollbarColor` are CSS shorthands csszyx splits over two
+    // keys, so no one key is their canonical spelling: each has a form of
+    // its own that names both keys.
+    const SPLIT_SHORTHANDS = [
+        '`font` is not an sz key, and nothing is emitted for it.\n  help: write `weight` for the font weight, or `fontFamily` for the font family.',
+        '`scrollbarColor` is not an sz key, and nothing is emitted for it.\n  help: write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour.',
+    ];
+
+    it('runtime drops a split shorthand and names the keys that split it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        expect(transform({ font: 'bold', scrollbarColor: 'red-500' }).className).toBe('');
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual(['canonical-key', 'canonical-key']);
+        expect(messages.join('\n')).toContain(SPLIT_SHORTHANDS[0]);
+        expect(messages.join('\n')).toContain(SPLIT_SHORTHANDS[1]);
+    });
+
+    it.each(ENGINES)(
+        '%s drops a split shorthand and names the keys that split it',
+        (_name, engine) => {
+            const run = captureWarnings(
+                engine,
+                "export const App = () => <div sz={{ font: 'bold', scrollbarColor: 'red-500', padding: 4 }} />;",
+            );
+
+            expect(run.className ?? '').toBe('');
+            expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+                ['canonical-key', { form: 'font', key: 'font' }],
+                ['canonical-key', { form: 'scrollbar-color', key: 'scrollbarColor' }],
+                ['canonical-key', { form: 'alias', key: 'padding' }],
+            ]);
+            expect(run.warnings.join('\n')).toContain(SPLIT_SHORTHANDS[0]);
+            expect(run.warnings.join('\n')).toContain(SPLIT_SHORTHANDS[1]);
+        },
+    );
+
     it.each(ENGINES)('%s drops dynamic aliases before CSS-variable lowering', (_name, engine) => {
         const source = `
             export const App = ({ pad, size }) => (

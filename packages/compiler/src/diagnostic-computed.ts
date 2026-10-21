@@ -136,4 +136,8 @@ export const SZ_BROWSER_DIAGNOSTIC_COMPUTED_VALUES: Readonly<Record<string, SzDi
                 : 'check the spelling',
         parserMessage: args => textArg(args, 'message').replace(/\.$/, ''),
         groupLiteral: args => literal(textArg(args, 'groupValue')),
+        valueLiteral: args =>
+            textArg(args, 'valueType') === 'string'
+                ? `'${textArg(args, 'value')}'`
+                : textArg(args, 'value'),
     };

@@ -190,6 +190,22 @@ describe('validateDocument — unknown keys', () => {
         expect(diags[0].code?.target.url).toBe('https://csszyx.com/e/canonical-key');
     });
 
+    it('names the keys a split shorthand is written with, as the build does', () => {
+        const diags = diagnosticsFor(
+            "const A = () => <div sz={{ font: 'bold', scrollbarColor: 'red-500' }} />;",
+        );
+        expect(diags.map(diag => [diag.code?.value, diag.message])).toEqual([
+            [
+                'canonical-key',
+                '`font` is not an sz key, and nothing is emitted for it.\nhelp: write `weight` for the font weight, or `fontFamily` for the font family.',
+            ],
+            [
+                'canonical-key',
+                '`scrollbarColor` is not an sz key, and nothing is emitted for it.\nhelp: write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour.',
+            ],
+        ]);
+    });
+
     it('suggests the key a typo most likely means, as the build does', () => {
         const [diagnostic] = diagnosticsFor("const A = () => <div sz={{ wordBrak: 'all' }} />;");
         expect(diagnostic?.message).toContain('help: write `');

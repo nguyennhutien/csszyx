@@ -21,8 +21,8 @@
 
 import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
 import {
-    SZ_DIAGNOSTIC_REGISTRY,
-    type SzDiagnosticSpec,
+    SZ_DIAGNOSTIC_RENDER_SPECS,
+    type SzDiagnosticRenderSpec,
     type SzDiagnosticWords,
 } from './diagnostic-registry.generated.js';
 import {
@@ -40,8 +40,8 @@ export {
 } from './diagnostic-template.js';
 
 /** Every id's entry, by id. */
-const SPECS: ReadonlyMap<string, SzDiagnosticSpec> = new Map(
-    SZ_DIAGNOSTIC_REGISTRY.map(spec => [spec.id, spec]),
+const SPECS: ReadonlyMap<string, SzDiagnosticRenderSpec> = new Map(
+    SZ_DIAGNOSTIC_RENDER_SPECS.map(spec => [spec.id, spec]),
 );
 
 /**
@@ -50,8 +50,8 @@ const SPECS: ReadonlyMap<string, SzDiagnosticSpec> = new Map(
  * @param code - The id.
  * @returns Its entry.
  */
-function specOf(code: SzDiagnosticId): SzDiagnosticSpec {
-    return SPECS.get(code) as SzDiagnosticSpec;
+function specOf(code: SzDiagnosticId): SzDiagnosticRenderSpec {
+    return SPECS.get(code) as SzDiagnosticRenderSpec;
 }
 
 /**
@@ -85,7 +85,7 @@ export interface IdentifiedDiagnostic {
  * @param code - The code.
  * @returns Its position kind.
  */
-export function szDiagnosticPositionOf(code: SzDiagnosticId): SzDiagnosticSpec['position'] {
+export function szDiagnosticPositionOf(code: SzDiagnosticId): SzDiagnosticRenderSpec['position'] {
     return specOf(code).position;
 }
 
@@ -140,13 +140,13 @@ export function szDiagnosticRenderer(
 ): SzDiagnosticRenderer {
     // Merged once, so the filler's per-entry cache keeps working.
     const specs = new Map(
-        SZ_DIAGNOSTIC_REGISTRY.map(spec => {
+        SZ_DIAGNOSTIC_RENDER_SPECS.map(spec => {
             const more = words[spec.id];
             return [spec.id, more === undefined ? spec : { ...spec, ...more }];
         }),
     );
     const parts: SzDiagnosticRenderer['parts'] = (diagnostic, computed) => {
-        const spec = specs.get(diagnostic.code) as SzDiagnosticSpec;
+        const spec = specs.get(diagnostic.code) as SzDiagnosticRenderSpec;
         // An id whose words live with another renderer would print an empty
         // line here; a caller that reaches this picked the wrong renderer.
         if (spec.text === undefined && spec.help === undefined && spec.note === undefined) {
