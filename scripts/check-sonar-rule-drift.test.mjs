@@ -10,6 +10,7 @@ import {
     bucketRules,
     isEnabled,
     parseSonarProperties,
+    profileFile,
     profileRuleList,
     readSonarProperties,
     rspecId,
@@ -187,6 +188,40 @@ describe('the profile list the changed-line gate reads', () => {
             { key: 'typescript:S4323', rule: 'sonarjs/use-type-alias', scope: 'MAIN' },
             { key: 'typescript:S5976', rule: 'sonarjs/parameterized-tests', scope: 'ALL' },
             { key: 'typescript:S7503', rule: 'require-await', scope: 'MAIN' },
+        ]);
+    });
+});
+
+describe('the profile file', () => {
+    it('writes only names the local rule set already holds, whatever Sonar sent', () => {
+        const local = new Set(['S1119', 'S7741']);
+        const list = [
+            { key: 'typescript:S1119', rule: 'sonarjs/no-labels', scope: 'MAIN' },
+            { key: 'typescript:S7741', rule: 'unicorn/no-typeof-undefined', scope: 'TEST' },
+            { key: 'typescript:S9999', rule: 'sonarjs/unknown', scope: 'ALL' },
+            { key: 'javascript:S1119', rule: 'sonarjs/no-labels', scope: 'MAIN' },
+            { key: 'typescript:S1119 ../../etc', rule: 'sonarjs/no-labels', scope: 'MAIN' },
+            { key: 'typescript:S7741', rule: 'unicorn/no-typeof-undefined', scope: 'ANY' },
+        ];
+        assert.deepEqual(profileFile(list, 'ts', local), {
+            format: 1,
+            language: 'ts',
+            rules: [
+                { key: 'typescript:S1119', rule: 'sonarjs/no-labels', scope: 'MAIN' },
+                { key: 'typescript:S7741', rule: 'unicorn/no-typeof-undefined', scope: 'TEST' },
+                { key: 'typescript:S7741', rule: 'unicorn/no-typeof-undefined', scope: 'ALL' },
+            ],
+        });
+    });
+
+    it('names JavaScript keys for the JavaScript list', () => {
+        const rules = profileFile(
+            [{ key: 'javascript:S9382', rule: 'no-await-in-loop', scope: 'MAIN' }],
+            'js',
+            new Set(['S9382']),
+        ).rules;
+        assert.deepEqual(rules, [
+            { key: 'javascript:S9382', rule: 'no-await-in-loop', scope: 'MAIN' },
         ]);
     });
 });

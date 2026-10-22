@@ -1,6 +1,5 @@
 {
     "format": 1,
-    "profile": "Sonar way comprehensive",
     "language": "js",
     "rules": [
         {

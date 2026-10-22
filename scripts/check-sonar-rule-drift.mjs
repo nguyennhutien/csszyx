@@ -334,6 +334,37 @@ export function profileRuleList(buckets, foreignByRspec = FOREIGN_RULES) {
         .sort((left, right) => left.key.localeCompare(right.key));
 }
 
+/** Sonar's language prefix on a rule key, by the profile files' language. */
+const SONAR_KEY_PREFIX = { ts: 'typescript', js: 'javascript' };
+
+/** The file sets a rule can read, spelled as the gate expects them. */
+const RULE_SCOPES = { MAIN: 'MAIN', TEST: 'TEST', ALL: 'ALL' };
+
+/**
+ * The profile file's content, built only from names this repository already
+ * holds: a key is kept when its rule id is one the local rule set knows, and
+ * is written from that local id, and a scope is one of the three the gate
+ * reads. What SonarCloud returns decides which entries are kept, never the
+ * text written to disk.
+ *
+ * @param list - What {@link profileRuleList} returned, filtered to the language.
+ * @param language - `ts` or `js`.
+ * @param localIds - Rule ids (`S1119`) a local plugin implements.
+ * @returns The object to write, format 1.
+ */
+export function profileFile(list, language, localIds) {
+    const prefix = SONAR_KEY_PREFIX[language];
+    const ids = [...localIds];
+    const rules = [];
+    for (const entry of list) {
+        const id = ids.find(local => entry.key === `${prefix}:${local}`);
+        if (id === undefined) continue;
+        const scope = Object.hasOwn(RULE_SCOPES, entry.scope) ? RULE_SCOPES[entry.scope] : 'ALL';
+        rules.push({ key: `${prefix}:${id}`, rule: entry.rule, scope });
+    }
+    return { format: 1, language, rules };
+}
+
 /**
  * Print the drift, or emit it as JSON.
  *
@@ -360,14 +391,9 @@ async function main({ language, json, writeProfile }) {
                 bucketRules(active.rules, localByRspec, new Set(), FOREIGN_RULES),
             );
             const runnable = list.filter(entry => runsOn(entry.rule, key));
-            const written = {
-                format: 1,
-                profile: active.profile.name,
-                language: key,
-                rules: runnable,
-            };
+            const written = profileFile(runnable, key, localIds);
             writeFileSync(file, `${JSON.stringify(written, null, 4)}\n`);
-            console.log(`[sonar-drift] wrote ${runnable.length} rules to ${file}`);
+            console.log(`[sonar-drift] wrote ${written.rules.length} rules to ${file}`);
             for (const entry of list.filter(item => !runsOn(item.rule, key))) {
                 console.log(`  not runnable on ${key} files: ${entry.key} ${entry.rule}`);
             }
