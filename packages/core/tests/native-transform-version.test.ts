@@ -61,7 +61,7 @@ describe('@csszyx/core/native transformBatch', () => {
         const { transformBatch } = await import('../native/index.js');
 
         expect(transformBatch([{ filename: '/p/a.tsx', source: '' }])).toEqual([
-            { code: '', classes: [], issues: [], mergeGroups: [] },
+            { code: '', classes: [], spans: '1,0,0,0,0,' },
         ]);
         // Nothing to read the shape from, so nothing is refused.
         expect(transformBatch([])).toEqual([]);
@@ -114,14 +114,11 @@ describe('@csszyx/core/native transformBatch', () => {
         }
     });
 
-    it('refuses a binding whose issues carry no args, judged on the first issue', async () => {
+    it('refuses a binding that hands each span over as its own object', async () => {
         packageName.current = fixture('native-binding-no-args.cjs');
         const { transformBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
-        const clean = { filename: '/p/a.tsx', source: '' };
 
-        // A result with no issue cannot show the missing field.
-        expect(transformBatch([clean])).toHaveLength(1);
-        expect(() => transformBatch([clean, { filename: '/p/b.tsx', source: '' }])).toThrow(
+        expect(() => transformBatch([{ filename: '/p/a.tsx', source: '' }])).toThrow(
             CsszyxNativeUnavailableError,
         );
     });

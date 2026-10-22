@@ -147,9 +147,8 @@ function staleArgs(packageName) {
 /**
  * Refuse a result an older platform package returned. Such a package still
  * exports the function, so the loader's export check passes; only the result
- * tells. Without this the caller fails on the first missing field, or, for
- * a field it reads per issue, prints a sentence with holes in it. Every result
- * has the same shape, so one is enough: the first that has an issue.
+ * tells. Without this the caller fails on the first missing field. Every
+ * result has the same shape, so the first is enough.
  *
  * @template T
  * @param {T[]} results - What the binding returned.
@@ -157,9 +156,7 @@ function staleArgs(packageName) {
  * @returns {T[]} The results.
  */
 function currentResults(results, current) {
-    // A result with no issue says nothing about the shape of one, so judge the
-    // first that has an issue, and the first result when none does.
-    const judged = results.find(result => result.issues?.length > 0) ?? results[0];
+    const judged = results[0];
     if (judged === undefined || current(judged)) return results;
     throw new CsszyxNativeUnavailableError(staleArgs(cachedPackageName));
 }
@@ -168,9 +165,7 @@ export function transformBatch(_files, options) {
     const binding = loadNativeBinding();
     return currentResults(
         binding.transformBatch(_files, options),
-        result =>
-            Array.isArray(result.issues) &&
-            result.issues.every(issue => typeof issue.argsJson === 'string'),
+        result => typeof result.spans === 'string',
     );
 }
 

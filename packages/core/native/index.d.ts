@@ -110,29 +110,30 @@ export interface NativeTransformResult {
     /** Static className/class strings discovered in the source. */
     rawClassNames: string[];
     /**
-     * Each static object a merge would read: the key behind each class and that
-     * key's byte offset (both index-parallel to `classes`), and its classes.
+     * The file's spans as one length-prefixed text, the text the wasm build
+     * writes as its result's `spans`: each non-fatal diagnostic (code, byte
+     * offset, args), each static object a merge would read and each
+     * one-class object (the key behind each class, that key's byte offset,
+     * the class), and each static class name beside a static `sz`.
+     * `@csszyx/compiler` decodes it; the engine writes no sentence, the
+     * compiler renders one from the diagnostic registry.
+     *
+     * Every number is decimal; a string is its length in UTF-16 units, `:`,
+     * then the string, never escaped:
+     *
+     * ```text
+     * spans     = format "," issues groups groups overrides
+     * issues    = count "," { str(code) num(start) } [ str(args) ]   (args when count > 0)
+     * groups    = count "," { count "," { str(key) num(keyStart) str(class) } }
+     * overrides = count "," { num(start) count "," { str(base) } count "," { str(over) } }
+     * num(n)    = digits ","          str(s) = length ":" s
+     * ```
+     *
+     * `format` is 1. `args` is one JSON list, an object per issue, keys in
+     * the diagnostic registry's order. The first `groups` are the objects a
+     * merge reads, the second the one-class objects.
      */
-    mergeGroups: Array<{ keys: string[]; keyStarts: number[]; classes: string[] }>;
-    /**
-     * Each static object of one class, in the shape of `mergeGroups`: a merge
-     * reads nothing here; the key behind the class and its byte offset are
-     * where a dead class is reported. Absent from a binary that predates it.
-     */
-    singleClassGroups?: Array<{ keys: string[]; keyStarts: number[]; classes: string[] }>;
-    /**
-     * Each static class name and the static `sz` classes beside it a merge would
-     * read, with the byte offset of the class-name attribute.
-     */
-    mergeOverrides: Array<{ start: number; base: string[]; over: string[] }>;
-    /**
-     * The code and byte offset of each non-fatal diagnostic. Codes are the ids
-     * `csszyx check --rule` accepts; `argsJson` is the JSON object of the
-     * values the diagnostic names, keys in the registry's order, the same
-     * bytes the wasm artifact writes. The engine writes no sentence:
-     * `@csszyx/compiler` renders one from the diagnostic registry.
-     */
-    issues: Array<{ code: string; start: number; argsJson: string }>;
+    spans: string;
     /** Recovery token metadata emitted for hydration safety. */
     recoveryTokens: Array<{
         /** Public token inserted into generated code. */

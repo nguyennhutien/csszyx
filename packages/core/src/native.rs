@@ -295,55 +295,6 @@ pub struct NativeTransformTimings {
     pub total_ns: u32,
 }
 
-/// What one diagnostic reports, and where.
-#[derive(Debug)]
-#[napi(object)]
-pub struct NativeIssue {
-    /// The kind of problem, as `csszyx check --rule` names it.
-    pub code: String,
-    /// Byte offset in the source the diagnostic points at; `0` for one about
-    /// the whole file.
-    pub start: u32,
-    /// The values the diagnostic names, as the JSON object the wasm artifact
-    /// writes for `args`: the same bytes, keys in the registry's order.
-    pub args_json: String,
-}
-
-/// One static object a merge would read, and where it is.
-#[derive(Debug)]
-#[napi(object)]
-pub struct NativeMergeGroup {
-    /// The key each class was lowered from, index-parallel to `classes`.
-    pub keys: Vec<String>,
-    /// Byte offset in the source of the key each class was lowered from,
-    /// index-parallel to `keys`.
-    pub key_starts: Vec<u32>,
-    /// The classes, as emitted.
-    pub classes: Vec<String>,
-}
-
-impl From<crate::transform::merge::MergeGroup> for NativeMergeGroup {
-    fn from(group: crate::transform::merge::MergeGroup) -> Self {
-        Self {
-            keys: group.keys,
-            key_starts: group.key_starts,
-            classes: group.classes,
-        }
-    }
-}
-
-/// A static class name and the `sz` classes beside it.
-#[derive(Debug)]
-#[napi(object)]
-pub struct NativeMergeOverride {
-    /// Byte offset of the class-name attribute in the source.
-    pub start: u32,
-    /// The class name's classes, as written.
-    pub base: Vec<String>,
-    /// The `sz` classes, as emitted.
-    pub over: Vec<String>,
-}
-
 /// Transform output shape returned to JavaScript per source file.
 #[derive(Debug)]
 #[napi(object)]
@@ -356,16 +307,12 @@ pub struct NativeTransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
-    /// Each static object a merge would read.
-    pub merge_groups: Vec<NativeMergeGroup>,
-    /// Each static object of one class, which a merge does not read: where its
-    /// class's key is written.
-    pub single_class_groups: Vec<NativeMergeGroup>,
-    /// Each static class name beside a static `sz` a merge would read.
-    pub merge_overrides: Vec<NativeMergeOverride>,
-    /// Each non-fatal diagnostic: its code, position and args. The engine
-    /// writes no sentence; the compiler renders one from the registry.
-    pub issues: Vec<NativeIssue>,
+    /// Each non-fatal diagnostic and each list a merge would read, as one
+    /// length-prefixed text (`transform::spans`): the text the wasm build
+    /// writes as the file's `spans`, decoded by `@csszyx/compiler`. A string
+    /// per file costs one boundary crossing where an object per group and a
+    /// string per class and key cost one each.
+    pub spans: String,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<NativeRecoveryToken>,
     /// CSS custom property mangle metadata.
@@ -447,38 +394,11 @@ pub fn transform_batch_native(
 impl From<TransformResult> for NativeTransformResult {
     fn from(result: TransformResult) -> Self {
         Self {
+            spans: crate::transform::spans::spans_text(&result),
             code: result.code,
             map: result.map.map(|map| map.to_string()),
             classes: result.classes,
             raw_class_names: result.raw_class_names,
-            merge_groups: result
-                .merge_groups
-                .into_iter()
-                .map(NativeMergeGroup::from)
-                .collect(),
-            single_class_groups: result
-                .single_class_groups
-                .into_iter()
-                .map(NativeMergeGroup::from)
-                .collect(),
-            merge_overrides: result
-                .merge_overrides
-                .into_iter()
-                .map(|pair| NativeMergeOverride {
-                    start: pair.start,
-                    base: pair.base,
-                    over: pair.over,
-                })
-                .collect(),
-            issues: result
-                .issues
-                .into_iter()
-                .map(|issue| NativeIssue {
-                    code: issue.code.as_str().to_string(),
-                    start: issue.start,
-                    args_json: issue.args.to_json(),
-                })
-                .collect(),
             recovery_tokens: result
                 .recovery_tokens
                 .into_iter()

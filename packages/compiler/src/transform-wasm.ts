@@ -27,7 +27,7 @@ import {
     unrenderedDiagnosticFields,
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
-import { locateEngineSpans } from './engine-spans.js';
+import { decodeEngineSpans, type LocatedEngineSpans } from './engine-spans.js';
 import { CsszyxError } from './errors.js';
 import type {
     GlobalVarSourceFile,
@@ -46,22 +46,13 @@ import {
     thrownMessage,
 } from './transform-rust.js';
 
-/** One merge group as the wasm JSON spells it. */
-interface WasmMergeGroup {
-    keys: string[];
-    key_starts: number[];
-    classes: string[];
-}
-
 /** The raw serde shape `transform_batch_json` returns, snake_case per field. */
 interface WasmResultJson {
     code: string;
     classes: string[];
     raw_class_names: string[];
-    merge_groups: WasmMergeGroup[];
-    single_class_groups: WasmMergeGroup[];
-    merge_overrides: Array<{ start: number; base: string[]; over: string[] }>;
-    issues: Array<{ code: string; start: number; args: object }>;
+    /** The file's spans text: the text the native binding returns as `spans`. */
+    spans: string;
     recovery_tokens: Array<{
         token: string;
         mode: 'csr' | 'dev-only';
@@ -374,24 +365,11 @@ function runWasmBatch(
 }
 
 /**
- * One group in the spelling the shared span locator reads.
- *
- * @param group - A group as the wasm JSON spells it.
- * @returns The same group, camel-cased.
- */
-function rawGroup(group: WasmMergeGroup): {
-    keys: string[];
-    keyStarts: number[];
-    classes: string[];
-} {
-    return { keys: group.keys, keyStarts: group.key_starts, classes: group.classes };
-}
-
-/**
  * Convert the serde result shape into the compiler result shape.
  *
  * The napi lane gets this conversion from napi-derive (camelCase fields);
- * the wasm boundary is JSON, so the snake_case mapping lives here.
+ * the wasm boundary is JSON, so the snake_case mapping lives here. The spans
+ * are the text both artifacts write, read by the shared decoder.
  *
  * @param result Raw wasm transform result.
  * @param source The source the result was transformed from, to place its spans.
@@ -405,12 +383,17 @@ function fromWasmResult(
     file: string,
     fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
-    const spans = locateEngineSpans(source, {
-        issues: result.issues,
-        mergeGroups: result.merge_groups.map(rawGroup),
-        singleClassGroups: result.single_class_groups.map(rawGroup),
-        mergeOverrides: result.merge_overrides,
-    });
+    let spans: LocatedEngineSpans;
+    try {
+        spans = decodeEngineSpans(source, result.spans);
+    } catch (err) {
+        // The wasm build writes the text the native binding does: only one
+        // from another build, or a csszyx bug, writes text this cannot read.
+        throw new WasmTransformUnavailableError(thrownMessage(err), {
+            cause: err,
+            where: 'decodeEngineSpans',
+        });
+    }
     return {
         code: result.code,
         transformed: result.metadata.transformed,

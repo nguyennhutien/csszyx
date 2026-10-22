@@ -313,20 +313,23 @@ pub struct TransformResult {
     pub raw_class_names: Vec<String>,
     /// Each static object a merge would read, when the pass had no merge
     /// table; objects of one class are left out.
-    #[serde(default)]
+    ///
+    /// This and the other spans cross to JavaScript as one object written by
+    /// [`super::spans`], never as fields of the result.
+    #[serde(default, skip_serializing)]
     pub merge_groups: Vec<super::merge::MergeGroup>,
     /// Each static object of one class, when the pass had no merge table, in
     /// the shape of `merge_groups`: a merge reads nothing here, a report reads
     /// the key and offset behind the class.
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub single_class_groups: Vec<super::merge::MergeGroup>,
     /// Each static class name beside a static `sz` a merge would read, when
     /// the pass had no merge table; one side empty is left out.
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub merge_overrides: Vec<super::merge::MergeOverride>,
     /// Each non-fatal diagnostic: its code, position and args. The engine
     /// writes no sentence; the compiler renders one from the registry.
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub issues: Vec<Issue>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<RecoveryToken>,

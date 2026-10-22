@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { decodeEngineSpans, storeEngineSpans } from '../../compiler/src/engine-spans.js';
 
 interface ParseRecord {
     source: string;
@@ -28,7 +29,8 @@ interface WasmTransformResult {
     code: string;
     classes: string[];
     raw_class_names: string[];
-    issues: unknown[];
+    /** The file's spans text, issues among them, as the native binding returns it. */
+    spans: string;
 }
 
 interface ParserWasm {
@@ -97,9 +99,10 @@ describe('wasm parser artifact', () => {
                 );
             }
             // The same bytes as the native artifact recorded: key order included.
-            if (JSON.stringify(result.issues) !== JSON.stringify(record.issues)) {
+            const { issues } = storeEngineSpans(decodeEngineSpans(record.source, result.spans));
+            if (JSON.stringify(issues) !== JSON.stringify(record.issues)) {
                 mismatches.push(
-                    `${record.source}\n  issues expected ${JSON.stringify(record.issues)}\n  issues got      ${JSON.stringify(result.issues)}`,
+                    `${record.source}\n  issues expected ${JSON.stringify(record.issues)}\n  issues got      ${JSON.stringify(issues)}`,
                 );
             }
         }

@@ -11,6 +11,8 @@
  *
  * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */
+import { createRequire } from 'node:module';
+import { transformBatch } from '@csszyx/core/native';
 import { expect } from 'vitest';
 import {
     isRustTransformAvailable,
@@ -182,6 +184,59 @@ export function normalizeEmit(code: string): string {
     return code.replace(/\s+/g, ' ');
 }
 
+/** The wasm artifact's batch entry, as the harness calls it directly. */
+interface ParserWasmBatch {
+    transform_batch_json(filesJson: string, optionsJson: string): string;
+}
+
+/** Every option the wasm artifact requires, at its default. */
+const WASM_DEFAULT_OPTIONS = JSON.stringify({
+    mangle_vars: false,
+    mangle_var_hoist_max_depth: null,
+    global_var_aliases: [],
+});
+
+/**
+ * The spans text each artifact writes for one file, read straight from each
+ * binding: what the shared decoder reads, before any of it runs. The wasm
+ * artifact writes it as the `spans` string of its result.
+ *
+ * @param source - Full module source.
+ * @param filename - Filename handed to the engine.
+ * @returns Each artifact's text, or `undefined` for an artifact that wrote
+ *          none; `rust` only when the native lane runs.
+ */
+export function engineSpansText(
+    source: string,
+    filename = '/p/t.tsx',
+): { wasm: unknown; rust?: unknown } {
+    const wasm = createRequire(import.meta.url)('@csszyx/core/parser-wasm') as ParserWasmBatch;
+    const [fromWasm] = JSON.parse(
+        wasm.transform_batch_json(JSON.stringify([{ filename, source }]), WASM_DEFAULT_OPTIONS),
+    ) as Array<{ spans?: unknown }>;
+    if (!RUST_LANE) return { wasm: fromWasm?.spans };
+    const [fromRust] = transformBatch([{ filename, source }]) as Array<{ spans?: unknown }>;
+    return { wasm: fromWasm?.spans, rust: fromRust?.spans };
+}
+
+/**
+ * Assert both artifacts write the same spans text for one file, character
+ * for character.
+ *
+ * Both come from one writer in the engine, so any difference is a lane that
+ * stopped going through it.
+ *
+ * @param source - Full module source.
+ * @param filename - Filename handed to the engine.
+ */
+export function expectSpansTextEqual(source: string, filename = '/p/t.tsx'): void {
+    const { wasm, rust } = engineSpansText(source, filename);
+    expect.soft(typeof wasm, `wasm spans text for ${JSON.stringify(source)}`).toBe('string');
+    if (!RUST_LANE) return;
+    expect.soft(typeof rust, `rust spans text for ${JSON.stringify(source)}`).toBe('string');
+    expect(rust, JSON.stringify(source)).toBe(wasm);
+}
+
 /**
  * Transform one sz literal on every engine and assert they agree.
  *
@@ -195,6 +250,7 @@ export function expectParity(sz: string, expected: string): void {
         const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
         expect(emitted, `${name} — ${sz}`).toBe(expected);
     }
+    expectSpansTextEqual(tsx, 'engine-parity.tsx');
 }
 
 /** One captured engine run: the raw result plus its merged warning channel. */

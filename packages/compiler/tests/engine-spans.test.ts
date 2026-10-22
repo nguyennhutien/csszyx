@@ -130,14 +130,14 @@ describe('a lone surrogate before a diagnostic', () => {
 });
 
 describe('locateEngineSpans', () => {
-    it('reads the args of either artifact: an object, or the JSON the native binding writes', () => {
+    it('reads the args an issue carries, and none from an issue without them', () => {
         const spans = (issue: object) =>
             locateEngineSpans('x', {
                 issues: [issue as never],
                 mergeGroups: [],
                 mergeOverrides: [],
             }).issues[0]?.args;
-        expect(spans({ code: 'unknown-key', start: 0, argsJson: '{"key":"k"}' })).toEqual({
+        expect(spans({ code: 'unknown-key', start: 0, args: { key: 'k' } })).toEqual({
             key: 'k',
         });
         expect(spans({ code: 'style-override', start: 0 })).toEqual({});
