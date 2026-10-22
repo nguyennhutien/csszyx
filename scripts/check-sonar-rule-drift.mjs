@@ -78,6 +78,11 @@ const FOREIGN_RULES = new Map([
     // only, so S6557's `s[0] === 'x'` is typescript-eslint's.
     ['S6557', '@typescript-eslint/prefer-string-starts-ends-with'],
     ['S7758', 'unicorn/prefer-code-point'],
+    // Reported on #396 (`typeof x !== 'undefined'`, an object literal as a
+    // parameter's default) while the local run was green; the unicorn rules
+    // flag the same lines, verified on that code.
+    ['S7741', 'unicorn/no-typeof-undefined'],
+    ['S7737', 'unicorn/no-object-as-default-parameter'],
 ]);
 
 /**
@@ -87,7 +92,21 @@ const FOREIGN_RULES = new Map([
  * @returns Key to value, comments and blank lines dropped.
  */
 export function readSonarProperties(file) {
-    const entries = readFileSync(file, 'utf8')
+    return parseSonarProperties(readFileSync(file, 'utf8'));
+}
+
+/**
+ * Parse properties text into a plain map. A line ending in a backslash goes
+ * on to the next, as Java properties do: `sonar.exclusions` and
+ * `sonar.coverage.exclusions` are written one glob per line that way, and
+ * reading each line alone kept nothing of them but the backslash.
+ *
+ * @param text - The file's text.
+ * @returns Key to value, comments and blank lines dropped.
+ */
+export function parseSonarProperties(text) {
+    const entries = text
+        .replaceAll(/\\\r?\n[ \t]*/g, '')
         .split('\n')
         .map(line => line.trim())
         .filter(line => line !== '' && !line.startsWith('#'))
@@ -182,6 +201,58 @@ async function activeRules(organization, project, language) {
     return { profile, rules: rules.rules ?? [], total: rules.total ?? 0 };
 }
 
+/** The repository prefix of each Sonar language key's rules. */
+const RULE_REPOSITORY = { ts: 'typescript', js: 'javascript' };
+
+/**
+ * The RSPEC ids a local rule implements that the profile's listing left out.
+ *
+ * @param listed - The rules the search returned.
+ * @param localIds - Every RSPEC id a local rule implements.
+ * @returns The ids to ask about one by one.
+ */
+export function unlistedLocalIds(listed, localIds) {
+    const seen = new Set(listed.map(rule => rule.key.split(':')[1]));
+    return [...localIds].filter(id => !seen.has(id)).sort();
+}
+
+/**
+ * The profile's active rules, with the ones its listing leaves out.
+ *
+ * The rule search undercounts: on 2026-10-22 it listed 467 of the JavaScript
+ * profile's 481 active rules, and `javascript:S9382`, active since 2026-09-29
+ * and raised on #396, was not among them. `api/rules/show` answers for the rule
+ * itself, so every RSPEC id a local rule implements and the listing lacks is
+ * asked about there; the rules nothing here implements stay unlisted, as they
+ * would change nothing the gate can run.
+ *
+ * @param organization - Sonar organisation key.
+ * @param active - What {@link activeRules} returned.
+ * @param language - Sonar language key.
+ * @param localIds - Every RSPEC id a local rule implements.
+ * @returns The listing, completed.
+ */
+async function completeActiveRules(organization, active, language, localIds) {
+    const { profile } = active;
+    if (active.total >= (profile.activeRuleCount ?? 0)) return active;
+    console.log(
+        `[sonar-drift] ${language}: the search lists ${active.total} of ` +
+            `${profile.activeRuleCount} active rules; asking for each local one it left out.`,
+    );
+    const found = [];
+    for (const id of unlistedLocalIds(active.rules, localIds)) {
+        const key = `${RULE_REPOSITORY[language]}:${id}`;
+        const shown = await fetch(
+            `${SONAR_HOST}/api/rules/show?organization=${organization}&key=${key}&actives=true`,
+        ).then(response => (response.ok ? response.json() : {}));
+        if ((shown.actives ?? []).some(entry => entry.qProfile === profile.key)) {
+            found.push({ key, name: shown.rule?.name ?? '', scope: shown.rule?.scope });
+            console.log(`  active but unlisted: ${key}`);
+        }
+    }
+    return { ...active, rules: [...active.rules, ...found], total: active.total + found.length };
+}
+
 /**
  * The RSPEC ids `eslint-plugin-sonarjs` implements, mapped to its rule names.
  *
@@ -211,7 +282,7 @@ async function enabledLocalRules(file) {
     const { ESLint } = await import('eslint');
     const config = await new ESLint().calculateConfigForFile(file);
     return new Set([
-        ...Object.entries(config.rules ?? {})
+        ...Object.entries(config?.rules ?? {})
             .filter(([, setting]) => isEnabled(setting))
             .map(([name]) => name),
         ...GATED_RULES.keys(),
@@ -220,6 +291,28 @@ async function enabledLocalRules(file) {
 
 /** Where `--write-profile` writes the rules the changed-line gate runs. */
 export const PROFILE_RULES_FILE = 'scripts/sonar-profile-rules.json';
+
+/**
+ * The profile list of each language Sonar analyses here, by Sonar language
+ * key. JavaScript has a profile of its own (`javascript:S9382` on a
+ * `tsdown.config.mjs`, #396), which a TypeScript list never carried.
+ */
+export const PROFILE_RULES_FILES = {
+    ts: PROFILE_RULES_FILE,
+    js: 'scripts/sonar-profile-rules-js.json',
+};
+
+/**
+ * Whether a local rule can run on a language's files. A typescript-eslint
+ * rule needs the TypeScript parser, which JavaScript files are not given.
+ *
+ * @param rule - The eslint rule name.
+ * @param language - Sonar language key.
+ * @returns True when the changed-line gate can run it there.
+ */
+export function runsOn(rule, language) {
+    return language !== 'js' || !rule.startsWith('@typescript-eslint/');
+}
 
 /**
  * The profile rules a local rule implements, in the shape the changed-line gate
@@ -253,21 +346,42 @@ async function main({ language, json, writeProfile }) {
     const properties = readSonarProperties('sonar-project.properties');
     const organization = properties['sonar.organization'];
     const project = properties['sonar.projectKey'];
-    const [{ profile, rules, total }, localByRspec, enabled] = await Promise.all([
+    const localByRspec = await localSonarRules();
+    if (writeProfile) {
+        const localIds = new Set([...localByRspec.keys(), ...FOREIGN_RULES.keys()]);
+        for (const [key, file] of Object.entries(PROFILE_RULES_FILES)) {
+            const active = await completeActiveRules(
+                organization,
+                await activeRules(organization, project, key),
+                key,
+                localIds,
+            );
+            const list = profileRuleList(
+                bucketRules(active.rules, localByRspec, new Set(), FOREIGN_RULES),
+            );
+            const runnable = list.filter(entry => runsOn(entry.rule, key));
+            const written = {
+                format: 1,
+                profile: active.profile.name,
+                language: key,
+                rules: runnable,
+            };
+            writeFileSync(file, `${JSON.stringify(written, null, 4)}\n`);
+            console.log(`[sonar-drift] wrote ${runnable.length} rules to ${file}`);
+            for (const entry of list.filter(item => !runsOn(item.rule, key))) {
+                console.log(`  not runnable on ${key} files: ${entry.key} ${entry.rule}`);
+            }
+        }
+    }
+    const [{ profile, rules, total }, enabled] = await Promise.all([
         activeRules(organization, project, language),
-        localSonarRules(),
-        enabledLocalRules('packages/unplugin/src/unplugin.ts'),
+        enabledLocalRules(
+            language === 'js'
+                ? 'packages/csszyx/cdn-build.mjs'
+                : 'packages/unplugin/src/unplugin.ts',
+        ),
     ]);
     const buckets = bucketRules(rules, localByRspec, enabled, FOREIGN_RULES);
-
-    if (writeProfile) {
-        const list = profileRuleList(buckets);
-        writeFileSync(
-            PROFILE_RULES_FILE,
-            `${JSON.stringify({ format: 1, profile: profile.name, language, rules: list }, null, 4)}\n`,
-        );
-        console.log(`[sonar-drift] wrote ${list.length} rules to ${PROFILE_RULES_FILE}`);
-    }
 
     if (json) {
         console.log(JSON.stringify({ profile: profile.name, total, ...buckets }, null, 2));

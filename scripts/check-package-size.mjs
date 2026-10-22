@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -896,9 +896,10 @@ function moduleOrderFailures(budget, name, entries, modulesBySubpath) {
  *
  * @param {{ name: string, build: object, moduleOrder?: string[] }} budget the budget
  * @param {string} target absolute path of the file
+ * @param {string} written the file's text, as the gate read it
  * @returns {string[]} failure messages
  */
-function builtFileFailures(budget, target) {
+function builtFileFailures(budget, target, written) {
     const result = buildSync({
         ...budget.build,
         outfile: target,
@@ -906,7 +907,7 @@ function builtFileFailures(budget, target) {
         metafile: true,
         logLevel: 'silent',
     });
-    if (result.outputFiles[0].text !== readFileSync(target, 'utf8')) {
+    if (result.outputFiles[0].text !== written) {
         return [
             `${budget.name}: the file is not what its build options write, so the order ` +
                 'of its modules cannot be read from them. Rebuild it, or build it from the ' +
@@ -1517,14 +1518,18 @@ export function checkBudgets(budgets, rootDir) {
             } else if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
                 // bundle, but its absence is still a failure, never a pass.
-                statSync(target);
+                // Read once: the size, the sinks and the build comparison all
+                // judge these bytes, not a file that may change between reads.
+                const bytes = readFileSync(target);
                 files = [target];
-                gzipBytes = gzipTotalBytes(files);
+                gzipBytes = gzipSync(bytes, { level: 9 }).length;
                 // A production bundle shipped as a file is read like an app's.
                 if (budget.productionCodes !== undefined) {
-                    failures.push(...sinkFailures(budget, readFileSync(target, 'utf8')));
+                    failures.push(...sinkFailures(budget, bytes.toString('utf8')));
                 }
-                if (budget.build !== undefined) failures.push(...builtFileFailures(budget, target));
+                if (budget.build !== undefined) {
+                    failures.push(...builtFileFailures(budget, target, bytes.toString('utf8')));
+                }
             } else {
                 files = listExportEntries(target, budget.excludeSubpaths);
                 if (files.length === 0) {

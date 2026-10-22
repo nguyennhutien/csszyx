@@ -21,8 +21,14 @@
 //     by "diagnostics on a line the diff touched" missed every function whose
 //     body grew without its header moving, which is most of them. Sonar asks a
 //     different question: is this issue present in the base? So does this gate,
-//     by linting the base revision of each changed file through stdin and
+//     by linting the base revision of each changed file as text and
 //     keeping the head diagnostics that have no counterpart there.
+//
+//   - WHAT IT READS. The report once came from `pnpm exec eslint` on stdout,
+//     where pnpm writes its own warnings; one began with a bracket, the parse
+//     failed, and the gate passed two functions Sonar scored 18 and 20 (#396).
+//     It lints through the API now, fails when a file yields no result, and
+//     lints the JavaScript files Sonar analyses and the eslint config ignores.
 //
 // Scoped to `sonar.sources=packages` minus its exclusion list, so `scripts/`,
 // `apps/` and generated output are out.
@@ -40,6 +46,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { changedLines } from './check-patch-coverage.mjs';
+import { readSonarProperties } from './check-sonar-rule-drift.mjs';
 
 /** Sonar analyses `packages` and nothing else. */
 const SONAR_SOURCE = /^packages\//;
@@ -78,26 +85,48 @@ export function isSonarScoped(file) {
 }
 
 /**
+ * Whether Sonar reads a file as a test, by `sonar.test.inclusions`.
+ *
+ * @param file - Repo-relative path.
+ * @param properties - `sonar-project.properties`, read.
+ * @returns True for a test file.
+ */
+export function isSonarTest(file, properties) {
+    return (properties['sonar.test.inclusions'] ?? '')
+        .split(',')
+        .map(glob => glob.trim())
+        .filter(Boolean)
+        .some(glob => path.matchesGlob(file, glob));
+}
+
+/**
  * Read an eslint JSON report into one record per complexity diagnostic.
  *
- * The report is located by its opening bracket rather than parsed from the
- * first byte: a warning about a config or an engine version is written to the
- * same stream ahead of it, and losing every diagnostic to that would make the
- * gate silently pass.
+ * The report is the line that parses as a JSON array, not whatever follows the
+ * first bracket: a warning is written to the same stream ahead of it, and one
+ * can open with a bracket of its own. `pnpm exec` printed `[WARN] The "$"
+ * version reference syntax ...` there once an override used that syntax, the
+ * parse from that bracket failed, and the gate passed every function on pull
+ * request #396 while Sonar reported two.
  *
  * @param output - Whatever eslint wrote.
  * @param file - Repo-relative path the report is about.
- * @returns One entry per diagnostic; empty when eslint produced no report.
+ * @returns One entry per diagnostic, or null when eslint produced no report,
+ *   which the caller must treat as a failure rather than as a clean file.
  */
 export function parseEslintDiagnostics(output, file) {
-    const start = output.indexOf('[');
-    if (start === -1) return [];
-    let report;
-    try {
-        report = JSON.parse(output.slice(start));
-    } catch {
-        return [];
-    }
+    const report = output
+        .split('\n')
+        .filter(line => line.startsWith('['))
+        .map(line => {
+            try {
+                return JSON.parse(line);
+            } catch {
+                return null;
+            }
+        })
+        .find(parsed => Array.isArray(parsed));
+    if (report === undefined) return null;
     return report.flatMap(result =>
         (result.messages ?? [])
             .filter(message => message.ruleId === RULE)
@@ -125,47 +154,81 @@ export function newDiagnostics(head, base) {
     return head.filter(diagnostic => !known.has(key(diagnostic)));
 }
 
+/** Sonar's JavaScript sources: the repository's eslint config ignores every one. */
+const JAVASCRIPT = /\.(?:[cm]?js|jsx)$/;
+
+/**
+ * Whether a file is JavaScript, which the repository's eslint config ignores
+ * and Sonar analyses (`javascript:` rules, as on `tsdown.config.mjs` in #396).
+ *
+ * @param file - Repo-relative path.
+ * @returns True for a `.js`, `.mjs`, `.cjs` or `.jsx` file.
+ */
+export function isJavaScript(file) {
+    return JAVASCRIPT.test(file);
+}
+
+/**
+ * A linter for Sonar's sources in both languages, running `rules` on them.
+ *
+ * Built on the API rather than `pnpm exec eslint`, so nothing else writes to
+ * the stream the report is read from, and given the JavaScript files the
+ * repository's config ignores: ignore patterns are off (the caller has scoped
+ * the files to Sonar's), and a block registers the plugins for JavaScript,
+ * which the config registers for TypeScript only.
+ *
+ * @param {Record<string, unknown>} rules - eslint rule settings, by name.
+ * @param {{ javascript?: Record<string, unknown> }} [options] - Rules for
+ *   JavaScript files instead, where they differ (a typed rule cannot run there).
+ * @returns {Promise<import('eslint').ESLint>} The linter.
+ */
+export async function sonarScopedLinter(rules, options = {}) {
+    // Each file is linted twice, the second time as its base revision's text,
+    // which is not on disk; a single-run program (what `CI=true` turns on)
+    // would type that text as the working tree's.
+    process.env.TSESTREE_SINGLE_RUN ??= 'false';
+    const { ESLint } = await import('eslint');
+    const sonarjsModule = await import('eslint-plugin-sonarjs');
+    const unicornModule = await import('eslint-plugin-unicorn');
+    return new ESLint({
+        ignore: false,
+        overrideConfig: [
+            { files: ['packages/**/*.ts', 'packages/**/*.tsx'], rules },
+            {
+                files: ['packages/**/*.js', 'packages/**/*.mjs', 'packages/**/*.cjs'],
+                languageOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+                plugins: {
+                    sonarjs: sonarjsModule.default ?? sonarjsModule,
+                    unicorn: unicornModule.default ?? unicornModule,
+                },
+                rules: options.javascript ?? rules,
+            },
+        ],
+    });
+}
+
 /**
  * Lint one source text as if it were the given file.
  *
- * Fed through stdin so the base revision never touches the working tree, and
+ * Linted as text so the base revision never touches the working tree, and
  * named so eslint's flat config resolves the same blocks it would for the real
  * file: the `sonarjs` plugin is registered per path, so an out-of-tree
  * temporary file would silently lint without it.
  *
- * @param file - Repo-relative path, used for config resolution.
- * @param source - The text to lint.
- * @returns One entry per complexity diagnostic.
+ * @param {import('eslint').ESLint} eslint - From {@link sonarScopedLinter}.
+ * @param {string} file - Repo-relative path, used for config resolution.
+ * @param {string} source - The text to lint.
+ * @returns {Promise<{ file: string, line: number, message: string }[]>} One
+ *   entry per complexity diagnostic.
  */
-function lintSource(file, source) {
-    let output;
-    try {
-        output = execFileSync(
-            'pnpm',
-            [
-                'exec',
-                'eslint',
-                '--stdin',
-                '--stdin-filename',
-                file,
-                '--format',
-                'json',
-                '--rule',
-                `${RULE}: ["error", ${LIMIT}]`,
-            ],
-            {
-                encoding: 'utf8',
-                input: source,
-                stdio: ['pipe', 'pipe', 'pipe'],
-                maxBuffer: 32 * 1024 * 1024,
-            },
-        );
-    } catch (error) {
-        // A non-zero exit IS the finding, and the report is on the streams the
-        // failure carries. Only a missing binary leaves both empty.
-        output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+async function lintSource(eslint, file, source) {
+    const [result] = await eslint.lintText(source, { filePath: file });
+    const fatal = (result?.messages ?? []).find(message => message.fatal);
+    if (result === undefined || fatal !== undefined) {
+        // Silence here once read as "within the limit"; it means nothing ran.
+        throw new Error(`eslint could not lint ${file}: ${fatal?.message ?? 'no result'}`);
     }
-    return parseEslintDiagnostics(output, file);
+    return parseEslintDiagnostics(JSON.stringify([result]), file) ?? [];
 }
 
 /**
@@ -208,17 +271,18 @@ function baseSource(base, file) {
  * The base revision is linted only when the head has something to report, so an
  * unremarkable file costs one eslint run rather than two.
  *
+ * @param eslint - From {@link sonarScopedLinter}.
  * @param file - Repo-relative path.
  * @param base - Revision to compare against.
  * @returns The diagnostics this change is answerable for.
  */
-function offendingIn(file, base) {
+async function offendingIn(eslint, file, base) {
     const head = readFileSync(file, 'utf8');
-    const found = withLineText(lintSource(file, head), head);
+    const found = withLineText(await lintSource(eslint, file, head), head);
     if (found.length === 0) return [];
     const before = baseSource(base, file);
     if (before === null) return found;
-    return newDiagnostics(found, withLineText(lintSource(file, before), before));
+    return newDiagnostics(found, withLineText(await lintSource(eslint, file, before), before));
 }
 
 /**
@@ -227,7 +291,7 @@ function offendingIn(file, base) {
  * @param base - Revision to compare against.
  * @returns Process exit code.
  */
-function main(base) {
+async function main(base) {
     let touched;
     try {
         touched = changedLines(base);
@@ -236,7 +300,12 @@ function main(base) {
         return 0;
     }
 
-    const files = [...touched.keys()].filter(file => isSonarScoped(file) && existsSync(file));
+    // The profile runs S3776 on main code only (scope MAIN), so a test file is
+    // not measured there and is not here.
+    const properties = readSonarProperties('sonar-project.properties');
+    const files = [...touched.keys()].filter(
+        file => isSonarScoped(file) && !isSonarTest(file, properties) && existsSync(file),
+    );
     if (files.length === 0) {
         console.log('[complexity] no changed files in Sonar scope — nothing to check.');
         return 0;
@@ -245,7 +314,9 @@ function main(base) {
     console.log(
         `[complexity] checking ${files.length} changed file(s) against a limit of ${LIMIT}...`,
     );
-    const offending = files.flatMap(file => offendingIn(file, base));
+    const eslint = await sonarScopedLinter({ [RULE]: ['error', LIMIT] });
+    const offending = [];
+    for (const file of files) offending.push(...(await offendingIn(eslint, file, base)));
 
     if (offending.length === 0) {
         console.log('[complexity] every function this change touches is within the limit.');
@@ -269,5 +340,10 @@ function main(base) {
 // running this one as a side effect of the import.
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
     const flag = process.argv.slice(2).find(argument => argument.startsWith('--base='));
-    process.exit(main(flag === undefined ? 'origin/main' : flag.slice('--base='.length)));
+    main(flag === undefined ? 'origin/main' : flag.slice('--base='.length))
+        .then(code => process.exit(code))
+        .catch(error => {
+            console.error(`[complexity] ${error.stack ?? error.message}`);
+            process.exit(1);
+        });
 }

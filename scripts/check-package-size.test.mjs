@@ -23,6 +23,7 @@ import {
     SIZE_BUDGETS,
     viteAppBundle,
 } from './check-package-size.mjs';
+import { jsLiteral } from './js-literal.mjs';
 
 /** Create a throwaway directory tree from a { relativePath: content } map.
  * @param {Record<string, string>} files relative path → file content
@@ -1299,7 +1300,7 @@ function reportingPackage(leak) {
             exports: { './report': './report.mjs' },
         }),
         [`${lib}/report.mjs`]:
-            `export const GONE_KEY = ${JSON.stringify(LEAK_DIAGNOSTIC)};\n` +
+            `export const GONE_KEY = ${jsLiteral(LEAK_DIAGNOSTIC)};\n` +
             'export function szReport({ diagnostic, args }) {\n' +
             '    console.warn(diagnostic.text.replace("{key}", args.key));\n' +
             '}\n',
@@ -1400,7 +1401,7 @@ test('production carries no template, and a development build of a site carries 
 });
 
 test('the leak gate reads the built bytes of shipped files and of the installed app', async () => {
-    const template = JSON.stringify(LEAK_DIAGNOSTIC.text);
+    const template = jsLiteral(LEAK_DIAGNOSTIC.text);
     const root = makeFixture({
         ...reportingPackage(false),
         'packages/thing/dist/cdn.js': `(()=>{window.t=${template}})();\n`,

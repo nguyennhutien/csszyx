@@ -9,9 +9,12 @@ import { describe, it } from 'node:test';
 import {
     bucketRules,
     isEnabled,
+    parseSonarProperties,
     profileRuleList,
     readSonarProperties,
     rspecId,
+    runsOn,
+    unlistedLocalIds,
 } from './check-sonar-rule-drift.mjs';
 
 describe('rspec identifiers', () => {
@@ -185,5 +188,37 @@ describe('the profile list the changed-line gate reads', () => {
             { key: 'typescript:S5976', rule: 'sonarjs/parameterized-tests', scope: 'ALL' },
             { key: 'typescript:S7503', rule: 'require-await', scope: 'MAIN' },
         ]);
+    });
+});
+
+describe('the JavaScript profile', () => {
+    it('keeps a typescript-eslint rule to TypeScript files, where its parser runs', () => {
+        assert.equal(runsOn('@typescript-eslint/no-floating-promises', 'js'), false);
+        assert.equal(runsOn('@typescript-eslint/no-floating-promises', 'ts'), true);
+        assert.equal(runsOn('no-await-in-loop', 'js'), true);
+        assert.equal(runsOn('sonarjs/cognitive-complexity', 'js'), true);
+    });
+});
+
+describe('a listing that undercounts the profile', () => {
+    it('asks about each local rule the search left out, and no other', () => {
+        // `javascript:S9382` was active and missing from the search on #396.
+        const listed = [{ key: 'javascript:S3776' }, { key: 'javascript:S1874' }];
+        assert.deepEqual(unlistedLocalIds(listed, new Set(['S9382', 'S3776', 'S7741'])), [
+            'S7741',
+            'S9382',
+        ]);
+    });
+});
+
+describe('a properties value continued over lines', () => {
+    it('reads every glob of a list written one per line', () => {
+        // Read a line at a time, `sonar.coverage.exclusions` was a backslash.
+        const text = 'a=1\nsonar.exclusions=\\\n  **/dist/**,\\\n  **/*.rs\nb=2\n';
+        assert.deepEqual(parseSonarProperties(text), {
+            a: '1',
+            'sonar.exclusions': '**/dist/**,**/*.rs',
+            b: '2',
+        });
     });
 });

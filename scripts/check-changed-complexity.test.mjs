@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+    isJavaScript,
     isSonarScoped,
     newDiagnostics,
     parseEslintDiagnostics,
@@ -61,8 +62,20 @@ describe('eslint report parsing', () => {
         assert.equal(parseEslintDiagnostics(noisy, 'packages/a/src/x.ts').length, 1);
     });
 
-    it('answers empty when eslint wrote no JSON at all', () => {
-        assert.deepEqual(parseEslintDiagnostics('command not found', 'packages/a/src/x.ts'), []);
+    it('survives a warning line that opens with a bracket, as pnpm writes one', () => {
+        // `pnpm exec` printed this on stdout ahead of every report once an
+        // override used the `$` syntax, and the gate parsed from its bracket,
+        // failed, and passed every function on pull request #396.
+        const noisy =
+            '[WARN] The "$" version reference syntax in overrides is deprecated\n' +
+            JSON.stringify(report);
+
+        assert.equal(parseEslintDiagnostics(noisy, 'packages/a/src/x.ts').length, 1);
+    });
+
+    it('answers null when eslint wrote no report at all, so the gate cannot pass on it', () => {
+        assert.equal(parseEslintDiagnostics('command not found', 'packages/a/src/x.ts'), null);
+        assert.equal(parseEslintDiagnostics('[WARN] no report', 'packages/a/src/x.ts'), null);
     });
 });
 
@@ -111,5 +124,17 @@ describe('sonar scope', () => {
 
     it('rejects the end-to-end package', () => {
         assert.equal(isSonarScoped('packages/e2e/tests/x.ts'), false);
+    });
+});
+
+describe('JavaScript, which the eslint config ignores and Sonar reads', () => {
+    it('is told apart from TypeScript by its extension', () => {
+        for (const file of ['a.js', 'a.mjs', 'a.cjs', 'a.jsx'])
+            assert.equal(isJavaScript(file), true);
+        for (const file of ['a.ts', 'a.tsx', 'a.mts']) assert.equal(isJavaScript(file), false);
+    });
+
+    it('stays in scope at a package root, where `tsdown.config.mjs` is', () => {
+        assert.equal(isSonarScoped('packages/csszyx/tsdown.config.mjs'), true);
     });
 });

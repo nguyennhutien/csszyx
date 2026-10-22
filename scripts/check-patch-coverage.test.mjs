@@ -7,6 +7,8 @@ import {
     parseDiffHunks,
     parseLcov,
     repoRelativeSource,
+    sonarCoverageExclusions,
+    untrackedAsAdded,
 } from './check-patch-coverage.mjs';
 
 describe('patch coverage', () => {
@@ -147,6 +149,18 @@ describe('patch coverage', () => {
         assert.ok(!isMeasurable('eslint.redos.config.mjs'));
     });
 
+    it('measures a module at a package root that Sonar measures', () => {
+        // `cdn-build.mjs` holds the options the CDN bundles are built from.
+        // The gate exempted every file at a package root, Sonar exempts only
+        // the build configurations, and four new lines of it arrived on #396
+        // as uncovered while this gate said every changed line was covered.
+        assert.ok(isMeasurable('packages/csszyx/cdn-build.mjs'));
+        // What `sonar.coverage.exclusions` leaves out, this leaves out.
+        assert.ok(!isMeasurable('packages/csszyx/tsdown.config.mjs'));
+        assert.ok(!isMeasurable('packages/vscode/esbuild.mjs'));
+        assert.ok(!isMeasurable('packages/cli/vitest.config.ts'));
+    });
+
     it('still measures the hand-written JavaScript a package ships', () => {
         // The exemption is for a config beside `src`, not for anything with a
         // `.js` extension: the native loader sits deeper and is real source.
@@ -216,5 +230,22 @@ describe('patch coverage', () => {
 
         assert.equal(parsed.base, 'HEAD~1');
         assert.deepEqual(parsed.reports, ['/tmp/one.info']);
+    });
+});
+
+describe("Sonar's coverage exclusions", () => {
+    it('joins both lists and leaves Rust to Codecov', () => {
+        const globs = sonarCoverageExclusions({
+            'sonar.exclusions': '**/dist/**,**/*.rs',
+            'sonar.coverage.exclusions': '**/tsdown.config.mjs, **/esbuild.mjs',
+        });
+        assert.deepEqual(globs, ['**/dist/**', '**/tsdown.config.mjs', '**/esbuild.mjs']);
+    });
+});
+
+describe('a file nobody has added to git yet', () => {
+    it('counts every line as added, as the diff will once it is committed', () => {
+        const added = untrackedAsAdded(['packages/a/src/new.ts'], () => 'a\nb\nc');
+        assert.deepEqual([...added.get('packages/a/src/new.ts')], [1, 2, 3]);
     });
 });

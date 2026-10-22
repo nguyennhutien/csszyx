@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { jsLiteral } from '../../../scripts/js-literal.mjs';
 import { SZ_NODE_DIAGNOSTIC_WORDS } from '../src/diagnostic-node-words.generated.js';
 import { PLACEHOLDER } from '../src/diagnostic-placeholder.js';
 import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
@@ -83,7 +84,7 @@ const ENGINES: ReadonlyArray<readonly [string, Unrendered]> = [
  *   for a form no literal here drives, which fails that row.
  */
 function sourceOf(id: string, args: Record<string, string>): string | undefined {
-    const key = JSON.stringify(args.key);
+    const key = jsLiteral(args.key);
     switch (`${id}/${args.form}`) {
         case 'removed-key/removed':
             return `{ ${key}: 'x' }`;
@@ -94,7 +95,7 @@ function sourceOf(id: string, args: Record<string, string>): string | undefined 
         case 'removed-key/runtime-alias':
             return `{ ${key}: runtimeValue }`;
         case 'moved-value/value':
-            return `{ ${key}: ${JSON.stringify(args.value)} }`;
+            return `{ ${key}: ${jsLiteral(args.value)} }`;
         default:
             return undefined;
     }

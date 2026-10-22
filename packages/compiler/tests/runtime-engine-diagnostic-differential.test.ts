@@ -21,6 +21,7 @@
  * silent on both sides and every case would pass empty.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { jsLiteral } from '../../../scripts/js-literal.mjs';
 
 import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
 import { isRustTransformAvailable } from '../src/engine.js';
@@ -209,10 +210,7 @@ function runtimeLines(sz: SzObject): string[] {
  * @returns The messages.
  */
 function engineLines(engine: Unrendered, sz: SzObject): string[] {
-    const result = engine(
-        `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
-        '/p/src/A.jsx',
-    );
+    const result = engine(`export const A = () => <p sz={${jsLiteral(sz)}} />;`, '/p/src/A.jsx');
     return (result.issues as SzDiagnosticIssue[]).map(issue => renderEngineDiagnostic(issue, ''));
 }
 
@@ -314,7 +312,7 @@ describe('runtime and engine diagnostics', () => {
                 expect(engineLines(engine, sz)).toEqual([]);
                 expect(transform(sz).className).toBe(className);
                 const built = engine(
-                    `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
+                    `export const A = () => <p sz={${jsLiteral(sz)}} />;`,
                     '/p/src/A.jsx',
                 );
                 expect(built.code).toContain(`"${className}"`);
