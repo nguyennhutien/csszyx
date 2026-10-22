@@ -61,10 +61,11 @@ describe('judge', () => {
     });
 
     it('budgets the diagnostic path as a difference, so a cheaper control does not fail it', () => {
-        // Measured: 88e1b319 against the baseline, the control fell by 14 and
-        // the diagnostic path stayed within 2 scavenges.
-        assert.equal(judge({ clean: 111, eager: 262, lane: 164 }, limits).ok, true);
-        assert.equal(judge({ clean: 80, eager: 231, lane: 133 }, limits).ok, true);
+        // The measured baseline, and the same differences over a control 14
+        // lower: 88e1b319 against the first baseline was that shape, the
+        // control falling by 14 and the diagnostic path staying put.
+        assert.equal(judge({ clean: 94, eager: 230, lane: 124 }, limits).ok, true);
+        assert.equal(judge({ clean: 80, eager: 216, lane: 110 }, limits).ok, true);
     });
 });
 

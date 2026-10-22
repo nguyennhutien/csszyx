@@ -37,7 +37,14 @@
 //   v0.17.2                                      64
 //   88e1b319 (merge lists recorded twice,
 //             positions resolved eagerly)       125   274 +149   177 +52
-//   this gate's baseline                        111   262 +151   164 +53
+//   this gate's first baseline                  111   262 +151   164 +53
+//   spans as one length-prefixed text per file   94   230 +136   124 +30
+//
+// The last row is the current baseline. The spans cross the napi boundary as
+// one string per file, read by a cursor that builds the located entries
+// directly, reuses a string it has already read for a repeated key or class,
+// and parses every issue's args with one `JSON.parse`; the engine also
+// stopped copying each object's keys and classes twice while recording it.
 //
 // The clean ceiling is the baseline plus 3%, so a change that makes every
 // transform allocate more fails here even when no diagnostic is involved; the
@@ -61,10 +68,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** The most scavenges the clean control may reach: what every transform allocates. */
-export const CLEAN_SCAVENGE_CEILING = 114;
+export const CLEAN_SCAVENGE_CEILING = 97;
 
 /** The most scavenges each workload may run beyond the clean control. */
-export const SCAVENGE_DELTA_BUDGETS = { eager: 165, lane: 60 };
+export const SCAVENGE_DELTA_BUDGETS = { eager: 150, lane: 34 };
 
 /** V8 flags that make the scavenge count repeat: a fixed 1 MB nursery, one thread. */
 export const V8_FLAGS = [
