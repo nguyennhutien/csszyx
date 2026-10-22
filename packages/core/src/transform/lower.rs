@@ -3516,6 +3516,119 @@ mod tests {
         );
     }
 
+    /// The other half of the colour-opacity guard: the object under a prefixed
+    /// key that IS the `{ color, op }` shape is one declaration, so a member
+    /// that would read as a dead value outside it is never reported. Each
+    /// collector that carries the guard is held to it, so dropping the guard
+    /// from any one of them fails here.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collectors_do_not_walk_the_members_of_a_colour_object() {
+        let colour = |member: StaticSzProperty| StaticSzObject {
+            properties: vec![property(
+                "bg",
+                object(vec![
+                    property("color", StaticSzValue::String("red-500".to_string())),
+                    member,
+                ]),
+            )],
+        };
+
+        let mut steps = Vec::new();
+        super::collect_dead_spacing_steps(
+            &colour(property("p", StaticSzValue::Number(1.4))),
+            &mut steps,
+        );
+        assert!(steps.is_empty(), "spacing steps: {steps:?}");
+
+        let mut enums = Vec::new();
+        collect_dead_enum_values(
+            &colour(property(
+                "position",
+                StaticSzValue::String("bogus".to_string()),
+            )),
+            &mut enums,
+        );
+        assert!(enums.is_empty(), "closed enums: {enums:?}");
+
+        let mut styles = Vec::new();
+        super::collect_border_side_styles(
+            &colour(property(
+                "borderB",
+                StaticSzValue::String("none".to_string()),
+            )),
+            &mut styles,
+        );
+        assert!(styles.is_empty(), "border side styles: {styles:?}");
+    }
+
+    /// The objects `for_each_sz_object_in` hands its visitor under `key`, each
+    /// named by its keys, so a case reads as the bodies the lowering reaches.
+    fn sz_objects_under(key: &str, nested: StaticSzValue) -> Vec<String> {
+        let StaticSzValue::Object(nested) = nested else {
+            panic!("a case nests an object");
+        };
+        let mut visited = Vec::new();
+        super::for_each_sz_object_in(key, &nested, &mut |object| {
+            visited.push(
+                object
+                    .properties
+                    .iter()
+                    .map(|property| property.key.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
+        });
+        visited
+    }
+
+    /// Every dispatch arm, pinned by the bodies it reaches: an arm that fell
+    /// through to the variant default would hand over the parameter object
+    /// itself, whose keys are names, never sz keys.
+    #[test]
+    fn for_each_sz_object_in_reaches_the_bodies_the_lowering_lowers() {
+        let body = || object(vec![property("p", StaticSzValue::Number(4.0))]);
+
+        // Declaration values, not sz keys: nothing to visit.
+        assert!(sz_objects_under("css", object(vec![property("padding", body())])).is_empty());
+        assert!(sz_objects_under("bgImg", object(vec![property("url", body())])).is_empty());
+
+        // A plain variant is itself the body.
+        assert_eq!(sz_objects_under("hover", body()), ["p"]);
+
+        // `not` names a condition per body; `supports` adds a level.
+        assert_eq!(
+            sz_objects_under(
+                "not",
+                object(vec![
+                    property("hover", body()),
+                    property("supports", object(vec![property("display:grid", body())])),
+                ]),
+            ),
+            ["p", "p"],
+        );
+
+        // `group` and `peer`: a selector, a known variant, a key known only by
+        // its variant prefix (`screenPortrait` is `portrait`), `has`, and a
+        // named scope whose states hold the bodies.
+        for key in ["group", "peer"] {
+            assert_eq!(
+                sz_objects_under(
+                    key,
+                    object(vec![
+                        property(".item", body()),
+                        property("hover", body()),
+                        property("screenPortrait", body()),
+                        property("has", object(vec![property(":checked", body())])),
+                        property("card", object(vec![property("focus", body())])),
+                    ]),
+                ),
+                ["p", "p", "p", "p", "p"],
+                "{key}"
+            );
+        }
+    }
+
     #[cfg(feature = "native-engine")]
     #[test]
     fn collect_owned_key_variants_does_not_descend_a_mask_slot() {
