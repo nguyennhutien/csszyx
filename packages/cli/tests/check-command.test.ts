@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,7 +59,10 @@ describe('csszyx check', () => {
 
         await check({ cwd });
 
-        const reported = log.mock.calls.map(call => call.join(' ')).join('\n');
+        // Without colour: a CI runner sets `CI`, and picocolors colours the box.
+        const reported = stripVTControlCharacters(
+            log.mock.calls.map(call => call.join(' ')).join('\n'),
+        );
         expect(reported).toMatch(/│ {2}csszyx check {2,}│/);
         expect(reported).toContain(
             'Scope: static `sz` props and `szv()`/`szr()` catalogs; keys built from runtime data (an array, a spread, a `dynamic()` value) cannot be checked.',

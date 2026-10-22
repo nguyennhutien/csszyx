@@ -576,7 +576,7 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
     it('prints each removal at its file and line, with the key it was written as', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd: tailwindProject(files), rule: ['merge-covered-key'] });
-        const printed = log.mock.calls.flat().join('\n');
+        const printed = stripVTControlCharacters(log.mock.calls.flat().join('\n'));
         expect(printed).toContain(
             'Classes the build removes because an `sz` class on the same element covers them:\n',
         );

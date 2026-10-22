@@ -52,9 +52,11 @@ function spawnWorker(
     let readyResolved = false;
     let acquiredResolved = false;
     let resolveReady: () => void = () => {};
+    let rejectReady: (reason: Error) => void = () => {};
     let resolveAcquired: (value: boolean) => void = () => {};
-    const ready = new Promise<void>(resolve => {
+    const ready = new Promise<void>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
     });
     const acquired = new Promise<boolean>(resolve => {
         resolveAcquired = resolve;
@@ -82,6 +84,15 @@ function spawnWorker(
         acquired,
         result: new Promise(resolve => {
             child.on('close', code => {
+                // A worker that dies before it is ready (a module it imports
+                // will not load) never prints `ready`: fail with what it said
+                // rather than wait out the test timeout on every retry.
+                if (!readyResolved) {
+                    readyResolved = true;
+                    rejectReady(
+                        new Error(`lock worker exited ${code} before it was ready:\n${stderr}`),
+                    );
+                }
                 if (!acquiredResolved) {
                     acquiredResolved = true;
                     resolveAcquired(false);

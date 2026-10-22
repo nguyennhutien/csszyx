@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +27,20 @@ afterEach(() => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+/**
+ * Collects every `console.warn` line, as a reader sees it without colour: a
+ * CI runner sets `CI`, and picocolors then colours the icon a line starts with.
+ *
+ * @returns The warnings printed so far, appended to as the watch runs.
+ */
+function captureWarnings(): string[] {
+    const warnings: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(stripVTControlCharacters(args.map(String).join(' ')));
+    });
+    return warnings;
+}
 
 function tempRoot(): string {
     const dir = mkdtempSync(join(tmpdir(), 'csszyx-cli-watch-'));
@@ -171,10 +186,7 @@ describe('csszyx next-watch command', () => {
         writeFileSync(join(root, 'legacy/broken.css'), '@import "./gone.css";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
         const facts = join(root, '.csszyx/cache/stylesheet-facts.json');
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
 
         const events: string[] = [];
         const session = await startNextWatch(
@@ -281,10 +293,7 @@ describe('csszyx next-watch command', () => {
             "export default { diagnostics: { rules: { 'dead-class': 'off' } } };",
         );
         const state = join(root, '.csszyx/diagnostic-policy.json');
-        const said: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            said.push(args.map(String).join(' '));
-        });
+        const said = captureWarnings();
         const events: string[] = [];
         const session = await startNextWatch(
             { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
@@ -476,10 +485,7 @@ describe('csszyx next-watch command', () => {
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
         // A directory where the file goes: the rename that writes it fails.
         mkdirSync(join(root, '.csszyx/merge-registration.mjs/keep'), { recursive: true });
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
         const session = await startNextWatch(
             { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
             { watch: recordingWatch([]) },
@@ -499,10 +505,7 @@ describe('csszyx next-watch command', () => {
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
 
         const events: string[] = [];
         const session = await startNextWatch(
@@ -541,10 +544,7 @@ describe('csszyx next-watch command', () => {
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
 
         const events: string[] = [];
         const session = await startNextWatch(
@@ -629,9 +629,11 @@ describe('csszyx next-watch command', () => {
     }, 30_000);
 
     it('fails startup when no source files match', async () => {
-        // Resolved like the other cases: the message names the root as
-        // given, and macOS hands out a `/var` temp path that is a link.
-        const root = realpathSync(tempRoot());
+        // Resolved the way the watch resolves a root: macOS hands out a `/var`
+        // temp path that is a link, and Windows an 8.3 one (`RUNNER~1`) that
+        // only the native resolver expands, and the message names the root
+        // the watch settled on.
+        const root = realpathSync.native(tempRoot());
 
         await expect(
             startNextWatch({
