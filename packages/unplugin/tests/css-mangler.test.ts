@@ -13,7 +13,7 @@
  * - Edge cases and stress tests
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { escapeCSSClassName, mangleCSSSync, unescapeTailwindClass } from '../src/css-mangler';
 
@@ -546,5 +546,28 @@ describe('Additional Coverage', () => {
         const css = '.custom-class { color: red; }';
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.unmangledClasses).toContain('custom-class');
+    });
+});
+
+// A rule the mangler cannot parse keeps its original class names while the
+// markup is mangled, so it silently stops matching: said without `debug`.
+describe('a selector the mangler cannot parse', () => {
+    it('warns with the registry line and keeps the rule', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const result = mangleCSSSync('.p-4:: { color: red; }', testMangleMap);
+            expect(result.css).toBe('.p-4:: { color: red; }');
+            expect(warn.mock.calls).toEqual([
+                [
+                    '[csszyx] mangle-selector-unparsable:\n' +
+                        '  The class mangler could not parse the selector `.p-4::`, so this rule keeps the original class names, which the mangled markup no longer carries.\n' +
+                        '  help: add the classes of this selector to `production.manglePreserve`, which keeps them unmangled in the markup and the CSS; if your CSS wrote the selector, fix its syntax.\n' +
+                        '  note: the parser reported: Expected a pseudo-class or pseudo-element.\n' +
+                        '  docs: https://csszyx.com/e/mangle-selector-unparsable',
+                ],
+            ]);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });

@@ -297,7 +297,7 @@ describe('a vendored package beside the app root', () => {
         expect(js).toContain('__szvPick1(');
         expect(js).toContain('@csszyx/runtime/core');
         expect(js).not.toContain('flexContainerSz({');
-        expect(warnings.join('\n')).not.toContain('skipped by ignore rules');
+        expect(warnings.join('\n')).not.toContain('compile-sources-skipped');
     });
 
     it('safelists the package classes, so source(none) scoping is safe', async () => {
@@ -325,7 +325,7 @@ describe('a vendored package beside the app root', () => {
         // or `sz:`, so the old marker set never saw it.
         const logged = warnings.join('\n');
         expect(logged).toContain('flexSzv.ts');
-        expect(logged).toContain('cross-module registry');
+        expect(logged).toContain('may export `szv` factories');
         expect(logged).toContain('compileSources');
     });
 });

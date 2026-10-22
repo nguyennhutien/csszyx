@@ -24,8 +24,8 @@ describe('suppressedAdvisoryMessage', () => {
         expect(suppressedAdvisoryMessage(3)).toBe(
             '[csszyx] diagnostics-held:\n' +
                 '  This build held back 3 finding(s) at `info` and listed none of them.\n' +
-                '  help: run a development build to see each one with its file and position.\n' +
-                '  note: they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`.\n' +
+                '  help: run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.\n' +
+                '  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.\n' +
                 '  docs: https://csszyx.com/e/diagnostics-held',
         );
     });
@@ -34,12 +34,13 @@ describe('suppressedAdvisoryMessage', () => {
     // three recommended `info` kinds are not sz fallbacks at all: a className whose precedence over
     // `sz` is unstated, and a CSS-variable hoist the planner declined. Naming
     // the count after one of its three members told a reader a project with no
-    // fallback at all that it had some.
+    // fallback at all that it had some, so the note names the whole level and
+    // gives the fallback only as an example.
     it('names every kind it counts, not only the fallback', () => {
         const message = suppressedAdvisoryMessage(3) ?? '';
-        expect(message).toContain('fallback at an sz prop');
-        expect(message).toContain('precedence over sz is unstated');
-        expect(message).toContain('hoist the planner declined');
+        expect(message).toContain(
+            '  note: they are every finding at `info`: by default the ones csszyx handles itself, such as ',
+        );
         expect(message).not.toContain('advisory sz fallback');
     });
 

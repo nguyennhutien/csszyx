@@ -120,8 +120,11 @@ keeps the levels of `.csszyx/diagnostic-policy.json`, or `recommended` without
 that file; `{lane}` is `jest` or `the Turbopack loader`:
 
 ```text
-[csszyx] {lane} could not read the levels {config} sets: {reason}.
-  note: this worker reports at the levels in .csszyx/diagnostic-policy.json, or the recommended levels without that file.
+[csszyx] config-unloadable: {config}
+  This file could not be loaded in {lane}, so the levels in `.csszyx/diagnostic-policy.json` apply, or the `recommended` levels when that file does not exist.
+  help: make the file load in plain Node; `csszyx next prebuild` and `csszyx next watch` write `.csszyx/diagnostic-policy.json` for {lane}.
+  note: the loader reported: {reason}.
+  docs: https://csszyx.com/e/config-unloadable
 ```
 
 `{reason}` is `it did not finish loading within 30 s` for a config that never
@@ -143,12 +146,13 @@ on a dev server, in one burst of compiles — the rest are counted and one line
 closes them:
 
 ```text
-[csszyx] {id}: +{count} more not listed
+[csszyx] diagnostics-capped:
+  This build left {count} more `{id}` finding(s) unlisted.
   help: `csszyx check --rule {id}` lists every one.
 ```
 
-The line is headed by the capped id itself, so a search for `[csszyx] unknown-key:`
-finds the count beside the ten it lists ([`diagnostics-capped`](https://csszyx.com/e/diagnostics-capped)).
+The sentence names the capped id, so a search for `unknown-key` finds the count
+beside the ten it lists ([`diagnostics-capped`](https://csszyx.com/e/diagnostics-capped)).
 
 A build prints it at its end; a dev server, the loader and jest print it once
 the burst of compiles that produced them has paused for a second, or as the
@@ -267,7 +271,7 @@ barrel is followed and does not report. The other cause is
 
 | Message | Class | Fix |
 | --- | --- | --- |
-| ``[csszyx] unresolvable-spread: This `sz` object spreads a value the build cannot read, so the object falls back to the runtime and may render no styles in production.`` — help: ``use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.`` | missing output | Use the array form. |
+| ``[csszyx] unresolvable-spread: This `sz` object spreads a value the build cannot read, so the object falls back to the runtime.`` — help: ``use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.`` | missing output | Use the array form. |
 | ``[csszyx] fallback-nudge: This `sz` array element is an object literal with a runtime value, so the whole element is resolved at runtime.`` — help: ``use finite literal ternary branches where you can, or move the runtime values to `dynamic()`.`` — note: `its classes are still collected, best-effort.` | nudge | Optional. Prefer literal ternary branches. |
 | ``[csszyx] style-override: This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.`` — help: ``move the spread `style` to an explicit `style` prop, so csszyx merges both values.`` | nudge | Pass `style` explicitly so both values merge. |
 | ``[csszyx] sz-recover: `szRecover` takes only a string literal.`` — help: ``write `szRecover="csr"` or `szRecover="dev-only"`.`` — note: ``no `data-sz-recovery-token` is written for this element.`` | nudge | Use a literal. |
@@ -275,7 +279,7 @@ barrel is followed and does not report. The other cause is
 | ``[csszyx] class-precedence: `sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.`` — help: ``state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win.`` | nudge | State the order in one `sz` array. Either rewrite silences it. |
 | ``[csszyx] spread-split-class: `<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.`` — help: ``write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.`` — note: `in Vue JSX every class is merged, so every side applies there.` | missing output | `{earlier}` names what the sides before the last hold: a class name's value, or the classes of an `sz`. `{example}` is built from the element: where to put the array (after the spread, named when it is a plain name) and what goes in it — its class values, the spread's `className` or `class` as you wrote it, and your `sz` objects, such as ``after `{...rest}`, in the order that should win: `sz={['card', rest.className, { … }]}` ``. A spread may carry a class name of its own, so csszyx merges class names and `sz` only on the same side of one; each side becomes one class name where its `sz` stood, and the platform decides between them. Write everything in one `sz` array after the spread, in the order that should win. Vue JSX merges every `class` instead, so there all apply. In a Svelte component the two `class` attributes stop the build with Svelte's `attribute_duplicate: Attributes need to be unique`; the Svelte adapter compiles only an `sz` object, so there write `{...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}` — class and `sz` on the same side after the spread. |
 | ``[csszyx] duplicate-sz: `<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.`` — help: ``fold them into one `sz` array, so the order is written down.`` | nudge | Write one `sz` array. Nothing was dropped: every `sz` compiled, later wins per property, an authored `className` stays first. |
-| `[csszyx] merge-classifier-unavailable: The merge table is in format {tableFormat}, and this engine reads format {mergeTableFormat}, so no sz key was merged with a later key that covers it.` — help: ``install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.`` — note: ``every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.`` | correctness | The plugin and the engine come from different csszyx releases, or `.csszyx/merge-table.json` was truncated or hand-edited. Align the `@csszyx/*` versions; under Turbopack, write the table again with `csszyx next prebuild`. |
+| `[csszyx] merge-classifier-unavailable: The merge table is in format {tableFormat}, and this csszyx version reads format {mergeTableFormat}, so the build removes no class that a later sz key covers.` — help: ``install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.`` — note: ``every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.`` | correctness | The plugin and the engine come from different csszyx releases, or `.csszyx/merge-table.json` was truncated or hand-edited. Align the `@csszyx/*` versions; under Turbopack, write the table again with `csszyx next prebuild`. |
 
 `correctness` is a third class beside the two above: every class is present, but
 they are not the ones a correct build emits. Like missing output it prints in
@@ -299,8 +303,8 @@ finding, not only the fallbacks. That includes a finding your config lowered to
 ```text
 [csszyx] diagnostics-held:
   This build held back {count} finding(s) at `info` and listed none of them.
-  help: run a development build to see each one with its file and position.
-  note: they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`.
+  help: run a development build with `quiet` unset to see each one with its file and position, or `csszyx check` to list the sz findings among them.
+  note: they are every finding at `info`: by default the ones csszyx handles itself, such as an `sz` prop that falls back to the runtime or a class an `sz` class on the same element covers, and any finding `csszyx.config` sets to `info`.
   docs: https://csszyx.com/e/diagnostics-held
 ```
 
@@ -323,8 +327,12 @@ appears in it. Read sources when you need the real number.
 These come from the shared lowering core, so the **same message** appears
 whether the value was lowered at build time or by the runtime.
 
-`{ at LOC}` below is an optional ` at src/Card.tsx:12` suffix — present when a
-build engine knew the location, absent on the runtime path.
+Each line is headed by its code, and the rows below quote the runtime's form:
+with no location, the sentence follows the code on the first line. A build
+engine that knew the location names it after the code, as the engine's own
+messages do, and puts the sentence on the next line.
+In production the runtime prints the code, its args as JSON and the code's page
+instead of the sentence: `[csszyx] removed-key: {"form":"removed","key":"maskFrom"} https://csszyx.com/e/removed-key`.
 
 <Aside type="caution" title="Most of these are terminal-only">
 The main gate is: development **and** not a browser. That means they appear in
@@ -332,8 +340,9 @@ your dev-server terminal (build and SSR), not in the browser console. Set
 `CSSZYX_QUIET_SZ_WARNINGS=1` to mute them, or run `npx @csszyx/cli check` for a
 whole-project pass. The rows marked **browser too** use only the `NODE_ENV`
 half of that gate and do reach the console. The rows marked **every mode** say
-a class was not emitted at all, so the runtime prints them in production and in
-the browser too, once each; `CSSZYX_QUIET_SZ_WARNINGS=1` still mutes them. Every
+a class was not emitted at all, so the runtime prints them in production (as the
+code and its args) and in the browser too, once each;
+`CSSZYX_QUIET_SZ_WARNINGS=1` still mutes them. Every
 row below says a class is dead, so the bundler plugin prints the whole family in
 a production build as well as a development one; only `quiet: true`, or the
 id set to `off` in `csszyx.config`, silences the build's copy.
@@ -357,30 +366,35 @@ of unresolved objects is not supported yet.
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] Unknown property "{key}" in sz prop{ at LOC}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.` | The class *is* in the DOM — grep for it. |
-| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. **every mode.** |
-| ``[csszyx] removed-key: `{key}` was removed, and it holds a runtime value, so nothing is emitted for it.`` — help: ``write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.`` | Build only. An alias of a stand-alone key (`touchAction: c`) whose value the build cannot read: some values stand alone, others moved to group keys. A literal branch that moved is named as a moved value instead, and an alias whose every literal stands alone gets the canonical-key row. |
-| `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
-| `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
-| `[csszyx] "{rawKey}" boolean sugar was removed{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **every mode.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |
-| `[csszyx] "{rawKey}" was replaced{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | A `font-variant-numeric` flag that was canonical until 0.18.0 (`tabularNums`, `liningNums`, …). **every mode**, like the row above. |
-| `[csszyx] "{rawKey}" was replaced{ at LOC}. Use { {key}: true } instead, or run ``csszyx migrate``.` | `ordinal` and `slashedZero`, now `numOrdinal` and `numSlashedZero`. **every mode**, like the rows above. |
+| ``[csszyx] unknown-key: `{key}` is not an sz property.`` — help: ``write `{suggestion}` if you meant it; for a custom utility, define it with Tailwind's `@utility`.`` — note: ``the class is still emitted, and it styles nothing unless Tailwind serves that utility.`` | The class *is* in the DOM — grep for it. With no known key one edit away, the help starts `check the spelling`. |
+| ``[csszyx] removed-key: `{key}` was removed, and nothing is emitted for it.`` — help: ``{note}.`` | The removed key emits no class. Apply the replacement shape from the note. **every mode.** |
+| ``[csszyx] removed-key: `{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.`` — help: ``write the values {canonicalAllowed} on `{canonical}`, and any other value on its own key: {groups}.`` | Build only. An alias of a stand-alone key (`touchAction: c`) whose value the build cannot read: some values stand alone, others moved to group keys. A literal branch that moved is named as a moved value instead, and an alias whose every literal stands alone gets the canonical-key row. |
+| ``[csszyx] canonical-key: `{key}` is an alias of `{canonical}`, and nothing is emitted for it.`` — help: ``write `{canonical}`.`` | The alias emits no class; rename it to the canonical key. |
+| ``[csszyx] numeric-key: `sz` received a numeric key `{key}`, and its value is ignored.`` — help: ``pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.`` | You probably passed an array to `sz={{ … }}`. |
+| ``[csszyx] removed-key: The boolean shorthand `{rawKey}` was removed, and nothing is emitted for it.`` — help: ``write `{ {key}: '{value}' }` instead, or run `csszyx migrate`.`` | **every mode.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |
+| ``[csszyx] removed-key: `{rawKey}` was replaced, and nothing is emitted for it.`` — help: ``write `{ {key}: '{value}' }` instead, or run `csszyx migrate`.`` | A `font-variant-numeric` flag that was canonical until 0.18.0 (`tabularNums`, `liningNums`, …). **every mode**, like the row above. |
+| ``[csszyx] removed-key: `{rawKey}` was replaced, and nothing is emitted for it.`` — help: ``write `{ {key}: true }` instead, or run `csszyx migrate`.`` | `ordinal` and `slashedZero`, now `numOrdinal` and `numSlashedZero`. **every mode**, like the rows above. |
 
-When a warning has no source location, csszyx appends a traceability tail so
-you can find it:
-
-```text
-  sz object was {"p":4,"bgg":"red-500"}  ·  from at Card (/src/Card.tsx:8:5)
-```
-
-And once per process, a pointer at the whole-project scan:
+When a key warning has no source location, csszyx names the object and the
+caller in its place, after the code, so you can find it:
 
 ```text
-[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key issues at once (dev warnings only surface files as you open them).
+[csszyx] unknown-key: {place}
+  `bgg` is not an sz property.
 ```
 
-The parenthetical is `this warning has no source location — the scan reports
-which file and key triggered it` when the warning was unlocated.
+where `{place}` is the object's shape and the first frame of your code:
+
+```text
+sz object was {"p":4,"bgg":"red-500"}  ·  from at Card (/src/Card.tsx:8:5)
+```
+
+And once per process, after the first one, a pointer at the whole-project scan:
+
+```text
+[csszyx] dev-warnings-partial: The `sz` key warning above has no source location, so it does not name the file that triggered it.
+  help: run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line.
+```
 
 Unknown custom keys and removed keys deliberately have different outcomes. A
 brand-new key can still target a project-defined Tailwind `@utility`, so csszyx
@@ -393,7 +407,8 @@ so server-side rendering does not repeat them on every request. After 512
 distinct keys they stop, once, with:
 
 ```text
-[csszyx] {count} distinct unknown sz keys have been reported; further ones are suppressed for this process. help: sz keys built from data are the usual cause — look above for one key repeating with different names.
+[csszyx] diagnostics-capped: This process has reported {count} distinct unknown sz keys, so further ones are suppressed.
+  help: look above for one key repeating with different names; sz keys built from data are the usual cause.
 ```
 
 An object whose keys come from data — one per record — would otherwise make
@@ -404,22 +419,23 @@ look at. Production is unaffected.
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] "{key}: {value}"{ at LOC}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value ("{value}rem").` | |
-| `` [csszyx] {file}:{line}:{column}: `{class}` (sz key `{key}`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `{utility}`; drop the sign, or define it with @utility (unsigned-value). `` + ``help: `csszyx check --rule unsigned-value` lists every one.`` | Kind `unsigned-value` of the [dead-class](#an-sz-class-produces-no-css) report, `error` under both presets, printed where that report is and never failing the build. The class is written the way Tailwind spells a negative (`{ p: -2 }` → `-p-2`, `{ hover: { p: -2 } }` → `hover:-p-2`), and the project's own Tailwind is asked whether it serves it: stock Tailwind has no negative padding or width, and a project that defines `@utility -p-*` serves `-p-2` and hears nothing. Said only when the class without the sign is served (`hover:p-2` for `hover:-p-2`): `{ p: '-medium' }` → `-p-medium` is dead unsigned too, and is a plain `dead-class`. Said once, instead of a `dead-class` line. A length keeps its sign inside the bracket (`{ mt: '-10px' }` → `mt-[-10px]`) and is not this finding. |
-| `[csszyx] "{key}" is a property, not a variant, but received an object { … }{ at LOC}. This compiles to "{key}:*" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use { color: '...', op: ... }.` | The classic `p: { bg: … }` mistake. |
-| `[csszyx] {rawKey}: '{value}' is a CSS value — use the short form '{hint}' (e.g. { {rawKey}: '{hint}' }). '{rawKey}-{value}' has no Tailwind utility and renders nothing.` | **browser too**. `flex-start → start`, `space-between → between`, … |
-| `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity modifier will not apply — the "{color}" theme token resolves to the bare comma triplet "{value}", which color-mix() cannot dim. Wrap the variable, e.g. --color-{color}: rgb(var(--your-triplet)).` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
-| `[csszyx] "weight: '{value}'"{ at LOC}: Tailwind spells a numeric font weight through --font-weight-*, so "font-{value}" generates no CSS. Write weight: {value} as a number, which brackets to "font-[{value}]".` | A weight written as a string. The NUMBER form brackets for this reason. |
-| `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
-| `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
-| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {values}.` | `display`, `position`, `visibility`, `isolation` and the `num*`, `touch*` and `contain*` keys. See below. |
-| `[csszyx] "{key}: {value}" moved to { {newKey}: {newValue} }{ at LOC}. Run ``csszyx migrate`` to rewrite it.` | A `touch` value that became its group's own key (`touch: 'pan-x'` is `touchPanX: 'x'`), also when written on the old alias (`touchAction: 'pan-x'`). **every mode.** The class is not emitted. The build names it wherever it is written: in a ternary, under any variant, `group`, `peer`, `data`, `aria`, `has` and `not` included, and in a conditional object branch. |
-| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" it emits belongs to { {groupKey}: {groupValue} }: write that key, so it combines with the other groups instead of resetting them. {key} takes one of: {values}.` | A stand-alone key holding a value of one of its groups (`contain: 'paint'`, `nums: 'tabular'`). The class it names styles, but as a stand-alone value it resets the group keys written before it. See [one key per group](#one-key-per-group). |
-| `[csszyx] "{key}: {value}"{ at LOC} comes before "{group}" in one sz object, so {group} replaces it and the {key} value styles nothing. A spread override ({ ...base, {key}: '{value}' }) leaves this order; to override, layer it: sz={[base, { {key}: '{value}' }]}.` | **every mode.** See [one key per group](#one-key-per-group). |
-| ``[csszyx] runtime-family-conflict: `{key}` takes a runtime value beside `{other}` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`` — help: ``layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.`` | Build only. See [one key per group](#one-key-per-group). |
-| `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.` | The class *is* emitted. Only `--*` and `container` are reported — see below. |
+| ``[csszyx] off-scale-value: `{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.`` — help: ``use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.`` | |
+| `[csszyx] unsigned-value: {file}:{line}:{column}`, then `` `{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.`` — help: ``drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.`` — note: ``the class is still emitted, and it styles nothing.`` | Kind `unsigned-value` of the [dead-class](#an-sz-class-produces-no-css) report, `error` under both presets, printed where that report is and never failing the build. The class is written the way Tailwind spells a negative (`{ p: -2 }` → `-p-2`, `{ hover: { p: -2 } }` → `hover:-p-2`), and the project's own Tailwind is asked whether it serves it: stock Tailwind has no negative padding or width, and a project that defines `@utility -p-*` serves `-p-2` and hears nothing. Said only when the class without the sign is served (`hover:p-2` for `hover:-p-2`): `{ p: '-medium' }` → `-p-medium` is dead unsigned too, and is a plain `dead-class`. Said once, instead of a `dead-class` line. A length keeps its sign inside the bracket (`{ mt: '-10px' }` → `mt-[-10px]`) and is not this finding. |
+| ``[csszyx] unserved-variant: `{className}` produces no CSS: Tailwind serves no `{variant}` variant.`` — help: ``write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.`` | Kind `unserved-variant` of the [dead-class](#an-sz-class-produces-no-css) report, `error` under both presets, printed where that report is and never failing the build. A key holding an object is a variant (`{ hidden: { p: 4 } }` → `hidden:p-4`), and Tailwind has no bare `hidden`, `readonly` or `expanded` variant. The build and `csszyx check` ask the project's own Tailwind, and say it when the class with exactly one variant dropped is served (`p-4` for `hidden:p-4`), once, instead of a `dead-class` line. The help follows the name: the attribute in brackets and the state under `aria` for an ARIA state that is an HTML attribute too (`hidden`, `readonly`, `selected`), `aria` alone for any other ARIA state (``write `aria: { {variant}: { … } }` for the ARIA state.``), and ``check the spelling of `{variant}`.`` for any other name. An HTML attribute that is no ARIA state (`inert`, `open`, `default`) is served bare by every Tailwind v4, so it is not one of these names. Every form ends with ``note: the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`.``: a project that does serves the class and hears nothing. In development the runtime says it too, on Node and SSR, for an ARIA state that the Tailwind csszyx is built with serves no bare variant for (`hidden`, `readonly`, `selected`, `expanded`, `pressed`, `busy`, `current`, `live`, `atomic`, `modal` on 4.3.3), once per name, and never for another name, which only the project's stylesheet can define. |
+| ``[csszyx] property-object: `{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.`` — help: ``move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.`` | The classic `p: { bg: … }` mistake. |
+| ``[csszyx] closed-enum-value: `{key}: '{value}'` is a CSS value, and `{key}-{value}` produces no CSS.`` — help: ``use the short form: `{ {key}: '{suggestion}' }`.`` | **browser too**. `flex-start → start`, `space-between → between`, … |
+| ``[csszyx] broken-opacity: `{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.`` — help: ``wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`.`` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
+| ``[csszyx] numeric-font-weight: `weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.`` — help: ``write `weight: {value}` as a number; it emits `font-[{value}]`.`` | A weight written as a string. The NUMBER form brackets for this reason. |
+| ``[csszyx] closed-enum-value: `{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.`` — help: ``use `'grayscale'` or `'subpixel'`.`` | `{key}` is `fontSmoothing`. |
+| ``[csszyx] closed-enum-value: `{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.`` — help: ``use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: '{value}' }`.`` | `{key}` is `fontStyle`. |
+| ``[csszyx] closed-enum-value: `{key}: '{value}'` is not a `{key}` value.`` — help: ``use one of: {values}.`` — note: ``the class `{class}` is still emitted, and it styles nothing unless a rule of your own matches it.`` | `display`, `position`, `visibility`, `isolation` and the `num*`, `touch*` and `contain*` keys. See below. |
+| ``[csszyx] moved-value: `{key}: {value}` moved to `{newKey}`, and nothing is emitted for it.`` — help: ``write `{ {newKey}: {newValue} }`, or run `csszyx migrate`.`` | A `touch` value that became its group's own key (`touch: 'pan-x'` is `touchPanX: 'x'`), also when written on the old alias (`touchAction: 'pan-x'`). **every mode.** The class is not emitted. The build names it wherever it is written: in a ternary, under any variant, `group`, `peer`, `data`, `aria`, `has` and `not` included, and in a conditional object branch. |
+| ``[csszyx] closed-enum-value: `{key}: {value}` is not a `{key}` value; its class `{class}` belongs to `{ {groupKey}: {groupValue} }`.`` — help: ``write `{ {groupKey}: {groupValue} }`, so it combines with the other groups instead of resetting them.`` — note: `` `{key}` takes one of: {values}. `` | A stand-alone key holding a value of one of its groups (`contain: 'paint'`, `nums: 'tabular'`). The class it names styles, but as a stand-alone value it resets the group keys written before it. See [one key per group](#one-key-per-group). |
+| ``[csszyx] global-before-group: `{key}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{key}` value styles nothing.`` — help: ``to override the group, layer it: `sz={[base, { {key}: '{value}' }]}`.`` — note: ``a spread such as `{ ...base, {key}: '{value}' }` keeps the same key order, so it does not fix this.`` | **every mode.** See [one key per group](#one-key-per-group). |
+| ``[csszyx] runtime-family-conflict: `{key}` takes a runtime value beside `{other}` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.`` — help: ``layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.`` | Build only. See [one key per group](#one-key-per-group). |
+| ``[csszyx] non-variant-object: `{key}` is not a variant, so its object emits `{key}:` classes that produce no CSS.`` — help: ``a `--*` key takes a declaration value; `container` takes `true`.`` | The class *is* emitted. Only `--*` and `container` are reported — see below. |
 | ``[csszyx] runtime-value: `{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.`` — help: ``name the values with `szv()`, or use `dynamic()` for open-ended data.`` — note: ``no class or variable is emitted for `{key}`.`` | Build only — a *literal* on the same key is unaffected. See below. |
-| `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
+| ``[csszyx] per-side-border-style: `{key}: '{value}'` emits nothing: Tailwind has no per-side border style.`` — help: ``use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width.`` | A style keyword on a side key. See below. |
 
 #### Closed keys name a value outside their set
 
@@ -653,15 +669,15 @@ class that produces no CSS; the runtime does not judge it.
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] "{key}: '{value}'"{ at LOC} — string slash opacity is not supported, and nothing is emitted for it. Use object form: { color: '{color}', op: {opacity} }.` | build, **browser too**, production too. |
-| `[csszyx] "{key}: { color: '{color}'{, op: OP} }"{ at LOC} — a colour object takes its opacity in op, not in color. Write { color: '{base}', op: {opacity} }.` | build (`color-slash-opacity`), runtime in development. The class is still written; with both, `op` is the opacity. An `op` that is not a number or a string is named as if absent. |
+| ``[csszyx] slash-opacity-string: `{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.`` — help: ``use the object form: `{ color: '{color}', op: {opacity} }`.`` | build, **browser too**, production too. |
+| ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.`` — help: ``write `{ color: '{base}', op: {op} }`.`` — note: ``the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.`` Without `op`: ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}' }` puts the opacity in `color`; a colour object takes it in `op`.`` — help: ``write `{ color: '{base}', op: {opacity} }`.`` — note: ``the class still applies opacity {opacity}.`` | build (`color-slash-opacity`), runtime in development. The class is still written; with both, `op` is the opacity. An `op` that is not a number or a string is named as if absent. |
 
 ### Mask layers
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] {owner}: unknown field "{member}"{ at LOC} — nothing is emitted for it. {owner} takes { {allowed} }.` | **browser too**. Catches `maskLinear: { form: … }` for `from`. |
-| ``[csszyx] mask: '{value}'{ at LOC} — gradient layers moved to "{key}". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.`` | build, **browser too**, production too, with the kind `moved-value`: nothing is emitted for the value. A trailing `!` is left out of it. See [Effects & Filters](/docs/reference/effects/). |
+| ``[csszyx] unknown-field: `{owner}` has no field `{member}`, and nothing is emitted for it.`` — help: `` `{owner}` takes `{ {allowed} }`. `` | **browser too**. Catches `maskLinear: { form: … }` for `from`. |
+| ``[csszyx] moved-value: `mask: '{value}'` names a gradient layer, which moved to `{key}`, and nothing is emitted for it.`` — help: ``write this layer on `{key}`; `mask` takes only `none`, a `url()` or a CSS variable.`` | build, **browser too**, production too, with the kind `moved-value`: nothing is emitted for the value. A trailing `!` is left out of it. See [Effects & Filters](/docs/reference/effects/). |
 
 ## szv
 
@@ -676,27 +692,29 @@ safelisted.
 ### szv — runtime
 
 All of these are dev-only, deduplicated, and removed entirely from a production
-bundle. The `[csszyx] ` prefix is added by the shared helper.
+bundle. `{got}` is `null`, `an array`, or the value's `typeof`.
 
 | Message |
 | --- |
-| `szv(config): config must be an object, got {value}. Ignoring.` |
-| `szv(config): base must be an sz object, got {value}.` |
-| `szv(config): variants must be an object when present, got {value}. Ignoring.` |
-| `szv(config): defaultVariants must be an object, got {value}.` |
-| `szv(config): variants.{dimension} must be an object of values, got {value}.` |
-| `szv(config): variants.{dimension}.{token} must be an sz object, got {value}. It will be skipped.` |
-| `szv(config): {where} nests deeper than {max} levels; it will be rejected at render.` |
-| `szv(config): {where} has a forbidden key "{key}"; it will be skipped.` |
-| `szv()(selection): unknown variant "{key}" — not declared in config.variants.` |
-| `szv()(selection): "{value}" is not a value of variant "{key}" — it has no styles.` |
+| ``[csszyx] szv-config-invalid: The `szv` config is not an object (got {got}), so `szv` returns an empty sz object.`` — help: ``pass an object such as `{ base: { … }, variants: { … } }`.`` |
+| ``[csszyx] szv-config-invalid: `base` in the `szv` config is not an sz object (got {got}), so `szv` ignores it.`` — help: ``make `base` an sz object, such as `{ p: 4 }`.`` |
+| ``[csszyx] szv-config-invalid: `variants` in the `szv` config is not an object (got {got}), so `szv` returns only `base`.`` — help: ``make `variants` an object of dimensions, such as `{ size: { sm: { p: 2 } } }`.`` |
+| ``[csszyx] szv-config-invalid: `defaultVariants` in the `szv` config is not an object (got {got}), so no variant gets a default value.`` — help: ``make `defaultVariants` an object of values, such as `{ size: 'sm' }`.`` |
+| ``[csszyx] szv-config-invalid: `variants.{dimension}` is not an object of values (got {got}), so it adds no classes.`` — help: ``make `variants.{dimension}` an object that maps each value to an sz object.`` |
+| ``[csszyx] szv-config-invalid: `variants.{dimension}.{token}` is not an sz object (got {got}), so it is ignored.`` — help: ``make it an sz object, such as `{ p: 4 }`, or `null` to add nothing.`` |
+| ``[csszyx] sz-object-depth: `{where}` in the `szv` config nests deeper than {maxDepth} levels, so `szv` rejects it at render.`` — help: ``flatten `{where}`; nesting this deep usually means the config was built from untrusted or looping data.`` |
+| ``[csszyx] szv-forbidden-key: `{where}` in the `szv` config has the forbidden key `{key}`, so it is ignored.`` — help: ``remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`.`` |
+| ``[csszyx] szv-unknown-variant: The `szv` selection names the variant `{key}`, which `variants` does not declare, so it is ignored.`` — help: ``declare `variants.{key}`, or remove `{key}` from the selection.`` |
+| ``[csszyx] szv-unknown-variant-value: The `szv` selection sets `{key}` to `{value}`, which `variants.{key}` does not define, so it adds no class.`` — help: ``add `{value}` to `variants.{key}`, or use one of `{allowed}`.``, or ``add `{value}` to `variants.{key}`, which defines no value yet.`` when `variants.{key}` defines no value |
 
 The last two also fire from the precompiled fast path, with identical wording.
 
 **If you see `[object Object]` in `class`:**
 
 ```text
-[csszyx] szv() returned an sz OBJECT that was used as a string (e.g. className={someSzv({...})}) — this renders "[object Object]". Pass it to an sz= prop, or resolve it with szr(...) first.
+[csszyx] szv-object-as-string: An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.
+  help: pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.
+  note: a development build renders an empty string in its place.
 ```
 
 `szv()` returns an sz object, not a class string. Either pass it to `sz=`, or
@@ -706,9 +724,15 @@ wrap it: `className={szr(someSzv({ … }))}`.
 
 | Message | When |
 | --- | --- |
-| **Thrown.** `[csszyx] {fn}() received a plain object — the compiler could not resolve this sz prop at build time.` followed by `Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}` / `Fix:            sz={[cond ? varA : varB, { key: 'val' }]}` / `Received: {json}` | A spread the compiler could not fold reached the runtime. |
-| **Thrown.** `[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names.` … `add once at startup:` / `    import '@csszyx/runtime/lowering';` | Running outside the bundler plugin — unit tests, scripts. |
-| **Thrown.** `[csszyx] two builds sharing one JavaScript runtime registered different Tailwind prefixes: {before} and {after}. Keep independently configured applications on separate @csszyx/runtime instances or align their Tailwind prefix.` | Two independently built applications share a runtime realm but their stylesheets use different prefixes. csszyx stops before runtime lowering can emit a class owned by the wrong stylesheet. |
+| **Thrown.** ``[csszyx] lite-sz-object: `{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.`` — help: ``write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.`` | A spread the compiler could not fold reached the lite runtime. Development only: a production build skips the check. |
+| **Thrown.** ``[csszyx] lowering-not-loaded: A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.`` — help: ``add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.`` | Running outside the bundler plugin — unit tests, scripts. |
+| **Thrown.** ``[csszyx] runtime-prefix-conflict: Two builds sharing one JavaScript runtime registered the Tailwind prefixes `{first}` and `{second}`, so csszyx cannot tell which prefix their classes take.`` — help: ``keep independently configured applications on separate `@csszyx/runtime` instances, or align their Tailwind prefix.`` | Two independently built applications share a runtime realm but their stylesheets use different prefixes. csszyx stops before runtime lowering can emit a class owned by the wrong stylesheet. When one of them has no prefix, the sentence reads ``registered different Tailwind prefixes, `{first}` and none``. |
+
+Each of these is thrown as an error whose `code` is the id after `[csszyx]`
+and whose `args` hold the values the sentence names; a production build
+throws the code, its args as JSON and the code's page instead of the
+sentence. Test it with `isCsszyxError(err)` and `err.code`, from `csszyx` or
+`@csszyx/runtime`.
 
 An unreadable `szr()` argument is reported at build time as `szr fallback at …`
 and is **always missing output**.
@@ -737,27 +761,28 @@ and the theme group registry — which `classify` reads — says so once.
 
 | Message |
 | --- |
-| ``[csszyx] theme token "{name}" shadows a built-in {kind} — Tailwind compiles both meanings into one class, so it sets the token's property and the built-in's. A later class that sets only one of them does not replace it in `szcn`: both then apply, and stylesheet order decides which wins rather than the order you passed them. `classify` reports the built-in meaning only. Rename the token — no spelling of the merge can fix this while the name is shared.`` |
-| ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
-| ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
-| ``[csszyx] `registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry now only names the property `classify` and `splitBox` read.`` + ``help: declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.`` + ``note: `szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats.`` |
+| ``[csszyx] theme-collision: Theme token `{name}` shadows a built-in utility keyword, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.`` — help: ``rename the token; while it shares a built-in name, no class order or `szcn` call can fix this.`` — note: ``a later class that sets only one of them does not replace it in `szcn`, so both apply and stylesheet order decides which wins; `classify` reports the built-in meaning only.`` |
+| ``[csszyx] theme-collision: Theme token `{name}` shadows a built-in value, so Tailwind compiles both meanings into one class, which sets the token's property and the built-in's.`` — help and note as above. A colour token shadows a utility keyword; a text-size, font-family or font-weight token a value. |
+| ``[csszyx] theme-token-ambiguous: Theme token `{name}` is defined as both a colour and a text size, so `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for only one of them.`` — help: ``rename one of the tokens.`` — note: ``a `text:color` or `text:size` placement in `splitBox` does not match `text-{name}`; `szcn` merges on the compiled CSS and is not affected.`` |
+| ``[csszyx] theme-token-ambiguous: Theme token `{name}` is defined as both a font family and a font weight, so `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for only one of them.`` — help as above — note: ``a `font:family` or `font:weight` placement in `splitBox` does not match `font-{name}`; `szcn` merges on the compiled CSS and is not affected.`` |
+| ``[csszyx] register-szcn-groups-ignored: `registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and the groups you register only name the property that `classify` and `splitBox` read.`` — help: ``declare the tokens under `@theme` (`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules you wrote for those classes, and use a csszyx integration that supplies a merge table.`` — note: `` `szcn` never removes a class from `@utility`, a plugin or plain CSS; without a table it removes only exact repeats. `` |
 
 One more is not about a token at all. It is printed once, in development, the
 first time `szcn` meets two classes with no merge table registered:
 
 | Message |
 | --- |
-| ``[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.`` + ``help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; for jest, run the build or `csszyx next prebuild` first.`` + ``note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.`` |
+| ``[csszyx] merge-table-missing: `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.`` — help: ``use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.`` — note: ``the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.`` |
 
 A table the build wrote in a format this runtime does not read is refused the
 same way, which is what a stale `.csszyx/merge-registration.*` from another
 csszyx release looks like to a jest run. Rejection clears the previous table
 and cached merges. The regeneration warning appears once per session in both
-development and production:
+development and production (there as `[csszyx] merge-table-format-skew: {"format":2,"expected":1} https://csszyx.com/e/merge-table-format-skew`):
 
 | Message |
 | --- |
-| ``[csszyx] the merge table was written in format {n} and this runtime reads format {m}, so `szcn` keeps every class until it is rebuilt.`` + ``help: run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.`` |
+| ``[csszyx] merge-table-format-skew: The merge table was written in format {format}, and this csszyx version reads format {expected}, so `szcn` ignores the table and removes only exact repeats.`` — help: ``run the build, or `csszyx next prebuild` on Next.js, with the installed csszyx to write it again.`` |
 
 See [Where the table comes from](/docs/reference/runtime/#where-the-table-comes-from).
 
@@ -780,45 +805,52 @@ not cover `text-wrap`.
 
 | Message | Production? |
 | --- | --- |
-| `[csszyx] dynamic value on "{key}" is a {type} and cannot be resolved to CSS — the property is omitted. Pass a number, token, or CSS length (for responsive objects, use dynamic()).` | **Yes** — this one is deliberately kept in production, because the property is dropped. |
-| `[csszyx] dynamic value on "{key}" is a {type} — only a boolean can toggle this class, so it is omitted. Write non-boolean values as literals (or use dynamic() for responsive objects).` | **Yes** — same reason. Fires for the boolean-only keys such as `border*`, `ring`, `outline`, `shadow` and `truncate`, where a dynamic value can only ever mean on or off. `false` is a meaningful "off" and stays silent. |
-| `[csszyx] dropped an arbitrary value that could inject CSS: "{utility}". Arbitrary values from untrusted data are not emitted at runtime.` | No — dev only. See [Security](/docs/security/). |
-| ``[csszyx] dynamic() has injected {n}+ unique classes this session. Injected CSS rules are never removed, so continuously varying values (e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. Drive continuously changing values through a CSS variable instead.`` | No — dev only, once. |
-| **Thrown.** `csszyx: manifest fetch failed {status}` | Yes |
+| ``[csszyx] dynamic-unresolvable: The runtime value of `{key}` has type `{type}`, which cannot be resolved to CSS, so the property is omitted.`` — help: ``pass a number, a token or a CSS length; for a responsive object, use `dynamic()`.`` | **Yes** — this one is deliberately kept in production, because the property is dropped. |
+| ``[csszyx] dynamic-non-boolean: The runtime value of `{key}` has type `{type}`, and only a boolean toggles this class, so it is omitted.`` — help: ``pass `true` or `false`; write other values as literals, or use `dynamic()` for a responsive object.`` | **Yes** — same reason. Fires for the boolean-only keys such as `border*`, `ring`, `outline`, `shadow` and `truncate`, where a dynamic value can only ever mean on or off. `false` is a meaningful "off" and stays silent. |
+| ``[csszyx] dynamic-unsafe-arbitrary: The arbitrary value in `{utility}` could inject CSS, so `dynamic()` omits the class.`` — help: ``keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.`` — note: ``only the first dropped value of a session is reported.`` | No — dev only. See [Security](/docs/security/). |
+| ``[csszyx] dynamic-injection-growth: `dynamic()` has injected {count} or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.`` — help: ``drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.`` | No — dev only, once. |
+| **Thrown** and caught. ``[csszyx] dynamic-manifest-unreachable: The `dynamic()` manifest could not be fetched (HTTP status {status}), so every class is treated as new and injected at runtime.`` — help: ``serve the manifest at the URL `setManifestUrl` names, or turn `build.emitManifest` on.`` | Never printed: `dynamic()` catches it and injects every class. |
 
 ## Plugin configuration
 
 | Message | Kind |
 | --- | --- |
 | `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, ``  - `{key}` is read from `{movedTo}`, not from the plugin options`` (for `diagnostics`), or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
-| `[csszyx] config-invalid: {file}`, then ``This file has {count} problem(s); each one is ignored, and the rest of the file applies.``, or ``This file has {count} problem(s), and it is not applied, so every finding keeps its default level.`` when it did not load, exported nothing to read, or holds no `diagnostics` beside a key that belongs there, then one line per problem — `  - ({severity}) {path}: {what}`, or `  - ({severity}) {what}` for the file as a whole, where `{severity}` is `error` or `warning`: an id that is not a rule id, with the id it most likely means; an id whose level the file cannot set; an id csszyx no longer reports; a level, preset or shape the file cannot use; a misspelt `diagnostics` key; a key of `diagnostics` written at the top level; an override glob that can never match; or a plugin option written in the file, which only the bundler config is read for — and last — help: ``https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.`` | Warning, once per build; `csszyx check` prints it too and exits 1 unless every problem is a plugin option in the file, an id csszyx no longer reports, or the old `csszyx init` template below. [`csszyx.config`](/docs/reference/config/#csszyxconfig) explains each field. |
-| `[csszyx] {file} changed: read its levels again, recompiled every module and reloaded the page.` | Printed by a Vite dev server, once per save, creation or deletion of `csszyx.config` or of a module it imports (`{file}` names the file saved), whatever `quiet` says. The server read the file again, printed its problems if it has any, and compiled every module so each finding is listed again at the level the file now gives it. Nothing to do. |
-| `could not be loaded: {reason}` | One line of the warning above, for the file as a whole. The config file threw, or has a syntax error. `{reason}` is the first line of the error, ending in ` (at {file}:{line}:{column})` when the error names a place in the file. |
-| ``. `{file}` holds TypeScript syntax; rename it to `{name}`.`` | Ends `could not be loaded: {reason}` when a `.js` or `.mjs` config fails on a syntax error and holds a type annotation, a type import or another TypeScript-only form. `{name}` is `csszyx.config.ts` in a `"type": "module"` package and `csszyx.config.mts` elsewhere. |
+| `[csszyx] config-invalid: {file}`, then ``This file has {count} problem(s); each one is ignored, and the rest of the file applies.``, or ``This file has {count} problem(s), so it is not applied and the `recommended` levels apply.`` when it did not load, exported nothing to read, or holds no `diagnostics` beside a key that belongs there, then one line per problem — `  - ({severity}) {path}: {text}`, or `  - ({severity}) {text}` for the file as a whole, where `{severity}` is `error` or `warning`, with the problem's own `help:` and `note:` lines under it. Each problem is worded by its own id, listed in the rows below: an id no rule has ([`unknown-rule-id`](https://csszyx.com/e/unknown-rule-id)); an id whose level the file cannot set; an id csszyx no longer reports; a level ([`config-level-invalid`](https://csszyx.com/e/config-level-invalid)), a preset ([`config-preset-unknown`](https://csszyx.com/e/config-preset-unknown)) or a shape ([`config-field-invalid`](https://csszyx.com/e/config-field-invalid)) the file cannot use; a key csszyx does not read ([`config-field-unknown`](https://csszyx.com/e/config-field-unknown)); an override glob that matches no file ([`config-glob-unmatchable`](https://csszyx.com/e/config-glob-unmatchable)); a second config file ([`config-file-duplicate`](https://csszyx.com/e/config-file-duplicate)); a file that did not load ([`config-unloadable`](https://csszyx.com/e/config-unloadable)) or exports nothing ([`config-no-default-export`](https://csszyx.com/e/config-no-default-export)) — and last — help: ``https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.`` | Warning, once per build; `csszyx check` prints it too and exits 1 unless every problem is a plugin option in the file, an id csszyx no longer reports, or the old `csszyx init` template below. [`csszyx.config`](/docs/reference/config/#csszyxconfig) explains each field. |
+| `[csszyx] project-reload: {file}`, then ``This file changed, so csszyx read its levels again, recompiled every module and reloaded the page.`` | Printed by a Vite dev server, once per save, creation or deletion of `csszyx.config` or of a module it imports (`{file}` names the file saved, from the project root), whatever `quiet` says. The server read the file again, printed its problems if it has any, and compiled every module so each finding is listed again at the level the file now gives it. Nothing to do. |
+| ``This file could not be loaded, so the `recommended` levels apply.`` — help: ``fix the error the loader reported.`` — note: ``the loader reported: {reason}.`` | One line of the warning above, [`config-unloadable`](https://csszyx.com/e/config-unloadable), for the file as a whole. The config file threw, or has a syntax error. `{reason}` is the first line of the error, ending in ` (at {file}:{line}:{column})` when the error names a place in the file. |
+| ``This file holds TypeScript syntax under a JavaScript name, so it could not be loaded and the `recommended` levels apply.`` — help: ``rename it to `{renameTo}`.`` — note: ``the loader reported: {reason}.`` | In place of the line above when a `.js` or `.mjs` config fails on a syntax error and holds a type annotation, a type import or another TypeScript-only form. `{renameTo}` is `csszyx.config.ts` in a `"type": "module"` package and `csszyx.config.mts` elsewhere. |
 | `{n} config error(s) in {file}, which fail the run.` | The last line of `csszyx check`, marked `✖`, when the warning above has an `error` problem; on stderr under `--json`. The run exits 1 whatever the findings. |
-| ``has no default export; write `export default defineConfig({ … })`.`` | One line of the warning above, for the file as a whole: it loaded and exported nothing to read, such as `export const config = defineConfig({ … })`. `csszyx check` exits 1. |
-| ``default export: `{key}` is not read — did you mean `{near}`?`` | One line of the warning above: a top-level key one or two letters from `diagnostics`, which `{near}` names. Every level under it would fall back to the defaults, so `csszyx check` exits 1. |
+| ``This file has no default export, so nothing in it applies.`` — help: ``write `export default defineConfig({ … })`, importing `defineConfig` from `csszyx`.`` | One line of the warning above, [`config-no-default-export`](https://csszyx.com/e/config-no-default-export), for the file as a whole: it loaded and exported nothing to read, such as `export const config = defineConfig({ … })`. `csszyx check` exits 1. |
+| ``default export: `{key}` is not a field csszyx reads, so nothing under it applies.`` — help: ``rename it to `{suggestion}`.`` | One line of the warning above, [`config-field-unknown`](https://csszyx.com/e/config-field-unknown): a top-level key one or two letters from `diagnostics`, which `{suggestion}` names. Every level under it would fall back to the defaults, so `csszyx check` exits 1. |
+| ``{key}: `{key}` is a plugin option, and this file does not set plugin options, so it is ignored.`` — help: ``pass it to the csszyx plugin in your bundler config.`` | One line of the warning above, `config-field-unknown`: any other top-level key, such as a plugin option an older `csszyx init` scaffolded into the file. A warning; `csszyx check` does not exit 1 for it. |
+| `` `diagnostics.{key}` is not a field csszyx reads, so it sets nothing.`` — help: ``use `preset`, `rules`, `allow` or `overrides`.`` · `` `diagnostics.allow.{key}` is not a field csszyx reads, so it allows nothing.`` — help: ``use `classes` or `tokens`.`` | Lines of the warning above, `config-field-unknown`: a key `diagnostics` or `allow` does not take. `csszyx check` exits 1. |
+| ``diagnostics.rules: No rule or diagnostic is named `{ids}`, so a level set under that name applies to nothing.`` — help: ``write `{suggestion}` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.`` or ``check the spelling; …`` | One line of the warning above, [`unknown-rule-id`](https://csszyx.com/e/unknown-rule-id), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`, for an id that names nothing; `{suggestion}` is the id it most likely means, when one is near. The entry is dropped; `csszyx check` exits 1. |
+| ``diagnostics.rules: `{id}` is set to `{level}`, which is not a level, so that setting is ignored.`` — help: ``use `'off'`, `'info'`, `'warn'` or `'error'`.`` · ``diagnostics.preset: `{preset}` is not a preset, so the `recommended` levels apply.`` — help: ``use `'recommended'` or `'atomic'`.`` | Lines of the warning above, [`config-level-invalid`](https://csszyx.com/e/config-level-invalid) and [`config-preset-unknown`](https://csszyx.com/e/config-preset-unknown); `{level}` and `{preset}` are the values as JSON writes them, such as `"fatal"`. `csszyx check` exits 1. |
+| ``{field}: `{field}` is not an object, so it is ignored.``, or the same line for a list of names, a list of overrides, a `{ files, rules }` object, a glob list or an object of id and level, each with a help line that shows the shape to write | Lines of the warning above, [`config-field-invalid`](https://csszyx.com/e/config-field-invalid): a section of the file whose shape csszyx cannot read. For the default export itself the line reads ``The default export is not an object, so nothing in this file applies.``. `csszyx check` exits 1. |
+| ``{file}: `{read}` is read first, so this file is not read and nothing in it applies.`` — help: ``keep one config file: move what this file sets into `{read}`, then delete this file.`` | One line of the warning above, [`config-file-duplicate`](https://csszyx.com/e/config-file-duplicate), for each other `csszyx.config` file beside the one read. A warning. |
 | ``diagnostics.rules: `{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.`` — help: ``remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only.`` | One line of the warning above, [`config-id-not-settable`](https://csszyx.com/e/config-id-not-settable), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`: a real id, of a line the runtime prints or an error a call throws, which no level reaches. `rules` sets the engine's diagnostics and the passes of `csszyx check`. The entry is dropped; `csszyx check` exits 1. |
-| ``diagnostics.rules: `{id}` is no longer reported, so a level or a selection naming it applies to nothing.`` — help: ``name `{replacedBy}` instead, which reports what `{id}` did.`` or ``remove it.`` | One line of the warning above, [`removed-rule-id`](https://csszyx.com/e/removed-rule-id), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`, when the id is one a release shipped and csszyx no longer reports, such as `other` (`{replacedBy}` is `sz-diagnostic`). The entry is dropped; it is a warning, so `csszyx check` does not exit 1 for it. `csszyx check --rule` and `--ignore-rule` print the same text as its own `[csszyx] removed-rule-id:` warning and go on, selecting nothing for it. |
-| ``default export: `{key}` is not read at the top level — did you mean `diagnostics.{key}`?`` | One line of the warning above: `rules`, `preset`, `allow` or `overrides` written beside `diagnostics` instead of inside it, as an ESLint flat config has them. `csszyx check` exits 1. |
-| ``can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with `..`.`` | One line of the warning above, after the glob, under `diagnostics.overrides[{i}].files`: a glob starting with `/` or a drive letter, or holding a `..` segment. A backslash reads as `/` and `./` is dropped first, so `src\legacy` matches and `./../src` is refused. The glob is dropped; `csszyx check` exits 1. |
-| ``could not be loaded and is ignored: it is the file `csszyx init` 0.17 and earlier wrote, which nothing read. Replace it with `export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` from `csszyx`, or delete it. Load error: {reason}`` | One line of the warning above, in place of `could not be loaded` when the file has the shape of that template, whatever its quotes, spacing, semicolons and comments, and sets no `diagnostics`: the `csszyx.config.js` it wrote in TypeScript syntax into a JavaScript project. `csszyx check` does not exit 1 for it. |
+| ``diagnostics.rules: `{id}` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.`` — help: ``name `{replacedBy}` instead, which reports what `{id}` did.`` or ``remove it.`` | One line of the warning above, [`removed-rule-id`](https://csszyx.com/e/removed-rule-id), under `diagnostics.rules` or `diagnostics.overrides[{i}].rules`, when the id is one a release shipped and csszyx no longer reports, such as `other` (`{replacedBy}` is `sz-diagnostic`). The entry is dropped; it is a warning, so `csszyx check` does not exit 1 for it. `csszyx check --rule` and `--ignore-rule` print the same text as its own `[csszyx] removed-rule-id:` warning and go on, selecting nothing for it. |
+| ``default export: `{key}` is not read at the top level, so nothing under it applies.`` — help: ``move it under `diagnostics`, as `diagnostics.{key}`.`` | One line of the warning above, `config-field-unknown`: `rules`, `preset`, `allow` or `overrides` written beside `diagnostics` instead of inside it, as an ESLint flat config has them. `csszyx check` exits 1. |
+| `` `{glob}` is absolute or steps out of the project root with `..`, so it matches no file.`` — help: ``write it relative to the project root, such as `src/legacy/**`; csszyx matches each file by its path from there.`` | One line of the warning above, [`config-glob-unmatchable`](https://csszyx.com/e/config-glob-unmatchable): a glob starting with `/` or a drive letter, or holding a `..` segment. A backslash reads as `/` and `./` is dropped first, so `src\legacy` matches and `./../src` is refused. The glob is dropped; `csszyx check` exits 1. |
+| ``This is the file `csszyx init` 0.17 and earlier wrote, which does not load, so it is ignored.`` — help: ``replace it with `export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` from `csszyx`, or delete it.`` — note: ``the loader reported: {reason}.`` | One line of the warning above, `config-unloadable`, in place of the load failure when the file has the shape of that template, whatever its quotes, spacing, semicolons and comments, and sets no `diagnostics`: the `csszyx.config.js` it wrote in TypeScript syntax into a JavaScript project. `csszyx check` does not exit 1 for it. |
 | `[csszyx] could not write .csszyx/diagnostic-policy.json: {reason}` + `note: the safelist is written; until the file can be written, the Turbopack loader reports every diagnostic at its default level.` | Warning from `csszyx next prebuild` and `csszyx next watch`; the command still succeeds. |
-| `[csszyx] .csszyx/{file} is in format {n}, and this version reads format {m}: the levels in it are not used.` + ``help: run `csszyx next prebuild` with the csszyx this project installs, which writes it again.`` | Warning, once per process, from the Turbopack loader and jest; `{file}` is `diagnostic-policy.json`. Another csszyx version wrote the file. They load `csszyx.config` themselves instead, as when the file is out of date, or use the recommended levels in a project without one. |
-| `[csszyx] production.mangleMapDelivery has been removed and is ignored. The runtime mangle map is always registered from inside the JS bundle now, on every lane, so the built HTML never carries an executable inline <script> and a strict script-src 'self' policy needs no exception. Delete the option. (\`window.__csszyx\` is now opt-in through \`production.mangleDebugGlobal\`.)` | Warning, once per build, whenever the removed option is set |
-| **Thrown.** `[csszyx] Invalid production.mangleGlobalVars config:` + errors | Error |
+| `[csszyx] policy-state-format-skew: .csszyx/diagnostic-policy.json`, then ``This policy file was written in format {format}, and this csszyx version reads format {expected}, so the levels in it are not used.`` — help: ``run `csszyx next prebuild` or `csszyx next watch` with the installed csszyx to write it again.`` — note: ``until then csszyx loads the config file itself, in a child process, or applies the `recommended` levels when the project has none.`` | Warning, once per process, from the Turbopack loader and jest. Another csszyx version wrote the file. |
+| `[csszyx] removed-option:`, then `` `production.mangleMapDelivery` was removed and is ignored: the runtime mangle map is always registered from inside the JS bundle, and the built HTML carries no inline `<script>`.`` — help: ``delete the option.`` — note: ``a strict `script-src 'self'` policy needs no exception; `window.__csszyx` is opt-in through `production.mangleDebugGlobal`.`` | Warning, once per build, whenever the removed option is set |
+| `[csszyx] removed-option:`, then `` `production.injectChecksum` was removed and was never read: every production build carries the hydration checksum and the census, whatever it is set to.`` — help: ``delete the option.`` — note: ``the census lists no classes when `production.mangle` is off, and the browser runs neither the checksum nor the census as script; see https://csszyx.com/docs/security/.`` | Warning, once per build, whenever the removed option is set |
+| **Thrown.** `[csszyx] mangle-global-vars-options-invalid:`, then ``The `production.mangleGlobalVars` options break the rules listed below, so the build stops.`` — help: ``fix each option the list names.`` — note: ``the problems:`` and one line per problem | Error |
 | **Thrown.** `production.mangleGlobalVars.mode only supports 'alias'. A full rename needs every reference rewritten, including the ones csszyx cannot see.` | Error, listed under the line above |
 | **Thrown.** `production.mangleGlobalVars.onUnsafeUsage only supports 'error'. An unsafe usage means a token would be aliased where the rename cannot be proven complete, so there is nothing safe to downgrade it to.` | Error, listed under the line above |
 | **Thrown.** `production.mangleGlobalVars.tokens cannot include Tailwind reserved namespace token {name}` | Error, listed under the line above |
 | **Thrown.** `production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token {name}` | Error, listed under the line above |
-| **Thrown.** `[csszyx] production.mangleGlobalVars.enabled requires explicit tokens. Aliasing a property csszyx was not told about would rename references it cannot see.` | Error |
-| **Thrown.** `[csszyx] production.mangleGlobalVars.autoPrefix is not available: choosing tokens by prefix needs a CSS pre-scan that does not exist yet. List the tokens instead.` | Error |
-| **Thrown.** `[csszyx] production.mangleGlobalVars validation failed:` + one line per finding | Error |
-| **Thrown.** `[csszyx] CSS variable mangle map is {size} bytes, which exceeds the {max} byte safety cap. Reduce production.mangleVars usage, split the bundle, or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.` | Error |
-| `[csszyx] compileSources: {n} path(s) did not resolve to a directory (relative to {rootDir}): {list}. Their ``sz``/``szv`` will not be compiled or safelisted.` | Warning |
-| `[csszyx] Transform cache disabled because package versions could not be resolved.` | Ungated, once |
-| `[csszyx] production.mangle is not supported by the esbuild adapter; class mangling is disabled so emitted JS and CSS keep matching names.` | Ungated |
-| `⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn't configured. Run "npx @csszyx/cli init" to fix.` | Ungated |
+| **Thrown.** `[csszyx] mangle-global-vars-options-invalid:`, then `` `production.mangleGlobalVars.enabled` is `true` with no `tokens`, so the build stops.`` — help: ``list the custom properties to alias in `tokens`, such as `tokens: ['--brand']`.`` — note: ``csszyx aliases only the custom properties listed in `tokens`.`` | Error |
+| **Thrown.** `[csszyx] mangle-global-vars-options-invalid:`, then `` `production.mangleGlobalVars.autoPrefix` is set, and choosing tokens by prefix is not available yet, so the build stops.`` — help: ``remove `autoPrefix` and list the custom properties in `tokens`.`` | Error |
+| **Thrown.** `[csszyx] mangle-global-vars-plan-invalid:`, then `` `production.mangleGlobalVars` cannot alias every listed property safely, so the build stops.`` — help: ``fix each usage listed below, or take that property out of `tokens`.`` — note: ``the findings:`` and one line per finding | Error |
+| **Thrown.** `[csszyx] mangle-map-too-large:`, then ``The CSS variable mangle map is {size} bytes, over its safety cap of {maxBytes} bytes, so the build stops.`` — help: ``turn `production.mangleVars` off or split the bundle; to accept this size, raise the `CSSZYX_VAR_MANGLE_MAP_MAX_BYTES` environment variable above {size}.`` | Error |
+| `[csszyx] compile-sources-unresolved:`, then ``The `compileSources` path(s) `{paths}` do not resolve to a directory from `{root}`, so the build compiles nothing from them and adds none of their classes to the safelist.`` — help: ``point each path at a directory, relative to the project root or absolute, such as `compileSources: ['../../packages/vui']`.`` | Warning, once per root |
+| `[csszyx] transform-cache-disabled:`, then ``The build could not read the installed version of `@csszyx/unplugin` or `@csszyx/compiler`, so the transform cache is off and every build transforms each file again.`` — help: ``reinstall `@csszyx/unplugin` and `@csszyx/compiler`, or set `build.cache: false` to hide this line.`` — note: ``the build output is the same; only rebuilds are slower.`` | Ungated, once |
+| `[csszyx] esbuild-mangle-unsupported:`, then ``The esbuild adapter does not support `production.mangle`, so class mangling is off for this build.`` — help: ``use the Vite, Rollup or webpack plugin when the build needs mangled class names.`` — note: ``emitted JS and CSS keep the original class names, so they still match.`` | Ungated |
+| `[csszyx] theme-scan-without-typescript:`, then `` `{tsconfig}` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.`` — help: ``add `"{includePath}"` to its `include` array.`` | Ungated, once per process. `{includePath}` is `.csszyx/theme.d.ts` as that config reads it, from its own directory: `./.csszyx/theme.d.ts` for a config in the project root. A config a framework writes into `.nuxt/`, `.svelte-kit/` or `.astro/` is not named; the root `tsconfig.json` is. |
 
 The unrecognized-option check is worth its own note: csszyx does not silently
 accept a key it does not read, and it suggests the nearest real key for a typo.
@@ -826,14 +858,20 @@ accept a key it does not read, and it suggests the nearest real key for a typo.
 ### Theme auto-scan without the TypeScript wiring
 
 ```text
-⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn't configured. Run "npx @csszyx/cli init" to fix.
+[csszyx] theme-scan-without-typescript:
+  `tsconfig.app.json` does not mention `.csszyx`, so TypeScript does not see the theme types the scan wrote to `.csszyx/theme.d.ts`.
+  help: add `"./.csszyx/theme.d.ts"` to its `include` array.
+  docs: https://csszyx.com/e/theme-scan-without-typescript
 ```
 
-Printed once per process, and the one message on this page with no `[csszyx]`
-prefix. Nothing is wrong with your CSS: the scan works, but `tsconfig.json`
-does not include the generated `.csszyx` types, so the theme tokens it finds
-never reach editor completion or type-checking. Styling is unaffected either
-way.
+Printed once per process. Nothing is wrong with your CSS: the scan works, but
+no tsconfig TypeScript reads includes the generated `.csszyx` types, so the
+theme tokens it finds never reach editor completion or type-checking. The line
+names `tsconfig.json`, or `tsconfig.app.json` when the project has only that.
+A root `tsconfig.json` that includes nothing itself and lists `references`, as
+Vite's template writes it, is read through its references: the line stays
+silent when one of them mentions `.csszyx`, and names the first of them
+otherwise. Styling is unaffected either way.
 
 ### A class name with more than one author
 
@@ -843,12 +881,22 @@ says nothing. csszyx reports the declaration site, because that is the one
 place someone can change:
 
 ```text
-[csszyx] "@utility {name}" collides — {reason}. Tailwind merges both declarations into one rule and reports nothing, so the class carries styles no single place in your CSS shows. Every use is affected, including sz props that spell it correctly. Rename it; if a multi-property class is the point, declare it under a name nothing else claims.
+[csszyx] utility-collision:
+  `@utility {name}` is declared twice, so Tailwind merges both declarations into one class, and no single place in your CSS shows what `{name}` sets.
+  help: merge the two blocks into one, or rename one of them.
+  note: every use of `{name}` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.
 ```
 
-`{reason}` is either `declared twice` — two `@utility` blocks claiming one name
-— or `a theme token already generates it`, where a `@utility` takes a name a
-`--color-*` token already produces under one of its prefixes.
+```text
+[csszyx] utility-collision:
+  `@utility {name}` names a class a theme token already generates, so Tailwind merges both into one class, and no single place in your CSS shows what `{name}` sets.
+  help: rename the `@utility` or the theme token.
+  note: every use of `{name}` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.
+```
+
+The first is two `@utility` blocks claiming one name; the second a `@utility`
+that takes a name a `--color-*` token already produces under one of its
+prefixes.
 
 There is deliberately no ignore comment. A class that is meant to set several
 properties has a spelling that costs nothing: a name nobody else claims. An
@@ -883,7 +931,11 @@ next message catches.
 The new safelist is already written by then; delete the leftover yourself.
 
 ```text
-[csszyx] {stylesheet}: @source "{target}" names the old safelist, which csszyx no longer writes. The safelist is now {safelist}, and csszyx adds the directive itself: remove this line. Vite, Rollup and webpack inject it; on Next.js list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss' in postcss.config.
+[csszyx] legacy-source-directive: {stylesheet}
+  `@source "{target}"` names the old safelist, which csszyx no longer writes, so the build stops.
+  help: remove this line; on Next.js, also list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.
+  note: csszyx adds the `@source` for `.csszyx/csszyx-classes.txt` itself: the Vite, Rollup and webpack plugins inject it, and on Next.js `@csszyx/unplugin/postcss` does.
+  docs: https://csszyx.com/e/legacy-source-directive
 ```
 
 A build **error**, not a warning, and it is not gated: a stylesheet pointing at
@@ -891,13 +943,19 @@ a file that is gone would scan nothing and lose every csszyx class in silence,
 so the build stops instead. Remove the line.
 
 ```text
-[csszyx] {config} does not list '@csszyx/unplugin/postcss'. Next.js reads the safelist only through that plugin: list it before '@tailwindcss/postcss', or no sz class gets CSS.
+[csszyx] postcss-plugin-missing: {config}
+  The PostCSS config Next.js reads does not list `@csszyx/unplugin/postcss`, so Tailwind never reads the safelist and no `sz` class produces CSS.
+  help: add `@csszyx/unplugin/postcss` to its plugins, before `@tailwindcss/postcss`.
+  docs: https://csszyx.com/e/postcss-plugin-missing
 ```
 
 Printed by `csszyx next prebuild` and `csszyx next watch`. Add the plugin line.
 
 ```text
-[csszyx] '@csszyx/unplugin/postcss' is listed after '@tailwindcss/postcss'. Tailwind has already compiled the stylesheet by then, so the safelist is never read: list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss'.
+[csszyx] postcss-plugin-order:
+  `@csszyx/unplugin/postcss` is listed after `@tailwindcss/postcss`, so Tailwind compiles the stylesheet before csszyx adds the safelist, and the build stops.
+  help: list `'@csszyx/unplugin/postcss'` before `'@tailwindcss/postcss'` in `postcss.config`.
+  docs: https://csszyx.com/e/postcss-plugin-order
 ```
 
 A PostCSS **error**: reorder the two plugins.
@@ -905,7 +963,11 @@ A PostCSS **error**: reorder the two plugins.
 ### The safelist could not be written
 
 ```text
-[csszyx] could not write the generated safelist to {path}: {reason}. Tailwind scans that file for the classes csszyx found, so the CSS it generates will be missing them. Check that the directory exists and is writable.
+[csszyx] safelist-unwritable: .csszyx/csszyx-classes.txt
+  The generated safelist could not be written, so the CSS Tailwind generates is missing the classes csszyx found.
+  help: check that the directory exists and is writable.
+  note: the file system reported: {reason}.
+  docs: https://csszyx.com/e/safelist-unwritable
 ```
 
 The build carries on without those classes, so the page renders with `sz` props
@@ -916,13 +978,15 @@ all arrive here.
 ### Tailwind entries set different prefixes
 
 ```text
-[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:
-  {file}   {prefix(name) or no prefix}
-  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.
-  note: the build stopped before transforming any module; nothing was written.
+[csszyx] prefix-disagreement:
+  The Tailwind stylesheets of this project set different prefixes ({entries}), so no class csszyx emits is served by all of them.
+  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, or list the stylesheets this build loads with the csszyx `tailwindStylesheet` option.
+  note: no module was transformed, and nothing was written.
+  docs: https://csszyx.com/e/prefix-disagreement
 ```
 
-A build **error**, one line per stylesheet. csszyx writes one prefix before every
+A build **error**; `{entries}` names each stylesheet with the prefix it sets,
+such as `src/index.css` with `prefix(tw)`. csszyx writes one prefix before every
 class, so with two prefixes in play part of the app would get classes that style
 nothing. A stylesheet another entry imports has no say of its own, and entries
 that differ only in `important` do not stop the build. Usually one of the listed
@@ -936,8 +1000,10 @@ leaves its directory out for the loader too, and the Jest transformer takes the
 same patterns in its `ignore` option.
 
 ```text
-[csszyx] the ignore pattern `{pattern}` is negated, and an ignore list cannot take one: each pattern only adds paths to leave out.
+[csszyx] ignore-pattern-negated:
+  The ignore pattern `{pattern}` is negated, and an ignore list cannot take one, so csszyx stops.
   help: narrow the pattern that covers too much, so that nothing has to be taken back out.
+  note: each pattern only adds paths to leave out.
 ```
 
 An **error** from `csszyx next prebuild`, `csszyx next watch` and the Jest
@@ -946,18 +1012,22 @@ back out of `legacy/**`: it would match every path except that file, the app's
 real Tailwind entry included.
 
 ```text
-[csszyx] the csszyx `tailwindStylesheet` option lists stylesheets that are not there: {paths} (relative to {rootDir}).
-  help: list the stylesheet that imports Tailwind for this build, relative to the project root.
+[csszyx] tailwind-stylesheet-missing:
+  The stylesheet(s) `{paths}` named by the csszyx `tailwindStylesheet` option do not exist under `{rootDir}`, so the build stops.
+  help: list the Tailwind stylesheet this build loads, relative to the project root.
+  docs: https://csszyx.com/e/tailwind-stylesheet-missing
 ```
 
 A build **error**. A mistyped path would otherwise leave nothing to read the
 prefix from. Fix the path.
 
 ```text
-[csszyx] stylesheets that reach Tailwind did not compile, so csszyx cannot read the prefix its classes need:
-  {file}: {reason}
-  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in the csszyx `tailwindStylesheet` option.
-  note: no module was transformed; without the prefix every emitted class could style nothing.
+[csszyx] tailwind-stylesheet-broken:
+  A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.
+  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load with the csszyx `tailwindStylesheet` option.
+  note: each failure, as Tailwind reported it:
+    {file}: {reason}
+  docs: https://csszyx.com/e/tailwind-stylesheet-broken
 ```
 
 A build **error**. The stylesheet imports Tailwind, directly or through another
@@ -997,17 +1067,11 @@ reads no prefix and no theme from that file. `csszyx next prebuild` and
 they take no `quiet` option, so they always print it.
 
 ```text
-[csszyx] your Tailwind entry sets important, which csszyx does not emit for yet: every utility is `!important`, so a class csszyx emits cannot override one the project already applies.
-  help: drop important from the `@import "tailwindcss"` line, or keep it and style those elements with `className` until csszyx supports it.
-```
-
-A warning that fires in production. The build carries on, but an `sz` override
-loses to the class it was meant to override.
-
-```text
-[csszyx] csszyx merges no class in this build: {file} did not compile with its `@utility` blocks and plugin classes taken out ({reason}).
-  help: report it at https://github.com/nguyennhutien/csszyx/issues with the plugin or `@utility` block the stylesheet uses.
-  note: every class is kept: `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays next to the `sz` classes, and `szcn` removes only exact repeats.
+[csszyx] merge-origin-unreadable: {file}
+  This Tailwind stylesheet did not compile once csszyx took out its `@utility` blocks and plugin classes, so csszyx cannot tell Tailwind's classes from the project's and merges no class in this build.
+  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message and the plugin or `@utility` block the stylesheet uses.
+  note: every class is kept, so `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays beside the `sz` classes, and `szcn` removes only exact repeats; the compile reported: {reason}.
+  docs: https://csszyx.com/e/merge-origin-unreadable
 ```
 
 A warning that fires in production, printed once each time the build reads the
@@ -1021,16 +1085,23 @@ decides between them.
 ### The Tailwind prefix changed during a session
 
 ```text
-[csszyx] {file} changed the Tailwind prefix from {before} to {after}: recompiled every module and reloaded the page.
+[csszyx] project-reload: {file}
+  This file changed the Tailwind prefix from `{before}` to `{after}`, so csszyx recompiled every module and reloaded the page.
+  docs: https://csszyx.com/e/project-reload
 ```
 
 Printed by a Vite dev server, once per change, whatever `quiet` says. Every
 module compiled before the edit carried classes under the old prefix, so the
-server lowered every source again and reloaded the page. `{before}` and
-`{after}` read `no prefix` when none is set. Nothing to do.
+server lowered every source again and reloaded the page. A stylesheet that sets
+the first prefix reads ``This file set the Tailwind prefix `{after}`, so csszyx
+recompiled every module and reloaded the page.``, and one that drops it reads
+``This file removed the Tailwind prefix `{before}`, so csszyx recompiled every
+module and reloaded the page.``. Nothing to do.
 
 ```text
-[csszyx] {file} changed which sz keys cover each other: recompiled every module and reloaded the page.
+[csszyx] project-reload: {file}
+  This file changed which sz keys cover each other, so csszyx recompiled every module and reloaded the page.
+  docs: https://csszyx.com/e/project-reload
 ```
 
 The same reload for a stylesheet edit that changed which class a later `sz`
@@ -1040,12 +1111,13 @@ module merged its static `sz` objects under the stylesheet it was compiled
 with, so the server compiled every module again. Nothing to do.
 
 ```text
-[csszyx] {n} class(es) in {m} file(s) were removed: another class on the same element sets every property they set.
-  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.
-  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of `{config}` to hide this line; `build.mergeCoveredClasses: false` keeps the classes.
+[csszyx] merge-covered-held:
+  The build removed {classes} class(es) in {files} file(s), because another class on the same element sets every property they set.
+  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them; `build.mergeCoveredClasses: false` in the plugin options keeps every one.
+  note: this line stays until each id after `--rule` is `'off'` in `diagnostics.rules` of `{configFile}`.
 ```
 
-`{config}` is the project's config file, or the name `csszyx init` would give
+`{configFile}` is the project's config file, or the name `csszyx init` would give
 it when there is none.
 
 The `info` rendering of `merge-covered-key` and `merge-covered-class`, the
@@ -1061,8 +1133,12 @@ was; move it into `sz` after the key that covers it, or set
 `off` hides the line and changes nothing else.
 
 ```text
-[csszyx] {file}:{line}: `{key}` (`{class}`) removed: a later key in the same `sz` object sets every property it sets. (merge-covered-key)
-[csszyx] {file}:{line}: `{class}` removed from `className`: an `sz` class on the same element sets every property it sets. (merge-covered-class)
+[csszyx] merge-covered-key: {file}:{line}
+  The build removes `{className}`, written as `{key}`, because a later key in the same sz object sets every property it sets.
+  help: delete `{key}` from the object; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.
+[csszyx] merge-covered-class: {file}:{line}
+  The build removes `{className}` from `className`, because an `sz` class on the same element sets every property it sets.
+  help: delete `{className}` from `className`; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.
 ```
 
 The same finding at `warn` or `error` — the `atomic` preset, or a level set in
@@ -1071,13 +1147,17 @@ printed when the dev server or build starts, in production too, and again when
 a config edit during a dev server or a webpack watch changes the level.
 
 ```text
-[csszyx] {files} changed the Tailwind prefix from {before} to {after}, but this watch session compiled its modules under the old one, so their classes would style nothing.
-  help: stop the watch and start it again.
-  note: modules keep the classes they were compiled with until the restart.
+[csszyx] watch-prefix-changed:
+  `{changed}` changed the Tailwind prefix from `{before}` to `{after}`, and this watch session compiled its modules under the old one, so their classes would style nothing.
+  help: restart the watch session.
+  note: every rebuild fails with this error until the restart, or until the prefix is changed back.
+  docs: https://csszyx.com/e/watch-prefix-changed
 ```
 
 A watch **rebuild error** on webpack, `rollup -w`, `vite build --watch`, an
-esbuild context and rspack. Those bundlers keep the modules they already
+esbuild context and rspack. A stylesheet that sets the first prefix reads
+`` `{changed}` set the Tailwind prefix `{after}`, and this watch session compiled its modules without one, so their classes would style nothing.``,
+and one that drops it reads `` `{changed}` removed the Tailwind prefix `{before}`, and this watch session compiled its modules under it, so their classes would style nothing.``. Those bundlers keep the modules they already
 compiled and a plugin cannot make them compile everything again, so every
 rebuild fails with this until the prefix is back or the watch restarts.
 
@@ -1087,20 +1167,28 @@ rebuild fails with this until the prefix is back or the watch restarts.
 
 Closes a [prefix disagreement](#tailwind-entries-set-different-prefixes) or a
 stylesheet that did not compile when either happens during a Vite dev server
-(`the dev server`) or a watch rebuild (`this watch session`). It is a warning
+(`the dev server`) or a watch rebuild (`this watch session`), above its
+`docs:` line. For a disagreement it takes the place of the build's note, which
+says nothing was written: a session that goes on serving has written its
+output. It is a warning
 there, not an error: the author is mid-edit, and the next save usually fixes it.
 
 ```text
   note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.
 ```
 
-Closes the same two messages when `csszyx next watch` reads them after a
+Closes the same two messages, above their `docs:` line and in place of a
+disagreement's build note, when `csszyx next watch` reads them after a
 stylesheet edit. The watch goes on, but the stylesheet facts it records are not
 rewritten, so the Turbopack loader stops on the same error until the edit is
 fixed.
 
 ```text
-[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.
+[csszyx] internal-error:
+  An internal check failed in `createCompilerOptions`, so csszyx stops.
+  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
+  note: the check that failed: the build asked for the Tailwind prefix before it read the project's stylesheets.
+  docs: https://csszyx.com/e/internal-error
 ```
 
 A build **error** that should never reach you: a bundler lane reached the
@@ -1110,9 +1198,11 @@ its version.
 ### A stylesheet edit changed which sz keys cover each other
 
 ```text
-[csszyx] {files} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.
-  help: stop the watch and start it again.
-  note: this rebuild finished; only the objects whose keys changed cover are stale until then.
+[csszyx] watch-merge-groups-changed:
+  `{changed}` changed which sz keys cover each other, and this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or lack one a later key no longer covers.
+  help: restart the watch session.
+  note: this rebuild finished, and only sz objects that use those keys are stale until the restart.
+  docs: https://csszyx.com/e/watch-merge-groups-changed
 ```
 
 A later key in a static `sz` object replaces an earlier one whose CSS it
@@ -1127,9 +1217,11 @@ restart: it compiles every module again and reloads the page.
 ### A rule selects on a class the build already removed
 
 ```text
-[csszyx] `{class}` was removed from {file} before csszyx read a rule that selects on it, so the page would lose it.
-  help: set `build.mergeCoveredClasses: false` to keep every class, or restart a watch session.
-  note: csszyx reads every source for such rules before it merges; this one came later, from a module outside the project walk or an edit during a watch.
+[csszyx] merge-hook-late: {file}
+  `{className}` was removed from this file before csszyx read a rule that selects on it, so the page would lose that class, and the build stops.
+  help: set `build.mergeCoveredClasses: false` to keep every class, or restart the watch session.
+  note: csszyx reads such rules during the prescan, before it merges; this one came later, from a module the prescan did not reach or from an edit during a watch session.
+  docs: https://csszyx.com/e/merge-hook-late
 ```
 
 A build **error**. A merge never removes a class that a rule selects on: a
@@ -1148,38 +1240,43 @@ in memory the way it does on the Vite lane. Everything below is a build **stop**
 rather than a warning: carrying on would ship a page whose classes have no CSS.
 
 ```text
-[csszyx] Next Turbopack production cache is not ready for {root}: {reason}. Production builds with Turbopack need the csszyx safelist seeded first: npx csszyx next prebuild 'app/**/*.tsx'. Wire it into package.json so plain builds keep working: "build": "csszyx next prebuild 'app/**/*.tsx' && next build". Docs: https://csszyx.com/docs/installation#nextjs-turbopack-setup
+[csszyx] next-turbo-cache-unseeded:
+  The Turbopack production build of `{root}` has no current safelist from `csszyx next prebuild`, so it stops.
+  help: run `csszyx next prebuild` before `next build`, such as `"build": "csszyx next prebuild 'app/**/*.tsx' && next build"` in `package.json`.
+  note: the safelist check reported: {reason}.
+  docs: https://csszyx.com/e/next-turbo-cache-unseeded
 ```
 
-Printed across several lines in the terminal. Run the prebuild once, then keep
-the `build` script the message names so the next `next build` finds the cache
-already seeded.
+Run the prebuild once, then keep the `build` script the help names so the next
+`next build` finds the cache already seeded.
 
 ```text
-[csszyx] Next Turbopack does not support production CSS variable mangling for {file}. Use Next Webpack mode for full csszyx parity.
+[csszyx] next-mangle-vars-unsupported: {file}
+  Turbopack cannot mangle CSS variables in production, and `config.mangleVars` is on, so the build stops at this module.
+  help: set `config: { mangleVars: false }` in `csszyxTurbopack`, or build with webpack (`next build --webpack`), which mangles them.
+  docs: https://csszyx.com/e/next-mangle-vars-unsupported
 ```
 
 ```text
-[csszyx] Next prebuild does not support production CSS variable mangling. Use Next Webpack mode for full csszyx parity.
+[csszyx] next-mangle-vars-unsupported:
+  The Next prebuild cannot mangle CSS variables in production, and `config.mangleVars` is on, so it stops.
+  help: pass `config: { mangleVars: false }` to `runNextPrebuild`, or build with webpack (`next build --webpack`), which mangles them.
+  docs: https://csszyx.com/e/next-mangle-vars-unsupported
 ```
 
 Mangling rewrites variable names across the whole bundle, which needs a view of
 every module at once. Turbopack does not offer one; the Webpack lane does.
 
 ```text
-[csszyx] Next source transform failed closed for {file}: source still contains csszyx sz syntax.
+[csszyx] next-sz-untransformed: {file}
+  This module still holds `sz` syntax after the csszyx transform, so the build stops.
+  help: fix the warning reported for this file, such as a syntax error or an `ast-budget` warning for a file too large to transform; if `sz` here is not the `sz` prop, such as an object key of your own, rename it.
+  docs: https://csszyx.com/e/next-sz-untransformed
 ```
 
 The transform ran and left `sz` behind, which would reach the browser as an
 unknown prop. Stopping is the safe answer, and the file is named because the
 input that produced it is worth seeing.
-
-```text
-[csszyx] Next safelist watcher failed to run its initial cycle.
-```
-
-The watcher could not complete its first pass, so nothing after it can trust the
-safelist. Usually a permissions or path problem under `.csszyx`.
 
 ```text
 [csszyx] next watch is waiting for the safelist lock held by the Turbopack loader (process {pid}). Classes added meanwhile get no CSS until it is released; a lock left by a loader that exited is recovered within 30 s.
@@ -1197,7 +1294,7 @@ A shard another csszyx version wrote is left out of the safelist, and said:
 
 | Message | Kind |
 | --- | --- |
-| `[csszyx] {shard} is a safelist shard in format {n}, and this version reads format {m}: its classes are left out of the safelist.` + ``help: run `csszyx next prebuild` with the csszyx this project installs, which writes every shard again.`` | Warning, once per shard, from the loader, `csszyx next prebuild` and `csszyx next watch`. |
+| `[csszyx] safelist-shard-format-skew: {shard}` + `This safelist shard was written in format {n}, and this csszyx version reads format {m}, so its classes are left out of the safelist.` + help: ``run `csszyx next prebuild` with the installed csszyx to write every shard again.`` | Warning, once per shard, from the loader, `csszyx next prebuild` and `csszyx next watch`. |
 
 Each source's classes sit in a shard under
 `.csszyx/cache/safelist-shards/`, and this one was written by a csszyx whose
@@ -1228,19 +1325,27 @@ other lanes.
 ### The Tailwind prefix on the Next.js lanes
 
 ```text
-[csszyx] {lane} has not read the Tailwind prefix for {root}: {reason}.
+[csszyx] next-prefix-unread:
+  The Turbopack loader has no Tailwind prefix for `{root}` ({reason}), so it stops.
   help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first.
-  note: without the prefix every class this lane emits could style nothing.
+  note: this module was not transformed.
+  docs: https://csszyx.com/e/next-prefix-unread
 ```
 
-A build **error** from the Turbopack loader or `csszyx next prebuild`. Those
+A build **error** from the Turbopack loader, and from `runNextPrebuild` called
+from a script, which reads "The Next prebuild has no Tailwind prefix" and asks
+for `prepareNextStylesheetFacts` first. Those
 lanes read the prefix from `.csszyx/cache/stylesheet-facts.json`, and it was
 missing, or a stylesheet changed after it was written. Run the command the help
 line names. A `next dev` loader with no watcher reads the stylesheets itself
 instead of stopping.
 
 ```text
-[csszyx] internal error: a Next lane asked the engine to lower a module before it read the project's Tailwind prefix. This is a csszyx bug; please report it with the Next.js version you build with.
+[csszyx] internal-error:
+  An internal check failed in `transformNextSource`, so csszyx stops.
+  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
+  note: the check that failed: a Next build asked the engine to transform a module before it read the project's Tailwind prefix.
+  docs: https://csszyx.com/e/internal-error
 ```
 
 Should never reach you. Report it with the Next.js version.
@@ -1248,8 +1353,10 @@ Should never reach you. Report it with the Next.js version.
 ### An sz class produces no CSS
 
 ```text
-[csszyx] {file}:{line}:{column}: `{class}` (sz key `{key}`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
-  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.
+[csszyx] dead-class: {file}:{line}:{column}
+  `{className}` produces no CSS: this project's Tailwind serves no such utility.
+  help: fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.
+  note: the class is still emitted, and it styles nothing.
 ```
 
 The build-time `dead-class` finding, the same id and the same answer as
@@ -1261,7 +1368,7 @@ about every class an `sz` prop emitted; `{file}` is the first file, in path
 order, that emits the class and whose level lists it — an `overrides` entry
 that turns `dead-class` off for one file, or holds it at `info` in a production
 build, moves the line to the next file that emits the class. A class no file
-lists is counted once in the production closing line when any file holds it. The line, column and key are where that key is written, on every lane —
+lists is counted once in the production closing line when any file holds it. The line and column are where the `sz` key that emits it is written, on every lane —
 Vite, Rollup, webpack, and under Turbopack through `csszyx next prebuild` and
 `csszyx next watch` — for a class that is the only one of its object as for one
 of several. A class with no recorded site (a value only known at runtime) names
@@ -1280,27 +1387,35 @@ set to `off` hides the line.
 ### No CSS at all
 
 ```text
-[csszyx] generated {n} sz class(es) but found no CSS entry importing "tailwindcss" — those classes will produce no CSS. Import "tailwindcss" in a CSS file (csszyx auto-injects @source for the generated classes) so Tailwind emits their styles.
+[csszyx] tailwind-stylesheet-absent:
+  This build emitted {count} class(es) for `sz` props and processed no Tailwind stylesheet, so none of those classes produces CSS.
+  help: add `@import "tailwindcss";` to a stylesheet the app loads; csszyx adds the `@source` for its safelist there itself.
+  docs: https://csszyx.com/e/tailwind-stylesheet-absent
 ```
+
+Printed once per build, in production too, when csszyx emitted classes and CSS
+passed through the plugin but none of it imported `tailwindcss`.
 
 ### Some files skipped
 
 | Message | Notes |
 | --- | --- |
-| `[csszyx] {n} file(s) under packages/ use csszyx but were skipped by ignore rules:` + the list + ``Add the package directory to `compileSources` (or move the file out of packages/) — otherwise their classes never reach the safelist.`` | Normally a nudge. When any skipped file may export `szv` factories it fires in **production** too, and adds: `{m} of them may export ``szv`` factories, so they stay out of the cross-module registry and every importer falls back to the runtime path.` |
-| `[csszyx] prescan skipped {file}: the file exceeds the AST node budget, so NONE of its classes reached the safelist and their CSS will not be generated. Raise ``build.astBudgetLimit`` in the csszyx plugin options, or split the file.` | Ungated |
-| `[csszyx] prescan skipped {file}: transform failed, so none of its classes reached the safelist. {error}` | Ungated |
-| `[csszyx] prescan skipped {file}: the file failed to parse, so none of its classes reached the safelist. Fix the syntax error (or check the file extension matches its contents).` | Ungated |
-| `[csszyx] safelist exceeded {max} classes; additional classes were dropped. This usually means an unbounded set of arbitrary values reached an sz prop.` | Warning |
+| `[csszyx] compile-sources-skipped:`, then ``The build skipped {count} file(s) under `packages/` that use csszyx, so it compiles none of their `sz` props and none of their classes reach the safelist.`` — help: ``add the package directory to `compileSources`, such as `compileSources: ['packages/ui']`, or move the files out of `packages/`.`` — note: ``the skipped files:`` and one project path per line | Normally a nudge, in development only. When any skipped file may export `szv` factories it fires in **production** too, and the note opens: ``of these, {szvCount} may export `szv` factories, so another module that calls one runs it at runtime instead of getting its classes compiled in; the skipped files:`` |
+| `[csszyx] ast-budget: {file}`, then ``The prescan skipped this file because it exceeds the AST node budget, so none of its classes reached the safelist.`` — help: ``split the file, or raise `build.astBudgetLimit` in the plugin options; the Turbopack loader takes no budget option, so split the file there.`` — note: ``its classes produce no CSS unless another source names them.`` | At the level `diagnostics.rules` gives `ast-budget`; listed in every mode at the default |
+| `[csszyx] engine-call-failed:`, then ``The prescan could not transform `{file}`, so none of its classes reached the safelist.`` — help: ``fix the error the transform reported; under Tailwind `source(none)`, no class of this file gets CSS until then.`` — note: ``the transform reported: {detail}.`` | Ungated |
+| `[csszyx] parse-error: {file}`, then ``The prescan could not parse this file, so none of its classes reached the safelist.`` — help: ``fix the syntax error, or check that the file extension matches its contents.`` — note: ``its classes produce no CSS unless another source names them.`` | At the level `diagnostics.rules` gives `parse-error` |
+| `[csszyx] safelist-capped:`, then ``The safelist reached its cap of {max} classes, so the build left out every class it found after that.`` — help: ``look for `sz` values that write a different arbitrary value per element, such as `w-[137px]`, and replace them with theme values.`` — note: ``the classes left out produce no CSS unless another source names them; the cap is fixed, and no option raises it.`` | Warning, once per build |
 
 ### `.gitignore` cannot be read
 
 ```text
-[csszyx] the installed `ignore` package no longer matches one path apart from its parent folders; .gitignore cannot be read.
-  help: install ignore@7.0.6, the version @csszyx/unplugin pins, and remove any override that forces another.
+[csszyx] ignore-package-incompatible:
+  The installed `ignore` package lacks the internal matcher csszyx calls, so csszyx cannot read `.gitignore` and stops.
+  help: remove any override or resolution that forces another version of `ignore`, so csszyx gets `ignore@7.0.6`, the version it pins.
+  docs: https://csszyx.com/e/ignore-package-incompatible
 ```
 
-The build stops, and the `help:` line says what to do: `install ignore@7.0.6, the version @csszyx/unplugin pins, and remove any override that forces another.` csszyx reads `.gitignore` the way Tailwind does, folder by folder, through a part of the `ignore` package that is not public, and a version of `ignore` other than the one csszyx pins has removed it. A lockfile override (`pnpm.overrides`, npm `overrides`, Yarn `resolutions`) that forces another version is the usual cause.
+The build stops, and the `help:` line says what to do. csszyx reads `.gitignore` the way Tailwind does, folder by folder, through a part of the `ignore` package that is not public, and a version of `ignore` other than the one csszyx pins has removed it. A lockfile override (`pnpm.overrides`, npm `overrides`, Yarn `resolutions`) that forces another version is the usual cause.
 
 ### Monorepo content scope
 
@@ -1320,8 +1435,8 @@ These are informational and always print to stderr, once.
 
 | Message |
 | --- |
-| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` |
-| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
+| `[csszyx] active-parser:`, then ``This build parses with the native engine.`` · ``This build parses with the wasm engine.`` · ``This build parses with the wasm engine in place of the default native engine.`` |
+| `[csszyx] native-engine-unavailable:`, then ``The native engine is not available here, so the default `rust` parser runs on the wasm engine.`` — help: ``reinstall without skipping optional dependencies to get the native engine, or set `build.parser: 'wasm'` to hide this line.`` — note: ``the wasm engine produces the same output; only parsing is slower.`` |
 | `[csszyx] parse-error: Syntax error: {message}.` — help: `fix the syntax at this position.` — note: `the file is left unchanged.` One per syntax error, carrying the parser's message at the place it points to. A file whose `sz` values are all flat static objects, such as `sz={{ p: 4 }}`, takes a fast path that lowers them without parsing the file, so csszyx reports no syntax error in it: the bundler or `tsc` does. |
 
 <Aside type="note" title="What a parser fallback costs">
@@ -1335,9 +1450,9 @@ lanes it described.
 
 | Message | Kind |
 | --- | --- |
-| **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
+| **Thrown.** ``[csszyx] sz-object-depth: This `sz` value nests deeper than {maxDepth} levels, so csszyx rejects it.`` — help: ``check what reaches the `sz` prop; nesting this deep usually means untrusted or looping data.`` | Error: an `SzDepthError`, with `code` `sz-object-depth` |
 | `[csszyx] nesting-depth: Source nesting exceeds {maxNestingDepth} levels (found {depth}).` — help: ``flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.`` — note: `the file is left unchanged and contributes no classes.` | Native engine |
-| `[csszyx] ast-budget: The file exceeds the AST node budget.` — help: ``raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.`` — note: `the file is left unchanged, and none of its classes are collected.` | Native engine |
+| `[csszyx] ast-budget: This file exceeds the AST node budget.` — help: ``split the file, or raise `build.astBudgetLimit` in the plugin options; the Turbopack loader takes no budget option, so split the file there.`` — note: `the file is left unchanged, and none of its classes are collected.` | Native engine |
 
 ## Mangling
 
@@ -1353,31 +1468,46 @@ reports exist, both ungated.
 
 ### Hybrid hazards
 
-Printed when mangled tokens collide with class names in CSS csszyx does not
-own, or when a mangled class has no emitted rule:
+One record per kind of hazard, each with its own fix. Printed when mangled
+tokens collide with class names in CSS csszyx does not own:
 
 ```text
-[csszyx] production mangle found hybrid hazards: {n} mangled token(s) collide with class names in non-csszyx CSS (e.g. …) — those tokens will cross-contaminate external ".{token}" elements. HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now. THEN fix it: if these short names are in your OWN CSS, rename them to something specific (e.g. `.x` → `.resize-handle-x`) — short/common names also clash on specificity with other libraries. Only for names in a third-party stylesheet you cannot edit, list them in `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions` to find every offending name.
+[csszyx] mangle-hybrid-hazard:
+  Mangling renamed classes to {count} token(s) that CSS outside csszyx also uses as class names, such as `{names}`, so the renamed elements pick up that CSS and the elements it was written for pick up the csszyx rules.
+  help: rename those classes in your own CSS to something specific, such as `.x` to `.resize-handle-x`, and list the ones in a stylesheet you cannot edit in `production.mangleExclude`; until then, pass `production: { mangle: false }` to the csszyx plugin.
+  note: `csszyx scan-collisions` lists every class name in your stylesheets that a token could take, as a `mangleExclude` list you can paste.
+  docs: https://csszyx.com/e/mangle-hybrid-hazard
 ```
 
-The orphan clause reads `{n} mangled class(es) have no emitted CSS rule (e.g.
-…) — those elements lose styling.` and, when there are no collisions, closes
-with a different remedy pointing at the CSS pipeline instead.
+When a mangled class has no rule in any stylesheet of the build, the record
+reads ``Mangling renamed {count} class(es) that no stylesheet in this build has
+a rule for, such as `{names}`, so a stylesheet outside this build that styles
+them by name, such as one a separate Tailwind run writes, no longer matches
+them.`` — help: ``build that stylesheet through this bundler, so csszyx renames
+its rules too; until then, pass `production: { mangle: false }` to the csszyx
+plugin.``. Each record names up to eight classes and counts all of them.
 
-A stylesheet that matches classes by their text is the third hazard. The clause
+A stylesheet that matches classes by their text is the third hazard. The record
 names the selector and the classes it was matching, and the remedy is a
 paste-ready `production.manglePreserve`:
 
 ```text
-[csszyx] production mangle found hybrid hazards: {n} attribute selector(s) match class names by text (e.g. …) — those rules stop matching once the classes are renamed, so the elements lose those styles. Keep those classes readable with production.manglePreserve: [{entries}] (paste-ready), or key the rule off a data attribute, which mangling never touches. production.mangleExclude cannot help here: it reserves token names and does not keep a class from being renamed.
+[csszyx] mangle-hybrid-hazard:
+  Mangling broke {count} attribute selector(s) that match class names by text, such as `{selectors}`, so those rules stop matching and the elements lose those styles.
+  help: keep those classes readable with `production.manglePreserve: [{entries}]`, or select on a data attribute, which mangling never changes.
+  note: `production.mangleExclude` does not help here: it reserves token names and still lets the class be renamed.
+  docs: https://csszyx.com/e/mangle-hybrid-hazard
 ```
 
-The sample after `e.g.` is each selector followed by the classes it was
-matching, and the paste-ready value is a prefix (`'bg-tag*'`) when every renamed
-class starts with the selector's value, the exact names otherwise. When a selector
-such as `[class^="y"]` in external CSS would begin matching the tokens
-themselves, the clause reads `{n} attribute selector(s) would start matching
-mangled tokens instead (e.g. …).` followed by its own remedy: `Reserve those token names with production.mangleExclude: [{tokens}] (paste-ready) so no class is renamed to one of them, or key the rule off a data attribute, which mangling never touches; a prefix or substring selector goes on matching other tokens, so the data attribute is the durable fix.`
+Each of up to three selectors is followed by the classes it was matching, and
+the paste-ready value is a prefix (`'bg-tag*'`) when every renamed class starts
+with the selector's value, the exact names otherwise. When a selector such as
+`[class^="y"]` in external CSS would begin matching the tokens themselves, the
+record reads ``Mangling made {count} attribute selector(s) match the tokens it
+renamed classes to, such as `{selectors}`, so their rules style elements they
+were not written for.`` — help: ``reserve those tokens with
+`production.mangleExclude: [{entries}]`, or select on a data attribute, which
+mangling never changes.``
 
 ### A `manglePreserve` entry matched nothing
 
@@ -1393,11 +1523,15 @@ fix, so the build says which entries did nothing.
 Both **fail** when the plugin is created, before any build runs:
 
 ```text
-[csszyx] production.manglePreserve[{index}] must be a non-empty string (an exact class name, or a prefix ending in `*`); got {value}.
+[csszyx] mangle-preserve-invalid:
+  `production.manglePreserve[{index}]` is not a class name or a prefix (got {got}), so the build stops.
+  help: write an exact class name, such as `bg-tag-red`, or a prefix ending in `*`, such as `bg-tag-*`.
 ```
 
 ```text
-[csszyx] production.manglePreserve must not contain a lone `*`: it would keep every class and silently turn `production.mangle` into a no-op. Name a prefix (`bg-tag-*`) or set `production.mangle: false`.
+[csszyx] mangle-preserve-invalid:
+  `production.manglePreserve` holds a lone `*`, which would keep every class unmangled, so the build stops.
+  help: name a prefix, such as `bg-tag-*`, or set `production.mangle: false` to turn mangling off.
 ```
 
 A RegExp is rejected on purpose: a stateful flag makes a match alternate across
@@ -1451,31 +1585,40 @@ silently unstyle whatever else reads it. They arrive together under one error:
 ### Alias plan mismatch
 
 ```text
-[csszyx] production.mangleGlobalVars validation failed: CSS alias plan {actual} does not match source-transform alias table {expected}.
+[csszyx] internal-error:
+  An internal check failed in `assertGlobalVarPlanMatchesEarlyAliases`, so csszyx stops.
+  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.
+  note: the check that failed: the CSS alias plan {actual} does not match the source alias table {expected}.
+  docs: https://csszyx.com/e/internal-error
 ```
 
 The names the stylesheet was rewritten with and the names the source transform
-recorded have to be the same set. When they are not, some variable would be read
-under one name and written under another, so the build stops rather than ship a
-page whose custom properties resolve to nothing. Both tables are printed; the
-difference between them is the bug.
+recorded have to be the same set. Both read the same `tokens`, so no setting
+reaches this; when they differ, some variable would be read under one name and
+written under another, so the build stops rather than ship a page whose custom
+properties resolve to nothing. Both tables are printed; the difference between
+them is the bug.
 
 ## SSR & hydration
 
+Every row prints in production too, except `uncompiled-sz`; there each prints
+its code, its args as JSON and the code's page instead of the sentence.
+
 | Message | Notes |
 | --- | --- |
-| `[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.` | |
-| `Failed to parse mangle map:` | The census is not JSON; it is ignored. |
-| `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to {computed}, and the checksum it was built with is {expectedChecksum}` + `note: this detects a damaged or stale page, not an attacker; the checksum is not signed` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
-| `[csszyx] mangle-map-unavailable: this page carries the checksum {expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified` + `help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
-| `[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
-| `[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. crypto.subtle exists only in a secure context: serve the page over HTTPS, or from localhost. Nothing was verified.` | `verifyMangleChecksumAsync` answers `false`; `computeMangleChecksumAsync` throws it. Printed in production too. |
-| `[csszyx] Hydration aborted at {tag}:` + reason | |
-| `[csszyx] CSR recovery requires explicit szRecover directive` | Add `szRecover="csr"`. |
-| `[csszyx] szRecover="dev-only" is disabled in production` | By design. |
-| `[csszyx] Hydration mismatch recovered via CSR. Fix root cause before production.` | The page renders, but you have a real mismatch. |
-| `[csszyx] Stripped {n} szRecover="dev-only" token(s) from the production manifest. Recovery for these elements is disabled in production by design. Sites: {paths}` | Build-time, informational. |
-| `[csszyx] A raw ``sz`` object reached the runtime and was dropped before it could leak to the DOM as sz="[object Object]".` + ``This means the file was not compiled — its `sz` produces no CSS. If it lives in a workspace package, add that package directory to `compileSources`; otherwise check that the bundler is not skipping the file.`` | Dev only, once. The most direct "this file was never compiled" signal there is. |
+| ``[csszyx] mangle-map-unreadable: The class census on this page (`__CSSZYX_MANGLE_MAP__`) is not a map of class names to class names, so it is ignored.`` — help: ``serve the HTML as the build wrote it; a census that cannot be read means the page was changed or cut short after the build.`` | Printed through `console.error`, in production too. |
+| ``[csszyx] mangle-map-unreadable: The class census on this page (`__CSSZYX_MANGLE_MAP__`) is not valid JSON, so it is ignored.`` — help as above — note: ``the browser reported: {error}.`` | The census is not JSON; it is ignored. |
+| ``[csszyx] recovery-manifest-unreadable: The recovery manifest on this page is not valid JSON, so it is ignored.`` — help: ``serve the HTML as the build wrote it; the manifest is the `__SZ_RECOVERY_MANIFEST__` script the build adds to the page.`` — note: ``the browser reported: {error}.`` | From `loadManifestFromDOM`, through `console.error`, in production too. |
+| ``[csszyx] mangle-checksum-mismatch: The mangle map on this page hashes to `{computed}`, and the checksum it was built with is `{expected}`, so the check fails.`` — help: ``deploy the HTML and the bundle from one build.`` — note: ``this detects a damaged or stale page, not an attacker; the checksum is not signed.`` | From `verifyMangleChecksumAsync`, which answers `false`. The census or the bundle's map was altered, or the HTML and the bundle come from different builds. |
+| ``[csszyx] mangle-map-unavailable: This page carries the checksum `{checksum}` but neither a class census nor a bundled mangle map to recompute it from, so nothing was verified.`` — help: ``keep `production.hydrationCensus` on, its default, when the build sets `production.mangleVars` without `production.mangle`, since such a build bundles no map; otherwise, load the bundle that registers the map on this page.`` | From `verifyMangleChecksumAsync`, which answers `false`. Turning mangling off verifies quietly, and so does turning the census off while classes are mangled: the bundle then installs the map. Only `mangleVars` without class mangling and without the census leaves nothing to check. |
+| ``[csszyx] mangle-census-unreadable: The class census on this page could not be read, so the mangle checksum was not verified.`` — help: ``serve the HTML as the build wrote it; the line before this one says what is wrong with the census.`` | From `verifyMangleChecksumAsync`, which answers `false` without reading past the census to the bundle's map: something between the build and the browser changed or cut short the `__CSSZYX_MANGLE_MAP__` script, which is the damage the check exists to catch. |
+| ``[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so csszyx cannot recompute the mangle checksum.`` — help: ``serve the page over HTTPS, or from `localhost`.`` — note: `` `crypto.subtle` exists only in a secure context; `verifyMangleChecksumAsync` answers `false` without checking. `` | `verifyMangleChecksumAsync` answers `false`, in production too; `computeMangleChecksumAsync` throws. |
+| ``[csszyx] hydration-aborted: The HTML, the bundle and the recovery manifest do not all come from one build, so csszyx aborted hydration at `<{tagName}>`.`` — help: ``deploy the HTML, the bundle and the manifest from one build.`` | Through `console.error`, with the element after the message. A call to `abortHydration` with `map_missing` or `invalid_token` names that type and adds `note: the caller reported: {message}`. |
+| ``[csszyx] csr-recovery-unmarked: This element has a hydration mismatch but no `szRecover` directive, so it is not recovered on the client.`` — help: ``add `szRecover="csr"` to recover it, or `szRecover="dev-only"` to recover it in development only.`` | With the element after the message. |
+| ``[csszyx] csr-recovery-dev-only: This element has `szRecover="dev-only"`, which is off in production, so its hydration mismatch is not recovered.`` | By design. Only a production build prints it, so it prints as `[csszyx] csr-recovery-dev-only: {"form":"runtime"} https://csszyx.com/e/csr-recovery-dev-only`, with the element after it. |
+| ``[csszyx] csr-recovery-used: The hydration-abort marks on this element were cleared, so your code can render it on the client.`` — help: ``fix the cause of the mismatch; with `szRecover="csr"`, this recovery also runs in production.`` | The page renders, but you have a real mismatch. |
+| `[csszyx] csr-recovery-dev-only:`, then ``The production manifest leaves out {count} `szRecover="dev-only"` token(s), so recovery for those elements is off in production.`` — help: ``use `szRecover="csr"` on any of them whose recovery must run in production.`` — note: ``this is expected in a production build; the tokens are at {sites}.`` | Build-time, informational, once per build however many HTML entries it has. |
+| ``[csszyx] uncompiled-sz: A raw `sz` object reached the runtime because its file was not compiled, so it produces no CSS.`` — help: ``add the package directory to `compileSources` when the file lives in a workspace package; otherwise, check that the bundler does not skip the file.`` — note: ``csszyx dropped the object, so the DOM does not get `sz="[object Object]"`.`` | Dev only, once. The most direct "this file was never compiled" signal there is. |
 
 See [SSR & Hydration](/docs/ssr/) and the
 [Hydration API](/docs/reference/hydration/).
@@ -1495,25 +1638,34 @@ from the project root, and `--pattern` is read relative to that directory.
 | `{m} more sz issue(s) left out by --rule or --ignore-rule.` | Printed under the report when the selection left some issues out. |
 | `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
 | `✖ {n} sz issue(s) in {m} file(s); {k} below --fail-on {level}, which do not fail the run.` | Some issues are at a level quieter than `--fail-on`; they are marked `(info)` or `(warn)` in the report. The line starts with `!` instead of `✖` when none of them fails the run. |
-| `✖ --fail-on "{level}" {refusal}: use info, warn or error. Nothing was scanned.` | The run fails without scanning. `{refusal}` is `is not a level`, or `cannot be a threshold` for `off`: an `off` finding is never reported, so it cannot be one. |
-| `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
+| ``✖ [csszyx] cli-option-invalid: `--fail-on {value}` is not a level this command takes, so the command did not run.`` — help: ``pass `--fail-on info`, `--fail-on warn` or `--fail-on error`, or leave it out for `error`.`` | The run fails without scanning. `off` is refused too: an `off` finding is never reported, so it cannot be a threshold. |
+| ``✖ [csszyx] unknown-rule-id: No rule or diagnostic is named `{ids}`, so the selection would match nothing and `csszyx check` stops.`` — help: ``write `{suggestion}` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.`` | A `--rule` or `--ignore-rule` id that is no pass and no diagnostic. The run fails without scanning. With one such id the help names the nearest known one; with several it says ``check the spelling`` instead. |
+| ``Scope: static `sz` props and `szv()`/`szr()` catalogs; keys built from runtime data (an array, a spread, a `dynamic()` value) cannot be checked.`` | Printed with every clean run, so the scope is never implied to be wider than it is. |
 | `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
-| `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind's @utility.` | Each offender is listed above it, with the file that first emitted it. |
+| ``✖ {n} emitted class(es) produce no CSS: fix the sz key or value, or define the class with Tailwind's `@utility`.`` | Each offender is listed above it, with the file that first emitted it. In `--json` each is a `dead-class` finding with the registry's ``message`` (``\`{className}\` produces no CSS: this project's Tailwind serves no such utility.``), `help`, `note`, `args` and `url`. |
 | `Negative values this project's Tailwind does not serve:` + one line per class | The dead classes whose utility carries a sign `sz` hoisted (`-p-2`) and whose unsigned form is served, with the file that first emitted each; `rule` `dead-class`, `kind` `unsigned-value` in `--json`. Not listed again under the dead classes. |
-| `✖ {n} emitted class(es) carry a sign this project's Tailwind serves no negative utility for: drop the sign, or define the negative with Tailwind's @utility.` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
-| `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
+| ``✖ {n} emitted class(es) produce no CSS: this project's Tailwind serves no negative form of their utility; drop the sign, or define the negative with Tailwind's `@utility`.`` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
+| `Variants this project's Tailwind does not serve:` + two lines per class | The dead classes served with one variant dropped (`hidden:p-4`), with the file that first emitted each and a `help:` line for the name; `rule` `dead-class`, `kind` `unserved-variant` in `--json`, with `help`, `note` and `args` (`form`, `variant`, `className`). Not listed again under the dead classes. |
+| `✖ {n} emitted class(es) produce no CSS: each uses a variant this project's Tailwind does not serve.` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
+| `Dead-class check skipped: this project has no Tailwind stylesheet.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
-| `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
-| `Files that could not be read:` + one line per path | A path given to `--files` that names a source file the scan could not open. |
-| `✖ A directory and --files both choose the files to check. Pass "{dir}" or --files, not both.` | Exits non-zero, before any file is scanned. |
-| `✖ "{dir}" is a file, not a directory. To check single files, pass --files {dir}.` | Exits non-zero, before any file is scanned. |
-| `✖ --pattern "{pattern}" is an absolute path, so it would not stay inside "{dir}". Pass a pattern relative to the directory.` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
-| `✖ "{dir}" does not exist under {cwd}, so there is nothing to check.` | Exits non-zero rather than passing on the zero files a missing directory would match. |
-| `✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.` | Exits non-zero, before any file is scanned. |
-| `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
-| `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero at `error`. |
-| `Theme tokens a built-in utility already claims:` + one line per token reading `"{name}" also names {classes}. Tailwind merges both meanings into one rule, so a later class that sets only one of them does not replace it in szcn and the stylesheet decides which wins — not the order you wrote.` | Reported at the declaration, with its line. |
-| `✖ {n} theme token(s) shadow a built-in utility. Rename them; no spelling of the merge can fix this while the name is shared. To keep one anyway, pass --allow-token <name>.` | Exits non-zero at `error`. |
+| ``✖ A Tailwind stylesheet of this project did not compile (named above), so the dead-class check did not run and `csszyx check` fails until it compiles.`` | Exits non-zero. See below. |
+| ``Files given to `--files` that do not exist:`` + one line per path | A path given to `--files` that names a source file the scan could not open. |
+| ``✖ A directory and `--files` both choose the files to check: pass `{dir}` or `--files`, not both.`` | Exits non-zero, before any file is scanned. |
+| ``✖ `{dir}` is a file: to check single files, pass `--files {dir}`.`` | Exits non-zero, before any file is scanned. |
+| ``✖ `--pattern {pattern}` is an absolute path, so it would not stay inside `{dir}`: pass a pattern relative to the directory.`` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
+| ``✖ `{dir}` does not exist under `{cwd}`, so there is nothing to check: pass a directory under it, or leave `[dir]` out to check the whole project.`` | Exits non-zero rather than passing on the zero files a missing directory would match. |
+| `✖ Could not list the files to check: {reason}` | The glob itself failed; exits non-zero. |
+| ``✖ {n} file(s) given to `--files` do not exist, so no file was checked: fix each path above; a relative path is read from `--cwd`, or the current directory.`` | Exits non-zero, before any file is scanned. |
+| `Values that belong to a different sz key:` + two lines per offender, the second reading ``\`{key}: '{value}'\` emits \`{className}\`, which sets {sets}, not the property \`{key}\` sets.`` | A value written on a key that owns neither it nor its CSS property: the registry's `sibling-keyword` sentence; `--json` adds its `help`, `note`, `args` and `url`. |
+| `✖ {n} value(s) emit a class that sets another property than their key: move each to the key that sets that property, or declare a theme token named after it if the spelling was deliberate.` | Exits non-zero at `error`. |
+| `Theme tokens a built-in utility already claims:` + two lines per token, the second reading ``Theme token \`{name}\` also names \`{classes}\`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.`` | Reported at the declaration, with its line: the registry's `theme-collision` sentence; `--json` adds its `help`, `note`, `args` and `url`. |
+| ``✖ {n} theme token(s) share a name with a built-in utility: rename them, or keep one with `--allow-token <name>` or `diagnostics.allow.tokens` in `csszyx.config`.`` | Exits non-zero at `error`. |
+| `Opacity modifiers that do not apply:` + three lines per class: the class and its origin, the registry's `broken-opacity` sentence, and its `help:` line | A theme token that resolves to a bare comma triplet; see below. |
+| `✖ {n} emitted class(es) carry an opacity modifier that does not apply.` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
+| ``Classes the build removes because an `sz` class on the same element covers them:`` + one line per class reading `{file}:{line}: {sentence}`, then `note: a build with \`build.mergeCoveredClasses: false\` keeps these.` | The merge audit (`--rule merge-covered-key`, `--rule merge-covered-class`, or a config that reports them at `warn`): the registry's `merge-covered-key` / `merge-covered-class` sentence for each class. |
+| ``! {n} class(es) are removed because an `sz` class on the same element covers them.`` | Printed under that list; `✖` when a config raises one of them to `--fail-on` or louder. |
+| `✖ Merge audit did not run: {reason}` | The audit was selected and the project's stylesheets would not open — one did not compile, or they set different prefixes; for different prefixes a `help:` line follows, ``give every Tailwind stylesheet the same `@import "tailwindcss"` line.`` Exits non-zero, as the dead-class pass does: an audit that could not run must not pass. |
 
 Every pass marks its findings the way the sz-issue report does. A finding
 quieter than `error` is listed with `(info)` or `(warn)` in front of it. While
@@ -1569,41 +1721,57 @@ a prefix its name gives no hint of.
 
 ### `generate-types` and Tailwind v3
 
-`generate-types` reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig`. Tailwind v3 is an optional peer of `@csszyx/cli` — 12 MB across 37 packages that only this command touches — and no package manager warns when an optional peer is missing, so the command checks before it reads a config — and before it reports that it found none, since a v4 project has none by design — and stops with one of three messages. Each is the whole explanation, printed under a `❌` prefix.
+`generate-types` reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig`. Tailwind v3 is an optional peer of `@csszyx/cli` — 12 MB across 37 packages that only this command touches — and no package manager warns when an optional peer is missing, so the command checks before it reads a config — and before it reports that it found none, since a v4 project has none by design — and stops with one of three messages. Each is the whole explanation, printed under a `✖` prefix.
 
 No Tailwind at all:
 
 ```text
-generate-types needs Tailwind CSS v3, and this project has none installed. This command turns a v3 JavaScript config into TypeScript declarations, and reading that config is Tailwind's own job — the command calls Tailwind's resolveConfig to do it. With no Tailwind installed there is nothing to call, so it stops here rather than guessing at your theme. Install it next to the config: npm install -D tailwindcss@3 / pnpm add -D tailwindcss@3 / yarn add -D tailwindcss@3. Why it was not installed for you: Tailwind v3 pulls in 12 MB across 37 packages, and generate-types is the only csszyx command that touches it. Shipping it as a hard dependency would put those 12 MB into every install of @csszyx/cli — including a CI runner that only ever runs csszyx check. It is declared as an optional peer instead, so it arrives when you ask for this command and not before. If your project is on Tailwind v4 there is no tailwind.config.js for this command to read: v4 moved the theme into CSS (@theme { … }). Do not install v3 to get past this message — you do not need generate-types at all.
+[csszyx] tailwind-v3-unavailable:
+  `csszyx generate-types` reads a Tailwind v3 config, and this project has no Tailwind installed.
+  help: install `tailwindcss@3` as a dev dependency, such as `npm install -D tailwindcss@3`; on Tailwind v4 the theme lives in CSS under `@theme`, and this command is not needed.
+  note: `@csszyx/cli` lists Tailwind v3 as an optional peer, so installing the CLI does not install it.
 ```
 
 Tailwind is installed, but it is v4 (or any major other than 3):
 
 ```text
-generate-types needs Tailwind CSS v3, and this project has {version}. Nothing is broken. This command exists to read a v3 JavaScript config (tailwind.config.js) out of an older project, and Tailwind v4 removed both that config format and the resolveConfig helper the command calls. There is no version of generate-types that works against a v4 install. On v4 the theme lives in CSS and needs no generated declarations: @import "tailwindcss"; @theme { --color-brand: oklch(0.7 0.15 250); }. If you are part-way through migrating and still have a v3 tailwind.config.js you want typed, run the command in an environment that has v3 rather than downgrading this project: npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js. Why csszyx did not install v3 for you: it is 12 MB across 37 packages for one command, so it is an optional peer rather than a dependency.
+[csszyx] tailwind-v3-unavailable:
+  `csszyx generate-types` reads a Tailwind v3 config, and this project has Tailwind {version}, which has no JavaScript config to read.
+  help: declare the theme in CSS under `@theme`, which needs no generated types; to type a v3 config left over from a migration, run `npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js`.
+  note: `tailwind.config.js` and the `resolveConfig` helper this command calls were removed in Tailwind v4.
 ```
 
 v3 is installed and its entry did not load — a patched copy, a blocked `exports` map, a damaged file:
 
 ```text
-generate-types found Tailwind CSS {version} but could not load its resolveConfig entry: {reason}. The version is right, so this is not a missing install — the package is there and the entry point it advertises did not load. A reinstall usually clears it: npm install --force tailwindcss@3 / pnpm add -D tailwindcss@3. If it persists, the config cannot be read and generate-types has nothing to generate from. Open an issue with the version above and this line.
+[csszyx] tailwind-v3-unavailable:
+  `csszyx generate-types` found Tailwind {version} but could not load its `resolveConfig` entry, so it cannot read the config.
+  help: reinstall it, such as `npm install --force tailwindcss@3`; if the error stays, report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message.
+  note: loading the entry reported: {reason}.
 ```
 
-The same three sentences are thrown as an `Error` from `scanTailwindConfig` when it is called as a library, so a host such as the MCP server shows the explanation rather than a bare resolver error. `csszyx doctor` reports the state under `🧰 Optional tooling` as a line that never counts as an issue: `generate-types available (tailwindcss {version})`, `generate-types unavailable — tailwindcss v3 is an optional peer and is not installed. Only needed to read a v3 tailwind.config.js.`, `generate-types unavailable — tailwindcss {version} has no JavaScript config to read. Not needed on v4.`, or — as a warning, since a reinstall is due — `generate-types unavailable — tailwindcss {version} is installed but its resolveConfig entry did not load: {reason}. Reinstall it: npm install --force tailwindcss@3`.
+A config path the command cannot read stops it the same way, headed by the path: `tailwind-config-missing` (``This Tailwind config does not exist, so `csszyx generate-types` cannot read the theme.``) for a `--config` that names no file, the same code headed by no path (``No Tailwind config is in `{root}`, so `csszyx generate-types` cannot read the theme.``) when no `--config` was passed and the working directory has none, and `tailwind-config-unloadable` (``This Tailwind config threw while loading, so `csszyx generate-types` cannot read the theme.``, with what the import threw) for one that throws.
+
+The same messages are thrown as csszyx errors from `scanTailwindConfig` when it is called as a library, so a host such as the MCP server shows the explanation rather than a bare resolver error. `csszyx doctor` reports the state under `🧰 Optional tooling` as a line that never counts as an issue: `generate-types available (tailwindcss {version})`, `generate-types unavailable — tailwindcss v3 is an optional peer and is not installed. Only needed to read a v3 tailwind.config.js.`, `generate-types unavailable — tailwindcss {version} has no JavaScript config to read. Not needed on v4.`, or — as a warning, since a reinstall is due — `generate-types unavailable — tailwindcss {version} is installed but its resolveConfig entry did not load: {reason}. Reinstall it: npm install --force tailwindcss@3`.
 
 ### What `check` reports
 
 ```text
-[csszyx] ✖ {n} emitted class(es) carry an opacity modifier that does not survive compilation.
+Opacity modifiers that do not apply:
+  {className}                  {file}
+      `{className}` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `{value}`, which `color-mix()` cannot dim.
+      help: wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`.
+
+✖ {n} emitted class(es) carry an opacity modifier that does not apply.
 ```
 
 A theme token that resolves to a bare RGB triplet cannot be dimmed by
 `color-mix()`, so the opacity is dropped from the compiled CSS while the class
-name still carries it. The lines above this one name each class and its origin;
-wrap the variable, for example `rgb(var(--your-triplet))`.
+name still carries it. Each class is listed with its origin and the registry's
+`broken-opacity` words.
 
 ```text
-[csszyx] ✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.
+✖ {n} file(s) given to `--files` do not exist, so no file was checked: fix each path above; a relative path is read from `--cwd`, or the current directory.
 ```
 
 The run exits non-zero rather than reporting a clean pass over the files it did
@@ -1611,7 +1779,16 @@ manage to read.
 
 `csszyx next-watch` refuses to start on a bad interval rather than fall back to
 a default the command line did not ask for:
-`Invalid --debounce-ms. Expected an integer between 0 and 60000.`
+``[csszyx] cli-option-invalid: `--debounce-ms {value}` is not a whole number of milliseconds from 0 to 60000, so the command did not run.``
+`--mode` on `next-prebuild` and `--parser-mode` on both are refused the same
+way, each under its own form of `cli-option-invalid`; `csszyx init --framework`
+with a value no framework has is too
+(``[csszyx] cli-option-invalid: `--framework {value}` is not a framework `csszyx init` knows, so the command did not run.``),
+before it asks or installs anything. A pattern that matches no source file
+stops both Next commands with
+``[csszyx] no-source-files: No source file under `{root}` matches `{pattern}`, so there is nothing to scan for classes.``,
+and a watcher that throws while closing ends `next watch` with exit code 1 and
+``[csszyx] next-watcher-unclosed: The Next safelist watcher failed while closing, so `csszyx next watch` exits with code 1.``
 
 ### Running it in CI
 
@@ -1744,8 +1921,10 @@ csszyx check --rule merge-covered-key --rule merge-covered-class
 every diagnostic its kind, so `other` never comes back for one; it is kept
 only as an id `--rule`, `--ignore-rule` and `rules` still accept, with a
 warning. Every other pass repeats its `rule`,
-but for two kinds of `dead-class`: `unsigned-value`, a dead class whose sign
-the project's Tailwind serves no negative for, and `prefix-disagreement`.
+but for three kinds of `dead-class`: `unsigned-value`, a dead class whose sign
+the project's Tailwind serves no negative for, `unserved-variant`, a dead
+class whose variant the project's Tailwind does not serve, and
+`prefix-disagreement`.
 `fallback-missing-css` is listed too: its classes were never collected, so
 they have no CSS. The fallback that still collected its classes
 (`fallback-nudge`) and the `mangleVars` hoist note
@@ -1767,23 +1946,32 @@ as well as the report. They select findings and never set a level: a selected
 rule nor a kind fails the run rather than selecting nothing:
 
 ```text
-[csszyx] ✖ {given} is not a rule or a diagnostic kind, so it would select nothing. Known ids: {ids}.
+✖ [csszyx] unknown-rule-id:
+  No rule or diagnostic is named `{ids}`, so the selection would match nothing and `csszyx check` stops.
+  help: check the spelling; https://csszyx.com/docs/reference/warnings/ lists every id.
 ```
 
 ```text
-✖ The Tailwind entries in this project set different prefixes ({file}: {prefix(name) or no prefix}; …), so sz cannot be checked against all of them. Give every entry the same @import "tailwindcss" line.
+✖ The Tailwind stylesheets of this project set different prefixes (`{file}` with `prefix({name})`, `{file}` with none, …), so no class csszyx emits is served by all of them.
+  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line.
+  note: the dead-class check did not run.
 ```
 
 A `dead-class` finding of kind `prefix-disagreement`, and exit code 1: every
 class is dead under one of the prefixes, so there is no answer to report. The
 check skips the same build output the build walk does (`dist`, `build`,
 `target`, `coverage`, `storybook-static` and the framework caches), so a stale
-copy there does not cause it. `--ignore-rule prefix-disagreement` leaves the
-finding out, and the dead-class pass is skipped instead of run under a guess:
+copy there does not cause it. `--ignore-rule prefix-disagreement`, or a
+`--rule` list without it, leaves the finding out, and the dead-class pass is
+skipped instead of run under a guess:
 
 ```text
-Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule prefix-disagreement left that finding out.
+Dead-class check skipped: the Tailwind stylesheets set different prefixes, and `--rule` or `--ignore-rule` leaves `prefix-disagreement` out of this run.
 ```
+
+A `csszyx.config` that sets `prefix-disagreement` to `'off'` silences the
+finding, not the pass: the dead-class check runs with the prefix of the first
+stylesheet, and reports a class only when no stylesheet serves it.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:
@@ -1821,14 +2009,17 @@ output found - run build first`, `Checksum not found in HTML`, and similar.
 Errors from `@csszyx/runtime`, met while a page runs rather than while it builds.
 
 ```text
-[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names. The csszyx bundler plugin loads it automatically for files that can pass objects at runtime. Outside the plugin pipeline (unit tests, scripts), add once at startup: import '@csszyx/runtime/lowering';
+[csszyx] lowering-not-loaded: A string helper received an sz object, but the module that turns sz objects into class names is not loaded, so it cannot produce class names for it.
+  help: add `import '@csszyx/runtime/lowering';` once at startup when the code runs outside the csszyx bundler plugin, such as in unit tests or scripts; the plugin loads it for files that can pass objects at runtime.
 ```
 
 The message names the fix. It appears in unit tests and standalone scripts,
 where nothing has run the plugin that would have injected the import.
 
 ```text
-[csszyx] {helper}() received a plain object — the compiler could not resolve this sz prop at build time. Common cause: sz={{ ...(cond ? varA : varB), key: 'val' }} Fix: sz={[cond ? varA : varB, { key: 'val' }]} Received: {value}
+[csszyx] lite-sz-object: `{fnName}()` takes class strings and received the plain object `{received}`, because the compiler could not resolve this `sz` prop at build time.
+  help: write `sz={[cond ? varA : varB, { key: 'val' }]}`; a spread of a conditional, such as `sz={{ ...(cond ? varA : varB), key: 'val' }}`, is the usual cause.
+  note: a production build skips this check: `_sz` returns the object, or `[object Object]` beside other classes, and `_szMerge` throws a `TypeError`.
 ```
 
 A spread of a conditional hides the shape from the compiler, so the build has
@@ -1839,15 +2030,18 @@ The class toolkit refuses a selector it cannot act on, in development, and
 answers as if nothing matched:
 
 ```text
-[csszyx] has/pick/omit take one selector, not an array; pass the selectors one at a time, or use splitBox whose inner/outer options take a list.
+[csszyx] split-box-selector-invalid: `has`, `pick` and `omit` take one selector, so an array matches nothing.
+  help: pass the selectors one at a time; `splitBox` takes a list in `inner` and `outer`.
 ```
 
 ```text
-[csszyx] an empty selector {} matches nothing; name a category and value, e.g. { overflow: "hidden" }.
+[csszyx] split-box-selector-invalid: The empty selector `{}` names no category, so it matches nothing.
+  help: name a category and a value, such as `{ overflow: "hidden" }`.
 ```
 
 ```text
-[csszyx] '{selector}' is not a category or class prefix csszyx knows; the category is '{hint}'.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: use the category `{hint}`.
 ```
 
 When the word is also a property the qualified form can name — `color` is
@@ -1856,15 +2050,18 @@ category alone would catch more than the word meant: `'text'` also matches
 `text-sm`.
 
 ```text
-[csszyx] '{name}' is not a category or class prefix csszyx knows; the category is '{hint}', and '{hint}:{name}' matches that property only.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: use the category `{hint}`, or `{hint}:{name}` to match that property only.
 ```
 
 ```text
-[csszyx] '{selector}' is not a category or class prefix csszyx knows; classify('<a class>') shows the category a class belongs to.
+[csszyx] split-box-unknown-category: `{name}` is not a category or class prefix csszyx knows, so it matches nothing.
+  help: call `classify('<a class>')` to see the category a class belongs to.
 ```
 
 ```text
-[csszyx] an object selector names one category and value; { {categories} } can never match a single token.
+[csszyx] split-box-selector-invalid: An object selector names one category and value, so `{ {categories} }` can never match a single token.
+  help: pass one selector per category.
 ```
 
 An empty object used to match every csszyx token, and a misspelt category
@@ -1876,14 +2073,22 @@ show which category a class belongs to. The same checks run for `hasSz`,
 `pickSz`, `omitSz` and `splitBoxSz`, where an sz key such as `minW` is a valid
 selector.
 
-Two helpers take two different inputs, and mixing them up says so:
-`splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
+Two helpers take two different inputs, and mixing them up says so, with a
+`TypeError` in development:
+
+```text
+[csszyx] split-box-sz-string: `splitBoxSz` partitions sz objects, not class strings, so it cannot split `{value}`.
+  help: use `splitBox()` for a class string.
+  note: a production build drops the string instead of throwing.
+```
+
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
 
 ### A qualified selector reached the sz twins
 
 ```text
-[csszyx] '{selector}' names a property, which the sz twins do not read: an sz key has no value to classify. help: pass '{name}'.
+[csszyx] split-box-selector-invalid: `{selector}` names a property, and `hasSz`, `pickSz` and `omitSz` match an sz key by category only, so it matches nothing.
+  help: pass `{name}`.
 ```
 
 `'text:color'` qualifies a *class* selector by the property its value names —
@@ -1895,7 +2100,8 @@ to pass instead of pretending the selector does not exist.
 ### A peer rule kept a class on the frame
 
 ```text
-[csszyx] splitBox: '{token}' stays on the frame although '{base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. help: to reach the content instead, target it from the frame: '{reaching}'.
+[csszyx] split-box-peer-on-frame: `splitBox` keeps `{token}` on the frame although `{base}` belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match.
+  help: target the content from the frame instead: `{reaching}`.
 ```
 
 Every `peer-*` variant compiles to the general sibling combinator — the rule
@@ -1915,7 +2121,8 @@ are not affected — their rules reach descendants, and the content node is one.
 ### `css` went to the fallback node
 
 ```text
-[csszyx] splitBoxSz: '{key}' holds raw CSS csszyx does not classify, so it went to the {node} node with everything else it could not classify. help: if its declarations belong on the other node, place it yourself with { {other}: ['{key}'] }.
+[csszyx] split-box-unclassified: The `css` key holds raw CSS `splitBoxSz` does not classify, so it went to the {node} node with everything else it could not classify.
+  help: if its declarations belong on the other node, place it yourself with `{ {side}: ['css'] }`.
 ```
 
 `css` carries raw declarations, not sz keys, so `splitBoxSz` cannot tell which
@@ -1928,7 +2135,8 @@ silences the warning.
 ### A qualified selector names a property csszyx does not tell apart
 
 ```text
-[csszyx] '{property}' is not a property csszyx tells apart; '{selector}' matches nothing. help: the properties are {list} — classify('<a class>') shows the one a class carries.
+[csszyx] split-box-selector-invalid: `{property}` is not a property csszyx tells apart, so `{selector}` matches nothing.
+  help: use one of `{properties}`; `classify('<a class>')` shows the one a class carries.
 ```
 
 A selector such as `'text:color'` reads the half after the colon as a
@@ -1948,7 +2156,8 @@ warning is the only place it is said. Development only, once per message, and
 none of them changes the output.
 
 ```text
-[csszyx] splitBox: '{token}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.
+[csszyx] split-box-unbounded-scroll: `splitBox` put `{scroller}` on the content node, but nothing bounds the height of either node, so the content grows instead of scrolling.
+  help: give the className a height bound such as `h-64`, `max-h-96` or `h-full`, or put `flex flex-col min-h-0` on the frame and `flex-1 min-h-0` on the content.
 ```
 
 A scroll container with no height grows to fit its content, so it never
@@ -1957,14 +2166,16 @@ scrolls. The bound can be a class on either node (`h-*`, `max-h-*`, `min-h-*`,
 frame and a flex child (`flex-1`, `grow`, `basis-*`) are accepted as bounded.
 
 ```text
-[csszyx] splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. help: add 'overflow-hidden' to the frame.
+[csszyx] split-box-unclipped-corners: The `splitBox` frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners.
+  help: add `overflow-hidden` to the frame.
 ```
 
 Scrolled content paints out to the padding box, so it runs over a corner the
 frame rounded but never clipped.
 
 ```text
-[csszyx] splitBox: '{token}' went to the content node, so the frame keeps its background, border and size and stays visible. help: pass { outer: ['hidden'] } if the whole box should disappear.
+[csszyx] split-box-hidden-content: `splitBox` put `{hidden}` on the content node, so the frame keeps its background, border and size and stays visible.
+  help: pass `{ outer: ['hidden'] }` if the whole box should disappear.
 ```
 
 `hidden` is `display: none`, which acts on the contents, so it stops the content
@@ -1978,7 +2189,8 @@ partitions an sz object.
 ### A class csszyx does not recognise
 
 ```text
-[csszyx] splitBox: '{token}' is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify. help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { {other}: ['{token}'] }.
+[csszyx] split-box-unclassified: `{token}` is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify.
+  help: if it belongs on the other node, place it there with `{ {side}: ['{token}'] }`; a custom `@utility` that sets properties of both nodes has no correct side, so split it into two utilities.
 ```
 
 The toolkit's vocabulary is atomic utilities — a class whose name states one
@@ -1990,7 +2202,7 @@ per-property fragments to make the question answerable, so it says what it did
 and hands the call back.
 
 `{node}` is the node the fallback chose — `frame` by default, `content` when
-you passed `fallback: 'inner'` — and `{other}` is the opposite one, so the help
+you passed `fallback: 'inner'` — and `{side}` is the opposite one, so the help
 line always suggests moving the class rather than leaving it where it is.
 
 Placing the token by hand is the fix, and a placement list accepts the literal
@@ -2012,7 +2224,8 @@ the side the fallback would have chosen anyway.
 ### A placement names a variant
 
 ```text
-[csszyx] splitBox: a placement list names a class by its base, so '{token}' never matches; the variant prefix and the ! or - marker are stripped before the comparison. help: write { {side}: ['{base}'] }; it places every variant of '{base}'.
+[csszyx] split-box-placement-variant: A `splitBox` placement list names a class by its base, so `{selector}` never matches: the variant prefix and the `!` or `-` marker are stripped before the comparison.
+  help: write `{ {side}: ['{base}'] }`; it places every variant of `{base}`.
 ```
 
 Use the base name in `outer` and `inner` placement lists. The rule applies to
@@ -2030,7 +2243,8 @@ for literal custom-class placement, and
 ### The cap on development warnings
 
 ```text
-[csszyx] {count} distinct development warnings have been printed; further ones are suppressed for this session. help: a className built from data is the usual cause — look above for one warning repeating with different values.
+[csszyx] diagnostics-capped: This session has printed {count} distinct development warnings, so further ones are suppressed.
+  help: look above for one warning repeating with different values; a `className` built from data is the usual cause.
 ```
 
 Every warning prints once per distinct message, and the cache behind that
@@ -2059,32 +2273,48 @@ only. See [TypeScript Autocomplete](/docs/typescript-plugin/) and
 
 A Vue or Svelte template has no csszyx runtime, so the adapters write a class
 only for an `sz` value the engine resolves completely at build time. Any other
-value is an error, its attribute is left as written, and the build stops. Both
-messages start with the file and the position of the value in it:
+value is an error placed at its position in the file, its attribute is left as
+written, and the build stops:
+
+```text
+[csszyx] template-runtime-value: {file}:{line}:{column}
+  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.
+  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.
+  note: the attribute is left as written.
+  docs: https://csszyx.com/e/template-runtime-value
+```
+
+A name, a prop, a conditional, a call, an array value, or a template string
+with `${}` is only known at runtime. A value with a syntax error is
+[`parse-error`](#which-parser-ran) in its `expression` form: "This `sz` value
+could not be parsed as a JavaScript expression." The errors of one file fail
+the build at once, headed by their count:
+
+```text
+[csszyx] template-sz-invalid: {file}
+  This file has {count} `sz` error(s), so the build stops.
+  help: fix each error listed below.
+  docs: https://csszyx.com/e/template-sz-invalid
+```
+
+A file the framework cannot read is one error, and no `sz` in it is lowered:
 
 | Message | When |
 | --- | --- |
-| ``[csszyx] {file}:{line}:{col}: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it`` | a name, a prop, a conditional, a call, an array value, or a template string with `${}` |
-| ``[csszyx] {file}:{line}:{col}: this sz value could not be parsed as a JavaScript expression`` | a syntax error in the value |
-| ``[csszyx] {file}:{line}:{col}: Vue cannot parse this file, so no sz in it gets a class: {reason}`` | `vue/compiler-sfc` rejects the file, an element left open say |
-| ``[csszyx] {file}:{line}:{col}: Svelte cannot parse this file, so no sz in it gets a class: {reason}`` | `svelte/compiler` rejects the component: the quoted `sz="{ p: 4 }"`, TypeScript without `lang="ts"`, or markup another preprocessor has not turned into Svelte yet |
-| ``[csszyx] {file}:{line}:{col}: csszyx reads sz in an HTML template only, and this one is <template lang="{lang}">`` | a Vue template in another language, such as pug |
-| ``[csszyx] {file}:1:1: csszyx reads Svelte 5 markup, and svelte {version} resolves`` | the project installs Svelte 4 |
-| ``[csszyx] {adapter} reads templates with `{parser}`, which does not resolve from it help: install {package} in the project`` (the `help:` on its own line) | the project does not install `vue` or `svelte` |
-
-The first is followed by `help: write the value as a literal, e.g. { p: 4 }, or
-bind class or style yourself for a value that changes at runtime`, and both by
-`note: the attribute is left as written; no class is generated for it`. A file
-the framework's parser rejects is one error, and no `sz` in it is lowered; its
-`help:` line says what to change: write `sz={{ p: 4 }}`, or run csszyx after the
-preprocessors that turn the file into Svelte.
+| ``[csszyx] template-unparsable: Vue cannot parse this file, so no `sz` attribute in it gets a class.`` — help: ``fix the error the Vue compiler reports; the file does not compile without csszyx either.`` — note: ``the Vue compiler reported: {message}.`` | `vue/compiler-sfc` rejects the file, an element left open say |
+| ``[csszyx] template-unparsable: Svelte cannot parse this file, so no `sz` attribute in it gets a class.`` — help: ``write a quoted sz object as an expression, `sz={{ p: 4 }}`; Svelte does not parse `sz="{ p: 4 }"`.`` | `svelte/compiler` rejects a component that quotes an `sz` object |
+| ``[csszyx] template-unparsable: Svelte cannot parse this file, so no `sz` attribute in it gets a class.`` — help: ``run csszyx after the preprocessors that turn this file into Svelte, such as TypeScript without `lang="ts"`, or pug.`` | `svelte/compiler` rejects any other component: TypeScript without `lang="ts"`, or markup another preprocessor has not turned into Svelte yet |
+| ``[csszyx] template-lang-unsupported: This template is `<template lang="{lang}">`, and csszyx reads `sz` in HTML templates only, so no `sz` attribute in it gets a class.`` — help: ``write the template in HTML, or bind `class` yourself in it.`` | a Vue template in another language, such as pug |
+| ``[csszyx] svelte-version-unsupported: Svelte {version} resolves here, and csszyx reads Svelte 5 markup only, so no `sz` attribute in this file gets a class.`` — help: ``install `svelte@5`.`` | the project installs Svelte 4 |
 
 An adapter loads its framework's parser from the project the first time a file
 needs it. When none resolves, the build stops on:
 
 ```text
-[csszyx] @csszyx/vue-adapter reads templates with `vue/compiler-sfc`, which does not resolve from it
-help: install vue@3.5 in the project
+[csszyx] peer-module-unresolved:
+  `@csszyx/vue-adapter` reads templates with `vue/compiler-sfc`, which does not resolve from it, so no template is read.
+  help: install `vue@3.5` in the project.
+  docs: https://csszyx.com/e/peer-module-unresolved
 ```
 
 The Svelte adapter names `svelte/compiler` and `svelte@5` the same way. The
@@ -2116,26 +2346,20 @@ answers were the intended ones; the pinned expectations moved with it.
 ### The compiler and the engine come from different releases
 
 ```text
-[csszyx] engine-version-skew: @csszyx/compiler {version} was built for engine source {digest} and found {engine}
-help: install @csszyx/core@{version}; it installs its platform package at the same version
+[csszyx] engine-version-skew:
+  `@csszyx/compiler` {expectedVersion} loaded the {artifact} engine {foundVersion}, and the two must come from the same release, so csszyx stops.
+  help: install `@csszyx/core@{expectedVersion}`; it installs its platform package at the same version.
+  docs: https://csszyx.com/e/engine-version-skew
 ```
 
-The `help:` line names the fix for what answered:
+`{artifact}` is `native` or `wasm`. The sentence and its `help:` name the fix
+for what answered:
 
-```text
-help: install @csszyx/core@{version}; {platformPackage} must be {version} too, so reinstall it if your lockfile holds another version
-help: rebuild the engine from this checkout with `pnpm --filter @csszyx/core {task}` after changing its source
-```
-
-The first is for the native engine of another release: a lockfile can keep an
-older platform package beside a current `@csszyx/core`. The second is for an
-engine at the compiler's version built from other source, which happens only
-in a checkout of csszyx itself; `{task}` is `native:build` for the native
-engine and `build` for wasm.
-
-`{engine}` names the artifact and what it reported, such as `the native
-(@csszyx/core-linux-x64-gnu) engine 0.17.2 (source 9b40c2d1e7a35f08)`, or says it
-comes from a release before 0.18 that does not report its version.
+| Message | When |
+| --- | --- |
+| ``[csszyx] engine-version-skew: `@csszyx/compiler` {expectedVersion} loaded the native engine {foundVersion} from `{platformPackage}`, and the two must come from the same release, so csszyx stops.`` — help: ``install `@csszyx/core@{expectedVersion}`, and reinstall `{platformPackage}` if your lockfile holds it at another version.`` | the native engine of another release: a lockfile can keep an older platform package beside a current `@csszyx/core` |
+| ``[csszyx] engine-version-skew: `@csszyx/compiler` {expectedVersion} loaded a {artifact} engine from a release before 0.18, and the two must come from the same release, so csszyx stops.`` | an engine too old to report its version |
+| ``[csszyx] engine-version-skew: The {artifact} engine was built from source `{foundDigest}`, and `@csszyx/compiler` {expectedVersion} expects `{expectedDigest}`, so csszyx stops.`` — help: ``rebuild the engine from this checkout: `pnpm --filter @csszyx/core native:build` for native, `pnpm --filter @csszyx/core build` for wasm.`` | an engine at the compiler's version built from other source, which happens only in a checkout of csszyx itself |
 
 `@csszyx/compiler` and the engine in `@csszyx/core` are released together but
 installed apart, so a lockfile or a cache can pair them across releases. An
@@ -2150,8 +2374,9 @@ checkouts of csszyx itself: rebuild the engine.
 ### The plugin and the runtime come from different releases
 
 ```text
-[csszyx] runtime-version-skew: @csszyx/unplugin {pluginVersion} found @csszyx/runtime {runtimeVersion} at {runtimeDir}
-help: install @csszyx/runtime@{pluginVersion}; the build and the runtime lower sz objects with rules from the same release
+[csszyx] runtime-version-skew:
+  `@csszyx/unplugin` {pluginVersion} found `@csszyx/runtime` {runtimeVersion} at `{runtimeDir}`, and the two must come from the same release, so the build stops.
+  help: install `@csszyx/runtime@{pluginVersion}`.
 ```
 
 The build lowers every static `sz` object, and `@csszyx/runtime` lowers the rest

@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { isCsszyxError } from '../src/errors.js';
 import { requirePeer } from '../src/peer-module.js';
 
 const from = new URL('./fixtures/peer/', import.meta.url).href;
@@ -18,9 +19,27 @@ const peer = (request: string) =>
 
 describe('requirePeer', () => {
     it('names the package to install when the request does not resolve', () => {
-        expect(() => peer('no-such-framework/compiler')).toThrow(
-            '[csszyx] @csszyx/test-adapter reads templates with `no-such-framework/compiler`, which does not resolve from it\nhelp: install framework@5 in the project',
-        );
+        let error: unknown;
+        try {
+            peer('no-such-framework/compiler');
+        } catch (caught) {
+            error = caught;
+        }
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error).toMatchObject({
+            code: 'peer-module-unresolved',
+            args: {
+                requiredBy: '@csszyx/test-adapter',
+                request: 'no-such-framework/compiler',
+                install: 'framework@5',
+            },
+            message:
+                '[csszyx] peer-module-unresolved:\n' +
+                '  `@csszyx/test-adapter` reads templates with `no-such-framework/compiler`, which does not resolve from it, so no template is read.\n' +
+                '  help: install `framework@5` in the project.\n' +
+                '  docs: https://csszyx.com/e/peer-module-unresolved',
+        });
+        expect((error as Error).cause).toMatchObject({ code: 'MODULE_NOT_FOUND' });
     });
 
     it("passes the peer's own failure through", () => {

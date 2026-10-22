@@ -18,6 +18,7 @@ export {
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzDiagnosticArgs,
     type SzDiagnosticArgsByCode,
     type SzDiagnosticCode,
     type SzDiagnosticGroupId,
@@ -26,18 +27,26 @@ export {
     type SzSettableDiagnosticId,
 } from './diagnostic-codes.generated.js';
 export {
+    type SzDiagnosticErrorOptions,
+    szDiagnosticError,
+    szDiagnosticMessage,
+} from './diagnostic-error.js';
+export {
     type IdentifiedDiagnostic,
     isSzDiagnosticId,
     type RenderableDiagnostic,
-    renderSzDiagnostic,
-    renderSzDiagnosticBody,
-    renderSzDiagnosticParts,
     SZ_DIAGNOSTIC_URL_BASE,
     type SzDiagnosticComputed,
     type SzDiagnosticParts,
+    type SzTypedDiagnostic,
     szDiagnosticPositionOf,
 } from './diagnostic-render.js';
 export { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+export {
+    renderSzDiagnostic,
+    renderSzDiagnosticBody,
+    renderSzDiagnosticParts,
+} from './diagnostic-render-root.js';
 export {
     diagnosticPath,
     renderEngineDiagnostics,
@@ -97,6 +106,15 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
+/**
+ * The form `unserved-variant` names an ARIA state in, for the build and
+ * `csszyx check`, which ask the project's Tailwind whether it is served.
+ *
+ * @internal Shared by csszyx's own packages; not a stable API. Here rather
+ * than in `./internal` because the table shares the lowering's chunk, which
+ * the root loads already.
+ */
+export { type StateVariantForm, stateVariantForm } from './state-variants.js';
 export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
@@ -119,6 +137,7 @@ export {
     REPLACED_KEYS,
     type SourceTransformResult,
     SPECIAL_VARIANTS,
+    SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
     type SzObject,
     type SzValue,

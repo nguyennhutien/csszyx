@@ -81,9 +81,13 @@ describe('the @utility collision warning', () => {
             command: 'serve',
         });
 
-        const said = warn.mock.calls.map(call => call.join(' ')).join('\n');
-        expect(said).toContain('@utility card');
-        expect(said).toContain('declared twice');
+        expect(warn.mock.calls.map(call => call.join(' '))).toContain(
+            '[csszyx] utility-collision:\n' +
+                '  `@utility card` is declared twice, so Tailwind merges both declarations into one class, and no single place in your CSS shows what `card` sets.\n' +
+                '  help: merge the two blocks into one, or rename one of them.\n' +
+                '  note: every use of `card` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.\n' +
+                '  docs: https://csszyx.com/e/utility-collision',
+        );
     });
 
     it('says it once, however many times the stylesheet is rescanned', async () => {

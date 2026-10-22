@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { DIAGNOSTICS } from './diagnostics/registry.mjs';
 import {
     extractDocumentedMessages,
     extractSourceLiterals,
@@ -58,9 +59,37 @@ const EMPTY_BASELINE = { count: 0, messages: [] };
  *
  * `throw` is admitted at the same eight-word floor as the rest, which is what
  * keeps an internal invariant like `throw new Error('unreachable')` out.
+ *
+ * `szReport` prints a registry entry's words (ADR 0031): its call names the
+ * entry, not a sentence, and so does the compact line a site prints in
+ * production (`[csszyx] <code>: <args>`). Those are read by code
+ * ({@link extractSinkCodes}) and checked against the registry.
+ *
+ * A thrown csszyx error is read the same way: `new CsszyxError({ code, … })`
+ * or a native error given a code by `brandCsszyxError`, whose message is
+ * `szRender`'s words for the entry in development and the compact form in
+ * production. Prose handed to either is still a message to document.
  */
 const SINK_PATTERN =
-    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|warn|(?:diagnostics|errors)\.push|push_diagnostic|throw new (?:Error|TypeError))\s*\(/g;
+    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|szReport|szRender|warn|(?:diagnostics|errors)\.push|push_diagnostic|throw new (?:Error|TypeError)|new CsszyxError|brandCsszyxError)\s*\(/g;
+
+/** A registry entry a `szReport` call names, as the browser module exports it. */
+const REPORTED_ENTRY = /\bdiagnostic:\s*([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)\b/g;
+
+/** The calls that throw a csszyx error, whose `code` field is a registry id. */
+const ERROR_SINK_PATTERN = /\b(?:new CsszyxError|brandCsszyxError)\s*\(/g;
+
+/** The code a thrown csszyx error names: `code: '<code>'`. */
+const ERROR_CODE = /\bcode:\s*['"]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)['"]/g;
+
+/** The code that heads a line: `[csszyx] <code>: `, as the compact form writes it. */
+const CODE_HEAD = /\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*): /g;
+
+/**
+ * The compact production form: the code, then its args as JSON. Its only
+ * prose is the link to the code's page, so the region is read by code alone.
+ */
+const COMPACT_FORM = /\[csszyx\] [a-z][a-z0-9-]*: (?:\$\{|['"`]\s*\+\s*)JSON\.stringify\(/;
 
 /** Words a sink argument needs before it counts as a message worth documenting. */
 const MIN_MESSAGE_WORDS = 8;
@@ -73,12 +102,13 @@ const MIN_MESSAGE_WORDS = 8;
  * line-based cut would capture only its first fragment.
  *
  * @param source Raw contents of one source file.
+ * @param pattern The sink calls to read; every sink by default.
  * @returns The text inside each sink call's argument list.
  */
-export function extractSinkCallRegions(source) {
+export function extractSinkCallRegions(source, pattern = SINK_PATTERN) {
     const text = String(source);
     const regions = [];
-    for (const match of text.matchAll(SINK_PATTERN)) {
+    for (const match of text.matchAll(pattern)) {
         let depth = 1;
         let i = match.index + match[0].length;
         const start = i;
@@ -102,6 +132,7 @@ export function extractSinkCallRegions(source) {
 export function extractSinkMessages(source, rust = false) {
     const messages = [];
     for (const region of extractSinkCallRegions(source)) {
+        if (COMPACT_FORM.test(region)) continue;
         for (const literal of extractSourceLiterals(region, { rust })) {
             if (literal.split(' ').length >= MIN_MESSAGE_WORDS) {
                 messages.push(literal);
@@ -109,6 +140,52 @@ export function extractSinkMessages(source, rust = false) {
         }
     }
     return messages;
+}
+
+/**
+ * Collect the codes a file's sinks print: each registry entry a `szReport` or
+ * `szRender` call names, each code a thrown csszyx error names, and each code
+ * that heads a sink's literal. The words of such a line live in the registry,
+ * so its code is what gets checked.
+ *
+ * @param source Raw contents of one source file.
+ * @returns The codes, one per mention, in source order.
+ */
+export function extractSinkCodes(source) {
+    const codes = [];
+    for (const region of extractSinkCallRegions(source)) {
+        for (const [, name] of region.matchAll(REPORTED_ENTRY)) {
+            codes.push(name.toLowerCase().replaceAll('_', '-'));
+        }
+        for (const [, code] of region.matchAll(CODE_HEAD)) codes.push(code);
+    }
+    for (const region of extractSinkCallRegions(source, ERROR_SINK_PATTERN)) {
+        for (const [, code] of region.matchAll(ERROR_CODE)) codes.push(code);
+    }
+    return codes;
+}
+
+/**
+ * The codes the registry does not word: no entry, or an entry with no text,
+ * help or note, so neither the console nor its `/e/<code>` page could say
+ * anything about the line.
+ *
+ * @param codes Codes found at sinks.
+ * @param diagnostics The registry's entries.
+ * @returns The undocumented codes, each once, in the order given.
+ */
+export function undocumentedCodes(codes, diagnostics) {
+    const worded = new Set(
+        diagnostics
+            .filter(
+                entry =>
+                    entry.text !== undefined ||
+                    entry.help !== undefined ||
+                    entry.note !== undefined,
+            )
+            .map(entry => entry.id),
+    );
+    return [...new Set(codes)].filter(code => !worded.has(code));
 }
 
 /**
@@ -136,6 +213,12 @@ export function findUndocumentedMessages(repositoryRoot) {
             if (!isFullyComposed(message, haystack)) {
                 undocumented.push({ file, message });
             }
+        }
+        for (const code of undocumentedCodes(extractSinkCodes(source), DIAGNOSTICS)) {
+            const message = `[csszyx] ${code}: (no registry entry words this code)`;
+            if (seen.has(message)) continue;
+            seen.add(message);
+            undocumented.push({ file, message });
         }
     }
     return undocumented;

@@ -33,6 +33,20 @@ describe('csszyx_validate', () => {
         expect(byKey.ordinal.message).toBe("'ordinal' was replaced by 'numOrdinal' in 0.18.0.");
     });
 
+    it('names the keys a split shorthand is written with, in the engine words', () => {
+        const data = JSON.parse(handleValidate({ sz: { font: 'bold' } }).content[0].text);
+        expect(data.valid).toBe(false);
+        expect(data.errors).toEqual([
+            {
+                key: 'font',
+                code: 'canonical-key',
+                message: '`font` is not an sz key, and nothing is emitted for it.',
+                help: 'write `weight` for the font weight, or `fontFamily` for the font family.',
+                url: 'https://csszyx.com/e/canonical-key',
+            },
+        ]);
+    });
+
     it('catches unknown props', () => {
         const data = JSON.parse(handleValidate({ sz: { unknownProp: 'value' } }).content[0].text);
         expect(data.valid).toBe(false);
@@ -51,7 +65,7 @@ describe('csszyx_validate', () => {
         // Each part on its own: no header, no label, no layout to cut apart.
         expect(data.warnings[0]).toEqual({
             code: 'off-scale-value',
-            message: "`p: 1.3` is not on Tailwind's spacing scale, so the class generates no CSS.",
+            message: "`p: 1.3` is not on Tailwind's spacing scale, so the class produces no CSS.",
             help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'1.3rem'`.",
             url: 'https://csszyx.com/e/off-scale-value',
         });
@@ -134,7 +148,7 @@ describe('csszyx_validate', () => {
             expect(data.errors[0]).toEqual({
                 key: 'touch',
                 code: 'moved-value',
-                message: '`touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                message: "`touch: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
                 help: "write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
                 url: 'https://csszyx.com/e/moved-value',
             });
@@ -170,7 +184,9 @@ describe('csszyx_validate', () => {
         const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
         const data = JSON.parse(handleValidate({ sz }).content[0].text);
         expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
-        expect(data.errors[0].message).toContain('`touch: pan-x` moved to `touchPanX`');
+        expect(data.errors[0].message).toBe(
+            "`touch: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
+        );
         expect(data.errors[0].help).toContain("write `{ touchPanX: 'x' }`");
         expect(data.transformError).toBeUndefined();
         expect(data.transformResult.className).toBe(transform(sz as SzObject).className);
@@ -193,7 +209,7 @@ describe('csszyx_validate', () => {
         loop.hover = loop;
         const data = JSON.parse(handleValidate({ sz: loop }).content[0].text);
         expect(data.valid).toBe(false);
-        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformError).toContain('[csszyx] sz-object-depth:');
     });
 
     it('reports a transformError (and omits transformResult) when transform() itself throws', () => {
@@ -207,7 +223,7 @@ describe('csszyx_validate', () => {
         const data = JSON.parse(handleValidate({ sz: deep }).content[0].text);
 
         expect(data.valid).toBe(false);
-        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformError).toContain('[csszyx] sz-object-depth:');
         expect(data.transformResult).toBeUndefined();
     });
 });

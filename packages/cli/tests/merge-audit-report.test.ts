@@ -15,28 +15,34 @@ vi.mock('@csszyx/unplugin/next-prebuild', async importOriginal => ({
 }));
 
 describe('the merge audit', () => {
-    it('is skipped with the first line of a failure that is not an Error', async () => {
+    it('did not run, with the first line of a failure that is not an Error', async () => {
         const out = createReporter(false);
         const warn = vi.spyOn(out, 'runWarn');
-        await reportMergeAudit(out, {
+        const failed = await reportMergeAudit(out, {
             cwd: '/nowhere',
             files: [],
             selected: ['merge-covered-class'],
+            failOn: 'error',
         });
-        expect(warn).toHaveBeenCalledWith('Merge audit skipped: no stylesheet');
+        expect(warn).toHaveBeenCalledWith('✖ Merge audit did not run: no stylesheet');
         expect(out.findings).toEqual([]);
+        // Selected and could not run: the caller fails the run.
+        expect(failed).toBe(true);
     });
 
-    it('says it was skipped on stderr in --json, where stdout is the document', async () => {
+    it('says it did not run on stderr in --json, where stdout is the document', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         await reportMergeAudit(createReporter(true), {
             cwd: '/nowhere',
             files: [],
             selected: ['merge-covered-class'],
+            failOn: 'error',
         });
         expect(log).not.toHaveBeenCalled();
-        expect(error.mock.calls.flat().join('\n')).toContain('Merge audit skipped: no stylesheet');
+        expect(error.mock.calls.flat().join('\n')).toContain(
+            'Merge audit did not run: no stylesheet',
+        );
         vi.restoreAllMocks();
     });
 });

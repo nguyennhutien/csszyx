@@ -7,6 +7,7 @@
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { SLASH_OPACITY_STRING, szReport } from './report.js';
 import { szWarningsQuiet } from './sz-dev-warnings.js';
 
 /**
@@ -50,12 +51,12 @@ export function __resetStringColorOpacityWarnings(): void {
 }
 
 /**
- * Warn that slash opacity in a string needs the color-object form instead.
+ * Warn that slash opacity in a string needs the color-object form instead
+ * (`slash-opacity-string`).
  *
  * Nothing is emitted for the value, so this is missing output (ADR 0011): it
  * prints in every mode and in the browser, once per value, and only
- * `CSSZYX_QUIET_SZ_WARNINGS` mutes it. The engines render the same text with
- * the code `slash-opacity-string`.
+ * `CSSZYX_QUIET_SZ_WARNINGS` mutes it.
  *
  * @param key - Color property key.
  * @param color - Rejected color value, including the slash, without `!`.
@@ -66,10 +67,12 @@ export function warnStringColorOpacity(key: string, color: string, location?: st
     if (szWarningsQuiet() || warnedStringColorOpacity.has(token)) return;
     warnedStringColorOpacity.add(token);
     const slash = color.indexOf('/');
-    const at = location ? ` at ${location}` : '';
-    console.warn(
-        `[csszyx] "${key}: '${color}'"${at} — string slash opacity is not supported, and ` +
-            'nothing is emitted for it. Use object form: ' +
-            `{ color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
-    );
+    const args = { key, color: color.slice(0, slash), opacity: color.slice(slash + 1) };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: SLASH_OPACITY_STRING, args, at: location });
+    } else {
+        console.warn(
+            `[csszyx] slash-opacity-string: ${JSON.stringify(args)} https://csszyx.com/e/slash-opacity-string`,
+        );
+    }
 }

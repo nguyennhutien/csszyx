@@ -22,7 +22,11 @@
  */
 
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES, suggestSzKey } from '@csszyx/compiler';
-import { REMOVED_BOOLEAN_SUGAR, REPLACED_KEYS } from '@csszyx/compiler/browser';
+import {
+    REMOVED_BOOLEAN_SUGAR,
+    REPLACED_KEYS,
+    SPLIT_SHORTHAND_KEYS,
+} from '@csszyx/compiler/browser';
 import {
     fillSzDiagnosticTemplate,
     SZ_EDITOR_DIAGNOSTIC_TEMPLATES,
@@ -121,8 +125,8 @@ function removedSugarIssue(key: string, value: unknown): KeyIssue | undefined {
 
 /**
  * The engine's verdict on a key, in the engine's order: removed boolean sugar,
- * a removed key, a flag that was replaced, an alias, a number, or a key that
- * may still be a project's own utility.
+ * a removed key, a flag that was replaced, an alias or a split shorthand, a
+ * number, or a key that may still be a project's own utility.
  *
  * @param key - The key.
  * @param value - Its parsed value; only `true` can make it removed sugar.
@@ -141,7 +145,9 @@ export function keyIssue(key: string, value?: unknown): KeyIssue {
             args: { form: 'replaced', key, replacement: `${canonical}: true` },
         };
     }
-    if (canonical !== undefined) return { code: 'canonical-key', args: { key } };
+    if (canonical !== undefined) return { code: 'canonical-key', args: { form: 'alias', key } };
+    const split = SPLIT_SHORTHAND_KEYS[key];
+    if (split !== undefined) return { code: 'canonical-key', args: { form: split, key } };
     if (NUMERIC_KEY.test(key)) return { code: 'numeric-key', args: { key } };
     const suggestion = suggestSzKey(key);
     return { code: 'unknown-key', args: suggestion === null ? { key } : { key, suggestion } };

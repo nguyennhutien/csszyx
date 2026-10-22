@@ -521,8 +521,15 @@ function hashOutputs(outputs: readonly string[]): string {
     return hash.digest('hex');
 }
 
+/** The engine the plugin's `active-parser` line names, by the parser that runs on it. */
+const ENGINE_PARSER: Readonly<Record<string, ExternalBenchParser>> = {
+    native: 'rust',
+    wasm: 'wasm',
+};
+
 function observedParser(output: string, parser: ExternalBenchParser): boolean {
-    return /active parser:\s*(rust|wasm)\b/i.exec(output)?.[1]?.toLowerCase() === parser;
+    const engine = /This build parses with the (native|wasm) engine\b/.exec(output)?.[1];
+    return engine !== undefined && ENGINE_PARSER[engine] === parser;
 }
 
 function observedMangleVars(output: string): boolean {

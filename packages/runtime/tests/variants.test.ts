@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { runtimeMessage } from '../../compiler/tests/engine-message.js';
 import { szv } from '../src/variants.js';
+import { configInvalidLine } from './helpers/szv-lines.js';
 
 const buttonSz = szv({
     base: { display: 'inline-flex', items: 'center', rounded: 'md' },
@@ -126,7 +128,7 @@ describe('szv base-only configs', () => {
         });
         try {
             szv({ base: { p: 2 }, variants: 'nope' as never });
-            expect(warnings.some(w => w.includes('variants must be an object'))).toBe(true);
+            expect(warnings).toEqual([configInvalidLine('variants', 'string')]);
         } finally {
             spy.mockRestore();
         }
@@ -147,7 +149,14 @@ describe('szv output string-coercion guard (dev)', () => {
             // eslint-disable-next-line @typescript-eslint/no-base-to-string
             const coerced = String(boxSz({ v: 'x' }));
             expect(coerced).toBe('');
-            expect(warnings.some(w => w.includes('[object Object]'))).toBe(true);
+            expect(warnings).toEqual([
+                runtimeMessage(
+                    'szv-object-as-string',
+                    'An sz object from `szv()` was used as a class string, such as `className={someSzv({ … })}`, which renders `[object Object]` in a production build.',
+                    'help: pass it to an `sz` prop, or turn it into a class string with `szr(…)` first.',
+                    'note: a development build renders an empty string in its place.',
+                ),
+            ]);
         } finally {
             spy.mockRestore();
         }

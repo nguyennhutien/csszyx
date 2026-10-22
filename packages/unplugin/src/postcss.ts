@@ -15,13 +15,15 @@
 
 import * as path from 'node:path';
 import type { PluginCreator, Root } from 'postcss';
+import { diagnosticError } from './diagnostic-message.js';
+import { projectRelative } from './path-case.js';
 import {
     computeSafelistRelPath,
     DEFAULT_SAFELIST_FILES,
     importParamsAreLocal,
     importParamsNameTailwind,
     isDanglingLegacySource,
-    legacySourceMessage,
+    legacySourceError,
 } from './safelist-source.js';
 
 /** Options for {@link csszyxPostcss}. */
@@ -66,17 +68,19 @@ function rootMayReachTailwind(root: Root): boolean {
 /**
  * @param root - parsed stylesheet
  * @param file - absolute path of the stylesheet
+ * @param projectRoot - the project root, which the error names the file from
  * @returns the path each existing `@source` at-rule names, unquoted
- * @throws when one of them still names a pre-0.15.0 safelist that is gone
+ * @throws {CsszyxError} `legacy-source-directive`, when one of them still
+ *         names a pre-0.15.0 safelist that is gone
  */
-function existingSourcePaths(root: Root, file: string): Set<string> {
+function existingSourcePaths(root: Root, file: string, projectRoot: string): Set<string> {
     const paths = new Set<string>();
     root.walkAtRules('source', rule => {
         const match = /^["']([^"']*)["']$/.exec(rule.params.trim());
         const target = match?.[1];
         if (target === undefined) return;
         if (isDanglingLegacySource(target, file)) {
-            throw new Error(legacySourceMessage(file, target));
+            throw legacySourceError(projectRelative(projectRoot, file), target);
         }
         paths.add(target);
     });
@@ -107,15 +111,11 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
             // so the name to look for is the inner `tailwindcss`.
             const tailwindAt = names.indexOf('tailwindcss');
             if (tailwindAt !== -1 && tailwindAt < names.indexOf('csszyx')) {
-                throw new Error(
-                    "[csszyx] '@csszyx/unplugin/postcss' is listed after '@tailwindcss/postcss'. " +
-                        'Tailwind has already compiled the stylesheet by then, so the safelist is ' +
-                        "never read: list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss'.",
-                );
+                throw diagnosticError('postcss-plugin-order', {});
             }
             const file = root.source?.input.file;
             if (file === undefined || !rootMayReachTailwind(root)) return;
-            const present = existingSourcePaths(root, file);
+            const present = existingSourcePaths(root, file, projectRoot);
             for (const safelistFile of safelistFiles) {
                 const relPath = computeSafelistRelPath(projectRoot, safelistFile, file);
                 if (!present.has(relPath)) {

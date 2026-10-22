@@ -138,7 +138,9 @@ describe('unknown property warnings', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         transform({ paddingg: 4 });
         expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('Unknown property "paddingg"'),
+            expect.stringMatching(
+                /^\[csszyx\] unknown-key: .*\n {2}`paddingg` is not an sz property\.\n/,
+            ),
         );
         warnSpy.mockRestore();
     });
@@ -147,7 +149,9 @@ describe('unknown property warnings', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         transform({ backgroundColor: 'blue-500' });
         expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('Use the canonical key "bg" instead of "backgroundColor"'),
+            expect.stringMatching(
+                /^\[csszyx\] canonical-key: .*\n {2}`backgroundColor` is an alias of `bg`, and nothing is emitted for it\.\n {2}help: write `bg`\.\n/,
+            ),
         );
         warnSpy.mockRestore();
     });
@@ -190,7 +194,9 @@ describe('unknown property warnings', () => {
         // call that keeps it would otherwise read the prefix as options.
         const call = transform as unknown as (a: unknown, b: unknown, c?: unknown) => unknown;
 
-        expect(() => call({ p: 4 }, 'hover:')).toThrow(/takes options.*prefix:/s);
-        expect(() => call({ p: 4 }, '', { 'p-4': 'x' })).toThrow(/takes options/);
+        expect(() => call({ p: 4 }, 'hover:')).toThrow(
+            /^\[csszyx\] options-object-required: `transform` takes its options.*prefix: 'hover:'/s,
+        );
+        expect(() => call({ p: 4 }, '', { 'p-4': 'x' })).toThrow(/options-object-required/);
     });
 });

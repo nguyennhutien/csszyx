@@ -8,6 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { productionMessage, runtimeMessage } from '../../compiler/tests/engine-message.js';
+
 // transform is fail-safe and never throws for real input, so the runtime's
 // graceful-degradation path is unreachable without help. Wrap the real
 // transform and let one test flip it to throwing; every other test runs the
@@ -40,6 +42,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
 });
 
 describe('csszyx/browser standalone runtime', () => {
@@ -113,7 +116,9 @@ describe('csszyx/browser standalone runtime', () => {
         const plain = document.getElementById('plain');
         expect(plain?.className).toContain('flex');
         expect(plain?.className).toContain('gap-2');
-        expect(errorLog).toHaveBeenCalled();
+        // Not a parse error: the error itself is printed, carrying its own
+        // words, rather than worded as one.
+        expect(errorLog.mock.calls).toEqual([[new Error('compile boom')]]);
     });
 
     it('logs a brace-less sz value that does not parse and leaves the element unstyled', async () => {
@@ -130,13 +135,37 @@ describe('csszyx/browser standalone runtime', () => {
         for (const id of ['frac', 'semi', 'hex']) {
             expect(document.getElementById(id)?.className).toBe('');
         }
-        const logged = errorLog.mock.calls.map(call => call[0]);
-        expect(logged).toEqual([
-            '[csszyx] Parsing error:',
-            '[csszyx] Parsing error:',
-            '[csszyx] Parsing error:',
+        // The parser's error, as the registry words it: the attribute, the
+        // character and where it is.
+        const line = (input: string, char: string, index: number): string =>
+            runtimeMessage(
+                'sz-attribute-syntax',
+                `The \`sz\` attribute \`${input}\` has an unexpected \`${char}\` at offset ${index}, so the element gets no classes from it.`,
+                'help: write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+            );
+        expect(errorLog.mock.calls).toEqual([
+            [line('w: 1/2', '/', 4)],
+            [line('p: 4; m: 2', ';', 4)],
+            [line('bg: #fff', '#', 4)],
         ]);
-        expect(String(errorLog.mock.calls[0]?.[2])).toContain('Unexpected "/" at 4');
+    });
+
+    it('prints the code and args of a parse error in production', async () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+        document.body.innerHTML = '<div id="frac" sz="w: 1/2"></div>';
+        await loadRuntime();
+
+        expect(errorLog.mock.calls).toEqual([
+            [
+                productionMessage('sz-attribute-syntax', {
+                    form: 'char',
+                    input: 'w: 1/2',
+                    char: '/',
+                    index: 4,
+                }),
+            ],
+        ]);
     });
 
     it('keeps the plain class list fallback for a value with no colon', async () => {

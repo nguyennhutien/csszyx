@@ -14,6 +14,8 @@
  * have lowered the same literal.
  */
 
+import { DYNAMIC_UNRESOLVABLE, szReport } from './report.js';
+
 /** Sizing keys whose `screen` token means the viewport WIDTH. */
 const VIEWPORT_WIDTH_KEYS = new Set([
     'w',
@@ -61,11 +63,14 @@ function warnUnresolvable(key: string, value: unknown): void {
         return;
     }
     warnedShapes.add(shape);
-    console.warn(
-        `[csszyx] dynamic value on "${key}" is a ${typeof value} and cannot be resolved ` +
-            'to CSS — the property is omitted. Pass a number, token, or CSS length ' +
-            '(for responsive objects, use dynamic()).',
-    );
+    const args = { key, valueType: typeof value };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: DYNAMIC_UNRESOLVABLE, args });
+    } else {
+        console.warn(
+            `[csszyx] dynamic-unresolvable: ${JSON.stringify(args)} https://csszyx.com/e/dynamic-unresolvable`,
+        );
+    }
 }
 
 /**

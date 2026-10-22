@@ -16,6 +16,7 @@ import type { SourceTransformResult } from '@csszyx/compiler';
 import { transformSourceUnrendered } from '@csszyx/compiler/internal';
 import type { ContentScanner } from '@csszyx/tailwind-oracle';
 
+import { diagnosticMessage } from './diagnostic-message.js';
 import { type MergeSignature, removedByMerge, removedByOverride } from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { SourceHookRegistry } from './source-hooks.js';
@@ -33,8 +34,8 @@ export const MERGE_AUDIT_KINDS: readonly MergeAuditKind[] = [
     'merge-covered-class',
 ];
 
-/** One class a merge removes, and where. */
-export interface MergeAuditFinding {
+/** What every finding carries, whichever merge removed the class. */
+interface MergeAuditFindingBase {
     /** The file, as the caller named it. */
     file: string;
     /**
@@ -42,12 +43,23 @@ export interface MergeAuditFinding {
      * class-name attribute.
      */
     line: number;
-    kind: MergeAuditKind;
     /** The class removed. */
     className: string;
-    /** For `merge-covered-key`, the `sz` key the class was written as. */
-    key?: string;
 }
+
+/**
+ * One class a merge removes, and where. A key merge always names the key,
+ * which its line words; a class-name merge has none.
+ */
+export type MergeAuditFinding = MergeAuditFindingBase &
+    (
+        | {
+              kind: 'merge-covered-key';
+              /** The `sz` key the class was written as. */
+              key: string;
+          }
+        | { kind: 'merge-covered-class'; key?: undefined }
+    );
 
 /** One source file to audit. */
 export interface MergeAuditFile {
@@ -138,32 +150,28 @@ export function mergeFindingsOf(
     return inFile.sort((left, right) => left.line - right.line);
 }
 
-/** What each rule says a class lost to. */
-const REMOVAL_REASON: Record<MergeAuditKind, string> = {
-    'merge-covered-key':
-        'removed: a later key in the same `sz` object sets every property it sets.',
-    'merge-covered-class':
-        'removed from `className`: an `sz` class on the same element sets every property it sets.',
-};
-
 /**
- * What one finding says: the class, and for a key the key it was written as,
- * since that is what the author searches the source for.
+ * The line a build prints for one removed class, in the registry's words: the
+ * class, for a key the key it was written as, and where.
  *
  * @param finding - One removed class.
- * @returns The message, without the file and line.
+ * @returns The warning, headed by its id and `file:line`.
  */
-export function mergeRemovalMessage(finding: MergeAuditFinding): string {
-    const removed =
-        finding.key === undefined
-            ? `\`${finding.className}\``
-            : `\`${finding.key}\` (\`${finding.className}\`)`;
-    return `${removed} ${REMOVAL_REASON[finding.kind]}`;
+export function mergeRemovalLine(finding: MergeAuditFinding): string {
+    const at = `${finding.file}:${finding.line}`;
+    return finding.kind === 'merge-covered-key'
+        ? diagnosticMessage(
+              'merge-covered-key',
+              { key: finding.key, className: finding.className },
+              at,
+          )
+        : diagnosticMessage('merge-covered-class', { className: finding.className }, at);
 }
 
 /**
  * The one line a dev server prints at start for the classes a merge removed
- * at `info`: how many, which ids, how to list them, how to hide the line.
+ * at `info`: how many, which ids, how to list them, how to hide the line
+ * (`merge-covered-held`).
  *
  * @param held - How many classes each `info` id removed; at least one entry.
  * @param files - How many files they are in.
@@ -176,14 +184,12 @@ export function mergeRemovalSummaryMessage(
     files: number,
     configFile: string,
 ): string {
-    const ids = MERGE_AUDIT_KINDS.filter(kind => held.has(kind));
     let classes = 0;
     for (const count of held.values()) classes += count;
-    const rules = ids.map(kind => `--rule ${kind}`).join(' ');
-    const named = ids.map(kind => `\`${kind}\``).join(' and ');
-    return (
-        `[csszyx] ${classes} class(es) in ${files} file(s) were removed: another class on the same element sets every property they set.\n` +
-        `  help: \`csszyx check ${rules}\` lists them.\n` +
-        `  note: set ${named} to \`'off'\` in \`diagnostics.rules\` of \`${configFile}\` to hide this line; \`build.mergeCoveredClasses: false\` keeps the classes.`
-    );
+    return diagnosticMessage('merge-covered-held', {
+        classes,
+        files,
+        kinds: MERGE_AUDIT_KINDS.filter(kind => held.has(kind)),
+        configFile,
+    });
 }

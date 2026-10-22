@@ -6,7 +6,7 @@
  * left as written.
  */
 import { describe, expect, it, vi } from 'vitest';
-
+import { type CsszyxError, isCsszyxError } from '../src/errors.js';
 import {
     mayHoldSzAttribute,
     placeTemplateDiagnostic,
@@ -15,6 +15,7 @@ import {
     type TemplateSzAttribute,
     transformTemplateFile,
 } from '../src/internal.js';
+import { TEMPLATE_LANG_UNSUPPORTED, TEMPLATE_RUNTIME_VALUE } from '../src/report.js';
 
 const PARSERS = ['rust', 'wasm'] as const;
 
@@ -80,9 +81,14 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
             {
                 severity: 'error',
                 message:
-                    '[csszyx] App.vue:2:10: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it\n' +
-                    'help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime\n' +
-                    'note: the attribute is left as written; no class is generated for it',
+                    '[csszyx] template-runtime-value: App.vue:2:10\n' +
+                    '  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.\n' +
+                    '  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.\n' +
+                    '  note: the attribute is left as written.\n' +
+                    '  docs: https://csszyx.com/e/template-runtime-value',
+                code: 'template-runtime-value',
+                args: {},
+                file: 'App.vue',
                 line: 2,
                 column: 10,
             },
@@ -94,9 +100,22 @@ describe.each(PARSERS)('rewriteTemplateSz on the %s artifact', parser => {
         expect(result.diagnostics.map(d => [d.severity, d.line, d.column])).toEqual([
             ['error', 1, 15],
         ]);
-        expect(result.diagnostics[0].message).toContain(
-            '1:15: this sz value could not be parsed as a JavaScript expression',
-        );
+        expect(result.diagnostics[0]).toMatchObject({
+            code: 'parse-error',
+            args: { form: 'expression' },
+            message:
+                '[csszyx] parse-error: 1:15\n' +
+                '  This `sz` value could not be parsed as a JavaScript expression.\n' +
+                '  help: write the value as an object literal, such as `{ p: 4 }`.\n' +
+                '  note: the attribute is left as written, and no class is generated for it.\n' +
+                '  docs: https://csszyx.com/e/parse-error',
+        });
+    });
+
+    it('names the file of a syntax error when it has one', () => {
+        const result = rewrite('<a sz={{ p: 4 m: 2 }} />', 'App.vue');
+        expect(result.diagnostics[0]).toMatchObject({ file: 'App.vue', line: 1, column: 15 });
+        expect(result.diagnostics[0].message).toMatch(/^\[csszyx\] parse-error: App\.vue:1:15\n/);
     });
 
     it('places a warning on a later line of a value that spans lines', () => {
@@ -203,12 +222,7 @@ describe('the engine artifact', () => {
 });
 
 describe('transformTemplateFile', () => {
-    const reporter = {
-        warn: vi.fn(),
-        error: vi.fn((message: string): never => {
-            throw new Error(message);
-        }),
-    };
+    const reporter = throwingReporter();
     const same = (source: string) => ({ code: source, diagnostics: [] });
 
     it.each([
@@ -222,7 +236,16 @@ describe('transformTemplateFile', () => {
     it('returns the changed code, after reporting', () => {
         const preprocess = vi.fn((source: string, filename: string) => ({
             code: `${source}!`,
-            diagnostics: [{ severity: 'warning' as const, message: filename, line: 1, column: 1 }],
+            diagnostics: [
+                {
+                    severity: 'warning' as const,
+                    message: filename,
+                    code: 'unknown-key' as const,
+                    args: {},
+                    line: 1,
+                    column: 1,
+                },
+            ],
         }));
         expect(transformTemplateFile(reporter, 'sz={a}', 'A.vue', '.vue', preprocess)).toEqual({
             code: 'sz={a}!',
@@ -232,27 +255,60 @@ describe('transformTemplateFile', () => {
     });
 });
 
+/**
+ * A reporter that throws the error it is handed, as a plugin context does.
+ *
+ * @returns The reporter, its calls recorded.
+ */
+function throwingReporter() {
+    return {
+        warn: vi.fn(),
+        error: vi.fn((error: CsszyxError): never => {
+            throw error;
+        }),
+    };
+}
+
 describe('reportTemplateSzDiagnostics', () => {
-    it('passes each warning on and fails once with every error', () => {
-        const reporter = {
-            warn: vi.fn(),
-            error: vi.fn((message: string): never => {
-                throw new Error(message);
-            }),
-        };
-        const at = { line: 1, column: 1 };
-        expect(() =>
+    it('passes each warning on and fails once with every error, as a csszyx error', () => {
+        const reporter = throwingReporter();
+        const at = { line: 1, column: 1, code: 'unknown-key' as const, args: {} };
+        let thrown: unknown;
+        try {
             reportTemplateSzDiagnostics(reporter, [
-                { ...at, severity: 'error', message: 'a' },
+                { ...at, severity: 'error', message: 'a', file: 'A.vue' },
                 { ...at, severity: 'warning', message: 'w' },
                 { ...at, severity: 'error', message: 'b' },
-            ]),
-        ).toThrow('a\n\nb');
+            ]);
+        } catch (error) {
+            thrown = error;
+        }
+        expect(isCsszyxError(thrown)).toBe(true);
+        expect(thrown).toMatchObject({
+            code: 'template-sz-invalid',
+            args: { count: 2 },
+            message:
+                '[csszyx] template-sz-invalid: A.vue\n' +
+                '  This file has 2 `sz` error(s), so the build stops.\n' +
+                '  help: fix each error listed below.\n' +
+                '  docs: https://csszyx.com/e/template-sz-invalid\n\na\n\nb',
+        });
         expect(reporter.warn).toHaveBeenCalledWith('w');
     });
 
+    it('heads the errors of a file with no name with the count alone', () => {
+        const reporter = throwingReporter();
+        const error = { line: 1, column: 1, code: 'unknown-key' as const, args: {} };
+        expect(() =>
+            reportTemplateSzDiagnostics(reporter, [{ ...error, severity: 'error', message: 'a' }]),
+        ).toThrow(/^\[csszyx\] template-sz-invalid:\n {2}This file has 1 `sz` error\(s\)/);
+    });
+
     it('does not fail without an error', () => {
-        const reporter = { warn: vi.fn(), error: vi.fn() as unknown as (m: string) => never };
+        const reporter = {
+            warn: vi.fn(),
+            error: vi.fn() as unknown as (error: CsszyxError) => never,
+        };
         reportTemplateSzDiagnostics(reporter, []);
         expect(reporter.error).not.toHaveBeenCalled();
     });
@@ -278,7 +334,8 @@ describe('the template-file helpers', () => {
             file: 'a\nb\ncd',
             severity: 'warning',
             offset,
-            text: 'x',
+            diagnostic: TEMPLATE_RUNTIME_VALUE,
+            args: {},
         });
         expect([placed.line, placed.column]).toEqual([line, column]);
     });
@@ -290,8 +347,21 @@ describe('the template-file helpers', () => {
                 filename: 'A.vue',
                 severity: 'error',
                 offset: 3,
-                text: 'no',
+                diagnostic: TEMPLATE_LANG_UNSUPPORTED,
+                args: { lang: 'pug' },
             }),
-        ).toEqual({ severity: 'error', message: '[csszyx] A.vue:2:2: no', line: 2, column: 2 });
+        ).toEqual({
+            severity: 'error',
+            message:
+                '[csszyx] template-lang-unsupported: A.vue:2:2\n' +
+                '  This template is `<template lang="pug">`, and csszyx reads `sz` in HTML templates only, so no `sz` attribute in it gets a class.\n' +
+                '  help: write the template in HTML, or bind `class` yourself in it.\n' +
+                '  docs: https://csszyx.com/e/template-lang-unsupported',
+            code: 'template-lang-unsupported',
+            args: { lang: 'pug' },
+            file: 'A.vue',
+            line: 2,
+            column: 2,
+        });
     });
 });

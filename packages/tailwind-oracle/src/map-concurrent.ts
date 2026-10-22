@@ -8,6 +8,8 @@
  */
 import { readFile } from 'node:fs/promises';
 
+import { szDiagnosticError } from '@csszyx/compiler';
+
 /** File reads overlap this far; well under any descriptor limit a process starts with. */
 export const FILE_READ_CONCURRENCY = 16;
 
@@ -26,7 +28,7 @@ export const STYLESHEET_COMPILE_CONCURRENCY = 2;
  * @param concurrency - Maximum operations allowed to overlap.
  * @param operation - Independent asynchronous work for one value.
  * @returns Results in the same order as `items`, regardless of completion order.
- * @throws RangeError when `concurrency` is not a positive integer.
+ * @throws A csszyx `internal-error` when `concurrency` is not a positive integer.
  */
 export async function mapConcurrent<T, U>(
     items: readonly T[],
@@ -36,9 +38,10 @@ export async function mapConcurrent<T, U>(
     // Zero workers would answer with an array of holes, which a caller's
     // cast then reads as values.
     if (!Number.isInteger(concurrency) || concurrency < 1) {
-        throw new RangeError(
-            `mapConcurrent: concurrency must be a positive integer, got ${concurrency}`,
-        );
+        throw szDiagnosticError('internal-error', {
+            where: 'mapConcurrent',
+            detail: `concurrency must be a positive integer, got ${concurrency}`,
+        });
     }
     const results = new Array<U>(items.length);
     let nextIndex = 0;

@@ -23,6 +23,8 @@
 // From the limits subpath, not `/browser`: the browser entry's shared chunk
 // carries the compiler's property tables, and a bundle that imports anything
 // from it keeps them — 577 B gzip in this entry, measured with esbuild.
+import { CsszyxError } from '@csszyx/compiler/errors';
+import { LOWERING_NOT_LOADED, szRender } from '@csszyx/compiler/report';
 import { MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 
 import { getSzLowering } from './lowering-slot.js';
@@ -205,20 +207,22 @@ function resolveJoinedInput(input: SzInput, depth: number): string {
  *
  * @param input - The sz object, or a run of adjacent objects to merge.
  * @returns The lowered className.
- * @throws When no lowering module is loaded — a silent empty string here would
- * be invisibly dropped styling, the one failure mode this package never
- * accepts.
+ * @throws {CsszyxError} `lowering-not-loaded`, when no lowering module is
+ * loaded — a silent empty string here would be invisibly dropped styling, the
+ * one failure mode this package never accepts.
  */
 function lowerObject(input: object | readonly object[]): string {
     const lower = getSzLowering();
     if (lower === null) {
-        throw new Error(
-            '[csszyx] a string helper received an sz OBJECT but the object-lowering ' +
-                'module is not loaded, so it cannot be turned into class names.\n' +
-                'The csszyx bundler plugin loads it automatically for files that can ' +
-                'pass objects at runtime. Outside the plugin pipeline (unit tests, ' +
-                "scripts), add once at startup:\n    import '@csszyx/runtime/lowering';",
-        );
+        const args = {};
+        throw new CsszyxError({
+            code: 'lowering-not-loaded',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: LOWERING_NOT_LOADED, args })
+                    : `[csszyx] lowering-not-loaded: ${JSON.stringify(args)} https://csszyx.com/e/lowering-not-loaded`,
+        });
     }
     return lower(input);
 }

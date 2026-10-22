@@ -134,7 +134,7 @@ describe('rust parser real-source canary', () => {
         }
 
         expect(() => prePlugin.transform.call({ warn: vi.fn() }, source, id)).toThrow(
-            'csszyxRSCViolation: _sz imported in Server Component',
+            'This Server Component reaches `_sz` through its imports',
         );
     });
 

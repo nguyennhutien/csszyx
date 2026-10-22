@@ -39,7 +39,10 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
         for (const source of sources) control.seen.add(source);
         if (!again || control.secondPass === null) return;
         if (control.secondPass === 'unavailable') {
-            throw new actual.RustMigrateUnavailableError('the platform package went away');
+            throw new actual.RustMigrateUnavailableError({
+                form: 'not-installed',
+                packageName: '@csszyx/core-went-away',
+            });
         }
         throw new Error('the engine refused the second pass');
     };
@@ -201,6 +204,8 @@ describe('csszyx migrate — the project answers where a table would', () => {
         await migrate({ cwd, injectTodos: false });
 
         expect(process.exitCode).toBe(1);
-        expect(log.mock.calls.join('\n')).toContain('the platform package went away');
+        expect(log.mock.calls.join('\n')).toContain(
+            '`@csszyx/core-went-away` is not installed, so migrate cannot run.',
+        );
     });
 });

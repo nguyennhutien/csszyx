@@ -10,9 +10,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const binding = vi.hoisted(() => ({ calls: 0, fail: false }));
 
-class FakeUnavailable extends Error {
-    detail = 'stale';
-}
+class FakeUnavailable extends Error {}
 
 vi.mock('@csszyx/core/native', () => ({
     CsszyxNativeUnavailableError: FakeUnavailable,

@@ -60,7 +60,9 @@ describe('production option validation', () => {
                 vitePlugin({ production: { mangleMapDelivery: 'html' as never } }),
             ).not.toThrow();
             expect(warn).toHaveBeenCalledWith(
-                expect.stringContaining('production.mangleMapDelivery has been removed'),
+                expect.stringContaining(
+                    '`production.mangleMapDelivery` was removed and is ignored',
+                ),
             );
         } finally {
             warn.mockRestore();
@@ -86,10 +88,15 @@ describe('compileSources resolution warning', () => {
             path.join(root, 'src/App.tsx'),
         );
 
-        const message = warn.mock.calls.map(c => String(c[0])).join('\n');
-        expect(message).toContain('compileSources');
-        expect(message).toContain('did not resolve to a');
-        expect(message).toContain('does-not-exist');
+        const lines = warn.mock.calls
+            .map(c => String(c[0]))
+            .filter(line => line.startsWith('[csszyx] compile-sources-unresolved:'));
+        expect(lines).toEqual([
+            '[csszyx] compile-sources-unresolved:\n' +
+                `  The \`compileSources\` path(s) \`does-not-exist\`, \`also-missing\` do not resolve to a directory from \`${root}\`, so the build compiles nothing from them and adds none of their classes to the safelist.\n` +
+                "  help: point each path at a directory, relative to the project root or absolute, such as `compileSources: ['../../packages/vui']`.\n" +
+                '  docs: https://csszyx.com/e/compile-sources-unresolved',
+        ]);
     });
 });
 

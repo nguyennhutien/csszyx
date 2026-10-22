@@ -817,7 +817,7 @@ struct KeyValueFindings {
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
-    globals_before_groups: Vec<(String, String, &'static str, u32)>,
+    globals_before_groups: Vec<super::lower::GlobalBeforeGroup>,
     runtime_aliases: Vec<(String, u32)>,
 }
 
@@ -974,11 +974,14 @@ fn push_runtime_alias_diagnostics(found: &[(String, u32)], out: &mut Diagnostics
 
 /// A stand-alone key a group key written after it replaces.
 fn push_global_before_group_diagnostics(
-    found: &[(String, String, &'static str, u32)],
+    found: &[super::lower::GlobalBeforeGroup],
     out: &mut Diagnostics,
 ) {
-    for (global, value, group, offset) in found {
-        out.push_issue(issue::global_before_group(global, value, group), *offset);
+    for (global, value, value_type, group, offset) in found {
+        out.push_issue(
+            issue::global_before_group(global, value, value_type, group),
+            *offset,
+        );
     }
 }
 
@@ -1147,7 +1150,8 @@ fn push_removed_sugar_diagnostics(
 /// Report one unknown, removed, aliased, or numeric sz key.
 ///
 /// Four findings for one collector, because the remedy differs: a removed key
-/// has a replacement, an alias has a canonical spelling, a numeric key means an
+/// has a replacement, an alias (or a split shorthand) has the spelling to
+/// write, a numeric key means an
 /// array or spread leaked in, and anything else may still target a project's
 /// own `@utility`.
 fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
@@ -1165,7 +1169,16 @@ fn push_unknown_key_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) 
                 *offset,
             );
         } else if super::generated::tables::key_suggestion(key).is_some() {
-            out.push_issue(issue::canonical_key(key), *offset);
+            out.push_issue(issue::canonical_key_alias(key), *offset);
+        } else if let Some(form) = super::generated::tables::split_shorthand_form(key) {
+            // A shorthand csszyx writes as two keys has no one canonical key:
+            // its form's help names both.
+            let issue = if form == "font" {
+                issue::canonical_key_font(key)
+            } else {
+                issue::canonical_key_scrollbar_color(key)
+            };
+            out.push_issue(issue, *offset);
         } else if is_numeric_key(key) {
             out.push_issue(issue::numeric_key(key), *offset);
         } else {
@@ -1459,7 +1472,10 @@ mod tests {
     fn resolved_branch_diagnostics_preserve_families_locations_and_occurrences() {
         let defects = [
             ("workBreak: 'all'", r#"unknown-key {"key":"workBreak"}"#),
-            ("wordBreak: 'all'", r#"canonical-key {"key":"wordBreak"}"#),
+            (
+                "wordBreak: 'all'",
+                r#"canonical-key {"form":"alias","key":"wordBreak"}"#,
+            ),
             ("zzzNotAKey: 'x'", r#"unknown-key {"key":"zzzNotAKey"}"#),
             (
                 "display: 'bogus'",
@@ -2128,7 +2144,7 @@ mod tests {
         assert_eq!(
             located(&result, &file.source, "backgroundColor"),
             [(
-                r#"canonical-key {"key":"backgroundColor"}"#.to_string(),
+                r#"canonical-key {"form":"alias","key":"backgroundColor"}"#.to_string(),
                 1,
                 43
             )],
@@ -4695,6 +4711,182 @@ mod tests {
         (result.classes.join(" "), lines(&result))
     }
 
+    /// A value's important suffix is a class suffix, not part of the value,
+    /// so a moved value written with one is still named as moved, on its key
+    /// and on an alias of it, as the runtime names it.
+    #[test]
+    fn a_moved_value_is_named_with_its_important_suffix_split_off() {
+        for (sz, line) in [
+            (
+                "{ touch: 'pan-x!' }",
+                r#"moved-value {"form":"value","key":"touch","value":"pan-x"}"#,
+            ),
+            (
+                "{ touchAction: 'pan-y!' }",
+                r#"moved-value {"form":"value","key":"touchAction","value":"pan-y"}"#,
+            ),
+        ] {
+            let (classes, diagnostics) = layers_run(sz);
+            assert_eq!(classes, "", "{sz}");
+            assert_eq!(diagnostics, [line], "{sz}");
+        }
+    }
+
+    /// A parametric variant's bodies are sz objects, as the lowering and the
+    /// runtime read them, so every key and value family reports inside one as
+    /// it does at the top.
+    #[test]
+    fn every_key_value_family_reports_inside_a_parametric_variant() {
+        for (sz, code) in [
+            ("{ group: { hover: { dispaly: 'flex' } } }", "unknown-key"),
+            ("{ data: { foo: { dispaly: 'block' } } }", "unknown-key"),
+            (
+                "{ group: { card: { hover: { dispaly: 'grid' } } } }",
+                "unknown-key",
+            ),
+            (
+                "{ peer: { hover: { backgroundColor: 'red-500' } } }",
+                "canonical-key",
+            ),
+            ("{ has: { img: { fontVariant: 'x' } } }", "removed-key"),
+            ("{ has: { img: { p: 1.3 } } }", "off-scale-value"),
+            ("{ group: { has: { img: { p: 1.1 } } } }", "off-scale-value"),
+            (
+                "{ peer: { focus: { weight: '600' } } }",
+                "numeric-font-weight",
+            ),
+            (
+                "{ not: { supports: { 'display:grid': { weight: '500' } } } }",
+                "numeric-font-weight",
+            ),
+            (
+                "{ aria: { checked: { display: 'flx' } } }",
+                "closed-enum-value",
+            ),
+            (
+                "{ not: { first: { borderT: 'dashed' } } }",
+                "per-side-border-style",
+            ),
+            (
+                "{ group: { focus: { p: { a: 1, b: 2 } } } }",
+                "property-object",
+            ),
+            (
+                "{ data: { open: { container: { p: 4 } } } }",
+                "non-variant-object",
+            ),
+        ] {
+            let (_, diagnostics) = layers_run(sz);
+            assert!(
+                diagnostics
+                    .iter()
+                    .any(|line| line.starts_with(&format!("{code} "))),
+                "{sz}: {diagnostics:?}"
+            );
+        }
+    }
+
+    /// A parametric variant's parameters are names, not sz keys: a data
+    /// attribute called `container` is no `container` key.
+    #[test]
+    fn a_parametric_variant_s_parameters_are_not_judged_as_keys() {
+        for (sz, classes) in [
+            (
+                "{ group: { data: { container: { p: 4 } } } }",
+                "group-data-[container]:p-4",
+            ),
+            (
+                "{ peer: { name: { data: { container: { p: 4 } } } } }",
+                "peer-data-[container]/name:p-4",
+            ),
+            ("{ data: { dispaly: { p: 4 } } }", "data-[dispaly]:p-4"),
+            ("{ has: { img: { p: 4 } } }", "has-[img]:p-4"),
+            ("{ group: { '.card': { p: 4 } } }", "group-[.card]:p-4"),
+            ("{ min: { md: { p: 4 } } }", "min-md:p-4"),
+            ("{ max: { '330px': { p: 4 } } }", "max-[330px]:p-4"),
+            ("{ aria: { 'sort=asc': { p: 4 } } }", "aria-[sort=asc]:p-4"),
+            (
+                "{ group: { card: { hover: { p: 4 } } } }",
+                "group-hover/card:p-4",
+            ),
+            (
+                "{ not: { supports: { 'display:grid': { p: 4 } } } }",
+                "not-supports-[display:grid]:p-4",
+            ),
+        ] {
+            let (emitted, diagnostics) = layers_run(sz);
+            assert_eq!(emitted, classes, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
+
+    /// Removed boolean sugar is known only in its `true` form, which its own
+    /// report names. With any other value it is a key no table owns, unless a
+    /// table owns it in its own right (`flex: 1`), as the runtime reads it.
+    #[test]
+    fn removed_sugar_holding_a_value_is_an_unknown_key() {
+        let (classes, diagnostics) = layers_run("{ tabularNums: 'x' }");
+        assert_eq!(classes, "tabular-nums-x");
+        assert_eq!(diagnostics, [r#"unknown-key {"key":"tabularNums"}"#]);
+        let (classes, diagnostics) = layers_run("{ flex: 'x' }");
+        assert_eq!(classes, "flex-x");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let (classes, diagnostics) = layers_run("{ tabularNums: true }");
+        assert_eq!(classes, "");
+        assert!(
+            diagnostics
+                .iter()
+                .all(|line| line.starts_with("removed-key ")),
+            "{diagnostics:?}"
+        );
+    }
+
+    /// An ARIA state name is the `aria` variant's parameter. Written as a key
+    /// holding a scalar it is a key no table owns, as the runtime reads it —
+    /// unless a table owns it in its own right (`checked` is a variant,
+    /// `hidden: true` removed sugar).
+    #[test]
+    fn an_aria_state_name_holding_a_scalar_is_an_unknown_key() {
+        for key in [
+            "expanded", "hidden", "pressed", "readonly", "selected", "busy", "current", "live",
+            "atomic", "modal",
+        ] {
+            for value in ["'x'", "1", "true"] {
+                if key == "hidden" && value == "true" {
+                    continue;
+                }
+                let sz = format!("{{ {key}: {value} }}");
+                let (_, diagnostics) = layers_run(&sz);
+                assert_eq!(
+                    diagnostics,
+                    [format!(r#"unknown-key {{"key":"{key}"}}"#)],
+                    "{sz}"
+                );
+            }
+        }
+        for key in ["checked", "disabled", "required", "invalid"] {
+            let (_, diagnostics) = layers_run(&format!("{{ {key}: 'x' }}"));
+            assert!(diagnostics.is_empty(), "{key}: {diagnostics:?}");
+        }
+        // The documented form, the `aria` variant's parameter, reports nothing.
+        for (sz, classes) in [
+            (
+                "{ aria: { expanded: { bg: 'red-500' } } }",
+                "aria-expanded:bg-red-500",
+            ),
+            ("{ aria: { hidden: { p: 4 } } }", "aria-hidden:p-4"),
+            ("{ aria: { sort: { p: 4 } } }", "aria-[sort]:p-4"),
+            (
+                "{ group: { aria: { pressed: { p: 4 } } } }",
+                "group-aria-pressed:p-4",
+            ),
+        ] {
+            let (emitted, diagnostics) = layers_run(sz);
+            assert_eq!(emitted, classes, "{sz}");
+            assert!(diagnostics.is_empty(), "{sz}: {diagnostics:?}");
+        }
+    }
+
     #[test]
     fn an_sz_array_layers_a_stand_alone_keyword_and_its_groups_later_wins() {
         for (sz, expected) in [
@@ -4780,7 +4972,9 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
+            [
+                r#"global-before-group {"global":"contain","value":"none","valueType":"string","group":"containPaint"}"#
+            ]
         );
         let (classes, diagnostics) =
             layers_run("{ containLayout: true, contain: 'none', contain: 'strict' }");
@@ -4889,7 +5083,9 @@ mod tests {
         assert_eq!(classes, "contain-paint");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"contain","value":"none","group":"containPaint"}"#]
+            [
+                r#"global-before-group {"global":"contain","value":"none","valueType":"string","group":"containPaint"}"#
+            ]
         );
         let (classes, diagnostics) = run("containLayout: true, contain: 'none', contain: 'strict'");
         assert_eq!(classes, "contain-strict");
@@ -4915,7 +5111,10 @@ mod tests {
             [r#"moved-value {"form":"value","key":"touchAction","value":"pan-x"}"#]
         );
         let (_, standing) = layers_run("{ touchAction: m ? 'none' : 'auto' }");
-        assert_eq!(standing, [r#"canonical-key {"key":"touchAction"}"#]);
+        assert_eq!(
+            standing,
+            [r#"canonical-key {"form":"alias","key":"touchAction"}"#]
+        );
         let (_, runtime) = layers_run("{ touchAction: m ? c : 'pan-y' }");
         assert_eq!(
             runtime,
@@ -4949,8 +5148,8 @@ mod tests {
         assert_eq!(
             named,
             [
-                r#"global-before-group {"global":"contain","value":"1","group":"containPaint"}"#,
-                r#"global-before-group {"global":"touch","value":"true","group":"touchPanX"}"#,
+                r#"global-before-group {"global":"contain","value":"1","valueType":"number","group":"containPaint"}"#,
+                r#"global-before-group {"global":"touch","value":"true","valueType":"boolean","group":"touchPanX"}"#,
             ],
             "{diagnostics:?}"
         );
@@ -4962,7 +5161,9 @@ mod tests {
         assert_eq!(classes, "touch-pan-left");
         assert_eq!(
             diagnostics,
-            [r#"global-before-group {"global":"touch","value":"pan-x","group":"touchPanX"}"#]
+            [
+                r#"global-before-group {"global":"touch","value":"pan-x","valueType":"string","group":"touchPanX"}"#
+            ]
         );
     }
 
@@ -4976,7 +5177,25 @@ mod tests {
     #[test]
     fn a_removed_key_with_a_runtime_value_keeps_its_own_report() {
         let (_, diagnostics) = layers_run("{ backgroundColor: c }");
-        assert_eq!(diagnostics, [r#"canonical-key {"key":"backgroundColor"}"#]);
+        assert_eq!(
+            diagnostics,
+            [r#"canonical-key {"form":"alias","key":"backgroundColor"}"#]
+        );
+    }
+
+    /// A CSS shorthand csszyx writes as two keys is dropped like an alias,
+    /// in the form whose help names both keys.
+    #[test]
+    fn a_split_shorthand_is_named_in_its_own_form() {
+        let (classes, diagnostics) = layers_run("{ font: 'bold', scrollbarColor: c, p: 2 }");
+        assert_eq!(classes, "p-2");
+        assert_eq!(
+            diagnostics,
+            [
+                r#"canonical-key {"form":"font","key":"font"}"#,
+                r#"canonical-key {"form":"scrollbar-color","key":"scrollbarColor"}"#,
+            ]
+        );
     }
 
     #[test]

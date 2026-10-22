@@ -86,7 +86,9 @@ Write the canonical `{ property: 'value' }` form instead.
 The dev warning is precise:
 
 ```text
-[csszyx] "flex" boolean sugar was removed. Use { display: 'flex' } instead, or run `csszyx migrate`.
+[csszyx] removed-key: The boolean shorthand `flex` was removed, and nothing is emitted for it.
+  help: write `{ display: 'flex' }` instead, or run `csszyx migrate`.
+  docs: https://csszyx.com/e/removed-key
 ```
 
 :::note[Genuinely on/off utilities stay boolean]
@@ -118,7 +120,9 @@ key; it emits nothing and warns with the canonical key to use.
 | `{ borderRadius: 'lg' }` | `{ rounded: 'lg' }` |
 
 ```text
-[csszyx] Use the canonical key "bg" instead of "backgroundColor".
+[csszyx] canonical-key: `backgroundColor` is an alias of `bg`, and nothing is emitted for it.
+  help: write `bg`.
+  docs: https://csszyx.com/e/canonical-key
 ```
 
 ### 3. The `sz` type is closed — typos fail at compile time
@@ -344,10 +348,12 @@ There is no second implementation behind it. On a platform with no prebuilt
 binary, or after an install that skipped optional packages, migrate stops
 before touching any file:
 
-```
-✗ migrate: native engine unavailable: @csszyx/core-linux-x64-gnu is not installed
-help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages
-note: no file was changed; build and runtime do not use this engine
+```text
+[csszyx] native-migrate-unavailable:
+  `@csszyx/core-linux-x64-gnu` is not installed, so migrate cannot run.
+  help: reinstall without skipping optional dependencies, which installs `@csszyx/core-linux-x64-gnu` with `@csszyx/core`.
+  note: no file was changed; migrate runs on the native engine only, and builds and the runtime do not need it.
+  docs: https://csszyx.com/e/native-migrate-unavailable
 ```
 
 Building and the runtime are unaffected by this — those fall back to the WASM

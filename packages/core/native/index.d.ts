@@ -207,32 +207,44 @@ export interface NativeTransformResult {
     parserPath: 'fastRegex' | 'static' | 'semantic';
 }
 
-/** Error thrown when the native transform package is not installed/available. */
+/** What a {@link CsszyxNativeUnavailableError} names, by the registry's arg names. */
+export type NativeUnavailableArgs =
+    | { readonly form: 'no-platform-package'; readonly platform: string }
+    | { readonly form: 'not-installed' | 'stale-binding'; readonly packageName: string }
+    | {
+          readonly form: 'stale-binding-versions';
+          readonly packageName: string;
+          /** The platform package's version. */
+          readonly nativeVersion: string;
+          /** The installed `@csszyx/core`'s version. */
+          readonly coreVersion: string;
+      }
+    | {
+          readonly form: 'missing-export';
+          readonly packageName: string;
+          readonly exportName: string;
+      };
+
+/**
+ * Error thrown when the native engine cannot run here: no prebuilt package
+ * covers the platform, its package is not installed, or it predates the
+ * installed `@csszyx/core`. Its message is the registry's words for
+ * `native-engine-unavailable`.
+ */
 export class CsszyxNativeUnavailableError extends Error {
-    /** Stable machine-readable error code. */
-    readonly code: 'CSSZYX_NATIVE_UNAVAILABLE';
-    /** Optional package expected for the current platform, when supported. */
+    /** The registry id; `https://csszyx.com/e/native-engine-unavailable` explains it. */
+    readonly code: 'native-engine-unavailable';
+    /** The values the message names, by the registry's arg names. */
+    readonly args: NativeUnavailableArgs;
+    /** The platform package the loader looked for, or null when none covers the platform. */
     readonly packageName: NativePlatformPackage | null;
-    /** The message without its `csszyx native engine unavailable: ` prefix: what is missing, a `help:` line, a `note:` line. */
-    readonly detail: string;
-    /** The action to take, without its `help: ` label. */
-    readonly help: string;
-    /** Whether {@link help} was written for this failure rather than defaulted. A caller that rewrites the message for its own lane keeps an explicit one. */
-    readonly helpIsExplicit: boolean;
 
     /**
      * Creates a native-unavailable error.
-     * @param what - What is missing; defaults to the platform package not being installed.
-     * @param packageName - Package the loader looked for, or null when no prebuilt package covers the platform.
-     * @param help - The action to take; defaults to installing the package or switching to the wasm engine.
-     * @param note - What still holds; defaults to the wasm engine producing the same output.
+     * @param args - What is missing; by default the host's platform package,
+     *   or the platform (`linux-x64`) no prebuilt package covers.
      */
-    constructor(
-        what?: string,
-        packageName?: NativePlatformPackage | null,
-        help?: string,
-        note?: string,
-    );
+    constructor(args?: NativeUnavailableArgs);
 }
 
 /** Native binding shape exported by optional platform packages. */

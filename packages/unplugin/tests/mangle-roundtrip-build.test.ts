@@ -160,9 +160,11 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
     });
 
     it('source(none) safelisting emits every owned CSS rule without hybrid hazards', () => {
-        expect(
-            buildWarnings.filter(message => message.includes('production mangle found')),
-        ).toEqual([]);
+        // Every hazard record opens with its registry id; the old prose header
+        // is gone, and a filter on it matched nothing whatever the build did.
+        expect(buildWarnings.filter(message => message.includes('mangle-hybrid-hazard'))).toEqual(
+            [],
+        );
     });
 
     it('the map covers every owned class and is bijective', () => {

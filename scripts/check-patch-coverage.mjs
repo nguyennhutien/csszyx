@@ -20,6 +20,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { readSonarProperties } from './check-sonar-rule-drift.mjs';
+
 /** Reports read when none are named. Each is written by a coverage script. */
 const DEFAULT_REPORTS = [
     'coverage/lcov.info',
@@ -58,20 +60,17 @@ const UNMEASURED = [
     // its source is driven by the e2e suite rather than a unit test, so a
     // changed line there can never carry a hit record.
     /^playground\//,
-    // The TypeScript coverage run measures `packages/*/src/**`. A package's
-    // build, test or lint config sits beside `src`, is read by a tool rather
-    // than executed by a test, and can never carry a hit. The workspace's own
-    // configs sit at the root for the same reason and are read the same way —
-    // `vitest.config.ts` among them, which is how a run that edits the
-    // coverage settings ends up reporting the settings file as untested.
+    // The workspace's own configs sit at the root, outside Sonar's sources,
+    // and are read by a tool rather than executed by a test — `vitest.config.ts`
+    // among them, which is how a run that edits the coverage settings ends up
+    // reporting the settings file as untested. Either language: the three at
+    // the root today are `vitest.config.ts`, `eslint.config.js` and
+    // `eslint.redos.config.mjs`.
     //
-    // Either language: the three at the root today are `vitest.config.ts`,
-    // `eslint.config.js` and `eslint.redos.config.mjs`. Matching TypeScript
-    // alone was harmless while `.js` was unmeasurable outright, and became a
-    // false report the moment the shipped native loader made it measurable.
-    // The depth is what keeps that loader measured — it sits under
-    // `native/`, not beside `src`.
-    /^packages\/[^/]+\/[^/]+\.[cm]?[jt]s$/,
+    // A file at a PACKAGE root is decided by Sonar's own lists instead (see
+    // `isSonarExcluded`): this list once exempted every one, Sonar exempts only
+    // the build configurations, and `packages/csszyx/cdn-build.mjs` arrived on
+    // #396 with four uncovered new lines while this gate called it covered.
     /^[^/]+\.[cm]?[jt]s$/,
     // A snippet written for a reader to copy, not a code path the package
     // takes. It imports the built wasm artifact, so no unit test can drive it
@@ -107,7 +106,47 @@ const UNMEASURED = [
  * found. Widen `include` in vitest.config.ts alongside this, or the lines land
  * in no report and read as an unmeasured language instead.
  */
-const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs|js)$/;
+const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs|[cm]?js)$/;
+
+/** A file directly inside a package's directory, beside its `src`. */
+const PACKAGE_ROOT_FILE = /^packages\/[^/]+\/[^/]+$/;
+
+/** Where Sonar's file lists are read from. */
+const SONAR_PROPERTIES = 'sonar-project.properties';
+
+/**
+ * The globs Sonar leaves out of a TypeScript or JavaScript file's coverage:
+ * `sonar.exclusions` (not analysed) and `sonar.coverage.exclusions` (analysed,
+ * not measured). Rust is not Sonar's here, so its `**\/*.rs` entry is not
+ * this gate's answer for a `.rs` file; Codecov measures those.
+ *
+ * @param properties - `sonar-project.properties`, read.
+ * @returns The globs.
+ */
+export function sonarCoverageExclusions(properties) {
+    return ['sonar.exclusions', 'sonar.coverage.exclusions']
+        .flatMap(key => (properties[key] ?? '').split(','))
+        .map(glob => glob.trim())
+        .filter(glob => glob !== '' && glob !== '**/*.rs');
+}
+
+/** Sonar's exclusions, read once, on first use. */
+let sonarExclusions;
+
+/**
+ * Whether Sonar leaves a file out of its coverage, so no report has to cover it.
+ *
+ * @param file - Repo-relative path.
+ * @param exclusions - Globs from {@link sonarCoverageExclusions}; read from
+ *   `sonar-project.properties` when omitted.
+ * @returns True when a glob matches.
+ */
+export function isSonarExcluded(file, exclusions) {
+    if (exclusions === undefined) {
+        sonarExclusions ??= sonarCoverageExclusions(readSonarProperties(SONAR_PROPERTIES));
+    }
+    return (exclusions ?? sonarExclusions).some(glob => path.matchesGlob(file, glob));
+}
 
 /**
  * Resolve an lcov source path to one the diff also uses.
@@ -232,15 +271,42 @@ export function parseLcov(text, report) {
 /**
  * Line numbers each file gained or changed, relative to a base revision.
  *
+ * Measured on the working tree, which is what the coverage run and the lint
+ * gates read: from the merge base to the files on disk, plus every untracked
+ * file as wholly added. Diffing `base...HEAD` numbered the lines as committed,
+ * so before a commit the coverage report and the diff disagreed about which
+ * line was which: a refactor's new lines went unchecked and an old line that
+ * moved was reported as new and uncovered.
+ *
  * @param base - Revision to compare against.
  * @returns Repo-relative path mapped to the set of added or changed lines.
  */
 export function changedLines(base) {
-    const diff = execFileSync('git', ['diff', '-U0', `${base}...HEAD`], {
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-    });
-    return parseDiffHunks(diff);
+    const git = args =>
+        execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const mergeBase = git(['merge-base', base, 'HEAD']).trim();
+    const changed = parseDiffHunks(git(['diff', '-U0', mergeBase]));
+    const untracked = git(['ls-files', '--others', '--exclude-standard'])
+        .split('\n')
+        .filter(Boolean);
+    for (const [file, lines] of untrackedAsAdded(untracked)) changed.set(file, lines);
+    return changed;
+}
+
+/**
+ * Every line of each untracked file, as a diff would list a file it adds.
+ *
+ * @param files - Repo-relative paths.
+ * @param readSource - Reader, injected for tests.
+ * @returns Path mapped to the set of its line numbers.
+ */
+export function untrackedAsAdded(files, readSource = path => readFileSync(path, 'utf8')) {
+    return new Map(
+        files.map(file => {
+            const count = readSource(file).split('\n').length;
+            return [file, new Set(Array.from({ length: count }, (_, index) => index + 1))];
+        }),
+    );
 }
 
 /**
@@ -282,6 +348,9 @@ export function parseDiffHunks(diff) {
 export function isMeasurable(file, readSource = path => readFileSync(path, 'utf8')) {
     if (!MEASURED_EXTENSION.test(file)) return false;
     if (UNMEASURED.some(pattern => pattern.test(file))) return false;
+    // A file at a package root, beside `src`, is measured exactly when Sonar
+    // measures it; below that the coverage run's `include` decides, as above.
+    if (PACKAGE_ROOT_FILE.test(file) && isSonarExcluded(file)) return false;
     return !isRustWithoutCode(file, readSource);
 }
 

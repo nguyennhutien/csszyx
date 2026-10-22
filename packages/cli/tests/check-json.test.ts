@@ -104,8 +104,17 @@ describe('csszyx check --json', () => {
         // szcn reads the class for both meanings and merges a colour written
         // before it; what it cannot do is drop it for a colour written after,
         // which covers only one of the two. The finding says that case.
-        expect(finding?.message).toContain('a later class that sets only one of them');
-        expect(finding?.message).not.toContain('keeps the classes apart');
+        expect(finding?.message).toBe(
+            "Theme token `balance` also names `text-balance`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.",
+        );
+        expect(finding?.note).toContain('a later class that sets only one of them');
+        expect(finding?.note).not.toContain('keeps the classes apart');
+        expect(finding?.args).toEqual({
+            form: 'classes',
+            name: 'balance',
+            classes: ['text-balance'],
+        });
+        expect(finding?.url).toBe('https://csszyx.com/e/theme-collision');
     });
 
     it('carries an sz diagnostic, which already knew its own position', async () => {
@@ -426,7 +435,9 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
             await check({ cwd, rule: [id] });
 
             expect(process.exitCode).toBe(1);
-            expect(log.mock.calls.flat().join('\n')).toContain(`"${id}"`);
+            expect(log.mock.calls.flat().join('\n')).toContain(
+                `[csszyx] unknown-rule-id:\n  No rule or diagnostic is named \`${id}\`, so the selection would match nothing and \`csszyx check\` stops.`,
+            );
         },
     );
 
@@ -443,7 +454,7 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
 
         // Still accepted, as the 0.18 upgrade guide says: it now selects nothing.
         expect(printed).toContain(
-            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: name `sz-diagnostic` instead, which reports what `other` did.\n' +
                 '  docs: https://csszyx.com/e/removed-rule-id',
         );
@@ -495,7 +506,29 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         await check({ cwd, rule: ['unknwn-key'] });
 
         expect(process.exitCode).toBe(1);
-        expect(log.mock.calls.flat().join('\n')).toContain('"unknwn-key"');
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '✖ [csszyx] unknown-rule-id:\n' +
+                '  No rule or diagnostic is named `unknwn-key`, so the selection would match nothing and `csszyx check` stops.\n' +
+                '  help: write `unknown-key` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.\n' +
+                '  docs: https://csszyx.com/e/unknown-rule-id',
+        );
+    });
+
+    it('names every unknown id once, and guesses at none of several', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': PRECEDENCE_AND_TYPO,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, rule: ['unknwn-key', 'dead-clas'], ignoreRule: ['unknwn-key'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '  No rule or diagnostic is named `unknwn-key` or `dead-clas`, so the selection would match nothing and `csszyx check` stops.\n' +
+                '  help: check the spelling; https://csszyx.com/docs/reference/warnings/ lists every id.',
+        );
     });
 });
 
@@ -520,24 +553,42 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
                 file: 'src/App.tsx',
                 line: 2,
                 message:
-                    '`pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.',
+                    'The build removes `pb-2` from `className`, because an `sz` class on the same element sets every property it sets.',
             },
             {
                 rule: 'merge-covered-key',
                 file: 'src/App.tsx',
                 line: 4,
                 message:
-                    '`px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.',
+                    'The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.',
             },
         ]);
+        expect(report.findings[1]).toMatchObject({
+            kind: 'merge-covered-key',
+            help: 'delete `px` from the object; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.',
+            args: { key: 'px', className: 'px-2' },
+            url: 'https://csszyx.com/e/merge-covered-key',
+        });
+        expect(report.findings[0]?.args).toEqual({ className: 'pb-2' });
         expect(process.exitCode).toBeUndefined();
     });
 
     it('prints each removal at its file and line, with the key it was written as', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd: tailwindProject(files), rule: ['merge-covered-key'] });
-        expect(log.mock.calls.flat().join('\n')).toContain(
-            'src/App.tsx:4: `px` (`px-2`) removed: a later key in the same `sz` object sets every property it sets.',
+        const printed = stripVTControlCharacters(log.mock.calls.flat().join('\n'));
+        expect(printed).toContain(
+            'Classes the build removes because an `sz` class on the same element covers them:\n',
+        );
+        expect(printed).toContain(
+            '  src/App.tsx:4: The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.\n',
+        );
+        expect(printed).toContain(
+            '  note: a build with `build.mergeCoveredClasses: false` keeps these.\n',
+        );
+        // Below `--fail-on`, so the summary does not wear the failure cross.
+        expect(printed).toContain(
+            '! 1 class(es) are removed because an `sz` class on the same element covers them.',
         );
     });
 
@@ -552,7 +603,21 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         expect(report.findings).toEqual([]);
     });
 
-    it('is skipped, and says why, when the stylesheets do not compile', async () => {
+    it('says no class is removed when nothing merges', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({
+            cwd: tailwindProject({
+                ...files,
+                'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            }),
+            rule: ['merge-covered-class'],
+        });
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '✓ No class is removed because another class covers it.',
+        );
+    });
+
+    it('did not run, and says why and what to do, when the stylesheets disagree', async () => {
         const cwd = tailwindProject({
             ...files,
             // Two entries that set different prefixes give the build nothing
@@ -564,7 +629,49 @@ describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () 
         // The human report prints its warnings to stdout.
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         await check({ cwd, rule: ['merge-covered-class'] });
-        expect(log.mock.calls.flat().join('\n')).toContain('Merge audit skipped');
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '\u2716 Merge audit did not run: the Tailwind stylesheets of this project set different prefixes (`src/app.css` with `prefix(tw)`, `src/other.css` with none), so no class csszyx emits is served by all of them.\n' +
+                '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line.',
+        );
+    });
+
+    // As the dead-class pass does: an audit that was asked for and could not
+    // run on the project's own stylesheet fails the run, or a gate on it stays
+    // green while it checks nothing.
+    it('fails the run when it was selected and a stylesheet does not compile', async () => {
+        const cwd = tailwindProject({
+            ...files,
+            'src/app.css': '@import "tailwindcss";\n.card { @apply not-a-utility; }',
+        });
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({ cwd, rule: ['merge-covered-class'] });
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '\u2716 Merge audit did not run: a Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.',
+        );
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('passes when the environment has no Tailwind to ask', async () => {
+        const cwd = tailwindProject(files, { tailwind: false });
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({ cwd, rule: ['merge-covered-class'] });
+        expect(log.mock.calls.flat().join('\n')).not.toContain('Merge audit did not run');
+        expect(process.exitCode).toBeUndefined();
+    });
+
+    it('fails the run in --json too, saying why on stderr', async () => {
+        const cwd = tailwindProject({
+            ...files,
+            'src/app.css': '@import "tailwindcss" prefix(tw);',
+            'src/other.css': '@import "tailwindcss";',
+        });
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const report = await jsonFor(cwd, { rule: ['merge-covered-class'] });
+        expect(report.findings).toEqual([]);
+        expect(error.mock.calls.flat().join('\n')).toContain('Merge audit did not run');
+        expect(process.exitCode).toBe(1);
     });
 
     it('is not part of a run that does not name it', async () => {
@@ -604,7 +711,7 @@ describe('csszyx check --json — what the run says about itself', () => {
         const { stdout, stderr } = await streamsFor({ rule: ['other'] });
 
         expect(stderr).toContain(
-            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '[csszyx] removed-rule-id:\n  `other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: name `sz-diagnostic` instead, which reports what `other` did.',
         );
         const report = JSON.parse(stdout);
@@ -621,7 +728,7 @@ describe('csszyx check --json — what the run says about itself', () => {
         expect(process.exitCode).toBe(1);
         expect(stdout).toBe('');
         expect(stderr).toContain(
-            '✖ "bogus" is not a rule or a diagnostic kind, so it would select nothing.',
+            '✖ [csszyx] unknown-rule-id:\n  No rule or diagnostic is named `bogus`, so the selection would match nothing and `csszyx check` stops.',
         );
     });
 
@@ -630,7 +737,12 @@ describe('csszyx check --json — what the run says about itself', () => {
 
         expect(process.exitCode).toBe(1);
         expect(stdout).toBe('');
-        expect(stderr).toContain('✖ --fail-on "fatal" is not a level');
+        expect(stderr).toContain(
+            '✖ [csszyx] cli-option-invalid:\n' +
+                '  `--fail-on fatal` is not a level this command takes, so the command did not run.\n' +
+                '  help: pass `--fail-on info`, `--fail-on warn` or `--fail-on error`, or leave it out for `error`.\n' +
+                '  docs: https://csszyx.com/e/cli-option-invalid',
+        );
     });
 
     it('names a directory that does not exist on stderr', async () => {
@@ -638,7 +750,7 @@ describe('csszyx check --json — what the run says about itself', () => {
 
         expect(process.exitCode).toBe(1);
         expect(stdout).toBe('');
-        expect(stderr).toContain('✖ "nowhere" does not exist under');
+        expect(stderr).toContain('✖ `nowhere` does not exist under `');
     });
 
     it('lists the files that could not be read on stderr', async () => {
@@ -646,8 +758,10 @@ describe('csszyx check --json — what the run says about itself', () => {
 
         expect(process.exitCode).toBe(1);
         expect(stdout).toBe('');
-        expect(stderr).toContain('Files that could not be read:');
+        expect(stderr).toContain('Files given to `--files` that do not exist:');
         expect(stderr).toContain('  src/Missing.tsx');
-        expect(stderr).toContain('✖ 1 listed file(s) could not be read');
+        expect(stderr).toContain(
+            '✖ 1 file(s) given to `--files` do not exist, so no file was checked: fix each path above; a relative path is read from `--cwd`, or the current directory.',
+        );
     });
 });

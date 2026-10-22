@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { isCsszyxError } from '../src/errors.js';
 import {
     ManifestBuilder,
     parseManifest,
@@ -239,16 +240,73 @@ describe('parseManifest', () => {
         expect(manifest.tokens.token1).toBeDefined();
     });
 
-    it('should throw on invalid JSON', () => {
-        expect(() => parseManifest('invalid json')).toThrow();
+    it('throws recovery-manifest-unreadable, form parse, wrapping the SyntaxError', () => {
+        const syntax = (() => {
+            try {
+                JSON.parse('invalid json');
+            } catch (error) {
+                return error as SyntaxError;
+            }
+        })() as SyntaxError;
+        const error = caught(() => parseManifest('invalid json'));
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error).toMatchObject({
+            code: 'recovery-manifest-unreadable',
+            args: { form: 'parse', error: syntax.message },
+        });
+        expect((error as Error).cause).toBeInstanceOf(SyntaxError);
+        expect((error as Error).message).toBe(
+            '[csszyx] recovery-manifest-unreadable:\n' +
+                '  This recovery manifest is not valid JSON, so `parseManifest` cannot read it.\n' +
+                '  help: pass the manifest the build wrote, unchanged.\n' +
+                `  note: the parser reported: ${syntax.message}.\n` +
+                '  docs: https://csszyx.com/e/recovery-manifest-unreadable',
+        );
     });
 
-    it('should throw on missing fields', () => {
-        expect(() => parseManifest('{}')).toThrow();
-        expect(() => parseManifest('{"buildId": "123"}')).toThrow();
-        expect(() => parseManifest('{"buildId": "123", "checksum": "abc"}')).toThrow();
+    it('names every missing field, form format', () => {
+        const error = caught(() => parseManifest('{"buildId": "123"}'));
+        expect(error).toMatchObject({
+            code: 'recovery-manifest-unreadable',
+            args: { form: 'format', missing: ['checksum', 'tokens'] },
+        });
+        expect((error as Error).message).toBe(
+            '[csszyx] recovery-manifest-unreadable:\n' +
+                '  This recovery manifest is missing the field(s) `checksum`, `tokens`, so `parseManifest` cannot read it.\n' +
+                '  help: pass the manifest the build wrote, unchanged.\n' +
+                '  docs: https://csszyx.com/e/recovery-manifest-unreadable',
+        );
+        expect(caught(() => parseManifest('{}'))).toMatchObject({
+            args: { form: 'format', missing: ['buildId', 'checksum', 'tokens'] },
+        });
+    });
+
+    // JSON that parses to a non-object used to reach `parsed.buildId` and
+    // throw a TypeError naming no manifest at all.
+    it.each(['null', '5', '"text"'])('reads %s as a manifest with no fields', json => {
+        const error = caught(() => parseManifest(json));
+        expect(error).not.toBeInstanceOf(TypeError);
+        expect(error).toMatchObject({
+            code: 'recovery-manifest-unreadable',
+            args: { form: 'format', missing: ['buildId', 'checksum', 'tokens'] },
+        });
     });
 });
+
+/**
+ * What a call threw.
+ *
+ * @param call - The call.
+ * @returns The thrown value.
+ */
+function caught(call: () => unknown): unknown {
+    try {
+        call();
+    } catch (error) {
+        return error;
+    }
+    throw new Error('the call did not throw');
+}
 
 describe('validateManifest', () => {
     it('should validate correct manifest', () => {

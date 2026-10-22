@@ -108,10 +108,14 @@ try {
     engine.ensureRustTransformAvailable();
     process.stdout.write('no error');
 } catch (error) {
-    process.stdout.write(error.code + ' | ' + error.message.split('\\n')[0]);
+    process.stdout.write(error.code + ' | ' + error.message.split('\\n')[1].trim());
 }`,
     });
     assert.equal(stderr.match(/SyntaxError.*/)?.[0], undefined);
     assert.equal(status, 0, stderr);
-    assert.match(stdout, /^engine-version-skew \| .*from a release before 0\.18/);
+    // The first line is the `[csszyx] <code>:` header; the sentence follows it.
+    assert.match(
+        stdout,
+        /^engine-version-skew \| `@csszyx\/compiler` \S+ loaded a \w+ engine from a release before 0\.18,/,
+    );
 });

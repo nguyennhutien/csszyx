@@ -20,7 +20,10 @@ import type {
  * gives them a `check` surface and no `engine` one, so they are not engine
  * codes at all.
  */
-export const ORACLE_CODES: readonly SzSettableDiagnosticId[] = ['unsigned-value'];
+export const ORACLE_CODES: readonly SzSettableDiagnosticId[] = [
+    'unsigned-value',
+    'unserved-variant',
+];
 
 /** One source per code the engine renders, with the options it needs to be diagnosed. */
 export const CODE_SOURCES: ReadonlyArray<

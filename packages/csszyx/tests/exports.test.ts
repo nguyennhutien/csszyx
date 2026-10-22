@@ -52,6 +52,19 @@ describe('csszyx umbrella exports', () => {
         }
     });
 
+    // `init` installs `csszyx` and `@csszyx/runtime`, not the compiler, so
+    // the guard for a thrown csszyx error has to be reachable from both.
+    it('exposes isCsszyxError on both entries', () => {
+        const error = Object.assign(new Error('x'), {
+            code: 'lowering-not-loaded',
+            args: {},
+            [Symbol.for('csszyx.error')]: true,
+        });
+        expect(csszyx.isCsszyxError(error)).toBe(true);
+        expect(browserEntry.isCsszyxError(error)).toBe(true);
+        expect(browserEntry.isCsszyxError(new Error('x'))).toBe(false);
+    });
+
     it('exposes defineConfig, which a csszyx.config file imports, on both entries', () => {
         const config = { diagnostics: { preset: 'atomic' as const } };
         expect(csszyx.defineConfig(config)).toBe(config);

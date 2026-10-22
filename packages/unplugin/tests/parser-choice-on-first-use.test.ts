@@ -53,7 +53,7 @@ describe('a stale native binary', () => {
         try {
             await transformWith({ build: { parser: 'wasm', cache: false } });
             expect(warn.mock.calls.map(call => call.join(' ')).join('\n')).toContain(
-                'active parser: wasm',
+                '[csszyx] active-parser:\n  This build parses with the wasm engine.\n',
             );
         } finally {
             warn.mockRestore();

@@ -3,7 +3,9 @@ import type { SourceTransformResult, TransformSourceCodeOptions } from '@csszyx/
 import { ensureRustTransformAvailable } from '@csszyx/compiler/engine';
 import { transformRustUnrendered, transformWasmUnrendered } from '@csszyx/compiler/internal';
 import type { ResolvedCrossModuleEntries } from './cross-module-registry.js';
+import { diagnosticError } from './diagnostic-message.js';
 import { withCrossModuleStatics } from './next-cross-module.js';
+import { projectRelative } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,
@@ -78,9 +80,10 @@ export function transformNextSource(input: NextSourceTransformInput): NextSource
     // Null is a real answer: no stylesheet sets a prefix. Undefined means the
     // lane never asked, which only a lane csszyx forgot to wire can do.
     if (input.compilerOptions?.classPrefix === undefined) {
-        throw new Error(
-            "[csszyx] internal error: a Next lane asked the engine to lower a module before it read the project's Tailwind prefix. This is a csszyx bug; please report it with the Next.js version you build with.",
-        );
+        throw diagnosticError('internal-error', {
+            where: 'transformNextSource',
+            detail: "a Next build asked the engine to transform a module before it read the project's Tailwind prefix",
+        });
     }
     const filename = normalizeSourceFilename(input.filename);
     const producer: TransformCacheProducer = input.parserMode;
@@ -99,7 +102,12 @@ export function transformNextSource(input: NextSourceTransformInput): NextSource
     }
 
     const result = runNextSourceTransform(input, filename);
-    assertNoUnsafePassThrough(input.source, result.result, filename);
+    const rootDir = input.compilerOptions.rootDir;
+    assertNoUnsafePassThrough(
+        input.source,
+        result.result,
+        rootDir === undefined ? filename : projectRelative(rootDir, filename),
+    );
     if (input.cacheRoot && cacheKey && result.producer === producer) {
         writeTransformCache(input.cacheRoot, cacheInput, result.result, cacheKey);
         return { ...result, cacheStatus: 'write' };
@@ -109,23 +117,25 @@ export function transformNextSource(input: NextSourceTransformInput): NextSource
 }
 
 /**
+ * Stop on a module the transform handed back unchanged while it still holds
+ * `sz` syntax: passed through, it would ship an `sz` prop React renders as an
+ * attribute, with no class at all.
  *
- * @param source
- * @param result
- * @param filename
+ * @param source - The module as read.
+ * @param result - What the transform returned.
+ * @param file - The module, as its header names it.
+ * @throws {CsszyxError} `next-sz-untransformed`.
  */
 function assertNoUnsafePassThrough(
     source: string,
     result: SourceTransformResult,
-    filename: string,
+    file: string,
 ): void {
     if (!hasSzSyntax(source)) {
         return;
     }
     if (!result.transformed && result.code === source) {
-        throw new Error(
-            `[csszyx] Next source transform failed closed for ${filename}: source still contains csszyx sz syntax.`,
-        );
+        throw diagnosticError('next-sz-untransformed', {}, { at: file });
     }
 }
 

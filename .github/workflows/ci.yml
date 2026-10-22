@@ -743,6 +743,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The state layer words its lock error and its shard warning through
+      # `@csszyx/compiler` (`CsszyxError`, the diagnostic registry), which
+      # resolves to the package's `dist`. Only the compiler is built: it is
+      # TypeScript alone, so this needs no Rust, unlike a turbo build of the
+      # closure, which pulls in the wasm engine.
+      - name: Build @csszyx/compiler
+        run: pnpm --filter @csszyx/compiler build
+
       - name: Run Next state platform tests
         run: >-
           pnpm --filter @csszyx/unplugin exec vitest run

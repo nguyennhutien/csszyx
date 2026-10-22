@@ -15,6 +15,29 @@ import {
     setSzWarnLocation,
     transform,
 } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
+import { parseSzConsoleLine } from './helpers/sz-console-line.js';
+
+/** Every value `display` takes, as the dead-value help lists them. */
+const DISPLAY_VALUES =
+    'block, inline-block, inline, flex, inline-flex, grid, inline-grid, contents, table, inline-table, table-caption, table-cell, table-column, table-column-group, table-footer-group, table-header-group, table-row-group, table-row, flow-root, list-item, none';
+
+/**
+ * The line for a closed-enum value outside its set.
+ *
+ * @param key - The key.
+ * @param value - The value.
+ * @param bare - The class emitted for it.
+ * @param values - The values the key takes.
+ * @returns The line.
+ */
+const deadValue = (key: string, value: string, bare: string, values: string) =>
+    runtimeMessage(
+        'closed-enum-value',
+        `\`${key}: '${value}'\` is not a \`${key}\` value.`,
+        `help: use one of: ${values}.`,
+        `note: the class \`${bare}\` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.`,
+    );
 
 beforeEach(() => {
     // The warn sets are process-wide by design, so an earlier suite probing the
@@ -46,16 +69,15 @@ describe('closed-enum values on the runtime lane', () => {
     it('still emits a value outside the set, and names it with the legal ones', () => {
         const { className, warnings } = lower({ display: 'bogus' } as SzObject);
         expect(className).toBe('bogus');
-        expect(warnings).toHaveLength(1);
-        expect(warnings[0]).toContain('"display: bogus"');
-        expect(warnings[0]).toContain('The class "bogus" is still emitted');
-        expect(warnings[0]).toContain('inline-block');
+        expect(warnings).toEqual([deadValue('display', 'bogus', 'bogus', DISPLAY_VALUES)]);
     });
 
     it('names the prefixed class isolation emits for a value outside its set', () => {
         const { className, warnings } = lower({ isolation: 'bogus' } as SzObject);
         expect(className).toBe('isolation-bogus');
-        expect(warnings[0]).toContain('The class "isolation-bogus" is still emitted');
+        expect(warnings).toEqual([
+            deadValue('isolation', 'bogus', 'isolation-bogus', 'isolate, auto'),
+        ]);
     });
 
     // The important modifier is a class suffix, not part of the value.
@@ -70,7 +92,9 @@ describe('closed-enum values on the runtime lane', () => {
     it('does not read a prototype member as a legal value', () => {
         const { className, warnings } = lower({ display: 'constructor' } as SzObject);
         expect(className).toBe('constructor');
-        expect(warnings[0]).toContain('"display: constructor"');
+        expect(warnings).toEqual([
+            deadValue('display', 'constructor', 'constructor', DISPLAY_VALUES),
+        ]);
     });
 
     it.each([
@@ -87,7 +111,9 @@ describe('closed-enum values on the runtime lane', () => {
 
     it('reports a bad value nested under a variant', () => {
         const { warnings } = lower({ hover: { position: 'bogus' } } as SzObject);
-        expect(warnings[0]).toContain('"position: bogus"');
+        expect(parseSzConsoleLine(warnings[0] ?? '').text).toBe(
+            "`position: 'bogus'` is not a `position` value.",
+        );
     });
 
     it('warns once per key/value pair, however many elements repeat it', () => {
@@ -109,7 +135,9 @@ describe('the location a build engine knew', () => {
         ['a csszyx-owned key holding an object', { '--v-x': { p: 4 } }],
     ])('names the file and line for %s', (_what, sz) => {
         setSzWarnLocation('src/Card.tsx:12');
-        expect(lower(sz as SzObject).warnings[0]).toContain(' at src/Card.tsx:12');
+        expect(parseSzConsoleLine(lower(sz as SzObject).warnings[0] ?? '').place).toBe(
+            'src/Card.tsx:12',
+        );
     });
 });
 
@@ -120,9 +148,13 @@ describe('csszyx-owned keys holding an object on the runtime lane', () => {
     ])('names %s and still emits its prefix', (key, sz, expected) => {
         const { className, warnings } = lower(sz as SzObject);
         expect(className).toBe(expected);
-        expect(warnings).toHaveLength(1);
-        expect(warnings[0]).toContain(`"${key}"`);
-        expect(warnings[0]).toContain('it holds an object');
+        expect(warnings).toEqual([
+            runtimeMessage(
+                'non-variant-object',
+                `\`${key}\` is not a variant, so its object emits \`${key}:\` classes that produce no CSS.`,
+                'help: a `--*` key takes a declaration value; `container` takes `true`.',
+            ),
+        ]);
     });
 
     it.each([

@@ -48,7 +48,7 @@ describe('transformRust native wrapper', () => {
             expect(result.transformed).toBe(true);
         } catch (err) {
             expect(err).toBeInstanceOf(RustTransformUnavailableError);
-            expect((err as Error).message).toContain('native engine unavailable');
+            expect((err as Error).message).toContain('[csszyx] native-engine-unavailable:');
         }
     });
 
@@ -63,7 +63,7 @@ describe('transformRust native wrapper', () => {
             expect(result?.code).toContain('className="p-4"');
         } catch (err) {
             expect(err).toBeInstanceOf(RustTransformUnavailableError);
-            expect((err as Error).message).toContain('native engine unavailable');
+            expect((err as Error).message).toContain('[csszyx] native-engine-unavailable:');
         }
     });
 
@@ -71,8 +71,8 @@ describe('transformRust native wrapper', () => {
         const err = new RustTransformUnavailableError('test detail');
 
         expect(err.name).toBe('RustTransformUnavailableError');
-        expect(err.message).toContain('transformRust: native engine unavailable');
-        expect(err.message).toContain('test detail');
+        expect(err.message).toContain('An internal check failed in `transformRust`');
+        expect(err.message).toContain('note: the check that failed: test detail.');
     });
 });
 

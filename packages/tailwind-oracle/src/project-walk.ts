@@ -39,6 +39,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { szDiagnosticError } from '@csszyx/compiler';
 import ignore from 'ignore';
 
 /**
@@ -170,6 +171,9 @@ interface OwnPathRules {
     test(path: string, checkUnignored: boolean, mode: 'regex'): GitignoreVerdict;
 }
 
+/** The `ignore` version this package pins in its `dependencies`. */
+const IGNORE_PINNED = '7.0.6';
+
 /**
  * Match one path against an `ignore` instance's patterns, its parent folders
  * left out.
@@ -190,10 +194,7 @@ function ownPathVerdict(
 ): (relative: string) => GitignoreVerdict {
     const rules = (matcher as unknown as { _rules?: Partial<OwnPathRules> })._rules;
     if (typeof rules?.test !== 'function') {
-        throw new TypeError(
-            '[csszyx] the installed `ignore` package no longer matches one path apart from its parent folders; .gitignore cannot be read.\n' +
-                '  help: install ignore@7.0.6, the version @csszyx/unplugin pins, and remove any override that forces another.',
-        );
+        throw szDiagnosticError('ignore-package-incompatible', { pinned: IGNORE_PINNED });
     }
     const own = rules as OwnPathRules;
     return relative => own.test(relative, true, 'regex');

@@ -37,43 +37,171 @@ export type SzDiagnosticCode =
     | 'color-slash-opacity';
 
 /**
- * The named values each engine code carries in `issue.args`, by code. An
- * optional value the diagnostic has nothing for is absent, never `null`.
+ * The named values each live id carries, by id: what a site passes with it,
+ * and what an engine code carries in `issue.args`. An optional value the
+ * diagnostic has nothing for is absent, never `null`.
  */
-export interface SzDiagnosticArgsByCode {
-    'unknown-key': { readonly key: string; readonly suggestion?: string; };
-    'canonical-key': { readonly key: string; };
-    'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string; };
-    'numeric-key': { readonly key: string; };
-    'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string; };
-    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string; };
-    'off-scale-value': { readonly key: string; readonly value: string; };
-    'numeric-font-weight': { readonly value: string; };
-    'per-side-border-style': { readonly key: string; readonly value: string; };
-    'property-object': { readonly key: string; readonly nestedKeys: readonly string[]; };
-    'non-variant-object': { readonly key: string; };
-    'unknown-field': { readonly owner: string; readonly member: string; readonly allowed: readonly string[]; };
-    'runtime-value': { readonly key: string; };
-    'unresolvable-spread': {  };
-    'style-override': {  };
-    'szs-slot-map': { readonly form: 'host-element' | 'unreadable-slot'; };
-    'sz-recover': { readonly form: 'non-literal' | 'unknown-mode'; readonly mode?: string; };
-    'class-precedence': {  };
-    'duplicate-sz': { readonly elementName: string; readonly count: number; };
-    'spread-split-class': { readonly elementName: string; readonly classes: readonly string[]; readonly szCount: number; readonly szAt: number; readonly spread?: string; readonly parts: readonly string[]; };
-    'moved-value': { readonly form: 'value' | 'mask-layer'; readonly key: string; readonly value: string; readonly layerKey?: 'maskLinear' | 'maskRadial' | 'maskConic'; };
-    'global-before-group': { readonly global: string; readonly value: string; readonly group: string; };
-    'runtime-family-conflict': { readonly form: 'key-first' | 'other-first'; readonly key: string; readonly other: string; };
-    'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string; };
-    'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; };
-    'merge-classifier-unavailable': { readonly form: 'unreadable' | 'format-mismatch'; readonly error?: string; readonly tableFormat?: number; };
-    'parse-error': { readonly form: 'syntax' | 'summary' | 'panicked' | 'expression' | 'prescan'; readonly message?: string; readonly errorCount?: number; };
-    'nesting-depth': { readonly depth: number; };
-    'unsupported-dynamic-sz': {  };
-    'ast-budget': { readonly form: 'transform' | 'prescan'; };
-    'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number; };
-    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string; };
+export interface SzDiagnosticArgs {
+    'unknown-key': { readonly key: string; readonly suggestion?: string };
+    'canonical-key': { readonly form: 'alias' | 'font' | 'scrollbar-color'; readonly key: string };
+    'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string };
+    'numeric-key': { readonly key: string };
+    'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
+    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string };
+    'off-scale-value': { readonly key: string; readonly value: string };
+    'numeric-font-weight': { readonly value: string };
+    'per-side-border-style': { readonly key: string; readonly value: string };
+    'property-object': { readonly key: string; readonly nestedKeys: readonly string[] };
+    'non-variant-object': { readonly key: string };
+    'unknown-field': { readonly owner: string; readonly member: string; readonly allowed: readonly string[] };
+    'runtime-value': { readonly key: string };
+    'unresolvable-spread': Readonly<Record<string, never>>;
+    'style-override': Readonly<Record<string, never>>;
+    'szs-slot-map': { readonly form: 'host-element' | 'unreadable-slot' };
+    'sz-recover': { readonly form: 'non-literal' | 'unknown-mode'; readonly mode?: string };
+    'class-precedence': Readonly<Record<string, never>>;
+    'duplicate-sz': { readonly elementName: string; readonly count: number };
+    'spread-split-class': { readonly elementName: string; readonly classes: readonly string[]; readonly szCount: number; readonly szAt: number; readonly spread?: string; readonly parts: readonly string[] };
+    'moved-value': { readonly form: 'value' | 'mask-layer'; readonly key: string; readonly value: string; readonly layerKey?: 'maskLinear' | 'maskRadial' | 'maskConic' };
+    'global-before-group': { readonly global: string; readonly value: string; readonly valueType: 'string' | 'number' | 'boolean'; readonly group: string };
+    'runtime-family-conflict': { readonly form: 'key-first' | 'other-first'; readonly key: string; readonly other: string };
+    'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string };
+    'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string };
+    'merge-classifier-unavailable': { readonly form: 'unreadable' | 'format-mismatch'; readonly error?: string; readonly tableFormat?: number };
+    'parse-error': { readonly form: 'syntax' | 'summary' | 'panicked' | 'expression' | 'prescan'; readonly message?: string; readonly errorCount?: number };
+    'nesting-depth': { readonly depth: number };
+    'unsupported-dynamic-sz': Readonly<Record<string, never>>;
+    'ast-budget': { readonly form: 'transform' | 'prescan' };
+    'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
+    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
+    'unsigned-value': { readonly className: string; readonly utility: string };
+    'dead-class': { readonly className: string };
+    'prefix-disagreement': { readonly form: 'build' | 'next' | 'check'; readonly entries: readonly string[]; readonly setting?: string; readonly ignoreSetting?: string };
+    'sibling-keyword': { readonly key: string; readonly value: string; readonly className: string; readonly sets: readonly string[] };
+    'broken-opacity': { readonly className: string; readonly value: string };
+    'unserved-variant': { readonly form: 'aria' | 'attribute-or-aria' | 'unknown'; readonly variant: string; readonly className: string };
+    'theme-collision': { readonly form: 'classes' | 'utility-keyword' | 'value'; readonly name: string; readonly classes?: readonly string[] };
+    'merge-covered-key': { readonly key: string; readonly className: string };
+    'merge-covered-class': { readonly className: string };
+    'recovery-manifest-unreadable': { readonly form: 'json' | 'parse' | 'format'; readonly error?: string; readonly missing?: readonly string[] };
+    'mangle-map-unreadable': { readonly form: 'schema' | 'json'; readonly error?: string };
+    'mangle-census-unreadable': Readonly<Record<string, never>>;
+    'mangle-checksum-mismatch': { readonly computed: string; readonly expected: string };
+    'mangle-map-unavailable': { readonly checksum: string };
+    'web-crypto-unavailable': Readonly<Record<string, never>>;
+    'hydration-aborted': { readonly form: 'checksum-mismatch' | 'map-missing' | 'invalid-token'; readonly tagName: string; readonly message?: string };
+    'csr-recovery-unmarked': Readonly<Record<string, never>>;
+    'csr-recovery-dev-only': { readonly form: 'runtime' | 'stripped'; readonly count?: number; readonly sites?: readonly string[] };
+    'csr-recovery-used': Readonly<Record<string, never>>;
+    'merge-table-format-skew': { readonly format: number; readonly expected: number };
+    'merge-table-missing': Readonly<Record<string, never>>;
+    'uncompiled-sz': Readonly<Record<string, never>>;
+    'register-szcn-groups-ignored': Readonly<Record<string, never>>;
+    'theme-token-ambiguous': { readonly form: 'color-text-size' | 'font-family-weight'; readonly name: string };
+    'split-box-selector-invalid': { readonly form: 'array' | 'empty' | 'multi' | 'property' | 'sz-qualified'; readonly selector?: string; readonly property?: string; readonly categories?: readonly string[]; readonly properties?: readonly string[]; readonly name?: string };
+    'split-box-unknown-category': { readonly form: 'no-hint' | 'hint' | 'property-hint'; readonly name: string; readonly hint?: string };
+    'split-box-placement-variant': { readonly selector: string; readonly side: 'inner' | 'outer'; readonly base: string };
+    'split-box-peer-on-frame': { readonly token: string; readonly base: string; readonly reaching: string };
+    'split-box-unclassified': { readonly form: 'class' | 'raw-css'; readonly token?: string; readonly node: 'frame' | 'content'; readonly side: 'inner' | 'outer' };
+    'split-box-unbounded-scroll': { readonly scroller: string };
+    'split-box-unclipped-corners': Readonly<Record<string, never>>;
+    'split-box-hidden-content': { readonly hidden: string };
+    'szv-config-invalid': { readonly form: 'config' | 'base' | 'variants' | 'default-variants' | 'dimension' | 'variant-value'; readonly dimension?: string; readonly token?: string; readonly got: string };
+    'sz-object-depth': { readonly form: 'value' | 'szv-config'; readonly maxDepth: number; readonly where?: string };
+    'szv-forbidden-key': { readonly where: string; readonly key: string };
+    'szv-unknown-variant': { readonly key: string };
+    'szv-unknown-variant-value': { readonly form: 'listed' | 'none'; readonly key: string; readonly value: string; readonly allowed?: readonly string[] };
+    'szv-object-as-string': Readonly<Record<string, never>>;
+    'dynamic-injection-growth': { readonly count: number };
+    'dynamic-unsafe-arbitrary': { readonly utility: string };
+    'dynamic-non-boolean': { readonly key: string; readonly valueType: string };
+    'dynamic-unresolvable': { readonly key: string; readonly valueType: string };
+    'dev-warnings-partial': Readonly<Record<string, never>>;
+    'diagnostics-capped': { readonly form: 'per-id' | 'dev-warnings' | 'unknown-keys'; readonly id?: string; readonly count?: number };
+    'sz-attribute-syntax': { readonly form: 'char' | 'end'; readonly input: string; readonly char?: string; readonly index: number };
+    'options-object-required': { readonly form: 'transform' | 'csszyx-turbopack' | 'csszyx-turbopack-option'; readonly options?: readonly string[] };
+    'lowering-not-loaded': Readonly<Record<string, never>>;
+    'lite-sz-object': { readonly fnName: string; readonly received: string };
+    'split-box-sz-string': { readonly value: string };
+    'runtime-prefix-conflict': { readonly form: 'prefixes' | 'unprefixed'; readonly first: string; readonly second?: string };
+    'dynamic-manifest-unreachable': { readonly status: number };
+    'native-engine-unavailable': { readonly form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding' | 'stale-binding-versions' | 'wasm-fallback'; readonly platform?: string; readonly packageName?: string; readonly exportName?: string; readonly nativeVersion?: string; readonly coreVersion?: string };
+    'wasm-engine-unavailable': { readonly detail: string };
+    'native-migrate-unavailable': { readonly form: 'no-platform-package' | 'not-installed' | 'missing-export' | 'stale-binding' | 'stale-binding-versions'; readonly platform?: string; readonly packageName?: string; readonly exportName?: string; readonly nativeVersion?: string; readonly coreVersion?: string };
+    'engine-version-skew': { readonly form: 'version' | 'platform-package' | 'unreported' | 'source'; readonly artifact: 'native' | 'wasm'; readonly expectedVersion: string; readonly expectedDigest: string; readonly foundVersion?: string; readonly foundDigest?: string; readonly platformPackage?: string };
+    'runtime-version-skew': { readonly pluginVersion: string; readonly runtimeVersion: string; readonly runtimeDir: string };
+    'peer-module-unresolved': { readonly requiredBy: string; readonly request: string; readonly install: string };
+    'tailwind-v3-unavailable': { readonly form: 'absent' | 'wrong-major' | 'broken-entry'; readonly version?: string; readonly reason?: string };
+    'explain-input-invalid': { readonly form: 'not-one-expression' | 'runtime-only'; readonly input: string; readonly diagnostics?: readonly string[] };
+    'template-sz-invalid': { readonly count: number };
+    'template-runtime-value': Readonly<Record<string, never>>;
+    'template-unparsable': { readonly form: 'vue' | 'svelte-quoted' | 'svelte-preprocess'; readonly message: string };
+    'template-lang-unsupported': { readonly lang: string };
+    'svelte-version-unsupported': { readonly version: string };
+    'ignore-package-incompatible': { readonly pinned: string };
+    'internal-error': { readonly where: string; readonly detail: string };
+    'engine-call-failed': { readonly file: string; readonly detail: string };
+    'config-invalid': { readonly form: 'partly-applied' | 'not-applied'; readonly count: number };
+    'unknown-rule-id': { readonly form: 'config' | 'cli'; readonly ids: readonly string[]; readonly suggestion?: string };
+    'config-id-not-settable': { readonly id: string };
+    'removed-rule-id': { readonly form: 'replaced' | 'removed'; readonly id: string; readonly replacedBy?: string };
+    'config-level-invalid': { readonly id: string; readonly level: string };
+    'config-preset-unknown': { readonly preset: string };
+    'config-field-unknown': { readonly form: 'top-level' | 'misspelt' | 'plugin-option' | 'diagnostics' | 'allow'; readonly key: string; readonly suggestion?: string };
+    'config-field-invalid': { readonly field: string; readonly expected: 'config-object' | 'object' | 'rules-object' | 'name-list' | 'overrides-list' | 'override' | 'globs' };
+    'config-glob-unmatchable': { readonly glob: string };
+    'config-file-duplicate': { readonly read: string };
+    'config-unloadable': { readonly form: 'load' | 'typescript-in-js' | 'legacy-template' | 'worker'; readonly reason: string; readonly lane?: string; readonly renameTo?: string };
+    'config-no-default-export': Readonly<Record<string, never>>;
+    'policy-state-format-skew': { readonly format: number; readonly expected: number };
+    'safelist-shard-format-skew': { readonly format: number; readonly expected: number };
+    'diagnostics-held': { readonly count: number };
+    'merge-covered-held': { readonly classes: number; readonly files: number; readonly kinds: readonly string[]; readonly configFile: string };
+    'removed-option': { readonly form: 'inject-checksum' | 'mangle-map-delivery' };
+    'transform-cache-disabled': Readonly<Record<string, never>>;
+    'active-parser': { readonly form: 'native' | 'wasm' | 'degraded' };
+    'project-reload': { readonly form: 'config' | 'merge-groups' | 'prefix' | 'prefix-added' | 'prefix-removed'; readonly before?: string; readonly after?: string };
+    'watch-prefix-changed': { readonly form: 'changed' | 'added' | 'removed'; readonly changed: readonly string[]; readonly before?: string; readonly after?: string };
+    'watch-merge-groups-changed': { readonly changed: readonly string[] };
+    'safelist-unwritable': { readonly reason: string };
+    'safelist-capped': { readonly max: number };
+    'utility-collision': { readonly form: 'declared-twice' | 'theme-token'; readonly name: string };
+    'theme-scan-without-typescript': { readonly tsconfig: string; readonly includePath: string };
+    'esbuild-mangle-unsupported': Readonly<Record<string, never>>;
+    'mangle-selector-unparsable': { readonly selector: string; readonly error: string };
+    'mangle-preserve-invalid': { readonly form: 'entry' | 'lone-star'; readonly index?: number; readonly got?: string };
+    'mangle-global-vars-options-invalid': { readonly form: 'schema' | 'tokens-required' | 'auto-prefix'; readonly errors?: readonly string[] };
+    'mangle-global-vars-plan-invalid': { readonly findings: readonly string[] };
+    'mangle-map-too-large': { readonly size: number; readonly maxBytes: number };
+    'mangle-census-late': { readonly form: 'classes' | 'census-changed'; readonly classes?: readonly string[] };
+    'mangle-hybrid-hazard': { readonly form: 'collision' | 'orphan' | 'selector-renamed' | 'selector-matched'; readonly count: number; readonly names?: readonly string[]; readonly selectors?: readonly string[]; readonly entries?: readonly string[] };
+    'merge-hook-late': { readonly className: string };
+    'merge-origin-unreadable': { readonly reason: string };
+    'tailwind-stylesheet-missing': { readonly setting: string; readonly missing: readonly string[]; readonly root: string };
+    'tailwind-stylesheet-absent': { readonly count: number };
+    'tailwind-stylesheet-broken': { readonly stylesheets: readonly string[]; readonly setting: string };
+    'tailwind-config-missing': { readonly form: 'path' | 'not-found'; readonly root?: string };
+    'tailwind-config-unloadable': { readonly reason: string };
+    'legacy-source-directive': { readonly target: string };
+    'postcss-plugin-order': Readonly<Record<string, never>>;
+    'postcss-plugin-missing': Readonly<Record<string, never>>;
+    'ignore-pattern-negated': { readonly pattern: string };
+    'compile-sources-unresolved': { readonly paths: readonly string[]; readonly root: string };
+    'compile-sources-skipped': { readonly form: 'sz' | 'szv-exports'; readonly count: number; readonly files: readonly string[]; readonly szvCount?: number };
+    'css-source-unstable': Readonly<Record<string, never>>;
+    'rsc-boundary-violation': { readonly symbol: string; readonly chain: readonly string[] };
+    'next-prefix-unread': { readonly lane: 'prebuild' | 'turbopack-loader'; readonly root: string; readonly reason: string };
+    'next-safelist-locked': { readonly pid: number; readonly root: string; readonly mode: string; readonly host: string; readonly updatedAt: string; readonly command?: string };
+    'next-mangle-vars-unsupported': { readonly form: 'prebuild' | 'turbopack' };
+    'next-turbo-cache-unseeded': { readonly root: string; readonly reason: string };
+    'next-sz-untransformed': Readonly<Record<string, never>>;
+    'next-watcher-unclosed': { readonly detail: string };
+    'no-source-files': { readonly pattern: string; readonly root: string };
+    'cli-option-invalid': { readonly form: 'mode' | 'parser-mode' | 'debounce-ms' | 'framework' | 'fail-on'; readonly value?: string };
 }
+
+/** The named values each engine code carries in `issue.args`, by code. */
+export type SzDiagnosticArgsByCode = Pick<SzDiagnosticArgs, SzDiagnosticCode>;
 
 /** Every code `csszyx check` reports under its `sz-diagnostic` pass, in registry order. */
 export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
@@ -174,7 +302,8 @@ export type SzSettableDiagnosticId =
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
     | 'unsigned-value'
-    | 'prefix-disagreement';
+    | 'prefix-disagreement'
+    | 'unserved-variant';
 
 /** Every id a level can be set for, in registry order. */
 export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
@@ -219,6 +348,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'color-slash-opacity',
     'unsigned-value',
     'prefix-disagreement',
+    'unserved-variant',
 ];
 
 /** Every live public id, whatever surface prints it. */
@@ -260,6 +390,7 @@ export type SzDiagnosticId =
     | 'prefix-disagreement'
     | 'sibling-keyword'
     | 'broken-opacity'
+    | 'unserved-variant'
     | 'theme-collision'
     | 'merge-covered-key'
     | 'merge-covered-class'
@@ -342,11 +473,76 @@ export type SzDiagnosticId =
     | 'active-parser'
     | 'project-reload'
     | 'watch-prefix-changed'
+    | 'watch-merge-groups-changed'
     | 'safelist-unwritable'
+    | 'safelist-capped'
     | 'utility-collision'
     | 'theme-scan-without-typescript'
     | 'esbuild-mangle-unsupported'
     | 'mangle-selector-unparsable'
+    | 'mangle-preserve-invalid'
+    | 'mangle-global-vars-options-invalid'
+    | 'mangle-global-vars-plan-invalid'
+    | 'mangle-map-too-large'
+    | 'mangle-census-late'
+    | 'mangle-hybrid-hazard'
+    | 'merge-hook-late'
+    | 'merge-origin-unreadable'
+    | 'tailwind-stylesheet-missing'
+    | 'tailwind-stylesheet-absent'
+    | 'tailwind-stylesheet-broken'
+    | 'tailwind-config-missing'
+    | 'tailwind-config-unloadable'
+    | 'legacy-source-directive'
+    | 'postcss-plugin-order'
+    | 'postcss-plugin-missing'
+    | 'ignore-pattern-negated'
+    | 'compile-sources-unresolved'
+    | 'compile-sources-skipped'
+    | 'css-source-unstable'
+    | 'rsc-boundary-violation'
+    | 'next-prefix-unread'
+    | 'next-safelist-locked'
+    | 'next-mangle-vars-unsupported'
+    | 'next-turbo-cache-unseeded'
+    | 'next-sz-untransformed'
+    | 'next-watcher-unclosed'
+    | 'no-source-files'
+    | 'cli-option-invalid';
+
+/**
+ * The `code` of an error csszyx throws: every id the registry gives an
+ * error surface, so a typo in `err.code === '…'` fails to compile.
+ */
+export type SzErrorCode =
+    | 'parse-error'
+    | 'prefix-disagreement'
+    | 'recovery-manifest-unreadable'
+    | 'web-crypto-unavailable'
+    | 'sz-object-depth'
+    | 'sz-attribute-syntax'
+    | 'options-object-required'
+    | 'lowering-not-loaded'
+    | 'lite-sz-object'
+    | 'split-box-sz-string'
+    | 'runtime-prefix-conflict'
+    | 'dynamic-manifest-unreachable'
+    | 'native-engine-unavailable'
+    | 'wasm-engine-unavailable'
+    | 'native-migrate-unavailable'
+    | 'engine-version-skew'
+    | 'runtime-version-skew'
+    | 'peer-module-unresolved'
+    | 'tailwind-v3-unavailable'
+    | 'explain-input-invalid'
+    | 'template-sz-invalid'
+    | 'template-runtime-value'
+    | 'template-unparsable'
+    | 'template-lang-unsupported'
+    | 'svelte-version-unsupported'
+    | 'ignore-package-incompatible'
+    | 'internal-error'
+    | 'watch-prefix-changed'
     | 'mangle-preserve-invalid'
     | 'mangle-global-vars-options-invalid'
     | 'mangle-global-vars-plan-invalid'
@@ -364,12 +560,9 @@ export type SzDiagnosticId =
     | 'rsc-boundary-violation'
     | 'next-prefix-unread'
     | 'next-safelist-locked'
-    | 'next-generation-manifest-invalid'
     | 'next-mangle-vars-unsupported'
     | 'next-turbo-cache-unseeded'
     | 'next-sz-untransformed'
-    | 'next-watcher-not-started'
-    | 'next-watcher-unclosed'
     | 'no-source-files'
     | 'cli-option-invalid';
 

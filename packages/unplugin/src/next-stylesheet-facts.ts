@@ -35,7 +35,7 @@ import { stylesheetsImportedBy } from './js-stylesheet-imports.js';
 import { resolveNextAppCacheDir, resolveNextAppRoot } from './next-root-resolver.js';
 import {
     mayReachTailwind,
-    missingTailwindStylesheetMessage,
+    missingTailwindStylesheetError,
     openProjectStyleModel,
     originWarning,
     type ProjectStyleModel,
@@ -344,7 +344,7 @@ export async function openStylesheetModel(input: {
     }));
     const missing = listed.filter(entry => !existsSync(entry.absolute)).map(entry => entry.file);
     if (missing.length > 0) {
-        throw new Error(missingTailwindStylesheetMessage(missing, input.root, input.setting));
+        throw missingTailwindStylesheetError(missing, input.root, input.setting);
     }
     // A writer with no patterns of its own, such as the jest lane, keeps the
     // ones the command recorded: writing none would bring the ignored entries
@@ -373,7 +373,7 @@ export async function openStylesheetModel(input: {
         hookStylesheets: listed.length > 0 ? walked : [],
     });
     const problem = styleModelError(model, input.root, input.setting, input.ignoreSetting);
-    if (problem !== null) throw new Error(problem);
+    if (problem !== null) throw problem;
 
     return { model, candidates, ignore, gitignoreFiles: walk.gitignoreFiles };
 }
@@ -843,22 +843,6 @@ export function resolveNextClassPrefix(input: {
     // The candidates are dependencies too: an `@import "tailwindcss"` added to
     // one later has to re-run the loader.
     return { ok: true, prefix: null, dependencies: [factsPath, ...candidates] };
-}
-
-/**
- * What a synchronous Next lane says when it has no prefix to lower with.
- *
- * @param root - The Next app root.
- * @param reason - Why the facts could not be used.
- * @param lane - Which lane is asking, as the message names it.
- * @returns The message.
- */
-export function unreadNextPrefixMessage(root: string, reason: string, lane: string): string {
-    return (
-        `[csszyx] ${lane} has not read the Tailwind prefix for ${root}: ${reason}.\n` +
-        '  help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first.\n' +
-        '  note: without the prefix every class this lane emits could style nothing.'
-    );
 }
 
 /**

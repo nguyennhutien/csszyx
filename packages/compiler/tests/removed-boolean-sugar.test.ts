@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
 
 const t = (sz: SzObject): string => transform(sz).className;
+
+/**
+ * The line a removed boolean shorthand prints.
+ *
+ * @param key - The shorthand.
+ * @param canonical - The object to write instead.
+ * @returns The line.
+ */
+const removedSugar = (key: string, canonical: string) =>
+    runtimeMessage(
+        'removed-key',
+        `The boolean shorthand \`${key}\` was removed, and nothing is emitted for it.`,
+        `help: write \`${canonical}\` instead, or run \`csszyx migrate\`.`,
+    );
 
 /**
  * Boolean-sugar aliases for single-property utilities (display/position/
@@ -38,10 +53,7 @@ describe('removed boolean sugar', () => {
         it(`{ ${key}: true } emits nothing and names the canonical form`, () => {
             const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
             expect(t({ [key]: true } as SzObject)).toBe('');
-            expect(spy).toHaveBeenCalledWith(
-                expect.stringContaining(`"${key}" boolean sugar was removed`),
-            );
-            expect(spy).toHaveBeenCalledWith(expect.stringContaining(canonical));
+            expect(spy.mock.calls).toEqual([[removedSugar(key, canonical)]]);
         });
     }
 
@@ -60,9 +72,7 @@ describe('removed boolean sugar', () => {
         vi.stubGlobal('window', {});
         const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(t({ grid: true } as SzObject)).toBe('');
-        expect(spy).toHaveBeenCalledWith(
-            expect.stringContaining('"grid" boolean sugar was removed'),
-        );
+        expect(spy.mock.calls).toEqual([[removedSugar('grid', "{ display: 'grid' }")]]);
     });
 
     it('does not break the flex shorthand (flex: 1 / flex: "auto")', () => {

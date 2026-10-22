@@ -13,6 +13,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { runtimeMessage } from '../../compiler/tests/engine-message.js';
+
 import { generateDeclarations, parseVariants } from '../src/css-generator.js';
 
 describe('warnUnsafeArbitrary — production gate', () => {
@@ -229,8 +231,16 @@ describe('warnUnsafeArbitrary — dev-mode warning still fires once', () => {
         // above intentionally does not trip it (it returns before warning),
         // so this is the first non-production unsafe-value call in the file.
         generateDeclarations('[color:red;position:fixed]');
-        expect(warn).toHaveBeenCalled();
-        expect(warn.mock.calls[0][0]).toContain('dropped an arbitrary value');
+        expect(warn.mock.calls).toEqual([
+            [
+                runtimeMessage(
+                    'dynamic-unsafe-arbitrary',
+                    'The arbitrary value in `[color:red;position:fixed]` could inject CSS, so `dynamic()` omits the class.',
+                    'help: keep untrusted data out of arbitrary values, or validate it before it reaches `dynamic()`.',
+                    'note: only the first dropped value of a session is reported.',
+                ),
+            ],
+        ]);
 
         warn.mockRestore();
     });

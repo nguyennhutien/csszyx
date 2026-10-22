@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
-import { engineMessage } from './engine-message.js';
+import { engineMessage, runtimeMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -177,13 +177,16 @@ describe('font-variant-numeric keys', () => {
             engineMessage(
                 'global-before-group',
                 '/p/t.tsx:1:78',
-                '`nums: normal` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.',
+                "`nums: 'normal'` comes before `numOrdinal` in one sz object, so `numOrdinal` replaces it and the `nums` value styles nothing.",
                 "help: to override the group, layer it: `sz={[base, { nums: 'normal' }]}`.",
                 "note: a spread such as `{ ...base, nums: 'normal' }` keeps the same key order, so it does not fix this.",
             ),
         ]);
         expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
-            ['global-before-group', { global: 'nums', value: 'normal', group: 'numOrdinal' }],
+            [
+                'global-before-group',
+                { global: 'nums', value: 'normal', valueType: 'string', group: 'numOrdinal' },
+            ],
         ]);
     });
 
@@ -199,7 +202,11 @@ describe('font-variant-numeric keys', () => {
 
         expect(transform({ stackedFractions: true }).className).toBe('');
         expect(String(warn.mock.calls[0]?.[0])).toBe(
-            '[csszyx] "stackedFractions" was replaced. Use { numFraction: \'stacked\' } instead, or run `csszyx migrate`.',
+            runtimeMessage(
+                'removed-key',
+                '`stackedFractions` was replaced, and nothing is emitted for it.',
+                "help: write `{ numFraction: 'stacked' }` instead, or run `csszyx migrate`.",
+            ),
         );
     });
 });

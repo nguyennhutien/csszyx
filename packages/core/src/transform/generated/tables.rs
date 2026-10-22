@@ -404,7 +404,6 @@ pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
         "boxDecorationBreak" => Some("boxDecoration"),
         "objectPosition" => Some("objectPos"),
         "zIndex" => Some("z"),
-        "font" => Some("weight (for font-weight) or fontFamily (for family)"),
         "fontWeight" => Some("weight"),
         "fontSize" => Some("text"),
         "textDecoration" => Some("decoration"),
@@ -458,10 +457,19 @@ pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
         "touchAction" => Some("touch"),
         "userSelect" => Some("select"),
         "captionSide" => Some("caption"),
-        "scrollbarColor" => Some("scrollbarThumb (thumb color) or scrollbarTrack (track color)"),
         "scrollbarWidth" => Some("scrollbar"),
         "flexWrapReverse" => Some("flexWrap: 'wrap-reverse'"),
         "flexNowrap" => Some("flexWrap: 'nowrap'"),
+        _ => None,
+    }
+}
+
+/// The `canonical-key` form of a CSS shorthand csszyx writes as two keys,
+/// which emits nothing as an alias does. Mirrors `SPLIT_SHORTHAND_KEYS`.
+pub(crate) fn split_shorthand_form(key: &str) -> Option<&'static str> {
+    match key {
+        "font" => Some("font"),
+        "scrollbarColor" => Some("scrollbar-color"),
         _ => None,
     }
 }

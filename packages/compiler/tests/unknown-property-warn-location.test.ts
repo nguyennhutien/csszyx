@@ -10,6 +10,7 @@ import {
     transform,
 } from '../src/transform-core.js';
 import { ENGINES, RUST_LANE } from './engine-parity-harness.js';
+import { parseSzConsoleLine, szCodeOf } from './helpers/sz-console-line.js';
 
 // Runtime reports print once per message per process; each test asks afresh.
 beforeEach(() => {
@@ -23,6 +24,17 @@ function captureWarnings(action: () => void): string[] {
     });
     action();
     return calls;
+}
+
+/**
+ * The lines of one code among some console lines, each read into its parts.
+ *
+ * @param messages - Console lines.
+ * @param code - The code.
+ * @returns The lines it heads.
+ */
+function linesOf(messages: readonly string[], code: string) {
+    return messages.filter(m => szCodeOf(m) === code).map(parseSzConsoleLine);
 }
 
 /**
@@ -85,14 +97,18 @@ describe('unknown-property warning — source location', () => {
     it('runtime path (no source file) has no build location but keeps the core message', () => {
         // The browser/runtime `transform()` never sets a build location.
         transform({ xyzzy: 4 });
-        const msg = warn.mock.calls.map(c => String(c[0])).find(m => m.includes('xyzzy'));
-        expect(msg).toBeDefined();
-        expect(msg).toContain('Unknown property "xyzzy" in sz prop.');
-        expect(msg).toContain(
-            'The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos.',
+        const [line] = linesOf(
+            warn.mock.calls.map(c => String(c[0])),
+            'unknown-key',
         );
-        // No `at <file>:<line>` build location on the runtime path.
-        expect(msg).not.toMatch(/ at \S+:\d+/);
+        expect(line).toMatchObject({
+            text: '`xyzzy` is not an sz property.',
+            help: "check the spelling; for a custom utility, define it with Tailwind's `@utility`.",
+            note: 'the class is still emitted, and it styles nothing unless Tailwind serves that utility.',
+        });
+        // No `<file>:<line>` build location on the runtime path: the header
+        // names the object instead.
+        expect(line?.place).toMatch(/^sz object was \{"xyzzy":4\}/);
     });
 
     it('does not leak a build location into a later runtime transform', () => {
@@ -101,7 +117,9 @@ describe('unknown-property warning — source location', () => {
         transform({ qqq: 9 });
         const messages = warn.mock.calls.map(c => String(c[0]));
         // The runtime warning must NOT carry Foo.tsx (the post-loop clear ran).
-        expect(messages.some(m => m.includes('Unknown property "qqq"'))).toBe(true);
+        expect(linesOf(messages, 'unknown-key').map(l => l.text)).toEqual([
+            '`qqq` is not an sz property.',
+        ]);
         expect(messages.every(m => !m.includes('Foo.tsx'))).toBe(true);
     });
 
@@ -292,14 +310,31 @@ describe('project-scan hint — prints the CLI command for location-less warning
         });
         const { transform } = await import('../src/transform-core.js');
         transform({ zzznope: true });
-        expect(calls.some(m => m.includes('Unknown property "zzznope"'))).toBe(true);
-        const hint = calls.find(m => m.includes('npx @csszyx/cli check'));
-        expect(
-            hint,
-            'the CLI-scan command must be printed for a location-less warning',
-        ).toBeDefined();
+        expect(calls.map(szCodeOf)).toEqual(['unknown-key', 'dev-warnings-partial']);
         // The wording tells the developer why the scan is needed here.
-        expect(hint).toContain('no source location');
+        expect(calls[1]).toBe(
+            [
+                '[csszyx] dev-warnings-partial: The `sz` key warning above has no source location, so it does not name the file that triggered it.',
+                '  help: run `npx @csszyx/cli check` to list every file and key at once; set `CSSZYX_NO_PROJECT_SCAN_HINT=1` to hide this line.',
+                '  docs: https://csszyx.com/e/dev-warnings-partial',
+            ].join('\n'),
+        );
+    });
+
+    it('stays silent after a located warning, which names its file', async () => {
+        vi.resetModules();
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        const core = await import('../src/transform-core.js');
+        core.setSzWarnLocation('src/Hint.tsx:3');
+        try {
+            core.transform({ zzzlocated: true });
+        } finally {
+            core.setSzWarnLocation(undefined);
+        }
+        expect(calls.map(szCodeOf)).toEqual(['unknown-key']);
     });
 
     it('stays silent when CSSZYX_NO_PROJECT_SCAN_HINT is set', async () => {
@@ -351,10 +386,12 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
 
     it('the runtime path (no location) uses the same message', () => {
         const calls = captureWarnings(() => transform({ '4': true }));
-        const msg = calls.find(m => m.includes('numeric key "4"'));
-        expect(msg).toBeDefined();
-        expect(msg).toContain('an array or a spread');
-        expect(msg).not.toContain('Check for typos');
+        expect(linesOf(calls, 'numeric-key')).toMatchObject([
+            {
+                text: '`sz` received a numeric key `4`, and its value is ignored.',
+                help: 'pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.',
+            },
+        ]);
     });
 
     it.skipIf(!RUST_LANE)('the rust engine emits the same numeric message', () => {
@@ -479,9 +516,9 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
             return transform({ '4': true, xyzzy: 9 });
         }
         DataGridRow();
-        const msg = calls.find(m => m.includes('numeric key "4"')) ?? '';
-        expect(msg).toContain('sz object was {"4":true,"xyzzy":9}');
-        expect(msg).toContain('from DataGridRow');
+        const [line] = linesOf(calls, 'numeric-key');
+        expect(line?.place).toContain('sz object was {"4":true,"xyzzy":9}');
+        expect(line?.place).toContain('from DataGridRow');
     });
 
     it('caps a large object shape instead of dumping it', () => {
@@ -494,7 +531,7 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
             big[`k${i}`] = `value-${i}`;
         }
         transform(big);
-        const msg = calls.find(m => m.includes('Unknown property "badkey"')) ?? '';
+        const msg = linesOf(calls, 'unknown-key')[0]?.place ?? '';
         expect(msg).toContain('sz object was ');
         expect(msg).toContain('...');
         // The SHAPE segment is capped (the frame that follows is a source path
@@ -531,7 +568,9 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
 
     it('warns by default (flag unset)', () => {
         const calls = captureWarnings(() => transform({ xyzzy: 1 }));
-        expect(calls.some(m => m.includes('Unknown property "xyzzy"'))).toBe(true);
+        expect(linesOf(calls, 'unknown-key').map(l => l.text)).toEqual([
+            '`xyzzy` is not an sz property.',
+        ]);
     });
 
     it('is silent on the runtime path when set to 1', () => {
@@ -576,10 +615,36 @@ describe('runtime warning context — defensive edges', () => {
         // recursion a cyclic object would hit (which trips the depth guard first).
         const bad = { badkey: 1n } as unknown as Parameters<typeof transform>[0];
         expect(() => transform(bad)).not.toThrow();
-        const msg = calls.find(m => m.includes('Unknown property "badkey"')) ?? '';
-        expect(msg).toBeTruthy();
+        const [line] = linesOf(calls, 'unknown-key');
+        expect(line?.text).toBe('`badkey` is not an sz property.');
         // JSON.stringify throws → the shape is omitted, but the warning still fires.
-        expect(msg).not.toContain('sz object was ');
+        expect(line?.place ?? '').not.toContain('sz object was ');
+    });
+});
+
+describe('runtime warning context — nothing to name', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('prints the sentence after the code when neither the shape nor a frame is known', () => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        const limit = Error.stackTraceLimit;
+        // No frame to read, and a BigInt the shape cannot serialize.
+        Error.stackTraceLimit = 0;
+        try {
+            transform({ unnamedkey: 1n } as unknown as Parameters<typeof transform>[0]);
+        } finally {
+            Error.stackTraceLimit = limit;
+        }
+        const [line] = linesOf(calls, 'unknown-key');
+        expect(line?.place).toBeUndefined();
+        expect(
+            calls[0]?.startsWith('[csszyx] unknown-key: `unnamedkey` is not an sz property.'),
+        ).toBe(true);
     });
 });
 
@@ -600,10 +665,16 @@ describe('unknown-property warning — repeated at runtime', () => {
             }
         });
 
-        const about = (start: string) => warnings.filter(w => w.startsWith(start));
-        expect(about('[csszyx] Unknown property "xyzzy"')).toHaveLength(1);
-        expect(about('[csszyx] Unknown property "plugh"')).toHaveLength(1);
-        expect(about('[csszyx] Use the canonical key "bg"')).toHaveLength(1);
+        const about = (code: string, text: string) =>
+            linesOf(warnings, code).filter(line => line.text === text);
+        expect(about('unknown-key', '`xyzzy` is not an sz property.')).toHaveLength(1);
+        expect(about('unknown-key', '`plugh` is not an sz property.')).toHaveLength(1);
+        expect(
+            about(
+                'canonical-key',
+                '`backgroundColor` is an alias of `bg`, and nothing is emitted for it.',
+            ),
+        ).toHaveLength(1);
     });
 });
 
@@ -619,8 +690,14 @@ describe('unknown-property warning — a flood of distinct keys', () => {
             }
         });
 
-        expect(warnings.filter(w => w.startsWith('[csszyx] Unknown property'))).toHaveLength(512);
-        expect(warnings.filter(w => w.includes('further ones are suppressed'))).toHaveLength(1);
+        expect(warnings.filter(w => szCodeOf(w) === 'unknown-key')).toHaveLength(512);
+        expect(warnings.filter(w => szCodeOf(w) === 'diagnostics-capped')).toEqual([
+            [
+                '[csszyx] diagnostics-capped: This process has reported 512 distinct unknown sz keys, so further ones are suppressed.',
+                '  help: look above for one key repeating with different names; sz keys built from data are the usual cause.',
+                '  docs: https://csszyx.com/e/diagnostics-capped',
+            ].join('\n'),
+        ]);
     });
 });
 

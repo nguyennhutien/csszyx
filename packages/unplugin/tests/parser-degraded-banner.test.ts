@@ -39,15 +39,17 @@ describe('default rust with no native addon', () => {
             transform.call({ warn() {} }, 'export const x = 1;', '/p/App.tsx');
             transform.call({ warn() {} }, 'export const x = 1;', '/p/App.tsx');
 
-            const warned = warn.mock.calls.map(call => call.join(' ')).join('\n');
-            expect(warned).toContain('fell back to its wasm build');
-            expect(warned).toContain(
-                'active parser: wasm (degraded from default `rust`: same engine, wasm build)',
-            );
             // Once per process, not once per transform.
-            expect(
-                warn.mock.calls.filter(call => call.join(' ').includes('active parser')),
-            ).toHaveLength(1);
+            expect(warn.mock.calls.map(call => call.join(' '))).toEqual([
+                '[csszyx] native-engine-unavailable:\n' +
+                    '  The native engine is not available here, so the default `rust` parser runs on the wasm engine.\n' +
+                    "  help: reinstall without skipping optional dependencies to get the native engine, or set `build.parser: 'wasm'` to hide this line.\n" +
+                    '  note: the wasm engine produces the same output; only parsing is slower.\n' +
+                    '  docs: https://csszyx.com/e/native-engine-unavailable',
+                '[csszyx] active-parser:\n' +
+                    '  This build parses with the wasm engine in place of the default native engine.\n' +
+                    '  docs: https://csszyx.com/e/active-parser',
+            ]);
         } finally {
             warn.mockRestore();
         }

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
     assertNoRSCBoundaryViolation,
+    assertNoRSCGraphViolation,
     createRSCModuleRecord,
     deleteRSCModuleRecord,
     findRSCBoundaryViolation,
@@ -98,8 +99,15 @@ describe('RSC boundary guard', () => {
         `;
 
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
-            'csszyxRSCViolation: _sz imported in Server Component /app/actions.tsx\n' +
-                '  Import chain: /app/actions.tsx -> @csszyx/runtime',
+            expect.objectContaining({
+                code: 'rsc-boundary-violation',
+                args: { symbol: '_sz', chain: ['/app/actions.tsx', '@csszyx/runtime'] },
+                message:
+                    '[csszyx] rsc-boundary-violation: /app/actions.tsx\n' +
+                    '  This Server Component reaches `_sz` through its imports, and `_sz` runs only on the client, so the build stops.\n' +
+                    "  help: add `'use client'` to the module of `/app/actions.tsx` -> `@csszyx/runtime` that uses `_sz`, or keep that module out of server code; csszyx inserts `_sz` where an `sz` prop's value is known only at runtime.\n" +
+                    '  docs: https://csszyx.com/e/rsc-boundary-violation',
+            }),
         );
     });
 
@@ -118,7 +126,9 @@ describe('RSC boundary guard', () => {
                 injectRuntimeImportLikePlugin(result.code, '_sz'),
                 SERVER_FILE,
             );
-        }).toThrow('csszyxRSCViolation: _sz imported in Server Component /app/actions.tsx');
+        }).toThrow(
+            '[csszyx] rsc-boundary-violation: /app/actions.tsx\n  This Server Component reaches `_sz`',
+        );
     });
 
     it('fails generated _szMerge imports from dynamic className merge in use server modules', () => {
@@ -136,7 +146,9 @@ describe('RSC boundary guard', () => {
                 injectRuntimeImportLikePlugin(result.code, '_szMerge'),
                 SERVER_FILE,
             );
-        }).toThrow('csszyxRSCViolation: _szMerge imported in Server Component /app/actions.tsx');
+        }).toThrow(
+            '[csszyx] rsc-boundary-violation: /app/actions.tsx\n  This Server Component reaches `_szMerge`',
+        );
     });
 
     it('allows static sz in use server modules because no runtime helper is needed', () => {
@@ -166,7 +178,9 @@ describe('RSC boundary guard', () => {
                 `import { _sz } from '@csszyx/runtime';\n${result.code}`,
                 '/repo/app/page.tsx',
             );
-        }).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/app/page.tsx');
+        }).toThrow(
+            '[csszyx] rsc-boundary-violation: /repo/app/page.tsx\n  This Server Component reaches `_sz`',
+        );
     });
 
     it('keeps generated runtime imports after leading-comment server directives', async () => {
@@ -188,7 +202,9 @@ describe('RSC boundary guard', () => {
 
         expect(() =>
             prePlugin.transform.call({ warn: () => undefined }, source, '/repo/actions.tsx'),
-        ).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/actions.tsx');
+        ).toThrow(
+            '[csszyx] rsc-boundary-violation: /repo/actions.tsx\n  This Server Component reaches `_sz`',
+        );
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -269,6 +285,16 @@ describe('RSC boundary guard', () => {
             path: '/repo/app/page.tsx',
             importChain: ['/repo/app/page.tsx', '/repo/app/ServerCard.tsx', '@csszyx/runtime'],
         });
+        expect(() => assertNoRSCGraphViolation(records)).toThrow(
+            expect.objectContaining({
+                code: 'rsc-boundary-violation',
+                message:
+                    '[csszyx] rsc-boundary-violation: /repo/app/page.tsx\n' +
+                    '  This Server Component reaches `_sz` through its imports, and `_sz` runs only on the client, so the build stops.\n' +
+                    "  help: add `'use client'` to the module of `/repo/app/page.tsx` -> `/repo/app/ServerCard.tsx` -> `@csszyx/runtime` that uses `_sz`, or keep that module out of server code; csszyx inserts `_sz` where an `sz` prop's value is known only at runtime.\n" +
+                    '  docs: https://csszyx.com/e/rsc-boundary-violation',
+            }),
+        );
     });
 
     it('stops graph traversal at use client boundaries', () => {
@@ -373,7 +399,9 @@ describe('RSC audit regressions and known issues', () => {
                 return dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('flags named imports from the standalone @csszyx/dynamic package', () => {
@@ -384,7 +412,9 @@ describe('RSC audit regressions and known issues', () => {
                 return dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('flags namespace imports from csszyx/dynamic in a server module', () => {
@@ -395,7 +425,9 @@ describe('RSC audit regressions and known issues', () => {
                 return cssz.dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('flags side-effect imports of csszyx/browser in a server module', () => {
@@ -410,7 +442,9 @@ describe('RSC audit regressions and known issues', () => {
                 return null;
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('flags default imports of forbidden runtime symbols', () => {
@@ -421,7 +455,9 @@ describe('RSC audit regressions and known issues', () => {
                 return _sz({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('flags mixed default + named imports where the default is forbidden', () => {
@@ -432,7 +468,9 @@ describe('RSC audit regressions and known issues', () => {
                 return _sz({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
     });
 
     it('handles large hostile import clauses without regex backtracking', () => {
@@ -440,7 +478,9 @@ describe('RSC audit regressions and known issues', () => {
         const code = `'use server';\nimport {${padding}_sz as cx} from '@csszyx/runtime';`;
         const startedAt = performance.now();
 
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
+            '[csszyx] rsc-boundary-violation:',
+        );
         expect(performance.now() - startedAt).toBeLessThan(2_000);
     });
 

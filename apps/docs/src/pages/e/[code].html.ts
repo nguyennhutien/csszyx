@@ -4,11 +4,10 @@
  */
 import type { APIRoute, GetStaticPaths } from 'astro';
 
-import data from '../../data/diagnostics.json';
-import { type DiagnosticData, diagnosticPages } from '../../utils/diagnostic-page';
+import { DIAGNOSTIC_DATA, diagnosticPages } from '../../utils/diagnostic-page';
 
 export const getStaticPaths = (() =>
-    diagnosticPages(data as DiagnosticData).map(([code, html]) => ({
+    diagnosticPages(DIAGNOSTIC_DATA).map(([code, html]) => ({
         params: { code },
         props: { html },
     }))) satisfies GetStaticPaths;

@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { __szSpacingVar, __szUnitVar } from '../src/spacing-var.js';
+import { productionMessage, runtimeMessage } from './engine-message.js';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -72,9 +73,33 @@ describe('__szSpacingVar', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(__szSpacingVar({ sm: 4, md: 8 }, 'spacingvartestkey')).toBeUndefined();
         expect(__szSpacingVar({ lg: 2 }, 'spacingvartestkey')).toBeUndefined();
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0][0]).toContain('spacingvartestkey');
-        expect(warn.mock.calls[0][0]).toContain('dynamic()');
+        expect(warn.mock.calls).toEqual([
+            [
+                runtimeMessage(
+                    'dynamic-unresolvable',
+                    'The runtime value of `spacingvartestkey` has type `object`, which cannot be resolved to CSS, so the property is omitted.',
+                    'help: pass a number, a token or a CSS length; for a responsive object, use `dynamic()`.',
+                ),
+            ],
+        ]);
+    });
+
+    it('prints its code and args in production, where the property is still missing', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('NODE_ENV', 'production');
+        try {
+            expect(__szSpacingVar(true, 'spacingvartestprod')).toBeUndefined();
+        } finally {
+            vi.unstubAllEnvs();
+        }
+        expect(warn.mock.calls).toEqual([
+            [
+                productionMessage('dynamic-unresolvable', {
+                    key: 'spacingvartestprod',
+                    valueType: 'boolean',
+                }),
+            ],
+        ]);
     });
 });
 

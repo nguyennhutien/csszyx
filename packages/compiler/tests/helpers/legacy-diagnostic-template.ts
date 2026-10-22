@@ -6,15 +6,26 @@
  * holds the current renderer to; not used by any source.
  */
 import { PLACEHOLDER } from '../../src/diagnostic-placeholder.js';
-import type {
-    SzDiagnosticSpec,
-    SzDiagnosticTemplateText,
-} from '../../src/diagnostic-registry.generated.js';
-import type { SzDiagnosticComputed, SzDiagnosticTemplate } from '../../src/diagnostic-template.js';
+import type { SzDiagnosticTemplateText } from '../../src/diagnostic-registry.generated.js';
+import type { SzDiagnosticSpec } from '../../src/diagnostic-spec.generated.js';
+import type { SzDiagnosticComputed } from '../../src/diagnostic-template.js';
 
 type ArgValue = string | number | readonly string[];
 
-function joinersOf(spec: SzDiagnosticTemplate): Readonly<Record<string, string>> {
+/**
+ * An entry as the oracle reads it: the registry's own arg objects, each list
+ * arg with its joiner, as entries were shaped before the generator encoded
+ * them into one string.
+ */
+export interface LegacyTemplate {
+    readonly args: Readonly<Record<string, { readonly joiner?: string }>>;
+    readonly variesBy?: string;
+    readonly text?: SzDiagnosticTemplateText;
+    readonly help?: SzDiagnosticTemplateText;
+    readonly note?: SzDiagnosticTemplateText;
+}
+
+function joinersOf(spec: LegacyTemplate): Readonly<Record<string, string>> {
     const joiners: Record<string, string> = {};
     for (const [name, arg] of Object.entries(spec.args)) {
         if (arg.joiner !== undefined) joiners[name] = arg.joiner;
@@ -69,7 +80,7 @@ export interface LegacyParts {
  * @returns The parts.
  */
 export function legacyFillSzDiagnosticTemplate(
-    template: SzDiagnosticTemplate,
+    template: LegacyTemplate,
     diagnostic: LegacyDiagnostic,
     computed: Readonly<Record<string, SzDiagnosticComputed>>,
 ): LegacyParts {

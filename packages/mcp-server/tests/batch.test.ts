@@ -50,7 +50,7 @@ describe('csszyx_batch', () => {
         const data = JSON.parse(handleBatch({ items }).content[0].text);
 
         expect(data.results[0].className).toBe('m-1');
-        expect(data.results[1].error).toContain('maximum depth');
+        expect(data.results[1].error).toContain('[csszyx] sz-object-depth:');
         expect(data.results[1].className).toBeUndefined();
         expect(data.results[2].className).toBe('m-2');
         expect(data.successful).toBe(2);

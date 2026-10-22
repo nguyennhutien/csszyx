@@ -21,6 +21,11 @@
 //   - Cognitive complexity has its own gate (check-changed-complexity.mjs) with
 //     the profile's limit, and is left to it.
 //
+// JavaScript is read too, with the JavaScript profile's list
+// (`sonar-profile-rules-js.json`): Sonar analyses the `.mjs` files the eslint
+// config ignores, and raised `javascript:S9382` on one in #396 while this gate,
+// which ran TypeScript rules on TypeScript files only, said nothing.
+//
 // Usage: node scripts/check-changed-sonar.mjs [--base=<ref>]
 
 import { execFileSync } from 'node:child_process';
@@ -28,9 +33,20 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import { isSonarScoped } from './check-changed-complexity.mjs';
+import {
+    isJavaScript,
+    isSonarScoped,
+    isSonarTest,
+    sonarScopedLinter,
+} from './check-changed-complexity.mjs';
 import { changedLines } from './check-patch-coverage.mjs';
-import { PROFILE_RULES_FILE, readSonarProperties } from './check-sonar-rule-drift.mjs';
+import {
+    PROFILE_RULES_FILE,
+    PROFILE_RULES_FILES,
+    readSonarProperties,
+} from './check-sonar-rule-drift.mjs';
+
+export { isSonarTest };
 
 /** Rules a dedicated gate runs with the profile's own options. */
 const GATED_ELSEWHERE = new Set(['sonarjs/cognitive-complexity']);
@@ -57,21 +73,6 @@ export function rulesToRun(profile, isTest) {
             .filter(entry => entry.scope === 'ALL' || entry.scope === wanted)
             .map(entry => [entry.rule, entry.key]),
     );
-}
-
-/**
- * Whether Sonar reads a file as a test, by `sonar.test.inclusions`.
- *
- * @param file - Repo-relative path.
- * @param properties - `sonar-project.properties`, read.
- * @returns True for a test file.
- */
-export function isSonarTest(file, properties) {
-    return (properties['sonar.test.inclusions'] ?? '')
-        .split(',')
-        .map(glob => glob.trim())
-        .filter(Boolean)
-        .some(glob => path.matchesGlob(file, glob));
 }
 
 /**
@@ -157,6 +158,12 @@ function baseSource(base, file) {
  */
 async function lint(eslint, ruleKeys, file, source) {
     const [result] = await eslint.lintText(source, { filePath: file });
+    const fatal = (result?.messages ?? []).find(message => message.fatal);
+    if (result === undefined || fatal !== undefined) {
+        // A file that did not lint has no findings to report, which read as
+        // "nothing new"; it means nothing ran.
+        throw new Error(`eslint could not lint ${file}: ${fatal?.message ?? 'no result'}`);
+    }
     const lines = source.split('\n');
     return (result?.messages ?? [])
         .filter(message => ruleKeys.has(message.ruleId))
@@ -291,27 +298,27 @@ async function main(base) {
         return 0;
     }
 
-    const profile = JSON.parse(readFileSync(PROFILE_RULES_FILE, 'utf8'));
+    // TypeScript and JavaScript have a profile each, and Sonar keys a finding
+    // by its language (`javascript:S9382` on a `.mjs` file, #396).
+    const profiles = {
+        ts: JSON.parse(readFileSync(PROFILE_RULES_FILES.ts, 'utf8')),
+        js: JSON.parse(readFileSync(PROFILE_RULES_FILES.js, 'utf8')),
+    };
     const properties = readSonarProperties('sonar-project.properties');
     const ignored = ignoredIssues(properties);
-    // Each file is linted twice, the second time as its base revision's text,
-    // which is not on disk; a single-run program (what `CI=true` turns on)
-    // would type that text as the working tree's.
-    process.env.TSESTREE_SINGLE_RUN ??= 'false';
-    const { ESLint } = await import('eslint');
-    const linterFor = isTest => {
-        const ruleKeys = rulesToRun(profile, isTest);
-        const eslint = new ESLint({
-            overrideConfig: [
-                {
-                    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
-                    rules: Object.fromEntries([...ruleKeys.keys()].map(rule => [rule, 'error'])),
-                },
-            ],
+    const enable = ruleKeys =>
+        Object.fromEntries([...ruleKeys.keys()].map(rule => [rule, 'error']));
+    const linterFor = async isTest => {
+        const ruleKeys = {
+            ts: rulesToRun(profiles.ts, isTest),
+            js: rulesToRun(profiles.js, isTest),
+        };
+        const eslint = await sonarScopedLinter(enable(ruleKeys.ts), {
+            javascript: enable(ruleKeys.js),
         });
         return { eslint, ruleKeys };
     };
-    const linters = { main: linterFor(false), test: linterFor(true) };
+    const linters = { main: await linterFor(false), test: await linterFor(true) };
     const canary = await typedCanaryProblem(await canaryLinter());
     if (canary !== null) {
         console.error(canary);
@@ -319,12 +326,15 @@ async function main(base) {
     }
 
     console.log(
-        `[sonar] checking ${files.length} changed file(s) against ${linters.main.ruleKeys.size} ` +
-            `profile rules (${linters.test.ruleKeys.size} on tests)...`,
+        `[sonar] checking ${files.length} changed file(s) against ${linters.main.ruleKeys.ts.size} ` +
+            `profile rules (${linters.test.ruleKeys.ts.size} on tests, ` +
+            `${linters.main.ruleKeys.js.size} on JavaScript)...`,
     );
     const found = [];
     for (const file of files) {
-        const { eslint, ruleKeys } = isSonarTest(file, properties) ? linters.test : linters.main;
+        const linter = isSonarTest(file, properties) ? linters.test : linters.main;
+        const { eslint } = linter;
+        const ruleKeys = linter.ruleKeys[isJavaScript(file) ? 'js' : 'ts'];
         const head = await lint(eslint, ruleKeys, file, readFileSync(file, 'utf8'));
         if (head.length === 0) continue;
         const before = baseSource(base, file);

@@ -78,7 +78,7 @@ describe('Next Turbopack loader core', () => {
                 config: { mangleVars: false },
                 writeOptions: { retryDelayMs: 0 },
             }),
-        ).toThrow(/names the old safelist/);
+        ).toThrow(/^\[csszyx\] legacy-source-directive: app\/globals\.css\n/);
     });
 
     it('transforms source, injects runtime imports, writes a shard, and materializes the safelist before returning', () => {
@@ -236,6 +236,8 @@ describe('Next Turbopack loader core', () => {
         const root = tempRoot();
         const source = 'export const App=()=> <div sz={{ color: "red" }} />;';
         const filename = writeSource(root, source);
+        // The app root, which the error names the module from.
+        writeFileSync(join(root, 'package.json'), '{ "name": "app" }\n');
 
         expect(() =>
             runNextTurboLoader(source, loaderContext(root, filename), {
@@ -243,7 +245,17 @@ describe('Next Turbopack loader core', () => {
                 mode: 'production',
                 compilerOptions: { mangleVars: true },
             }),
-        ).toThrow(/does not support production CSS variable mangling/);
+        ).toThrow(
+            expect.objectContaining({
+                code: 'next-mangle-vars-unsupported',
+                args: { form: 'turbopack' },
+                message:
+                    '[csszyx] next-mangle-vars-unsupported: src/App.tsx\n' +
+                    '  Turbopack cannot mangle CSS variables in production, and `config.mangleVars` is on, so the build stops at this module.\n' +
+                    '  help: set `config: { mangleVars: false }` in `csszyxTurbopack`, or build with webpack (`next build --webpack`), which mangles them.\n' +
+                    '  docs: https://csszyx.com/e/next-mangle-vars-unsupported',
+            }),
+        );
     });
 });
 
@@ -522,7 +534,9 @@ describe('Next Turbopack loader under lock contention', () => {
         const cacheDir = runLoader(root, 'src/Warm.tsx').context.cacheDir;
         const release = holdLock(cacheDir, 'csszyx next turbo-loader');
         try {
-            expect(() => runLoader(root, 'src/Loud.tsx')).toThrow(/already locked by process/);
+            expect(() => runLoader(root, 'src/Loud.tsx')).toThrow(
+                /^\[csszyx\] next-safelist-locked:\n {2}Process \d+ on /,
+            );
         } finally {
             release();
         }

@@ -123,7 +123,30 @@ describe('csszyxTurbopack', () => {
         const call = csszyxTurbopack as unknown as (a: unknown, b: unknown) => unknown;
 
         expect(() => call({ resolveAlias: { x: 'y' } }, { glob: '*.tsx' })).toThrow(
-            /takes one object.*turbopack:/s,
+            expect.objectContaining({
+                code: 'options-object-required',
+                args: { form: 'csszyx-turbopack' },
+                message:
+                    '[csszyx] options-object-required:\n' +
+                    '  `csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument is refused.\n' +
+                    '  help: write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.\n' +
+                    '  docs: https://csszyx.com/e/options-object-required',
+            }),
+        );
+    });
+
+    it('names every option it does not have', () => {
+        const call = csszyxTurbopack as (options: unknown) => unknown;
+        expect(() => call({ rules: {}, tailwindStylesheet: 'a.css', resolveAlias: {} })).toThrow(
+            expect.objectContaining({
+                code: 'options-object-required',
+                args: { form: 'csszyx-turbopack-option', options: ['rules', 'resolveAlias'] },
+                message:
+                    '[csszyx] options-object-required:\n' +
+                    '  `csszyxTurbopack` has no option(s) `rules`, `resolveAlias`, so the call is refused.\n' +
+                    '  help: use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.\n' +
+                    '  docs: https://csszyx.com/e/options-object-required',
+            }),
         );
     });
 
@@ -137,7 +160,9 @@ describe('csszyxTurbopack', () => {
         { parserMode: 'wasm', resolveAlias: { react: 'preact/compat' } },
     ])('rejects misplaced Turbopack settings in a single argument: %j', existing => {
         const call = csszyxTurbopack as (options: unknown) => unknown;
-        expect(() => call(existing)).toThrow(/takes one object.*turbopack:/s);
+        expect(() => call(existing)).toThrow(
+            /has no option\(s\) `[^`]+`(?:, `[^`]+`)*, so the call is refused/,
+        );
     });
 
     it.each([1, 16, 256])('preserves %i settings inside the Turbopack config', count => {

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
+import { szCodeOf } from './helpers/sz-console-line.js';
 
 /**
  * Alignment sz-keys take csszyx's short value form (start/end/between/around/
@@ -22,15 +24,18 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         });
         transform(sz);
         spy.mockRestore();
-        return calls.filter(c => c.includes('is a CSS value'));
+        return calls.filter(c => szCodeOf(c) === 'closed-enum-value');
     };
 
     it('warns on self: flex-start and names the short form', () => {
         const w = warns({ self: 'flex-start' } as SzObject);
-        expect(w).toHaveLength(1);
-        expect(w[0]).toContain("self: 'flex-start'");
-        expect(w[0]).toContain("'start'");
-        expect(w[0]).toContain('no Tailwind utility');
+        expect(w).toEqual([
+            runtimeMessage(
+                'closed-enum-value',
+                "`self: 'flex-start'` is a CSS value, and `self-flex-start` produces no CSS.",
+                "help: use the short form: `{ self: 'start' }`.",
+            ),
+        ]);
     });
 
     it('stays quiet in production', () => {
@@ -43,6 +48,20 @@ describe('alignment CSS-longhand value warning (dev)', () => {
 
     it('warns on justify: flex-end', () => {
         expect(warns({ justify: 'flex-end' } as SzObject)[0]).toContain("'end'");
+    });
+
+    it('reads the important modifier before looking the value up, as the engine does', () => {
+        // `flex-start!` is `flex-start` with the class suffix: the engine
+        // reports it (`closed-enum-value`, `css-value`), and the runtime
+        // looked the marked value up and found no hint.
+        const w = warns({ justify: 'flex-start!' } as SzObject);
+        expect(w).toEqual([
+            runtimeMessage(
+                'closed-enum-value',
+                "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` produces no CSS.",
+                "help: use the short form: `{ justify: 'start' }`.",
+            ),
+        ]);
     });
 
     it('warns on items: flex-start', () => {

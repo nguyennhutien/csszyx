@@ -68,9 +68,15 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
 
         const report = await reportFor(cwd);
 
-        expect(report).toContain('bg-broken/30');
-        expect(report).toContain('17, 119, 224');
-        expect(report).toContain('Broken.tsx');
+        expect(report).toContain('Opacity modifiers that do not apply:');
+        expect(report).toMatch(/bg-broken\/30 +src\/Broken\.tsx\n/);
+        expect(report).toContain(
+            '\n      `bg-broken/30` carries an opacity modifier that does not apply: its theme token resolves to the bare comma triplet `17, 119, 224`, which `color-mix()` cannot dim.\n' +
+                "      help: wrap the token's variable in a colour function, such as `rgb(var(--your-triplet))`.",
+        );
+        expect(report).toContain(
+            '1 emitted class(es) carry an opacity modifier that does not apply.',
+        );
         expect(report).not.toContain('bg-fine/30');
         expect(report).not.toContain('bg-good/50');
         expect(process.exitCode).toBe(1);

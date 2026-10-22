@@ -2,13 +2,21 @@
  * csszyx_lookup — Look up how a CSS property or keyword maps to an sz key.
  *
  * Accepts CSS property names (kebab-case or camelCase), sz keys, or free-text
- * keywords. Builds its search index dynamically from PROPERTY_MAP and
- * SUGGESTION_MAP so it never drifts from the actual compiler.
+ * keywords. Builds its search index dynamically from PROPERTY_MAP,
+ * SUGGESTION_MAP and SPLIT_SHORTHAND_KEYS so it never drifts from the actual
+ * compiler.
  *
  * Example: "background-color" → { szKey: "bg", tailwindPrefix: "bg", examples: [...] }
  */
 
-import { BOOLEAN_SHORTHANDS, PROPERTY_MAP, SUGGESTION_MAP } from '@csszyx/compiler';
+import {
+    BOOLEAN_SHORTHANDS,
+    PROPERTY_MAP,
+    renderSzDiagnosticParts,
+    SPLIT_SHORTHAND_KEYS,
+    SUGGESTION_MAP,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+} from '@csszyx/compiler';
 import { z } from 'zod';
 
 // ============================================================================
@@ -47,9 +55,8 @@ for (const szKey of Object.keys(PROPERTY_MAP)) {
     addSearch(toKebab(szKey), szKey);
 }
 
-// Index SUGGESTION_MAP entries (CSS property aliases → sz keys).
-// Values can be descriptive strings like "weight (for font-weight) or fontFamily (for family)".
-// Extract the first token as the primary sz key.
+// Index SUGGESTION_MAP entries (CSS property aliases → sz keys). A value whose
+// first token is no sz key, such as a replaced flag's shape, is left out.
 for (const [cssAlias, szTarget] of Object.entries(SUGGESTION_MAP)) {
     const primaryKey = szTarget.split(/[\s/(]/)[0];
     if (
@@ -58,6 +65,22 @@ for (const [cssAlias, szTarget] of Object.entries(SUGGESTION_MAP)) {
     ) {
         addSearch(cssAlias, primaryKey);
         addSearch(toKebab(cssAlias), primaryKey);
+    }
+}
+
+// Index each CSS shorthand csszyx writes as two keys under both, as the help
+// of its `canonical-key` diagnostic names them: `font` → `weight`, `fontFamily`.
+for (const [shorthand, form] of Object.entries(SPLIT_SHORTHAND_KEYS)) {
+    const { help = '' } = renderSzDiagnosticParts(
+        { code: 'canonical-key', args: { form, key: shorthand } },
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    );
+    const keys = [...help.matchAll(/`([^`]+)`/g)]
+        .map(([, named]) => named)
+        .filter(named => PROPERTY_MAP[named] !== undefined);
+    for (const named of keys) {
+        addSearch(shorthand, named);
+        addSearch(toKebab(shorthand), named);
     }
 }
 

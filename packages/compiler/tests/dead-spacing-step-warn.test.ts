@@ -5,6 +5,20 @@ import {
     setSzWarnLocation,
     transform,
 } from '../src/transform-core.js';
+import { engineMessage, runtimeMessage } from './engine-message.js';
+import { szCodeOf } from './helpers/sz-console-line.js';
+
+/**
+ * The body of the off-scale line for one key and value.
+ *
+ * @param key - The key.
+ * @param value - The value, as written into the sentence.
+ * @returns The sentence and the help.
+ */
+const offScale = (key: string, value: string) => [
+    `\`${key}: ${value}\` is not on Tailwind's spacing scale, so the class produces no CSS.`,
+    `help: use a quarter step such as \`1.25\`, \`1.5\` or \`1.75\`, or a unit value such as \`'${value}rem'\`.`,
+];
 
 /**
  * Tailwind's bare spacing syntax only accepts quarter steps (multiples of
@@ -27,15 +41,12 @@ describe('dead spacing-step warning (dev)', () => {
         });
         transform(sz);
         spy.mockRestore();
-        return calls.filter(c => c.includes('spacing scale'));
+        return calls.filter(c => szCodeOf(c) === 'off-scale-value');
     };
 
     it('warns on a non-quarter-step padding number and suggests fixes', () => {
         const w = warns({ p: 1.4 } as SzObject);
-        expect(w).toHaveLength(1);
-        expect(w[0]).toContain('"p: 1.4"');
-        expect(w[0]).toContain('generates no CSS');
-        expect(w[0]).toContain('"1.4rem"');
+        expect(w).toEqual([runtimeMessage('off-scale-value', ...offScale('p', '1.4'))]);
     });
 
     it('stays quiet in production and when muted', () => {
@@ -50,11 +61,15 @@ describe('dead spacing-step warning (dev)', () => {
     });
 
     it('warns on a numeric-string spacing value', () => {
-        expect(warns({ m: '2.3' } as SzObject)[0]).toContain('"m: 2.3"');
+        expect(warns({ m: '2.3' } as SzObject)).toEqual([
+            runtimeMessage('off-scale-value', ...offScale('m', '2.3')),
+        ]);
     });
 
     it('warns under a variant', () => {
-        expect(warns({ hover: { gap: 3.1 } } as SzObject)[0]).toContain('"gap: 3.1"');
+        expect(warns({ hover: { gap: 3.1 } } as SzObject)).toEqual([
+            runtimeMessage('off-scale-value', ...offScale('gap', '3.1')),
+        ]);
     });
 
     it('stays silent for quarter steps, units, and non-spacing keys', () => {
@@ -70,7 +85,9 @@ describe('dead spacing-step warning (dev)', () => {
     it('appends the source location when the build engine has set one', () => {
         setSzWarnLocation('src/App.tsx:12');
         try {
-            expect(warns({ px: 2.2 } as SzObject)[0]).toContain(' at src/App.tsx:12');
+            expect(warns({ px: 2.2 } as SzObject)).toEqual([
+                engineMessage('off-scale-value', 'src/App.tsx:12', ...offScale('px', '2.2')),
+            ]);
         } finally {
             setSzWarnLocation(undefined);
         }

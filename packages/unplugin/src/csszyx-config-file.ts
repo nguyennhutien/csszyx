@@ -28,7 +28,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { atomicWriteFileSync } from './atomic-write.js';
+import { diagnosticMessage } from './diagnostic-message.js';
 import {
+    configProblemMessage,
     createDiagnosticPolicy,
     type DiagnosticConfigProblem,
     type DiagnosticPolicy,
@@ -83,8 +85,11 @@ export function isReadableDiagnosticPolicyState(
     if (typeof state.format === 'number' && !unreadStateFormats.has(key)) {
         unreadStateFormats.add(key);
         console.warn(
-            `[csszyx] .csszyx/${DIAGNOSTIC_POLICY_STATE_FILE} is in format ${state.format}, and this version reads format ${DIAGNOSTIC_POLICY_READ_FORMAT}: the levels in it are not used.\n` +
-                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes it again.',
+            diagnosticMessage(
+                'policy-state-format-skew',
+                { format: state.format, expected: DIAGNOSTIC_POLICY_READ_FORMAT },
+                `.csszyx/${DIAGNOSTIC_POLICY_STATE_FILE}`,
+            ),
         );
     }
     return false;
@@ -484,15 +489,15 @@ function namingUserFile(text: string, file: string): { text: string; location: s
 
 /**
  * Why a config did not load, in the user's terms: the first line of the
- * error with the ES-module copy named as the user's file, the line and column
- * of the file's own stack frame when the error has one, and a rename when a
- * JavaScript file failed on TypeScript syntax.
+ * error with the ES-module copy named as the user's file, and the line and
+ * column of the file's own stack frame when the error has one; with the name
+ * to rename it to when a JavaScript file failed on TypeScript syntax.
  *
  * @param error - What the import threw.
  * @param file - Absolute path of the config.
- * @returns The reason.
+ * @returns The reason, and the rename when there is one.
  */
-function loadFailureReason(error: unknown, file: string): string {
+function loadFailure(error: unknown, file: string): { reason: string; renameTo?: string } {
     const name = path.basename(file);
     const message = error instanceof Error ? error.message : String(error);
     let reason = namingUserFile(message.split('\n')[0] as string, file).text;
@@ -501,10 +506,12 @@ function loadFailureReason(error: unknown, file: string): string {
         error instanceof Error ? namingUserFile(error.stack ?? '', file).location : null;
     if (location !== null) reason += ` (at ${location})`;
     if (error instanceof SyntaxError && /\.m?js$/.test(name) && looksLikeTypeScript(file)) {
-        const renamed = csszyxConfigFileNameFor(path.dirname(file), { typescript: true });
-        reason += `. \`${name}\` holds TypeScript syntax; rename it to \`${renamed}\`.`;
+        return {
+            reason,
+            renameTo: csszyxConfigFileNameFor(path.dirname(file), { typescript: true }),
+        };
     }
-    return reason;
+    return { reason };
 }
 
 /**
@@ -520,21 +527,6 @@ function looksLikeTypeScript(file: string): boolean {
     } catch {
         return false;
     }
-}
-
-/**
- * The warning for the old `csszyx init` template, which does not load.
- *
- * @param reason - Why it did not load.
- * @returns The problem text.
- */
-function unloadableTemplateMessage(reason: string): string {
-    return (
-        'could not be loaded and is ignored: it is the file `csszyx init` 0.17 and earlier ' +
-        'wrote, which nothing read. Replace it with ' +
-        '`export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` ' +
-        `from \`csszyx\`, or delete it. Load error: ${reason}`
-    );
 }
 
 /** What loading a project's config produced. */
@@ -570,25 +562,32 @@ export async function loadDiagnosticPolicy(
     const problems: DiagnosticConfigProblem[] = found.ignored.map(ignored => ({
         severity: 'warning',
         path: ignored,
-        message: `not read: \`${name}\` is read first. Keep one config file.`,
+        message: configProblemMessage('config-file-duplicate', { read: name }),
     }));
     let module: unknown;
     try {
         module = await importConfig(found.file, importModule);
     } catch (error) {
-        const reason = loadFailureReason(error, found.file);
+        const { reason, renameTo } = loadFailure(error, found.file);
         problems.unshift(
             isOldInitTemplate(found.file)
                 ? {
                       severity: 'warning',
                       path: name,
-                      message: unloadableTemplateMessage(reason),
+                      message: configProblemMessage('config-unloadable', {
+                          form: 'legacy-template',
+                          reason,
+                      }),
                       fileIgnored: true,
                   }
                 : {
                       severity: 'error',
                       path: name,
-                      message: `could not be loaded: ${reason}`,
+                      message: configProblemMessage('config-unloadable', {
+                          form: renameTo === undefined ? 'load' : 'typescript-in-js',
+                          reason,
+                          renameTo,
+                      }),
                       fileIgnored: true,
                   },
         );
@@ -600,7 +599,7 @@ export async function loadDiagnosticPolicy(
         problems.unshift({
             severity: 'error',
             path: name,
-            message: 'has no default export; write `export default defineConfig({ … })`.',
+            message: configProblemMessage('config-no-default-export', {}),
             fileIgnored: true,
         });
         return { file: found.file, policy: createDiagnosticPolicy(), problems };

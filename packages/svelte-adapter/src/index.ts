@@ -16,6 +16,7 @@ import {
     type SourceMap,
     type TemplateSzDiagnostic,
     type TemplateSzOptions,
+    type TemplateSzReporter,
     transformTemplateFile,
 } from '@csszyx/compiler/internal';
 import type { PreprocessorGroup } from 'svelte/compiler';
@@ -96,10 +97,10 @@ export function transformMarkup(
  * Where the preprocessor reports: warnings on the console, and every error at
  * once as the exception Svelte reports for the file.
  */
-const PREPROCESSOR_REPORTER = {
+const PREPROCESSOR_REPORTER: TemplateSzReporter = {
     warn: (message: string): void => console.warn(message),
-    error: (message: string): never => {
-        throw new Error(message);
+    error: (error): never => {
+        throw error;
     },
 };
 

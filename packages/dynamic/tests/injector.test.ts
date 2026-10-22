@@ -5,6 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { runtimeMessage } from '../../compiler/tests/engine-message.js';
+
 import type { Tier } from '../src/css-generator.js';
 import { cleanup, injectRule, isInjected, resolveTier, TIER_ORDER } from '../src/injector.js';
 
@@ -291,8 +293,15 @@ describe('injected-class growth warning', () => {
         expect(warn).not.toHaveBeenCalled();
 
         injectUnique(2, 'b');
-        expect(warn).toHaveBeenCalledOnce();
-        expect(warn.mock.calls[0][0]).toContain('unique classes');
+        expect(warn.mock.calls).toEqual([
+            [
+                runtimeMessage(
+                    'dynamic-injection-growth',
+                    '`dynamic()` has injected 5000 or more unique classes this session, and injected CSS rules are never removed, so the CSSOM keeps growing and style recalculation slows.',
+                    'help: drive continuously changing values, such as a width that changes every animation frame, through a CSS variable instead.',
+                ),
+            ],
+        ]);
 
         // Growth past the threshold stays quiet — one nudge per session.
         injectUnique(100, 'c');

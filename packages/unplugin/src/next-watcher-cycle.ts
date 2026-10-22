@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-
+import { diagnosticError } from './diagnostic-message.js';
 import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
@@ -72,9 +72,10 @@ export function runNextWatcherCycle(
             context.manifestExpectation,
         );
         if (!validation.ok) {
-            throw new Error(
-                `[csszyx] Next watcher wrote an invalid generation manifest: ${validation.reason}`,
-            );
+            throw diagnosticError('internal-error', {
+                where: 'runNextWatcherCycle',
+                detail: `the manifest the watcher wrote reads back invalid (${validation.reason})`,
+            });
         }
 
         lock.heartbeat();

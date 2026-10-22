@@ -32,6 +32,7 @@ import { pathToFileURL } from 'node:url';
 // the CLI for the one command that uses it.
 import { sortStrings } from '@csszyx/compiler';
 import type { Config } from 'tailwindcss';
+import { registryError } from '../utils/registry-words.js';
 import { resolveTailwindV3, tailwindLoaderFor } from './tailwind-availability.js';
 
 /**
@@ -105,7 +106,7 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
     const absolutePath = resolve(configPath);
 
     if (!existsSync(absolutePath)) {
-        throw new Error(`Tailwind config not found: ${absolutePath}`);
+        throw registryError('tailwind-config-missing', { form: 'path' }, { file: absolutePath });
     }
 
     // For TypeScript configs, we need to use tsx or esbuild-register
@@ -118,8 +119,10 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
         const module = await import(fileUrl);
         userConfig = module.default || module;
     } catch (error) {
-        throw new Error(
-            `Failed to load Tailwind config: ${error instanceof Error ? error.message : String(error)}`,
+        throw registryError(
+            'tailwind-config-unloadable',
+            { reason: error instanceof Error ? error.message : String(error) },
+            { file: absolutePath, cause: error },
         );
     }
 

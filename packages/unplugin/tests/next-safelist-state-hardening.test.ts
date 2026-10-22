@@ -130,7 +130,7 @@ describe('lock liveness against the real process table', () => {
                 mode: 'development',
                 command: 'contender',
             }),
-        ).toThrow(/already/);
+        ).toThrow(expect.objectContaining({ code: 'next-safelist-locked' }));
         live.release();
 
         // A dead pid on this host is recovered by the default probe.

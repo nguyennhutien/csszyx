@@ -112,7 +112,9 @@ describe('csszyx check — classes that style nothing', () => {
 
         const report = await reportFor(cwd);
 
-        expect(report).toMatch(/skipped|could not/i);
+        expect(report).toContain(
+            'Dead-class check skipped: this project has no Tailwind stylesheet.',
+        );
         expect(report).not.toContain('pointer-none');
     });
 
@@ -129,6 +131,9 @@ describe('csszyx check — classes that style nothing', () => {
         const report = await reportFor(cwd);
 
         expect(report).toContain('skipped');
+        expect(report).toContain(
+            '\u2716 A Tailwind stylesheet of this project did not compile (named above), so the dead-class check did not run and `csszyx check` fails until it compiles.',
+        );
         expect(process.exitCode).toBe(1);
     });
 
@@ -351,15 +356,19 @@ describe('csszyx check — a sign this project serves no negative of', () => {
                 file: 'src/A.tsx',
                 level: 'error',
                 message:
-                    '"-p-2" is emitted, and this project\'s Tailwind serves no negative "p-2": drop the sign, or define it with @utility.',
+                    "`-p-2` produces no CSS: this project's Tailwind serves `p-2` but no negative form of it.",
+                help: "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
+                note: 'the class is still emitted, and it styles nothing.',
+                args: { className: '-p-2', utility: 'p-2' },
+                url: 'https://csszyx.com/e/unsigned-value',
             },
             expect.objectContaining({
                 kind: 'unsigned-value',
-                message: expect.stringContaining('"data-[state=open]:-p-3"'),
+                args: { className: 'data-[state=open]:-p-3', utility: 'p-3' },
             }),
             expect.objectContaining({
                 kind: 'unsigned-value',
-                message: expect.stringContaining('"group-hover:-w-4"'),
+                args: { className: 'group-hover:-w-4', utility: 'w-4' },
             }),
         ]);
         expect(process.exitCode).toBe(1);
@@ -376,6 +385,12 @@ describe('csszyx check — a sign this project serves no negative of', () => {
             /Negative values this project's Tailwind does not serve:\n.*-p-2 +src\/A\.tsx/,
         );
         expect(report).not.toMatch(/Classes that produce no CSS:\n(.*\n)*.*-p-2 /);
+        expect(report).toContain(
+            "\u2716 1 emitted class(es) produce no CSS: this project's Tailwind serves no negative form of their utility; drop the sign, or define the negative with Tailwind's `@utility`.",
+        );
+        expect(report).toContain(
+            "\u2716 1 emitted class(es) produce no CSS: fix the sz key or value, or define the class with Tailwind's `@utility`.",
+        );
     });
 
     it('runs the pass for --rule unsigned-value alone', async () => {
@@ -399,12 +414,17 @@ describe('csszyx check — a sign this project serves no negative of', () => {
         expect(findings).toEqual([
             expect.objectContaining({
                 file: 'src/A.tsx',
+                kind: 'dead-class',
                 message:
-                    '"-p-medium" is emitted but produces no CSS under this project\'s Tailwind.',
+                    "`-p-medium` produces no CSS: this project's Tailwind serves no such utility.",
+                help: "fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.",
+                note: 'the class is still emitted, and it styles nothing.',
+                args: { className: '-p-medium' },
+                url: 'https://csszyx.com/e/dead-class',
             }),
             expect.objectContaining({
                 message:
-                    '"hover:-p-wide" is emitted but produces no CSS under this project\'s Tailwind.',
+                    "`hover:-p-wide` produces no CSS: this project's Tailwind serves no such utility.",
             }),
         ]);
         expect(findings.filter(entry => entry.kind === 'unsigned-value')).toEqual([]);
@@ -418,6 +438,106 @@ describe('csszyx check — a sign this project serves no negative of', () => {
         });
         const findings = await findingsFor(cwd);
         expect(findings.filter(entry => entry.kind === 'unsigned-value')).toEqual([]);
+        expect(process.exitCode).not.toBe(1);
+    });
+});
+
+describe('csszyx check — a variant the project does not serve', () => {
+    /**
+     * Run the command with `--json` and return its findings.
+     *
+     * @param cwd - Project root.
+     * @param rule - The `--rule` selection, when given.
+     * @returns The findings.
+     */
+    async function findingsFor(
+        cwd: string,
+        rule?: string[],
+    ): Promise<Array<Record<string, unknown>>> {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd, json: true, rule });
+        return JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+    }
+
+    const STATES =
+        'export const A = () => <div sz={{ hidden: { p: 4 }, hovr: { p: 4 }, checked: { p: 2 }, aria: { expanded: { p: 1 } }, md: { expanded: { m: 1 } } }} />;';
+
+    it('names the variant, by the project’s Tailwind, once per class', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': STATES,
+        });
+        const findings = (await findingsFor(cwd)).filter(entry => entry.rule === 'dead-class');
+
+        // `checked:p-2` and `aria-expanded:p-1` are served, and not named.
+        expect(findings).toEqual([
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                file: 'src/A.tsx',
+                level: 'error',
+                args: { form: 'attribute-or-aria', variant: 'hidden', className: 'hidden:p-4' },
+                message: expect.stringContaining('`hidden:p-4`'),
+                help: expect.stringContaining("`{ '[hidden]': { … } }`"),
+                url: 'https://csszyx.com/e/unserved-variant',
+            }),
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                args: { form: 'unknown', variant: 'hovr', className: 'hovr:p-4' },
+                help: 'check the spelling of `hovr`.',
+                note: expect.stringContaining('@custom-variant'),
+            }),
+            expect.objectContaining({
+                kind: 'unserved-variant',
+                args: { form: 'aria', variant: 'expanded', className: 'md:expanded:m-1' },
+            }),
+        ]);
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('lists them apart from the classes that produce no CSS', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ hidden: { p: 4 }, break: 'bogus' }} />;",
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd });
+        const report = stripVTControlCharacters(
+            log.mock.calls.map(call => call.join(' ')).join('\n'),
+        );
+
+        expect(report).toMatch(
+            /Variants this project's Tailwind does not serve:\n.*hidden:p-4 +src\/A\.tsx/,
+        );
+        expect(report).not.toMatch(/Classes that produce no CSS:\n(.*\n)*.*hidden:p-4 /);
+        expect(report).toContain('break-bogus');
+        expect(report).toContain(
+            "\u2716 1 emitted class(es) produce no CSS: each uses a variant this project's Tailwind does not serve.",
+        );
+    });
+
+    it('runs the pass for --rule unserved-variant alone', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx':
+                "export const A = () => <div sz={{ hidden: { p: 4 }, break: 'bogus' }} />;",
+        });
+        const findings = await findingsFor(cwd, ['unserved-variant']);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([
+            expect.objectContaining({ kind: 'unserved-variant', file: 'src/A.tsx' }),
+        ]);
+    });
+
+    it('passes a project that defines the variant with @custom-variant', async () => {
+        const cwd = tailwindProject({
+            'src/app.css':
+                '@import "tailwindcss";\n@custom-variant expanded (&[aria-expanded=true]);',
+            'src/A.tsx': 'export const A = () => <div sz={{ expanded: { p: 4 } }} />;',
+        });
+        const findings = await findingsFor(cwd);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([]);
         expect(process.exitCode).not.toBe(1);
     });
 });

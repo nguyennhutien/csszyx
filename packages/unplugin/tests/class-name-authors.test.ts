@@ -24,7 +24,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { findClassNameAuthorConflicts } from '../src/class-name-authors.js';
+import {
+    classNameAuthorConflictMessage,
+    findClassNameAuthorConflicts,
+} from '../src/class-name-authors.js';
 
 describe('findClassNameAuthorConflicts', () => {
     it('reports one name claimed by two utility blocks', () => {
@@ -33,7 +36,7 @@ describe('findClassNameAuthorConflicts', () => {
             utilityStatics: ['panel-flat', 'panel-flat'],
         });
 
-        expect(found).toEqual([{ name: 'panel-flat', reason: 'declared twice' }]);
+        expect(found).toEqual([{ name: 'panel-flat', form: 'declared-twice' }]);
     });
 
     it('reports a utility named after a class a colour token generates', () => {
@@ -42,9 +45,7 @@ describe('findClassNameAuthorConflicts', () => {
             utilityStatics: ['text-brand'],
         });
 
-        expect(found).toEqual([
-            { name: 'text-brand', reason: 'a theme token already generates it' },
-        ]);
+        expect(found).toEqual([{ name: 'text-brand', form: 'theme-token' }]);
     });
 
     it('checks every prefix a colour token feeds, not just text', () => {
@@ -80,5 +81,27 @@ describe('findClassNameAuthorConflicts', () => {
         expect(
             findClassNameAuthorConflicts({ themeColors: ['brand'], utilityStatics: [] }),
         ).toEqual([]);
+    });
+});
+
+describe('classNameAuthorConflictMessage', () => {
+    it('words a name declared twice', () => {
+        expect(classNameAuthorConflictMessage({ name: 'card', form: 'declared-twice' })).toBe(
+            '[csszyx] utility-collision:\n' +
+                '  `@utility card` is declared twice, so Tailwind merges both declarations into one class, and no single place in your CSS shows what `card` sets.\n' +
+                '  help: merge the two blocks into one, or rename one of them.\n' +
+                '  note: every use of `card` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.\n' +
+                '  docs: https://csszyx.com/e/utility-collision',
+        );
+    });
+
+    it('words a name a theme token already generates', () => {
+        expect(classNameAuthorConflictMessage({ name: 'bg-brand', form: 'theme-token' })).toBe(
+            '[csszyx] utility-collision:\n' +
+                '  `@utility bg-brand` names a class a theme token already generates, so Tailwind merges both into one class, and no single place in your CSS shows what `bg-brand` sets.\n' +
+                '  help: rename the `@utility` or the theme token.\n' +
+                '  note: every use of `bg-brand` gets both, including a class an `sz` prop emits, and Tailwind does not warn about it.\n' +
+                '  docs: https://csszyx.com/e/utility-collision',
+        );
     });
 });

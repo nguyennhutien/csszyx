@@ -13,7 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
-import { szDiagnosticKindOf } from './helpers/runtime-warning-kind.js';
+import { szReportedCodes } from './helpers/sz-console-line.js';
 
 /** What one lane wrote for an sz object, and the kinds it reported. */
 interface LaneResult {
@@ -28,7 +28,7 @@ type Sz = Record<string, unknown>;
 type Lane = (sz: Sz) => LaneResult;
 
 /**
- * The runtime lowering, its console warnings read back as kinds.
+ * The runtime lowering, its console warnings read back as their codes.
  *
  * @param sz - The sz object.
  * @returns What it wrote and reported.
@@ -40,7 +40,7 @@ function runtimeLane(sz: Sz): LaneResult {
     try {
         return {
             className: transform(sz as never).className,
-            kinds: warnings.map(message => szDiagnosticKindOf(message)),
+            kinds: szReportedCodes(warnings),
         };
     } finally {
         console.warn = original;

@@ -13,6 +13,9 @@
 import { version as packageVersion } from '../package.json';
 import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 
+// The guard for an error csszyx throws: `init` installs this package, not the
+// compiler, so it is reachable from here (ADR 0031 §5).
+export { type CsszyxErrorFields, isCsszyxError } from '@csszyx/compiler/errors';
 // Export SzInput type from concatenate
 export type { SzInput } from './concatenate.js';
 // Export concatenation helpers

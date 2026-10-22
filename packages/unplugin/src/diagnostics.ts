@@ -28,8 +28,12 @@ export {
     deadClassMessage,
     hoistedSignUtility,
     reportDeadSzClasses,
+    type UnservedVariant,
+    unservedVariantMessage,
+    unservedVariantOf,
     unsignedClass,
     unsignedValueMessage,
+    variantDroppedForms,
 } from './dead-class.js';
 export {
     capOverflowMessage,
@@ -62,6 +66,7 @@ export {
     diagnosticPolicyWatchFiles,
     isDiagnosticPolicyWatchFile,
 } from './diagnostic-policy-inputs.js';
+export { keptSessionMessage } from './kept-session-message.js';
 export { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
 export {
     type QuietMode,

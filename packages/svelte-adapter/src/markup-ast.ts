@@ -14,6 +14,11 @@ import {
     type TemplateSzAttribute,
     type TemplateSzDiagnostic,
 } from '@csszyx/compiler/internal';
+import {
+    SVELTE_VERSION_UNSUPPORTED,
+    type SzBrowserDiagnostic,
+    TEMPLATE_UNPARSABLE,
+} from '@csszyx/compiler/report';
 
 /** A node of Svelte's modern AST; only the fields the adapter reads. */
 interface SvelteNode {
@@ -67,17 +72,25 @@ export function readSzAttributes(source: string, filename?: string): SzAttribute
         requiredBy: '@csszyx/svelte-adapter',
         install: 'svelte@5',
     });
-    const fail = (offset: number, text: string): SzAttributeReading => ({
+    const fail = <Args extends object>(
+        offset: number,
+        diagnostic: SzBrowserDiagnostic<Args>,
+        args: NoInfer<Args>,
+    ): SzAttributeReading => ({
         attributes: [],
         diagnostics: [
-            placeTemplateDiagnostic({ file: source, filename, severity: 'error', offset, text }),
+            placeTemplateDiagnostic({
+                file: source,
+                filename,
+                severity: 'error',
+                offset,
+                diagnostic,
+                args,
+            }),
         ],
     });
     if (Number.parseInt(svelte.VERSION, 10) < 5) {
-        return fail(
-            0,
-            `csszyx reads Svelte 5 markup, and svelte ${svelte.VERSION} resolves\nhelp: install svelte@5`,
-        );
+        return fail(0, SVELTE_VERSION_UNSUPPORTED, { version: svelte.VERSION });
     }
     // Svelte drops a leading byte order mark, so its offsets start one later.
     const shift = source.startsWith(BYTE_ORDER_MARK) ? 1 : 0;
@@ -89,7 +102,10 @@ export function readSzAttributes(source: string, filename?: string): SzAttribute
         // Only Svelte's own verdict on the file is a diagnostic; anything else,
         // its parser running out of stack say, is not about the markup.
         if (typeof failure.code !== 'string') throw error;
-        return fail(failure.position[0] + shift, unparsable(source, failure.message));
+        return fail(failure.position[0] + shift, TEMPLATE_UNPARSABLE, {
+            form: unparsableForm(source),
+            message: failure.message,
+        });
     }
     const reader: Reader = { source, shift, found: [] };
     collect(reader, root);
@@ -97,19 +113,15 @@ export function readSzAttributes(source: string, filename?: string): SzAttribute
 }
 
 /**
- * The message for a component Svelte cannot parse.
+ * Why Svelte likely could not parse a component, which picks the advice.
  *
  * @param source - The component.
- * @param reason - Svelte's message.
- * @returns What went wrong, and what to do.
+ * @returns `svelte-quoted` when it quotes an sz object, which Svelte cannot
+ *   read; `svelte-preprocess` otherwise.
  */
-function unparsable(source: string, reason: string): string {
-    const head = `Svelte cannot parse this file, so no sz in it gets a class: ${reason}`;
+function unparsableForm(source: string): 'svelte-quoted' | 'svelte-preprocess' {
     // `sz="{ p: 4 }"` was read before Svelte saw the file; Svelte cannot read it.
-    if (/\bsz\s*=\s*["']\s*\{(?!\{)/.test(source)) {
-        return `${head}\nhelp: write a quoted sz object as an expression, sz={{ p: 4 }}; Svelte does not parse sz="{ p: 4 }"`;
-    }
-    return `${head}\nhelp: run csszyx after the preprocessors that turn this file into Svelte, such as TypeScript without lang="ts" or pug`;
+    return /\bsz\s*=\s*["']\s*\{(?!\{)/.test(source) ? 'svelte-quoted' : 'svelte-preprocess';
 }
 
 /** What a walk over one component carries. */

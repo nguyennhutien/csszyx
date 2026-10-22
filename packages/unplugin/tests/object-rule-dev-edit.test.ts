@@ -104,8 +104,10 @@ describe('the object rule on a dev server', () => {
         expect(dev.sent).toContainEqual({ type: 'full-reload' });
         expect(await dev.transform()).toEqual(['pb-brand p-4']);
         // A reload that drops the page's state says why, as the prefix one does.
-        expect(dev.warnings.join('\n')).toContain(
-            'src/index.css changed which sz keys cover each other: recompiled every module and reloaded the page.',
+        expect(dev.warnings).toContain(
+            '[csszyx] project-reload: src/index.css\n' +
+                '  This file changed which sz keys cover each other, so csszyx recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
         );
     }, 120_000);
 
@@ -164,8 +166,12 @@ describe('the object rule during a rollup watch session', () => {
         writeFileSync(session.css, WITHOUT_TOKEN);
         await expect(session.call('buildStart')).resolves.toBeUndefined();
 
-        expect(session.warnings.join('\n')).toContain(
-            'src/index.css changed which sz keys cover each other',
+        expect(session.warnings).toContain(
+            '[csszyx] watch-merge-groups-changed:\n' +
+                '  `src/index.css` changed which sz keys cover each other, and this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or lack one a later key no longer covers.\n' +
+                '  help: restart the watch session.\n' +
+                '  note: this rebuild finished, and only sz objects that use those keys are stale until the restart.\n' +
+                '  docs: https://csszyx.com/e/watch-merge-groups-changed',
         );
     }, 60_000);
 

@@ -8,9 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-class FakeUnavailable extends Error {
-    detail = 'not installed';
-}
+class FakeUnavailable extends Error {}
 
 const engineFailure = new TypeError('the engine could not read these files');
 

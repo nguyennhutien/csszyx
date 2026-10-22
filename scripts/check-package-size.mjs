@@ -1,9 +1,17 @@
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 import { buildSync } from 'esbuild';
+
+import ts from 'typescript';
+
+import { cdnBuildOptions, INSTALLED_RESOLUTION } from '../packages/csszyx/cdn-build.mjs';
+import { browserSourceFiles } from './diagnostics/browser-sources.mjs';
+import * as registry from './diagnostics/registry.mjs';
+import { browserDiagnostics, EDITOR_IDS } from './gen-diagnostic-codes.mjs';
 
 /**
  * Size gate for the JS that ships to end users. Bytes are the one performance
@@ -61,6 +69,11 @@ import { buildSync } from 'esbuild';
  * before the first call returns, so a heavy import added to a build-time
  * entry is start-up time for every build, dev server and CLI run.
  *
+ * A fifth, `kind: 'installed-app'`, bundles the csszyx packages together the
+ * way an app that installed them gets them, each from its built `dist` and
+ * the compiler in once, so a chunk layout that only shows when the packages
+ * meet is measured somewhere.
+ *
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
  * Crossing one is a one-line change to the number below plus a sentence in the
@@ -68,6 +81,18 @@ import { buildSync } from 'esbuild';
  * headroom: wide enough that legitimate small growth does not thrash the
  * number, tight enough that silently swallowing a 30KB dependency fails.
  */
+
+/**
+ * The sources of one package that a browser bundle can hold.
+ *
+ * @param {string} name - The package's directory under `packages/`.
+ * @returns {Set<string>} The files, repository-relative.
+ */
+function sourcesOf(name) {
+    return new Set(
+        [...browserSourceFiles()].filter(file => file.startsWith(`packages/${name}/src/`)),
+    );
+}
 
 /** Gzip ceilings per user-shipped surface, set the usual ~300 bytes above a
  * measurement. Re-measure with `pnpm check:package-size` after a build.
@@ -93,57 +118,70 @@ export const SIZE_BUDGETS = [
         // mangle check finds its map on the page or in the bundle, says why
         // every `false` happened, and fails a census the page carries but
         // cannot read instead of reading past it to the bundle's map.
-        maxGzipBytes: 16_450,
+        //
+        // Lowered from 16,450 on 2026-10-20, measured 15,689 (16,170 before):
+        // its production lines print their code and args instead of the
+        // sentence (ADR 0031), and the development ones are the registry's
+        // templates, which a production build drops. Budget the usual ~300
+        // above.
+        //
+        // Lowered from 16,000 on 2026-10-20, measured 15,547 (15,744 before):
+        // the errors it throws carry their code and throw the compact line in
+        // production instead of the sentence (`lowering-not-loaded`,
+        // `runtime-prefix-conflict`, `web-crypto-unavailable`).
+        maxGzipBytes: 15_850,
         // Measured 2026-10-08, after those roles: 15,417 / 426 / 1,359 / 434 /
         // 8,144 / 1,082. `.` raised from 15,700 on 2026-10-17, measured 15,721,
-        // for the same check.
+        // for the same check, and lowered from 16,000 on 2026-10-20, measured
+        // 15,250, with the union. The other entries measured 426 / 1,366 / 434
+        // / 8,153 / 1,096 that day: each module that reports keeps a bare
+        // import of `@csszyx/compiler/report`, external here, which an app
+        // that bundles the compiler drops (`sideEffects: false`).
+        //
+        // `.` lowered from 15,550 and `./merge` from 1,400 on 2026-10-20 with
+        // the union, measured 15,064 and 1,030 (15,307 and 1,137 before), the
+        // others 477 / 1,308 / 463 / 8,160: `./lite` and `./lowering` grew by
+        // a bare import of `@csszyx/compiler/errors` each, external here.
         entryBudgets: {
-            '.': 16_000,
+            '.': 15_400,
             './lite': 750,
             './core': 1_650,
             './lowering': 750,
             './split': 8_450,
-            './merge': 1_400,
+            './merge': 1_350,
         },
         // The same bundles built by Vite (see `checkViteBudgets`), measured
         // 2026-10-19: 15,686, then 15,376 / 464 / 1,362 / 515 / 8,059 / 996.
-        // Each the usual ~300 above, rounded up to 50.
+        // Each the usual ~300 above, rounded up to 50. The union and `.`
+        // lowered on 2026-10-20 with the esbuild ones, measured 15,331 and
+        // 15,014.
+        //
+        // Lowered on 2026-10-20 with the thrown errors' compact lines,
+        // measured 15,088, then 14,693 / 478 / 1,264 / 530 / 8,072 / 892
+        // (15,352, then 15,026 / 464 / 1,375 / 515 / 8,066 / 1,004 before).
         vite: {
-            maxGzipBytes: 16_000,
+            maxGzipBytes: 15_400,
             entryBudgets: {
-                '.': 15_700,
+                '.': 15_000,
                 './lite': 800,
-                './core': 1_700,
+                './core': 1_600,
                 './lowering': 850,
                 './split': 8_400,
-                './merge': 1_300,
+                './merge': 1_200,
             },
         },
-        // Each one reports csszyx's own output as wrong, an integrity check
-        // failing, or prints only because the app turned `debug` on (ADR
-        // 0011). A usage nudge belongs behind `NODE_ENV`, not in this list.
-        productionMessages: [
-            // The mangle map and recovery manifest are integrity inputs.
-            'error: Failed to parse mangle map:',
-            'error: Failed to parse recovery manifest:',
-            'error: [csszyx] Mangle map failed schema validation (not a plai',
-            // `verifyMangleChecksumAsync` saying why it answered false:
-            // `web-crypto-unavailable`, built before the call, then
-            // `mangle-checksum-mismatch` / `mangle-map-unavailable`, chosen
-            // by the call, and `mangle-census-unreadable` for a census the
-            // page carries but cannot read.
-            'warn: <expr>',
-            'warn: <expr>',
-            'warn: [csszyx] mangle-census-unreadable: the mangle census on ',
-            // Hydration that aborted or fell back renders other than the
-            // server did; `dev-only` recovery says it is off in production.
-            'error: [csszyx] Hydration aborted at ',
-            'warn: [csszyx] CSR recovery requires explicit szRecover direct',
-            'warn: [csszyx] Hydration mismatch recovered via CSR. Fix root ',
-            'warn: [csszyx] szRecover=',
-            // A merge table from another csszyx version merges wrongly.
-            'warn: [csszyx] the merge table was written in format ',
-            // Only with `initRuntime({ debug: true })`.
+        // Each one reports csszyx's own output as wrong or an integrity check
+        // failing (ADR 0011), so it prints in production as its code and
+        // args: the mangle map, census and recovery manifest the page
+        // carries, a mangle check that answered false, hydration that
+        // aborted or fell back, and a merge table from another csszyx
+        // version. Read from the registry (`runtime.production`), never listed
+        // here. A usage nudge belongs behind `NODE_ENV`.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('runtime')),
+        // The two lines `initRuntime({ debug: true })` prints. They report no
+        // problem, so the registry has no id for them (ADR 0031 item 5), and
+        // they are the only lines allowed beside its codes.
+        nonRegistryMessages: [
             'log: [csszyx] Runtime initialized',
             'warn: [csszyx] Runtime already initialized',
         ],
@@ -159,6 +197,10 @@ export const SIZE_BUDGETS = [
         entryBudgets: { '.': 10_650, './react': 8_200 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
         vite: { maxGzipBytes: 11_000, entryBudgets: { '.': 10_700, './react': 8_100 } },
+        // None today: its one production failure, an unreachable manifest, is
+        // a rejected fetch it catches. Read from the registry all the same, so
+        // a production line added to its sources has to be registered.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('dynamic')),
     },
     {
         name: '@csszyx/compiler browser app bundle',
@@ -172,7 +214,14 @@ export const SIZE_BUDGETS = [
         // the engine; `./internal` is what the adapters, the CLI and the build
         // plugin share). A new export is measured, and needs an entry budget,
         // unless it is added here.
-        excludeSubpaths: ['.', './engine', './internal', './migrate'],
+        //
+        // `./report` ships to the browser but only in development: the
+        // reporter and every template, re-exported whole, which a namespace
+        // import keeps live, so an entry budget would price the full template
+        // set no app ships. It is priced through its consumers instead: a
+        // site imports it from a `NODE_ENV` branch, and `checkTemplateLeaks`
+        // fails any production bundle that keeps a template.
+        excludeSubpaths: ['.', './engine', './internal', './migrate', './report'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so
@@ -239,7 +288,12 @@ export const SIZE_BUDGETS = [
             // in the chunk order that put them first, see the union), and
             // 16,332 with the category map ahead of them, the same day.
             './browser': 16_600,
+            // `./sz-limits` measured 501 on 2026-10-20 (346 before):
+            // `SzDepthError` extends the error class of `./errors`, measured
+            // 357 alone, which ships to the browser because the runtime
+            // re-exports its guard and every csszyx error extends it.
             './sz-limits': 650,
+            './errors': 650,
             './keyword-families': 1_000,
             './bool-class': 650,
             './color-var': 550,
@@ -264,7 +318,9 @@ export const SIZE_BUDGETS = [
             maxGzipBytes: 17_500,
             entryBudgets: {
                 './browser': 16_650,
+                // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
+                './errors': 700,
                 './keyword-families': 1_050,
                 './bool-class': 750,
                 './color-var': 600,
@@ -272,29 +328,34 @@ export const SIZE_BUDGETS = [
             },
         },
         // Each one reports a class the transform did not emit (ADR 0011), so
-        // they print in production and in the browser, once each; only
-        // `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them.
-        productionMessages: [
-            // A value that moved onto its group's own key (`touch: 'pan-x'`).
-            'warn: <expr>',
-            // A replaced or removed key (`ordinal`, `tabularNums`, `inlineFlex`).
-            'warn: [csszyx] ',
-            // A stand-alone key a later group key replaces in one object.
-            'warn: [csszyx] ',
-            // A removed key (`fontVariant`, `maskFrom`), named with its note.
-            'warn: [csszyx] ',
-            // A colour key's slash-opacity string (`bg: 'red-500/50'`), which
-            // emits nothing; the build reports it as `slash-opacity-string`.
-            'warn: [csszyx] ',
-            // A gradient layer on `mask` (`mask: 'linear-45'`), which emits
-            // nothing; the build reports it as `moved-value`.
-            'warn: [csszyx] mask: ',
-            // A dynamic value the runtime helpers cannot lower, so the style
-            // is dropped: a non-boolean on a boolean-only key (`./bool-class`)
-            // and an unresolvable spacing value (`./spacing-var`).
-            'warn: [csszyx] dynamic value on ',
-            'warn: [csszyx] dynamic value on ',
-        ],
+        // it prints in production and in the browser, once each, as its code
+        // and args; only `CSSZYX_QUIET_SZ_WARNINGS=1` mutes the sz key and
+        // value lines. Read from the registry (`runtime.production`), never
+        // listed here: a removed or replaced key, a moved value and a
+        // gradient layer on `mask`, a stand-alone key a later group replaces,
+        // a group's value written on that stand-alone key, a slash-opacity
+        // string, and the two dynamic values the runtime helpers cannot lower.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('compiler')),
+    },
+    // What an app that installs csszyx ships when it imports the runtime and
+    // the dynamic layer: both resolved from `packages/csszyx`'s
+    // `node_modules` to their built `dist`, the compiler bundled in once,
+    // which no budget above measures (each leaves the other csszyx packages
+    // external). It is where the compiler's chunk layout lands in a real app:
+    // moving the closed-enum import to the top of `transform-core.ts`, where
+    // the import sort puts it, measured +234 here; dropping the per-key-rows
+    // chunk group +286; building `./report` with the entries +276. Each is
+    // under the usual headroom, so the module order is what fails: the first
+    // two lose a chunk, the third lays the key tables first (it fails the
+    // Node budgets below too). Measured 39,733 on 2026-10-21. Budget the
+    // usual ~300 above.
+    {
+        name: 'csszyx installed app bundle (runtime + dynamic, compiler bundled)',
+        kind: 'installed-app',
+        target: 'packages/csszyx',
+        imports: ['@csszyx/runtime', '@csszyx/dynamic'],
+        maxGzipBytes: 40_050,
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
     // but a file every `npm install` downloads inside @csszyx/core. Measured
@@ -452,11 +513,82 @@ export const SIZE_BUDGETS = [
     // leaf modules (+186) and smaller steps are the rest (per-commit deltas
     // from a worktree build, whose module path comments differ, so only the
     // deltas carry over). Budget the usual ~300 above.
+    //
+    // 49,180 on 2026-10-20, lowered from 51,500: the compiler's browser lane
+    // now renders its development warnings from the registry, and the
+    // extension, built without `NODE_ENV`, carried those templates (53,138)
+    // to print warnings into the extension host's log. `esbuild.mjs` now
+    // builds it as production, which folds them out.
+    //
+    // Raised from 49,500 on 2026-10-21, measured 49,629: the extension keeps
+    // the tooling metadata of the 0.18 registry, the editor words of each id
+    // (+468 raw) and the canonical key forms with their value types (+438
+    // raw). A module order that measured smaller was a compression accident
+    // nothing would hold, so it was not taken. Budget the usual ~300 above.
     {
         name: '@csszyx/vscode extension bundle',
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
-        maxGzipBytes: 51_500,
+        maxGzipBytes: 49_950,
+        // Built as production, so the leak gate reads it, except for the ids
+        // whose words the extension shows as its own editor diagnostics
+        // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
+        templateFree: { allowedIds: EDITOR_IDS },
+    },
+    // The CDN bundles, which a `<script>` tag loads whole: unpkg and jsdelivr
+    // serve the production one at the package root, and nothing priced it.
+    // Measured 2026-10-20: 16,097 production, 24,368 development (the
+    // sentences and the development warnings the production one folds out).
+    // Budget the usual ~300 above.
+    //
+    // Lowered from 16,400 and 25,400 on 2026-10-21, measured 15,854 and
+    // 22,351 (16,117 and 25,355 before): both are built from the compiler's
+    // `dist` instead of its source (`packages/csszyx/cdn-build.mjs`), so they
+    // get the chunk layout the compiler's build sets up for gzip and one copy
+    // of `errors` (the source's and `dist/errors.mjs` before), and the
+    // development one one copy of the reporter and its templates (the
+    // source's `report.ts` and `dist/report.mjs` before). `build` names the
+    // options the file is written from, so the gate reads the layout back
+    // from the same build: the per-key rows have to come before the key
+    // tables, as in the compiler's own budget, and a bundle built from the
+    // source again has neither chunk and fails here.
+    {
+        name: 'csszyx CDN bundle',
+        kind: 'file',
+        target: 'packages/csszyx/dist/browser.iife.js',
+        maxGzipBytes: 16_200,
+        // A `<script>` tag loads it as built, so the leak gate reads its bytes.
+        templateFree: {},
+        build: cdnBuildOptions('production'),
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
+        // Its sinks are read as an app's (ADR 0031 §6): every line it prints
+        // and every error it throws carries a code the registry lets print in
+        // production. The file holds only what `browser.ts` reaches, so the
+        // codes of every browser source are allowed and those of its own
+        // sources required.
+        productionCodes: productionCodesOf(registry.DIAGNOSTICS, browserSourceFiles()),
+        requiredCodes: productionCodesOf(registry.DIAGNOSTICS, sourcesOf('csszyx')),
+        // `reportUnreadable` prints an error the parse or the transform threw
+        // that is not the attribute's syntax as it was thrown: a csszyx error
+        // carries its own code, and anything else is not csszyx's to word.
+        passthroughSinks: ['error: <expr>'],
+    },
+    // The development one raised from 24,650 on 2026-10-20, measured 24,795
+    // (+427): the errors it can throw (`sz-object-depth`,
+    // `options-object-required`, `sz-attribute-syntax`) carry the registry's
+    // words, help and note included, where they threw a one-line sentence,
+    // and the error class came with them. The production one measured 16,069
+    // (-28) the same day. Raised again to 25,400 on 2026-10-20, measured 25,114
+    // (+319): `unserved-variant` prints only in Node, but its gate reads
+    // `typeof window`, which no bundler folds, so the table (84), the words
+    // (120) and the report (~109) ride along, as every Node-only line does.
+    {
+        name: 'csszyx CDN development bundle',
+        kind: 'file',
+        target: 'packages/csszyx/dist/browser.dev.iife.js',
+        maxGzipBytes: 22_700,
+        build: cdnBuildOptions('development'),
+        moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // What Node loads for the two entries the build tools import: the engine
     // calls and the diagnostic renderer, which reads the diagnostic registry
@@ -466,19 +598,67 @@ export const SIZE_BUDGETS = [
     // (49,614), and 3.61 ms after the tables moved to their own module
     // (30,115). `./internal` measured 33,093 the same day. Budgets the usual
     // ~300 above the measurement.
+    //
+    // Raised 2026-10-20 from 30,400 / 33,400, measured 30,964 / 33,882 (+702
+    // / +703 against 30,262 / 33,179): the engine's error classes extend
+    // `CsszyxError` and carry the registry's `code` and `args`, so both
+    // entries load `./errors` (394) and the code that fills those args
+    // (`transform-rust` +192, `transform-select` +119). Branding the classes
+    // without extending measured 30,594 / 33,510, still over (user accepted).
+    //
+    // Lowered 2026-10-21 from 31,250 / 34,200, measured 25,652 / 28,678
+    // (-6,320 / -6,320 against 31,972 / 34,998 with the 0.18 words in): the
+    // renderer reads `diagnostic-registry.generated.ts`, which now carries per
+    // id only what a line is rendered from (id, position, arg joiners,
+    // `variesBy`, words); the summaries, surfaces, forms and arg types moved
+    // to `diagnostic-spec.generated.ts`, which no compiler entry imports
+    // (`tests/diagnostic-render-specs.test.ts`). Importing `./engine` took
+    // 4.95 ms p50 against 5.30 ms before, p50 of 60 fresh processes on the
+    // devcontainer, where the 1.76 ms above measures about 5 ms.
+    //
+    // The state-variant table (`unserved-variant`, its forms generated from
+    // Tailwind) stays in the lowering's chunk, which the root loads and
+    // neither entry does. Grouped into the key tables' chunk, which both
+    // load, it cost `./engine` +166 and `./internal` +165 gzip bytes on
+    // 2026-10-21, under the ~300 headroom of each. `excludedModules` reads the
+    // `//#region` markers of the files each entry loads, so the drift fails
+    // at any size.
+    //
+    // Raised 2026-10-21 from 25,950 / 29,000, measured 26,936 / 29,974
+    // (+1,284 / +1,296 against 25,652 / 28,678): the errors these entries
+    // throw now carry the registry's words in full — `engine-version-skew`,
+    // `internal-error`, `wasm-engine-unavailable`, and on `./internal`
+    // `template-sz-invalid`, `template-runtime-value` and
+    // `peer-module-unresolved` — each one plain literal of
+    // `diagnostic-browser.generated.ts`, which the bundle keeps alone
+    // (`tests/engine-entry-isolation.test.ts` pins which). Kept in full on
+    // the user's call (2026-10-21) rather than cut to a compact line.
+    //
+    // Raised 2026-10-21 from 27,250 / 30,250, measured 27,103 / 30,135
+    // (+139 / +131 against 26,964 / 30,004): a development render refuses a
+    // diagnostic missing a required arg or a form with no sentence
+    // (`assertFillable`, +189), the registry gained the
+    // `stale-binding-versions` and `sz-attribute-syntax` `end` forms (+60),
+    // and `diagnosticPath` changed (+11). Marking each arg's optionality as
+    // an object per arg cost a further +221 / +234; the generator now writes
+    // an entry's args as one string (`'form key replacement?'`) and its list
+    // joiners apart (`templateArgs`, `templateJoiners`), which removes that
+    // and keeps the check's semantics. Budgets the usual ~300 above.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 30_400,
+        maxGzipBytes: 27_400,
+        excludedModules: ['src/state-variants.generated.ts'],
     },
     {
         name: '@csszyx/compiler `./internal`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 33_400,
+        maxGzipBytes: 30_450,
+        excludedModules: ['src/state-variants.generated.ts'],
     },
 ];
 
@@ -594,6 +774,19 @@ export function appBundle(entryPaths, packageDir) {
     return appBuild(entryPaths, packageDir).code;
 }
 
+/** An app entry that imports each entry as a namespace and exports them all,
+ * so nothing a consumer could reach is shaken out.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @returns {string} the entry's source
+ */
+function namespaceEntry(entryPaths) {
+    return entryPaths
+        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
+        .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
+        .join('\n');
+}
+
 /** The esbuild app build behind {@link appBundle}, with the bundle's modules
  * in the order it lays them out (esbuild's metafile lists an output's inputs
  * in that order).
@@ -604,12 +797,8 @@ export function appBundle(entryPaths, packageDir) {
  */
 function appBuild(entryPaths, packageDir) {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    const contents = entryPaths
-        .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
-        .concat(`export { ${entryPaths.map((_, i) => `e${i}`).join(', ')} };`)
-        .join('\n');
     const result = buildSync({
-        stdin: { contents, resolveDir: packageDir, loader: 'js' },
+        stdin: { contents: namespaceEntry(entryPaths), resolveDir: packageDir, loader: 'js' },
         bundle: true,
         write: false,
         format: 'esm',
@@ -617,6 +806,7 @@ function appBuild(entryPaths, packageDir) {
         minify: true,
         treeShaking: true,
         metafile: true,
+        ...INSTALLED_RESOLUTION,
         external: ['@csszyx/*', ...Object.keys(manifest.peerDependencies ?? {})],
         define: { 'process.env.NODE_ENV': '"production"' },
         logLevel: 'silent',
@@ -656,6 +846,22 @@ export function moduleOrderProblems(moduleIds, prefixes) {
     return problems;
 }
 
+/** The failures of one module order, worded for the gate.
+ *
+ * @param {string} label who lays the modules out: the budget's name, and its subpath if any
+ * @param {string[]} moduleIds module paths in bundle order
+ * @param {string[]} prefixes file-name prefixes, in the order required
+ * @returns {string[]} failure messages
+ */
+function orderFailures(label, moduleIds, prefixes) {
+    return moduleOrderProblems(moduleIds, prefixes).map(
+        problem =>
+            `${label} ${problem}. The order keeps tables within gzip's reach of the code ` +
+            'that repeats their keys; restore it in the import order or the chunk groups ' +
+            'before moving the budget.',
+    );
+}
+
 /** The failures of a budget's `moduleOrder` for one lane.
  *
  * @param {{ name: string, moduleOrder?: Record<string, string[]> }} budget the budget
@@ -671,15 +877,129 @@ function moduleOrderFailures(budget, name, entries, modulesBySubpath) {
             failures.push(`${name}: \`${subpath}\` has a module order but no export`);
             continue;
         }
-        for (const problem of moduleOrderProblems(modulesBySubpath.get(subpath) ?? [], prefixes)) {
-            failures.push(
-                `${name}: \`${subpath}\` ${problem}. The order keeps tables within gzip's ` +
-                    'reach of the code that repeats their keys; restore it in the import order ' +
-                    'or the chunk groups before moving the budget.',
-            );
-        }
+        failures.push(
+            ...orderFailures(
+                `${name}: \`${subpath}\``,
+                modulesBySubpath.get(subpath) ?? [],
+                prefixes,
+            ),
+        );
     }
     return failures;
+}
+
+/** The failures of a file budget that names the esbuild options its file is
+ * written from (`build`): the file has to be what those options write, and
+ * the modules of that build laid out in its `moduleOrder`. The order is read
+ * from esbuild's metafile, which a written file does not keep, so the build
+ * runs again in memory and is compared byte for byte with the file first.
+ *
+ * @param {{ name: string, build: object, moduleOrder?: string[] }} budget the budget
+ * @param {string} target absolute path of the file
+ * @param {string} written the file's text, as the gate read it
+ * @returns {string[]} failure messages
+ */
+function builtFileFailures(budget, target, written) {
+    const result = buildSync({
+        ...budget.build,
+        outfile: target,
+        write: false,
+        metafile: true,
+        logLevel: 'silent',
+    });
+    if (result.outputFiles[0].text !== written) {
+        return [
+            `${budget.name}: the file is not what its build options write, so the order ` +
+                'of its modules cannot be read from them. Rebuild it, or build it from the ' +
+                'options the budget names.',
+        ];
+    }
+    const [output] = Object.values(result.metafile.outputs);
+    return orderFailures(`${budget.name}:`, Object.keys(output.inputs), budget.moduleOrder ?? []);
+}
+
+/** Bundle the csszyx packages an app imports the way an app that installed
+ * them ships them: each specifier imported as a namespace from the package
+ * that depends on them, so they resolve through its `node_modules` to their
+ * built `dist`, the compiler bundled in ({@link INSTALLED_RESOLUTION}).
+ * Production, minified, the
+ * peer dependencies left to the app. A build error throws.
+ *
+ * @param {{ target: string, imports: string[] }} budget the budget
+ * @param {string} rootDir absolute repository root
+ * @returns {{ code: string, moduleIds: string[] }} the bundle and its modules in order
+ */
+function installedAppBuild(budget, rootDir) {
+    const packageDir = path.join(rootDir, budget.target);
+    const result = buildSync({
+        stdin: { contents: namespaceEntry(budget.imports), resolveDir: packageDir, loader: 'js' },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        minify: true,
+        treeShaking: true,
+        metafile: true,
+        ...INSTALLED_RESOLUTION,
+        external: appPeers(packageDir),
+        define: { 'process.env.NODE_ENV': '"production"' },
+        logLevel: 'silent',
+    });
+    const [output] = Object.values(result.metafile.outputs);
+    return {
+        code: result.outputFiles[0].text,
+        moduleIds: Object.keys(output.inputs)
+            .filter(id => id !== '<stdin>')
+            .map(id => path.resolve(id)),
+    };
+}
+
+/** The modules a build marks in its output, one `//#region <source>` line
+ * each (Rolldown, and so tsdown, writes them), by the file that holds them.
+ *
+ * @param {string[]} files absolute file paths
+ * @returns {Map<string, string[]>} file → the sources it holds
+ */
+function regionsOf(files) {
+    return new Map(
+        files.map(file => [
+            file,
+            [...readFileSync(file, 'utf8').matchAll(/^\/\/#region (\S+)$/gm)].map(m => m[1]),
+        ]),
+    );
+}
+
+/** Where the files a Node entry loads hold a module its budget keeps out of
+ * them (`excludedModules`, package-relative source paths). Read from the
+ * region markers, so a files list with none fails rather than passing; and a
+ * name no source file has fails too, or a rename would leave an exclusion
+ * that holds nothing.
+ *
+ * @param {string[]} files absolute files the entry loads
+ * @param {string[]} excluded package-relative source paths kept out
+ * @param {string} packageDir absolute package directory
+ * @returns {string[]} one problem per mismatch
+ */
+export function excludedModuleProblems(files, excluded, packageDir) {
+    const regions = regionsOf(files);
+    const problems = [];
+    if (![...regions.values()].some(sources => sources.length > 0)) {
+        problems.push(
+            'no file it loads carries a `//#region` marker, so which modules it holds cannot be read',
+        );
+    }
+    for (const source of excluded) {
+        if (!existsSync(path.join(packageDir, source))) {
+            problems.push(`\`${source}\` names no source file`);
+            continue;
+        }
+        for (const [file, sources] of regions) {
+            if (sources.includes(source)) {
+                problems.push(`loads \`${source}\` (${path.relative(packageDir, file)})`);
+            }
+        }
+    }
+    return problems;
 }
 
 /** The id of the entry module the Vite lane bundles from. */
@@ -707,22 +1027,50 @@ export async function viteAppBundle(entryPaths, packageDir) {
  * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
  */
 async function viteAppBuild(entryPaths, packageDir) {
-    const { build } = await import('vite');
     const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    const external = ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})];
-    // An app's entry exports nothing, so a namespace has to be used to stay.
-    const contents = entryPaths
+    return viteSiteBuild({
+        contents: globalEntry(entryPaths),
+        root: packageDir,
+        nodeEnv: 'production',
+        external: ['@csszyx', ...Object.keys(manifest.peerDependencies ?? {})],
+    });
+}
+
+/** An app entry for Vite: it exports nothing, so each namespace is kept
+ * reachable through a global.
+ *
+ * @param {string[]} entryPaths absolute entry files
+ * @returns {string} the entry's source
+ */
+function globalEntry(entryPaths) {
+    return entryPaths
         .map((entry, i) => `import * as e${i} from ${JSON.stringify(entry)};`)
         .concat(`globalThis.__csszyxSizeGate = [${entryPaths.map((_, i) => `e${i}`).join(', ')}];`)
         .join('\n');
+}
+
+/** `vite build` of one entry source with no config of its own, so its
+ * defaults (Rolldown, the Oxc minifier, the default browser target) decide.
+ * A build error rejects.
+ *
+ * @param {object} options what to build
+ * @param {string} options.contents the entry's source
+ * @param {string} options.root absolute directory imports resolve from
+ * @param {'production' | 'development'} options.nodeEnv the `process.env.NODE_ENV` to define
+ * @param {string[]} options.external packages left out, each with its subpaths
+ * @returns {Promise<Array<{ code: string, moduleIds: string[] }>>} every chunk with its modules in layout order
+ */
+async function viteSiteBuild(options) {
+    const { build } = await import('vite');
+    const { contents, root, nodeEnv, external } = options;
     // One output, so one result: a watcher or a list would fail on `.output`.
     const { output } = await build({
         configFile: false,
-        root: packageDir,
+        root,
         publicDir: false,
         logLevel: 'silent',
-        mode: 'production',
-        define: { 'process.env.NODE_ENV': '"production"' },
+        mode: nodeEnv,
+        define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
         plugins: [
             {
                 name: 'csszyx-size-gate-entry',
@@ -744,31 +1092,297 @@ async function viteAppBuild(entryPaths, packageDir) {
         .map(chunk => ({ code: chunk.code, moduleIds: chunk.moduleIds }));
 }
 
-/** Console calls whose first argument opens with a string literal: the
- * method, then the text up to the first interpolation or quote. Ordered
- * alternation and a negated class keep the scan linear on minified input. */
-const CONSOLE_CALL_PATTERN =
-    /console\.(warn|error|log|info|debug)\(\s*([`"'])?((?:(?!\$\{)[^`"'\\])*)/g;
+/** The parser the sink gate reads a bundle with: the compiler's own
+ * dependency, resolved from the compiler so the gate needs no copy of it. */
+const { parseSync } = createRequire(new URL('../packages/compiler/package.json', import.meta.url))(
+    'oxc-parser',
+);
 
-/** The messages a bundle can print, one entry per console call: `method: head`,
- * where head is the literal's opening text (at most 56 characters) or
- * `<expr>` when the first argument is not a string literal.
+/** The console methods whose first argument is a message. */
+const CONSOLE_METHODS = new Set(['warn', 'error', 'log', 'info', 'debug']);
+
+/** A native error class, the one constructor name a minifier keeps:
+ * `Error`, `TypeError`, `SyntaxError`, … */
+const NATIVE_ERROR = /^(?:[A-Z][A-Za-z]*)?Error$/;
+
+/** The head of a registered line: `[csszyx] <code>: `. */
+const CODE_HEAD = /^\[csszyx\] ([a-z][a-z0-9]*(?:-[a-z0-9]+)*): /;
+
+/** How much of a prose literal a head keeps. */
+const HEAD_LENGTH = 56;
+
+/** Each error class the registry names (`surfaces.error.classes`), by the one
+ * id it throws under. A class listed under two ids throws either, so its
+ * code is not known from the class and it is left out.
  *
- * @param {string} code a bundle
- * @returns {string[]} message heads, sorted
+ * @param {Array<{ id: string, surfaces: { error?: { classes?: string[] } } }>} diagnostics the registry's entries
+ * @returns {Map<string, string>} class name → id
  */
-export function consoleMessages(code) {
-    return [...code.matchAll(CONSOLE_CALL_PATTERN)]
-        .map(([, method, quote, text]) => `${method}: ${quote ? text.slice(0, 56) : '<expr>'}`)
-        .sort();
+export function errorClassCodesOf(diagnostics) {
+    const codes = new Map();
+    const shared = new Set();
+    for (const { id, surfaces } of diagnostics) {
+        for (const name of surfaces.error?.classes ?? []) {
+            if (codes.has(name)) shared.add(name);
+            codes.set(name, id);
+        }
+    }
+    for (const name of shared) codes.delete(name);
+    return codes;
 }
 
-/** Compare a bundle's console messages with the ones its budget allows, as
+/** The registry's error classes, by id. */
+const ERROR_CLASS_CODES = errorClassCodesOf(registry.DIAGNOSTICS);
+
+/** A message as the literal text and the expressions it is built from, in
+ * order: a string, a template literal, or a `+` chain of them.
+ *
+ * @param {any} node an expression
+ * @returns {Array<{ text: string } | { expr: true }>} the parts
+ */
+function messageParts(node) {
+    if (node.type === 'ParenthesizedExpression') return messageParts(node.expression);
+    if (node.type === 'Literal' && typeof node.value === 'string') return [{ text: node.value }];
+    if (node.type === 'TemplateLiteral') {
+        return node.quasis.flatMap((quasi, i) =>
+            i < node.expressions.length
+                ? [{ text: quasi.value.cooked }, { expr: true }]
+                : [{ text: quasi.value.cooked }],
+        );
+    }
+    if (node.type === 'BinaryExpression' && node.operator === '+') {
+        return [...messageParts(node.left), ...messageParts(node.right)];
+    }
+    return [{ expr: true }];
+}
+
+/** Whether a message opens with literal text. */
+const literalLed = node => 'text' in messageParts(node)[0];
+
+/** The head a sink's message is read by. The compact production line,
+ * `[csszyx] <code>: <args> https://csszyx.com/e/<code>`, reads as its code
+ * head alone; any other literal text beside it is prose, read as written so
+ * no list can allow it by its code. A message that opens with no literal is
+ * `<expr>`.
+ *
+ * @param {any} node the message expression, or nothing
+ * @returns {string} the head
+ */
+function messageHead(node) {
+    if (node === undefined) return '<expr>';
+    const parts = messageParts(node);
+    const [first] = parts;
+    if (!('text' in first)) return '<expr>';
+    const head = CODE_HEAD.exec(first.text);
+    if (head === null || first.text.length > head[0].length) {
+        return first.text.slice(0, HEAD_LENGTH);
+    }
+    const link = ` https://csszyx.com/e/${head[1]}`;
+    const prose = parts
+        .slice(1)
+        .find(part => 'text' in part && part.text !== '' && part.text !== link);
+    return prose === undefined ? head[0] : `${head[0]}…${prose.text}`;
+}
+
+/** The message of a csszyx error built from its options,
+ * `{ code, args, message }`, with the code checked against the head: a
+ * `code` the message does not name is a line no page explains.
+ *
+ * @param {any} node an argument
+ * @returns {string | undefined} the head, or nothing for any other argument
+ */
+function optionsHead(node) {
+    if (node?.type !== 'ObjectExpression') return undefined;
+    const property = name =>
+        node.properties.find(
+            p => p.type === 'Property' && !p.computed && (p.key.name ?? p.key.value) === name,
+        )?.value;
+    const message = property('message');
+    const code = property('code');
+    if (message === undefined || code === undefined) return undefined;
+    const head = messageHead(message);
+    const named = CODE_HEAD.exec(head)?.[1];
+    return code.type === 'Literal' && named !== undefined && code.value !== named
+        ? `${head}(code ${code.value})`
+        : head;
+}
+
+/** The messages a bundle can print or throw, read from its syntax tree, one
+ * head per sink (ADR 0031 §6, the sinks `validate-undocumented-warnings`
+ * reads): `method: head` for a console call, and `throw: head` for
+ *
+ * - a native error built with a message (`new TypeError(…)`),
+ * - a csszyx error built from its options, by whatever name the minifier
+ *   gave its class, directly or through a subclass's `super(…)`,
+ * - a `super(…)` or a `throw` handed literal text, and
+ * - a class the registry names, imported under any name, which throws its
+ *   id: its message is worded, and read, in the package that defines it.
+ *
+ * Passthrough sinks are allowed by what they are (ADR 0031 item 5): a throw
+ * of a caught value, of a call's result, or of a class that words its own
+ * message carries no message at the throw, and its message is read where the
+ * error is built. A non-literal message handed to a console call or a native
+ * error reads `<expr>`, which a budget must name to let through.
+ *
+ * @param {string} code a bundle
+ * @param {ReadonlyMap<string, string>} [classCodes] error class → id, from {@link errorClassCodesOf}
+ * @returns {string[]} the heads, sorted
+ */
+export function sinkMessages(code, classCodes = ERROR_CLASS_CODES) {
+    const { program, errors } = parseSync('bundle.js', code, { sourceType: 'module' });
+    if (errors.length > 0) throw new Error(`cannot read the bundle: ${errors[0].message}`);
+    const imported = new Map();
+    for (const node of program.body) {
+        if (node.type !== 'ImportDeclaration') continue;
+        for (const specifier of node.specifiers) {
+            const name = specifier.imported?.name ?? specifier.imported?.value;
+            if (classCodes.has(name)) imported.set(specifier.local.name, classCodes.get(name));
+        }
+    }
+    const heads = [];
+    const sink = node => {
+        const [first] = node.arguments ?? [];
+        const { callee } = node;
+        if (node.type === 'ThrowStatement') {
+            if (literalLed(node.argument)) heads.push(`throw: ${messageHead(node.argument)}`);
+        } else if (
+            node.type === 'CallExpression' &&
+            callee.type === 'MemberExpression' &&
+            !callee.computed &&
+            callee.object.type === 'Identifier' &&
+            callee.object.name === 'console' &&
+            CONSOLE_METHODS.has(callee.property.name)
+        ) {
+            heads.push(`${callee.property.name}: ${messageHead(first)}`);
+        } else if (node.type === 'NewExpression' && imported.has(callee.name)) {
+            heads.push(`throw: [csszyx] ${imported.get(callee.name)}: `);
+        } else if (
+            node.type === 'NewExpression' ||
+            (node.type === 'CallExpression' && callee.type === 'Super')
+        ) {
+            const head =
+                optionsHead(first) ??
+                (NATIVE_ERROR.test(callee.name) ||
+                (callee.type === 'Super' && first !== undefined && literalLed(first))
+                    ? messageHead(first)
+                    : undefined);
+            if (head !== undefined) heads.push(`throw: ${head}`);
+        }
+    };
+    const visit = node => {
+        if (Array.isArray(node)) {
+            for (const child of node) visit(child);
+            return;
+        }
+        if (node === null || typeof node !== 'object') return;
+        if (typeof node.type === 'string') sink(node);
+        for (const [key, value] of Object.entries(node)) {
+            if (key !== 'parent') visit(value);
+        }
+    };
+    visit(program);
+    return heads.sort();
+}
+
+/** The lines a production bundle may print and the errors it may throw, by
+ * the code that heads them: every registry id that prints in production
+ * (`runtime.production` true, or a list of the forms that do) from one of
+ * the bundle's source files, with the method its entry names, and every id
+ * it throws (`surfaces.error`, unless `production` is false) from one of
+ * them. Read from the registry so the list is never written twice (ADR
+ * 0031); a site writes the compact form inline,
+ * `[csszyx] <code>: <args JSON> <link>`, whose head {@link sinkMessages}
+ * reads.
+ *
+ * @param {Array<{ id: string, surfaces: { runtime?: { production: boolean | string[], console?: 'error' }, error?: { host: string, production?: false } }, sources?: string[] }>} diagnostics the registry's entries
+ * @param {ReadonlySet<string>} files the sources the bundle can hold, repository-relative
+ * @returns {string[]} the heads, `method: [csszyx] <code>: ` and `throw: [csszyx] <code>: `, sorted
+ */
+export function productionCodesOf(diagnostics, files) {
+    const heads = [];
+    for (const { id, surfaces, sources = [] } of diagnostics) {
+        if (!sources.some(source => files.has(source.replace(/:\d+$/, '')))) continue;
+        const production = surfaces.runtime?.production;
+        if (production === true || (Array.isArray(production) && production.length > 0)) {
+            heads.push(`${surfaces.runtime.console ?? 'warn'}: [csszyx] ${id}: `);
+        }
+        const thrown = surfaces.error;
+        if (thrown !== undefined && thrown.host !== 'node' && thrown.production !== false) {
+            heads.push(`throw: [csszyx] ${id}: `);
+        }
+    }
+    return heads.sort();
+}
+
+/** Compare the lines a bundle prints and throws with the codes the registry
+ * lets it print in production, as sets: one sink per site, and one code may
+ * have several sites. A head no code allows is a development line that
+ * failed to fold, a sentence where the compact line belongs, or a line
+ * printed through another method than the registry names; a required head
+ * the bundle no longer prints is a stale entry or a lost site. The required
+ * heads are the allowed ones, unless a budget measures a file that holds
+ * only what its entry reaches. A bundle with no sink at all fails too when
+ * the registry lets it print something: the scan must find the sinks it
+ * checks, or a reader that stopped matching would pass every bundle. One the
+ * registry lets print nothing passes only while it prints nothing.
+ *
+ * @param {string[]} printed heads from {@link sinkMessages}
+ * @param {string[]} allowed heads from {@link productionCodesOf}, and the ones a budget names
+ * @param {string[]} [required] heads the bundle must print
+ * @returns {string[]} one problem per mismatch
+ */
+export function codeProblems(printed, allowed, required = allowed) {
+    const problems = [];
+    if (printed.length === 0 && allowed.length > 0) {
+        problems.push('found no sink to check, so the sink scan read nothing');
+    }
+    for (const head of new Set(printed)) {
+        if (!allowed.includes(head)) {
+            problems.push(
+                `prints "${head}", which the registry does not mark as printing in production`,
+            );
+        }
+    }
+    for (const head of required) {
+        if (!printed.includes(head)) problems.push(`no longer prints "${head}"`);
+    }
+    return problems;
+}
+
+/** The sink failures of one production bundle against its budget: the
+ * registry's codes when the budget reads them, and a hand-written list
+ * otherwise.
+ *
+ * @param {(typeof SIZE_BUDGETS)[number]} budget the budget
+ * @param {string} bundle the bundle
+ * @returns {string[]} failure messages
+ */
+function sinkFailures(budget, bundle) {
+    const printed = sinkMessages(bundle);
+    const named = [...(budget.nonRegistryMessages ?? []), ...(budget.passthroughSinks ?? [])];
+    const problems =
+        budget.productionCodes === undefined
+            ? messageProblems(printed, budget.productionMessages ?? [])
+            : codeProblems(
+                  printed,
+                  [...budget.productionCodes, ...named],
+                  [...(budget.requiredCodes ?? budget.productionCodes), ...named],
+              );
+    return problems.map(
+        problem =>
+            `${budget.name}: the production bundle ${problem}. Only a message that ` +
+            "reports csszyx's own output as wrong or missing, a security or a crash " +
+            'stays in production (ADR 0011), as its code (ADR 0031); anything else checks ' +
+            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
+    );
+}
+
+/** Compare a bundle's sink messages with the ones its budget allows, as
  * multisets, both ways: a message nobody listed is a development warning that
  * failed to fold (or a new production message that needs a decision, ADR
  * 0011), and a listed message the bundle no longer prints is a stale list.
  *
- * @param {string[]} printed heads from {@link consoleMessages}
+ * @param {string[]} printed heads from {@link sinkMessages}
  * @param {string[]} allowed heads the budget lists
  * @returns {string[]} one problem per mismatch
  */
@@ -885,12 +1499,37 @@ export function checkBudgets(budgets, rootDir) {
                 }
                 files = nodeEntryFiles(entry.file);
                 gzipBytes = gzipTotalBytes(files);
+                const excluded = budget.excludedModules ?? [];
+                for (const problem of excluded.length > 0
+                    ? excludedModuleProblems(files, excluded, target)
+                    : []) {
+                    failures.push(
+                        `${budget.name}: ${problem}. A module kept out of what Node loads ` +
+                            'costs every build its bytes; see the budget for where it belongs.',
+                    );
+                }
+            } else if (budget.kind === 'installed-app') {
+                const { code, moduleIds } = installedAppBuild(budget, rootDir);
+                files = moduleIds;
+                gzipBytes = gzipSync(code, { level: 9 }).length;
+                failures.push(
+                    ...orderFailures(`${budget.name}:`, moduleIds, budget.moduleOrder ?? []),
+                );
             } else if (budget.kind === 'file') {
                 // A binary artifact is one opaque file: no import graph to
                 // bundle, but its absence is still a failure, never a pass.
-                statSync(target);
+                // Read once: the size, the sinks and the build comparison all
+                // judge these bytes, not a file that may change between reads.
+                const bytes = readFileSync(target);
                 files = [target];
-                gzipBytes = gzipTotalBytes(files);
+                gzipBytes = gzipSync(bytes, { level: 9 }).length;
+                // A production bundle shipped as a file is read like an app's.
+                if (budget.productionCodes !== undefined) {
+                    failures.push(...sinkFailures(budget, bytes.toString('utf8')));
+                }
+                if (budget.build !== undefined) {
+                    failures.push(...builtFileFailures(budget, target, bytes.toString('utf8')));
+                }
             } else {
                 files = listExportEntries(target, budget.excludeSubpaths);
                 if (files.length === 0) {
@@ -898,17 +1537,7 @@ export function checkBudgets(budgets, rootDir) {
                 }
                 const bundle = appBundle(files, target);
                 gzipBytes = gzipSync(bundle, { level: 9 }).length;
-                for (const problem of messageProblems(
-                    consoleMessages(bundle),
-                    budget.productionMessages ?? [],
-                )) {
-                    failures.push(
-                        `${budget.name}: the production bundle ${problem}. Only a message that ` +
-                            "reports csszyx's own output as wrong or missing, a security or a crash " +
-                            'stays in production (ADR 0011); anything else checks ' +
-                            "`process.env.NODE_ENV !== 'production'` at the call site so the bundler drops it.",
-                    );
-                }
+                failures.push(...sinkFailures(budget, bundle));
                 if (budget.entryBudgets) {
                     const entries = listExportSubpaths(target, budget.excludeSubpaths);
                     for (const problem of entryBudgetProblems(
@@ -1017,12 +1646,300 @@ export async function checkViteBudgets(budgets, rootDir) {
     return { results, failures };
 }
 
+/** The ids whose templates the leak gate looks for: every id the browser
+ * module carries, read from the registry the generator writes it from. */
+export const TEMPLATE_DIAGNOSTICS = browserDiagnostics(registry);
+
+/** The positive control: a site written the way a browser entry reports a
+ * diagnostic, `szReport` on the development branch of a `NODE_ENV` check. A
+ * development build of it must carry the id's templates, or the production
+ * check could pass for a template that was never bundled at all. */
+export const TEMPLATE_CONTROL = {
+    resolveDir: 'packages/runtime',
+    id: 'removed-key',
+    contents:
+        "import { REMOVED_KEY, szReport } from '@csszyx/compiler/report';\n" +
+        "if (process.env.NODE_ENV !== 'production') {\n" +
+        "    szReport({ diagnostic: REMOVED_KEY, args: { form: 'removed', key: 'fontVariant' } });\n" +
+        '}\n',
+};
+
+/** Every template string the ids carry, each form of each field: what a
+ * bundle holds as a string literal whenever it holds the template.
+ *
+ * @param {Array<{ id: string, text?: unknown, help?: unknown, note?: unknown }>} diagnostics the ids, with their templates
+ * @returns {Array<{ id: string, text: string }>} the templates, in registry order
+ */
+export function templateTexts(diagnostics) {
+    const texts = [];
+    for (const diagnostic of diagnostics) {
+        for (const field of ['text', 'help', 'note']) {
+            const value = diagnostic[field];
+            if (value === undefined) continue;
+            for (const text of typeof value === 'string' ? [value] : Object.values(value)) {
+                texts.push({ id: diagnostic.id, text });
+            }
+        }
+    }
+    return texts;
+}
+
+/** The value of every string literal in a bundle, as parsed: whichever
+ * quotes and escapes a minifier picks, a literal reads as the text it holds.
+ *
+ * @param {string} code a bundle
+ * @returns {Set<string>} the values
+ */
+function stringLiterals(code) {
+    const source = ts.createSourceFile(
+        'bundle.js',
+        code,
+        ts.ScriptTarget.Latest,
+        false,
+        ts.ScriptKind.JS,
+    );
+    const values = new Set();
+    const visit = node => {
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+            values.add(node.text);
+        ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return values;
+}
+
+/** The templates a bundle holds, each as a whole string literal. Prose that
+ * shares words with a template is not one: a template holds its `{name}`
+ * placeholders, or, with none, is the whole sentence as the registry words it.
+ *
+ * @param {string} code a bundle
+ * @param {Array<{ id: string, text: string }>} texts from {@link templateTexts}
+ * @returns {Array<{ id: string, text: string }>} the ones found
+ */
+export function templateLeaks(code, texts) {
+    const literals = stringLiterals(code);
+    return texts.filter(({ text }) => literals.has(text));
+}
+
+/** The peer dependencies an app brings itself, for a package and the csszyx
+ * packages it depends on: a build that bundles the siblings leaves these out.
+ * Each sibling is read where the package resolves it, its `node_modules`. A
+ * csszyx package is never one of them, though one names another as its peer
+ * (`@csszyx/unplugin` names `@csszyx/runtime`): the csszyx packages are what
+ * the build bundles.
+ *
+ * @param {string} packageDir absolute package directory
+ * @returns {string[]} the package names
+ */
+function appPeers(packageDir) {
+    const read = dir => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    const manifest = read(packageDir);
+    const peers = new Set(Object.keys(manifest.peerDependencies ?? {}));
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
+        const sibling = path.join(packageDir, 'node_modules', name);
+        if (!name.startsWith('@csszyx/') || !existsSync(path.join(sibling, 'package.json'))) {
+            continue;
+        }
+        for (const peer of Object.keys(read(sibling).peerDependencies ?? {})) peers.add(peer);
+    }
+    return [...peers].filter(name => !name.startsWith('@csszyx/'));
+}
+
+/** Bundle a site the way an app ships it, csszyx siblings included, so code
+ * a package imports from another csszyx package is in the bundle, each
+ * sibling from its built `dist` ({@link INSTALLED_RESOLUTION}): through the
+ * repository's tsconfig `paths` the runtime's bundle held the compiler's
+ * source, a layout no user gets, with a second copy of `errors` and
+ * `sz-limits` beside the `dist` ones its subpath imports reach.
+ *
+ * @param {object} options what to build
+ * @param {string} options.contents the entry's source
+ * @param {string} options.resolveDir absolute directory imports resolve from
+ * @param {'production' | 'development'} options.nodeEnv the `process.env.NODE_ENV` to define
+ * @param {string[]} options.external packages left out
+ * @returns {string} the minified bundle
+ */
+function siteBundle(options) {
+    const { contents, resolveDir, nodeEnv, external } = options;
+    return buildSync({
+        stdin: { contents, resolveDir, loader: 'js' },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        minify: true,
+        treeShaking: true,
+        ...INSTALLED_RESOLUTION,
+        external,
+        define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
+        logLevel: 'silent',
+    }).outputFiles[0].text;
+}
+
+/** The two-way template gate (ADR 0031, PR C). Every app bundle, built for
+ * production by esbuild and by Vite ({@link TEMPLATE_LANES}) with the csszyx
+ * packages it imports bundled in, must carry no
+ * template text: a template reaches production only through a call outside a
+ * `NODE_ENV` branch, or a template that is not a plain literal (a bare
+ * `Object.freeze` survives in esbuild, Vite and webpack). And a development
+ * build of {@link TEMPLATE_CONTROL} must carry its id's templates, so "none
+ * found" cannot come from a check that sees nothing.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @param {object} [options] what to look for
+ * @param {Array<{ id: string }>} [options.diagnostics] the ids and their templates
+ * @param {{ resolveDir: string, id: string, contents: string }} [options.control] the positive control
+ * @returns {Promise<{ failures: string[], templates: number, bundles: number }>} failures, and what was checked
+ */
+export async function checkTemplateLeaks(budgets, rootDir, options = {}) {
+    const { diagnostics = TEMPLATE_DIAGNOSTICS, control = TEMPLATE_CONTROL } = options;
+    const texts = templateTexts(diagnostics);
+    const failures = [];
+    if (texts.length === 0) {
+        failures.push('template leak gate: no template to look for, so no bundle can fail');
+        return { failures, templates: 0, bundles: 0 };
+    }
+    let bundles = 0;
+    for (const lane of TEMPLATE_LANES) {
+        for (const budget of budgets.filter(b => b.kind === 'app-bundle')) {
+            const target = path.join(rootDir, budget.target);
+            const name = `${budget.name}${lane.suffix}`;
+            let code;
+            try {
+                const entries = listExportEntries(target, budget.excludeSubpaths);
+                code = await lane.build({
+                    contents: lane.entry(entries),
+                    resolveDir: target,
+                    nodeEnv: 'production',
+                    external: appPeers(target),
+                });
+            } catch (error) {
+                failures.push(`${name}: ${error.message} — run \`pnpm build\` first?`);
+                continue;
+            }
+            bundles += 1;
+            for (const { id, text } of templateLeaks(code, texts)) {
+                failures.push(
+                    `${name}: the production bundle carries the development text "${text}" ` +
+                        `of \`${id}\`. Report it with \`szReport\` only inside a ` +
+                        "`process.env.NODE_ENV !== 'production'` branch, and keep the template a plain literal.",
+                );
+            }
+        }
+        failures.push(...(await controlFailures(lane, rootDir, control, texts)));
+    }
+    const shipped = shippedTemplateFailures(budgets, rootDir, texts);
+    failures.push(...shipped.failures);
+    return { failures, templates: texts.length, bundles: bundles + shipped.bundles };
+}
+
+/** The leak gate over what ships built rather than what an app builds: each
+ * `kind: 'file'` budget that declares `templateFree`, read from its bytes on
+ * disk, and the installed app, built for production. A file's `allowedIds`
+ * names the ids it carries the words of by design.
+ *
+ * @param {typeof SIZE_BUDGETS} budgets budget entries with repo-relative targets
+ * @param {string} rootDir absolute repository root
+ * @param {Array<{ id: string, text: string }>} texts every template
+ * @returns {{ failures: string[], bundles: number }} failures, and how many were read
+ */
+function shippedTemplateFailures(budgets, rootDir, texts) {
+    const failures = [];
+    let bundles = 0;
+    for (const budget of budgets) {
+        const scan =
+            budget.kind === 'installed-app'
+                ? {}
+                : budget.kind === 'file'
+                  ? budget.templateFree
+                  : undefined;
+        if (scan === undefined) continue;
+        let code;
+        try {
+            code =
+                budget.kind === 'installed-app'
+                    ? installedAppBuild(budget, rootDir).code
+                    : readFileSync(path.join(rootDir, budget.target), 'utf8');
+        } catch (error) {
+            failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
+            continue;
+        }
+        bundles += 1;
+        const allowed = new Set(scan.allowedIds ?? []);
+        for (const { id, text } of templateLeaks(code, texts)) {
+            if (allowed.has(id)) continue;
+            failures.push(
+                `${budget.name}: the production bundle carries the development text "${text}" ` +
+                    `of \`${id}\`. Report it with \`szReport\` only inside a ` +
+                    "`process.env.NODE_ENV !== 'production'` branch, and keep the template a plain literal.",
+            );
+        }
+    }
+    return { failures, bundles };
+}
+
+/** The control's failures in one lane: its development build must carry each
+ * of its id's templates, its production build none.
+ *
+ * @param {(typeof TEMPLATE_LANES)[number]} lane the bundler
+ * @param {string} rootDir absolute repository root
+ * @param {{ resolveDir: string, id: string, contents: string }} control the positive control
+ * @param {Array<{ id: string, text: string }>} texts every template
+ * @returns {Promise<string[]>} failure messages
+ */
+async function controlFailures(lane, rootDir, control, texts) {
+    const label = `template leak control${lane.suffix}`;
+    const dir = path.join(rootDir, control.resolveDir);
+    const build = nodeEnv =>
+        lane.build({
+            contents: control.contents,
+            resolveDir: dir,
+            nodeEnv,
+            external: appPeers(dir),
+        });
+    const failures = [];
+    try {
+        const expected = texts.filter(({ id }) => id === control.id);
+        const kept = templateLeaks(await build('development'), expected);
+        for (const { text } of expected.filter(template => !kept.includes(template))) {
+            failures.push(
+                `${label}: a development build of a site that reports \`${control.id}\` ` +
+                    `lacks "${text}", so a production bundle without it proves nothing.`,
+            );
+        }
+        for (const { id, text } of templateLeaks(await build('production'), texts)) {
+            failures.push(`${label}: its production build carries "${text}" of \`${id}\`.`);
+        }
+    } catch (error) {
+        failures.push(`${label}: ${error.message} — run \`pnpm build\` first?`);
+    }
+    return failures;
+}
+
+/** The bundlers the template gate builds with: esbuild, and Vite (Rolldown
+ * and the Oxc minifier), which drop dead branches and unused literals by
+ * different rules. */
+const TEMPLATE_LANES = [
+    { suffix: '', entry: namespaceEntry, build: async options => siteBundle(options) },
+    {
+        suffix: ' (Vite)',
+        entry: globalEntry,
+        build: async ({ contents, resolveDir, nodeEnv, external }) =>
+            (await viteSiteBuild({ contents, root: resolveDir, nodeEnv, external }))
+                .map(chunk => chunk.code)
+                .join('\n'),
+    },
+];
+
 async function main() {
     const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const { results, failures } = checkBudgets(SIZE_BUDGETS, rootDir);
     const vite = await checkViteBudgets(SIZE_BUDGETS, rootDir);
     results.push(...vite.results);
     failures.push(...vite.failures);
+    const leaks = await checkTemplateLeaks(SIZE_BUDGETS, rootDir);
+    failures.push(...leaks.failures);
     for (const result of results) {
         const headroom = result.maxGzipBytes - result.gzipBytes;
         console.log(
@@ -1030,6 +1947,10 @@ async function main() {
                 `(${result.files.length} files, ${headroom >= 0 ? `${headroom} under` : `${-headroom} over`})`,
         );
     }
+    console.log(
+        `Template leak gate: ${leaks.templates} templates looked for in ${leaks.bundles} ` +
+            'production app bundles and shipped files, and the development control.',
+    );
     if (failures.length > 0) {
         throw new Error(`Package size check failed:\n- ${failures.join('\n- ')}`);
     }

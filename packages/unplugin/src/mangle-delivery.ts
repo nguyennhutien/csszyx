@@ -17,6 +17,8 @@
  * @module mangle-delivery
  */
 
+import { diagnosticMessage } from './diagnostic-message.js';
+
 /**
  * Whether runtime helpers need the map registered for this build.
  *
@@ -43,16 +45,6 @@ export function needsRuntimeMangleRegistration(
 
 /**
  * The once-per-build notice for a config that still sets the removed
- * `production.mangleMapDelivery` option.
- *
- * An unread option is silent, so an author who set `'html'` to get the inline
- * installer would otherwise never learn that the installer is gone — and one
- * who set `'bundle'` for CSP would not learn that they can drop the line.
- *
- * @returns The warning text.
- */
-/**
- * The once-per-build notice for a config that still sets the removed
  * `production.injectChecksum` option.
  *
  * The option was never read: the checksum attribute and the census both shipped
@@ -63,13 +55,7 @@ export function needsRuntimeMangleRegistration(
  * @returns The warning text.
  */
 export function removedInjectChecksumMessage(): string {
-    return (
-        '[csszyx] production.injectChecksum has been removed and was never read. The hydration ' +
-        'checksum and the inert census ship on every production build, and no option turned ' +
-        'them off — a build that set this to false still carried both. Delete the option. The ' +
-        'census carries no class entries when production.mangle is off, and both tags are data, ' +
-        'not script: see https://csszyx.com/docs/security/'
-    );
+    return diagnosticMessage('removed-option', { form: 'inject-checksum' });
 }
 
 /**
@@ -83,11 +69,5 @@ export function removedInjectChecksumMessage(): string {
  * @returns The warning text.
  */
 export function removedMangleMapDeliveryMessage(): string {
-    return (
-        '[csszyx] production.mangleMapDelivery has been removed and is ignored. The runtime ' +
-        'mangle map is always registered from inside the JS bundle now, on every lane, so the ' +
-        "built HTML never carries an executable inline <script> and a strict script-src 'self' " +
-        'policy needs no exception. Delete the option. (`window.__csszyx` is now opt-in through ' +
-        '`production.mangleDebugGlobal`.)'
-    );
+    return diagnosticMessage('removed-option', { form: 'mangle-map-delivery' });
 }

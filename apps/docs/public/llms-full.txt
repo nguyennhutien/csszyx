@@ -33,7 +33,7 @@ const csszyxWebpack = require("@csszyx/unplugin/webpack").default;
 
 module.exports = {
   webpack(config) {
-    config.plugins.unshift(...csszyxWebpack());
+    config.plugins.unshift(csszyxWebpack());
     return config;
   },
 };

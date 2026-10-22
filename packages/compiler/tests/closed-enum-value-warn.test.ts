@@ -79,7 +79,7 @@ describe('closed-enum values', () => {
             ]);
             expect(diagnostics).toHaveLength(1);
             const [hit] = diagnostics;
-            expect(hit).toContain(`\`${key}: ${bad}\` is not a \`${key}\` value.`);
+            expect(hit).toContain(`\`${key}: '${bad}'\` is not a \`${key}\` value.`);
             expect(hit).toContain(`the class \`${bare}\` is still emitted`);
             expect(hit).toContain('help: use one of: ');
         },
@@ -137,7 +137,7 @@ describe('closed-enum values the runtime lane names', () => {
             ],
         ]);
         expect(diagnostics[0]).toContain(
-            "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` generates no CSS.",
+            "`justify: 'flex-start'` is a CSS value, and `justify-flex-start` produces no CSS.",
         );
         expect(diagnostics[0]).toContain("help: use the short form: `{ justify: 'start' }`.");
     });

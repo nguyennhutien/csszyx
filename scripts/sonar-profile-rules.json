@@ -1,6 +1,5 @@
 {
     "format": 1,
-    "profile": "Sonar way comprehensive",
     "language": "ts",
     "rules": [
         {
@@ -544,6 +543,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S5260",
+            "rule": "sonarjs/table-header-reference",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S5264",
             "rule": "sonarjs/object-alt-content",
             "scope": "MAIN"
@@ -879,6 +883,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6551",
+            "rule": "@typescript-eslint/no-base-to-string",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6557",
             "rule": "@typescript-eslint/prefer-string-starts-ends-with",
             "scope": "MAIN"
@@ -931,6 +940,16 @@
         {
             "key": "typescript:S7639",
             "rule": "sonarjs/review-blockchain-mnemonic",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7737",
+            "rule": "unicorn/no-object-as-default-parameter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7741",
+            "rule": "unicorn/no-typeof-undefined",
             "scope": "MAIN"
         },
         {
@@ -999,6 +1018,11 @@
             "scope": "TEST"
         },
         {
+            "key": "typescript:S8786",
+            "rule": "sonarjs/super-linear-regex",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S888",
             "rule": "sonarjs/no-equals-in-for-termination",
             "scope": "MAIN"
@@ -1059,6 +1083,16 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S9135",
+            "rule": "sonarjs/avoid-mutating-nested-properties-of-shallow-clones",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S9144",
+            "rule": "sonarjs/prefer-native-jquery-alternative",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S9145",
             "rule": "sonarjs/no-vue-class-component",
             "scope": "MAIN"
@@ -1087,6 +1121,11 @@
             "key": "typescript:S9169",
             "rule": "sonarjs/vitest-mock-at-module-scope",
             "scope": "TEST"
+        },
+        {
+            "key": "typescript:S9339",
+            "rule": "sonarjs/prefer-native-axios-alternative",
+            "scope": "MAIN"
         },
         {
             "key": "typescript:S9382",

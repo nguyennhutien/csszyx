@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isValidManifest, loadManifestFromDOM, verifyAllTokens } from '../src/verify.js';
+import { jsonErrorOf, manifestUnreadableLine } from './helpers/hydration-lines.js';
 
 const manifest = { buildId: 'b1', checksum: 'c1', mangleChecksum: 'm1', tokens: {} };
 
@@ -36,7 +37,7 @@ describe('loadManifestFromDOM', () => {
         document.body.appendChild(script);
         const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
         expect(loadManifestFromDOM()).toBeNull();
-        expect(errorLog).toHaveBeenCalled();
+        expect(errorLog.mock.calls).toEqual([[manifestUnreadableLine(jsonErrorOf('{ not json'))]]);
     });
 });
 

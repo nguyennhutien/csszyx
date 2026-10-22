@@ -34,7 +34,17 @@ export default defineConfig({
             // not build output. Left out of the denominator it was invisible
             // here while Sonar, which reads the same report but its own file
             // list, counted every line of it as uncovered.
-            include: ['packages/*/src/**/*.{ts,tsx}', 'packages/*/native/**/*.js'],
+            //
+            // A module at a package's root is the same case: `cdn-build.mjs`
+            // holds the options both CDN bundles are built from, Sonar counts
+            // it, and its new lines arrived uncovered while every local check
+            // passed. The build configurations beside it are left out below,
+            // as `sonar.coverage.exclusions` leaves them out.
+            include: [
+                'packages/*/src/**/*.{ts,tsx}',
+                'packages/*/native/**/*.js',
+                'packages/*/*.{js,mjs,cjs}',
+            ],
             exclude: [
                 '**/*.d.ts',
                 '**/dist/**',
@@ -42,6 +52,9 @@ export default defineConfig({
                 '**/*.test.ts',
                 '**/*.type-test.ts', // type-only assertions, no runtime to cover
                 '**/scripts/**',
+                // Build configuration, run by `pnpm build` (sonar-project.properties).
+                '**/tsdown.config.mjs',
+                '**/esbuild.mjs',
                 'packages/e2e/**',
                 // packages/ts-plugin ships its own c8 run over the built dist,
                 // and that report is uploaded alongside this one. Measuring it

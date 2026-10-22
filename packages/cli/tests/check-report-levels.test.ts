@@ -10,7 +10,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { createDiagnosticPolicy } from '@csszyx/unplugin/diagnostics';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createReporter } from '../src/scanner/check-report.js';
+import { createReporter, partLines } from '../src/scanner/check-report.js';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -65,5 +65,16 @@ describe('the check reporter', () => {
                 level: 'warn',
             },
         ]);
+    });
+});
+
+describe('the labelled lines under a finding', () => {
+    it('prints a line for each part the finding has, and none for one it lacks', () => {
+        expect(partLines({ help: 'do this.', note: 'this held.' }, '  ')).toEqual([
+            '  help: do this.',
+            '  note: this held.',
+        ]);
+        expect(partLines({ note: 'this held.' }, '    ')).toEqual(['    note: this held.']);
+        expect(partLines({}, '  ')).toEqual([]);
     });
 });

@@ -9,6 +9,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { productionMessage } from '../../compiler/tests/engine-message.js';
+import { formatSkewLine, MISSING_TABLE_LINE } from './helpers/merge-lines.js';
+
 afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -43,12 +46,15 @@ describe('a table the build wrote', () => {
     });
 
     it('is refused, keeping every class, when written in another format', async () => {
-        const { runtime, printed } = await fresh();
+        const { runtime, warn } = await fresh();
         runtime.registerMergeSignatures(TABLE, { format: runtime.MERGE_TABLE_FORMAT + 1 });
 
         expect(runtime.szcn('pb-2', 'p-4')).toBe('pb-2 p-4');
-        expect(printed()).toContain('written in format');
-        expect(printed()).toContain('csszyx next prebuild');
+        // With the table refused, the merge has none, and says so too.
+        expect(warn.mock.calls).toEqual([
+            [formatSkewLine(runtime.MERGE_TABLE_FORMAT + 1)],
+            [MISSING_TABLE_LINE],
+        ]);
     });
 
     it('is refused in production with a regeneration warning', async () => {
@@ -57,8 +63,13 @@ describe('a table the build wrote', () => {
         runtime.registerMergeSignatures(TABLE, { format: runtime.MERGE_TABLE_FORMAT + 1 });
 
         expect(runtime.szcn('pb-2', 'p-4')).toBe('pb-2 p-4');
-        expect(printed()).toContain('written in format');
-        expect(printed()).toContain('csszyx next prebuild');
+        // Its code, args and page: the table's format and the one read.
+        expect(printed()).toBe(
+            productionMessage('merge-table-format-skew', {
+                format: runtime.MERGE_TABLE_FORMAT + 1,
+                expected: runtime.MERGE_TABLE_FORMAT,
+            }),
+        );
     });
 
     it('is used when registered by hand, with no format', async () => {
@@ -123,7 +134,7 @@ describe.each(['development', 'production'])('format replacement in %s', environ
             expect.soft(runtime.szcn('pb-2 p-4', 'pb-2')).toBe('p-4 pb-2');
         }
         expect(
-            warn.mock.calls.filter(args => String(args[0]).includes('written in format')),
+            warn.mock.calls.filter(args => String(args[0]).includes('merge-table-format-skew')),
         ).toHaveLength(1);
         runtime.registerMergeSignatures(TABLE, { format: runtime.MERGE_TABLE_FORMAT });
         expect(runtime.szcn('pb-2', 'p-4')).toBe('p-4');

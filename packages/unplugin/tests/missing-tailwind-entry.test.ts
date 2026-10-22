@@ -91,10 +91,12 @@ describe('shouldWarnMissingTailwindEntry', () => {
 });
 
 describe('missingTailwindEntryMessage', () => {
-    it('names the count and the actionable fix', () => {
-        const message = missingTailwindEntryMessage(3);
-        expect(message).toContain('3 sz class');
-        expect(message).toContain('found no CSS entry importing "tailwindcss"');
-        expect(message).toContain('@source');
+    it('is the registry line, with the count', () => {
+        expect(missingTailwindEntryMessage(3)).toBe(
+            '[csszyx] tailwind-stylesheet-absent:\n' +
+                '  This build emitted 3 class(es) for `sz` props and processed no Tailwind stylesheet, so none of those classes produces CSS.\n' +
+                '  help: add `@import "tailwindcss";` to a stylesheet the app loads; csszyx adds the `@source` for its safelist there itself.\n' +
+                '  docs: https://csszyx.com/e/tailwind-stylesheet-absent',
+        );
     });
 });

@@ -11,7 +11,6 @@
 
 import {
     mayHoldSzAttribute,
-    placeTemplateDiagnostic,
     rewriteTemplateSz,
     type SourceMap,
     type TemplateSzAttribute,
@@ -142,15 +141,8 @@ function lowerFile(
     reading: { attributes: TemplateSzAttribute[]; failure: ReadFailure | null },
 ): PreprocessResult {
     if (reading.failure) {
-        const { offset, text } = reading.failure;
-        const placed = placeTemplateDiagnostic({
-            file,
-            filename: options.filename,
-            severity: 'error',
-            offset,
-            text,
-        });
-        return unchanged(file, [placed]);
+        const { offset, place } = reading.failure;
+        return unchanged(file, [place({ file, filename: options.filename, offset })]);
     }
     if (reading.attributes.length === 0) return unchanged(file, []);
     const { code, map, count, classNames, diagnostics } = rewriteTemplateSz(

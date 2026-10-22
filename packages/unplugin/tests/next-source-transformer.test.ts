@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { transformNextSource } from '../src/next-source-transformer.js';
 import { resolveTransformCacheDir } from '../src/transform-cache.js';
+import { internalErrorMessage } from './helpers/internal-error.js';
 
 const tempDirs: string[] = [];
 const PLUGIN_VERSION = packageVersion('../package.json');
@@ -49,7 +50,15 @@ describe('Next source transformer', () => {
                 pluginVersion: PLUGIN_VERSION,
                 compilerVersion: COMPILER_VERSION,
             }),
-        ).toThrow(/internal error[\s\S]*csszyx bug/);
+        ).toThrow(
+            expect.objectContaining({
+                code: 'internal-error',
+                message: internalErrorMessage(
+                    'transformNextSource',
+                    "a Next build asked the engine to transform a module before it read the project's Tailwind prefix",
+                ),
+            }),
+        );
     });
 
     it('keys its cache on the prefix, so a prefix change is not served the old classes', () => {
@@ -120,9 +129,20 @@ describe('Next source transformer', () => {
                 input({
                     parserMode: 'wasm',
                     source: 'const App = <div sz={{ p: 4 }}',
+                    compilerOptions: { classPrefix: null, rootDir: '/repo' },
                 }),
             ),
-        ).toThrow();
+        ).toThrow(
+            expect.objectContaining({
+                code: 'next-sz-untransformed',
+                args: {},
+                message:
+                    '[csszyx] next-sz-untransformed: src/App.tsx\n' +
+                    '  This module still holds `sz` syntax after the csszyx transform, so the build stops.\n' +
+                    '  help: fix the warning reported for this file, such as a syntax error or an `ast-budget` warning for a file too large to transform; if `sz` here is not the `sz` prop, such as an object key of your own, rename it.\n' +
+                    '  docs: https://csszyx.com/e/next-sz-untransformed',
+            }),
+        );
     });
 
     // The fail-closed guard previously tripped on any `sz=` substring,
@@ -189,7 +209,7 @@ describe('Next source transformer', () => {
                     source: 'const marker = /sz=/;\nconst App = <div sz={{ p: 4 }}',
                 }),
             ),
-        ).toThrow();
+        ).toThrow(/^\[csszyx\] next-sz-untransformed: \/repo\/src\/App\.tsx\n/);
     });
     it('will not serve a file the output built against a different table', () => {
         // The registry slice a file compiled against is part of its identity.

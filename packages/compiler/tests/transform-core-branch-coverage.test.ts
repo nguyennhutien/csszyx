@@ -15,6 +15,8 @@ import {
     setSzWarnLocation,
     transform,
 } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
+import { parseSzConsoleLine } from './helpers/sz-console-line.js';
 
 /**
  * className for an sz object (the piece every assertion checks).
@@ -402,7 +404,11 @@ describe('string property handler chain', () => {
             vi.unstubAllEnvs();
         }
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            "[csszyx] fontSmoothing: 'blurry' is not supported — use 'grayscale' or 'subpixel'.",
+            runtimeMessage(
+                'closed-enum-value',
+                "`fontSmoothing: 'blurry'` has no Tailwind class, and nothing is emitted for it.",
+                "help: use `'grayscale'` or `'subpixel'`.",
+            ),
         ]);
         warn.mockRestore();
     });
@@ -607,25 +613,29 @@ describe('input validation and quiet-mode gating', () => {
     });
     it('unknown-key warning carries the runtime shape/frame context', () => {
         cls({ notARealProperty: 'x' } as unknown as SzObject);
-        const messages = warnSpy.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('Unknown property'))).toBe(true);
-        expect(messages.some(m => m.includes('sz object was'))).toBe(true);
+        const lines = warnSpy.mock.calls.map(c => parseSzConsoleLine(String(c[0])));
+        const line = lines.find(l => l.code === 'unknown-key');
+        expect(line?.text).toBe('`notARealProperty` is not an sz property.');
+        // No file position at runtime: the header names the object and the caller.
+        expect(line?.place).toMatch(/^sz object was \{"notARealProperty":"x"\}/);
     });
     it('unknown-key warning uses the build location when one is set', () => {
         setSzWarnLocation('src/App.tsx:12');
         cls({ notARealProperty: 'x' } as unknown as SzObject);
-        const messages = warnSpy.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('at src/App.tsx:12'))).toBe(true);
+        const lines = warnSpy.mock.calls.map(c => parseSzConsoleLine(String(c[0])));
+        expect(lines.find(l => l.code === 'unknown-key')?.place).toBe('src/App.tsx:12');
     });
     it('numeric-key warning names the array/spread cause', () => {
         cls({ 3: 5 } as unknown as SzObject);
-        const messages = warnSpy.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('numeric key'))).toBe(true);
+        const lines = warnSpy.mock.calls.map(c => parseSzConsoleLine(String(c[0])));
+        expect(lines.find(l => l.code === 'numeric-key')?.help).toBe(
+            'pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place.',
+        );
     });
     it('alias key warning suggests the canonical form', () => {
         cls({ padding: 4 } as unknown as SzObject);
-        const messages = warnSpy.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('canonical key "p"'))).toBe(true);
+        const lines = warnSpy.mock.calls.map(c => parseSzConsoleLine(String(c[0])));
+        expect(lines.find(l => l.code === 'canonical-key')?.help).toBe('write `p`.');
     });
 });
 

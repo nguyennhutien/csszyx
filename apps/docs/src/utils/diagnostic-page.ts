@@ -10,6 +10,12 @@
  * summaries and argument names can hold `<`, `{` and backticks.
  */
 
+import generated from '../data/diagnostics.json';
+import { escapeHtml, withCode } from './diagnostic-html';
+import { type MessageData, messageParts } from './diagnostic-message';
+
+export { escapeHtml } from './diagnostic-html';
+
 /** One argument of a diagnostic, as the registry declares it. */
 export interface DiagnosticArg {
     type: string | string[];
@@ -18,6 +24,9 @@ export interface DiagnosticArg {
     joiner?: string;
 }
 
+/** A message part: one template, or one per variant. */
+export type DiagnosticTemplate = string | Record<string, string>;
+
 /** One live id. */
 export interface DiagnosticEntry {
     id: string;
@@ -25,14 +34,32 @@ export interface DiagnosticEntry {
     surfaces: {
         engine?: Record<string, never>;
         check?: { group: string };
-        runtime?: { production: boolean };
-        error?: { classes?: string[] };
+        runtime?: { production: boolean | string[]; host?: string };
+        error?: { classes?: string[]; production?: boolean; host?: string };
     };
     defaults?: { recommended: string; atomic: string };
     position: 'site' | 'file' | 'none';
     args?: Record<string, DiagnosticArg>;
     forms?: string[];
+    /** The enum arg a per-variant template is keyed by, when it is not `form`. */
+    variesBy?: string;
     gaps?: string[];
+    /** What the diagnostic says. */
+    text?: DiagnosticTemplate;
+    /** What to do. */
+    help?: DiagnosticTemplate;
+    /** What does not happen, or still holds. */
+    note?: DiagnosticTemplate;
+}
+
+/** One line a production bundle can print, with the values its words name. */
+export interface LookupRow {
+    /** What the line prints. */
+    args: Record<string, string>;
+    /** The computed values the message names, read from the compiler's tables. */
+    values: Record<string, string>;
+    /** Only the build reports it; no browser bundle prints this form. */
+    engine?: boolean;
 }
 
 /** One id that no longer reports. */
@@ -45,7 +72,7 @@ export interface RemovedEntry {
 }
 
 /** The generated data file. */
-export interface DiagnosticData {
+export interface DiagnosticData extends MessageData {
     format: number;
     groups: Array<{ id: string; summary: string }>;
     diagnostics: DiagnosticEntry[];
@@ -67,7 +94,7 @@ export interface Shipped {
  * behaviour only once the code doing it is there. The change that lands one
  * flips its flag.
  */
-export const SHIPPED: Shipped = { codePrefix: false, errorCode: false, compactProduction: false };
+export const SHIPPED: Shipped = { codePrefix: true, errorCode: true, compactProduction: true };
 
 /** How a page is rendered. */
 export interface PageOptions {
@@ -75,26 +102,20 @@ export interface PageOptions {
     removed?: RemovedEntry[];
     /** Which ADR 0031 behaviours to describe; defaults to {@link SHIPPED}. */
     shipped?: Shipped;
+    /** The placeholder grammar, computed values and rows; defaults to the generated data's. */
+    message?: MessageData;
 }
+
+/**
+ * The generated data, as the pages read it. JSON infers each entry's own
+ * shape, which a cast cannot compare with an index signature directly.
+ */
+export const DIAGNOSTIC_DATA = generated as unknown as DiagnosticData;
 
 /** Where every page links for the longer explanations. */
 const WARNINGS_PAGE = '/docs/reference/warnings/';
 /** The index of every code. */
 const CODES_PAGE = '/docs/reference/codes/';
-
-/**
- * Escape text for an HTML text node or a double-quoted attribute.
- *
- * @param text - Any text.
- * @returns The escaped text.
- */
-export function escapeHtml(text: string): string {
-    return text
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;');
-}
 
 /**
  * One sentence per surface the id appears on, saying what reports it and
@@ -112,14 +133,26 @@ export function surfaceSentences(entry: DiagnosticEntry, shipped: Shipped = SHIP
     if (entry.surfaces.check) {
         out.push(`\`csszyx check\` reports it in its \`${entry.surfaces.check.group}\` pass.`);
     }
-    if (entry.surfaces.runtime) {
+    const production = entry.surfaces.runtime?.production;
+    if (Array.isArray(production)) {
+        const forms = production.map(form => `\`${form}\``).join(', ');
         out.push(
-            entry.surfaces.runtime.production
+            `It is printed to the console. A production browser bundle prints its ${forms} form${production.length > 1 ? 's' : ''} only.`,
+        );
+    } else if (entry.surfaces.runtime) {
+        out.push(
+            production
                 ? 'It is printed to the console, by a production browser bundle too.'
                 : 'It is printed to the console. A production browser bundle leaves it out.',
         );
     }
-    if (entry.surfaces.error) {
+    if (entry.surfaces.error?.production === false) {
+        out.push(
+            shipped.errorCode
+                ? 'It is thrown as an error whose `code` is this id, by a development build; a production build does not throw it.'
+                : 'It is thrown as an error by a development build; a production build does not throw it.',
+        );
+    } else if (entry.surfaces.error) {
         out.push(shipped.errorCode ? 'It is thrown as an error whose `code` is this id.' : 'It is thrown as an error.');
     }
     for (const gap of entry.gaps ?? []) {
@@ -150,16 +183,6 @@ export function argType(arg: DiagnosticArg): string {
         .slice(1)
         .map(value => `'${value}'`)
         .join(' | ');
-}
-
-/**
- * Inline `code` spans written with backticks, the way the registry writes them.
- *
- * @param text - Escaped text.
- * @returns The text with each backtick span wrapped in `<code>`.
- */
-function withCode(text: string): string {
-    return text.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 /**
@@ -214,7 +237,7 @@ ${body}
  * @returns The page's HTML.
  */
 export function renderDiagnosticPage(entry: DiagnosticEntry, options: PageOptions = {}): string {
-    const { removed = [], shipped = SHIPPED } = options;
+    const { removed = [], shipped = SHIPPED, message = DIAGNOSTIC_DATA } = options;
     const parts = [
         `<h1><code>${escapeHtml(entry.id)}</code></h1>`,
         `<p>${withCode(escapeHtml(entry.summary))}</p>`,
@@ -230,6 +253,7 @@ export function renderDiagnosticPage(entry: DiagnosticEntry, options: PageOption
                 .join(', ')}.</p>`,
         );
     }
+    parts.push(...messageParts(entry, shipped, message));
     if (isSettable(entry)) {
         const defaults = entry.defaults ?? { recommended: 'error', atomic: 'error' };
         parts.push(
@@ -309,7 +333,10 @@ export function diagnosticPages(data: DiagnosticData): Array<[id: string, html: 
     const kebab = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
     return [
         ...data.diagnostics.map(
-            (entry): [string, string] => [entry.id, renderDiagnosticPage(entry, { removed: data.removed })],
+            (entry): [string, string] => [
+                entry.id,
+                renderDiagnosticPage(entry, { removed: data.removed, message: data }),
+            ],
         ),
         ...data.removed
             .filter(entry => kebab.test(entry.id))

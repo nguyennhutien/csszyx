@@ -33,7 +33,7 @@ describe('setSzClassPrefix', () => {
         registerSzClassPrefix('tw');
 
         expect(() => registerSzClassPrefix('ui')).toThrowError(
-            /registered different Tailwind prefixes: prefix\(tw\) and prefix\(ui\)/,
+            /runtime-prefix-conflict: .*prefixes `tw` and `ui`/,
         );
         expect(_sz({ p: 4 })).toBe('tw:p-4');
     });
@@ -42,7 +42,7 @@ describe('setSzClassPrefix', () => {
         registerSzClassPrefix(null);
 
         expect(() => registerSzClassPrefix('tw')).toThrowError(
-            /registered different Tailwind prefixes: no prefix and prefix\(tw\)/,
+            /runtime-prefix-conflict: .*different Tailwind prefixes, `tw` and none/,
         );
         expect(_sz({ p: 4 })).toBe('p-4');
     });
@@ -52,7 +52,7 @@ describe('setSzClassPrefix', () => {
 
         expect(_sz({ p: 4 })).toBe('p-4');
         expect(() => registerSzClassPrefix('tw')).toThrowError(
-            /registered different Tailwind prefixes: no prefix and prefix\(tw\)/,
+            /runtime-prefix-conflict: .*different Tailwind prefixes, `tw` and none/,
         );
     });
 
@@ -68,7 +68,7 @@ describe('setSzClassPrefix', () => {
         globals.__csszyx_class_prefix_registration = { value: 'tw' };
 
         expect(() => registerSzClassPrefix('ui')).toThrowError(
-            /registered different Tailwind prefixes: prefix\(tw\) and prefix\(ui\)/,
+            /runtime-prefix-conflict: .*prefixes `tw` and `ui`/,
         );
         expect(globals.__csszyx_class_prefix).toBe('tw');
     });
@@ -78,7 +78,7 @@ describe('setSzClassPrefix', () => {
         globals.__csszyx_class_prefix_registration = { value: 'tw' };
 
         expect(() => registerSzClassPrefix(null)).toThrowError(
-            /registered different Tailwind prefixes: prefix\(tw\) and no prefix/,
+            /runtime-prefix-conflict: .*different Tailwind prefixes, `tw` and none/,
         );
         expect(globals.__csszyx_class_prefix).toBe('tw');
     });

@@ -52,9 +52,11 @@ function spawnWorker(
     let readyResolved = false;
     let acquiredResolved = false;
     let resolveReady: () => void = () => {};
+    let rejectReady: (reason: Error) => void = () => {};
     let resolveAcquired: (value: boolean) => void = () => {};
-    const ready = new Promise<void>(resolve => {
+    const ready = new Promise<void>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
     });
     const acquired = new Promise<boolean>(resolve => {
         resolveAcquired = resolve;
@@ -82,6 +84,15 @@ function spawnWorker(
         acquired,
         result: new Promise(resolve => {
             child.on('close', code => {
+                // A worker that dies before it is ready (a module it imports
+                // will not load) never prints `ready`: fail with what it said
+                // rather than wait out the test timeout on every retry.
+                if (!readyResolved) {
+                    readyResolved = true;
+                    rejectReady(
+                        new Error(`lock worker exited ${code} before it was ready:\n${stderr}`),
+                    );
+                }
                 if (!acquiredResolved) {
                     acquiredResolved = true;
                     resolveAcquired(false);
@@ -139,7 +150,7 @@ describe('Next safelist advisory lock across processes', { retry: 2 }, () => {
 
         const winners = results.filter(result => result.stdout.includes('acquired:'));
         const locked = results.filter(
-            result => result.code === 2 && result.stderr.includes('already locked'),
+            result => result.code === 2 && result.stderr.includes('[csszyx] next-safelist-locked:'),
         );
         expect(winners).toHaveLength(1);
         expect(winners[0]?.code).toBe(0);
@@ -183,7 +194,8 @@ describe('Next safelist advisory lock across processes', { retry: 2 }, () => {
         expect(ownerResult.stdout).toContain('acquired:');
         expect(
             contenderResults.every(
-                result => result.code === 2 && result.stderr.includes('already locked'),
+                result =>
+                    result.code === 2 && result.stderr.includes('[csszyx] next-safelist-locked:'),
             ),
         ).toBe(true);
     }, 45_000);

@@ -33,7 +33,9 @@ import {
     loadDiagnosticPolicy,
     readDiagnosticPolicyState,
 } from './csszyx-config-file.js';
+import { diagnosticMessage } from './diagnostic-message.js';
 import {
+    configProblemMessage,
     createDiagnosticPolicy,
     type DiagnosticConfigProblem,
     type DiagnosticPolicy,
@@ -99,20 +101,16 @@ function loadedConfigOf(stdout: string): LoadedConfig | null {
 }
 
 /**
- * The line a lane prints when it keeps the defaults because the config's
- * levels could not be read.
+ * The line a lane prints when it keeps the state file's levels, or the
+ * defaults, because the config's levels could not be read.
  *
  * @param lane - The lane, as the line names it: `jest`, `the Turbopack loader`.
  * @param configName - The config's file name.
  * @param reason - Why, without a closing full stop.
- * @returns The warning, `[csszyx]`-prefixed.
+ * @returns The warning, `[csszyx] config-unloadable:`-headed.
  */
 function configNotReadMessage(lane: string, configName: string, reason: string): string {
-    return (
-        `[csszyx] ${lane} could not read the levels ${configName} sets: ${reason}.\n` +
-        '  note: this worker reports at the levels in .csszyx/diagnostic-policy.json, or the ' +
-        'recommended levels without that file.'
-    );
+    return diagnosticMessage('config-unloadable', { form: 'worker', lane, reason }, configName);
 }
 
 /** Node flags, spelled without a value, that take the next argument as theirs. */
@@ -294,7 +292,7 @@ export async function loadDiagnosticPolicyInChild(root: string): Promise<LoadedD
             {
                 severity: 'error',
                 path: path.basename(found.file),
-                message: `could not be loaded: ${reason}`,
+                message: configProblemMessage('config-unloadable', { form: 'load', reason }),
                 fileIgnored: true,
             },
         ],

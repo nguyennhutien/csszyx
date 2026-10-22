@@ -11,7 +11,12 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { auditMerges, mergeFindingsOf, mergeRemovalSummaryMessage } from '../src/merge-audit.js';
+import {
+    auditMerges,
+    mergeFindingsOf,
+    mergeRemovalLine,
+    mergeRemovalSummaryMessage,
+} from '../src/merge-audit.js';
 import { openStylesheetModel } from '../src/next-stylesheet-facts.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
@@ -106,7 +111,47 @@ describe('the summary line a dev server prints', () => {
             'csszyx.config.mjs',
         );
 
-        expect(line).toContain('`diagnostics.rules` of `csszyx.config.mjs`');
-        expect(line).not.toContain('csszyx.config.ts');
+        expect(line).toBe(
+            '[csszyx] merge-covered-held:\n' +
+                '  The build removed 2 class(es) in 1 file(s), because another class on the same element sets every property they set.\n' +
+                '  help: `csszyx check --rule merge-covered-key` lists them; `build.mergeCoveredClasses: false` in the plugin options keeps every one.\n' +
+                "  note: this line stays until each id after `--rule` is `'off'` in `diagnostics.rules` of `csszyx.config.mjs`.\n" +
+                '  docs: https://csszyx.com/e/merge-covered-held',
+        );
+    });
+});
+
+describe('the line a build prints for one removed class', () => {
+    it('names the key a covered class was written as', () => {
+        expect(
+            mergeRemovalLine({
+                file: 'src/App.tsx',
+                line: 3,
+                kind: 'merge-covered-key',
+                className: 'px-2',
+                key: 'px',
+            }),
+        ).toBe(
+            '[csszyx] merge-covered-key: src/App.tsx:3\n' +
+                '  The build removes `px-2`, written as `px`, because a later key in the same sz object sets every property it sets.\n' +
+                '  help: delete `px` from the object; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.\n' +
+                '  docs: https://csszyx.com/e/merge-covered-key',
+        );
+    });
+
+    it('names a covered className class', () => {
+        expect(
+            mergeRemovalLine({
+                file: 'src/App.tsx',
+                line: 1,
+                kind: 'merge-covered-class',
+                className: 'pb-2',
+            }),
+        ).toBe(
+            '[csszyx] merge-covered-class: src/App.tsx:1\n' +
+                '  The build removes `pb-2` from `className`, because an `sz` class on the same element sets every property it sets.\n' +
+                '  help: delete `pb-2` from `className`; to keep every covered class, set `build.mergeCoveredClasses: false` in the plugin options.\n' +
+                '  docs: https://csszyx.com/e/merge-covered-class',
+        );
     });
 });

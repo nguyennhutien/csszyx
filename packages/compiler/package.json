@@ -54,6 +54,16 @@
         "default": "./dist/sz-limits.cjs"
       }
     },
+    "./errors": {
+      "import": {
+        "types": "./dist/errors.d.mts",
+        "default": "./dist/errors.mjs"
+      },
+      "require": {
+        "types": "./dist/errors.d.cts",
+        "default": "./dist/errors.cjs"
+      }
+    },
     "./keyword-families": {
       "import": {
         "types": "./dist/keyword-families.d.mts",
@@ -92,6 +102,16 @@
       "require": {
         "types": "./dist/spacing-var.d.cts",
         "default": "./dist/spacing-var.cjs"
+      }
+    },
+    "./report": {
+      "import": {
+        "types": "./dist/report.d.mts",
+        "default": "./dist/report.mjs"
+      },
+      "require": {
+        "types": "./dist/report.d.cts",
+        "default": "./dist/report.cjs"
       }
     },
     "./migrate": {

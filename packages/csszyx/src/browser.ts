@@ -17,7 +17,8 @@
  */
 
 import { type SzObject, transform } from '@csszyx/compiler/browser';
-import { parseSzAttribute } from './parse-sz-attribute.js';
+import { SZ_ATTRIBUTE_SYNTAX, szReport } from '@csszyx/compiler/report';
+import { parseSzAttribute, type SzAttributeSyntaxArgs } from './parse-sz-attribute.js';
 
 declare global {
     /**
@@ -74,12 +75,33 @@ function processElement(el: Element): void {
                 }
             });
         } else {
-            console.error('[csszyx] Parsing error:', rawValue, e);
+            reportUnreadable(e);
         }
     }
 
     el.removeAttribute('sz');
     delete dataset.szProcessed;
+}
+
+/**
+ * Say why an element's `sz` attribute gave it no classes. The parser's error
+ * is the attribute's syntax, worded by the registry, in production too: a
+ * page loading this from a CDN has no build log to say it instead. Any other
+ * error is printed as it was thrown, under its own code.
+ *
+ * @param error - What the parse or the transform threw.
+ */
+function reportUnreadable(error: unknown): void {
+    const args = (error as { args?: SzAttributeSyntaxArgs }).args;
+    if (!(error instanceof SyntaxError) || args === undefined) {
+        console.error(error);
+    } else if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: SZ_ATTRIBUTE_SYNTAX, args });
+    } else {
+        console.error(
+            `[csszyx] sz-attribute-syntax: ${JSON.stringify(args)} https://csszyx.com/e/sz-attribute-syntax`,
+        );
+    }
 }
 
 /**

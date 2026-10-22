@@ -41,8 +41,9 @@ describe('property-object warning parity', () => {
             ['property-object', expect.objectContaining({ key })],
         ]);
         const [hit] = warnings;
-        expect(hit).toContain(`\`${key}\` is a property, and its object`);
-        expect(hit).toContain('generate no CSS');
+        expect(hit).toContain(
+            `\`${key}\` sets a property and is not a variant, so its object \`{ bg }\` emits \`${key}:*\` classes that produce no CSS.`,
+        );
     });
 
     it('reports through per-result diagnostics, identically on both artifacts', () => {

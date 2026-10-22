@@ -131,8 +131,8 @@ function knownSzKeyNames(): SzKeyNameIndex {
             names.set(key, key);
         }
         // An alias suggests its canonical key: `workBreak` is nearest the alias
-        // `wordBreak`, and the key to write is `break`. A few entries are prose
-        // naming several keys, which is not a key to suggest.
+        // `wordBreak`, and the key to write is `break`. A replaced flag's
+        // entry is a shape (`flexWrap: 'nowrap'`), which is not a key to suggest.
         for (const [alias, canonical] of Object.entries(SUGGESTION_MAP)) {
             if (BARE_KEY.test(canonical)) names.set(alias, canonical);
         }

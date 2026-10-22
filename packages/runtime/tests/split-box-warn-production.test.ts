@@ -3,15 +3,21 @@
  * pin it.
  *
  * `devWarn` refuses to print in production on its own, so a test that only
- * watches `console.warn` stays green even with the guard in `splitBoxUncached`
- * deleted — and deleting it is not free. The guard is what lets a bundler drop
- * `warnUnusableSplit` and every message string it holds: with the guard, an
- * app bundled for production carries none of that text; without it, the whole
- * analysis is reachable code that runs on every uncached split.
+ * watches `console.warn` stays green even with the guard in each warning
+ * helper (`warnUnusableSplit` and its siblings) deleted — and deleting it is
+ * not free. The guard is what lets a bundler drop the analysis and every
+ * message string it holds: with the guard, an app bundled for production
+ * carries none of that text; without it, the whole analysis is reachable code
+ * that runs on every uncached split.
  *
  * So this file replaces `devWarn` with a spy that prints nothing and refuses
  * nothing. The only thing that can keep it uncalled is the caller's own guard.
  */
+import {
+    SPLIT_BOX_PLACEMENT_VARIANT,
+    SPLIT_BOX_UNCLASSIFIED,
+    SPLIT_BOX_UNKNOWN_CATEGORY,
+} from '@csszyx/compiler/report';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const devWarn = vi.fn();
@@ -21,7 +27,7 @@ vi.mock('../src/dev-warn.js', () => ({
     resetDevWarnCache: () => {},
 }));
 
-const { has, splitBox } = await import('../src/split-box.js');
+const { has, splitBox, splitBoxSz } = await import('../src/split-box.js');
 
 /** A className that trips all three warnings, unique per test to skip the memo. */
 const TRIPWIRE = 'rounded-xl overflow-y-auto hidden';
@@ -64,7 +70,10 @@ describe('the placement-name warning in a production build', () => {
     it('is reached everywhere else', () => {
         process.env.NODE_ENV = 'development';
         splitBox('dev-only-2 md:hidden', { outer: ['md:hidden'] });
-        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining("'md:hidden' never matches"));
+        expect(devWarn).toHaveBeenCalledWith({
+            diagnostic: SPLIT_BOX_PLACEMENT_VARIANT,
+            args: { selector: 'md:hidden', side: 'outer', base: 'hidden' },
+        });
     });
 });
 
@@ -84,6 +93,33 @@ describe('the selector warnings in a production build', () => {
     it('are reached everywhere else', () => {
         process.env.NODE_ENV = 'development';
         has('p-4', 'nonsense-dev');
-        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining('is not a category'));
+        expect(devWarn).toHaveBeenCalledWith({
+            diagnostic: SPLIT_BOX_UNKNOWN_CATEGORY,
+            args: { form: 'no-hint', name: 'nonsense-dev' },
+        });
+    });
+});
+
+describe('the raw-css placement warning in a production build', () => {
+    // The sz-object path reports the fallback's `css` placement from its own
+    // helper, a separate guard from the className analysis above.
+    it('is never reached, and `css` still lands on the fallback side', () => {
+        process.env.NODE_ENV = 'production';
+        expect(splitBoxSz({ css: { color: 'red' } })).toEqual({
+            outer: { css: { color: 'red' } },
+            inner: {},
+        });
+        expect(devWarn).not.toHaveBeenCalled();
+    });
+
+    it('is reached everywhere else', () => {
+        process.env.NODE_ENV = 'development';
+        splitBoxSz({ css: { color: 'blue' } });
+        expect(devWarn).toHaveBeenCalledWith(
+            expect.objectContaining({
+                diagnostic: SPLIT_BOX_UNCLASSIFIED,
+                args: expect.objectContaining({ form: 'raw-css' }),
+            }),
+        );
     });
 });

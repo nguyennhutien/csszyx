@@ -49,7 +49,6 @@
  * @module diagnostic-policy
  */
 import {
-    type IdentifiedDiagnostic,
     isSzDiagnosticId,
     nearestName,
     renderSzDiagnosticBody,
@@ -59,7 +58,9 @@ import {
     SZ_DIAGNOSTIC_GROUP_IDS,
     SZ_REMOVED_DIAGNOSTIC_IDS,
     SZ_SETTABLE_DIAGNOSTIC_IDS,
+    type SzDiagnosticId,
     type SzRemovedDiagnosticId,
+    type SzTypedDiagnostic,
 } from '@csszyx/compiler';
 import type {
     CsszyxFileConfig,
@@ -127,10 +128,14 @@ export function isRemovedRuleId(id: string): id is SzRemovedDiagnosticId {
 export function removedRuleIdDiagnostic(
     id: string,
     replacedBy: string | undefined,
-): IdentifiedDiagnostic {
-    const args =
-        replacedBy === undefined ? { form: 'removed', id } : { form: 'replaced', id, replacedBy };
-    return { code: 'removed-rule-id', args };
+): SzTypedDiagnostic<'removed-rule-id'> {
+    return {
+        code: 'removed-rule-id',
+        args:
+            replacedBy === undefined
+                ? { form: 'removed', id }
+                : { form: 'replaced', id, replacedBy },
+    };
 }
 
 /**
@@ -300,16 +305,6 @@ export interface ReadFileConfig {
 /** Keys of the `diagnostics` section. */
 const DIAGNOSTICS_KEYS = new Set(['preset', 'rules', 'allow', 'overrides']);
 
-/**
- * Names as code spans, joined.
- *
- * @param names - The names.
- * @param separator - What goes between two.
- * @returns For example `` `a`, `b` ``.
- */
-function codeList(names: Iterable<string>, separator: string): string {
-    return [...names].map(name => `\`${name}\``).join(separator);
-}
 /** Keys of `diagnostics.allow`. */
 const ALLOW_KEYS = new Set(['classes', 'tokens']);
 
@@ -334,18 +329,31 @@ function isStringList(value: unknown): value is string[] {
 }
 
 /**
- * The known id a misspelt one most likely means.
+ * A config problem's words: the registry's sentence and its `help:` line,
+ * without the header, for a bullet of the `config-invalid` message.
  *
- * @param id - The id as written.
- * @returns ` — did you mean \`x\`?`, or an empty string.
+ * @param code - The id of the problem.
+ * @param args - Its args.
+ * @returns The body, its continuation lines indented by two spaces.
  */
-function didYouMean(id: string): string {
+export function configProblemMessage(code: SzDiagnosticId, args: object): string {
+    return renderSzDiagnosticBody({ code, args }, SZ_DIAGNOSTIC_COMPUTED_VALUES);
+}
+
+/**
+ * The name a misspelt one most likely means.
+ *
+ * @param name - The name as written.
+ * @param known - The names it could mean.
+ * @returns The nearest, or undefined when none is near.
+ */
+function nearest(name: string, known: readonly string[]): string | undefined {
     const near = nearestName(
-        id,
-        SZ_SETTABLE_DIAGNOSTIC_IDS.map(known => [known, known] as const),
-        Math.max(1, Math.floor(id.length / 4)),
+        name,
+        known.map(entry => [entry, entry] as const),
+        Math.max(1, Math.floor(name.length / 4)),
     );
-    return near === null ? '' : ` — did you mean \`${near}\`?`;
+    return near ?? undefined;
 }
 
 /**
@@ -360,13 +368,12 @@ function didYouMean(id: string): string {
  * @returns The problem's message.
  */
 function unknownIdMessage(id: string): string {
-    if (isSzDiagnosticId(id)) {
-        return renderSzDiagnosticBody(
-            { code: 'config-id-not-settable', args: { id } },
-            SZ_DIAGNOSTIC_COMPUTED_VALUES,
-        );
-    }
-    return `\`${id}\` is not a rule id${didYouMean(id) || '.'}`;
+    if (isSzDiagnosticId(id)) return configProblemMessage('config-id-not-settable', { id });
+    return configProblemMessage('unknown-rule-id', {
+        form: 'config',
+        ids: [id],
+        suggestion: nearest(id, SZ_SETTABLE_DIAGNOSTIC_IDS),
+    });
 }
 
 /**
@@ -385,7 +392,14 @@ function readRules(
     const rules: Partial<Record<SzDiagnosticRuleId, SzDiagnosticLevel>> = {};
     if (value === undefined) return rules;
     if (!isRecord(value)) {
-        problems.push({ severity: 'error', path: at, message: 'must be an object of id → level.' });
+        problems.push({
+            severity: 'error',
+            path: at,
+            message: configProblemMessage('config-field-invalid', {
+                field: at,
+                expected: 'rules-object',
+            }),
+        });
         return rules;
     }
     for (const [id, level] of Object.entries(value)) {
@@ -405,7 +419,11 @@ function readRules(
             problems.push({
                 severity: 'error',
                 path: at,
-                message: `\`${id}\` is set to ${JSON.stringify(level)}; a level is one of ${SZ_DIAGNOSTIC_LEVELS.join(', ')}.`,
+                message: configProblemMessage('config-level-invalid', {
+                    id,
+                    // `undefined` and a function have no JSON spelling.
+                    level: JSON.stringify(level) ?? String(level),
+                }),
             });
         } else {
             rules[id as SzDiagnosticRuleId] = level as SzDiagnosticLevel;
@@ -430,7 +448,10 @@ function readAllow(
         problems.push({
             severity: 'error',
             path: 'diagnostics.allow',
-            message: 'must be an object.',
+            message: configProblemMessage('config-field-invalid', {
+                field: 'diagnostics.allow',
+                expected: 'object',
+            }),
         });
         return {};
     }
@@ -443,7 +464,10 @@ function readAllow(
             problems.push({
                 severity: 'error',
                 path: `diagnostics.allow.${key}`,
-                message: 'must be a list of names.',
+                message: configProblemMessage('config-field-invalid', {
+                    field: `diagnostics.allow.${key}`,
+                    expected: 'name-list',
+                }),
             });
         }
     }
@@ -452,7 +476,7 @@ function readAllow(
         problems.push({
             severity: 'error',
             path: 'diagnostics.allow',
-            message: `\`${key}\` is not read; \`allow\` takes \`classes\` and \`tokens\`.`,
+            message: configProblemMessage('config-field-unknown', { form: 'allow', key }),
         });
     }
     return allow;
@@ -509,7 +533,7 @@ function readOverrideGlobs(
             problems.push({
                 severity: 'error',
                 path: at,
-                message: `\`${glob}\` can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with \`..\`.`,
+                message: configProblemMessage('config-glob-unmatchable', { glob }),
             });
         } else if (GLOB_MAGIC.test(relative)) {
             usable.push(relative);
@@ -536,7 +560,10 @@ function readOverrides(
         problems.push({
             severity: 'error',
             path: 'diagnostics.overrides',
-            message: 'must be a list of { files, rules }.',
+            message: configProblemMessage('config-field-invalid', {
+                field: 'diagnostics.overrides',
+                expected: 'overrides-list',
+            }),
         });
         return [];
     }
@@ -544,7 +571,14 @@ function readOverrides(
     for (const [index, entry] of value.entries()) {
         const at = `diagnostics.overrides[${index}]`;
         if (!isRecord(entry)) {
-            problems.push({ severity: 'error', path: at, message: 'must be { files, rules }.' });
+            problems.push({
+                severity: 'error',
+                path: at,
+                message: configProblemMessage('config-field-invalid', {
+                    field: at,
+                    expected: 'override',
+                }),
+            });
             continue;
         }
         const files = entry.files;
@@ -552,7 +586,10 @@ function readOverrides(
             problems.push({
                 severity: 'error',
                 path: `${at}.files`,
-                message: 'must be a glob or a list of globs, relative to the project root.',
+                message: configProblemMessage('config-field-invalid', {
+                    field: `${at}.files`,
+                    expected: 'globs',
+                }),
             });
             continue;
         }
@@ -588,27 +625,27 @@ function topLevelKeyProblem(key: string, hasDiagnostics: boolean): DiagnosticCon
         return {
             severity: 'error',
             path: 'default export',
-            message: `\`${key}\` is not read at the top level — did you mean \`diagnostics.${key}\`?`,
+            message: configProblemMessage('config-field-unknown', { form: 'top-level', key }),
             ...ignored,
         };
     }
-    const near = nearestName(
-        key,
-        TOP_LEVEL_KEYS.map(known => [known, known] as const),
-        Math.max(1, Math.floor(key.length / 4)),
-    );
-    if (near !== null) {
+    const suggestion = nearest(key, TOP_LEVEL_KEYS);
+    if (suggestion !== undefined) {
         return {
             severity: 'error',
             path: 'default export',
-            message: `\`${key}\` is not read — did you mean \`${near}\`?`,
+            message: configProblemMessage('config-field-unknown', {
+                form: 'misspelt',
+                key,
+                suggestion,
+            }),
             ...ignored,
         };
     }
     return {
         severity: 'warning',
         path: key,
-        message: `\`${key}\` is not read from this file; plugin options belong in the bundler config.`,
+        message: configProblemMessage('config-field-unknown', { form: 'plugin-option', key }),
     };
 }
 
@@ -632,7 +669,10 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
         problems.push({
             severity: 'error',
             path: 'default export',
-            message: 'must be an object; write `export default defineConfig({ … })`.',
+            message: configProblemMessage('config-field-invalid', {
+                field: 'default export',
+                expected: 'config-object',
+            }),
             fileIgnored: true,
         });
         return { config: normalize(), problems };
@@ -648,7 +688,10 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
         problems.push({
             severity: 'error',
             path: 'diagnostics',
-            message: 'must be an object.',
+            message: configProblemMessage('config-field-invalid', {
+                field: 'diagnostics',
+                expected: 'object',
+            }),
             fileIgnored: true,
         });
         return { config: normalize(), problems };
@@ -658,7 +701,7 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
         problems.push({
             severity: 'error',
             path: 'diagnostics',
-            message: `\`${key}\` is not read; \`diagnostics\` takes ${codeList(DIAGNOSTICS_KEYS, ', ')}.`,
+            message: configProblemMessage('config-field-unknown', { form: 'diagnostics', key }),
         });
     }
     const config: SzDiagnosticsConfig = {};
@@ -669,7 +712,9 @@ export function readCsszyxFileConfig(value: unknown): ReadFileConfig {
             problems.push({
                 severity: 'error',
                 path: 'diagnostics.preset',
-                message: `${JSON.stringify(section.preset)} is not a preset; use ${codeList(SZ_DIAGNOSTIC_PRESETS, ' or ')}.`,
+                message: configProblemMessage('config-preset-unknown', {
+                    preset: JSON.stringify(section.preset),
+                }),
             });
         }
     }

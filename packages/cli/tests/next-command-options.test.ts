@@ -37,21 +37,18 @@ function helpOptions(command: string): Array<[string, string]> {
 }
 
 const SHARED: ReadonlyArray<readonly [string, string]> = [
-    ['--root <dir>', 'Next app root (defaults to cwd)'],
-    ['--cwd <dir>', 'Current working directory'],
-    ['--parser-mode <mode>', 'rust | wasm (default: rust)'],
-    [
-        '--output-file <path>',
-        'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
-    ],
+    ['--root <dir>', 'Next.js app root (default: --cwd)'],
+    ['--cwd <dir>', 'Directory to run in (default: the current one)'],
+    ['--parser-mode <mode>', 'Engine to parse with: rust (native engine) or wasm (default: rust)'],
+    ['--output-file <path>', 'Where to write the safelist (default: .csszyx/csszyx-classes.txt)'],
     ['--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)'],
     [
         '--tailwind-stylesheet <paths>',
-        'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
+        'Tailwind stylesheets this app loads, relative to --root and comma-separated, when the project holds others',
     ],
     [
         '--ignore <patterns>',
-        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated, repeatable)',
+        'Glob patterns to leave out of the source files and of the Tailwind stylesheets read for the prefix (comma-separated, repeatable)',
     ],
     [
         '--imported-static-sz',
@@ -59,7 +56,7 @@ const SHARED: ReadonlyArray<readonly [string, string]> = [
     ],
     [
         '--no-imported-static-sz',
-        'Leave imported sz objects to the runtime; pass the same to the loader (default: true)',
+        'Leave imported sz objects to the runtime; set importedStaticSz: false in csszyxTurbopack to match (default: true)',
     ],
 ];
 
@@ -70,7 +67,7 @@ describe('next-prebuild and next-watch options', () => {
             expect.arrayContaining([
                 ...SHARED,
                 ['--mode <mode>', 'development | production (default: production)'],
-                ['--json', 'Emit a single JSON result instead of formatted text'],
+                ['--json', 'Print one JSON document instead of the text report'],
             ]),
         );
         expect(options).toHaveLength(SHARED.length + 2);
@@ -81,7 +78,10 @@ describe('next-prebuild and next-watch options', () => {
         expect(options).toEqual(
             expect.arrayContaining([
                 ...SHARED,
-                ['--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)'],
+                [
+                    '--debounce-ms <ms>',
+                    'Milliseconds to wait after a change before writing the safelist (default: 50)',
+                ],
             ]),
         );
         expect(options).toHaveLength(SHARED.length + 1);

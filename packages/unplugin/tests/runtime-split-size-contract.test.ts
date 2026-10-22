@@ -27,13 +27,14 @@ const require = createRequire(import.meta.url);
 
 /**
  * A string constant that exists only in the compiler's transform chunk — the
- * error `transform` throws for options passed the old way, kept verbatim by
- * minification. Present in a bundle exactly when the browser transform shipped.
+ * head of the production message of the error `transform` throws for options
+ * passed the old way, kept verbatim by minification. Present in a bundle
+ * exactly when the browser transform shipped.
  *
  * Not a warning message: those fold away in a production bundle now, so a
  * warning marker reads "no compiler" whether or not the transform shipped.
  */
-const COMPILER_MARKER = 'transform takes options';
+const COMPILER_MARKER = '[csszyx] options-object-required: ';
 
 /**
  * A string only the compiler's property tables carry — a display value from its
@@ -152,8 +153,9 @@ describe('runtime split size contract', () => {
         );
         expect(probe.code).not.toContain(COMPILER_TABLES_MARKER);
         // The limits themselves are what `core` does need: its depth guard
-        // throws this message on hostile input.
-        expect(probe.code).toContain('nesting exceeded the maximum depth');
+        // throws this error on hostile input, worded in production as its
+        // code and args.
+        expect(probe.code).toContain('[csszyx] sz-object-depth: ');
     });
 
     it.each(LIGHT_RUNTIME_PROBES)('$label', async ({ source, minGzipBytes, maxGzipBytes }) => {

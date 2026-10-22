@@ -412,6 +412,17 @@ export const MIGRATION_NOTES: Record<string, string> = {
         "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`",
 };
 
+/**
+ * CSS shorthands csszyx writes as two keys, so no one key is their canonical
+ * spelling: each names the `canonical-key` form whose help names both keys.
+ * Like an alias, such a key emits nothing. Kept apart from `SUGGESTION_MAP`,
+ * whose every value is a key to write.
+ */
+export const SPLIT_SHORTHAND_KEYS: Readonly<Record<string, 'font' | 'scrollbar-color'>> = {
+    font: 'font',
+    scrollbarColor: 'scrollbar-color',
+};
+
 export const SUGGESTION_MAP: Record<string, string> = {
     // font-variant-numeric single-keyword groups joined the `num*` family (0.18.0)
     ordinal: 'numOrdinal',
@@ -460,8 +471,7 @@ export const SUGGESTION_MAP: Record<string, string> = {
     boxDecorationBreak: 'boxDecoration',
     objectPosition: 'objectPos',
     zIndex: 'z',
-    // Typography
-    font: 'weight (for font-weight) or fontFamily (for family)',
+    // Typography (`font` itself is a split shorthand: SPLIT_SHORTHAND_KEYS)
     fontWeight: 'weight',
     fontSize: 'text',
     textDecoration: 'decoration',
@@ -519,8 +529,7 @@ export const SUGGESTION_MAP: Record<string, string> = {
     touchAction: 'touch',
     userSelect: 'select',
     captionSide: 'caption',
-    // Scrollbar (v4.3)
-    scrollbarColor: 'scrollbarThumb (thumb color) or scrollbarTrack (track color)',
+    // Scrollbar (v4.3; `scrollbarColor` is a split shorthand: SPLIT_SHORTHAND_KEYS)
     scrollbarWidth: 'scrollbar',
     // Boolean remaps
     flexWrapReverse: "flexWrap: 'wrap-reverse'",

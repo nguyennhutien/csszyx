@@ -11,6 +11,7 @@ import {
     pickSz,
     splitBoxSz,
 } from '../src/split-box.js';
+import { unclassifiedCssLine } from './helpers/split-box-lines.js';
 
 describe('splitBoxSz', () => {
     it('partitions an sz object at the border line (the report case)', () => {
@@ -94,7 +95,7 @@ describe('splitBoxSz', () => {
     });
 
     it('throws on a raw class string in development', () => {
-        expect(() => splitBoxSz('m-4 px-2')).toThrow(/raw class strings/);
+        expect(() => splitBoxSz('m-4 px-2')).toThrow(/^\[csszyx\] split-box-sz-string: /);
     });
 
     it('skips prototype-polluting keys', () => {
@@ -238,10 +239,7 @@ describe('the css key is raw CSS, routed whole by the fallback', () => {
     it('warns in development that the fallback placed it', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         splitBoxSz({ css: { color: 'red' } });
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]?.[0])).toMatch(
-            /splitBoxSz: 'css'.*frame node.*\{ inner: \['css'\] \}/,
-        );
+        expect(warn.mock.calls).toEqual([[unclassifiedCssLine('frame')]]);
     });
 
     it('is a leaf for hasSz / pickSz / omitSz', () => {

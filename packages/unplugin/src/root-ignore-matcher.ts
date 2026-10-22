@@ -12,21 +12,10 @@ import path from 'node:path';
 
 import { braceExpand, Minimatch } from 'minimatch';
 
+import { diagnosticError } from './diagnostic-message.js';
+
 /** Directory verdicts kept per matcher before the memo is dropped and refilled. */
 const MAX_REMEMBERED_DIRECTORIES = 50_000;
-
-/**
- * What the Next commands say about an ignore pattern that starts with `!`.
- *
- * @param pattern - The pattern as the user wrote it.
- * @returns The message.
- */
-function negatedIgnorePatternMessage(pattern: string): string {
-    return [
-        `[csszyx] the ignore pattern \`${pattern}\` is negated, and an ignore list cannot take one: each pattern only adds paths to leave out.`,
-        '  help: narrow the pattern that covers too much, so that nothing has to be taken back out.',
-    ].join('\n');
-}
 
 /** The ignore list, asked about one path at a time. */
 export interface RootIgnoreMatcher {
@@ -57,10 +46,10 @@ interface CompiledPattern {
  *
  * @param pattern - The pattern as the user wrote it.
  * @returns One entry per brace expansion, plus the bare directory of a `dir/**`.
- * @throws {Error} When the pattern is negated.
+ * @throws {CsszyxError} `ignore-pattern-negated`, when the pattern is negated.
  */
 function compilePattern(pattern: string): CompiledPattern[] {
-    if (pattern.startsWith('!')) throw new Error(negatedIgnorePatternMessage(pattern));
+    if (pattern.startsWith('!')) throw diagnosticError('ignore-pattern-negated', { pattern });
     const relative = pattern.startsWith('./') ? pattern.slice(2) : pattern;
     return braceExpand(relative).flatMap(expanded => {
         const options = { dot: true, nobrace: true };

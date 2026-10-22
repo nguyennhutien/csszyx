@@ -69,7 +69,7 @@ function deadLines(): string[] {
     const lines: string[] = [];
     vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
         const line = args.map(String).join(' ');
-        if (line.includes('(dead-class)')) lines.push(line);
+        if (line.startsWith('[csszyx] dead-class:')) lines.push(line);
     });
     return lines;
 }
@@ -101,8 +101,11 @@ describe('a Vite build', () => {
             deadClassMessage('justify-safe-center', 'src/A.tsx', JUSTIFY_SITE),
         ]);
         expect(deadClassMessage('break-bogus', 'src/A.tsx')).toBe(
-            "[csszyx] src/A.tsx: `break-bogus` is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).\n" +
-                "  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.",
+            '[csszyx] dead-class: src/A.tsx\n' +
+                "  `break-bogus` produces no CSS: this project's Tailwind serves no such utility.\n" +
+                "  help: fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.\n" +
+                '  note: the class is still emitted, and it styles nothing.\n' +
+                '  docs: https://csszyx.com/e/dead-class',
         );
     }, 60_000);
 
@@ -211,8 +214,7 @@ describe('a Vite build, for a sign the project serves no negative of', () => {
         const lines: string[] = [];
         vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
             const line = args.map(String).join(' ');
-            if (line.includes('(dead-class)') || line.includes('(unsigned-value)'))
-                lines.push(line);
+            if (/^\[csszyx\] (dead-class|unsigned-value):/.test(line)) lines.push(line);
         });
         return lines;
     }
@@ -227,12 +229,12 @@ describe('a Vite build, for a sign the project serves no negative of', () => {
         // `-mt-2` is served: margins have negatives.
         expect(lines).toEqual([
             expect.stringContaining(
-                "`-p-2` (sz key `p`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `p-2`",
+                "`-p-2` produces no CSS: this project's Tailwind serves `p-2` but no negative form of it.",
             ),
             expect.stringContaining('`data-[state=open]:-p-3`'),
             expect.stringContaining('`group-hover:-w-4`'),
         ]);
-        for (const line of lines) expect(line).toContain('(unsigned-value)');
+        for (const line of lines) expect(line).toMatch(/^\[csszyx\] unsigned-value: /);
     }, 60_000);
 
     it('names a class dead without its sign too as dead-class, once', async () => {
@@ -244,10 +246,10 @@ describe('a Vite build, for a sign the project serves no negative of', () => {
         await viteBuild(root);
         expect(lines).toEqual([
             expect.stringContaining(
-                '`-p-medium` (sz key `p`) is emitted by an sz prop and produces no CSS under',
+                "`-p-medium` produces no CSS: this project's Tailwind serves no such utility.",
             ),
         ]);
-        expect(lines[0]).toContain('(dead-class)');
+        expect(lines[0]).toMatch(/^\[csszyx\] dead-class: /);
     }, 60_000);
 
     it('says nothing when the project defines the negative with @utility', async () => {

@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +27,20 @@ afterEach(() => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+/**
+ * Collects every `console.warn` line, as a reader sees it without colour: a
+ * CI runner sets `CI`, and picocolors then colours the icon a line starts with.
+ *
+ * @returns The warnings printed so far, appended to as the watch runs.
+ */
+function captureWarnings(): string[] {
+    const warnings: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(stripVTControlCharacters(args.map(String).join(' ')));
+    });
+    return warnings;
+}
 
 function tempRoot(): string {
     const dir = mkdtempSync(join(tmpdir(), 'csszyx-cli-watch-'));
@@ -161,7 +176,7 @@ describe('waitFor reports what it saw', () => {
 
 describe('csszyx next-watch command', () => {
     it('records the stylesheet facts again when a stylesheet changes', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -171,10 +186,7 @@ describe('csszyx next-watch command', () => {
         writeFileSync(join(root, 'legacy/broken.css'), '@import "./gone.css";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
         const facts = join(root, '.csszyx/cache/stylesheet-facts.json');
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
 
         const events: string[] = [];
         const session = await startNextWatch(
@@ -205,7 +217,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('writes the diagnostic policy the Turbopack loader reads when it starts', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -229,7 +241,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('names a dead sz class and a config problem when it starts', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -248,12 +260,16 @@ describe('csszyx next-watch command', () => {
         );
         try {
             const said = warn.mock.calls.map(call => String(call[0]));
-            expect(said.join('\n')).toContain('did you mean `dead-class`?');
+            expect(said.join('\n')).toContain(
+                '    help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
+            );
             // The line, column and key, as the Vite lane names them.
             const column = 'export const App = () => <div sz={{ '.length + 1;
             expect(
                 said.filter(line =>
-                    line.includes(`src/App.tsx:1:${column}: \`break-bogus\` (sz key \`break\`)`),
+                    line.includes(
+                        `[csszyx] dead-class: src/App.tsx:1:${column}\n  \`break-bogus\` produces no CSS`,
+                    ),
                 ),
             ).toHaveLength(1);
         } finally {
@@ -263,7 +279,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('reads an edited config, rewrites the policy file and says what it now lists', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -277,10 +293,7 @@ describe('csszyx next-watch command', () => {
             "export default { diagnostics: { rules: { 'dead-class': 'off' } } };",
         );
         const state = join(root, '.csszyx/diagnostic-policy.json');
-        const said: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            said.push(args.map(String).join(' '));
-        });
+        const said = captureWarnings();
         const events: string[] = [];
         const session = await startNextWatch(
             { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
@@ -319,7 +332,7 @@ describe('csszyx next-watch command', () => {
             // watch's own process reads the config's edit and every module it
             // imports as first read: a policy file with fresh inputs and stale
             // levels, which every lane then trusts.
-            const root = realpathSync(tempRoot());
+            const root = realpathSync.native(tempRoot());
             linkTailwind(root);
             mkdirSync(join(root, 'app'), { recursive: true });
             writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -360,7 +373,7 @@ describe('csszyx next-watch command', () => {
     );
 
     it('reads the config again when a module it imports outside the root changes', async () => {
-        const outside = realpathSync(tempRoot());
+        const outside = realpathSync.native(tempRoot());
         const root = join(outside, 'app');
         mkdirSync(join(root, 'src'), { recursive: true });
         writeFileSync(join(root, 'package.json'), '{"name":"app","private":true}\n');
@@ -393,7 +406,7 @@ describe('csszyx next-watch command', () => {
         // One delete is two things here: an input of the levels gone and a
         // source of classes gone. Reading the levels again must not stand in
         // for reaping the source's shard.
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         writeFileSync(join(root, 'globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 2 }} />;');
@@ -429,7 +442,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('rewrites the merge registration when a stylesheet drops a theme token', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         const stylesheet = join(root, 'app/globals.css');
@@ -465,38 +478,35 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('warns and keeps watching when the merge table cannot be written', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
-        // A directory where the file goes: the rename that writes it fails.
+        // A directory where the file goes: the rename that writes it fails,
+        // with EISDIR on POSIX and EPERM on Windows.
         mkdirSync(join(root, '.csszyx/merge-registration.mjs/keep'), { recursive: true });
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
         const session = await startNextWatch(
             { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
             { watch: recordingWatch([]) },
         );
         try {
-            expect(warnings.join('\n')).toContain('could not write .csszyx/merge-registration.mjs');
+            expect(warnings[0]).toMatch(
+                /^\u26a0 \[csszyx\] could not write \.csszyx\/merge-registration\.mjs: (?:EISDIR|EPERM): .*\n {2}note: the safelist is written; until the file can be written, `szcn` under Turbopack and jest removes only exact repeats, and a Turbopack build keeps every key of an sz object rather than merging one a later key covers\.$/,
+            );
         } finally {
             await session.close();
         }
     }, 60_000);
 
     it('reports a stylesheet edit that stops the facts, and keeps watching', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
-        const warnings: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-            warnings.push(args.map(String).join(' '));
-        });
+        const warnings = captureWarnings();
 
         const events: string[] = [];
         const session = await startNextWatch(
@@ -514,7 +524,46 @@ describe('csszyx next-watch command', () => {
             // The build's note says nothing was written; a watch that goes on
             // says what it goes on with instead.
             expect(warnings.join('\n')).not.toContain('nothing was written');
-            expect(warnings.join('\n')).toContain('`csszyx next watch` keeps watching');
+            expect(warnings.at(-1)).toBe(
+                '\u26a0 [csszyx] tailwind-stylesheet-broken:\n' +
+                    '  A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.\n' +
+                    '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load with the `--tailwind-stylesheet` flag.\n' +
+                    '  note: each failure, as Tailwind reported it:\n' +
+                    `    app/globals.css: ENOENT: no such file or directory, open '${join(root, 'app/gone.css')}'\n` +
+                    '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.\n' +
+                    '  docs: https://csszyx.com/e/tailwind-stylesheet-broken',
+            );
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
+    it('replaces the build note of a prefix disagreement with its own, above `docs:`', async () => {
+        const root = realpathSync.native(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        const warnings = captureWarnings();
+
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch(events) },
+        );
+        try {
+            writeFileSync(join(root, 'app/other.css'), '@import "tailwindcss" prefix(tw);\n');
+            await waitFor(() => warnings.join('\n').includes('prefix-disagreement'), {
+                describe: () => describeWatchState(events, []),
+            });
+            const warning = warnings.at(-1) as string;
+            expect(warning).not.toContain('nothing was written');
+            expect(warning.split('\n').slice(-2)).toEqual([
+                '  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.',
+                '  docs: https://csszyx.com/e/prefix-disagreement',
+            ]);
+            expect(warning.match(/ note: /g)).toHaveLength(1);
         } finally {
             await session.close();
             vi.restoreAllMocks();
@@ -581,7 +630,11 @@ describe('csszyx next-watch command', () => {
     }, 30_000);
 
     it('fails startup when no source files match', async () => {
-        const root = tempRoot();
+        // Resolved the way the watch resolves a root: macOS hands out a `/var`
+        // temp path that is a link, and Windows an 8.3 one (`RUNNER~1`) that
+        // only the native resolver expands, and the message names the root
+        // the watch settled on.
+        const root = realpathSync.native(tempRoot());
 
         await expect(
             startNextWatch({
@@ -591,7 +644,9 @@ describe('csszyx next-watch command', () => {
                 parserMode: 'wasm',
                 silent: true,
             }),
-        ).rejects.toThrow('No source files matched');
+        ).rejects.toThrow(
+            `No source file under \`${root}\` matches \`src/**/*.tsx\`, so there is nothing to scan for classes.`,
+        );
     });
 
     it('rejects invalid parser mode before starting chokidar', async () => {
@@ -605,7 +660,13 @@ describe('csszyx next-watch command', () => {
                 parserMode: 'swc' as 'rust',
                 silent: true,
             }),
-        ).rejects.toThrow('Invalid --parser-mode');
+        ).rejects.toMatchObject({
+            code: 'cli-option-invalid',
+            args: { form: 'parser-mode', value: 'swc' },
+            message: expect.stringContaining(
+                '`--parser-mode swc` is not a parser this command takes, so the command did not run.',
+            ),
+        });
     });
 
     it('rejects invalid debounce values before starting chokidar', async () => {
@@ -620,6 +681,13 @@ describe('csszyx next-watch command', () => {
                 debounceMs: '-1',
                 silent: true,
             }),
-        ).rejects.toThrow('Invalid --debounce-ms');
+        ).rejects.toMatchObject({
+            code: 'cli-option-invalid',
+            args: { form: 'debounce-ms', value: '-1' },
+            message: expect.stringContaining(
+                '`--debounce-ms -1` is not a whole number of milliseconds from 0 to 60000, so the command did not run.\n' +
+                    '  help: pass a whole number from 0 to 60000, such as `--debounce-ms 100`, or leave it out for 50.',
+            ),
+        });
     });
 });

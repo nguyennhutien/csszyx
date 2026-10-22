@@ -8,57 +8,35 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
     Record<'unknown-key' | 'canonical-key' | 'removed-key' | 'numeric-key', SzDiagnosticTemplate>
 > = {
     "unknown-key": {
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "suggestion": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "key suggestion?",
         "text": "`{key}` is not an sz property.",
         "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
     },
     "canonical-key": {
-        "args": {
-            "key": {
-                "type": "string"
-            }
+        "args": "form key",
+        "text": {
+            "alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
+            "font": "`{key}` is not an sz key, and nothing is emitted for it.",
+            "scrollbar-color": "`{key}` is not an sz key, and nothing is emitted for it."
         },
-        "text": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
-        "help": "write `{canonical}`."
+        "help": {
+            "alias": "write `{canonical}`.",
+            "font": "write `weight` for the font weight, or `fontFamily` for the font family.",
+            "scrollbar-color": "write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour."
+        }
     },
     "removed-key": {
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "runtime-alias",
-                    "sugar-replaced",
-                    "sugar",
-                    "removed",
-                    "replaced"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "replacement": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "form key replacement?",
         "text": {
-            "runtime-alias": "`{key}` was removed, and nothing is emitted for its runtime value.",
+            "runtime-alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.",
             "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
             "sugar": "The boolean shorthand `{key}` was removed, and nothing is emitted for it.",
             "removed": "`{key}` was removed, and nothing is emitted for it.",
             "replaced": "`{key}` was replaced, and nothing is emitted for it."
         },
         "help": {
-            "runtime-alias": "write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.",
+            "runtime-alias": "write the values {canonicalAllowed} on `{canonical}`, and any other value on its own key: {groups}.",
             "sugar-replaced": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "sugar": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "removed": "{note}.",
@@ -66,11 +44,7 @@ export const SZ_EDITOR_DIAGNOSTIC_TEMPLATES: Readonly<
         }
     },
     "numeric-key": {
-        "args": {
-            "key": {
-                "type": "string"
-            }
-        },
+        "args": "key",
         "text": "`sz` received a numeric key `{key}`, and its value is ignored.",
         "help": "pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
     }

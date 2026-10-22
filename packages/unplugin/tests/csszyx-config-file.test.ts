@@ -111,6 +111,20 @@ const config: CsszyxConfig = {
 export default config;
 `;
 
+/**
+ * The problem a config that did not load gets, in the registry's words.
+ *
+ * @param reason - What the loader reported.
+ * @returns The problem's message.
+ */
+function loadFailed(reason: string): string {
+    return (
+        'This file could not be loaded, so the `recommended` levels apply.\n' +
+        '  help: fix the error the loader reported.\n' +
+        `  note: the loader reported: ${reason}.`
+    );
+}
+
 describe('loadDiagnosticPolicy', () => {
     // TypeScript under every package type is loaded by plain Node in the CLI's
     // `config-file-node-import.test.ts`; vitest's own transform stands in for
@@ -322,11 +336,11 @@ describe('loadDiagnosticPolicy', () => {
 
         expect(loaded.problems).toHaveLength(1);
         expect(loaded.problems[0]).toMatchObject({ severity: 'warning', path: 'csszyx.config.js' });
-        expect(loaded.problems[0]?.message).toContain('could not be loaded');
-        expect(loaded.problems[0]?.message).toContain('`csszyx init` 0.17');
-        expect(loaded.problems[0]?.message).toContain('nothing read');
-        expect(loaded.problems[0]?.message).toContain('`defineConfig`');
-        expect(loaded.problems[0]?.message).toContain("Unexpected token '{'");
+        expect(loaded.problems[0]?.message).toBe(
+            'This is the file `csszyx init` 0.17 and earlier wrote, which does not load, so it is ignored.\n' +
+                '  help: replace it with `export default defineConfig({ diagnostics: { … } })`, importing `defineConfig` from `csszyx`, or delete it.\n' +
+                "  note: the loader reported: Unexpected token '{'.",
+        );
         expect(loaded.policy.levelOf({ rule: 'dead-class' })).toBe('error');
     });
 
@@ -411,7 +425,7 @@ describe('loadDiagnosticPolicy', () => {
         const loaded = await loadDiagnosticPolicy(root, importModule);
 
         expect(loaded.problems[0]?.message).toBe(
-            'could not be loaded: defineConfig is not defined (at csszyx.config.ts:3:16)',
+            loadFailed('defineConfig is not defined (at csszyx.config.ts:3:16)'),
         );
     });
 
@@ -424,9 +438,7 @@ describe('loadDiagnosticPolicy', () => {
 
         const loaded = await loadDiagnosticPolicy(root, importModule);
 
-        expect(loaded.problems[0]?.message).toBe(
-            'could not be loaded: boom (at csszyx.config.mjs:7)',
-        );
+        expect(loaded.problems[0]?.message).toBe(loadFailed('boom (at csszyx.config.mjs:7)'));
     });
 
     it('writes the user file name where the reason names the copy', async () => {
@@ -441,7 +453,7 @@ describe('loadDiagnosticPolicy', () => {
         const loaded = await loadDiagnosticPolicy(root, importModule);
 
         expect(loaded.problems[0]?.message).toBe(
-            "could not be loaded: Cannot find package 'x' imported from csszyx.config.ts",
+            loadFailed("Cannot find package 'x' imported from csszyx.config.ts"),
         );
     });
 
@@ -461,7 +473,9 @@ describe('loadDiagnosticPolicy', () => {
 
         expect(loaded.problems[0]).toMatchObject({ severity: 'error', fileIgnored: true });
         expect(loaded.problems[0]?.message).toBe(
-            `could not be loaded: Unexpected token ':'. \`${name}\` holds TypeScript syntax; rename it to \`${to}\`.`,
+            'This file holds TypeScript syntax under a JavaScript name, so it could not be loaded and the `recommended` levels apply.\n' +
+                `  help: rename it to \`${to}\`.\n` +
+                "  note: the loader reported: Unexpected token ':'.",
         );
     });
 
@@ -473,7 +487,7 @@ describe('loadDiagnosticPolicy', () => {
             return Promise.reject(new SyntaxError("Unexpected token ':'"));
         });
 
-        expect(loaded.problems[0]?.message).toBe("could not be loaded: Unexpected token ':'");
+        expect(loaded.problems[0]?.message).toBe(loadFailed("Unexpected token ':'"));
     });
 
     it('does not suggest a rename for a syntax error in plain JavaScript or a .ts file', async () => {
@@ -487,8 +501,8 @@ describe('loadDiagnosticPolicy', () => {
         ];
 
         expect(loads.map(loaded => loaded.problems[0]?.message)).toEqual([
-            "could not be loaded: Unexpected token ';'",
-            "could not be loaded: Unexpected token ';'",
+            loadFailed("Unexpected token ';'"),
+            loadFailed("Unexpected token ';'"),
         ]);
     });
 
@@ -503,7 +517,9 @@ describe('loadDiagnosticPolicy', () => {
             {
                 severity: 'error',
                 path: 'csszyx.config.mjs',
-                message: 'has no default export; write `export default defineConfig({ … })`.',
+                message:
+                    'This file has no default export, so nothing in it applies.\n' +
+                    '  help: write `export default defineConfig({ … })`, importing `defineConfig` from `csszyx`.',
                 fileIgnored: true,
             },
         ]);
@@ -551,7 +567,8 @@ describe('loadDiagnosticPolicy', () => {
         const loaded = await loadDiagnosticPolicy(root);
 
         expect(loaded.problems.map(problem => problem.message)).toEqual([
-            '`dead-clas` is not a rule id — did you mean `dead-class`?',
+            'No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.\n' +
+                '  help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
         ]);
     });
 
@@ -615,7 +632,9 @@ describe('findCsszyxConfigFile', () => {
             {
                 severity: 'warning',
                 path: 'csszyx.config.mjs',
-                message: 'not read: `csszyx.config.mts` is read first. Keep one config file.',
+                message:
+                    '`csszyx.config.mts` is read first, so this file is not read and nothing in it applies.\n' +
+                    '  help: keep one config file: move what this file sets into `csszyx.config.mts`, then delete this file.',
             },
         ]);
     });
@@ -673,8 +692,11 @@ describe('the policy state file the Turbopack loader reads', () => {
         fs.writeFileSync(file, JSON.stringify({ config: {} }));
         readDiagnosticPolicyState(root);
         expect(warn.mock.calls.map(call => String(call[0]))).toEqual([
-            `[csszyx] .csszyx/${DIAGNOSTIC_POLICY_STATE_FILE} is in format 999, and this version reads format ${DIAGNOSTIC_POLICY_READ_FORMAT}: the levels in it are not used.\n` +
-                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes it again.',
+            `[csszyx] policy-state-format-skew: .csszyx/${DIAGNOSTIC_POLICY_STATE_FILE}\n` +
+                `  This policy file was written in format 999, and this csszyx version reads format ${DIAGNOSTIC_POLICY_READ_FORMAT}, so the levels in it are not used.\n` +
+                '  help: run `csszyx next prebuild` or `csszyx next watch` with the installed csszyx to write it again.\n' +
+                '  note: until then csszyx loads the config file itself, in a child process, or applies the `recommended` levels when the project has none.\n' +
+                '  docs: https://csszyx.com/e/policy-state-format-skew',
         ]);
     });
 });

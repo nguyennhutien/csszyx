@@ -16,6 +16,7 @@ import {
     NextSafelistWatcher,
 } from '../src/next-watcher.js';
 import type { NextWatcherLoopCycleRunner } from '../src/next-watcher-loop.js';
+import { internalErrorMessage } from './helpers/internal-error.js';
 
 describe('Next safelist watcher controller', () => {
     function context() {
@@ -139,7 +140,9 @@ describe('Next safelist watcher controller', () => {
             },
         });
 
-        expect(() => watcher.start()).toThrow(/already locked by process 4242/);
+        expect(() => watcher.start()).toThrow(
+            /^\[csszyx\] next-safelist-locked:\n {2}Process 4242 on /,
+        );
     });
 
     it('starts against a real lock the loader holds, and materializes once it lets go', () => {
@@ -193,7 +196,15 @@ describe('Next safelist watcher controller', () => {
             runCycle: () => undefined as never,
         });
 
-        expect(() => watcher.start()).toThrow('failed to run its initial cycle');
+        expect(() => watcher.start()).toThrow(
+            expect.objectContaining({
+                code: 'internal-error',
+                message: internalErrorMessage(
+                    'NextSafelistWatcher.start',
+                    'the initial cycle neither ran nor was queued behind the lock',
+                ),
+            }),
+        );
     });
 
     it('accepts only direct absolute JSON shard paths', () => {
@@ -337,7 +348,15 @@ describe('Next safelist watcher controller', () => {
 
         expect(watcher.notify('add', path.join(ctx.safelist.shardsDir, 'a.json'))).toBe(false);
         watcher.close();
-        expect(() => watcher.start()).toThrow('Cannot start a closed Next safelist watcher');
+        expect(() => watcher.start()).toThrow(
+            expect.objectContaining({
+                code: 'internal-error',
+                message: internalErrorMessage(
+                    'NextSafelistWatcher.start',
+                    'the watcher was started after it was closed',
+                ),
+            }),
+        );
     });
 });
 

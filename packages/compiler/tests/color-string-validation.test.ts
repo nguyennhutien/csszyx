@@ -5,6 +5,22 @@ import {
     isDroppedSlashOpacity,
 } from '../src/color-validation.js';
 import { transform } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
+
+/**
+ * The slash-opacity-string line for one key and value.
+ *
+ * @param key - The colour key.
+ * @param color - The colour before the slash.
+ * @param opacity - The opacity after it.
+ * @returns The line.
+ */
+const slashOpacity = (key: string, color: string, opacity: string) =>
+    runtimeMessage(
+        'slash-opacity-string',
+        `\`${key}: '${color}/${opacity}'\` emits nothing: a string value cannot carry a slash opacity.`,
+        `help: use the object form: \`{ color: '${color}', op: ${opacity} }\`.`,
+    );
 
 /**
  * Tests for the one colour-string rule the lowering applies.
@@ -63,25 +79,19 @@ describe('transform() — color string validation (JS path)', () => {
         it('suppresses bg: "blue-500/20" and warns', () => {
             const result = transform({ bg: 'blue-500/20' });
             expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining('string slash opacity is not supported'),
-            );
+            expect(console.warn).toHaveBeenCalledWith(slashOpacity('bg', 'blue-500', '20'));
         });
 
         it('suppresses bg: "blue-500/02" (typo) and warns', () => {
             const result = transform({ bg: 'blue-500/02' });
             expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining('string slash opacity is not supported'),
-            );
+            expect(console.warn).toHaveBeenCalledWith(slashOpacity('bg', 'blue-500', '02'));
         });
 
         it('suppresses text: "blue-600/75" and warns', () => {
             const result = transform({ color: 'blue-600/75' });
             expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining('string slash opacity is not supported'),
-            );
+            expect(console.warn).toHaveBeenCalledWith(slashOpacity('color', 'blue-600', '75'));
         });
 
         it('suppresses other color props with slash opacity', () => {
@@ -90,9 +100,7 @@ describe('transform() — color string validation (JS path)', () => {
                 vi.clearAllMocks();
                 const result = transform({ [prop]: 'red-500/50' });
                 expect(result.className).toBe('');
-                expect(console.warn).toHaveBeenCalledWith(
-                    expect.stringContaining('string slash opacity is not supported'),
-                );
+                expect(console.warn).toHaveBeenCalledWith(slashOpacity(prop, 'red-500', '50'));
             }
         });
     });

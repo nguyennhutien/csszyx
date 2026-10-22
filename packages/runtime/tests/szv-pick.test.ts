@@ -21,6 +21,7 @@ import { szr } from '../src/concatenate.js';
 import { setSzLowering } from '../src/lowering-slot.js';
 import { __szvPick, __szvPick1, type SzvCompiledTable } from '../src/szv-pick.js';
 import { szv } from '../src/variants.js';
+import { unknownValueLine, unknownVariantLine } from './helpers/szv-lines.js';
 
 afterEach(() => {
     setSzLowering(null);
@@ -202,19 +203,16 @@ describe('dev warning parity', () => {
         });
 
         szr(factory({ ghostA: 'x', pad: 'nopeA' } as never));
-        const fromFactory = seen.splice(0);
-        expect(fromFactory.join('\n')).toContain('unknown variant "ghostA"');
-        expect(fromFactory.join('\n')).toContain('"nopeA" is not a value of variant "pad"');
+        expect(seen.splice(0)).toEqual([
+            unknownVariantLine('ghostA'),
+            unknownValueLine('pad', 'nopeA', ['sm']),
+        ]);
 
         __szvPick(table, { ghostB: 'x', tone: 'nopeB' });
-        const fromPicker = seen.splice(0);
-        expect(fromPicker.join('\n')).toContain('unknown variant "ghostB"');
-        expect(fromPicker.join('\n')).toContain('"nopeB" is not a value of variant "tone"');
-
-        // Identical templates modulo the differing names.
-        const normalize = (messages: string[]): string[] =>
-            messages.map(m => m.replace(/"[^"]*"/g, '"·"')).sort();
-        expect(normalize(fromPicker)).toEqual(normalize(fromFactory));
+        expect(seen.splice(0)).toEqual([
+            unknownVariantLine('ghostB'),
+            unknownValueLine('tone', 'nopeB', ['red']),
+        ]);
 
         // And the dedup itself: repeating an already-warned selection through
         // the OTHER path stays silent, because the channel is shared.
@@ -259,8 +257,10 @@ describe('picker hardening', () => {
         __szvPick(table, { pad: [] });
         __szvPick(table, { pad: { value: 'sm' } });
 
-        expect(seen.join('\n')).toContain('"an array" is not a value of variant "pad"');
-        expect(seen.join('\n')).toContain('"object" is not a value of variant "pad"');
+        expect(seen).toEqual([
+            unknownValueLine('pad', 'an array', ['sm']),
+            unknownValueLine('pad', 'object', ['sm']),
+        ]);
     });
 });
 
@@ -329,13 +329,8 @@ describe('__szvPick1 equivalence (exhaustive)', () => {
         const table = compileTable({ variants: { pad: { sm: { p: 2 } } } });
 
         __szvPick1(table, 'pad', 'nopeSingle');
-        const fromSingle = seen.splice(0);
+        expect(seen.splice(0)).toEqual([unknownValueLine('pad', 'nopeSingle', ['sm'])]);
         __szvPick(table, { pad: 'nopeFull' });
-        const fromFull = seen.splice(0);
-
-        expect(fromSingle.join('\n')).toContain('"nopeSingle" is not a value of variant "pad"');
-        const normalize = (messages: string[]): string[] =>
-            messages.map(m => m.replace(/"[^"]*"/g, '"·"'));
-        expect(normalize(fromSingle)).toEqual(normalize(fromFull));
+        expect(seen.splice(0)).toEqual([unknownValueLine('pad', 'nopeFull', ['sm'])]);
     });
 });

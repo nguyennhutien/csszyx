@@ -2,9 +2,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { JsonLike } from './next-cache-identity.js';
+import { diagnosticError } from './diagnostic-message.js';
 import { configWithImportedStaticSz, resolveNextCrossModule } from './next-cross-module.js';
-import type { NextLaneOptions } from './next-lane-options.js';
+import { assertNextMangleBoundary, type NextLaneOptions } from './next-lane-options.js';
 import { readPackageVersion } from './next-package-version.js';
 import { NEXT_PREBUILD_LOCK_COMMAND, writeNextSafelistShard } from './next-safelist-state.js';
 import {
@@ -13,7 +13,8 @@ import {
     transformNextSource,
 } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
-import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
+import { resolveNextClassPrefix } from './next-stylesheet-facts.js';
+import { projectRelative } from './path-case.js';
 import { assertRuntimeMatchesPlugin } from './runtime-version.js';
 
 // The CLI records the stylesheet facts before it calls the prebuild, through the
@@ -24,7 +25,6 @@ export {
     type MergeAuditFile,
     type MergeAuditFinding,
     type MergeAuditKind,
-    mergeRemovalMessage,
 } from './merge-audit.js';
 export {
     MERGE_REGISTRATION_FILE,
@@ -110,7 +110,7 @@ export interface NextPrebuildResult {
  * @returns Summary covering scanned/transformed counts and materialization paths.
  */
 export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResult {
-    assertProductionManglingBoundary(options);
+    assertNextMangleBoundary(options, (options.mode ?? 'production') === 'production', 'prebuild');
 
     const csszyxVersion =
         options.csszyxVersion ?? readPackageVersion('../package.json', import.meta.url);
@@ -148,7 +148,9 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
     // plugin; a config that does not list it makes every sz class silent.
     const postcssConfig = findPostcssConfigWithoutCsszyx(context.root);
     if (postcssConfig !== null) {
-        (options.warn ?? console.warn)(missingPostcssPluginMessage(postcssConfig));
+        (options.warn ?? console.warn)(
+            missingPostcssPluginMessage(projectRelative(context.root, postcssConfig)),
+        );
     }
 
     const cacheRoot = resolveTransformCacheDir(
@@ -161,7 +163,11 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         tailwindStylesheet: [options.tailwindStylesheet ?? []].flat(),
     });
     if (!prefix.ok) {
-        throw new Error(unreadNextPrefixMessage(context.root, prefix.reason, 'the Next prebuild'));
+        throw diagnosticError('next-prefix-unread', {
+            lane: 'prebuild',
+            root: context.root,
+            reason: prefix.reason,
+        });
     }
 
     const files: NextPrebuildFileResult[] = [];
@@ -243,35 +249,6 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         files,
         cycle,
     };
-}
-
-/**
- *
- * @param options
- */
-function assertProductionManglingBoundary(options: NextPrebuildOptions): void {
-    if (options.allowProductionMangling) {
-        return;
-    }
-    if ((options.mode ?? 'production') !== 'production') {
-        return;
-    }
-    if (options.compilerOptions?.mangleVars === true || hasEnabledMangleVars(options.config)) {
-        throw new Error(
-            '[csszyx] Next prebuild does not support production CSS variable mangling. Use Next Webpack mode for full csszyx parity.',
-        );
-    }
-}
-
-/**
- *
- * @param config
- */
-function hasEnabledMangleVars(config: JsonLike | undefined): boolean {
-    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-        return false;
-    }
-    return (config as { readonly mangleVars?: unknown }).mangleVars === true;
 }
 
 /**

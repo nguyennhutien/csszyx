@@ -1,3 +1,5 @@
+import { MERGE_TABLE_FORMAT_SKEW, szReport } from '@csszyx/compiler/report';
+
 /** Compact, app-scoped merge data emitted by the build plugin. */
 export type MergeSignatureTable = readonly [
     signatures: Readonly<Record<string, number>>,
@@ -48,12 +50,16 @@ export function registerMergeSignatures(
         table = undefined;
         if (!warnedFormat) {
             warnedFormat = true;
-            console.warn(
-                `[csszyx] the merge table was written in format ${format} and this runtime reads ` +
-                    `format ${MERGE_TABLE_FORMAT}, so \`szcn\` keeps every class until it is rebuilt.\n` +
-                    '  help: run the build, or `csszyx next prebuild` on Next.js, with the csszyx ' +
-                    'versions now installed.',
-            );
+            // In production too: a table from another csszyx version would
+            // merge wrongly, and now merges nothing.
+            const args = { format, expected: MERGE_TABLE_FORMAT };
+            if (process.env.NODE_ENV !== 'production') {
+                szReport({ diagnostic: MERGE_TABLE_FORMAT_SKEW, args });
+            } else {
+                console.warn(
+                    `[csszyx] merge-table-format-skew: ${JSON.stringify(args)} https://csszyx.com/e/merge-table-format-skew`,
+                );
+            }
         }
         return;
     }

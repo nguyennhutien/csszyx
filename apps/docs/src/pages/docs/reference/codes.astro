@@ -5,15 +5,14 @@
  */
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 
-import data from '../../../data/diagnostics.json';
 import {
-    type DiagnosticData,
+    DIAGNOSTIC_DATA,
     type DiagnosticEntry,
     isSettable,
     SHIPPED,
 } from '../../../utils/diagnostic-page';
 
-const { diagnostics, groups, removed } = data as DiagnosticData;
+const { diagnostics, groups, removed } = DIAGNOSTIC_DATA;
 
 /** The columns of the surfaces an id appears on. */
 const surfaces = (entry: DiagnosticEntry): string =>

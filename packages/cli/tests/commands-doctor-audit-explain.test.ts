@@ -95,10 +95,26 @@ describe('doctor', () => {
 
         expect(output).toContain('csszyx configuration found: csszyx.config.mjs');
         expect(output).toContain(
-            '\u2717 diagnostics.rules: `dead-clas` is not a rule id — did you mean `dead-class`?',
+            '\u2717 `diagnostics.rules`: No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.\n' +
+                '  help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
         );
-        expect(output).toContain('\u26a0 development: `development` is not read from this file');
+        expect(output).toContain(
+            '\u26a0 `development`: `development` is a plugin option, and this file does not set plugin options, so it is ignored.',
+        );
         expect(output).toContain('Found 1 issue(s)');
+    });
+
+    it('paths a top-level field problem by `default export`, in a code span', async () => {
+        const { logs } = captureLogs();
+        const cwd = tempRoot();
+        writeFileSync(join(cwd, 'csszyx.config.mjs'), 'export default { diagnostic: {} };');
+        writeFileSync(join(cwd, 'package.json'), JSON.stringify({}));
+
+        await doctor({ cwd });
+
+        expect(logs.join('\n')).toContain(
+            '`default export`: `diagnostic` is not a field csszyx reads, so nothing under it applies.',
+        );
     });
 
     it('names the file when the config does not load', async () => {
@@ -109,7 +125,9 @@ describe('doctor', () => {
 
         await doctor({ cwd });
 
-        expect(logs.join('\n')).toContain('\u2717 csszyx.config.mjs could not be loaded:');
+        expect(logs.join('\n')).toContain(
+            '\u2717 `csszyx.config.mjs`: This file could not be loaded, so the `recommended` levels apply.',
+        );
     });
 
     it('counts the missing pieces on an empty project', async () => {
@@ -119,6 +137,9 @@ describe('doctor', () => {
 
         await doctor({ cwd, verbose: true });
         const output = logs.join('\n');
+        expect(output).toContain(
+            '\u26a0 No csszyx.config found, so the `recommended` levels apply.',
+        );
         expect(output).toContain('issue(s)');
         expect(output).toContain('npm install -D tailwindcss');
     });
@@ -224,10 +245,25 @@ describe('scanTailwindConfig', () => {
     it('throws a readable error for a missing or broken config', async () => {
         const { scanTailwindConfig } = await import('../src/scanner/tailwind-scanner.js');
         const cwd = tempRoot();
-        await expect(scanTailwindConfig(join(cwd, 'nope.js'))).rejects.toThrow(/not found/);
+        await expect(scanTailwindConfig(join(cwd, 'nope.js'))).rejects.toMatchObject({
+            code: 'tailwind-config-missing',
+            message: expect.stringContaining('This Tailwind config does not exist'),
+        });
         const broken = join(cwd, 'tailwind.config.mjs');
         writeFileSync(broken, 'export default {{{');
-        await expect(scanTailwindConfig(broken)).rejects.toThrow(/Failed to load/);
+        await expect(scanTailwindConfig(broken)).rejects.toMatchObject({
+            code: 'tailwind-config-unloadable',
+            args: { reason: expect.any(String) },
+            cause: expect.any(Error),
+            message: expect.stringContaining('This Tailwind config threw while loading'),
+        });
+        // A config may throw a value that is not an Error; its text is the reason.
+        const thrower = join(cwd, 'tailwind.config.cjs');
+        writeFileSync(thrower, "throw 'no theme here';");
+        await expect(scanTailwindConfig(thrower)).rejects.toMatchObject({
+            code: 'tailwind-config-unloadable',
+            args: { reason: 'no theme here' },
+        });
     });
 });
 

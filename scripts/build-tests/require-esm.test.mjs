@@ -73,13 +73,15 @@ function runCommonJs(script) {
 const APP_PACKAGES = ['runtime', 'dynamic', 'types', 'csszyx'];
 
 /**
- * The `@csszyx/compiler` subpaths a CommonJS file of an app package requires.
+ * The `@csszyx/compiler` subpaths a CommonJS file of an app package requires,
+ * and those the compiler's own CommonJS files require in turn: `./browser`
+ * reaches its reporter through `@csszyx/compiler/report`.
  *
  * @returns {Set<string>} The specifiers.
  */
 function compilerSubpathsRequiredFromCommonJs() {
     const found = new Set();
-    for (const name of APP_PACKAGES) {
+    for (const name of [...APP_PACKAGES, 'compiler']) {
         const dist = path.join(ROOT, 'packages', name, 'dist');
         if (!existsSync(dist)) continue;
         for (const file of readdirSync(dist)) {

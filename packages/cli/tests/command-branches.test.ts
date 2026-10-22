@@ -156,7 +156,9 @@ describe('next-prebuild non-json output paths', () => {
         const cwd = tempRoot();
         const code = await nextPrebuild({ root: cwd, cwd, pattern: 'app/**/*.none' });
         expect(code).toBe(1);
-        expect(errors.join('\n')).toContain('No source files matched');
+        expect(errors.join('\n')).toContain(
+            `No source file under \`${cwd}\` matches \`app/**/*.none\`, so there is nothing to scan for classes.`,
+        );
     });
 
     it('prints a human error for an invalid --mode', async () => {
@@ -171,7 +173,9 @@ describe('next-prebuild non-json output paths', () => {
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div />;');
         const code = await nextPrebuild({ root: cwd, cwd, mode: 'staging' as 'production' });
         expect(code).toBe(1);
-        expect(errors.join('\n')).toContain('Invalid --mode');
+        expect(errors.join('\n')).toContain(
+            '`--mode staging` is not a mode this command takes, so the command did not run.',
+        );
     });
 });
 

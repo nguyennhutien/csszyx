@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { hasSz, omitSz, pickSz, splitBoxSz } from '../src/split-box.js';
+import { SELECTOR_INVALID, unknownCategoryLine } from './helpers/split-box-lines.js';
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -62,17 +63,17 @@ describe('the twins refuse what the class toolkit refuses', () => {
         expect(hasSz({ w: 'full', p: 2 }, {})).toBe(false);
         expect(pickSz({ w: 'full', p: 2 }, {})).toEqual({});
         expect(omitSz({ w: 'full', p: 2 }, {})).toEqual({ w: 'full', p: 2 });
-        expect(said()).toContain('empty selector');
+        expect(said()).toBe(SELECTOR_INVALID.empty);
     });
 
     it('a misspelt selector warns', () => {
         expect(hasSz({ w: 'full' }, 'widht')).toBe(false);
-        expect(said()).toContain("'widht'");
+        expect(said()).toBe(unknownCategoryLine('widht'));
     });
 
     it('an array warns', () => {
         expect(hasSz({ w: 'full' }, ['w'] as unknown as string)).toBe(false);
-        expect(said()).toContain('array');
+        expect(said()).toBe(SELECTOR_INVALID.array);
     });
 });
 
@@ -83,8 +84,6 @@ describe('a qualified selector on the sz twins', () => {
     // it must be told what to pass, not that the selector does not exist.
     it('is refused with the class-only reason and the form to pass instead', () => {
         expect(pickSz({ color: 'red', text: 'sm' }, 'text:color')).toEqual({});
-        expect(said()).toContain("'text:color'");
-        expect(said()).toContain("pass 'text'");
-        expect(said()).not.toContain('is not a category or class prefix');
+        expect(said()).toBe(SELECTOR_INVALID.szQualified('text:color', 'text'));
     });
 });

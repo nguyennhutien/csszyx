@@ -67,7 +67,7 @@ describe('core string paths (no lowering registered)', () => {
 
 describe('core object paths without a lowerer', () => {
     it('throws loudly instead of silently dropping styling', () => {
-        expect(() => _sz({ p: 4 })).toThrowError(/object-lowering/);
+        expect(() => _sz({ p: 4 })).toThrowError(/^\[csszyx\] lowering-not-loaded: /);
     });
 
     it('names the one-line fix in the error', () => {
@@ -75,12 +75,12 @@ describe('core object paths without a lowerer', () => {
     });
 
     it('throws for an object nested inside an array too', () => {
-        expect(() => _sz(['a', { p: 4 }])).toThrowError(/object-lowering/);
+        expect(() => _sz(['a', { p: 4 }])).toThrowError(/^\[csszyx\] lowering-not-loaded: /);
     });
 
     it('throws from _szPart and _szMerge as well', () => {
-        expect(() => _szPart({ p: 4 })).toThrowError(/object-lowering/);
-        expect(() => _szMerge({ p: 4 })).toThrowError(/object-lowering/);
+        expect(() => _szPart({ p: 4 })).toThrowError(/^\[csszyx\] lowering-not-loaded: /);
+        expect(() => _szMerge({ p: 4 })).toThrowError(/^\[csszyx\] lowering-not-loaded: /);
     });
 });
 

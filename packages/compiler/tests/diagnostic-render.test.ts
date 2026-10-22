@@ -1,7 +1,7 @@
 /**
  * The diagnostic renderer and its computed values (ADR 0031).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { COMPUTED } from '../../../scripts/diagnostics/registry.mjs';
 import { casingProblems, PLACEHOLDER_PATTERN } from '../../../scripts/gen-diagnostic-codes.mjs';
@@ -14,6 +14,7 @@ import {
     renderSzDiagnosticParts,
 } from '../src/diagnostic-render.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from '../src/diagnostic-render-helpers.js';
+import { renderSzDiagnosticBody as renderRootBody } from '../src/diagnostic-render-root.js';
 import {
     diagnosticPath,
     renderEngineDiagnostics,
@@ -26,10 +27,45 @@ import { MIGRATION_NOTES } from '../src/transform-core.js';
 
 const computed = SZ_DIAGNOSTIC_COMPUTED_VALUES;
 
+describe('the root renderer', () => {
+    it('words a line only Node prints, which the engine renderer carries no words for', async () => {
+        const root = await import('../src/index.js');
+        const diagnostic = {
+            code: 'config-id-not-settable' as const,
+            args: { id: 'uncompiled-sz' },
+        };
+        expect(root.renderSzDiagnosticParts(diagnostic, computed).text).toBe(
+            '`uncompiled-sz` is printed to the console or thrown, so `csszyx.config` sets no level for it.',
+        );
+        // The engine lane renders engine ids, so it loads none of these words,
+        // and says so rather than print an empty line.
+        expect(() => renderSzDiagnosticParts(diagnostic, computed)).toThrow(
+            'this renderer has no words for `config-id-not-settable`',
+        );
+        // An engine id reads the same either way.
+        const engine = {
+            code: 'canonical-key' as const,
+            args: { form: 'alias', key: 'padding' },
+        };
+        expect(root.renderSzDiagnosticParts(engine, computed)).toEqual(
+            renderSzDiagnosticParts(engine, computed),
+        );
+        expect(root.renderSzDiagnostic({ diagnostic, file: 'csszyx.config.ts', computed })).toBe(
+            '[csszyx] config-id-not-settable: csszyx.config.ts\n' +
+                '  `uncompiled-sz` is printed to the console or thrown, so `csszyx.config` sets no level for it.\n' +
+                `  help: ${root.renderSzDiagnosticParts(diagnostic, computed).help}\n` +
+                '  docs: https://csszyx.com/e/config-id-not-settable',
+        );
+    });
+});
+
 describe('renderSzDiagnosticParts', () => {
     it('returns each part bare, for a sink to lay out', () => {
         expect(
-            renderSzDiagnosticParts({ code: 'canonical-key', args: { key: 'padding' } }, computed),
+            renderSzDiagnosticParts(
+                { code: 'canonical-key', args: { form: 'alias', key: 'padding' } },
+                computed,
+            ),
         ).toEqual({
             text: '`padding` is an alias of `p`, and nothing is emitted for it.',
             help: 'write `p`.',
@@ -46,7 +82,10 @@ describe('renderSzDiagnosticParts', () => {
     });
 
     it('leaves out a field the code has no template for', () => {
-        const noNote = renderSzDiagnosticParts({ code: 'unresolvable-spread', args: {} }, computed);
+        const noNote = renderSzDiagnosticParts(
+            { code: 'numeric-key', args: { key: '0' } },
+            computed,
+        );
         expect(Object.keys(noNote)).toEqual(['text', 'help', 'docs']);
         const noHelp = renderSzDiagnosticParts(
             {
@@ -136,21 +175,35 @@ describe('renderSzDiagnostic', () => {
         expect(message).toContain('docs: https://csszyx.com/e/numeric-key');
     });
 
-    it('prints nothing for a per-form field when the issue names no form', () => {
-        expect(
+    it('refuses an issue that names no form, or one with no sentence, outside production', () => {
+        expect(() =>
             renderSzDiagnosticBody(
                 { code: 'closed-enum-value', args: { key: 'k', value: 'v' } },
                 computed,
             ),
-        ).toBe('');
+        ).toThrow('`closed-enum-value` was reported without its `form` arg');
+        expect(() =>
+            renderSzDiagnosticBody(
+                { code: 'closed-enum-value', args: { form: 'nope', key: 'k', value: 'v' } },
+                computed,
+            ),
+        ).toThrow('`closed-enum-value` has no sentence for the form `nope`');
     });
 
-    it('prints nothing for a field the variant has no template for', () => {
-        const body = renderSzDiagnosticBody(
-            { code: 'closed-enum-value', args: { form: 'nope', key: 'k', value: 'v' } },
-            computed,
-        );
-        expect(body).toBe('');
+    it('prints nothing for a per-form field it has no template for, in production', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        try {
+            for (const args of [
+                { key: 'k', value: 'v' },
+                { form: 'nope', key: 'k', value: 'v' },
+            ]) {
+                expect(renderSzDiagnosticBody({ code: 'closed-enum-value', args }, computed)).toBe(
+                    '',
+                );
+            }
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 });
 
@@ -300,13 +353,22 @@ describe('diagnosticPath', () => {
     });
 
     it('matches a Windows root whatever its separators and drive-letter case', () => {
-        expect(diagnosticPath('C:\\repo\\src\\A.tsx', 'C:/repo')).toBe('src\\A.tsx');
+        expect(diagnosticPath('C:\\repo\\src\\A.tsx', 'C:/repo')).toBe('src/A.tsx');
         expect(diagnosticPath('C:/repo/src/A.tsx', 'C:\\repo\\')).toBe('src/A.tsx');
         expect(diagnosticPath('c:\\Repo\\A.tsx', 'C:\\repo')).toBe('A.tsx');
         expect(diagnosticPath('D:\\repo\\A.tsx', 'C:\\repo')).toBe('D:\\repo\\A.tsx');
         expect(diagnosticPath('C:\\repository\\A.tsx', 'c:\\repo')).toBe('C:\\repository\\A.tsx');
         expect(diagnosticPath('c:\\A.tsx', 'C:\\')).toBe('A.tsx');
         expect(diagnosticPath('C:\\\u0130x\\A.tsx', 'C:\\i\u0307x')).toBe('C:\\\u0130x\\A.tsx');
+    });
+
+    it('prints a Windows path under the root with `/`, as Vite spells it', () => {
+        // webpack and Jest pass backslashed resource paths, Vite forward ones:
+        // one file must read the same in both.
+        expect(diagnosticPath('C:\\repo\\src\\ui\\A.tsx', 'C:\\repo')).toBe('src/ui/A.tsx');
+        expect(diagnosticPath('C:/repo/src/ui/A.tsx', 'C:\\repo')).toBe('src/ui/A.tsx');
+        // A backslash is a filename character on POSIX, kept as given.
+        expect(diagnosticPath('/repo/src/a\\b.tsx', '/repo')).toBe('src/a\\b.tsx');
     });
 
     it('keeps the case of a POSIX root significant', () => {
@@ -368,9 +430,9 @@ describe('isSzDiagnosticId', () => {
         expect(isSzDiagnosticId('CSSZYX_NATIVE_UNAVAILABLE')).toBe(false);
     });
 
-    it('renders a template of an id the engine does not report', () => {
+    it('renders a template of an id the engine does not report, through the root', () => {
         expect(
-            renderSzDiagnosticBody(
+            renderRootBody(
                 { code: 'config-id-not-settable', args: { id: 'internal-error' } },
                 SZ_DIAGNOSTIC_COMPUTED_VALUES,
             ),

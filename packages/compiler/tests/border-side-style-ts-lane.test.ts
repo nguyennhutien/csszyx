@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { transform } from '../src/index.js';
 import { __resetSzWarnDedupForTests, setSzWarnLocation } from '../src/transform-core.js';
+import { engineMessage, runtimeMessage } from './engine-message.js';
 
 /** Every per-side border key, including the logical ones. */
 const SIDE_KEYS = [
@@ -49,11 +50,15 @@ describe('a style keyword on a side border key (TypeScript lowering)', () => {
         transform({ borderB: 'none' });
         transform({ borderB: 'none' });
 
-        expect(warn).toHaveBeenCalledTimes(1);
-        const message = String(warn.mock.calls[0]?.[0]);
-        expect(message).toContain('"borderB"');
-        expect(message).toContain('no per-side border style');
-        expect(message).toContain('borderStyle');
+        expect(warn.mock.calls).toEqual([
+            [
+                runtimeMessage(
+                    'per-side-border-style',
+                    "`borderB: 'none'` emits nothing: Tailwind has no per-side border style.",
+                    "help: use `borderStyle: 'none'` for every side, or a number on `borderB` for the width.",
+                ),
+            ],
+        ]);
     });
 
     it('keeps the width, the colour and the canonical style key', () => {
@@ -74,7 +79,14 @@ describe('a style keyword on a side border key (TypeScript lowering)', () => {
         setSzWarnLocation('App.tsx:12');
         try {
             transform({ borderL: 'double' });
-            expect(String(warn.mock.calls[0]?.[0])).toContain('at App.tsx:12');
+            expect(String(warn.mock.calls[0]?.[0])).toBe(
+                engineMessage(
+                    'per-side-border-style',
+                    'App.tsx:12',
+                    "`borderL: 'double'` emits nothing: Tailwind has no per-side border style.",
+                    "help: use `borderStyle: 'double'` for every side, or a number on `borderL` for the width.",
+                ),
+            );
         } finally {
             setSzWarnLocation(undefined);
         }

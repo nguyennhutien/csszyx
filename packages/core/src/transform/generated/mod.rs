@@ -37,7 +37,7 @@ mod sz_fallback_matrix_tests {
 
 #[cfg(test)]
 mod diagnostic_table_tests {
-    use super::tables::{key_migration_note, key_suggestion};
+    use super::tables::{key_migration_note, key_suggestion, split_shorthand_form};
 
     /// The CSS property names the table translates, alias to canonical key.
     const CANONICAL_KEY_SUGGESTIONS: &[(&str, &str)] = &[
@@ -82,10 +82,6 @@ mod diagnostic_table_tests {
         ("boxDecorationBreak", "boxDecoration"),
         ("objectPosition", "objectPos"),
         ("zIndex", "z"),
-        (
-            "font",
-            "weight (for font-weight) or fontFamily (for family)",
-        ),
         ("fontWeight", "weight"),
         ("fontSize", "text"),
         ("textDecoration", "decoration"),
@@ -139,10 +135,6 @@ mod diagnostic_table_tests {
         ("touchAction", "touch"),
         ("userSelect", "select"),
         ("captionSide", "caption"),
-        (
-            "scrollbarColor",
-            "scrollbarThumb (thumb color) or scrollbarTrack (track color)",
-        ),
         ("scrollbarWidth", "scrollbar"),
         ("flexWrapReverse", "flexWrap: 'wrap-reverse'"),
         ("flexNowrap", "flexWrap: 'nowrap'"),
@@ -169,9 +161,32 @@ mod diagnostic_table_tests {
         }
 
         // A key that IS canonical has nothing to suggest, so the lookup must
-        // not answer for everything.
-        for key in ["p", "bg", "display", "alignContent", "notAKeyAtAll"] {
+        // not answer for everything; nor does a split shorthand, whose value
+        // would be prose naming two keys rather than one key to write.
+        for key in [
+            "p",
+            "bg",
+            "display",
+            "alignContent",
+            "notAKeyAtAll",
+            "font",
+            "scrollbarColor",
+        ] {
             assert_eq!(key_suggestion(key), None, "{key}");
+        }
+    }
+
+    /// A CSS shorthand csszyx writes as two keys names its `canonical-key`
+    /// form, whose help names both keys.
+    #[test]
+    fn every_split_shorthand_names_its_form() {
+        assert_eq!(split_shorthand_form("font"), Some("font"));
+        assert_eq!(
+            split_shorthand_form("scrollbarColor"),
+            Some("scrollbar-color")
+        );
+        for key in ["fontFamily", "weight", "scrollbarThumb", "p"] {
+            assert_eq!(split_shorthand_form(key), None, "{key}");
         }
     }
 

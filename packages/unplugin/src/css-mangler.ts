@@ -14,6 +14,8 @@
 import postcss, { type Root, type Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 
+import { diagnosticMessage } from './diagnostic-message.js';
+
 const BACKSLASH = String.fromCodePoint(92);
 
 /**
@@ -325,10 +327,15 @@ function createManglerSession(mangleMap: MangleMap, options: CSSManglerOptions):
                 rule.selector = newSelector;
                 return true;
             } catch (error) {
-                // Log but don't fail on selector parsing errors
-                if (options.debug) {
-                    console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
-                }
+                // The rule keeps its original class names while the markup is
+                // mangled, so it silently stops matching: said without `debug`.
+                console.warn(
+                    diagnosticMessage('mangle-selector-unparsable', {
+                        selector: rule.selector,
+                        // The note adds its own period; the parser ends with one.
+                        error: (error as Error).message.replace(/\.$/, ''),
+                    }),
+                );
                 return false;
             }
         },

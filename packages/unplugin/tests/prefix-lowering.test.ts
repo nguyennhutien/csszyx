@@ -26,6 +26,7 @@ import {
     vitePlugin,
     webpackPlugin,
 } from '../src/unplugin.js';
+import { internalErrorMessage } from './helpers/internal-error.js';
 import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 const APP = 'export const App = () => <div sz={{ p: 4 }} />;\n';
@@ -161,10 +162,12 @@ describe('stylesheets that give no single prefix', () => {
             (error: Error) => error.message,
         );
 
-        expect(message).toContain('set different prefixes');
-        // In walk order, which is the filesystem's, so each line on its own.
-        expect(message).toMatch(/src\/index\.css\s+prefix\(tw\)/);
-        expect(message).toMatch(/legacy\/old\.css\s+no prefix/);
+        expect(message).toMatch(
+            /^\[csszyx\] prefix-disagreement:\n {2}The Tailwind stylesheets of this project set different prefixes \(/,
+        );
+        // In walk order, which is the filesystem's.
+        expect(message).toContain('`src/index.css` with `prefix(tw)`');
+        expect(message).toContain('`legacy/old.css` with none');
     }, 60_000);
 
     it('reads only the stylesheets `tailwindStylesheet` lists', async () => {
@@ -194,7 +197,14 @@ describe('stylesheets that give no single prefix', () => {
         );
 
         await expect(call('configResolved', { root, command: 'build' })).rejects.toThrow(
-            /tailwindStylesheet[\s\S]*src\/gone\.css/,
+            expect.objectContaining({
+                code: 'tailwind-stylesheet-missing',
+                message:
+                    '[csszyx] tailwind-stylesheet-missing:\n' +
+                    `  The stylesheet(s) \`src/gone.css\` named by the csszyx \`tailwindStylesheet\` option do not exist under \`${root}\`, so the build stops.\n` +
+                    '  help: list the Tailwind stylesheet this build loads, relative to the project root.\n' +
+                    '  docs: https://csszyx.com/e/tailwind-stylesheet-missing',
+            }),
         );
     }, 60_000);
 });
@@ -212,8 +222,10 @@ describe('stylesheets that did not compile', () => {
             (error: Error) => error.message,
         );
 
-        expect(message).toContain('did not compile');
-        expect(message).toMatch(/src\/index\.css: /);
+        expect(message).toMatch(
+            /^\[csszyx\] tailwind-stylesheet-broken:\n {2}A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module\.\n/,
+        );
+        expect(message).toMatch(/\n {4}src\/index\.css: /);
     }, 60_000);
 
     it('warns about a stray one that never reaches Tailwind, and builds', async () => {
@@ -307,6 +319,18 @@ describe('the webpack lane', () => {
     }, 60_000);
 });
 
+/**
+ * What a lane that never read the stylesheets stops with.
+ *
+ * @param where - The function that asked for the prefix.
+ * @returns The message.
+ */
+const unreadStylesheets = (where: string): string =>
+    internalErrorMessage(
+        where,
+        "the build asked for the Tailwind prefix before it read the project's stylesheets",
+    );
+
 describe('an unserved-class list asked for before the stylesheet was read', () => {
     // An empty list would read as "Tailwind serves every class", and each name
     // would silently keep a placement it should not: the same lane bug the
@@ -314,7 +338,9 @@ describe('an unserved-class list asked for before the stylesheet was read', () =
     it('fails loudly instead of reporting nothing', async () => {
         const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
 
-        await expect(call('renderStart')).rejects.toThrow(/internal error.*csszyx bug/s);
+        await expect(call('renderStart')).rejects.toThrow(
+            unreadStylesheets('settleUnservedClasses'),
+        );
     });
 });
 
@@ -339,6 +365,6 @@ describe('a transform that reaches the engine before the stylesheet was read', (
 
         expect(() =>
             plugin.transform.call({ warn() {} }, APP, '/never-started/src/App.tsx'),
-        ).toThrow(/internal error.*csszyx bug/s);
+        ).toThrow(unreadStylesheets('createCompilerOptions'));
     });
 });

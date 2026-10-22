@@ -19,12 +19,14 @@
  * csszyx itself lowers onto the contaminated class.
  */
 
+import { diagnosticMessage } from './diagnostic-message.js';
+
 /** One class name whose meaning more than one declaration decides. */
 export interface ClassNameAuthorConflict {
     /** The claimed class name. */
     name: string;
-    /** What the name collides with. */
-    reason: 'declared twice' | 'a theme token already generates it';
+    /** What the name collides with: a second `@utility`, or a theme token. */
+    form: 'declared-twice' | 'theme-token';
 }
 
 /** What the stylesheet scanners read out of a project. */
@@ -82,12 +84,22 @@ export function findClassNameAuthorConflicts(declared: DeclaredNames): ClassName
         seen.add(cls);
         if (conflicts.some(existing => existing.name === cls)) continue;
         if (declaredTwice) {
-            conflicts.push({ name: cls, reason: 'declared twice' });
+            conflicts.push({ name: cls, form: 'declared-twice' });
             continue;
         }
         if (generatedByTheme.has(cls)) {
-            conflicts.push({ name: cls, reason: 'a theme token already generates it' });
+            conflicts.push({ name: cls, form: 'theme-token' });
         }
     }
     return conflicts;
+}
+
+/**
+ * The warning for one conflict, in the registry's words (`utility-collision`).
+ *
+ * @param conflict - The name and what it collides with.
+ * @returns The message.
+ */
+export function classNameAuthorConflictMessage(conflict: ClassNameAuthorConflict): string {
+    return diagnosticMessage('utility-collision', { form: conflict.form, name: conflict.name });
 }

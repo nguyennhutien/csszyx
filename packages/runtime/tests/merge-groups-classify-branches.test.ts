@@ -23,6 +23,7 @@ import {
     classifyAmbiguousValue,
     registerSzcnGroups,
 } from '../src/merge-groups.js';
+import { themeCollisionLine } from './helpers/theme-lines.js';
 
 afterEach(() => {
     _resetSzcnGroups();
@@ -96,7 +97,7 @@ describe('registerSzcnGroups collision blocklist — non-colors category', () =>
         // 'sans' is a FONT_FAMILIES keyword, and fontWeights' blocklist includes
         // FONT_FAMILIES — registering it as a weight must be rejected.
         registerSzcnGroups({ fontWeights: ['sans'] });
-        expect(warn.mock.calls.some(c => /shadows a built-in value/.test(String(c[0])))).toBe(true);
+        expect(warn).toHaveBeenCalledWith(themeCollisionLine('sans', 'value'));
     });
 });
 

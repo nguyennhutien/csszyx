@@ -14,6 +14,7 @@
  * dependency rules (e.g. "if the frame clips, make the scroller scroll") without
  * hardcoding csszyx's class vocabulary.
  */
+
 import {
     isForbiddenSzKey,
     MAX_SZ_DEPTH,
@@ -21,6 +22,19 @@ import {
     type SzObject,
     type SzValue,
 } from '@csszyx/compiler/browser';
+import { brandCsszyxError } from '@csszyx/compiler/errors';
+import {
+    SPLIT_BOX_HIDDEN_CONTENT,
+    SPLIT_BOX_PEER_ON_FRAME,
+    SPLIT_BOX_PLACEMENT_VARIANT,
+    SPLIT_BOX_SELECTOR_INVALID,
+    SPLIT_BOX_SZ_STRING,
+    SPLIT_BOX_UNBOUNDED_SCROLL,
+    SPLIT_BOX_UNCLASSIFIED,
+    SPLIT_BOX_UNCLIPPED_CORNERS,
+    SPLIT_BOX_UNKNOWN_CATEGORY,
+    szRender,
+} from '@csszyx/compiler/report';
 import {
     BOX_ROLE_BY_KEY,
     BOX_ROLE_PREFIXES,
@@ -629,50 +643,44 @@ type UnusableSelector =
 /**
  * Say why a selector cannot be used.
  *
- * Every message sits inside the `NODE_ENV` block on purpose. `devWarn`
+ * The report sits inside the `NODE_ENV` block on purpose. `devWarn`
  * already refuses to print in production, but a bundler removes only what it
- * can prove dead, and a call with a string argument is not that: measured,
- * the unknown-selector text shipped in every production bundle, 157 gzip
- * bytes of it. Inside the block the whole switch is unreachable and leaves
- * with it.
+ * can prove dead, and a call with an argument is not that: measured, the
+ * unknown-selector text shipped in every production bundle, 157 gzip bytes of
+ * it, and a call naming a template would keep the template. Inside the block
+ * the call is unreachable and leaves with it.
  *
  * @param why - Which shape was refused, with what the message needs to name.
  */
 function warnUnusableSelector(why: UnusableSelector): void {
     if (process.env.NODE_ENV !== 'production') {
-        switch (why.kind) {
-            case 'array':
-                devWarn(
-                    'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
-                        'or use splitBox whose inner/outer options take a list.',
-                );
-                break;
-            case 'empty':
-                devWarn(
-                    'an empty selector {} matches nothing; name a category and value, ' +
-                        'e.g. { overflow: "hidden" }.',
-                );
-                break;
-            case 'multi':
-                devWarn(
-                    'an object selector names one category and value; ' +
-                        `{ ${why.categories.join(', ')} } can never match a single token.`,
-                );
-                break;
-            case 'property':
-                devWarn(
-                    `'${why.property}' is not a property csszyx tells apart; '${why.selector}' matches nothing. ` +
-                        `help: the properties are ${[...getMergeGroupProperties()].join(', ')} — ` +
-                        "classify('<a class>') shows the one a class carries.",
-                );
-                break;
-            case 'sz-qualified':
-                devWarn(
-                    `'${why.selector}' names a property, which the sz twins do not read: an sz key has no value to classify. ` +
-                        `help: pass '${why.name}'.`,
-                );
-                break;
-        }
+        devWarn({ diagnostic: SPLIT_BOX_SELECTOR_INVALID, args: unusableSelectorArgs(why) });
+    }
+}
+
+/**
+ * The `split-box-selector-invalid` args of a refused selector.
+ *
+ * @param why - Which shape was refused, with what its line names.
+ * @returns The args, in the registry's order.
+ */
+function unusableSelectorArgs(
+    why: UnusableSelector,
+): NonNullable<(typeof SPLIT_BOX_SELECTOR_INVALID)['argsType']> {
+    switch (why.kind) {
+        case 'multi':
+            return { form: why.kind, categories: why.categories };
+        case 'property':
+            return {
+                form: why.kind,
+                selector: why.selector,
+                property: why.property,
+                properties: [...getMergeGroupProperties()],
+            };
+        case 'sz-qualified':
+            return { form: why.kind, selector: why.selector, name: why.name };
+        default:
+            return { form: why.kind };
     }
 }
 
@@ -685,26 +693,18 @@ function warnUnusableSelector(why: UnusableSelector): void {
 function warnUnknownSelector(name: string): void {
     if (process.env.NODE_ENV !== 'production') {
         const hint = CATEGORY_HINTS[name];
-        if (hint === undefined) {
-            devWarn(
-                `'${name}' is not a category or class prefix csszyx knows; ` +
-                    "classify('<a class>') shows the category a class belongs to.",
-            );
-            return;
-        }
         // `color` is both the word people reach for and a property the
         // qualified form can name, so the hint offers the narrower selector
         // as well: `text` alone would also catch `text-sm`.
-        if (getMergeGroupProperties().has(name)) {
-            devWarn(
-                `'${name}' is not a category or class prefix csszyx knows; ` +
-                    `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
-            );
-            return;
+        let args: NonNullable<(typeof SPLIT_BOX_UNKNOWN_CATEGORY)['argsType']> = {
+            form: 'no-hint',
+            name,
+        };
+        if (hint !== undefined) {
+            const form = getMergeGroupProperties().has(name) ? 'property-hint' : 'hint';
+            args = { form, name, hint };
         }
-        devWarn(
-            `'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`,
-        );
+        devWarn({ diagnostic: SPLIT_BOX_UNKNOWN_CATEGORY, args });
     }
 }
 
@@ -932,11 +932,10 @@ function usablePlacements(
         const base = family === 'class' ? normalizeBase(stripVariant(sel)) : sel;
         if (base !== sel && base !== '') {
             if (process.env.NODE_ENV !== 'production') {
-                devWarn(
-                    `splitBox: a placement list names a class by its base, so '${sel}' never matches; ` +
-                        'the variant prefix and the ! or - marker are stripped before the comparison. ' +
-                        `help: write { ${side}: ['${base}'] }; it places every variant of '${base}'.`,
-                );
+                devWarn({
+                    diagnostic: SPLIT_BOX_PLACEMENT_VARIANT,
+                    args: { selector: sel, side, base },
+                });
             }
             return false;
         }
@@ -986,11 +985,11 @@ function splitBoxUncached(
         (side === 'outer' ? outer : inner).push(token);
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-        warnUnplacedTokens(unplaced, fallback);
-        warnSiblingBound(outer, bridge);
-        warnUnusableSplit(outer, inner, bridge);
-    }
+    // Each holds the one `NODE_ENV` check around its own reports, which is what
+    // lets a production bundle drop the analysis and every template it names.
+    warnUnplacedTokens(unplaced, fallback);
+    warnSiblingBound(outer, bridge);
+    warnUnusableSplit(outer, inner, bridge);
 
     return { outer: outer.join(' '), inner: inner.join(' ') };
 }
@@ -1056,18 +1055,20 @@ const STRETCHED_PREFIXES = ['grow-', 'basis-'];
  * @param bridge - The mangle bridge for this operation.
  */
 function warnSiblingBound(outer: readonly string[], bridge: MangleBridge | undefined): void {
-    for (const token of outer) {
-        const info = inspect(token, bridge);
-        if (info?.movedFrom === undefined) continue;
-        // The variant chain is everything before the base; `stripVariant`
-        // already found the last top-level colon, so a colon inside an
-        // arbitrary value cannot split the token in the wrong place.
-        const tail = stripVariant(token);
-        const reaching = `${token.slice(0, token.length - tail.length)}[&>*]:${tail}`;
-        devWarn(
-            `splitBox: '${token}' stays on the frame although '${info.base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. ` +
-                `help: to reach the content instead, target it from the frame: '${reaching}'.`,
-        );
+    if (process.env.NODE_ENV !== 'production') {
+        for (const token of outer) {
+            const info = inspect(token, bridge);
+            if (info?.movedFrom === undefined) continue;
+            // The variant chain is everything before the base; `stripVariant`
+            // already found the last top-level colon, so a colon inside an
+            // arbitrary value cannot split the token in the wrong place.
+            const tail = stripVariant(token);
+            const reaching = `${token.slice(0, token.length - tail.length)}[&>*]:${tail}`;
+            devWarn({
+                diagnostic: SPLIT_BOX_PEER_ON_FRAME,
+                args: { token, base: info.base, reaching },
+            });
+        }
     }
 }
 
@@ -1075,28 +1076,27 @@ function warnSiblingBound(outer: readonly string[], bridge: MangleBridge | undef
  * Say that a token nothing classified was placed by the fallback rather than by
  * a rule. The atomic-only scope means a custom `@utility` declaring several
  * properties at once has no correct side, so the author has to make the call —
- * and cannot make it without being told. Development only; the caller guards on
- * `NODE_ENV`.
+ * and cannot make it without being told. Development only.
  *
  * @param unplaced - Base names of the tokens the fallback placed.
  * @param fallback - The role the fallback sent them to.
  */
 function warnUnplacedTokens(unplaced: readonly string[], fallback: BoxRole): void {
-    const node = fallback === 'outer' ? 'frame' : 'content';
-    const other = fallback === 'outer' ? 'inner' : 'outer';
-    for (const token of new Set(unplaced)) {
-        devWarn(
-            `splitBox: '${token}' is not a utility csszyx knows, so it went to the ${node} node with everything else it could not classify. ` +
-                `help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { ${other}: ['${token}'] }.`,
-        );
+    if (process.env.NODE_ENV !== 'production') {
+        for (const token of new Set(unplaced)) {
+            devWarn({
+                diagnostic: SPLIT_BOX_UNCLASSIFIED,
+                args: { form: 'class', token, ...unplacedSides(fallback) },
+            });
+        }
     }
 }
 
 /**
  * Say when a partition produced a shape that cannot do what the className asked
- * for. Development only — the caller guards on `NODE_ENV`, so nothing here is
- * reachable in a production bundle, and every lookup goes through the same
- * memoized `inspect` the partition already filled.
+ * for. Development only — nothing here is reachable in a production bundle,
+ * and every lookup goes through the same memoized `inspect` the partition
+ * already filled.
  *
  * @param outer - Raw tokens routed to the frame.
  * @param inner - Raw tokens routed to the content.
@@ -1107,66 +1107,66 @@ function warnUnusableSplit(
     inner: readonly string[],
     bridge: MangleBridge | undefined,
 ): void {
-    const scroller = inner.find(token => isScroller(inspect(token, bridge)));
+    if (process.env.NODE_ENV !== 'production') {
+        const scroller = inner.find(token => isScroller(inspect(token, bridge)));
 
-    if (scroller !== undefined) {
-        // A scroll container with no height grows to fit its content, so it
-        // never scrolls. The bound can be a class on either node, or it can
-        // come from the parent, which is what the position and flex cases are.
-        const bounded =
-            someToken(
-                [...outer, ...inner],
-                bridge,
-                (info, base) =>
-                    info?.category === 'sizing' &&
-                    HEIGHT_BOUND_PREFIXES.some(prefix => base.startsWith(prefix)),
-            ) ||
-            someToken(
-                outer,
-                bridge,
-                (_info, base) =>
-                    STRETCHED_BASES.has(base) ||
-                    STRETCHED_PREFIXES.some(prefix => base.startsWith(prefix)),
-            ) ||
-            (someToken(outer, bridge, (_info, base) => base === 'absolute' || base === 'fixed') &&
+        if (scroller !== undefined) {
+            // A scroll container with no height grows to fit its content, so it
+            // never scrolls. The bound can be a class on either node, or it can
+            // come from the parent, which is what the position and flex cases are.
+            const bounded =
+                someToken(
+                    [...outer, ...inner],
+                    bridge,
+                    (info, base) =>
+                        info?.category === 'sizing' &&
+                        HEIGHT_BOUND_PREFIXES.some(prefix => base.startsWith(prefix)),
+                ) ||
                 someToken(
                     outer,
                     bridge,
-                    (info, base) =>
-                        info?.category === 'position' && base !== 'absolute' && base !== 'fixed',
-                ));
-        if (!bounded) {
-            devWarn(
-                `splitBox: '${scroller}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. ` +
-                    "help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.",
-            );
+                    (_info, base) =>
+                        STRETCHED_BASES.has(base) ||
+                        STRETCHED_PREFIXES.some(prefix => base.startsWith(prefix)),
+                ) ||
+                (someToken(
+                    outer,
+                    bridge,
+                    (_info, base) => base === 'absolute' || base === 'fixed',
+                ) &&
+                    someToken(
+                        outer,
+                        bridge,
+                        (info, base) =>
+                            info?.category === 'position' &&
+                            base !== 'absolute' &&
+                            base !== 'fixed',
+                    ));
+            if (!bounded) {
+                devWarn({ diagnostic: SPLIT_BOX_UNBOUNDED_SCROLL, args: { scroller } });
+            }
+
+            // Scrolled content paints to the padding box, so it runs over a corner
+            // the frame rounded but did not clip.
+            if (
+                someToken(outer, bridge, info => info?.category === 'rounded') &&
+                !someToken(outer, bridge, isClip)
+            ) {
+                devWarn({ diagnostic: SPLIT_BOX_UNCLIPPED_CORNERS, args: {} });
+            }
         }
 
-        // Scrolled content paints to the padding box, so it runs over a corner
-        // the frame rounded but did not clip.
-        if (
-            someToken(outer, bridge, info => info?.category === 'rounded') &&
-            !someToken(outer, bridge, isClip)
-        ) {
-            devWarn(
-                'splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. ' +
-                    "help: add 'overflow-hidden' to the frame.",
-            );
-        }
-    }
-
-    // `hidden` is display:none, which is inner: it stops the CONTENT node from
-    // rendering while the frame keeps its own background, border and size. Under
-    // a variant the pair is usually deliberate, so only the bare form is named.
-    const hidden = inner.find(
-        token =>
-            token === stripVariant(token) && normalizeBase(decodeToken(token, bridge)) === 'hidden',
-    );
-    if (hidden !== undefined) {
-        devWarn(
-            `splitBox: '${hidden}' went to the content node, so the frame keeps its background, border and size and stays visible. ` +
-                "help: pass { outer: ['hidden'] } if the whole box should disappear.",
+        // `hidden` is display:none, which is inner: it stops the CONTENT node from
+        // rendering while the frame keeps its own background, border and size. Under
+        // a variant the pair is usually deliberate, so only the bare form is named.
+        const hidden = inner.find(
+            token =>
+                token === stripVariant(token) &&
+                normalizeBase(decodeToken(token, bridge)) === 'hidden',
         );
+        if (hidden !== undefined) {
+            devWarn({ diagnostic: SPLIT_BOX_HIDDEN_CONTENT, args: { hidden } });
+        }
     }
 }
 
@@ -1317,17 +1317,33 @@ function isVariantContainer(
 /**
  * Say that the fallback placed the raw `css` object, the sz-object analog of
  * the warning `splitBox` gives the `[prop:val]` classes it compiles to.
- * Development only; the caller guards on `NODE_ENV`.
+ * Development only.
  *
  * @param fallback - The role the fallback sent it to.
  */
 function warnUnplacedCss(fallback: BoxRole): void {
-    const node = fallback === 'outer' ? 'frame' : 'content';
-    const other = fallback === 'outer' ? 'inner' : 'outer';
-    devWarn(
-        `splitBoxSz: '${RAW_CSS_KEY}' holds raw CSS csszyx does not classify, so it went to the ${node} node with everything else it could not classify. ` +
-            `help: if its declarations belong on the other node, place it yourself with { ${other}: ['${RAW_CSS_KEY}'] }.`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        devWarn({
+            diagnostic: SPLIT_BOX_UNCLASSIFIED,
+            args: { form: 'raw-css', ...unplacedSides(fallback) },
+        });
+    }
+}
+
+/**
+ * Where the fallback put what it could not classify, and the side that places
+ * it by hand on the other node.
+ *
+ * @param fallback - The role the fallback sent it to.
+ * @returns The node it went to and the placement option for the other one.
+ */
+function unplacedSides(fallback: BoxRole): {
+    readonly node: 'frame' | 'content';
+    readonly side: 'inner' | 'outer';
+} {
+    return fallback === 'outer'
+        ? ({ node: 'frame', side: 'inner' } as const)
+        : ({ node: 'content', side: 'outer' } as const);
 }
 
 /**
@@ -1421,8 +1437,10 @@ function flattenSz(sz: SzInput, depth: number): SzObject {
     if (!sz) return {};
     if (typeof sz === 'string') {
         if (process.env.NODE_ENV !== 'production' && sz.trim()) {
-            throw new TypeError(
-                `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for ${JSON.stringify(sz)}.`,
+            const args = { value: sz };
+            throw brandCsszyxError(
+                new TypeError(szRender({ diagnostic: SPLIT_BOX_SZ_STRING, args })),
+                { code: 'split-box-sz-string', args },
             );
         }
         return {};
@@ -1519,7 +1537,7 @@ function partitionSzEntry(key: string, value: SzValue, context: SzPartitionConte
         return;
     }
     if (!isVariantContainer(key, entry, value)) {
-        if (key === RAW_CSS_KEY && process.env.NODE_ENV !== 'production') {
+        if (key === RAW_CSS_KEY) {
             warnUnplacedCss(context.fallback);
         }
         (context.fallback === 'inner' ? context.inner : context.outer)[key] = value;

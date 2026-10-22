@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runtimeMessage } from '../../compiler/tests/engine-message.js';
 import { resetDevWarnCache } from '../src/dev-warn.js';
 import { szv } from '../src/variants.js';
+import { configInvalidLine, unknownValueLine, unknownVariantLine } from './helpers/szv-lines.js';
 
 // szv config/selection validation: TypeScript catches these at author time, but a
 // config from runtime/JSON data, an `as any`, or a JS caller bypasses the types.
@@ -17,8 +19,6 @@ describe('szv config/selection validation (dev)', () => {
     afterEach(() => {
         warn.mockRestore();
     });
-
-    const warned = (re: RegExp) => warn.mock.calls.some(c => re.test(String(c[0])));
 
     it('accepts a valid config without warning', () => {
         const f = szv({
@@ -42,13 +42,13 @@ describe('szv config/selection validation (dev)', () => {
         // @ts-expect-error — intentionally invalid
         const f = szv('nope');
         expect(f()).toEqual({});
-        expect(warned(/config must be an object/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('config', 'string')]]);
     });
 
     it('warns when a variant dimension is not an object', () => {
         // @ts-expect-error — variants.size must be an object of values
         szv({ variants: { size: 'sm' } });
-        expect(warned(/variants\.size must be an object/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[configInvalidLine('dimension', 'string', 'size')]]);
     });
 
     it('warns when a variant value is a primitive, and skips it at render', () => {
@@ -57,7 +57,9 @@ describe('szv config/selection validation (dev)', () => {
             variants: { size: { sm: 'px-2' } },
         });
         expect(f({ size: 'sm' })).toEqual({}); // primitive skipped, no crash
-        expect(warned(/variants\.size\.sm must be an sz object/)).toBe(true);
+        expect(warn.mock.calls).toEqual([
+            [configInvalidLine('variant-value', 'string', 'size', 'sm')],
+        ]);
     });
 
     it('allows a null variant value (no styles for that token)', () => {
@@ -71,28 +73,45 @@ describe('szv config/selection validation (dev)', () => {
         const f = szv({ variants: { size: { sm: { px: 2 } } } });
         // @ts-expect-error — `color` is not a declared variant
         f({ color: 'blue' });
-        expect(warned(/unknown variant "color"/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[unknownVariantLine('color')]]);
     });
 
     it('warns on an unknown value for a known variant', () => {
         const f = szv({ variants: { size: { sm: { px: 2 } } } });
         // @ts-expect-error — `xl` is not a value of `size`
         f({ size: 'xl' });
-        expect(warned(/"xl" is not a value of variant "size"/)).toBe(true);
+        expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'xl', ['sm'])]]);
+    });
+
+    it('names every value a dimension defines, each in its own code span', () => {
+        const f = szv({ variants: { size: { sm: { px: 2 }, lg: { px: 4 } } } });
+        // @ts-expect-error — `xl` is not a value of `size`
+        f({ size: 'xl' });
+        expect(String(warn.mock.calls[0]?.[0])).toContain(
+            'help: add `xl` to `variants.size`, or use one of `sm`, `lg`.',
+        );
+        expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'xl', ['sm', 'lg'])]]);
     });
 
     it('describes an object selection without default object stringification', () => {
         const f = szv({ variants: { size: { sm: { px: 2 } } } });
         // @ts-expect-error — object values are structurally invalid selections
         expect(f({ size: {} })).toEqual({});
-        expect(warned(/"object" is not a value of variant "size"/)).toBe(true);
-        expect(warned(/\[object Object\]/)).toBe(false);
+        expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'object', ['sm'])]]);
     });
 
     it('warns on a forbidden (prototype-polluting) key in a variant value', () => {
         const hostile = JSON.parse('{"size":{"sm":{"__proto__":{"px":9}}}}');
         szv({ variants: hostile });
-        expect(warned(/forbidden key "__proto__"/)).toBe(true);
+        expect(warn.mock.calls).toEqual([
+            [
+                runtimeMessage(
+                    'szv-forbidden-key',
+                    '`variants.size.sm` in the `szv` config has the forbidden key `__proto__`, so it is ignored.',
+                    'help: remove the key; csszyx never reads `__proto__`, `constructor` or `prototype`.',
+                ),
+            ],
+        ]);
     });
 
     it('dedupes the same warning (hot path safety)', () => {
@@ -101,8 +120,7 @@ describe('szv config/selection validation (dev)', () => {
         f({ size: 'xl' });
         // @ts-expect-error
         f({ size: 'xl' });
-        const xlWarns = warn.mock.calls.filter(c => /is not a value of variant/.test(String(c[0])));
-        expect(xlWarns).toHaveLength(1);
+        expect(warn.mock.calls).toEqual([[unknownValueLine('size', 'xl', ['sm'])]]);
     });
 });
 

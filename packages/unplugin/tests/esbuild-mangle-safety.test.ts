@@ -47,7 +47,13 @@ describe('esbuild class-mangle safety', () => {
         });
         const javascript = result.outputFiles?.map(file => file.text).join('\n') ?? '';
 
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('mangling is disabled'));
+        expect(warn).toHaveBeenCalledWith(
+            '[csszyx] esbuild-mangle-unsupported:\n' +
+                '  The esbuild adapter does not support `production.mangle`, so class mangling is off for this build.\n' +
+                '  help: use the Vite, Rollup or webpack plugin when the build needs mangled class names.\n' +
+                '  note: emitted JS and CSS keep the original class names, so they still match.\n' +
+                '  docs: https://csszyx.com/e/esbuild-mangle-unsupported',
+        );
         expect(javascript).toContain('p-91');
         expect(javascript).toContain('m-92');
         expect(javascript).toContain('raw-esbuild');

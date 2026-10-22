@@ -209,29 +209,26 @@ describe('isPackagesSkippedSource', () => {
 });
 
 describe('skippedSzFilesMessage', () => {
-    it('names the count, the files, and the compileSources fix', () => {
-        const message = skippedSzFilesMessage([
-            '/repo/packages/vui/Button.tsx',
-            '/repo/packages/vui/Card.tsx',
-        ]);
-        expect(message).toContain('2 file(s) under packages/');
-        expect(message).toContain('/repo/packages/vui/Button.tsx');
-        expect(message).toContain('compileSources');
-        expect(message).toContain('safelist');
+    it('is `compile-sources-skipped`, listing each file on its own line', () => {
+        expect(skippedSzFilesMessage(['packages/vui/Button.tsx', 'packages/vui/Card.tsx'])).toBe(
+            '[csszyx] compile-sources-skipped:\n' +
+                '  The build skipped 2 file(s) under `packages/` that use csszyx, so it compiles none of their `sz` props and none of their classes reach the safelist.\n' +
+                "  help: add the package directory to `compileSources`, such as `compileSources: ['packages/ui']`, or move the files out of `packages/`.\n" +
+                '  note: the skipped files:\n' +
+                '    packages/vui/Button.tsx\n' +
+                '    packages/vui/Card.tsx\n' +
+                '  docs: https://csszyx.com/e/compile-sources-skipped',
+        );
     });
 
     it('names the cross-module registry consequence when a skip costs it', () => {
         // A skipped module that EXPORTS szv factories costs every importer its
         // precompile; the field report traced that back by hand because the
         // message only talked about CSS.
-        const factory = '/repo/packages/vui/src/flexSzv.ts';
-        const message = skippedSzFilesMessage([factory, '/repo/packages/vui/Card.tsx'], [factory]);
-        expect(message).toContain('1 of them may export `szv` factories');
-        expect(message).toContain('cross-module registry');
-    });
-
-    it('omits the registry clause when no skipped file exports a factory', () => {
-        const message = skippedSzFilesMessage(['/repo/packages/vui/Card.tsx']);
-        expect(message).not.toContain('cross-module registry');
+        const factory = 'packages/vui/src/flexSzv.ts';
+        const message = skippedSzFilesMessage([factory, 'packages/vui/Card.tsx'], [factory]);
+        expect(message).toContain(
+            '  note: of these, 1 may export `szv` factories, so another module that calls one runs it at runtime instead of getting its classes compiled in; the skipped files:\n',
+        );
     });
 });

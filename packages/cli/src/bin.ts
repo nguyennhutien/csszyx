@@ -9,9 +9,9 @@
  * corrupts the protocol stream.
  *
  * Available commands:
- * - init: Setup wizard for new projects
- * - doctor: Diagnose mangling issues
- * - audit: Performance analysis
+ * - init: Set up csszyx in a project
+ * - doctor: Check the config, Tailwind, package versions and build output
+ * - audit: Size of the built HTML and CSS
  * - generate-types: Generate TypeScript declarations
  * - migrate: Convert Tailwind className to sz prop
  * - next watch: Maintain Next.js Turbopack safelist state
@@ -161,10 +161,13 @@ async function runNextWatchCommand(
 }
 
 // init command
-cli.command('init', 'Setup csszyx in your project')
-    .option('--framework <name>', 'Specify framework')
+cli.command('init', 'Set up csszyx in this project')
+    .option(
+        '--framework <name>',
+        'Framework to set up instead of the detected one: vite-react, vite-vue, vite-svelte, nextjs-app, nextjs-pages, nuxt, sveltekit or astro',
+    )
     .option('--yes', 'Skip prompts (use defaults)')
-    .option('--cwd <dir>', 'Current working directory')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .action(async options => {
         await (await import('./commands/init.js')).init({
             framework: options.framework,
@@ -174,9 +177,9 @@ cli.command('init', 'Setup csszyx in your project')
     });
 
 // doctor command
-cli.command('doctor', 'Diagnose mangling issues')
+cli.command('doctor', 'Check the csszyx config, Tailwind, package versions and build output')
     .option('--verbose', 'Show detailed output')
-    .option('--cwd <dir>', 'Current working directory')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .action(async options => {
         await (await import('./commands/doctor.js')).doctor({
             verbose: options.verbose,
@@ -187,20 +190,20 @@ cli.command('doctor', 'Diagnose mangling issues')
 // check command
 cli.command(
     'check [dir]',
-    'Scan static sz props and szv()/szr() catalogs for unknown/aliased sz keys (CI-friendly)',
+    'Report sz diagnostics and classes that produce no CSS, for CI and git hooks',
 )
     .option('--pattern <glob>', 'Glob of source files to scan, relative to [dir]')
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
-    .option('--cwd <dir>', 'Current working directory')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .option('--allow <class>', 'Accept an emitted class that produces no CSS (repeatable)')
     .option(
         '--allow-token <name>',
         'Accept a theme token that shadows a built-in utility (repeatable)',
     )
     .option('--files <path>', 'Check exactly these files, for a git hook (repeatable)')
-    .option('--json', 'Emit one machine-readable document instead of the prose report')
-    .option('--rule <id>', 'Report only this rule or diagnostic kind (repeatable)')
-    .option('--ignore-rule <id>', 'Leave out this rule or diagnostic kind (repeatable)')
+    .option('--json', 'Print one JSON document instead of the text report')
+    .option('--rule <id>', 'Report only this diagnostic id or check pass (repeatable)')
+    .option('--ignore-rule <id>', 'Leave out this diagnostic id or check pass (repeatable)')
     .option(
         '--fail-on <level>',
         'Fail on findings at this level or louder: info, warn or error (default: error)',
@@ -228,7 +231,7 @@ cli.command(
 )
     .option('--pattern <glob>', 'Glob of stylesheet files to scan')
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
-    .option('--cwd <dir>', 'Current working directory')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .action(async options => {
         await (await import('./commands/scan-collisions.js')).scanCollisions({
             cwd: options.cwd,
@@ -245,9 +248,9 @@ cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles 
 );
 
 // audit command
-cli.command('audit', 'Analyze mangling performance')
-    .option('--json', 'Output as JSON')
-    .option('--cwd <dir>', 'Current working directory')
+cli.command('audit', 'Print the size of the built HTML and CSS under dist/')
+    .option('--json', 'Print one JSON document instead of the text report')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .action(async options => {
         (await import('./commands/audit.js')).audit({
             json: options.json,
@@ -256,11 +259,14 @@ cli.command('audit', 'Analyze mangling performance')
     });
 
 // generate-types command
-cli.command('generate-types', 'Generate TypeScript declarations from tailwind.config.js')
+cli.command(
+    'generate-types',
+    'Generate TypeScript declarations from a Tailwind v3 config (tailwind.config.js)',
+)
     .option('-c, --config <path>', 'Path to tailwind.config.js')
     .option('-o, --output <path>', 'Output file path (default: ./csszyx.d.ts)')
-    .option('--cwd <dir>', 'Current working directory')
-    .option('--silent', 'Silent mode (no output)')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
+    .option('--silent', 'Print nothing')
     .action(async options => {
         await (await import('./commands/generate-types.js')).generateTypes({
             config: options.config,
@@ -275,7 +281,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     .option('--dry-run', 'Show changes without modifying files')
     .option('--ignore <patterns>', 'Glob patterns to ignore (comma-separated)')
     .option('--pattern <glob>', 'Custom glob pattern for file discovery')
-    .option('--cwd <dir>', 'Current working directory')
+    .option('--cwd <dir>', 'Directory to run in (default: the current one)')
     .option('--braces', 'Wrap HTML sz values in outer { } braces (default: bare)')
     .option('--no-fouc', 'Skip FOUC-prevention CSS injection into HTML files')
     .option('--inject-runtime <mode>', 'Inject runtime script into HTML: local | cdn')
@@ -286,10 +292,10 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     )
     .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
     .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
-    .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
+    .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz keys')
     .option(
         '--keys-only',
-        'Only normalize legacy sz-prop keys to their canonical form; leave className untouched (0.9.10 → 0.10.0 upgrade)',
+        'Only rewrite old sz keys to their canonical names, and leave className untouched (0.9.10 → 0.10.0 upgrade)',
     )
     .action(async (dir, options) => {
         await (await import('./commands/migrate.js')).migrate({
@@ -316,21 +322,18 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
  * so the two commands cannot drift apart on a flag or its wording.
  */
 const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: string]> = [
-    ['--root <dir>', 'Next app root (defaults to cwd)'],
-    ['--cwd <dir>', 'Current working directory'],
-    ['--parser-mode <mode>', 'rust | wasm (default: rust)'],
-    [
-        '--output-file <path>',
-        'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
-    ],
+    ['--root <dir>', 'Next.js app root (default: --cwd)'],
+    ['--cwd <dir>', 'Directory to run in (default: the current one)'],
+    ['--parser-mode <mode>', 'Engine to parse with: rust (native engine) or wasm (default: rust)'],
+    ['--output-file <path>', 'Where to write the safelist (default: .csszyx/csszyx-classes.txt)'],
     ['--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)'],
     [
         '--tailwind-stylesheet <paths>',
-        'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
+        'Tailwind stylesheets this app loads, relative to --root and comma-separated, when the project holds others',
     ],
     [
         '--ignore <patterns>',
-        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated, repeatable)',
+        'Glob patterns to leave out of the source files and of the Tailwind stylesheets read for the prefix (comma-separated, repeatable)',
     ],
     [
         '--imported-static-sz',
@@ -338,7 +341,7 @@ const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: 
     ],
     [
         '--no-imported-static-sz',
-        'Leave imported sz objects to the runtime; pass the same to the loader',
+        'Leave imported sz objects to the runtime; set importedStaticSz: false in csszyxTurbopack to match',
     ],
 ];
 
@@ -354,18 +357,24 @@ function withNextSafelistOptions(command: Command): Command {
 withNextSafelistOptions(
     cli.command(
         'next-prebuild [pattern]',
-        'Seed the Next.js Turbopack csszyx safelist and generation manifest',
+        'Write the safelist for a Next.js Turbopack build once; also runs as csszyx next prebuild (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,mjs,cjs})',
     ),
 )
     .option('--mode <mode>', 'development | production (default: production)')
-    .option('--json', 'Emit a single JSON result instead of formatted text')
+    .option('--json', 'Print one JSON document instead of the text report')
     .action(runNextPrebuildCommand);
 
 // next-watch command
 withNextSafelistOptions(
-    cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safelist'),
+    cli.command(
+        'next-watch [pattern]',
+        'Keep the safelist of a Next.js Turbopack build up to date while files change; also runs as csszyx next watch (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,mjs,cjs})',
+    ),
 )
-    .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
+    .option(
+        '--debounce-ms <ms>',
+        'Milliseconds to wait after a change before writing the safelist (default: 50)',
+    )
     .action(runNextWatchCommand);
 
 // Default command (show help)

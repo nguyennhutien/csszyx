@@ -6,11 +6,50 @@
  * the abort protocol when necessary to preserve SSR invariants.
  */
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+import {
+    CSR_RECOVERY_UNMARKED,
+    CSR_RECOVERY_USED,
+    HYDRATION_ABORTED,
+    MANGLE_CENSUS_UNREADABLE,
+    MANGLE_CHECKSUM_MISMATCH,
+    MANGLE_MAP_UNAVAILABLE,
+    MANGLE_MAP_UNREADABLE,
+    szRender,
+    szReport,
+    WEB_CRYPTO_UNAVAILABLE,
+} from '@csszyx/compiler/report';
+
 import { createHydrationMangleMap } from './hydration-map.js';
+import { digestMangleMap, webCryptoUnavailable } from './mangle-checksum.js';
 import { getMangleRegistry } from './mangle-registry.js';
 import { sortStrings } from './sort.js';
 import type { RecoveryManifest } from './verify.js';
 import { getRecoveryMode, hasRecoveryToken } from './verify.js';
+
+/**
+ * Recompute a mangle map's checksum the way the Rust core does, with Web
+ * Crypto, so it works without the WASM core.
+ *
+ * @param map - the mangle map to checksum.
+ * @returns the 16-char hex checksum, byte-for-byte what the Rust core derives
+ *          from the same map, whatever characters the class names carry.
+ * @throws {CsszyxError} `web-crypto-unavailable`, in an insecure context.
+ */
+export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
+    if (webCryptoUnavailable()) {
+        const args = {};
+        throw new CsszyxError({
+            code: 'web-crypto-unavailable',
+            args,
+            message:
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: WEB_CRYPTO_UNAVAILABLE, args })
+                    : `[csszyx] web-crypto-unavailable: ${JSON.stringify(args)} https://csszyx.com/e/web-crypto-unavailable`,
+        });
+    }
+    return await digestMangleMap(map);
+}
 
 /**
  * Window augmentation for csszyx global state.
@@ -52,6 +91,13 @@ export interface HydrationError {
     element?: HTMLElement;
     timestamp: number;
 }
+
+/** The `hydration-aborted` form of each error type. */
+const HYDRATION_ABORTED_FORM = {
+    checksum_mismatch: 'checksum-mismatch',
+    map_missing: 'map-missing',
+    invalid_token: 'invalid-token',
+} as const satisfies Record<HydrationErrorType, string>;
 
 /**
  * Cap on retained hydration errors. Each error can hold an element reference,
@@ -208,15 +254,29 @@ export function loadMangleMapFromDOM(): MangleMap | null {
         const content = scriptElement.textContent || '';
         const parsed: unknown = JSON.parse(content);
         if (!isValidMangleMap(parsed)) {
-            console.error(
-                '[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.',
-            );
+            reportUnreadableMap({ form: 'schema' });
             return null;
         }
         return parsed;
     } catch (error) {
-        console.error('Failed to parse mangle map:', error);
+        reportUnreadableMap({ form: 'json', error: (error as SyntaxError).message });
         return null;
+    }
+}
+
+/**
+ * Say that the page's mangle map is ignored, in production too: the map is an
+ * integrity input, and a page that drops it renders other than it was built.
+ *
+ * @param args - Why it does not read: its shape, or the parser's message.
+ */
+function reportUnreadableMap(args: NonNullable<(typeof MANGLE_MAP_UNREADABLE)['argsType']>): void {
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MANGLE_MAP_UNREADABLE, args });
+    } else {
+        console.error(
+            `[csszyx] mangle-map-unreadable: ${JSON.stringify(args)} https://csszyx.com/e/mangle-map-unreadable`,
+        );
     }
 }
 
@@ -293,92 +353,6 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 }
 
 /**
- * Why Web Crypto cannot be used here, or null when it can.
- *
- * `crypto.subtle` exists only in a secure context, so a page served over plain
- * HTTP from anything but localhost does not have it. Both the compute and the
- * verify path need this answer and both need to say the same thing about it,
- * so the sentence lives here once.
- *
- * @returns the reason, or null when Web Crypto is available.
- */
-function webCryptoUnavailable(): string | null {
-    if (typeof crypto === 'undefined' || crypto.subtle === undefined) {
-        return (
-            '[csszyx] web-crypto-unavailable: Web Crypto is unavailable, so the mangle checksum cannot be recomputed. ' +
-            'crypto.subtle exists only in a secure context: serve the page over HTTPS, or ' +
-            'from localhost. Nothing was verified.'
-        );
-    }
-    return null;
-}
-
-/**
- * Order two byte sequences the way Rust orders the strings they encode.
- *
- * @param a - left operand.
- * @param b - right operand.
- * @returns negative, zero or positive, for `Array.prototype.sort`.
- */
-function compareBytes(a: Uint8Array, b: Uint8Array): number {
-    const shared = Math.min(a.length, b.length);
-    for (let i = 0; i < shared; i++) {
-        const left = a[i] as number;
-        const right = b[i] as number;
-        if (left !== right) return left - right;
-    }
-    return a.length - b.length;
-}
-
-/**
- * Recompute a mangle map's checksum the same way the Rust core does
- * (`compute_checksum_internal`): SHA-256 over the entries sorted by key and
- * formatted `<origLen>:<orig>:<mangleLen>:<mangle>`, joined by `|`, hex-encoded,
- * first 16 chars (64 bits). The lengths count UTF-16 code units.
- *
- * Uses the Web Crypto API (`crypto.subtle`), so it works WITHOUT the WASM core —
- * unlike the WASM-only sync path. Async because `crypto.subtle.digest` is async.
- *
- * @param map - the mangle map to checksum.
- * @returns the 16-char hex checksum, byte-for-byte what the Rust core derives
- *          from the same map, whatever characters the class names carry.
- * @throws when Web Crypto is unavailable, which means an insecure context.
- */
-export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
-    const unavailable = webCryptoUnavailable();
-    if (unavailable !== null) {
-        throw new Error(unavailable);
-    }
-    // Sort by the bytes that get hashed, which is what the Rust core compares.
-    // Comparing the strings instead is a tenth of a millisecond cheaper on a
-    // five-hundred-name map and wrong: JavaScript would order the text it holds
-    // while the core orders the text it received, and an unpaired surrogate
-    // survives the first and not the second. Encoding once per name settles it
-    // without anyone having to reason about surrogates.
-    //
-    // The shape carries a length per field. See the core's
-    // compute_checksum_internal: a name holding the separator — every variant
-    // class holds a colon — would otherwise let two different maps render the
-    // same text and share a checksum.
-    const encoder = new TextEncoder();
-    const canonical = Object.keys(map)
-        .map(key => ({ key, bytes: encoder.encode(key) }))
-        .sort((a, b) => compareBytes(a.bytes, b.bytes))
-        .map(({ key }) => {
-            const value = map[key] as string;
-            return `${key.length}:${key}:${value.length}:${value}`;
-        })
-        .join('|');
-    const bytes = encoder.encode(canonical);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    let hex = '';
-    for (const b of new Uint8Array(digest)) {
-        hex += b.toString(16).padStart(2, '0');
-    }
-    return hex.slice(0, 16);
-}
-
-/**
  * The map the checksum was computed over, from wherever this page carries it.
  *
  * The census in the document comes first: it is what a reader decodes the
@@ -440,28 +414,68 @@ export async function verifyMangleChecksumAsync(
     // map; the caller needs to know the check never ran. Warned in production
     // too: a caller believing integrity was verified when it was not is exactly
     // the state this function exists to prevent.
-    const unavailable = webCryptoUnavailable();
-    if (unavailable !== null) {
-        console.warn(unavailable);
+    if (webCryptoUnavailable()) {
+        if (process.env.NODE_ENV !== 'production') {
+            szReport({ diagnostic: WEB_CRYPTO_UNAVAILABLE, args: {} });
+        } else {
+            console.warn(
+                `[csszyx] web-crypto-unavailable: ${JSON.stringify({})} https://csszyx.com/e/web-crypto-unavailable`,
+            );
+        }
         return false;
     }
     const source = map ? { map, found: true } : hydrationMapOfPage();
     if ('unreadable' in source) {
-        console.warn(
-            '[csszyx] mangle-census-unreadable: the mangle census on this page is not a valid map, so nothing was verified',
-        );
+        if (process.env.NODE_ENV !== 'production') {
+            szReport({ diagnostic: MANGLE_CENSUS_UNREADABLE, args: {} });
+        } else {
+            console.warn(
+                `[csszyx] mangle-census-unreadable: ${JSON.stringify({})} https://csszyx.com/e/mangle-census-unreadable`,
+            );
+        }
         return false;
     }
-    const computed = await computeMangleChecksumAsync(source.map);
+    const computed = await digestMangleMap(source.map);
     if (computed === expectedChecksum) return true;
-    console.warn(
-        source.found
-            ? `[csszyx] mangle-checksum-mismatch: the mangle map on this page hashes to ${computed}, and the checksum it was built with is ${expectedChecksum}\n` +
-                  'note: this detects a damaged or stale page, not an attacker; the checksum is not signed'
-            : `[csszyx] mangle-map-unavailable: this page carries the checksum ${expectedChecksum} but neither a census nor a bundled mangle map to recompute it from, so nothing was verified\n` +
-                  'help: production.mangleVars without production.mangle and with hydrationCensus: false ships no map: turn the census on. Otherwise the bundle that registers the map did not run here',
-    );
+    if (source.found) {
+        reportMangleChecksumMismatch(computed, expectedChecksum);
+    } else {
+        reportMangleMapUnavailable(expectedChecksum);
+    }
     return false;
+}
+
+/**
+ * Say that the map recomputes to a checksum other than the expected one.
+ *
+ * @param computed - The checksum recomputed from the map.
+ * @param expected - The checksum it had to match.
+ */
+function reportMangleChecksumMismatch(computed: string, expected: string): void {
+    const args = { computed, expected };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MANGLE_CHECKSUM_MISMATCH, args });
+    } else {
+        console.warn(
+            `[csszyx] mangle-checksum-mismatch: ${JSON.stringify(args)} https://csszyx.com/e/mangle-checksum-mismatch`,
+        );
+    }
+}
+
+/**
+ * Say that the page carries a checksum and no map to recompute it from.
+ *
+ * @param checksum - The checksum the page carries.
+ */
+function reportMangleMapUnavailable(checksum: string): void {
+    const args = { checksum };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MANGLE_MAP_UNAVAILABLE, args });
+    } else {
+        console.warn(
+            `[csszyx] mangle-map-unavailable: ${JSON.stringify(args)} https://csszyx.com/e/mangle-map-unavailable`,
+        );
+    }
 }
 
 /**
@@ -497,8 +511,22 @@ export function abortHydration(element: HTMLElement, error: HydrationError): voi
     // Step 2: Preserve static HTML (no re-render needed, just mark)
     // React/framework-specific implementation would go here
 
-    // Step 3: Log audit message
-    console.error(`[csszyx] Hydration aborted at ${element.tagName}:`, error.message);
+    // Step 3: Log audit message, with the element, which the console can
+    // reveal. A type csszyx raises itself says what happened; the other two
+    // only reach here from a caller, whose message the line carries.
+    const args = {
+        form: HYDRATION_ABORTED_FORM[error.type],
+        tagName: element.localName,
+        ...(error.type === 'checksum_mismatch' ? {} : { message: error.message }),
+    };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: HYDRATION_ABORTED, args, extra: [element] });
+    } else {
+        console.error(
+            `[csszyx] hydration-aborted: ${JSON.stringify(args)} https://csszyx.com/e/hydration-aborted`,
+            element,
+        );
+    }
 
     // Step 4: Inject abort attribute
     element.dataset.szHydrationAborted = error.timestamp.toString();
@@ -604,21 +632,38 @@ export function attemptCSRRecovery(element: HTMLElement): boolean {
 
     // Check if element has explicit recovery permission
     if (!hasRecoveryToken(element)) {
-        console.warn('[csszyx] CSR recovery requires explicit szRecover directive');
+        if (process.env.NODE_ENV !== 'production') {
+            szReport({ diagnostic: CSR_RECOVERY_UNMARKED, args: {}, extra: [element] });
+        } else {
+            console.warn(
+                `[csszyx] csr-recovery-unmarked: ${JSON.stringify({})} https://csszyx.com/e/csr-recovery-unmarked`,
+                element,
+            );
+        }
         return false;
     }
 
     const mode = getRecoveryMode(element);
 
     // dev-only mode only works in development
+    // Only a production build reaches this line, so it has only the compact
+    // form: its sentence is on the code's page.
     if (mode === 'dev-only' && process.env.NODE_ENV === 'production') {
-        console.warn('[csszyx] szRecover="dev-only" is disabled in production');
+        console.warn(
+            `[csszyx] csr-recovery-dev-only: ${JSON.stringify({ form: 'runtime' })} https://csszyx.com/e/csr-recovery-dev-only`,
+            element,
+        );
         return false;
     }
 
-    console.warn(
-        '[csszyx] Hydration mismatch recovered via CSR. Fix root cause before production.',
-    );
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: CSR_RECOVERY_USED, args: {}, extra: [element] });
+    } else {
+        console.warn(
+            `[csszyx] csr-recovery-used: ${JSON.stringify({})} https://csszyx.com/e/csr-recovery-used`,
+            element,
+        );
+    }
 
     // Remove abort markers
     delete element.dataset.szHydrationAborted;

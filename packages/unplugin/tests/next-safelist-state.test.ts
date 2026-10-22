@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     acquireNextSafelistStateLock,
@@ -18,6 +18,7 @@ import {
     materializeNextSafelist,
     NEXT_SAFELIST_SHARD_FORMAT,
     NEXT_SAFELIST_SHARD_READ_FORMAT,
+    NextSafelistStateLockedError,
     readNextSafelistStateLockMetadata,
     resolveNextSafelistStatePaths,
     writeNextSafelistShard,
@@ -193,8 +194,11 @@ describe('Next safelist state', () => {
         const lines = warn.mock.calls.map(call => String(call[0]));
         expect(lines).toEqual([
             // The line names the shard with `/` on every platform.
-            `[csszyx] .csszyx/cache/safelist-shards/newer.json is a safelist shard in format 99, and this version reads format ${NEXT_SAFELIST_SHARD_READ_FORMAT}: its classes are left out of the safelist.\n` +
-                '  help: run `csszyx next prebuild` with the csszyx this project installs, which writes every shard again.',
+            '[csszyx] safelist-shard-format-skew: .csszyx/cache/safelist-shards/newer.json\n' +
+                `  This safelist shard was written in format 99, and this csszyx version reads format ${NEXT_SAFELIST_SHARD_READ_FORMAT}, so its classes are left out of the safelist.\n` +
+                '  help: run `csszyx next prebuild` with the installed csszyx to write every shard again.\n' +
+                '  note: until then a class only this shard lists gets no CSS.\n' +
+                '  docs: https://csszyx.com/e/safelist-shard-format-skew',
         ]);
         warn.mockRestore();
     });
@@ -422,7 +426,7 @@ describe('Next safelist state', () => {
                 now: Date.parse('2026-06-04T00:01:00.000Z'),
                 isProcessAlive: () => true,
             }),
-        ).toThrow(/already locked/);
+        ).toThrow(/^\[csszyx\] next-safelist-locked:\n {2}Process \d+ on /);
 
         recovered.release();
         expect(existsSync(lockPath)).toBe(false);
@@ -639,7 +643,7 @@ describe('Next safelist state', () => {
                 staleAfterMs: 30_000,
                 isProcessAlive: () => false,
             }),
-        ).toThrow(/already locked/);
+        ).toThrow(/^\[csszyx\] next-safelist-locked:\n {2}Process \d+ on /);
     });
 
     it('recovers a cross-host lock after staleAfterMs without consulting the local pid lookup', () => {
@@ -704,5 +708,43 @@ describe('Next safelist state', () => {
         expect(firstWrite.changed).toBe(true);
         expect(secondWrite.changed).toBe(false);
         expect(secondWrite.filePath).toBe(firstWrite.filePath);
+    });
+});
+
+describe('the error for a lock another live process holds', () => {
+    it('is a csszyx error that names the holder by the registry args', () => {
+        const holder = {
+            version: 1 as const,
+            pid: 4242,
+            token: 't',
+            hostname: 'build-host',
+            root: '/app',
+            mode: 'development' as const,
+            command: 'csszyx next watch',
+            startedAt: '2026-06-04T00:00:00.000Z',
+            updatedAt: '2026-06-04T00:00:10.000Z',
+        };
+        const error = new NextSafelistStateLockedError(holder);
+        expect(error).toBeInstanceOf(CsszyxError);
+        expect(error).toMatchObject({
+            name: 'NextSafelistStateLockedError',
+            code: 'next-safelist-locked',
+            args: {
+                pid: 4242,
+                root: '/app',
+                mode: 'development',
+                host: 'build-host',
+                updatedAt: '2026-06-04T00:00:10.000Z',
+                command: 'csszyx next watch',
+            },
+            holder,
+        });
+        expect(error.message).toBe(
+            '[csszyx] next-safelist-locked:\n' +
+                '  Process 4242 on `build-host` holds the csszyx safelist lock for `/app` in development mode, so this process cannot write the safelist.\n' +
+                '  help: stop that process, such as a running `csszyx next watch`, or wait for it to finish; a lock not refreshed for 30 seconds is taken over by the next run.\n' +
+                '  note: the lock was last refreshed at 2026-06-04T00:00:10.000Z.\n' +
+                '  docs: https://csszyx.com/e/next-safelist-locked',
+        );
     });
 });

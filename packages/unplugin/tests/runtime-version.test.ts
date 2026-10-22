@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { CsszyxError } from '@csszyx/compiler/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runNextPrebuild } from '../src/next-prebuild.js';
 import { runNextTurboLoader } from '../src/next-turbo-loader.js';
@@ -107,9 +108,17 @@ describe('assertRuntimeMatchesPlugin', () => {
         }
         expect(thrown).toBeInstanceOf(RuntimeVersionSkewError);
         expect((thrown as RuntimeVersionSkewError).code).toBe('runtime-version-skew');
+        expect(thrown).toBeInstanceOf(CsszyxError);
+        expect((thrown as RuntimeVersionSkewError).args).toEqual({
+            pluginVersion: '1.2.3',
+            runtimeVersion: '1.2.2',
+            runtimeDir: join(root, 'node_modules/@csszyx/runtime'),
+        });
         expect((thrown as Error).message).toBe(
-            `[csszyx] runtime-version-skew: @csszyx/unplugin 1.2.3 found @csszyx/runtime 1.2.2 at ${join(root, 'node_modules/@csszyx/runtime')}\n` +
-                'help: install @csszyx/runtime@1.2.3; the build and the runtime lower sz objects with rules from the same release',
+            '[csszyx] runtime-version-skew:\n' +
+                `  \`@csszyx/unplugin\` 1.2.3 found \`@csszyx/runtime\` 1.2.2 at \`${join(root, 'node_modules/@csszyx/runtime')}\`, and the two must come from the same release, so the build stops.\n` +
+                '  help: install `@csszyx/runtime@1.2.3`.\n' +
+                '  docs: https://csszyx.com/e/runtime-version-skew',
         );
     });
 });

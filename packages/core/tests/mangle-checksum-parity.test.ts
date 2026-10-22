@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { computeMangleChecksumAsync } from '../../runtime/src/hydration.js';
+import { digestMangleMap } from '../../runtime/src/mangle-checksum.js';
 import { compute_mangle_checksum } from '../pkg-parser/csszyx_core.js';
 
 type MangleMapLike = Record<string, string>;
@@ -68,7 +68,7 @@ const FRAGMENTS: Array<[label: string, text: string]> = [
  * @returns nothing; fails the test when they disagree.
  */
 async function expectAgreement(map: MangleMapLike): Promise<void> {
-    expect(await computeMangleChecksumAsync(map)).toBe(compute_mangle_checksum(map));
+    expect(await digestMangleMap(map)).toBe(compute_mangle_checksum(map));
 }
 
 describe('the canonical form, frozen on both sides', () => {
@@ -99,7 +99,7 @@ describe('the canonical form, frozen on both sides', () => {
     ];
 
     it.each(FROZEN)('the runtime derives the frozen checksum for %s', async (_n, map, sum) => {
-        expect(await computeMangleChecksumAsync(map)).toBe(sum);
+        expect(await digestMangleMap(map)).toBe(sum);
     });
 
     it.each(FROZEN)('the core derives the frozen checksum for %s', (_n, map, sum) => {
@@ -144,17 +144,17 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
     it('answers the same thing twice, and does not depend on insertion order', async () => {
         const forward: MangleMapLike = { 'p-4': 'a', [content('\u{1F389}')]: 'b', 'm-2': 'c' };
         const reversed: MangleMapLike = { 'm-2': 'c', [content('\u{1F389}')]: 'b', 'p-4': 'a' };
-        const first = await computeMangleChecksumAsync(forward);
+        const first = await digestMangleMap(forward);
 
-        expect(await computeMangleChecksumAsync(forward)).toBe(first);
-        expect(await computeMangleChecksumAsync(reversed)).toBe(first);
+        expect(await digestMangleMap(forward)).toBe(first);
+        expect(await digestMangleMap(reversed)).toBe(first);
         expect(first).toBe(compute_mangle_checksum(reversed));
     });
 
     it('reads only the keys the build emitted, not one carried on a prototype', async () => {
         const own: MangleMapLike = Object.create({ 'inherited-class': 'zz' }) as MangleMapLike;
         own['p-4'] = 'a';
-        expect(await computeMangleChecksumAsync(own)).toBe(compute_mangle_checksum({ 'p-4': 'a' }));
+        expect(await digestMangleMap(own)).toBe(compute_mangle_checksum({ 'p-4': 'a' }));
     });
 
     it.each([
@@ -190,7 +190,7 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
         const map: MangleMapLike = { [surrogate]: 'a', [replacement]: 'b' };
         expect(surrogate).not.toBe(replacement);
         expect(Object.keys(map)).toHaveLength(2);
-        expect(await computeMangleChecksumAsync(map)).not.toBe(compute_mangle_checksum(map));
+        expect(await digestMangleMap(map)).not.toBe(compute_mangle_checksum(map));
     });
 
     it('normalises an unpaired surrogate the same way on both sides', async () => {
@@ -204,9 +204,7 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
         await expectAgreement(high);
         await expectAgreement(low);
         await expectAgreement(replaced);
-        expect(await computeMangleChecksumAsync(high)).toBe(
-            await computeMangleChecksumAsync(replaced),
-        );
+        expect(await digestMangleMap(high)).toBe(await digestMangleMap(replaced));
     });
 });
 

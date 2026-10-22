@@ -4,6 +4,7 @@
  * time: a template has no csszyx runtime for the rest. Every other value is an
  * error placed in the `.svelte` file, and its attribute is left as written.
  */
+import { type CsszyxError, isCsszyxError } from '@csszyx/compiler/errors';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -13,10 +14,36 @@ const PARSERS = ['rust', 'wasm'] as const;
 
 const SCRIPT = '<script>let { size } = $props();</script>\n';
 
-const RUNTIME =
-    'this sz value is only known at runtime, and a template has no csszyx runtime to resolve it\n' +
-    'help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime\n' +
-    'note: the attribute is left as written; no class is generated for it';
+/**
+ * The error for a value only the runtime knows, as the registry words it.
+ * @param where - Where it is: `file:line:column`.
+ * @returns The message.
+ */
+function runtime(where: string): string {
+    return (
+        `[csszyx] template-runtime-value: ${where}\n` +
+        '  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.\n' +
+        '  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.\n' +
+        '  note: the attribute is left as written.\n' +
+        '  docs: https://csszyx.com/e/template-runtime-value'
+    );
+}
+
+/**
+ * The one error a file with one bad value fails the build with.
+ * @param file - The file.
+ * @param where - Where the value is: `line:column`.
+ * @returns The message.
+ */
+function failed(file: string, where: string): string {
+    return (
+        `[csszyx] template-sz-invalid: ${file}\n` +
+        '  This file has 1 `sz` error(s), so the build stops.\n' +
+        '  help: fix each error listed below.\n' +
+        '  docs: https://csszyx.com/e/template-sz-invalid\n\n' +
+        runtime(`${file}:${where}`)
+    );
+}
 
 describe.each(PARSERS)('the %s artifact', parser => {
     const run = (source: string) => preprocess(source, { filename: 'App.svelte', parser });
@@ -82,7 +109,10 @@ describe.each(PARSERS)('the %s artifact', parser => {
         expect(result.diagnostics).toEqual([
             {
                 severity: 'error',
-                message: `[csszyx] App.svelte:2:10: ${RUNTIME}`,
+                message: runtime('App.svelte:2:10'),
+                code: 'template-runtime-value',
+                args: {},
+                file: 'App.svelte',
                 line: 2,
                 column: 10,
             },
@@ -138,7 +168,7 @@ describe.each(PARSERS)('the %s artifact', parser => {
 describe('transformMarkup', () => {
     it('places a diagnostic in the markup when no file is named', () => {
         const result = transformMarkup('<div sz={styles}></div>');
-        expect(result.diagnostics[0].message.startsWith('[csszyx] 1:10: this sz value')).toBe(true);
+        expect(result.diagnostics[0].message).toBe(runtime('1:10'));
     });
 
     it('leaves a quoted sz string that is not an object alone', () => {
@@ -162,9 +192,18 @@ describe('transformMarkup', () => {
 describe('the preprocessor', () => {
     it('throws every error at once, naming the file and position', () => {
         const markup = preprocessor().markup;
-        expect(() =>
-            markup?.({ content: '<div sz={styles}></div>', filename: 'App.svelte' }),
-        ).toThrow(`[csszyx] App.svelte:1:10: ${RUNTIME}`);
+        let thrown: unknown;
+        try {
+            markup?.({ content: '<div sz={styles}></div>', filename: 'App.svelte' });
+        } catch (error) {
+            thrown = error;
+        }
+        expect(isCsszyxError(thrown)).toBe(true);
+        expect(thrown).toMatchObject({
+            code: 'template-sz-invalid',
+            args: { count: 1 },
+            message: failed('App.svelte', '1:10'),
+        });
     });
 
     it('prints a warning and keeps the output', () => {
@@ -177,7 +216,7 @@ describe('the preprocessor', () => {
 });
 
 describe('the Vite plugin', () => {
-    type Context = { error: (message: string) => never; warn: (message: string) => void };
+    type Context = { error: (error: CsszyxError) => never; warn: (message: string) => void };
     type Transform = (this: Context, code: string, id: string) => { code: string } | null;
 
     /**
@@ -187,8 +226,8 @@ describe('the Vite plugin', () => {
      */
     function transform(code: string) {
         const context = {
-            error: vi.fn((message: string): never => {
-                throw new Error(message);
+            error: vi.fn((error: CsszyxError): never => {
+                throw error;
             }),
             warn: vi.fn(),
         };
@@ -205,7 +244,13 @@ describe('the Vite plugin', () => {
     it('fails the build on an error, naming the file and position', () => {
         const { result, context } = transform('<div sz={styles}></div>');
         expect(result).toBeInstanceOf(Error);
-        expect(context.error).toHaveBeenCalledWith(`[csszyx] /src/App.svelte:1:10: ${RUNTIME}`);
+        expect(context.error).toHaveBeenCalledWith(
+            expect.objectContaining({
+                code: 'template-sz-invalid',
+                args: { count: 1 },
+                message: failed('/src/App.svelte', '1:10'),
+            }),
+        );
     });
 
     it('passes a warning to the bundler and keeps the output', () => {

@@ -10,9 +10,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
-import { engineMessage } from './engine-message.js';
+import { engineMessage, productionMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
-import { szDiagnosticKindOf } from './helpers/runtime-warning-kind.js';
+import { szReportedCodes } from './helpers/sz-console-line.js';
 
 /** What one lane wrote for an sz object, and the kinds it reported. */
 interface LaneResult {
@@ -27,7 +27,7 @@ type Sz = Record<string, unknown>;
 type Lane = (sz: Sz) => LaneResult;
 
 /**
- * The runtime lowering, its console warnings read back as kinds.
+ * The runtime lowering, its console warnings read back as their codes.
  *
  * @param sz - The sz object.
  * @returns What it wrote and reported.
@@ -39,9 +39,7 @@ function runtimeLane(sz: Sz): LaneResult {
     try {
         return {
             className: transform(sz as never).className,
-            kinds: warnings
-                .filter(message => !message.includes('Tip: run'))
-                .map(message => szDiagnosticKindOf(message)),
+            kinds: szReportedCodes(warnings),
         };
     } finally {
         console.warn = original;
@@ -291,19 +289,16 @@ describe.each(LANES)('a slash opacity string — %s', (_name, lower) => {
 });
 
 describe('the slash opacity diagnostic', () => {
-    const expected =
-        `[csszyx] "bg: 'red-500/50'" at /p/src/Spelling.jsx:1 — string slash opacity is not ` +
-        'supported, and nothing is emitted for it. Use object form: ' +
-        "{ color: 'red-500', op: 50 }.";
-
-    // The engine's text is the registry's; the runtime's is the sentence above.
-    // The wording converges when the runtime lane moves to the registry, so the
-    // two are compared on the facts both name: the key, the colour and the opacity.
+    // Both lanes render the registry's text; the runtime has no column.
+    const lines = [
+        "`bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.",
+        "help: use the object form: `{ color: 'red-500', op: 50 }`.",
+    ];
+    const expected = engineMessage('slash-opacity-string', '/p/src/Spelling.jsx:1', ...lines);
     const engineExpected = engineMessage(
         'slash-opacity-string',
         '/p/src/Spelling.jsx:1:33',
-        "`bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.",
-        "help: use the object form: `{ color: 'red-500', op: 50 }`.",
+        ...lines,
     );
 
     it.each(ENGINES)('%s renders the registry text, bang removed', (_name, engine) => {
@@ -320,16 +315,29 @@ describe('the slash opacity diagnostic', () => {
         ]);
     });
 
-    it('the runtime prints the same text once, in production too', () => {
+    it('the runtime prints the same text once, and its code in production too', () => {
         // The class is missing, so it is not a development nudge (ADR 0011).
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        vi.stubEnv('NODE_ENV', 'production');
         setSzWarnLocation('/p/src/Spelling.jsx:1');
         try {
             expect(transform({ bg: 'red-500/50!', p: 2 }).className).toBe('p-2');
             transform({ bg: 'red-500/50' });
-
             expect(warn.mock.calls).toEqual([[expected]]);
+
+            warn.mockClear();
+            __resetSzWarnDedupForTests();
+            vi.stubEnv('NODE_ENV', 'production');
+            transform({ bg: 'red-500/50' });
+            transform({ bg: 'red-500/50' });
+            expect(warn.mock.calls).toEqual([
+                [
+                    productionMessage('slash-opacity-string', {
+                        key: 'bg',
+                        color: 'red-500',
+                        opacity: '50',
+                    }),
+                ],
+            ]);
         } finally {
             setSzWarnLocation(undefined);
             vi.unstubAllEnvs();
@@ -389,19 +397,18 @@ describe.each(LANES)('a slash opacity in a colour object — %s', (_name, lower)
 });
 
 describe('the colour-object slash opacity diagnostic', () => {
-    // The engine renders from the registry, the runtime from its own sentence;
-    // the wording converges in the runtime PR, so the engine tests below pin the
-    // registry text and the facts in `issue.args`.
-    const runtimeWithOp =
-        `[csszyx] "bg: { color: 'red-500/50', op: 20 }" at /p/src/Spelling.jsx:1 — a colour ` +
-        "object takes its opacity in op, not in color. Write { color: 'red-500', op: 20 }.";
-    const withOp = engineMessage(
-        'color-slash-opacity',
-        '/p/src/Spelling.jsx:1:33',
+    // Both lanes render the registry's text; the runtime has no column.
+    const withOpLines = [
         "`bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
         "help: write `{ color: 'red-500', op: 20 }`.",
         'note: the class uses `op: 20`; the `/50` in `color` is ignored.',
+    ];
+    const runtimeWithOp = engineMessage(
+        'color-slash-opacity',
+        '/p/src/Spelling.jsx:1',
+        ...withOpLines,
     );
+    const withOp = engineMessage('color-slash-opacity', '/p/src/Spelling.jsx:1:33', ...withOpLines);
     const withoutOp = engineMessage(
         'color-slash-opacity',
         '/p/src/Spelling.jsx:1:33',
@@ -483,8 +490,13 @@ describe('the colour-object slash opacity diagnostic', () => {
 
             expect(warn.mock.calls).toEqual([
                 [
-                    `[csszyx] "bg: { color: 'red-500/50!', op: '20' }" at /p/src/Spelling.jsx:1 — a ` +
-                        "colour object takes its opacity in op, not in color. Write { color: 'red-500!', op: '20' }.",
+                    engineMessage(
+                        'color-slash-opacity',
+                        '/p/src/Spelling.jsx:1',
+                        "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                        "help: write `{ color: 'red-500!', op: '20' }`.",
+                        "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                    ),
                 ],
             ]);
         } finally {
@@ -560,14 +572,14 @@ describe.each(LANES)('a gradient layer on mask — %s', (_name, lower) => {
 });
 
 describe('the mask layer diagnostic', () => {
-    const expected =
-        "[csszyx] mask: 'linear-45' at /p/src/Spelling.jsx:1 — gradient layers moved to " +
-        '"maskLinear". Tailwind composites mask-image from one variable per layer, so each ' +
-        'layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or ' +
-        'a CSS variable.';
+    // Both lanes render the registry's text; the runtime has no column.
+    const expected = engineMessage(
+        'moved-value',
+        '/p/src/Spelling.jsx:1',
+        "`mask: 'linear-45'` names a gradient layer, which moved to `maskLinear`, and nothing is emitted for it.",
+        'help: write this layer on `maskLinear`; `mask` takes only `none`, a `url()` or a CSS variable.',
+    );
 
-    // The wording converges with the runtime's in the runtime PR; until then the
-    // engine's text is the registry's and the facts are pinned in `issue.args`.
     it.each(ENGINES)('%s renders the registry text, bang removed', (_name, engine) => {
         const run = captureWarnings(
             engine,
@@ -592,16 +604,30 @@ describe('the mask layer diagnostic', () => {
         ]);
     });
 
-    it('the runtime prints the same text once, in production too', () => {
+    it('the runtime prints the same text once, and its code in production too', () => {
         // The mask is missing, so it is not a development nudge (ADR 0011).
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        vi.stubEnv('NODE_ENV', 'production');
         setSzWarnLocation('/p/src/Spelling.jsx:1');
         try {
             expect(transform({ mask: 'linear-45!', p: 2 }).className).toBe('p-2');
             transform({ mask: 'linear-45' });
-
             expect(warn.mock.calls).toEqual([[expected]]);
+
+            warn.mockClear();
+            __resetSzWarnDedupForTests();
+            vi.stubEnv('NODE_ENV', 'production');
+            transform({ mask: 'linear-45' });
+            transform({ mask: 'linear-45' });
+            expect(warn.mock.calls).toEqual([
+                [
+                    productionMessage('moved-value', {
+                        form: 'mask-layer',
+                        key: 'mask',
+                        value: 'linear-45',
+                        layerKey: 'maskLinear',
+                    }),
+                ],
+            ]);
         } finally {
             setSzWarnLocation(undefined);
             vi.unstubAllEnvs();

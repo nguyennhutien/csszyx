@@ -120,10 +120,24 @@ test('fails on growth and on a stale entry, so the baseline only shrinks by hand
 });
 
 test('writes the baseline so a regenerated file is already the formatted one', () => {
-    const found = { '4.0.0': { regressed: [], dead: ['p|var'], spelling: [], table: [] } };
+    const found = {
+        '4.0.0': { regressed: [], dead: ['p|var'], spelling: [], table: [], variant: [] },
+    };
     const text = renderBaseline('4.3.3', found);
 
     // One key per line: the formatter leaves an object written that way alone.
     assert.match(text, /\n {12}"dead": \{\n {16}"p\|var": true\n {12}\}/);
     assert.deepEqual(readBaseline(text).versions, found);
+});
+
+test('holds the served state variants to the baseline like every other finding', () => {
+    // The runtime reports a bare state name from the table measured on the pin;
+    // a version that serves another set is a difference a person reads.
+    const found = { variant: ['inert: served by the pin, not here'] };
+
+    assert.deepEqual(compareWithBaseline(found, {}), [
+        'variant: inert: served by the pin, not here (not in the baseline)',
+    ]);
+    const text = renderBaseline('4.3.3', { '4.0.0': found });
+    assert.match(text, /"variant": \{\n {16}"inert: served by the pin, not here": true\n {12}\}/);
 });

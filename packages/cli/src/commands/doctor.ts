@@ -61,16 +61,16 @@ async function checkConfiguration(cwd: string): Promise<number> {
     printSection('📋 Configuration Health');
     const loaded = await loadDiagnosticPolicy(cwd);
     if (loaded.file === null) {
-        printWarn('No csszyx.config found - using defaults');
+        printWarn('No csszyx.config found, so the `recommended` levels apply.');
         return 0;
     }
     const name = path.basename(loaded.file);
     printSuccess(`csszyx configuration found: ${name}`);
     for (const problem of loaded.problems) {
-        const line =
-            problem.path === name
-                ? `${name} ${problem.message}`
-                : `${problem.path}: ${problem.message}`;
+        // The path is a config key, a problem with the whole file is pathed
+        // by the file's name (its sentence starts "This file"), and one with
+        // a top-level field by `default export`.
+        const line = `\`${problem.path}\`: ${problem.message}`;
         if (problem.severity === 'error') printError(line);
         else printWarn(line);
     }

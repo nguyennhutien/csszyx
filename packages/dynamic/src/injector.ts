@@ -20,6 +20,8 @@
  * - Stale manifest → injected rule overrides built rule (same CSS value)
  */
 
+import { DYNAMIC_INJECTION_GROWTH, szReport } from '@csszyx/compiler/report';
+
 import { BREAKPOINTS, type Tier } from './css-generator.js';
 
 // ── Tier ordering ─────────────────────────────────────────────────────────────
@@ -211,12 +213,10 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
         injected.size >= INJECTED_GROWTH_WARN_THRESHOLD
     ) {
         warnedInjectedGrowth = true;
-        console.warn(
-            `[csszyx] dynamic() has injected ${INJECTED_GROWTH_WARN_THRESHOLD}+ unique classes this session. ` +
-                'Injected CSS rules are never removed, so continuously varying values ' +
-                '(e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. ' +
-                'Drive continuously changing values through a CSS variable instead.',
-        );
+        szReport({
+            diagnostic: DYNAMIC_INJECTION_GROWTH,
+            args: { count: INJECTED_GROWTH_WARN_THRESHOLD },
+        });
     }
 
     if (!cssRule) {

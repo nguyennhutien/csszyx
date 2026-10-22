@@ -30,8 +30,12 @@ build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
 or install it as a dev dependency. A Next.js project also adds
 `@csszyx/unplugin` directly, because its configs name that package (the
-Next.js steps below say where); `csszyx init` does this for you, and adds
-these packages to `dependencies`.
+Next.js steps below say where), and so does any project whose
+`postcss.config` lists `@csszyx/unplugin/postcss`; `csszyx init` does this
+for you, and adds these packages to `dependencies`. For a framework it does
+not detect, init installs Tailwind with `@tailwindcss/postcss` and prints a
+`postcss.config.mjs` that runs `@csszyx/unplugin/postcss` before it, plus the
+Vite lines for a project that builds with Vite.
 [Where each package goes](#where-each-package-goes) says which ones a
 production install can leave out.
 
@@ -404,7 +408,7 @@ behaviour before relying on it.
 
 4. **Keep the Tailwind safelist fresh.** Run the csszyx watcher/prebuild
    around Next. Production builds fail-closed
-   (`Next Turbopack production cache is not ready`) until
+   (`next-turbo-cache-unseeded`) until
    `csszyx next prebuild` has seeded the safelist and generation manifest,
    so wire both flows into your scripts:
 
@@ -610,7 +614,7 @@ Fix: explicitly declare `tailwindcss` as a dependency in each package that uses 
 **Plugin order warnings** — CSSzyx must be **before** Tailwind and React in
 the plugins array.
 
-**"No prebuilt native binary" warning, or a `native engine unavailable` build
+**"No prebuilt native binary" warning, or a `native-engine-unavailable` build
 error** — CSSzyx parses your source with one engine that ships as two artifacts.
 The default is `rust` (a native addon) because it is the fastest. The same
 engine is also compiled to WebAssembly and ships inside `@csszyx/core` itself,

@@ -77,15 +77,37 @@ describe('compileManglePreserve', () => {
     });
 
     it('refuses a lone *, which would switch mangling off silently', () => {
-        expect(() => compileManglePreserve(['*'])).toThrow(/manglePreserve/);
+        expect(() => compileManglePreserve(['*'])).toThrow(
+            expect.objectContaining({
+                code: 'mangle-preserve-invalid',
+                args: { form: 'lone-star' },
+                message:
+                    '[csszyx] mangle-preserve-invalid:\n' +
+                    '  `production.manglePreserve` holds a lone `*`, which would keep every class unmangled, so the build stops.\n' +
+                    '  help: name a prefix, such as `bg-tag-*`, or set `production.mangle: false` to turn mangling off.\n' +
+                    '  docs: https://csszyx.com/e/mangle-preserve-invalid',
+            }),
+        );
     });
 
     it('refuses entries that are not non-empty strings, naming what it got', () => {
-        expect(() => compileManglePreserve([''])).toThrow(/manglePreserve\[0\].*empty string/);
+        expect(() => compileManglePreserve(['p-4', 5 as unknown as string])).toThrow(
+            expect.objectContaining({
+                code: 'mangle-preserve-invalid',
+                args: { form: 'entry', index: 1, got: 'number 5' },
+                message:
+                    '[csszyx] mangle-preserve-invalid:\n' +
+                    '  `production.manglePreserve[1]` is not a class name or a prefix (got number 5), so the build stops.\n' +
+                    '  help: write an exact class name, such as `bg-tag-red`, or a prefix ending in `*`, such as `bg-tag-*`.\n' +
+                    '  docs: https://csszyx.com/e/mangle-preserve-invalid',
+            }),
+        );
+        expect(() => compileManglePreserve([''])).toThrow(
+            /manglePreserve\[0\]` .*got an empty string/,
+        );
         expect(() => compileManglePreserve([/x/ as unknown as string])).toThrow(
             /a RegExp \(\/x\/\)/,
         );
-        expect(() => compileManglePreserve([5 as unknown as string])).toThrow(/number 5/);
         expect(() => compileManglePreserve([undefined as unknown as string])).toThrow(
             /undefined undefined/,
         );

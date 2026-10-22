@@ -280,7 +280,9 @@ describe('csszyx check [dir]', () => {
         const printed = await printedBy({ cwd, dir: 'src', files: ['src/Bad.tsx'] });
 
         expect(process.exitCode).toBe(1);
-        expect(printed).toContain('--files');
+        expect(printed).toContain(
+            '✖ A directory and `--files` both choose the files to check: pass `src` or `--files`, not both.',
+        );
         expect(printed).not.toContain('nonsenseKey');
     });
 
@@ -293,7 +295,9 @@ describe('csszyx check [dir]', () => {
         const printed = await printedBy({ cwd, dir: 'scr' });
 
         expect(process.exitCode).toBe(1);
-        expect(printed).toContain('"scr"');
+        expect(printed).toContain(
+            `✖ \`scr\` does not exist under \`${cwd}\`, so there is nothing to check: pass a directory under it, or leave \`[dir]\` out to check the whole project.`,
+        );
     });
 
     it('refuses an absolute --pattern, which would not stay inside the directory', async () => {
@@ -312,7 +316,9 @@ describe('csszyx check [dir]', () => {
         });
 
         expect(process.exitCode).toBe(1);
-        expect(printed).toContain('is an absolute path');
+        expect(printed).toContain(
+            'is an absolute path, so it would not stay inside `src/components`: pass a pattern relative to the directory.',
+        );
         expect(printed).not.toContain('nonsenseKey');
     });
 
@@ -325,6 +331,8 @@ describe('csszyx check [dir]', () => {
         const printed = await printedBy({ cwd, dir: 'src/Bad.tsx' });
 
         expect(process.exitCode).toBe(1);
-        expect(printed).toContain('--files src/Bad.tsx');
+        expect(printed).toContain(
+            '✖ `src/Bad.tsx` is a file: to check single files, pass `--files src/Bad.tsx`.',
+        );
     });
 });

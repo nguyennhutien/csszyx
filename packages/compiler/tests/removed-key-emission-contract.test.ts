@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { transform } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES, type EngineParityResult } from './engine-parity-harness.js';
+import { szReportedCodes } from './helpers/sz-console-line.js';
 
 /**
  * The code and key of each issue an engine reported.
@@ -15,6 +16,8 @@ function keysOf(issues: EngineParityResult['issues']) {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    // Each runtime case reads its own first report.
+    __resetSzWarnDedupForTests();
 });
 
 describe('removed sz key emission contract', () => {
@@ -27,9 +30,9 @@ describe('removed sz key emission contract', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         expect(transform({ [key]: value }).className).toBe('');
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            `"${key}" was removed`,
-        );
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual(['removed-key']);
+        expect(messages[0]).toContain(`\`${key}\` was removed, and nothing is emitted for it.`);
     });
 
     it('runtime drops canonical aliases while preserving custom utility fallthrough', () => {
@@ -44,12 +47,18 @@ describe('removed sz key emission contract', () => {
         });
 
         expect(result.className).toBe('custom-thing-active');
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            'canonical key "p"',
-        );
-        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
-            'canonical key "bgRepeat"',
-        );
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual([
+            'canonical-key',
+            'canonical-key',
+            'canonical-key',
+            'canonical-key',
+            'removed-key',
+            'unknown-key',
+        ]);
+        expect(messages.join('\n')).toContain('`padding` is an alias of `p`');
+        expect(messages.join('\n')).toContain('`backgroundRepeat` is an alias of `bgRepeat`');
+        expect(messages.join('\n')).toContain('`customThing` is not an sz property');
     });
 
     it.each(ENGINES)(
@@ -72,6 +81,43 @@ describe('removed sz key emission contract', () => {
             expect(run.warnings.join('\n')).toContain('`padding` is an alias of `p`');
             expect(run.warnings.join('\n')).toContain('`maskFrom` was removed');
             expect(run.warnings.join('\n')).toContain('`customThing` is not an sz property');
+        },
+    );
+
+    // `font` and `scrollbarColor` are CSS shorthands csszyx splits over two
+    // keys, so no one key is their canonical spelling: each has a form of
+    // its own that names both keys.
+    const SPLIT_SHORTHANDS = [
+        '`font` is not an sz key, and nothing is emitted for it.\n  help: write `weight` for the font weight, or `fontFamily` for the font family.',
+        '`scrollbarColor` is not an sz key, and nothing is emitted for it.\n  help: write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour.',
+    ];
+
+    it('runtime drops a split shorthand and names the keys that split it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        expect(transform({ font: 'bold', scrollbarColor: 'red-500' }).className).toBe('');
+        const messages = warn.mock.calls.map(call => String(call[0]));
+        expect(szReportedCodes(messages)).toEqual(['canonical-key', 'canonical-key']);
+        expect(messages.join('\n')).toContain(SPLIT_SHORTHANDS[0]);
+        expect(messages.join('\n')).toContain(SPLIT_SHORTHANDS[1]);
+    });
+
+    it.each(ENGINES)(
+        '%s drops a split shorthand and names the keys that split it',
+        (_name, engine) => {
+            const run = captureWarnings(
+                engine,
+                "export const App = () => <div sz={{ font: 'bold', scrollbarColor: 'red-500', padding: 4 }} />;",
+            );
+
+            expect(run.className ?? '').toBe('');
+            expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
+                ['canonical-key', { form: 'font', key: 'font' }],
+                ['canonical-key', { form: 'scrollbar-color', key: 'scrollbarColor' }],
+                ['canonical-key', { form: 'alias', key: 'padding' }],
+            ]);
+            expect(run.warnings.join('\n')).toContain(SPLIT_SHORTHANDS[0]);
+            expect(run.warnings.join('\n')).toContain(SPLIT_SHORTHANDS[1]);
         },
     );
 

@@ -9,11 +9,9 @@
  * @module diagnostic-template
  */
 
+import type { SzDiagnosticId } from './diagnostic-codes.generated.js';
 import { PLACEHOLDER } from './diagnostic-placeholder.js';
-import type {
-    SzDiagnosticSpec,
-    SzDiagnosticTemplateText,
-} from './diagnostic-registry.generated.js';
+import type { SzDiagnosticTemplateText } from './diagnostic-registry.generated.js';
 
 /** A diagnostic to fill: the code its page is named by, and its args. */
 export interface TemplatedDiagnostic {
@@ -21,17 +19,51 @@ export interface TemplatedDiagnostic {
     args: object;
 }
 
-/** What filling a code needs from its registry entry. */
-export type SzDiagnosticTemplate = Pick<
-    SzDiagnosticSpec,
-    'args' | 'variesBy' | 'text' | 'help' | 'note'
->;
+/**
+ * What filling a code needs from its registry entry: how each list arg joins,
+ * the arg a per-variant template is keyed by, and the templates. A registry
+ * entry is one; so is each export of the browser module.
+ */
+export interface SzDiagnosticTemplate {
+    /**
+     * Every arg name in registry order, separated by one space, each one the
+     * entry may leave out followed by `?`: `'form key replacement?'`. Names
+     * are camelCase (the generator refuses any other), so neither mark can
+     * be part of one.
+     */
+    readonly args: string;
+    /** The separator each list arg is written with; absent when it has none. */
+    readonly joiners?: Readonly<Record<string, string>>;
+    /** The enum arg a per-variant template is keyed by, when it is not `form`. */
+    readonly variesBy?: string;
+    /** What the diagnostic says: one template, or one per variant. */
+    readonly text?: SzDiagnosticTemplateText;
+    /** What to do. */
+    readonly help?: SzDiagnosticTemplateText;
+    /** What does not happen, or still holds. */
+    readonly note?: SzDiagnosticTemplateText;
+}
+
+/**
+ * One id as the browser module carries it, for `szReport` to print.
+ *
+ * @template Args - The args a report of it passes, as the registry declares them.
+ */
+export interface SzBrowserDiagnostic<Args extends object = Readonly<Record<string, ArgValue>>>
+    extends SzDiagnosticTemplate {
+    /** The id the line is headed by. */
+    readonly id: SzDiagnosticId;
+    /** `error` when the line prints through `console.error`; absent, `console.warn`. */
+    readonly console?: 'error';
+    /** Never set: carries `Args` to the `szReport` call that names this id. */
+    readonly argsType?: Args;
+}
 
 /** Where every code's page lives; the code is appended. */
 export const SZ_DIAGNOSTIC_URL_BASE = 'https://csszyx.com/e/';
 
 /** One arg value, as the wire carries it. */
-type ArgValue = string | number | readonly string[];
+export type ArgValue = string | number | readonly string[];
 
 /** A value computed from an issue's args, by a helper over shared data. */
 export type SzDiagnosticComputed = (args: Readonly<Record<string, ArgValue>>) => string;
@@ -48,6 +80,8 @@ type CompiledField = Segments | Readonly<Record<string, Segments>>;
 /** An entry's fields split into segments, and its list joiners. */
 interface CompiledTemplate {
     joiners: Readonly<Record<string, string>>;
+    /** The args the entry may not leave out. */
+    required: readonly string[];
     text?: CompiledField;
     help?: CompiledField;
     note?: CompiledField;
@@ -93,6 +127,16 @@ function compileField(text: SzDiagnosticTemplateText | undefined): CompiledField
 }
 
 /**
+ * An entry's arg names in registry order, each optional one still marked `?`.
+ *
+ * @param spec - The entry.
+ * @returns The names; none for an entry with no args (`args: ''`).
+ */
+export function argNamesOf(spec: Pick<SzDiagnosticTemplate, 'args'>): string[] {
+    return spec.args === '' ? [] : spec.args.split(' ');
+}
+
+/**
  * An entry compiled: its fields split, and how each list arg joins.
  *
  * @param spec - The entry.
@@ -101,12 +145,9 @@ function compileField(text: SzDiagnosticTemplateText | undefined): CompiledField
 function compiledOf(spec: SzDiagnosticTemplate): CompiledTemplate {
     let compiled = COMPILED.get(spec);
     if (compiled === undefined) {
-        const joiners: Record<string, string> = {};
-        for (const [name, arg] of Object.entries(spec.args)) {
-            if (arg.joiner !== undefined) joiners[name] = arg.joiner;
-        }
         compiled = {
-            joiners,
+            joiners: spec.joiners ?? {},
+            required: argNamesOf(spec).filter(name => !name.endsWith('?')),
             text: compileField(spec.text),
             help: compileField(spec.help),
             note: compileField(spec.note),
@@ -180,7 +221,42 @@ export interface SzDiagnosticParts {
 }
 
 /**
- * Fill a code's templates for one diagnostic.
+ * Refuse a diagnostic its templates cannot word: a required arg left out, or
+ * a form the sentence has no text for. Filled anyway, either prints an empty
+ * space where the value or the sentence belongs. The types refuse the same
+ * calls at a site that names its id; this catches args built at run time,
+ * such as an engine issue's.
+ *
+ * Reads what {@link compiledOf} kept, so a render allocates nothing for it.
+ *
+ * @param template - The code's entry.
+ * @param required - Its required args, from its compiled form.
+ * @param code - The code.
+ * @param args - The issue's args.
+ * @param variant - The form its templates are keyed by, when they have forms.
+ */
+function assertFillable(
+    template: SzDiagnosticTemplate,
+    required: readonly string[],
+    code: string,
+    args: Readonly<Record<string, ArgValue>>,
+    variant: ArgValue | undefined,
+): void {
+    for (const name of required) {
+        if (args[name] === undefined) {
+            throw new Error(`[csszyx] \`${code}\` was reported without its \`${name}\` arg`);
+        }
+    }
+    const { text } = template;
+    if (typeof text === 'object' && (typeof variant !== 'string' || text[variant] === undefined)) {
+        throw new Error(`[csszyx] \`${code}\` has no sentence for the form \`${String(variant)}\``);
+    }
+}
+
+/**
+ * Fill a code's templates for one diagnostic. Outside production it throws
+ * on a diagnostic it cannot word ({@link assertFillable}); a production
+ * build fills what it has, so a user is never stopped by a wording slip.
  *
  * @param template - The code's entry: its args and templates.
  * @param diagnostic - The diagnostic: the code its page is named by, and its args.
@@ -195,6 +271,9 @@ export function fillSzDiagnosticTemplate(
     const args = diagnostic.args as Readonly<Record<string, ArgValue>>;
     const compiled = compiledOf(template);
     const variant = args[template.variesBy ?? 'form'];
+    if (process.env.NODE_ENV !== 'production') {
+        assertFillable(template, compiled.required, diagnostic.code, args, variant);
+    }
     const part = (field: 'text' | 'help' | 'note'): string | undefined => {
         const segments = segmentsFor(compiled[field], variant);
         return segments === undefined
@@ -209,4 +288,45 @@ export function fillSzDiagnosticTemplate(
         ...(note === undefined ? {} : { note }),
         docs: `${SZ_DIAGNOSTIC_URL_BASE}${diagnostic.code}`,
     };
+}
+
+/**
+ * The terminal layout of a body: the text, then each labelled part, two
+ * spaces in.
+ *
+ * @param parts - The parts.
+ * @returns The body.
+ */
+export function szDiagnosticBody(parts: SzDiagnosticParts): string {
+    let body = parts.text;
+    if (parts.help !== undefined) body += `\n  help: ${parts.help}`;
+    if (parts.note !== undefined) body += `\n  note: ${parts.note}`;
+    return body;
+}
+
+/**
+ * A whole message as a console or a terminal prints it, the one layout the
+ * build and the browser share. With a place, the header names it and the body
+ * follows two spaces in, as the engine's messages read; an empty place leaves
+ * the header bare. With none, as a browser line has, the sentence follows the
+ * code on the first line. The link to the code's page comes last.
+ *
+ * @param options - What to lay out.
+ * @param options.code - The code the line is headed by.
+ * @param options.parts - The filled parts.
+ * @param options.where - Where the diagnostic is, when it has a place.
+ * @returns The message.
+ */
+export function layoutSzDiagnostic(options: {
+    code: string;
+    parts: SzDiagnosticParts;
+    where?: string;
+}): string {
+    const { code, parts, where } = options;
+    const tag = `[csszyx] ${code}:`;
+    const body = szDiagnosticBody(parts);
+    let head = `${tag} ${body}`;
+    if (where === '') head = `${tag}\n  ${body}`;
+    else if (where !== undefined) head = `${tag} ${where}\n  ${body}`;
+    return `${head}\n  docs: ${parts.docs}`;
 }

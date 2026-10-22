@@ -49,8 +49,12 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
         const report = await reportFor(cwd);
 
         expect(report).toContain('src/app.css:3');
-        expect(report).toContain('balance');
-        expect(report).toContain('text-balance');
+        expect(report).toContain(
+            "    Theme token `balance` also names `text-balance`, so Tailwind compiles both meanings into one rule, which sets the token's property and the built-in's.",
+        );
+        expect(report).toContain(
+            '1 theme token(s) share a name with a built-in utility: rename them, or keep one with `--allow-token <name>` or `diagnostics.allow.tokens` in `csszyx.config`.',
+        );
         expect(process.exitCode).toBe(1);
     });
 

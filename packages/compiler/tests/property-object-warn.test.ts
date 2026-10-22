@@ -6,6 +6,22 @@ import {
     type SzObject,
     transform,
 } from '../src/transform-core.js';
+import { runtimeMessage } from './engine-message.js';
+import { szCodeOf } from './helpers/sz-console-line.js';
+
+/**
+ * The property-object line for one key and the nested keys it names.
+ *
+ * @param key - The property key.
+ * @param nested - The nested keys, as the line joins them.
+ * @returns The line.
+ */
+const propertyObject = (key: string, nested: string) =>
+    runtimeMessage(
+        'property-object',
+        `\`${key}\` sets a property and is not a variant, so its object \`{ ${nested} }\` emits \`${key}:*\` classes that produce no CSS.`,
+        "help: move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
+    );
 
 /**
  * A PROPERTY key that receives an object (other than the documented
@@ -29,27 +45,21 @@ describe('property-key object-value warning (dev)', () => {
         });
         transform(sz);
         spy.mockRestore();
-        return calls.filter(c => c.includes('is a property, not a variant'));
+        return calls.filter(c => szCodeOf(c) === 'property-object');
     };
 
     it('warns on a property key holding a nested object and echoes its keys', () => {
         const w = warns({ p: { bg: 'red-500' } } as SzObject);
-        expect(w).toHaveLength(1);
-        expect(w[0]).toContain('"p" is a property, not a variant');
-        expect(w[0]).toContain('{ bg }');
-        expect(w[0]).toContain('"p:*" classes');
-        expect(w[0]).toContain('generate no CSS');
+        expect(w).toEqual([propertyObject('p', 'bg')]);
     });
 
     it('warns on a malformed color-opacity object missing the color key', () => {
         const w = warns({ shadow: { op: 12.5 } } as SzObject);
-        expect(w).toHaveLength(1);
-        expect(w[0]).toContain('"shadow"');
-        expect(w[0]).toContain("{ color: '...', op: ... }");
+        expect(w).toEqual([propertyObject('shadow', 'op')]);
     });
 
     it('warns inside variant nesting', () => {
-        expect(warns({ hover: { m: { p: 2 } } } as SzObject)[0]).toContain('"m"');
+        expect(warns({ hover: { m: { p: 2 } } } as SzObject)).toEqual([propertyObject('m', 'p')]);
     });
 
     it('stays silent for every documented object shape', () => {

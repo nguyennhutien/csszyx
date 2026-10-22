@@ -9,7 +9,17 @@
  * @module template-ast
  */
 
-import { requirePeer, type TemplateSzAttribute } from '@csszyx/compiler/internal';
+import {
+    placeTemplateDiagnostic,
+    requirePeer,
+    type TemplateSzAttribute,
+    type TemplateSzDiagnostic,
+} from '@csszyx/compiler/internal';
+import {
+    type SzBrowserDiagnostic,
+    TEMPLATE_LANG_UNSUPPORTED,
+    TEMPLATE_UNPARSABLE,
+} from '@csszyx/compiler/report';
 
 import { decodeCharacterReferences } from './character-references.js';
 
@@ -76,8 +86,35 @@ const DIRECTIVE = 7;
 export interface ReadFailure {
     /** UTF-16 offset in the file. */
     offset: number;
-    /** The message, without its location. */
-    text: string;
+    /**
+     * The error, placed in a file.
+     *
+     * @param at - Where to place it.
+     * @param at.file - The file the diagnostic names.
+     * @param at.filename - The file's name as the template compiler saw it.
+     * @param at.offset - The UTF-16 offset in the file.
+     * @returns The diagnostic.
+     */
+    place(at: { file: string; filename?: string; offset: number }): TemplateSzDiagnostic;
+}
+
+/**
+ * A failure in the registry's words.
+ *
+ * @param offset - Where it is.
+ * @param diagnostic - The registry entry.
+ * @param args - Its args.
+ * @returns The failure.
+ */
+function failure<Args extends object>(
+    offset: number,
+    diagnostic: SzBrowserDiagnostic<Args>,
+    args: NoInfer<Args>,
+): ReadFailure {
+    return {
+        offset,
+        place: at => placeTemplateDiagnostic({ ...at, severity: 'error', diagnostic, args }),
+    };
 }
 
 /** What {@link readSzAttributes} found in a file. */
@@ -113,24 +150,28 @@ export function readSzAttributes(source: string, filename?: string): SzAttribute
     });
     const template = descriptor.template;
     const bounds = template && { start: template.loc.start.offset, end: template.loc.end.offset };
-    const fail = (offset: number, text: string): SzAttributeReading => ({
+    const fail = (failed: ReadFailure): SzAttributeReading => ({
         attributes: [],
-        failure: { offset, text },
+        failure: failed,
         template: bounds,
     });
     if (errors.length > 0) {
         const [first] = errors;
         return fail(
-            first.loc?.start.offset ?? 0,
-            `Vue cannot parse this file, so no sz in it gets a class: ${first.message}`,
+            failure(first.loc?.start.offset ?? 0, TEMPLATE_UNPARSABLE, {
+                form: 'vue',
+                message: first.message,
+            }),
         );
     }
     if (template === null) return { attributes: [], failure: null, template: null };
     if (template.lang !== undefined && template.lang !== 'html') {
         return fail(
-            source.lastIndexOf('<template', template.loc.start.offset),
-            `csszyx reads sz in an HTML template only, and this one is <template lang="${template.lang}">\n` +
-                'help: write the template in HTML, or bind class yourself in it',
+            failure(
+                source.lastIndexOf('<template', template.loc.start.offset),
+                TEMPLATE_LANG_UNSUPPORTED,
+                { lang: template.lang },
+            ),
         );
     }
     return { attributes: collect(source, template.ast), failure: null, template: bounds };

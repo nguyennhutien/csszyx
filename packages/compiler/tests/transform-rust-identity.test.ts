@@ -44,14 +44,19 @@ describe('the native availability probe', () => {
         engine.identity = () => ({ version: '0.17.2', digest: 'bbbbbbbbbbbbbbbb' });
         engine.platform = null;
         const { isRustTransformAvailable } = await import('../src/transform-rust.js');
-        expect(isRustTransformAvailable).toThrow('the native (no platform package) engine 0.17.2');
+        expect(isRustTransformAvailable).toThrow(
+            '`@csszyx/compiler` 0.18.0 loaded the native engine 0.17.2, and the two must come from the same release, so csszyx stops.',
+        );
         engine.platform = '@csszyx/core-linux-x64-gnu';
     });
 
     it('answers false for a missing addon', async () => {
         const { CsszyxNativeUnavailableError } = await import('@csszyx/core/native');
         engine.identity = () => {
-            throw new CsszyxNativeUnavailableError('no binary', null);
+            throw new CsszyxNativeUnavailableError({
+                form: 'no-platform-package',
+                platform: 'freebsd-x64',
+            });
         };
         const { isRustTransformAvailable } = await import('../src/transform-rust.js');
         expect(isRustTransformAvailable()).toBe(false);
@@ -67,7 +72,7 @@ describe('the native availability probe', () => {
         engine.exportsIdentity = false;
         const { isRustTransformAvailable } = await import('../src/transform-rust.js');
         expect(isRustTransformAvailable).toThrow(
-            'the native (@csszyx/core-linux-x64-gnu) engine, from a release before 0.18',
+            '`@csszyx/compiler` 0.18.0 loaded a native engine from a release before 0.18, and the two must come from the same release, so csszyx stops.',
         );
         engine.exportsIdentity = true;
     });

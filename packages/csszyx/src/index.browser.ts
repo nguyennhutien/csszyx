@@ -24,14 +24,17 @@
 // === Runtime Helpers ===
 // === Variant Authoring ===
 // === Hydration & SSR ===
+// === Errors csszyx throws: `isCsszyxError(err)` and `err.code` ===
 export {
     _sz,
     _sz2,
     _sz3,
     _szMerge,
     abortHydration,
+    type CsszyxErrorFields,
     endHydration,
     getSSRContext,
+    isCsszyxError,
     isHydrating,
     isSSREnvironment,
     startHydration,

@@ -32,6 +32,10 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { CsszyxError } from '@csszyx/compiler/errors';
+
+import { registryMessage } from '../utils/registry-words.js';
+
 /** Tailwind v3's `resolveConfig`: fills a user config with the defaults. */
 export type ResolveConfig = (config: unknown) => unknown;
 
@@ -160,12 +164,21 @@ export function tailwindLoaderFor(projectRoot: string, alsoNextToCli = true): Ta
 /** Which of the install states the probe found. */
 export type TailwindState = 'absent' | 'wrong-major' | 'broken';
 
+/** The registry's form for each install state. */
+const FORM_OF_STATE = {
+    absent: 'absent',
+    'wrong-major': 'wrong-major',
+    broken: 'broken-entry',
+} as const satisfies Record<TailwindState, string>;
+
 /**
- * Thrown by `resolveTailwindV3`: the message is the complete explanation for
- * the user, and the fields let a caller that prints its own line — `doctor` —
- * read the state instead of the prose.
+ * Thrown by `resolveTailwindV3`: the message is the registry's words for the
+ * state, and the fields let a caller that prints its own line — `doctor` —
+ * read the state instead of the prose. A csszyx error,
+ * `tailwind-v3-unavailable`, whose `args` carry the state's form, the
+ * version and the reason, and whose `cause` is what loading the entry threw.
  */
-export class TailwindUnavailableError extends Error {
+export class TailwindUnavailableError extends CsszyxError {
     /** The install state. */
     readonly state: TailwindState;
     /** The installed version, when one was found. */
@@ -175,17 +188,23 @@ export class TailwindUnavailableError extends Error {
 
     /**
      * @param state - The install state.
-     * @param message - The complete explanation.
      * @param fields - What the state carries.
      * @param fields.version - The installed version, when one was found.
      * @param fields.reason - What loading the entry threw, for a broken install.
+     * @param fields.cause - What loading the entry threw, as it was thrown.
      */
     constructor(
         state: TailwindState,
-        message: string,
-        fields: { version?: string; reason?: string } = {},
+        fields: { version?: string; reason?: string; cause?: unknown } = {},
     ) {
-        super(message);
+        const { version, reason, cause } = fields;
+        const args = {
+            form: FORM_OF_STATE[state],
+            ...(version === undefined ? {} : { version }),
+            ...(reason === undefined ? {} : { reason }),
+        };
+        const code = 'tailwind-v3-unavailable';
+        super({ code, args, message: registryMessage({ code, args }), cause });
         this.name = 'TailwindUnavailableError';
         this.state = state;
         this.version = fields.version;
@@ -219,12 +238,12 @@ export async function resolveTailwindV3(
     try {
         version = await loader.version();
     } catch (error) {
-        if (isModuleNotFound(error)) throw new TailwindUnavailableError('absent', absentMessage());
+        if (isModuleNotFound(error)) throw new TailwindUnavailableError('absent');
         throw error;
     }
     const major = Number.parseInt(version, 10);
     if (major !== 3) {
-        throw new TailwindUnavailableError('wrong-major', wrongMajorMessage(version), { version });
+        throw new TailwindUnavailableError('wrong-major', { version });
     }
     let entry: unknown;
     try {
@@ -233,7 +252,7 @@ export async function resolveTailwindV3(
         // A v3 has been located, so whatever its entry throws — a code-less
         // SyntaxError from a damaged file included — is a fact about that
         // install, and the reinstall is its remedy.
-        throw brokenEntry(version, error instanceof Error ? error.message : String(error));
+        throw brokenEntry(version, error instanceof Error ? error.message : String(error), error);
     }
     if (typeof entry !== 'function')
         throw brokenEntry(version, 'the entry did not export a function');
@@ -245,98 +264,9 @@ export async function resolveTailwindV3(
  *
  * @param version - The installed version.
  * @param reason - What loading the entry threw.
+ * @param cause - What it threw, as thrown; absent when it threw nothing.
  * @returns The error, carrying both.
  */
-function brokenEntry(version: string, reason: string): TailwindUnavailableError {
-    return new TailwindUnavailableError('broken', brokenEntryMessage(version, reason), {
-        version,
-        reason,
-    });
-}
-
-/**
- * State (a): no Tailwind at all.
- *
- * @returns The complete message.
- */
-function absentMessage(): string {
-    return [
-        'generate-types needs Tailwind CSS v3, and this project has none installed.',
-        '',
-        '  This command turns a v3 JavaScript config into TypeScript declarations, and',
-        "  reading that config is Tailwind's own job — the command calls Tailwind's",
-        '  resolveConfig to do it. With no Tailwind installed there is nothing to call,',
-        '  so it stops here rather than guessing at your theme.',
-        '',
-        '  Install it next to the config:',
-        '',
-        '    npm  install -D tailwindcss@3',
-        '    pnpm add     -D tailwindcss@3',
-        '    yarn add     -D tailwindcss@3',
-        '',
-        '  Why it was not installed for you: Tailwind v3 pulls in 12 MB across 37',
-        '  packages, and generate-types is the only csszyx command that touches it.',
-        '  Shipping it as a hard dependency would put those 12 MB into every install of',
-        '  @csszyx/cli — including a CI runner that only ever runs csszyx check. It is',
-        '  declared as an optional peer instead, so it arrives when you ask for this',
-        '  command and not before.',
-        '',
-        '  If your project is on Tailwind v4 there is no tailwind.config.js for this',
-        '  command to read: v4 moved the theme into CSS (@theme { … }). Do not install v3',
-        '  to get past this message — you do not need generate-types at all.',
-    ].join('\n');
-}
-
-/**
- * State (b): Tailwind is installed, but not v3.
- *
- * @param version - The installed version.
- * @returns The complete message.
- */
-function wrongMajorMessage(version: string): string {
-    return [
-        `generate-types needs Tailwind CSS v3, and this project has ${version}.`,
-        '',
-        '  Nothing is broken. This command exists to read a v3 JavaScript config',
-        '  (tailwind.config.js) out of an older project, and Tailwind v4 removed both',
-        '  that config format and the resolveConfig helper the command calls. There is',
-        '  no version of generate-types that works against a v4 install.',
-        '',
-        '  On v4 the theme lives in CSS and needs no generated declarations:',
-        '',
-        '    @import "tailwindcss";',
-        '    @theme { --color-brand: oklch(0.7 0.15 250); }',
-        '',
-        '  If you are part-way through migrating and still have a v3 tailwind.config.js',
-        '  you want typed, run the command in an environment that has v3 rather than',
-        '  downgrading this project:',
-        '',
-        '    npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js',
-        '',
-        '  Why csszyx did not install v3 for you: it is 12 MB across 37 packages for one',
-        '  command, so it is an optional peer rather than a dependency.',
-    ].join('\n');
-}
-
-/**
- * State (c′): v3 is there and its entry did not load.
- *
- * @param version - The installed version.
- * @param reason - What loading the entry threw.
- * @returns The complete message.
- */
-function brokenEntryMessage(version: string, reason: string): string {
-    return [
-        `generate-types found Tailwind CSS ${version} but could not load its`,
-        `  resolveConfig entry: ${reason}`,
-        '',
-        '  The version is right, so this is not a missing install — the package is there',
-        '  and the entry point it advertises did not load. A reinstall usually clears it:',
-        '',
-        '    npm  install --force tailwindcss@3',
-        '    pnpm add -D tailwindcss@3',
-        '',
-        '  If it persists, the config cannot be read and generate-types has nothing to',
-        '  generate from. Open an issue with the version above and this line.',
-    ].join('\n');
+function brokenEntry(version: string, reason: string, cause?: unknown): TailwindUnavailableError {
+    return new TailwindUnavailableError('broken', { version, reason, cause });
 }

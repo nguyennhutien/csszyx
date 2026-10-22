@@ -162,7 +162,9 @@ describe('the rule id vocabulary', () => {
         ).toEqual([
             expect.objectContaining({
                 severity: 'error',
-                message: expect.stringContaining('`custom-class` is not a rule id'),
+                message: expect.stringContaining(
+                    'No rule or diagnostic is named `custom-class`, so a level set under that name applies to nothing.',
+                ),
             }),
         ]);
     });
@@ -203,12 +205,16 @@ describe('readCsszyxFileConfig', () => {
             {
                 severity: 'error',
                 path: 'diagnostics.rules',
-                message: '`dead-clas` is not a rule id — did you mean `dead-class`?',
+                message:
+                    'No rule or diagnostic is named `dead-clas`, so a level set under that name applies to nothing.\n' +
+                    '  help: write `dead-class` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
             },
             {
                 severity: 'error',
                 path: 'diagnostics.overrides[0].rules',
-                message: '`unknwn-key` is not a rule id — did you mean `unknown-key`?',
+                message:
+                    'No rule or diagnostic is named `unknwn-key`, so a level set under that name applies to nothing.\n' +
+                    '  help: write `unknown-key` if you meant it; https://csszyx.com/docs/reference/warnings/ lists every id.',
             },
         ]);
         // The id is dropped, the rest of the config still applies.
@@ -275,7 +281,7 @@ describe('readCsszyxFileConfig', () => {
                 severity: 'warning',
                 path: 'diagnostics.rules',
                 message:
-                    '`other` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+                    '`other` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                     '  help: name `sz-diagnostic` instead, which reports what `other` did.',
             },
         ]);
@@ -289,7 +295,7 @@ describe('readCsszyxFileConfig', () => {
                 SZ_DIAGNOSTIC_COMPUTED_VALUES,
             ),
         ).toBe(
-            '`gone` is no longer reported, so a level or a selection naming it applies to nothing.\n' +
+            '`gone` is no longer reported, so a `csszyx.config` level or a `--rule` or `--ignore-rule` flag naming it applies to nothing.\n' +
                 '  help: remove it.',
         );
     });
@@ -298,7 +304,13 @@ describe('readCsszyxFileConfig', () => {
         // `othr` is one letter from `other`, which is removed: no level reaches
         // it, so it is never offered.
         expect(readCsszyxFileConfig({ diagnostics: { rules: { othr: 'off' } } }).problems).toEqual([
-            { severity: 'error', path: 'diagnostics.rules', message: '`othr` is not a rule id.' },
+            {
+                severity: 'error',
+                path: 'diagnostics.rules',
+                message:
+                    'No rule or diagnostic is named `othr`, so a level set under that name applies to nothing.\n' +
+                    '  help: check the spelling; https://csszyx.com/docs/reference/warnings/ lists every id.',
+            },
         ]);
     });
 
@@ -306,13 +318,25 @@ describe('readCsszyxFileConfig', () => {
         expect(
             readCsszyxFileConfig({ diagnostics: { rules: { zzzzzz: 'off' } } }).problems,
         ).toEqual([
-            { severity: 'error', path: 'diagnostics.rules', message: '`zzzzzz` is not a rule id.' },
+            {
+                severity: 'error',
+                path: 'diagnostics.rules',
+                message:
+                    'No rule or diagnostic is named `zzzzzz`, so a level set under that name applies to nothing.\n' +
+                    '  help: check the spelling; https://csszyx.com/docs/reference/warnings/ lists every id.',
+            },
         ]);
     });
 
     it('refuses an allow section that is not an object', () => {
         expect(readCsszyxFileConfig({ diagnostics: { allow: ['a'] } }).problems).toEqual([
-            { severity: 'error', path: 'diagnostics.allow', message: 'must be an object.' },
+            {
+                severity: 'error',
+                path: 'diagnostics.allow',
+                message:
+                    '`diagnostics.allow` is not an object, so it is ignored.\n' +
+                    '  help: write it as an object, such as `{ classes: [] }` for `allow`.',
+            },
         ]);
     });
 
@@ -326,6 +350,56 @@ describe('readCsszyxFileConfig', () => {
         ).toEqual(['diagnostics.rules', 'diagnostics.overrides']);
     });
 
+    it('words each problem with its registry id', () => {
+        const messages = (value: unknown) =>
+            readCsszyxFileConfig(value).problems.map(problem => problem.message);
+        expect(messages(3)).toEqual([
+            'The default export is not an object, so nothing in this file applies.\n' +
+                '  help: write `export default defineConfig({ … })`, importing `defineConfig` from `csszyx`.',
+        ]);
+        expect(messages({ diagnostics: [] })).toEqual([
+            '`diagnostics` is not an object, so it is ignored.\n' +
+                '  help: write it as an object, such as `{ classes: [] }` for `allow`.',
+        ]);
+        expect(
+            messages({
+                diagnostics: {
+                    preset: 'strict',
+                    rules: { 'dead-class': 'fatal' },
+                    allow: { classes: 'one', colors: [] },
+                    overrides: [{ rules: {} }, 'src/**'],
+                    strict: true,
+                },
+            }),
+        ).toEqual([
+            '`diagnostics.strict` is not a field csszyx reads, so it sets nothing.\n' +
+                '  help: use `preset`, `rules`, `allow` or `overrides`.',
+            '`"strict"` is not a preset, so the `recommended` levels apply.\n' +
+                "  help: use `'recommended'` or `'atomic'`.",
+            '`dead-class` is set to `"fatal"`, which is not a level, so that setting is ignored.\n' +
+                "  help: use `'off'`, `'info'`, `'warn'` or `'error'`.",
+            '`diagnostics.allow.classes` is not a list of names, so it allows nothing.\n' +
+                "  help: write it as a list of strings, such as `['my-card']`.",
+            '`diagnostics.allow.colors` is not a field csszyx reads, so it allows nothing.\n' +
+                '  help: use `classes` or `tokens`.',
+            '`diagnostics.overrides[0].files` is not a glob or a list of globs, so this override applies to no file.\n' +
+                "  help: write a glob relative to the project root, such as `'src/legacy/**'`, or a list of them.",
+            '`diagnostics.overrides[1]` is not a `{ files, rules }` object, so it is ignored.\n' +
+                "  help: write it as `{ files: 'src/legacy/**', rules: { 'dead-class': 'off' } }`.",
+        ]);
+        // A level with no JSON spelling is named as JavaScript prints it.
+        expect(messages({ diagnostics: { rules: { 'dead-class': undefined } } })).toEqual([
+            '`dead-class` is set to `undefined`, which is not a level, so that setting is ignored.\n' +
+                "  help: use `'off'`, `'info'`, `'warn'` or `'error'`.",
+        ]);
+        expect(messages({ diagnostics: { rules: 'off', overrides: {} } })).toEqual([
+            '`diagnostics.rules` is not an object of id and level, so none of its levels apply.\n' +
+                "  help: write it as `{ 'dead-class': 'warn' }`.",
+            '`diagnostics.overrides` is not a list, so no override applies.\n' +
+                '  help: write it as a list of `{ files, rules }` objects.',
+        ]);
+    });
+
     it('names a misspelt diagnostics key as an error, with the key it most likely means', () => {
         // Read as a plugin option it would only warn, and every level it sets
         // would fall back to the defaults with `check` still passing. With no
@@ -334,7 +408,9 @@ describe('readCsszyxFileConfig', () => {
             {
                 severity: 'error',
                 path: 'default export',
-                message: '`diagnostic` is not read — did you mean `diagnostics`?',
+                message:
+                    '`diagnostic` is not a field csszyx reads, so nothing under it applies.\n' +
+                    '  help: rename it to `diagnostics`.',
                 fileIgnored: true,
             },
         ]);
@@ -346,7 +422,9 @@ describe('readCsszyxFileConfig', () => {
             {
                 severity: 'error',
                 path: 'default export',
-                message: '`diagnostic` is not read — did you mean `diagnostics`?',
+                message:
+                    '`diagnostic` is not a field csszyx reads, so nothing under it applies.\n' +
+                    '  help: rename it to `diagnostics`.',
             },
         ]);
         expect(read.config.preset).toBe('atomic');
@@ -361,7 +439,9 @@ describe('readCsszyxFileConfig', () => {
                 {
                     severity: 'error',
                     path: 'default export',
-                    message: `\`${key}\` is not read at the top level — did you mean \`diagnostics.${key}\`?`,
+                    message:
+                        `\`${key}\` is not read at the top level, so nothing under it applies.\n` +
+                        `  help: move it under \`diagnostics\`, as \`diagnostics.${key}\`.`,
                     fileIgnored: true,
                 },
             ]);
@@ -375,7 +455,8 @@ describe('readCsszyxFileConfig', () => {
                 severity: 'warning',
                 path: 'development',
                 message:
-                    '`development` is not read from this file; plugin options belong in the bundler config.',
+                    '`development` is a plugin option, and this file does not set plugin options, so it is ignored.\n' +
+                    '  help: pass it to the csszyx plugin in your bundler config.',
             },
         ]);
     });
@@ -430,7 +511,9 @@ describe('overrides[].files', () => {
             refused.map(glob => ({
                 severity: 'error',
                 path: 'diagnostics.overrides[0].files',
-                message: `\`${glob}\` can never match: files are matched by their path from the project root, so a glob cannot be absolute or step out with \`..\`.`,
+                message:
+                    `\`${glob}\` is absolute or steps out of the project root with \`..\`, so it matches no file.\n` +
+                    '  help: write it relative to the project root, such as `src/legacy/**`; csszyx matches each file by its path from there.',
             })),
         );
         // The globs that can match still apply.
@@ -513,14 +596,19 @@ describe('diagnosticConfigProblemsMessage', () => {
             {
                 severity: 'error',
                 path: 'csszyx.config.mjs',
-                message: 'could not be loaded: Unexpected token',
+                message:
+                    'This file could not be loaded, so the `recommended` levels apply.\n' +
+                    '  help: fix the error the loader reported.\n' +
+                    '  note: the loader reported: Unexpected token.',
                 fileIgnored: true,
             },
         ]);
         expect(message).toBe(
             '[csszyx] config-invalid: csszyx.config.mjs\n' +
-                '  This file has 1 problem(s), and it is not applied, so every finding keeps its default level.\n' +
-                '  - (error) could not be loaded: Unexpected token\n' +
+                '  This file has 1 problem(s), so it is not applied and the `recommended` levels apply.\n' +
+                '  - (error) This file could not be loaded, so the `recommended` levels apply.\n' +
+                '    help: fix the error the loader reported.\n' +
+                '    note: the loader reported: Unexpected token.\n' +
                 `  help: ${CONFIG_HELP}\n` +
                 '  docs: https://csszyx.com/e/config-invalid',
         );

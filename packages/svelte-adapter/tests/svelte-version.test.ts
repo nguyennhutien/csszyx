@@ -17,7 +17,10 @@ describe('a project on Svelte 4', () => {
         const result = preprocess(source, { filename: 'A.svelte' });
         expect(result.code).toBe(source);
         expect(result.diagnostics.map(d => d.message)).toEqual([
-            '[csszyx] A.svelte:1:1: csszyx reads Svelte 5 markup, and svelte 4.2.19 resolves\nhelp: install svelte@5',
+            '[csszyx] svelte-version-unsupported: A.svelte:1:1\n' +
+                '  Svelte 4.2.19 resolves here, and csszyx reads Svelte 5 markup only, so no `sz` attribute in this file gets a class.\n' +
+                '  help: install `svelte@5`.\n' +
+                '  docs: https://csszyx.com/e/svelte-version-unsupported',
         ]);
     });
 });

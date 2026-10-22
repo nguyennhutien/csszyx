@@ -1,5 +1,7 @@
 import * as fs from 'node:fs';
 
+import { diagnosticError } from './diagnostic-message.js';
+
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** Text and metadata captured from one stable file version. */
@@ -34,6 +36,8 @@ const NODE_FS: StableFileSnapshotFs = {
  * @param maxAttempts Maximum stable-read attempts.
  * @param fsApi Filesystem implementation, injectable for deterministic tests.
  * @returns Stable source content and its matching modification time.
+ * @throws {CsszyxError} `css-source-unstable` when every read raced a writer;
+ *         `internal-error` for a `maxAttempts` that is not a positive integer.
  */
 export function readStableTextFileSnapshotSync(
     file: string,
@@ -41,7 +45,10 @@ export function readStableTextFileSnapshotSync(
     fsApi: StableFileSnapshotFs = NODE_FS,
 ): StableTextFileSnapshot {
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
-        throw new RangeError('maxAttempts must be a positive integer.');
+        throw diagnosticError('internal-error', {
+            where: 'readStableTextFileSnapshotSync',
+            detail: `maxAttempts must be a positive integer, got ${maxAttempts}`,
+        });
     }
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -58,7 +65,7 @@ export function readStableTextFileSnapshotSync(
         }
     }
 
-    throw new Error(`CSS source changed while being read: ${file}`);
+    throw diagnosticError('css-source-unstable', {}, { at: file });
 }
 
 /**

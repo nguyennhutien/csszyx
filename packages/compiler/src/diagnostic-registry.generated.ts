@@ -2,35 +2,19 @@
 // Do not edit by hand. Edit scripts/diagnostics/registry.mjs instead.
 //
 // Node-only: every entry in one object, which no bundler tree-shakes per key.
-// A browser entry must never import this module.
+// A browser entry must never import this module. It carries what a line is
+// rendered from; the full specification is `diagnostic-spec.generated.ts`,
+// which no compiler entry imports.
 
-/** One argument a diagnostic carries. */
-export interface SzDiagnosticArgSpec {
-    /** `string`, `number`, `string[]`, or `['enum', ...values]`. */
-    readonly type: string | readonly string[];
-    /** Absent from the record when the diagnostic has nothing for it. */
-    readonly optional?: boolean;
-    /** Text from a third party (a parser, a JSON reader): unstable, never a key. */
-    readonly opaque?: boolean;
-    /** How a list joins when it is written into a sentence. */
-    readonly joiner?: string;
-}
-
-/** One public diagnostic id. */
-export interface SzDiagnosticSpec {
+/** One id as the renderer reads it. */
+export interface SzDiagnosticRenderSpec {
     readonly id: string;
-    readonly summary: string;
-    readonly surfaces: {
-        readonly engine?: Record<string, never>;
-        readonly check?: { readonly group: string };
-        readonly runtime?: { readonly production: boolean };
-        readonly error?: { readonly classes?: readonly string[] };
-    };
-    readonly defaults?: { readonly recommended: string; readonly atomic: string };
+    /** What a record's `start` points at. */
     readonly position: 'site' | 'file' | 'none';
-    readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
-    readonly forms?: readonly string[];
-    readonly gaps?: readonly string[];
+    /** Every arg name in registry order, space-separated, one the entry may leave out followed by `?`. */
+    readonly args: string;
+    /** The separator each list arg is written with; absent when it has none. */
+    readonly joiners?: Readonly<Record<string, string>>;
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
     /** What the diagnostic says: one template, or one per variant. */
@@ -44,103 +28,56 @@ export interface SzDiagnosticSpec {
 /** A template: one text, or one per variant of the sentence. */
 export type SzDiagnosticTemplateText = string | Readonly<Record<string, string>>;
 
+/** What a diagnostic says, apart from its metadata. */
+export type SzDiagnosticWords = Pick<SzDiagnosticRenderSpec, 'text' | 'help' | 'note'>;
+
 /** The registry's format, so a reader can refuse one it does not know. */
 export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = 1;
 
-/** Engine limits a sentence names, from the registry the engine reads too. */
-export const SZ_DIAGNOSTIC_CONSTANTS = {"maxNestingDepth":64,"mergeTableFormat":1} as const;
+// Generated once, into a module the browser helpers read too.
+export { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-constants.generated.js';
 
 /** The computed values a template may name beside its args. */
-export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral"];
+export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral","valueLiteral"];
 
-/** Every live id, in registry order. */
-export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
+/** Every live id as the renderer reads it, in registry order. */
+export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unknown-key",
-        "summary": "A key no sz table knows, likely a typo.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "suggestion": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "key suggestion?",
         "text": "`{key}` is not an sz property.",
         "help": "{spellingHint}; for a custom utility, define it with Tailwind's `@utility`.",
         "note": "the class is still emitted, and it styles nothing unless Tailwind serves that utility."
     },
     {
         "id": "canonical-key",
-        "summary": "An alias of a key, with the canonical spelling to write.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            }
+        "args": "form key",
+        "text": {
+            "alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
+            "font": "`{key}` is not an sz key, and nothing is emitted for it.",
+            "scrollbar-color": "`{key}` is not an sz key, and nothing is emitted for it."
         },
-        "text": "`{key}` is an alias of `{canonical}`, and nothing is emitted for it.",
-        "help": "write `{canonical}`."
+        "help": {
+            "alias": "write `{canonical}`.",
+            "font": "write `weight` for the font weight, or `fontFamily` for the font family.",
+            "scrollbar-color": "write `scrollbarThumb` for the thumb colour, or `scrollbarTrack` for the track colour."
+        }
     },
     {
         "id": "removed-key",
-        "summary": "A key that was removed or replaced, with what to write instead.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "site",
-        "forms": [
-            "runtime-alias",
-            "sugar-replaced",
-            "sugar",
-            "removed",
-            "replaced"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "runtime-alias",
-                    "sugar-replaced",
-                    "sugar",
-                    "removed",
-                    "replaced"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "replacement": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "form key replacement?",
         "text": {
-            "runtime-alias": "`{key}` was removed, and nothing is emitted for its runtime value.",
+            "runtime-alias": "`{key}` is an alias of `{canonical}`, and nothing is emitted for its runtime value.",
             "sugar-replaced": "`{key}` was replaced, and nothing is emitted for it.",
             "sugar": "The boolean shorthand `{key}` was removed, and nothing is emitted for it.",
             "removed": "`{key}` was removed, and nothing is emitted for it.",
             "replaced": "`{key}` was replaced, and nothing is emitted for it."
         },
         "help": {
-            "runtime-alias": "write {canonicalAllowed} on `{canonical}`, and the other values on {groups}.",
+            "runtime-alias": "write the values {canonicalAllowed} on `{canonical}`, and any other value on its own key: {groups}.",
             "sugar-replaced": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "sugar": "write `{ {replacement} }` instead, or run `csszyx migrate`.",
             "removed": "{note}.",
@@ -149,73 +86,19 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "numeric-key",
-        "summary": "A numeric key, the mark of an array or spread passed as an sz object.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            }
-        },
+        "args": "key",
         "text": "`sz` received a numeric key `{key}`, and its value is ignored.",
         "help": "pass an object of sz keys here; a numeric key usually means an array or a spread was passed in its place."
     },
     {
         "id": "closed-enum-value",
-        "summary": "A value a closed-enum key does not take.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "forms": [
-            "sibling-group",
-            "dead",
-            "css-value",
-            "font-style",
-            "font-smoothing"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "sibling-group",
-                    "dead",
-                    "css-value",
-                    "font-style",
-                    "font-smoothing"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            },
-            "suggestion": {
-                "type": "string",
-                "optional": true
-            },
-            "groupKey": {
-                "type": "string",
-                "optional": true
-            },
-            "groupValue": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "form key value suggestion? groupKey? groupValue?",
         "text": {
-            "sibling-group": "`{key}: {value}` is not a `{key}` value; its class `{bare}` belongs to `{ {groupKey}: {groupLiteral} }`.",
-            "dead": "`{key}: {value}` is not a `{key}` value.",
-            "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` generates no CSS.",
+            "sibling-group": "`{key}: '{value}'` is not a `{key}` value; its class `{bare}` belongs to `{ {groupKey}: {groupLiteral} }`.",
+            "dead": "`{key}: '{value}'` is not a `{key}` value.",
+            "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` produces no CSS.",
             "font-style": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
             "font-smoothing": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it."
         },
@@ -228,216 +111,91 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         },
         "note": {
             "sibling-group": "`{key}` takes one of: {enumAllowed}.",
-            "dead": "the class `{bare}` is still emitted, and it styles nothing unless a rule of your own matches it."
+            "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies."
         }
     },
     {
         "id": "slash-opacity-string",
-        "summary": "A colour key given its opacity in a string, which emits nothing; the object form takes it.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "color": {
-                "type": "string"
-            },
-            "opacity": {
-                "type": "string"
-            }
-        },
+        "args": "key color opacity",
         "text": "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
         "help": "use the object form: `{ color: '{color}', op: {opacity} }`."
     },
     {
         "id": "off-scale-value",
-        "summary": "A spacing value off Tailwind's quarter-step scale.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            }
-        },
-        "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class generates no CSS.",
+        "args": "key value",
+        "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
         "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
     },
     {
         "id": "numeric-font-weight",
-        "summary": "A font weight written as a numeric string.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "value": {
-                "type": "string"
-            }
-        },
-        "text": "`weight: '{value}'` is a numeric string, so `font-{value}` generates no CSS.",
+        "args": "value",
+        "text": "`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.",
         "help": "write `weight: {value}` as a number; it emits `font-[{value}]`."
     },
     {
         "id": "per-side-border-style",
-        "summary": "A border style on one side, which Tailwind cannot express.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            }
-        },
+        "args": "key value",
         "text": "`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.",
         "help": "use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."
     },
     {
         "id": "property-object",
-        "summary": "An object on a key that names a property, not a variant.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "nestedKeys": {
-                "type": "string[]",
-                "joiner": ", "
-            }
+        "args": "key nestedKeys",
+        "joiners": {
+            "nestedKeys": ", "
         },
-        "text": "`{key}` is a property, and its object `{ {nestedKeys} }` emits `{key}:*` classes that match no Tailwind variant and generate no CSS.",
+        "text": "`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.",
         "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
     },
     {
         "id": "non-variant-object",
-        "summary": "An object on a csszyx-owned key that is not a variant.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            }
-        },
-        "text": "`{key}` is not a variant, so its object emits `{key}:` classes that generate no CSS.",
+        "args": "key",
+        "text": "`{key}` is not a variant, so its object emits `{key}:` classes that produce no CSS.",
         "help": "a `--*` key takes a declaration value; `container` takes `true`."
     },
     {
         "id": "unknown-field",
-        "summary": "A field a structured value (a mask layer) does not take.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "owner": {
-                "type": "string"
-            },
-            "member": {
-                "type": "string"
-            },
-            "allowed": {
-                "type": "string[]",
-                "joiner": ", "
-            }
+        "args": "owner member allowed",
+        "joiners": {
+            "allowed": ", "
         },
         "text": "`{owner}` has no field `{member}`, and nothing is emitted for it.",
         "help": "`{owner}` takes `{ {allowed} }`."
     },
     {
         "id": "runtime-value",
-        "summary": "A runtime value on a key with no CSS-variable utility.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            }
-        },
+        "args": "key",
         "text": "`{key}` cannot take a runtime value: Tailwind has no utility for this key that reads a CSS variable.",
         "help": "name the values with `szv()`, or use `dynamic()` for open-ended data.",
         "note": "no class or variable is emitted for `{key}`."
     },
     {
         "id": "unresolvable-spread",
-        "summary": "A spread in an sz object the build cannot resolve.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {},
-        "text": "This `sz` object spreads a value the build cannot read, so the object falls back to the runtime and may render no styles in production.",
-        "help": "use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`."
+        "args": "",
+        "text": "This `sz` object spreads a value the build cannot read, so the object falls back to the runtime.",
+        "help": "use the array form: `sz={[x, { … }]}` in place of `sz={{ ...x, … }}`.",
+        "note": "the classes of the spread value were not collected, so they produce no CSS unless another source names them."
     },
     {
         "id": "style-override",
-        "summary": "A props spread that may override the style sz emits.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "This element spreads props that may carry `style`, and the `style` that `sz` writes can replace it.",
         "help": "move the spread `style` to an explicit `style` prop, so csszyx merges both values."
     },
     {
         "id": "szs-slot-map",
-        "summary": "An szs slot map the build cannot read, or one on a host element.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "forms": [
-            "host-element",
-            "unreadable-slot"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "host-element",
-                    "unreadable-slot"
-                ]
-            }
-        },
+        "args": "form",
         "text": {
             "host-element": "`szs` has no effect on a host element; it maps the slot names of a custom component.",
             "unreadable-slot": "A slot value in `szs` could not be read at build time, so no slot classes were compiled."
@@ -450,28 +208,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "sz-recover",
-        "summary": "An szRecover value the build cannot read.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "forms": [
-            "non-literal",
-            "unknown-mode"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "non-literal",
-                    "unknown-mode"
-                ]
-            },
-            "mode": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "form mode?",
         "text": {
             "non-literal": "`szRecover` takes only a string literal.",
             "unknown-mode": "`szRecover` has an unknown mode `\"{mode}\"`."
@@ -484,70 +222,25 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "class-precedence",
-        "summary": "A runtime className beside sz, which sz overrides.",
-        "surfaces": {
-            "engine": {}
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "`sz` wins over the runtime `className` on this element in any attribute order, so a caller's `className` cannot override these styles.",
         "help": "state the order in one `sz` array: `sz={[{ … }, className]}` for the caller to win, `sz={[className, { … }]}` for these styles to win."
     },
     {
         "id": "duplicate-sz",
-        "summary": "An element with more than one sz attribute, merged in order.",
-        "surfaces": {
-            "engine": {}
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "args": {
-            "elementName": {
-                "type": "string"
-            },
-            "count": {
-                "type": "number"
-            }
-        },
+        "args": "elementName count",
         "text": "`<{elementName}>` carries {count} `sz` attributes, merged in order as `sz={[first, …, last]}`: the later one wins for each property.",
         "help": "fold them into one `sz` array, so the order is written down."
     },
     {
         "id": "spread-split-class",
-        "summary": "Class names and sz on more than one side of a spread.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {
-            "elementName": {
-                "type": "string"
-            },
-            "classes": {
-                "type": "string[]",
-                "joiner": " and "
-            },
-            "szCount": {
-                "type": "number"
-            },
-            "szAt": {
-                "type": "number"
-            },
-            "spread": {
-                "type": "string",
-                "optional": true
-            },
-            "parts": {
-                "type": "string[]",
-                "joiner": ", "
-            }
+        "args": "elementName classes szCount szAt spread? parts",
+        "joiners": {
+            "classes": " and ",
+            "parts": ", "
         },
         "text": "`<{elementName}>` has class names or `sz` on more than one side of a spread; in React, Preact, Solid and Qwik the last class attribute replaces the others, so {earlier} will not apply there.",
         "help": "write them in one `sz` array after {spreadPlace}, in the order that should win: `sz={[{example}]}`.",
@@ -555,44 +248,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "moved-value",
-        "summary": "A value that moved to another key, with the key to write.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "site",
-        "forms": [
-            "value",
-            "mask-layer"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "value",
-                    "mask-layer"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            },
-            "layerKey": {
-                "type": [
-                    "enum",
-                    "maskLinear",
-                    "maskRadial",
-                    "maskConic"
-                ],
-                "optional": true
-            }
-        },
+        "args": "form key value layerKey?",
         "text": {
-            "value": "`{key}: {value}` moved to `{movedKey}`, and nothing is emitted for it.",
+            "value": "`{key}: '{value}'` moved to `{movedKey}`, and nothing is emitted for it.",
             "mask-layer": "`mask: '{value}'` names a gradient layer, which moved to `{layerKey}`, and nothing is emitted for it."
         },
         "help": {
@@ -602,56 +261,17 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "global-before-group",
-        "summary": "A stand-alone keyword written before a group key that replaces it.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "site",
-        "args": {
-            "global": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            },
-            "group": {
-                "type": "string"
-            }
-        },
-        "text": "`{global}: {value}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.",
-        "help": "to override the group, layer it: `sz={[base, { {global}: '{value}' }]}`.",
-        "note": "a spread such as `{ ...base, {global}: '{value}' }` keeps the same key order, so it does not fix this."
+        "args": "global value valueType group",
+        "text": "`{global}: {valueLiteral}` comes before `{group}` in one sz object, so `{group}` replaces it and the `{global}` value styles nothing.",
+        "help": "to override the group, layer it: `sz={[base, { {global}: {valueLiteral} }]}`.",
+        "note": "a spread such as `{ ...base, {global}: {valueLiteral} }` keeps the same key order, so it does not fix this."
     },
     {
         "id": "runtime-family-conflict",
-        "summary": "A runtime value beside the other side of its key family.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "forms": [
-            "key-first",
-            "other-first"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "key-first",
-                    "other-first"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "other": {
-                "type": "string"
-            }
-        },
-        "text": "`{key}` takes a runtime value beside `{other}` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.",
+        "args": "form key other",
+        "text": "`{key}` takes a runtime value beside `{other}` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.",
         "help": {
             "key-first": "layer them, later wins: `sz={[{ {key}: … }, { {other}: … }]}`.",
             "other-first": "layer them, later wins: `sz={[{ {other}: … }, { {key}: … }]}`."
@@ -659,47 +279,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "fallback-missing-css",
-        "summary": "A runtime fallback whose classes were never collected.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {
-            "site": {
-                "type": [
-                    "enum",
-                    "sz",
-                    "szr",
-                    "szv",
-                    "sz-variant-key"
-                ]
-            },
-            "shape": {
-                "type": [
-                    "enum",
-                    "call",
-                    "identifier",
-                    "import",
-                    "member",
-                    "other",
-                    "szv-factory",
-                    "variant"
-                ],
-                "optional": true
-            },
-            "detail": {
-                "type": "string",
-                "optional": true
-            },
-            "path": {
-                "type": "string",
-                "optional": true
-            },
-            "keyPath": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "site shape? detail? path? keyPath?",
         "variesBy": "site",
         "text": {
             "sz": "`sz` falls back to the runtime: {fallbackReason}.",
@@ -714,52 +295,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "sz-variant-key": "{fallbackSuggestion}"
         },
         "note": {
-            "sz": "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
-            "szr": "its classes were not collected, so Tailwind generates CSS for them only if another source names them.",
-            "szv": "none of its variant classes were collected, so they generate no CSS."
+            "sz": "its classes were not collected, so they produce no CSS unless another source names them.",
+            "szr": "its classes were not collected, so they produce no CSS unless another source names them.",
+            "szv": "none of its variant classes were collected, so they produce no CSS unless another source names them."
         }
     },
     {
         "id": "fallback-nudge",
-        "summary": "A runtime fallback whose classes were still collected.",
-        "surfaces": {
-            "engine": {}
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "args": {
-            "site": {
-                "type": [
-                    "enum",
-                    "sz",
-                    "sz-array-element"
-                ]
-            },
-            "shape": {
-                "type": [
-                    "enum",
-                    "call",
-                    "identifier",
-                    "import",
-                    "member",
-                    "other",
-                    "szv-factory",
-                    "variant"
-                ],
-                "optional": true
-            },
-            "detail": {
-                "type": "string",
-                "optional": true
-            },
-            "path": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "site shape? detail? path?",
         "variesBy": "site",
         "text": {
             "sz": "`sz` falls back to the runtime: {fallbackReason}.",
@@ -776,93 +320,25 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "merge-classifier-unavailable",
-        "summary": "A merge table this engine cannot read, so nothing merged.",
-        "surfaces": {
-            "engine": {}
-        },
-        "defaults": {
-            "recommended": "warn",
-            "atomic": "warn"
-        },
         "position": "file",
-        "forms": [
-            "unreadable",
-            "format-mismatch"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "unreadable",
-                    "format-mismatch"
-                ]
-            },
-            "error": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            },
-            "tableFormat": {
-                "type": "number",
-                "optional": true
-            }
-        },
+        "args": "form error? tableFormat?",
         "text": {
-            "unreadable": "The merge table is not one this engine reads ({error}), so no sz key was merged with a later key that covers it.",
-            "format-mismatch": "The merge table is in format {tableFormat}, and this engine reads format {mergeTableFormat}, so no sz key was merged with a later key that covers it."
+            "unreadable": "The merge table is not one this engine reads ({error}), so the build removes no class that a later sz key covers.",
+            "format-mismatch": "The merge table is in format {tableFormat}, and this csszyx version reads format {mergeTableFormat}, so the build removes no class that a later sz key covers."
         },
         "help": "install the same csszyx version of every `@csszyx` package, then rebuild; under Turbopack, delete `.csszyx/merge-table.json` and run `csszyx next prebuild`.",
         "note": "every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides."
     },
     {
         "id": "parse-error",
-        "summary": "A file the parser rejected, which contributes no classes.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            },
-            "error": {
-                "classes": [
-                    "ExplainParseError"
-                ]
-            }
-        },
         "position": "site",
-        "forms": [
-            "syntax",
-            "summary",
-            "panicked",
-            "expression",
-            "prescan"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "syntax",
-                    "summary",
-                    "panicked",
-                    "expression",
-                    "prescan"
-                ]
-            },
-            "message": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            },
-            "errorCount": {
-                "type": "number",
-                "optional": true
-            }
-        },
+        "args": "form message? errorCount?",
         "text": {
             "syntax": "Syntax error: {parserMessage}.",
             "summary": "This file could not be parsed (syntax errors: {errorCount}).",
             "panicked": "The parser stopped at a syntax error it could not recover from.",
             "expression": "This `sz` value could not be parsed as a JavaScript expression.",
-            "prescan": "This file failed to parse, so the build collected no classes from it."
+            "prescan": "The prescan could not parse this file, so none of its classes reached the safelist."
         },
         "help": {
             "syntax": "fix the syntax at this position.",
@@ -876,101 +352,43 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "summary": "the file is left unchanged.",
             "panicked": "the file is left unchanged.",
             "expression": "the attribute is left as written, and no class is generated for it.",
-            "prescan": "its classes generate no CSS unless another source names them."
+            "prescan": "its classes produce no CSS unless another source names them."
         }
     },
     {
         "id": "nesting-depth",
-        "summary": "A file nested deeper than the parser guard allows.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "file",
-        "args": {
-            "depth": {
-                "type": "number"
-            }
-        },
+        "args": "depth",
         "text": "Source nesting exceeds {maxNestingDepth} levels (found {depth}).",
         "help": "flatten the structure; nesting this deep usually comes from `sz` or JSX over-nested by hand or by generated code.",
         "note": "the file is left unchanged and contributes no classes."
     },
     {
         "id": "unsupported-dynamic-sz",
-        "summary": "An sz attribute whose value the engine cannot read.",
-        "surfaces": {
-            "engine": {}
-        },
         "position": "site",
-        "args": {},
+        "args": "",
         "text": "This `sz` attribute has no value, or a JSX element as its value.",
         "help": "give `sz` a value in braces, such as `sz={{ p: 4 }}`, or remove it.",
         "note": "the attribute is left as written; the rest of the file is still transformed."
     },
     {
         "id": "ast-budget",
-        "summary": "A file over the AST budget, left unchanged.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "transform",
-            "prescan"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "transform",
-                    "prescan"
-                ]
-            }
-        },
+        "args": "form",
         "text": {
-            "transform": "The file exceeds the AST node budget.",
-            "prescan": "The file exceeds the AST node budget, so the build collected no classes from it."
+            "transform": "This file exceeds the AST node budget.",
+            "prescan": "The prescan skipped this file because it exceeds the AST node budget, so none of its classes reached the safelist."
         },
-        "help": "raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.",
+        "help": "split the file, or raise `build.astBudgetLimit` in the plugin options; the Turbopack loader takes no budget option, so split the file there.",
         "note": {
             "transform": "the file is left unchanged, and none of its classes are collected.",
-            "prescan": "their CSS is not generated unless another source names them."
+            "prescan": "its classes produce no CSS unless another source names them."
         }
     },
     {
         "id": "mangle-vars-hoist-skipped",
-        "summary": "A CSS variable mangleVars could not hoist to a component.",
-        "surfaces": {
-            "engine": {}
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "info"
-        },
         "position": "site",
-        "args": {
-            "name": {
-                "type": "string"
-            },
-            "usageCount": {
-                "type": "number"
-            },
-            "reason": {
-                "type": [
-                    "enum",
-                    "no-lca",
-                    "non-host-ancestor",
-                    "max-depth"
-                ]
-            },
-            "maxDepth": {
-                "type": "number",
-                "optional": true
-            }
-        },
+        "args": "name usageCount reason maxDepth?",
         "variesBy": "reason",
         "text": {
             "no-lca": "`mangleVars` did not hoist `{name}`: its {usageCount} usages share no common JSX ancestor.",
@@ -984,51 +402,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "color-slash-opacity",
-        "summary": "A colour object with a slash opacity in `color`; the object takes it in `op`.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false
-            }
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "forms": [
-            "op-given",
-            "op-absent"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "op-given",
-                    "op-absent"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "base": {
-                "type": "string"
-            },
-            "opacity": {
-                "type": "string"
-            },
-            "important": {
-                "type": [
-                    "enum",
-                    "!"
-                ],
-                "optional": true
-            },
-            "op": {
-                "type": "string",
-                "optional": true
-            }
-        },
+        "args": "form key base opacity important? op?",
         "text": {
             "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
             "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
@@ -1044,2361 +419,693 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "unsigned-value",
-        "summary": "A negative value on a key Tailwind serves no negative utility for.",
-        "surfaces": {
-            "check": {
-                "group": "dead-class"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "className": {
-                "type": "string"
-            }
-        }
+        "args": "className utility"
     },
     {
         "id": "dead-class",
-        "summary": "An emitted class this project's Tailwind generates no CSS for.",
-        "surfaces": {
-            "check": {
-                "group": "dead-class"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "className": {
-                "type": "string"
-            }
-        }
+        "args": "className"
     },
     {
         "id": "prefix-disagreement",
-        "summary": "Tailwind entries in one project that set different prefixes.",
-        "surfaces": {
-            "check": {
-                "group": "dead-class"
-            },
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "entries": {
-                "type": "string[]",
-                "joiner": ", "
-            },
-            "setting": {
-                "type": "string",
-                "optional": true
-            },
-            "ignoreSetting": {
-                "type": "string",
-                "optional": true
-            }
+        "args": "form entries setting? ignoreSetting?",
+        "joiners": {
+            "entries": ", "
         }
     },
     {
         "id": "sibling-keyword",
-        "summary": "A value that emits a class setting another property than its key sets.",
-        "surfaces": {
-            "check": {
-                "group": "sibling-keyword"
-            }
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            },
-            "className": {
-                "type": "string"
-            },
-            "sets": {
-                "type": "string[]",
-                "joiner": ", "
-            }
+        "args": "key value className sets",
+        "joiners": {
+            "sets": ", "
         }
     },
     {
         "id": "broken-opacity",
-        "summary": "An opacity modifier on a colour whose theme value color-mix() cannot dim.",
-        "surfaces": {
-            "check": {
-                "group": "broken-opacity"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "className": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string",
-                "optional": true
-            }
-        },
-        "gaps": [
-            "engine"
-        ]
+        "args": "className value"
+    },
+    {
+        "id": "unserved-variant",
+        "position": "site",
+        "args": "form variant className"
     },
     {
         "id": "theme-collision",
-        "summary": "A theme token whose name a built-in utility also uses.",
-        "surfaces": {
-            "check": {
-                "group": "theme-collision"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "site",
-        "args": {
-            "name": {
-                "type": "string"
-            },
-            "classes": {
-                "type": "string[]",
-                "joiner": ", ",
-                "optional": true
-            },
-            "builtInKind": {
-                "type": [
-                    "enum",
-                    "utility-keyword",
-                    "value"
-                ],
-                "optional": true
-            }
+        "args": "form name classes?",
+        "joiners": {
+            "classes": "`, `"
         }
     },
     {
         "id": "merge-covered-key",
-        "summary": "An sz key the build removed because a later key in the same object covers it.",
-        "surfaces": {
-            "check": {
-                "group": "merge-covered-key"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "className": {
-                "type": "string"
-            }
-        }
+        "args": "key className"
     },
     {
         "id": "merge-covered-class",
-        "summary": "A className class the build removed because an sz class on the element covers it.",
-        "surfaces": {
-            "check": {
-                "group": "merge-covered-class"
-            },
-            "runtime": {
-                "production": false
-            }
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
         "position": "site",
-        "args": {
-            "className": {
-                "type": "string"
-            }
-        }
+        "args": "className"
     },
     {
         "id": "recovery-manifest-unreadable",
-        "summary": "A recovery manifest that is not valid JSON or not in the recovery format.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            },
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "json",
-            "format"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "json",
-                    "format"
-                ]
-            },
-            "error": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            }
+        "args": "form error? missing?",
+        "joiners": {
+            "missing": "`, `"
         }
     },
     {
         "id": "mangle-map-unreadable",
-        "summary": "A mangle map on the page that is not a plain map of class names, so it is ignored.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "forms": [
-            "schema",
-            "json"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "schema",
-                    "json"
-                ]
-            },
-            "error": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            }
-        }
+        "args": "form error?"
     },
     {
         "id": "mangle-census-unreadable",
-        "summary": "A mangle census on the page that is not a valid map, so nothing was verified.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "mangle-checksum-mismatch",
-        "summary": "A mangle map whose hash differs from the checksum it was built with.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "computed": {
-                "type": "string"
-            },
-            "expected": {
-                "type": "string"
-            }
-        }
+        "args": "computed expected"
     },
     {
         "id": "mangle-map-unavailable",
-        "summary": "A page with a mangle checksum but no census or map to recompute it from.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "checksum": {
-                "type": "string"
-            }
-        }
+        "args": "checksum"
     },
     {
         "id": "web-crypto-unavailable",
-        "summary": "A page without Web Crypto, so the mangle checksum cannot be recomputed.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            },
-            "error": {}
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "hydration-aborted",
-        "summary": "A hydration check that threw on an element and stopped.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "tagName": {
-                "type": "string"
-            },
-            "message": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "form tagName message?"
     },
     {
         "id": "csr-recovery-unmarked",
-        "summary": "A hydration mismatch on an element without an szRecover directive.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "csr-recovery-dev-only",
-        "summary": "An szRecover=\"dev-only\" element in a production build, where its recovery is off.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "forms": [
-            "runtime",
-            "stripped"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "runtime",
-                    "stripped"
-                ]
-            },
-            "count": {
-                "type": "number",
-                "optional": true
-            },
-            "sites": {
-                "type": "string[]",
-                "joiner": ", ",
-                "optional": true
-            }
+        "args": "form count? sites?",
+        "joiners": {
+            "sites": ", "
         }
     },
     {
         "id": "csr-recovery-used",
-        "summary": "A hydration mismatch the runtime recovered by rendering on the client.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "merge-table-format-skew",
-        "summary": "A merge table in a format this runtime does not read, so szcn merges nothing.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "format": {
-                "type": "number"
-            }
-        }
+        "args": "format expected"
     },
     {
         "id": "merge-table-missing",
-        "summary": "A run with no merge table, so szcn removes only exact repeats.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "uncompiled-sz",
-        "summary": "A raw sz object that reached the runtime because its file was not compiled.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "register-szcn-groups-ignored",
-        "summary": "A registerSzcnGroups call, which no longer changes what szcn merges.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "theme-token-ambiguous",
-        "summary": "A theme token defined under two namespaces that share one class prefix.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "color-text-size",
-            "font-family-weight"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "color-text-size",
-                    "font-family-weight"
-                ]
-            },
-            "name": {
-                "type": "string"
-            }
-        }
+        "args": "form name"
     },
     {
         "id": "split-box-selector-invalid",
-        "summary": "A has/pick/omit selector that can never match a token.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "array",
-            "empty",
-            "multi",
-            "property",
-            "sz-qualified"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "array",
-                    "empty",
-                    "multi",
-                    "property",
-                    "sz-qualified"
-                ]
-            },
-            "selector": {
-                "type": "string",
-                "optional": true
-            },
-            "property": {
-                "type": "string",
-                "optional": true
-            },
-            "categories": {
-                "type": "string[]",
-                "joiner": ", ",
-                "optional": true
-            }
+        "args": "form selector? property? categories? properties? name?",
+        "joiners": {
+            "categories": ", ",
+            "properties": "`, `"
         }
     },
     {
         "id": "split-box-unknown-category",
-        "summary": "A selector name that is no category or class prefix csszyx knows.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "no-hint",
-            "hint",
-            "property-hint"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "no-hint",
-                    "hint",
-                    "property-hint"
-                ]
-            },
-            "name": {
-                "type": "string"
-            }
-        }
+        "args": "form name hint?"
     },
     {
         "id": "split-box-placement-variant",
-        "summary": "A splitBox placement written with a variant or marker, which never matches.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "selector": {
-                "type": "string"
-            },
-            "side": {
-                "type": [
-                    "enum",
-                    "inner",
-                    "outer"
-                ]
-            }
-        }
+        "args": "selector side base"
     },
     {
         "id": "split-box-peer-on-frame",
-        "summary": "A peer class splitBox kept on the frame although its base belongs inside.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "token": {
-                "type": "string"
-            }
-        }
+        "args": "token base reaching"
     },
     {
         "id": "split-box-unclassified",
-        "summary": "A class or raw CSS splitBox cannot classify, placed on the fallback node.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "class",
-            "raw-css"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "class",
-                    "raw-css"
-                ]
-            },
-            "token": {
-                "type": "string",
-                "optional": true
-            },
-            "node": {
-                "type": [
-                    "enum",
-                    "frame",
-                    "content"
-                ]
-            }
-        }
+        "args": "form token? node side"
     },
     {
         "id": "split-box-unbounded-scroll",
-        "summary": "A scrolling content node whose height nothing bounds, so it grows instead.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "scroller": {
-                "type": "string"
-            }
-        }
+        "args": "scroller"
     },
     {
         "id": "split-box-unclipped-corners",
-        "summary": "A rounded frame that does not clip its scrolling content.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "split-box-hidden-content",
-        "summary": "A hiding class placed on the content node, which leaves the frame visible.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "hidden": {
-                "type": "string"
-            }
-        }
+        "args": "hidden"
     },
     {
         "id": "szv-config-invalid",
-        "summary": "A part of an szv config that does not have the shape szv reads.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "config",
-            "base",
-            "variants",
-            "default-variants",
-            "dimension",
-            "variant-value"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "config",
-                    "base",
-                    "variants",
-                    "default-variants",
-                    "dimension",
-                    "variant-value"
-                ]
-            },
-            "dimension": {
-                "type": "string",
-                "optional": true
-            },
-            "token": {
-                "type": "string",
-                "optional": true
-            },
-            "got": {
-                "type": "string"
-            }
-        }
+        "args": "form dimension? token? got"
     },
     {
         "id": "sz-object-depth",
-        "summary": "An sz object at runtime nested deeper than the depth limit.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            },
-            "error": {
-                "classes": [
-                    "SzDepthError"
-                ]
-            }
-        },
         "position": "none",
-        "forms": [
-            "value",
-            "szv-config"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "value",
-                    "szv-config"
-                ]
-            },
-            "maxDepth": {
-                "type": "number"
-            },
-            "where": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form maxDepth where?"
     },
     {
         "id": "szv-forbidden-key",
-        "summary": "A key in an szv config that csszyx never reads, such as __proto__.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "where": {
-                "type": "string"
-            },
-            "key": {
-                "type": "string"
-            }
-        }
+        "args": "where key"
     },
     {
         "id": "szv-unknown-variant",
-        "summary": "A selection that names a variant the szv config does not declare.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "key": {
-                "type": "string"
-            }
-        }
+        "args": "key"
     },
     {
         "id": "szv-unknown-variant-value",
-        "summary": "A selection that gives a variant a value it has no styles for.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "value": {
-                "type": "string"
-            }
+        "args": "form key value allowed?",
+        "joiners": {
+            "allowed": "`, `"
         }
     },
     {
         "id": "szv-object-as-string",
-        "summary": "An sz object from szv() used as a class string, which renders \"[object Object]\".",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "dynamic-injection-growth",
-        "summary": "A session in which dynamic() has injected so many classes the CSSOM keeps growing.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": "count"
     },
     {
         "id": "dynamic-unsafe-arbitrary",
-        "summary": "An arbitrary value dynamic() dropped because it could inject CSS.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "utility": {
-                "type": "string"
-            }
-        }
+        "args": "utility"
     },
     {
         "id": "dynamic-non-boolean",
-        "summary": "A runtime value that is not a boolean on a key only a boolean can toggle.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "valueType": {
-                "type": "string"
-            }
-        }
+        "args": "key valueType"
     },
     {
         "id": "dynamic-unresolvable",
-        "summary": "A runtime value of a type no CSS value can be resolved from.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            }
-        },
         "position": "none",
-        "args": {
-            "key": {
-                "type": "string"
-            },
-            "valueType": {
-                "type": "string"
-            }
-        }
+        "args": "key valueType"
     },
     {
         "id": "dev-warnings-partial",
-        "summary": "Development warnings that cover only the files a page loads; csszyx check scans all.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "located",
-            "unlocated"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "located",
-                    "unlocated"
-                ]
-            }
-        }
+        "args": ""
     },
     {
         "id": "diagnostics-capped",
-        "summary": "More findings of one kind than a run lists; the rest are counted, not printed.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "per-id",
-            "dev-warnings",
-            "unknown-keys"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "per-id",
-                    "dev-warnings",
-                    "unknown-keys"
-                ]
-            },
-            "id": {
-                "type": "string",
-                "optional": true
-            },
-            "count": {
-                "type": "number",
-                "optional": true
-            }
-        },
-        "help": {
-            "per-id": "`csszyx check --rule {id}` lists every one."
-        }
+        "args": "form id? count?"
     },
     {
         "id": "sz-attribute-syntax",
-        "summary": "An sz attribute string that does not parse.",
-        "surfaces": {
-            "runtime": {
-                "production": true
-            },
-            "error": {}
-        },
         "position": "site",
-        "args": {
-            "input": {
-                "type": "string"
-            },
-            "char": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form input char? index"
     },
     {
         "id": "options-object-required",
-        "summary": "An options argument that is not the one object the call takes.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "transform",
-            "csszyx-turbopack"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "transform",
-                    "csszyx-turbopack"
-                ]
-            }
+        "args": "form options?",
+        "joiners": {
+            "options": "`, `"
         }
     },
     {
         "id": "lowering-not-loaded",
-        "summary": "An sz object passed to a string helper before the lowering module is loaded.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "lite-sz-object",
-        "summary": "An sz object passed to a lite-runtime helper, which cannot lower objects.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "fnName": {
-                "type": "string"
-            },
-            "received": {
-                "type": "string"
-            }
-        }
+        "args": "fnName received"
     },
     {
         "id": "split-box-sz-string",
-        "summary": "A class string passed to splitBoxSz, which takes sz objects.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "value": {
-                "type": "string"
-            }
-        }
+        "args": "value"
     },
     {
         "id": "runtime-prefix-conflict",
-        "summary": "Two builds sharing one runtime that registered different Tailwind prefixes.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "first": {
-                "type": "string",
-                "optional": true
-            },
-            "second": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form first second?"
     },
     {
         "id": "dynamic-manifest-unreachable",
-        "summary": "A dynamic manifest the browser could not fetch.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "status": {
-                "type": "number"
-            }
-        }
+        "args": "status"
     },
     {
         "id": "native-engine-unavailable",
-        "summary": "A native engine that is missing, cannot load, or predates this compiler.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            },
-            "error": {
-                "classes": [
-                    "CsszyxNativeUnavailableError",
-                    "RustTransformUnavailableError"
-                ]
-            }
-        },
         "position": "none",
-        "forms": [
-            "no-platform-package",
-            "not-installed",
-            "missing-export",
-            "stale-binding",
-            "wasm-fallback"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "no-platform-package",
-                    "not-installed",
-                    "missing-export",
-                    "stale-binding",
-                    "wasm-fallback"
-                ]
-            },
-            "packageName": {
-                "type": "string",
-                "optional": true
-            },
-            "exportName": {
-                "type": "string",
-                "optional": true
-            },
-            "detail": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            }
-        }
+        "args": "form platform? packageName? exportName? nativeVersion? coreVersion?"
     },
     {
         "id": "wasm-engine-unavailable",
-        "summary": "A wasm engine that failed to load.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "WasmTransformUnavailableError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "detail": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "detail"
     },
     {
         "id": "native-migrate-unavailable",
-        "summary": "A native engine csszyx migrate needs and cannot load; migrate has no wasm lane.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "RustMigrateUnavailableError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "detail": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "form platform? packageName? exportName? nativeVersion? coreVersion?"
     },
     {
         "id": "engine-version-skew",
-        "summary": "An engine built from other source than the compiler that loads it.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "EngineVersionSkewError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "artifact": {
-                "type": [
-                    "enum",
-                    "native",
-                    "wasm"
-                ]
-            },
-            "expectedVersion": {
-                "type": "string"
-            },
-            "expectedDigest": {
-                "type": "string"
-            },
-            "foundVersion": {
-                "type": "string",
-                "optional": true
-            },
-            "foundDigest": {
-                "type": "string",
-                "optional": true
-            },
-            "platformPackage": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form artifact expectedVersion expectedDigest foundVersion? foundDigest? platformPackage?"
     },
     {
         "id": "runtime-version-skew",
-        "summary": "A @csszyx/runtime at another version than the plugin that lowers for it.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "RuntimeVersionSkewError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "pluginVersion": {
-                "type": "string"
-            },
-            "runtimeVersion": {
-                "type": "string"
-            },
-            "runtimeDir": {
-                "type": "string"
-            }
-        }
+        "args": "pluginVersion runtimeVersion runtimeDir"
     },
     {
         "id": "peer-module-unresolved",
-        "summary": "A peer package csszyx needs that does not resolve from the project.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "requiredBy": {
-                "type": "string"
-            },
-            "request": {
-                "type": "string"
-            },
-            "install": {
-                "type": "string"
-            }
-        }
+        "args": "requiredBy request install"
     },
     {
         "id": "tailwind-v3-unavailable",
-        "summary": "A project where generate-types finds no loadable Tailwind CSS v3.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "TailwindUnavailableError"
-                ]
-            }
-        },
         "position": "none",
-        "forms": [
-            "absent",
-            "wrong-major",
-            "broken-entry"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "absent",
-                    "wrong-major",
-                    "broken-entry"
-                ]
-            },
-            "version": {
-                "type": "string",
-                "optional": true
-            },
-            "reason": {
-                "type": "string",
-                "optional": true,
-                "opaque": true
-            }
-        }
+        "args": "form version? reason?"
     },
     {
         "id": "explain-input-invalid",
-        "summary": "An input to csszyx explain that is not one sz expression the build lowers.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "ExplainParseError"
-                ]
-            }
-        },
         "position": "none",
-        "forms": [
-            "not-one-expression",
-            "runtime-only"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "not-one-expression",
-                    "runtime-only"
-                ]
-            },
-            "diagnostics": {
-                "type": "string[]",
-                "joiner": "\n",
-                "optional": true,
-                "opaque": true
-            }
+        "args": "form input diagnostics?",
+        "joiners": {
+            "diagnostics": "\n"
         }
     },
     {
         "id": "template-sz-invalid",
-        "summary": "A Vue or Svelte file whose template sz has errors, each reported with its own code.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {
-            "count": {
-                "type": "number"
-            }
-        }
+        "args": "count"
     },
     {
         "id": "template-runtime-value",
-        "summary": "A template sz value only known at runtime, which a template cannot resolve.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "site",
-        "args": {}
+        "args": ""
     },
     {
         "id": "template-unparsable",
-        "summary": "A Vue or Svelte file its own compiler cannot parse, so no sz in it gets a class.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "site",
-        "forms": [
-            "vue",
-            "svelte-quoted",
-            "svelte-preprocess"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "vue",
-                    "svelte-quoted",
-                    "svelte-preprocess"
-                ]
-            },
-            "reason": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "form message"
     },
     {
         "id": "template-lang-unsupported",
-        "summary": "A Vue template in a language other than HTML, which csszyx does not read.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "site",
-        "args": {
-            "lang": {
-                "type": "string"
-            }
-        }
+        "args": "lang"
     },
     {
         "id": "svelte-version-unsupported",
-        "summary": "An installed Svelte older than 5, whose markup csszyx does not read.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "site",
-        "args": {
-            "version": {
-                "type": "string"
-            }
-        }
+        "args": "version"
     },
     {
         "id": "ignore-package-incompatible",
-        "summary": "An installed `ignore` package that no longer reads .gitignore the way csszyx needs.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {}
+        "args": "pinned"
     },
     {
         "id": "internal-error",
-        "summary": "A state csszyx should never reach: a csszyx bug to report.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "RustTransformUnavailableError",
-                    "WasmTransformUnavailableError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "where": {
-                "type": "string"
-            }
-        }
+        "args": "where detail"
     },
     {
         "id": "engine-call-failed",
-        "summary": "A call into the engine that threw.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            },
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "call",
-            "prescan"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "call",
-                    "prescan"
-                ]
-            },
-            "detail": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "file detail"
     },
     {
         "id": "config-invalid",
-        "summary": "A csszyx.config with problems, each reported with its own code.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "partly-applied",
-            "not-applied"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "partly-applied",
-                    "not-applied"
-                ]
-            },
-            "count": {
-                "type": "number"
-            }
-        },
-        "text": {
-            "partly-applied": "This file has {count} problem(s); each one is ignored, and the rest of the file applies.",
-            "not-applied": "This file has {count} problem(s), and it is not applied, so every finding keeps its default level."
-        },
-        "help": "https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved."
+        "args": "form count"
     },
     {
         "id": "unknown-rule-id",
-        "summary": "A rule id no diagnostic, kind or group has, likely a typo.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "config",
-            "cli"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "config",
-                    "cli"
-                ]
-            },
-            "ids": {
-                "type": "string[]",
-                "joiner": ", "
-            },
-            "suggestion": {
-                "type": "string",
-                "optional": true
-            }
+        "args": "form ids suggestion?",
+        "joiners": {
+            "ids": "` or `"
         }
     },
     {
         "id": "config-id-not-settable",
-        "summary": "A rule id for a runtime line or a throw, whose level csszyx.config cannot set.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "id": {
-                "type": "string"
-            }
-        },
-        "text": "`{id}` is printed to the console or thrown, so `csszyx.config` sets no level for it.",
-        "help": "remove it; `rules` sets the level of engine diagnostics and `csszyx check` findings only."
+        "args": "id"
     },
     {
         "id": "removed-rule-id",
-        "summary": "A rule id csszyx no longer reports, with the id that replaced it.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "replaced",
-            "removed"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "replaced",
-                    "removed"
-                ]
-            },
-            "id": {
-                "type": "string"
-            },
-            "replacedBy": {
-                "type": "string",
-                "optional": true
-            }
-        },
-        "text": "`{id}` is no longer reported, so a level or a selection naming it applies to nothing.",
-        "help": {
-            "replaced": "name `{replacedBy}` instead, which reports what `{id}` did.",
-            "removed": "remove it."
-        }
+        "args": "form id replacedBy?"
     },
     {
         "id": "config-level-invalid",
-        "summary": "A rule set to something other than off, info, warn or error.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "id": {
-                "type": "string"
-            },
-            "level": {
-                "type": "string"
-            }
-        }
+        "args": "id level"
     },
     {
         "id": "config-preset-unknown",
-        "summary": "A diagnostics preset other than recommended or atomic.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "preset": {
-                "type": "string"
-            }
-        }
+        "args": "preset"
     },
     {
         "id": "config-field-unknown",
-        "summary": "A field csszyx.config does not read.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "top-level",
-            "misspelt",
-            "plugin-option",
-            "diagnostics",
-            "allow"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "top-level",
-                    "misspelt",
-                    "plugin-option",
-                    "diagnostics",
-                    "allow"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "suggestion": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form key suggestion?"
     },
     {
         "id": "config-field-invalid",
-        "summary": "A csszyx.config field whose value does not have the shape it takes.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "field": {
-                "type": "string"
-            },
-            "expected": {
-                "type": [
-                    "enum",
-                    "object",
-                    "rules-object",
-                    "name-list",
-                    "overrides-list",
-                    "override",
-                    "globs"
-                ]
-            }
-        }
+        "args": "field expected",
+        "variesBy": "expected"
     },
     {
         "id": "config-glob-unmatchable",
-        "summary": "An override glob that is absolute or steps out of the root, so it never matches.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "glob": {
-                "type": "string"
-            }
-        }
+        "args": "glob"
     },
     {
         "id": "config-file-duplicate",
-        "summary": "A second csszyx.config file beside the one csszyx reads.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "read": {
-                "type": "string"
-            }
-        }
+        "args": "read"
     },
     {
         "id": "config-unloadable",
-        "summary": "A csszyx.config that could not be loaded, so the default levels apply.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "load",
-            "legacy-template",
-            "worker"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "load",
-                    "legacy-template",
-                    "worker"
-                ]
-            },
-            "reason": {
-                "type": "string",
-                "opaque": true
-            },
-            "lane": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form reason lane? renameTo?"
     },
     {
         "id": "config-no-default-export",
-        "summary": "A csszyx.config with no default export.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "policy-state-format-skew",
-        "summary": "A saved diagnostic policy in a format this version does not read.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "format": {
-                "type": "number"
-            }
-        }
+        "args": "format expected"
     },
     {
         "id": "safelist-shard-format-skew",
-        "summary": "A Next safelist shard in a format this version does not read.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "format": {
-                "type": "number"
-            }
-        }
+        "args": "format expected"
     },
     {
         "id": "diagnostics-held",
-        "summary": "Findings at info a production build counted instead of listing.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "count": {
-                "type": "number"
-            }
-        },
-        "text": "This build held back {count} finding(s) at `info` and listed none of them.",
-        "help": "run a development build to see each one with its file and position.",
-        "note": "they are the advisories csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — and any finding `csszyx.config` sets to `info`."
+        "args": "count"
     },
     {
         "id": "merge-covered-held",
-        "summary": "Classes a build removed by merging, counted instead of listed.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "classes": {
-                "type": "number"
-            },
-            "files": {
-                "type": "number"
-            },
-            "kinds": {
-                "type": "string[]",
-                "joiner": " and "
-            },
-            "configFile": {
-                "type": "string"
-            }
+        "args": "classes files kinds configFile",
+        "joiners": {
+            "kinds": " --rule "
         }
     },
     {
         "id": "removed-option",
-        "summary": "A plugin option that was removed and is no longer read.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "inject-checksum",
-            "mangle-map-delivery"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "inject-checksum",
-                    "mangle-map-delivery"
-                ]
-            }
-        }
+        "args": "form"
     },
     {
         "id": "transform-cache-disabled",
-        "summary": "A build without its transform cache, because package versions did not resolve.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "active-parser",
-        "summary": "The parser a build runs, and whether it fell back from the native engine.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "forms": [
-            "native",
-            "wasm",
-            "degraded"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "native",
-                    "wasm",
-                    "degraded"
-                ]
-            }
-        }
+        "args": "form"
     },
     {
         "id": "project-reload",
-        "summary": "A project-wide input that changed, so a dev server recompiled every module.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "forms": [
-            "config",
-            "merge-groups",
-            "prefix"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "config",
-                    "merge-groups",
-                    "prefix"
-                ]
-            },
-            "before": {
-                "type": "string",
-                "optional": true
-            },
-            "after": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form before? after?"
     },
     {
         "id": "watch-prefix-changed",
-        "summary": "A Tailwind prefix that changed during a watch build, which needs a restart.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "changed": {
-                "type": "string[]",
-                "joiner": ", "
-            },
-            "before": {
-                "type": "string",
-                "optional": true
-            },
-            "after": {
-                "type": "string",
-                "optional": true
-            }
+        "args": "form changed before? after?",
+        "joiners": {
+            "changed": "`, `"
+        }
+    },
+    {
+        "id": "watch-merge-groups-changed",
+        "position": "none",
+        "args": "changed",
+        "joiners": {
+            "changed": "`, `"
         }
     },
     {
         "id": "safelist-unwritable",
-        "summary": "A generated safelist csszyx could not write, so Tailwind misses its classes.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "file",
-        "args": {
-            "reason": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "reason"
+    },
+    {
+        "id": "safelist-capped",
+        "position": "none",
+        "args": "max"
     },
     {
         "id": "utility-collision",
-        "summary": "An @utility whose name another utility also claims, so Tailwind merges both.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "name": {
-                "type": "string"
-            },
-            "reason": {
-                "type": "string"
-            }
-        }
+        "args": "form name"
     },
     {
         "id": "theme-scan-without-typescript",
-        "summary": "Theme auto-scan turned on in a project without TypeScript configured.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": "tsconfig includePath"
     },
     {
         "id": "esbuild-mangle-unsupported",
-        "summary": "production.mangle on the esbuild adapter, which turns mangling off.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "mangle-selector-unparsable",
-        "summary": "A CSS selector the class mangler could not parse, left unmangled.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "selector": {
-                "type": "string"
-            },
-            "error": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "selector error"
     },
     {
         "id": "mangle-preserve-invalid",
-        "summary": "A production.manglePreserve entry that is not a class name or a prefix.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "entry",
-            "lone-star"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "entry",
-                    "lone-star"
-                ]
-            },
-            "index": {
-                "type": "number",
-                "optional": true
-            },
-            "got": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form index? got?"
     },
     {
         "id": "mangle-global-vars-options-invalid",
-        "summary": "production.mangleGlobalVars options csszyx cannot apply.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "schema",
-            "tokens-required",
-            "auto-prefix"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "schema",
-                    "tokens-required",
-                    "auto-prefix"
-                ]
-            },
-            "errors": {
-                "type": "string[]",
-                "joiner": "\n",
-                "optional": true
-            }
+        "args": "form errors?",
+        "joiners": {
+            "errors": "\n    - "
         }
     },
     {
         "id": "mangle-global-vars-plan-invalid",
-        "summary": "A global-variable alias plan that renames a variable unsafely.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "findings": {
-                "type": "string[]",
-                "joiner": "\n",
-                "opaque": true
-            }
+        "args": "findings",
+        "joiners": {
+            "findings": "\n    - "
         }
     },
     {
         "id": "mangle-map-too-large",
-        "summary": "A CSS variable mangle map larger than its safety cap.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "size": {
-                "type": "number"
-            },
-            "maxBytes": {
-                "type": "number"
-            }
-        }
+        "args": "size maxBytes"
     },
     {
         "id": "mangle-census-late",
-        "summary": "Classes that appeared after the mangle map was frozen.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "classes",
-            "census-changed"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "classes",
-                    "census-changed"
-                ]
-            },
-            "ownedClasses": {
-                "type": "string[]",
-                "joiner": ", ",
-                "optional": true
-            },
-            "authorClasses": {
-                "type": "string[]",
-                "joiner": ", ",
-                "optional": true
-            }
+        "args": "form classes?",
+        "joiners": {
+            "classes": "`, `"
+        }
+    },
+    {
+        "id": "mangle-hybrid-hazard",
+        "position": "none",
+        "args": "form count names? selectors? entries?",
+        "joiners": {
+            "names": "`, `",
+            "selectors": "`; `",
+            "entries": ", "
         }
     },
     {
         "id": "merge-hook-late",
-        "summary": "A rule selecting on a class the build had already merged away.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {
-            "className": {
-                "type": "string"
-            }
-        }
+        "args": "className"
+    },
+    {
+        "id": "merge-origin-unreadable",
+        "position": "file",
+        "args": "reason"
     },
     {
         "id": "tailwind-stylesheet-missing",
-        "summary": "A configured Tailwind stylesheet that does not exist.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "setting": {
-                "type": "string"
-            },
-            "missing": {
-                "type": "string[]",
-                "joiner": ", "
-            },
-            "root": {
-                "type": "string"
-            }
+        "args": "setting missing root",
+        "joiners": {
+            "missing": "`, `"
         }
     },
     {
-        "id": "tailwind-stylesheet-broken",
-        "summary": "A stylesheet reaching Tailwind that does not compile, so the prefix is unknown.",
-        "surfaces": {
-            "error": {}
-        },
+        "id": "tailwind-stylesheet-absent",
         "position": "none",
-        "args": {
-            "stylesheets": {
-                "type": "string[]",
-                "joiner": "\n"
-            },
-            "setting": {
-                "type": "string"
-            }
+        "args": "count"
+    },
+    {
+        "id": "tailwind-stylesheet-broken",
+        "position": "none",
+        "args": "stylesheets setting",
+        "joiners": {
+            "stylesheets": "\n    "
         }
     },
     {
         "id": "tailwind-config-missing",
-        "summary": "A Tailwind config path that does not exist.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {}
+        "args": "form root?"
     },
     {
         "id": "tailwind-config-unloadable",
-        "summary": "A Tailwind config that threw while loading.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {
-            "reason": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "reason"
     },
     {
         "id": "legacy-source-directive",
-        "summary": "An @source line naming the old safelist file, which csszyx no longer writes.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {
-            "target": {
-                "type": "string"
-            }
-        }
+        "args": "target"
     },
     {
         "id": "postcss-plugin-order",
-        "summary": "The csszyx PostCSS plugin listed after Tailwind, which then never reads the safelist.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {}
+        "args": ""
+    },
+    {
+        "id": "postcss-plugin-missing",
+        "position": "file",
+        "args": ""
     },
     {
         "id": "ignore-pattern-negated",
-        "summary": "A negated pattern in an ignore list, which can only add paths.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "pattern": {
-                "type": "string"
-            }
+        "args": "pattern"
+    },
+    {
+        "id": "compile-sources-unresolved",
+        "position": "none",
+        "args": "paths root",
+        "joiners": {
+            "paths": "`, `"
+        }
+    },
+    {
+        "id": "compile-sources-skipped",
+        "position": "none",
+        "args": "form count files szvCount?",
+        "joiners": {
+            "files": "\n    "
         }
     },
     {
         "id": "css-source-unstable",
-        "summary": "A CSS source that kept changing while csszyx read it.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {}
+        "args": ""
     },
     {
         "id": "rsc-boundary-violation",
-        "summary": "A client-only csszyx export imported into a Server Component.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {
-            "symbol": {
-                "type": "string"
-            },
-            "chain": {
-                "type": "string[]",
-                "joiner": " -> "
-            }
+        "args": "symbol chain",
+        "joiners": {
+            "chain": "` -> `"
         }
     },
     {
         "id": "next-prefix-unread",
-        "summary": "A Next lane that runs before the Tailwind prefix was read.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "NextStylesheetFactsPending"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "lane": {
-                "type": [
-                    "enum",
-                    "prebuild",
-                    "turbopack-loader"
-                ]
-            },
-            "root": {
-                "type": "string"
-            },
-            "reason": {
-                "type": "string"
-            }
-        }
+        "args": "lane root reason",
+        "variesBy": "lane"
     },
     {
         "id": "next-safelist-locked",
-        "summary": "A Next safelist state another live process holds the lock on.",
-        "surfaces": {
-            "error": {
-                "classes": [
-                    "NextSafelistStateLockedError"
-                ]
-            }
-        },
         "position": "none",
-        "args": {
-            "pid": {
-                "type": "number"
-            },
-            "root": {
-                "type": "string"
-            },
-            "mode": {
-                "type": "string"
-            },
-            "host": {
-                "type": "string"
-            },
-            "updatedAt": {
-                "type": "string"
-            }
-        }
-    },
-    {
-        "id": "next-generation-manifest-invalid",
-        "summary": "A Next generation manifest that does not have the shape csszyx writes.",
-        "surfaces": {
-            "error": {}
-        },
-        "position": "none",
-        "forms": [
-            "read",
-            "written"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "read",
-                    "written"
-                ]
-            },
-            "reason": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "pid root mode host updatedAt command?"
     },
     {
         "id": "next-mangle-vars-unsupported",
-        "summary": "production.mangleVars on a Next lane that cannot mangle CSS variables.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "forms": [
-            "prebuild",
-            "turbopack"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "prebuild",
-                    "turbopack"
-                ]
-            }
-        }
+        "args": "form"
     },
     {
         "id": "next-turbo-cache-unseeded",
-        "summary": "A Turbopack production build whose safelist was not seeded by csszyx next prebuild.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "root": {
-                "type": "string"
-            },
-            "reason": {
-                "type": "string"
-            }
-        }
+        "args": "root reason"
     },
     {
         "id": "next-sz-untransformed",
-        "summary": "A Next module that still holds sz syntax after the csszyx transform.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "file",
-        "args": {}
-    },
-    {
-        "id": "next-watcher-not-started",
-        "summary": "A Next safelist watcher whose first cycle did not complete.",
-        "surfaces": {
-            "error": {}
-        },
-        "position": "none",
-        "args": {}
+        "args": ""
     },
     {
         "id": "next-watcher-unclosed",
-        "summary": "A Next safelist watcher that threw while closing.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            }
-        },
         "position": "none",
-        "args": {
-            "detail": {
-                "type": "string",
-                "opaque": true
-            }
-        }
+        "args": "detail"
     },
     {
         "id": "no-source-files",
-        "summary": "A source pattern that matched no file under the root.",
-        "surfaces": {
-            "runtime": {
-                "production": false
-            },
-            "error": {}
-        },
         "position": "none",
-        "args": {
-            "pattern": {
-                "type": "string"
-            },
-            "root": {
-                "type": "string"
-            }
-        }
+        "args": "pattern root"
     },
     {
         "id": "cli-option-invalid",
-        "summary": "A CLI option value outside the values the command takes.",
-        "surfaces": {
-            "error": {}
-        },
         "position": "none",
-        "forms": [
-            "mode",
-            "parser-mode",
-            "debounce-ms"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "mode",
-                    "parser-mode",
-                    "debounce-ms"
-                ]
-            },
-            "value": {
-                "type": "string",
-                "optional": true
-            }
-        }
+        "args": "form value?"
     }
 ];

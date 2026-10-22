@@ -8,6 +8,12 @@
  */
 
 import { createRequire } from 'node:module';
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { PEER_MODULE_UNRESOLVED } from './diagnostic-browser.generated.js';
+import { CsszyxError } from './errors.js';
+import { renderThrown } from './thrown-words.js';
 
 /** Input to {@link requirePeer}. */
 export interface RequirePeerInput {
@@ -28,7 +34,7 @@ const loaded = new Map<string, unknown>();
  *
  * @param input - Where to resolve from, what to load and how to name it.
  * @returns The module.
- * @throws {Error} naming the package to install when it does not resolve.
+ * @throws {CsszyxError} `peer-module-unresolved`, naming the package to install, when it does not resolve.
  */
 export function requirePeer<T>(input: RequirePeerInput): T {
     const key = `${input.from}\0${input.request}`;
@@ -43,10 +49,17 @@ export function requirePeer<T>(input: RequirePeerInput): T {
             (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND' &&
             (error as Error).message.includes(`'${input.request}'`);
         if (!missing) throw error;
-        throw new Error(
-            `[csszyx] ${input.requiredBy} reads templates with \`${input.request}\`, which does not resolve from it\n` +
-                `help: install ${input.install} in the project`,
-        );
+        const args = {
+            requiredBy: input.requiredBy,
+            request: input.request,
+            install: input.install,
+        };
+        throw new CsszyxError({
+            code: 'peer-module-unresolved',
+            args,
+            message: renderThrown(PEER_MODULE_UNRESOLVED, args),
+            cause: error,
+        });
     }
     loaded.set(key, module);
     return module;

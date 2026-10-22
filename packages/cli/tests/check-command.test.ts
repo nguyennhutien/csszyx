@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -51,13 +52,21 @@ describe('csszyx check', () => {
 
     it('passes cleanly when every sz key is canonical', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
-        vi.spyOn(console, 'log').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         const cwd = projectWith({
             'src/Good.tsx': "export const Good = () => <div sz={{ p: 4, weight: 'bold' }} />;",
         });
 
         await check({ cwd });
 
+        // Without colour: a CI runner sets `CI`, and picocolors colours the box.
+        const reported = stripVTControlCharacters(
+            log.mock.calls.map(call => call.join(' ')).join('\n'),
+        );
+        expect(reported).toMatch(/│ {2}csszyx check {2,}│/);
+        expect(reported).toContain(
+            'Scope: static `sz` props and `szv()`/`szr()` catalogs; keys built from runtime data (an array, a spread, a `dynamic()` value) cannot be checked.',
+        );
         expect(process.exitCode).not.toBe(1);
     });
 });
@@ -75,7 +84,7 @@ describe('csszyx check — when the file scan itself fails', () => {
         await check({ cwd: join(cwd, 'src/App.tsx') });
 
         expect(log.mock.calls.map(call => call.join(' ')).join('\n')).toContain(
-            'Could not scan files',
+            '✖ Could not list the files to check: ENOTDIR',
         );
         expect(process.exitCode).toBe(1);
     });

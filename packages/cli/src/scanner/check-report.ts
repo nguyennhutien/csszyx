@@ -13,6 +13,12 @@
  *
  * @module
  */
+import {
+    renderSzDiagnosticParts,
+    SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    SZ_DIAGNOSTIC_URL_BASE,
+    type SzDiagnosticId,
+} from '@csszyx/compiler';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 import {
     createDiagnosticPolicy,
@@ -48,16 +54,16 @@ export interface CheckFinding {
     column?: number;
     /** What happened, in one sentence: the main sentence alone, with no layout. */
     message: string;
-    /** For an `sz-diagnostic` finding, what to do, as the clause after `help:`. */
+    /** What to do, as the clause after `help:`, when the finding has one. */
     help?: string;
-    /** For an `sz-diagnostic` finding, what happened to the output, after `note:`. */
+    /** What happened to the output, after `note:`, when the finding has one. */
     note?: string;
     /**
      * For an `unknown-key` finding, the known key it most likely misspells.
      * The same value as `args.suggestion`, kept where version 1 put it.
      */
     suggestion?: string;
-    /** For an `sz-diagnostic` finding, the values its sentence names, by name. */
+    /** The values its sentence names, by the registry's arg names. */
     args?: Readonly<Record<string, unknown>>;
     /** The page that explains the kind: `https://csszyx.com/e/<kind>`. */
     url?: string;
@@ -72,6 +78,71 @@ export interface CheckFinding {
 /** A finding as a pass records it, before its kind defaults to its rule and its level is read. */
 export type FindingInput = Omit<CheckFinding, 'kind' | 'level'> &
     Partial<Pick<CheckFinding, 'kind'>>;
+
+/** What a pass knows of one finding it words from the registry. */
+export interface RegistryFindingInput {
+    /** The pass that found it. */
+    rule: CheckRule;
+    /** The registry id; the finding's kind. */
+    code: SzDiagnosticId;
+    /** The values its sentence names, by the registry's arg names. */
+    args: Readonly<Record<string, unknown>>;
+    /** Project-relative file, when the finding has one. */
+    file?: string;
+    /** 1-based line, when the finding has one. */
+    line?: number;
+}
+
+/**
+ * A finding in the registry's words: the sentence, `help` and `note` of its
+ * code, its args and the page that explains it, as an `sz-diagnostic`
+ * finding carries them. A pass that wrote its own sentence printed words the
+ * code's page did not have.
+ *
+ * @param input - The pass, the code, its args and where it is.
+ * @returns The finding; its kind is the code.
+ */
+export function registryFinding(input: RegistryFindingInput): FindingInput {
+    const { rule, code, args, file, line } = input;
+    const { text, help, note } = renderSzDiagnosticParts(
+        { code, args },
+        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+    );
+    return {
+        rule,
+        kind: code,
+        ...(file === undefined ? {} : { file }),
+        ...(line === undefined ? {} : { line }),
+        // An absent part stays `undefined`, which the JSON leaves out.
+        message: text,
+        help,
+        note,
+        args,
+        url: `${SZ_DIAGNOSTIC_URL_BASE}${code}`,
+    };
+}
+
+/**
+ * The `help:` and `note:` lines of a finding, as the text report prints them
+ * under it.
+ *
+ * @param finding - The finding.
+ * @param indent - What each line starts with.
+ * @returns The lines; none for a part the finding does not have.
+ */
+export function partLines(finding: Pick<FindingInput, 'help' | 'note'>, indent: string): string[] {
+    return [
+        ...(finding.help === undefined ? [] : [`${indent}help: ${finding.help}`]),
+        ...(finding.note === undefined ? [] : [`${indent}note: ${finding.note}`]),
+    ];
+}
+
+/**
+ * The finding for entries that set different prefixes. It can be left out by
+ * id like a diagnostic kind, which skips the dead-class pass: that pass needs
+ * one prefix to ask about.
+ */
+export const PREFIX_DISAGREEMENT = 'prefix-disagreement' as const;
 
 /** Where the JSON Schema of the document `--json` writes is published. */
 export const CHECK_REPORT_SCHEMA = 'https://csszyx.com/schemas/check-v2.json';

@@ -21,6 +21,8 @@
  * seconds per class.
  */
 
+import { diagnosticError } from './diagnostic-message.js';
+
 /** Matches class names against a compiled `manglePreserve` list. */
 export interface ManglePreserveMatcher {
     /** The entries as configured, in order. */
@@ -72,7 +74,7 @@ export function utilityStart(className: string): number {
  *
  * @param entries - `production.manglePreserve` as configured.
  * @returns The matcher; a no-op one when the option is unset.
- * @throws when an entry is not a non-empty string, or is a lone `*`, which
+ * @throws {CsszyxError} `mangle-preserve-invalid`, when an entry is not a non-empty string, or is a lone `*`, which
  * would keep every class and turn mangling into a no-op without a word.
  */
 export function compileManglePreserve(
@@ -81,17 +83,14 @@ export function compileManglePreserve(
     const list = entries ?? [];
     list.forEach((entry, index) => {
         if (typeof entry !== 'string' || entry.length === 0) {
-            throw new TypeError(
-                `[csszyx] production.manglePreserve[${index}] must be a non-empty string ` +
-                    `(an exact class name, or a prefix ending in \`*\`); got ${describe(entry)}.`,
-            );
+            throw diagnosticError('mangle-preserve-invalid', {
+                form: 'entry',
+                index,
+                got: describe(entry),
+            });
         }
         if (entry === '*') {
-            throw new TypeError(
-                '[csszyx] production.manglePreserve must not contain a lone `*`: it would keep ' +
-                    'every class and silently turn `production.mangle` into a no-op. Name a prefix ' +
-                    '(`bg-tag-*`) or set `production.mangle: false`.',
-            );
+            throw diagnosticError('mangle-preserve-invalid', { form: 'lone-star' });
         }
     });
     const compiled = list.map(value => ({

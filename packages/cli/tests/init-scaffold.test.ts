@@ -221,8 +221,6 @@ describe('init interactive path with mocked prompts', () => {
         vi.doMock('prompts', () => ({
             default: vi.fn(async () => ({
                 installTailwind: false,
-                enableSSR: false,
-                enableRecovery: false,
                 setupGitignore: false,
                 setupTsconfig: false,
             })),

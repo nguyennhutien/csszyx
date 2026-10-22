@@ -388,7 +388,8 @@
             "table": {
                 "col: pinned 'nw', measured 'w'": true,
                 "row: pinned 'nw', measured 'w'": true
-            }
+            },
+            "variant": {}
         },
         "4.0.17": {
             "regressed": {
@@ -762,7 +763,8 @@
                 "zoom|var": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.1.0": {
             "regressed": {},
@@ -1078,7 +1080,8 @@
                 "zoom|var": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.1.18": {
             "regressed": {},
@@ -1394,7 +1397,8 @@
                 "zoom|var": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.2.0": {
             "regressed": {},
@@ -1450,7 +1454,8 @@
                 "zoom|var": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.2.4": {
             "regressed": {},
@@ -1506,7 +1511,8 @@
                 "zoom|var": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.3.0": {
             "regressed": {},
@@ -1525,13 +1531,15 @@
                 "autoRows|numeric-string": true
             },
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         },
         "4.3.3": {
             "regressed": {},
             "dead": {},
             "spelling": {},
-            "table": {}
+            "table": {},
+            "variant": {}
         }
     }
 }

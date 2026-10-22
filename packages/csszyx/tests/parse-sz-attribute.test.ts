@@ -13,8 +13,10 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { isCsszyxError } from '@csszyx/compiler/errors';
+import { afterEach, describe, expect, it } from 'vitest';
 
+import { productionMessage, runtimeMessage } from '../../compiler/tests/engine-message.js';
 import { parseSzAttribute } from '../src/parse-sz-attribute.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
@@ -50,6 +52,33 @@ const outcome = input => {
 
 /** Set once a child process has shown the stray-character inputs end. */
 let strayInputsEnd = false;
+
+/** The args of the `sz-attribute-syntax` error `{ w: 1/2 }` throws. */
+const ARGS = { form: 'char', input: '{ w: 1/2 }', char: '/', index: 6 };
+
+afterEach(() => {
+    process.env.NODE_ENV = 'test';
+});
+
+/**
+ * The error one input throws.
+ * @param input - An attribute the parser rejects.
+ * @returns The error, with the code and args it carries.
+ */
+function thrownBy(input: string): SyntaxError & {
+    code: string;
+    args: { form: string; input: string; char?: string; index: number };
+} {
+    try {
+        parseSzAttribute(input);
+    } catch (error) {
+        return error as SyntaxError & {
+            code: string;
+            args: { form: string; input: string; char?: string; index: number };
+        };
+    }
+    throw new Error(`expected ${input} to throw`);
+}
 
 describe('parseSzAttribute', () => {
     it.each([
@@ -90,12 +119,61 @@ describe('parseSzAttribute', () => {
 
     // In this process too, so coverage sees the throw — but only once a child
     // has shown it ends: a regression would otherwise hang the suite here.
+    // The error keeps its class, so a caller testing `instanceof SyntaxError`
+    // still matches, and carries the code and args of the runtime's line.
     it('names the character and where it is', () => {
         expect(strayInputsEnd).toBe(true);
-        expect(() => parseSzAttribute('{ w: 1/2 }')).toThrow(
-            new SyntaxError('[csszyx] Unexpected "/" at 6 in sz attribute "{ w: 1/2 }"'),
+        process.env.NODE_ENV = 'development';
+        const error = thrownBy('{ w: 1/2 }');
+        expect(error).toBeInstanceOf(SyntaxError);
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error.code).toBe('sz-attribute-syntax');
+        expect(error.args).toEqual(ARGS);
+        expect(error.message).toBe(
+            runtimeMessage(
+                'sz-attribute-syntax',
+                'The `sz` attribute `{ w: 1/2 }` has an unexpected `/` at offset 6, so the element gets no classes from it.',
+                'help: write it as an object literal with commas between keys, such as `sz="p: 4, w: \'1/2\'"`; quote a value that holds `/` or `#`.',
+            ),
         );
-        expect(() => parseSzAttribute('{ list: [1, /] }')).toThrow(/Unexpected "\/" at 12/);
+        expect(thrownBy('{ list: [1, /] }').args).toMatchObject({ char: '/', index: 12 });
+    });
+
+    it('names where an attribute ends before a key or value is complete, with no character to name', () => {
+        process.env.NODE_ENV = 'development';
+        // `[` reads as a key that never reaches its `:`; the end is after
+        // the attribute's last character, the trailing space aside.
+        const error = thrownBy(' [ ');
+        expect(error).toBeInstanceOf(SyntaxError);
+        expect(error.args).toEqual({ form: 'end', input: ' [ ', index: 2 });
+        expect(error.message).toBe(
+            runtimeMessage(
+                'sz-attribute-syntax',
+                'The `sz` attribute ` [ ` ends at offset 2 before a key or value is complete, so the element gets no classes from it.',
+                'help: give every key a `:` and a value, and close every `[` and quote, such as `sz="p: 4, [&>span]: { m: 2 }"`.',
+            ),
+        );
+        expect(thrownBy('{ p').args).toEqual({ form: 'end', input: '{ p', index: 3 });
+    });
+
+    // Brace-less input is parsed inside a `{ }` the parser adds. That `}` is
+    // not the author's, so it is never the character a report names: input
+    // that runs into it ends there, at the end of the attribute as written.
+    it.each([
+        ['p', 1],
+        ['w: [1, 2', 8],
+        ['  p: 4, m  ', 9],
+    ])('reports %j as ending at offset %i, not at the `}` the parser added', (input, at) => {
+        expect(strayInputsEnd).toBe(true);
+        expect(thrownBy(input).args).toEqual({ form: 'end', input, index: at });
+    });
+
+    it('is the compact line in production', () => {
+        process.env.NODE_ENV = 'production';
+        const error = thrownBy('{ w: 1/2 }');
+        expect(error).toBeInstanceOf(SyntaxError);
+        expect(error.code).toBe('sz-attribute-syntax');
+        expect(error.message).toBe(productionMessage('sz-attribute-syntax', ARGS));
     });
 
     // The position indexes the attribute as written, so it points at the
@@ -109,13 +187,7 @@ describe('parseSzAttribute', () => {
         ['  { w: 1/2 }', 8],
     ])('points the position of %s at the stray character', (input, at) => {
         expect(strayInputsEnd).toBe(true);
-        let message = '';
-        try {
-            parseSzAttribute(input);
-        } catch (error) {
-            message = (error as Error).message;
-        }
-        expect(message).toContain(` at ${at} in `);
+        expect(thrownBy(input).args.index).toBe(at);
         expect(input[at]).toMatch(/[/;#]/);
     });
 

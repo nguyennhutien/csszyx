@@ -10,6 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
+import { productionMessage, runtimeMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /**
@@ -58,8 +59,16 @@ describe('mask slot member warnings', () => {
         vi.stubEnv('NODE_ENV', 'production');
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         transform({ maskLinear: { typo: 1 }, mask: 'linear-45' });
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]?.[0])).toContain('gradient layers moved to');
+        expect(warn.mock.calls).toEqual([
+            [
+                productionMessage('moved-value', {
+                    form: 'mask-layer',
+                    key: 'mask',
+                    value: 'linear-45',
+                    layerKey: 'maskLinear',
+                }),
+            ],
+        ]);
     });
     it.each(ENGINES)('%s warns for a top-level typo inside maskLinear', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;";
@@ -165,25 +174,27 @@ describe('mask slot member warnings', () => {
     });
 });
 
-// The migration notes live on the runtime dev channel (`transform()` in
-// transform-core) — the engine's build diagnostics carry the generic
-// unknown-property message only, which is what default-lane users always saw.
-// Porting the notes into the engine diagnostics is tracked alongside the
-// szv/szr catalog-warning port; until then these specs pin the channel that
-// has them.
+// The runtime lowering names a removed key with its migration note as the
+// help, as the engine does (`removed-key`, form `removed`).
 describe('removed mask keys carry migration notes', () => {
     it('names the shape that replaced maskVia', () => {
-        const warnings = captureRuntimeWarnings(() => transform({ maskVia: '50%' }));
-        const hit = warnings.find(message => message.includes('"maskVia" was removed'));
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('Tailwind masks have no via stop');
+        expect(captureRuntimeWarnings(() => transform({ maskVia: '50%' }))).toEqual([
+            runtimeMessage(
+                'removed-key',
+                '`maskVia` was removed, and nothing is emitted for it.',
+                'help: write `{ from, to }` on `maskLinear`, `maskRadial` or `maskConic`; Tailwind masks have no via stop.',
+            ),
+        ]);
     });
 
     it('points maskShape at maskRadial', () => {
-        const warnings = captureRuntimeWarnings(() => transform({ maskShape: 'circle' }));
-        const hit = warnings.find(message => message.includes('"maskShape" was removed'));
-        expect(hit, warnings.join('\n')).toBeDefined();
-        expect(hit).toContain('maskRadial');
+        expect(captureRuntimeWarnings(() => transform({ maskShape: 'circle' }))).toEqual([
+            runtimeMessage(
+                'removed-key',
+                '`maskShape` was removed, and nothing is emitted for it.',
+                "help: write the shape on `maskRadial`: `{ shape: 'circle' }` or `{ shape: 'ellipse' }`.",
+            ),
+        ]);
     });
 });
 
@@ -194,10 +205,13 @@ describe('the mask layer-value warning fires in a browser dev context', () => {
         // component is exactly where a migrated value shows up.
         (globalThis as { window?: object }).window = {};
         try {
-            const warnings = captureRuntimeWarnings(() => transform({ mask: 'linear-45' }));
-            const hit = warnings.find(message => message.includes('gradient layers moved to'));
-            expect(hit, warnings.join('\n')).toBeDefined();
-            expect(hit).toContain('maskLinear');
+            expect(captureRuntimeWarnings(() => transform({ mask: 'linear-45' }))).toEqual([
+                runtimeMessage(
+                    'moved-value',
+                    "`mask: 'linear-45'` names a gradient layer, which moved to `maskLinear`, and nothing is emitted for it.",
+                    'help: write this layer on `maskLinear`; `mask` takes only `none`, a `url()` or a CSS variable.',
+                ),
+            ]);
         } finally {
             delete (globalThis as { window?: object }).window;
         }

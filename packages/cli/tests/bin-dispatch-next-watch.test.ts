@@ -44,7 +44,7 @@ describe('bin next-watch dispatch (real command)', () => {
             await new Promise(resolve => setTimeout(resolve, 25));
         }
 
-        expect(errors.join('\n')).toContain('No source files matched');
+        expect(errors.join('\n')).toContain('[csszyx] no-source-files:');
         expect(process.exitCode).toBe(1);
     }, 15000);
 });

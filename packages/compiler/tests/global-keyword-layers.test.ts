@@ -13,7 +13,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { deepMergeSzObjects, setSzWarnLocation, transform } from '../src/transform-core.js';
-import { engineMessage } from './engine-message.js';
+import { engineMessage, productionMessage, runtimeMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 afterEach(() => {
@@ -119,18 +119,21 @@ describe('a later layer overrides a key an earlier layer holds', () => {
 });
 
 /**
- * The warning a stand-alone key before one of its groups produces.
+ * The body of the report a stand-alone key before one of its groups produces.
  * @param global - The stand-alone key.
- * @param value - Its value.
+ * @param value - Its value: a string prints quoted, a number or boolean bare,
+ *   as the author wrote it.
  * @param group - The group key written after it.
- * @param at - The ` at file:line` suffix, or empty.
- * @returns The message.
+ * @returns The sentence, the help and the note.
  */
-const spreadShape = (global: string, value: string, group: string, at = '') =>
-    `[csszyx] "${global}: ${value}"${at} comes before "${group}" in one sz object, so ${group} ` +
-    `replaces it and the ${global} value styles nothing. A spread override ` +
-    `({ ...base, ${global}: '${value}' }) leaves this order; to override, layer it: ` +
-    `sz={[base, { ${global}: '${value}' }]}.`;
+const spreadLines = (global: string, value: string | number | boolean, group: string) => {
+    const literal = typeof value === 'string' ? `'${value}'` : String(value);
+    return [
+        `\`${global}: ${literal}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
+        `help: to override the group, layer it: \`sz={[base, { ${global}: ${literal} }]}\`.`,
+        `note: a spread such as \`{ ...base, ${global}: ${literal} }\` keeps the same key order, so it does not fix this.`,
+    ];
+};
 
 /**
  * The engine's message for a stand-alone key before one of its groups.
@@ -140,13 +143,16 @@ const spreadShape = (global: string, value: string, group: string, at = '') =>
  * @param column - The column of the stand-alone key on line 1.
  * @returns The message.
  */
-const engineSpread = (global: string, value: string, group: string, column: number) =>
+const engineSpread = (
+    global: string,
+    value: string | number | boolean,
+    group: string,
+    column: number,
+) =>
     engineMessage(
         'global-before-group',
         `/p/src/Layers.jsx:1:${column}`,
-        `\`${global}: ${value}\` comes before \`${group}\` in one sz object, so \`${group}\` replaces it and the \`${global}\` value styles nothing.`,
-        `help: to override the group, layer it: \`sz={[base, { ${global}: '${value}' }]}\`.`,
-        `note: a spread such as \`{ ...base, ${global}: '${value}' }\` keeps the same key order, so it does not fix this.`,
+        ...spreadLines(global, value, group),
     );
 
 describe('a stand-alone key written before a group key of its family', () => {
@@ -159,7 +165,12 @@ describe('a stand-alone key written before a group key of its family', () => {
         transform({ ...base, contain: 'content' });
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            spreadShape('contain', 'content', 'containPaint'),
+            productionMessage('global-before-group', {
+                global: 'contain',
+                value: 'content',
+                valueType: 'string',
+                group: 'containPaint',
+            }),
         ]);
     });
 
@@ -174,8 +185,57 @@ describe('a stand-alone key written before a group key of its family', () => {
         }
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            spreadShape('touch', 'auto', 'touchPinchZoom', ' at src/Over.tsx:9'),
-            '[csszyx] "normalCase" boolean sugar was removed at src/Over.tsx:9. Use { textTransform: \'none\' } instead, or run `csszyx migrate`.',
+            engineMessage(
+                'global-before-group',
+                'src/Over.tsx:9',
+                ...spreadLines('touch', 'auto', 'touchPinchZoom'),
+            ),
+            engineMessage(
+                'removed-key',
+                'src/Over.tsx:9',
+                'The boolean shorthand `normalCase` was removed, and nothing is emitted for it.',
+                "help: write `{ textTransform: 'none' }` instead, or run `csszyx migrate`.",
+            ),
+        ]);
+    });
+
+    it('runtime names a literal that is not a string by its text', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('NODE_ENV', 'production');
+
+        transform({ contain: 7, containPaint: true });
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            productionMessage('global-before-group', {
+                global: 'contain',
+                value: '7',
+                valueType: 'number',
+                group: 'containPaint',
+            }),
+        ]);
+    });
+
+    it('runtime writes a number or a boolean bare, as the author wrote it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        setSzWarnLocation('src/Bare.tsx:3');
+        try {
+            transform({ contain: 8, containPaint: true });
+            transform({ touch: true, touchPanY: 'up' });
+        } finally {
+            setSzWarnLocation(undefined);
+        }
+
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            engineMessage(
+                'global-before-group',
+                'src/Bare.tsx:3',
+                ...spreadLines('contain', 8, 'containPaint'),
+            ),
+            engineMessage(
+                'global-before-group',
+                'src/Bare.tsx:3',
+                ...spreadLines('touch', true, 'touchPanY'),
+            ),
         ]);
     });
 
@@ -235,7 +295,7 @@ describe('duplicate keys in a .jsx object', () => {
 describe('a moved value where the static pass used to miss it', () => {
     // The sentence names the key it moved to; the help line names the value to write.
     const moved = (value: string, key: string, replacement: string) =>
-        `\`touch: ${value}\` moved to \`${key}\`, and nothing is emitted for it.\n` +
+        `\`touch: '${value}'\` moved to \`${key}\`, and nothing is emitted for it.\n` +
         `  help: write \`{ ${key}: ${replacement} }\`, or run \`csszyx migrate\`.`;
 
     it.each(ENGINES)('%s names it in a property-level ternary', (_name, engine) => {
@@ -287,7 +347,7 @@ describe('a runtime value beside the other side of its family', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -350,10 +410,17 @@ describe('a runtime value beside the other side of its family', () => {
 });
 
 describe('a value that belongs to a sibling group', () => {
-    const sibling = (key: string, value: string, bare: string, fix: string, values: string) =>
-        `[csszyx] "${key}: ${value}" at /p/src/Layers.jsx:1 is not a ${key} value. The class ` +
-        `"${bare}" it emits belongs to { ${fix} }: write that key, so it combines with the other ` +
-        `groups instead of resetting them. ${key} takes one of: ${values}.`;
+    const siblingLines = (
+        key: string,
+        value: string,
+        bare: string,
+        fix: string,
+        values: string,
+    ) => [
+        `\`${key}: '${value}'\` is not a \`${key}\` value; its class \`${bare}\` belongs to \`{ ${fix} }\`.`,
+        `help: write \`{ ${fix} }\`, so it combines with the other groups instead of resetting them.`,
+        `note: \`${key}\` takes one of: ${values}.`,
+    ];
 
     const engineSibling = (
         key: string,
@@ -366,9 +433,7 @@ describe('a value that belongs to a sibling group', () => {
         engineMessage(
             'closed-enum-value',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${key}: ${value}\` is not a \`${key}\` value; its class \`${bare}\` belongs to \`{ ${fix} }\`.`,
-            `help: write \`{ ${fix} }\`, so it combines with the other groups instead of resetting them.`,
-            `note: \`${key}\` takes one of: ${values}.`,
+            ...siblingLines(key, value, bare, fix, values),
         );
 
     it.each(ENGINES)('%s names the group key', (_name, engine) => {
@@ -466,8 +531,18 @@ describe('a value that belongs to a sibling group', () => {
         setSzWarnLocation('src/Sibling.tsx:3');
         try {
             expect(transform({ nums: 'oldstyle' }).className).toBe('oldstyle-nums');
-            expect(String(warn.mock.calls[0]?.[0])).toContain(
-                "belongs to { numFigure: 'oldstyle' }: write that key",
+            expect(String(warn.mock.calls[0]?.[0])).toBe(
+                engineMessage(
+                    'closed-enum-value',
+                    'src/Sibling.tsx:3',
+                    ...siblingLines(
+                        'nums',
+                        'oldstyle',
+                        'oldstyle-nums',
+                        "numFigure: 'oldstyle'",
+                        'normal',
+                    ),
+                ),
             );
             warn.mockClear();
             expect(transform({ contain: 'style' }).className).toBe('contain-style');
@@ -476,14 +551,70 @@ describe('a value that belongs to a sibling group', () => {
         }
 
         expect(String(warn.mock.calls[0]?.[0])).toBe(
-            sibling(
-                'contain',
-                'style',
-                'contain-style',
-                'containStyle: true',
-                'none, strict, content',
-            ).replace(' at /p/src/Layers.jsx:1', ' at src/Sibling.tsx:3'),
+            engineMessage(
+                'closed-enum-value',
+                'src/Sibling.tsx:3',
+                ...siblingLines(
+                    'contain',
+                    'style',
+                    'contain-style',
+                    'containStyle: true',
+                    'none, strict, content',
+                ),
+            ),
         );
+    });
+
+    it('runtime names the group of a value written before that group, in production too', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(transform({ contain: 'size', containPaint: true }).className).toBe('contain-paint');
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            runtimeMessage(
+                'closed-enum-value',
+                ...siblingLines(
+                    'contain',
+                    'size',
+                    'contain-size',
+                    "containSize: 'size'",
+                    'none, strict, content',
+                ),
+            ),
+        ]);
+
+        // The value styles nothing, so a production page in a browser says so.
+        warn.mockClear();
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubGlobal('window', {});
+        try {
+            expect(transform({ hover: { contain: 'paint', containLayout: true } }).className).toBe(
+                'hover:contain-layout',
+            );
+        } finally {
+            vi.unstubAllGlobals();
+        }
+        expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+            productionMessage('closed-enum-value', {
+                form: 'sibling-group',
+                key: 'contain',
+                value: 'paint',
+                groupKey: 'containPaint',
+                groupValue: 'true',
+            }),
+        ]);
+    });
+
+    it('runtime names it once, and not under CSSZYX_QUIET_SZ_WARNINGS', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        transform({ nums: 'lining', numSpacing: 'tabular' });
+        transform({ nums: 'lining', numSpacing: 'tabular' });
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        warn.mockClear();
+        vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+        expect(transform({ nums: 'stacked', numFigure: 'oldstyle' }).className).toBe(
+            'oldstyle-nums',
+        );
+        expect(warn).not.toHaveBeenCalled();
     });
 });
 
@@ -502,9 +633,17 @@ describe('replaced, moved and removed keys print everywhere, once', () => {
         }
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            '[csszyx] "ordinal" was replaced. Use { numOrdinal: true } instead, or run `csszyx migrate`.',
-            '[csszyx] "touch: pan-left" moved to { touchPanX: \'left\' }. Run `csszyx migrate` to rewrite it.',
-            '[csszyx] "inlineFlex" boolean sugar was removed. Use { display: \'inline-flex\' } instead, or run `csszyx migrate`.',
+            productionMessage('removed-key', {
+                form: 'replaced',
+                key: 'ordinal',
+                replacement: 'numOrdinal: true',
+            }),
+            productionMessage('moved-value', { form: 'value', key: 'touch', value: 'pan-left' }),
+            productionMessage('removed-key', {
+                form: 'sugar',
+                key: 'inlineFlex',
+                replacement: "display: 'inline-flex'",
+            }),
         ]);
     });
 
@@ -546,7 +685,7 @@ describe('an alias holding a value that moved', () => {
             engineMessage(
                 'moved-value',
                 '/p/src/Layers.jsx:1:41',
-                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "`touchAction: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
                 "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
             ),
         ]);
@@ -557,7 +696,11 @@ describe('an alias holding a value that moved', () => {
 
         expect(transform({ touchAction: 'pan-down' }).className).toBe('');
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            '[csszyx] "touchAction: pan-down" moved to { touchPanY: \'down\' }. Run `csszyx migrate` to rewrite it.',
+            runtimeMessage(
+                'moved-value',
+                "`touchAction: 'pan-down'` moved to `touchPanY`, and nothing is emitted for it.",
+                "help: write `{ touchPanY: 'down' }`, or run `csszyx migrate`.",
+            ),
         ]);
     });
 });
@@ -575,7 +718,7 @@ describe('a removed key prints everywhere, once', () => {
         }
 
         expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-            '[csszyx] "fontVariant" was removed: write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: \'normal\'`.',
+            productionMessage('removed-key', { form: 'removed', key: 'fontVariant' }),
         ]);
     });
 
@@ -599,7 +742,7 @@ describe('a family conflict inside an sz array element', () => {
         engineMessage(
             'runtime-family-conflict',
             `/p/src/Layers.jsx:1:${column}`,
-            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can ship and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
+            `\`${dynamic}\` takes a runtime value beside \`${other}\` in one sz object, so both classes can be emitted and Tailwind's stylesheet order decides which applies, whatever the object's order.`,
             `help: layer them, later wins: \`sz={[{ ${first}: … }, { ${second}: … }]}\`.`,
         );
 
@@ -635,7 +778,7 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             engineMessage(
                 'moved-value',
                 at,
-                '`touchAction: pan-x` moved to `touchPanX`, and nothing is emitted for it.',
+                "`touchAction: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.",
                 "help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.",
             ),
         ]);
@@ -664,8 +807,8 @@ describe('an alias of a stand-alone key with a runtime value', () => {
             engineMessage(
                 'removed-key',
                 at,
-                '`touchAction` was removed, and nothing is emitted for its runtime value.',
-                'help: write auto, none, manipulation on `touch`, and the other values on touchPanX, touchPanY, touchPinchZoom.',
+                '`touchAction` is an alias of `touch`, and nothing is emitted for its runtime value.',
+                'help: write the values auto, none, manipulation on `touch`, and any other value on its own key: touchPanX, touchPanY, touchPinchZoom.',
             ),
         ]);
     });
@@ -679,8 +822,13 @@ describe('a stand-alone key of any literal type before its group', () => {
         );
 
         expect(run.warnings).toEqual([
-            engineSpread('contain', '1', 'containPaint', 41),
-            engineSpread('touch', 'true', 'touchPanX', 79),
+            engineSpread('contain', 1, 'containPaint', 41),
+            engineSpread('touch', true, 'touchPanX', 79),
+        ]);
+        // The value travels as text; its type says how the line spells it.
+        expect(run.result.issues?.map(issue => issue.args)).toEqual([
+            { global: 'contain', value: '1', valueType: 'number', group: 'containPaint' },
+            { global: 'touch', value: 'true', valueType: 'boolean', group: 'touchPanX' },
         ]);
     });
 });
@@ -698,8 +846,13 @@ describe('the runtime names these with their location', () => {
 
         const messages = warn.mock.calls.map(([message]) => String(message));
         expect(messages[0]).toBe(
-            '[csszyx] "maskTo" was removed at src/Gone.tsx:2: write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`.',
+            engineMessage(
+                'removed-key',
+                'src/Gone.tsx:2',
+                '`maskTo` was removed, and nothing is emitted for it.',
+                'help: write the to stop on its layer: `maskLinear`, `maskRadial` or `maskConic` take `{ to }`.',
+            ),
         );
-        expect(messages.some(message => message.includes('comes before'))).toBe(false);
+        expect(messages.some(message => message.includes('global-before-group'))).toBe(false);
     });
 });

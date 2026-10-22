@@ -57,7 +57,7 @@
     // input, including README.md and tsconfig.json.
     "@csszyx/compiler#test": {
       "dependsOn": ["^build", "@csszyx/runtime#build"],
-      "env": ["CSSZYX_TEST_WASM_ONLY"],
+      "env": ["CSSZYX_TEST_WASM_ONLY", "CSSZYX_REQUIRE_NATIVE"],
       "outputs": ["coverage/**"],
       "inputs": [
         "src/**",
@@ -67,7 +67,42 @@
         "*.config.ts",
         "$TURBO_ROOT$/apps/docs/src/content/docs/docs/reference/*.mdx",
         "$TURBO_ROOT$/packages/types/src/config.ts",
-        "$TURBO_ROOT$/packages/unplugin/README.md"
+        "$TURBO_ROOT$/packages/unplugin/README.md",
+        // `dev-warning-guard.test.ts` reads the sources of every package that
+        // reports a diagnostic, not only its own.
+        "$TURBO_ROOT$/packages/runtime/src/**",
+        "$TURBO_ROOT$/packages/dynamic/src/**",
+        "$TURBO_ROOT$/packages/csszyx/src/**"
+      ]
+    },
+    // The runtime and dynamic suites pin each console line through the
+    // compiler's `tests/engine-message.ts`, the one spelling of a line's shape
+    // every lane's suites share; a change there must re-run them.
+    //
+    // KEEP outputs AND inputs IN SYNC WITH `test` ABOVE. A package-specific task
+    // config REPLACES the generic one rather than merging into it.
+    "@csszyx/runtime#test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "test/**",
+        "*.config.js",
+        "*.config.ts",
+        "$TURBO_ROOT$/packages/compiler/tests/engine-message.ts"
+      ]
+    },
+    "@csszyx/dynamic#test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "test/**",
+        "*.config.js",
+        "*.config.ts",
+        "$TURBO_ROOT$/packages/compiler/tests/engine-message.ts"
       ]
     },
     // The umbrella's browser-entry test bundles the `csszyx` specifier itself,
@@ -87,7 +122,8 @@
         "test/**",
         "package.json",
         "*.config.js",
-        "*.config.ts"
+        "*.config.ts",
+        "$TURBO_ROOT$/packages/compiler/tests/engine-message.ts"
       ]
     },
     // The Jest transformer reads the Tailwind prefix in a child process, and a

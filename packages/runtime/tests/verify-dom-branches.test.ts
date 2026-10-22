@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadManifestFromDOM } from '../src/verify.js';
+import { jsonErrorOf, manifestUnreadableLine } from './helpers/hydration-lines.js';
 
 afterEach(() => {
     document.body.innerHTML = '';
@@ -26,6 +27,6 @@ describe('loadManifestFromDOM with an empty manifest script', () => {
 
         const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
         expect(loadManifestFromDOM()).toBeNull();
-        expect(errorLog).toHaveBeenCalled();
+        expect(errorLog.mock.calls).toEqual([[manifestUnreadableLine(jsonErrorOf(''))]]);
     });
 });

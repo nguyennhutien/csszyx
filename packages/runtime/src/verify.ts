@@ -6,6 +6,8 @@
  * szRecover directives are legitimate and haven't been tampered with.
  */
 
+import { RECOVERY_MANIFEST_UNREADABLE, szReport } from '@csszyx/compiler/report';
+
 /**
  * Recovery mode types.
  */
@@ -149,7 +151,15 @@ export function loadManifestFromDOM(): RecoveryManifest | null {
         const content = scriptElement.textContent || '';
         return JSON.parse(content) as RecoveryManifest;
     } catch (error) {
-        console.error('Failed to parse recovery manifest:', error);
+        // In production too: the manifest is an integrity input.
+        const args = { form: 'json' as const, error: (error as SyntaxError).message };
+        if (process.env.NODE_ENV !== 'production') {
+            szReport({ diagnostic: RECOVERY_MANIFEST_UNREADABLE, args });
+        } else {
+            console.error(
+                `[csszyx] recovery-manifest-unreadable: ${JSON.stringify(args)} https://csszyx.com/e/recovery-manifest-unreadable`,
+            );
+        }
         return null;
     }
 }

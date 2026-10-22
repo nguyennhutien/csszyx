@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    missingTailwindStylesheetMessage,
+    missingTailwindStylesheetError,
     type ProjectStyleModel,
     type StyleEntry,
     styleModelError,
@@ -51,12 +51,37 @@ describe('styleModelError — entries that disagree on the prefix', () => {
             ROOT,
         );
 
-        expect(message).toContain('set different prefixes');
-        expect(message).toMatch(/src\/index\.css\s+prefix\(tw\)/);
-        expect(message).toMatch(/tests\/fixtures\/legacy\.css\s+no prefix/);
-        expect(message).not.toContain('/app/');
-        expect(message).toContain('help:');
-        expect(message).toContain('`tailwindStylesheet`');
+        expect(message).toMatchObject({
+            code: 'prefix-disagreement',
+            args: {
+                form: 'build',
+                entries: [
+                    '`src/index.css` with `prefix(tw)`',
+                    '`tests/fixtures/legacy.css` with none',
+                ],
+                setting: 'the csszyx `tailwindStylesheet` option',
+            },
+            message:
+                '[csszyx] prefix-disagreement:\n' +
+                '  The Tailwind stylesheets of this project set different prefixes (`src/index.css` with `prefix(tw)`, `tests/fixtures/legacy.css` with none), so no class csszyx emits is served by all of them.\n' +
+                '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, or list the stylesheets this build loads with the csszyx `tailwindStylesheet` option.\n' +
+                '  note: no module was transformed, and nothing was written.\n' +
+                '  docs: https://csszyx.com/e/prefix-disagreement',
+        });
+    });
+
+    it('names the setting that leaves a directory out, on a lane that has one', () => {
+        const message = styleModelError(
+            modelOf([root('/app/a.css', 'tw'), root('/app/b.css', null)]),
+            ROOT,
+            'the `--tailwind-stylesheet` flag',
+            'the `--ignore` flag',
+        );
+
+        expect(message?.args).toMatchObject({ form: 'next', ignoreSetting: 'the `--ignore` flag' });
+        expect(message?.message).toContain(
+            '  help: give every Tailwind stylesheet the same `@import "tailwindcss"` line, list the stylesheets this build loads with the `--tailwind-stylesheet` flag, or leave another app\'s directory out with the `--ignore` flag.\n',
+        );
     });
 
     it('says nothing when every root sets the same prefix', () => {
@@ -123,12 +148,20 @@ describe('styleModelError — a stylesheet that reaches Tailwind did not compile
     it('stops the build and names the file with the first line of the reason', () => {
         const message = styleModelError(modelOf([failed('/app/src/index.css', true)]), ROOT);
 
-        expect(message).toContain('did not compile');
-        expect(message).toMatch(/src\/index\.css: ENOENT: no such file, open '\.\/gone\.css'/);
-        expect(message).not.toContain('Require stack');
-        expect(message).not.toContain('the stylesheet did not compile:');
-        expect(message).toContain('`tailwindStylesheet`');
-        expect(message).toContain('note:');
+        expect(message).toMatchObject({
+            code: 'tailwind-stylesheet-broken',
+            args: {
+                stylesheets: ["src/index.css: ENOENT: no such file, open './gone.css'"],
+                setting: 'the csszyx `tailwindStylesheet` option',
+            },
+            message:
+                '[csszyx] tailwind-stylesheet-broken:\n' +
+                '  A Tailwind stylesheet did not compile, so csszyx cannot read the Tailwind prefix and transforms no module.\n' +
+                '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load with the csszyx `tailwindStylesheet` option.\n' +
+                '  note: each failure, as Tailwind reported it:\n' +
+                "    src/index.css: ENOENT: no such file, open './gone.css'\n" +
+                '  docs: https://csszyx.com/e/tailwind-stylesheet-broken',
+        });
     });
 
     it('reports it before a prefix disagreement, whose facts it makes unreliable', () => {
@@ -141,8 +174,7 @@ describe('styleModelError — a stylesheet that reaches Tailwind did not compile
             ROOT,
         );
 
-        expect(message).toContain('did not compile');
-        expect(message).not.toContain('set different prefixes');
+        expect(message?.code).toBe('tailwind-stylesheet-broken');
     });
 
     it('does not stop the build for a stylesheet that never reached Tailwind', () => {
@@ -195,8 +227,8 @@ describe('the setting a message names, for a lane that is not configured through
             FLAG,
         );
 
-        expect(message).toContain(`list the stylesheets this build loads in ${FLAG}`);
-        expect(message).not.toContain('`tailwindStylesheet` option');
+        expect(message?.message).toContain(`list the stylesheets this build loads with ${FLAG}.`);
+        expect(message?.message).not.toContain('`tailwindStylesheet` option');
     });
 
     it('names it in the help for an entry that did not compile, and for one that never reached Tailwind', () => {
@@ -206,15 +238,25 @@ describe('the setting a message names, for a lane that is not configured through
             failure: { kind: 'stylesheet', reason: 'boom', reachedTailwind },
         });
 
-        expect(styleModelError(modelOf([failed('/app/a.css', true)]), ROOT, FLAG)).toContain(FLAG);
+        expect(
+            styleModelError(modelOf([failed('/app/a.css', true)]), ROOT, FLAG)?.message,
+        ).toContain(`it does load with ${FLAG}.`);
         expect(styleModelWarning(modelOf([failed('/app/b.css', false)]), ROOT, FLAG)).toContain(
             FLAG,
         );
     });
 
     it('names it as what lists a stylesheet that is not there', () => {
-        expect(missingTailwindStylesheetMessage(['app/gone.css'], ROOT, FLAG)).toContain(
-            `${FLAG} lists stylesheets that are not there`,
+        expect(missingTailwindStylesheetError(['app/gone.css', 'b.css'], ROOT, FLAG)).toMatchObject(
+            {
+                code: 'tailwind-stylesheet-missing',
+                args: { setting: FLAG, missing: ['app/gone.css', 'b.css'], root: ROOT },
+                message:
+                    '[csszyx] tailwind-stylesheet-missing:\n' +
+                    `  The stylesheet(s) \`app/gone.css\`, \`b.css\` named by ${FLAG} do not exist under \`/app\`, so the build stops.\n` +
+                    '  help: list the Tailwind stylesheet this build loads, relative to the project root.\n' +
+                    '  docs: https://csszyx.com/e/tailwind-stylesheet-missing',
+            },
         );
     });
 });

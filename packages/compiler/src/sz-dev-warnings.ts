@@ -14,9 +14,24 @@
  */
 
 /**
+ * `globalThis.__CSSZYX_SZ_WARNINGS_IN_BROWSER__`, which the development CDN
+ * bundle's build (`packages/csszyx/cdn-build.mjs`) defines, and no other; absent
+ * when run from source or from any other bundle. Read as a property of
+ * `globalThis`, written out at the read, so a bundle that does not define it
+ * reads `undefined` instead of throwing on an undeclared name, and esbuild's
+ * `define` replaces that member expression where it is defined.
+ */
+interface BrowserWarningsGlobal {
+    __CSSZYX_SZ_WARNINGS_IN_BROWSER__?: true;
+}
+
+/**
  * Whether a dev-mode sz diagnostic may print here: in a Node/SSR context only
  * (never the browser client — the warnings would double a server-side render),
- * and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The opt-out lets a team
+ * and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The development CDN
+ * bundle is the exception: a script-tag page has no server render to double,
+ * so its build defines `__CSSZYX_SZ_WARNINGS_IN_BROWSER__`, which esbuild folds
+ * here, and the browser prints them. Every other bundle leaves it undefined. The opt-out lets a team
  * that prefers a quiet dev loop rely on `csszyx check` instead; the default
  * stays ON because an unknown/aliased key is a dropped-class correctness
  * signal, not a style nudge.
@@ -33,7 +48,11 @@
  * @returns Whether a dev-mode sz warning should be printed, given development.
  */
 export function szNodeWarningsUnmuted(): boolean {
-    return typeof window === 'undefined' && process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1';
+    return (
+        ((globalThis as BrowserWarningsGlobal).__CSSZYX_SZ_WARNINGS_IN_BROWSER__ !== undefined ||
+            typeof window === 'undefined') &&
+        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
+    );
 }
 
 /**

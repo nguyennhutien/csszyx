@@ -74,13 +74,21 @@ function bothLanes(
 }
 
 describe('transform-wasm lane', () => {
-    it('names its unavailable error after the loader detail', async () => {
+    it('words the unavailable error with the loader detail', async () => {
         // The degrade path prints this error's message when an EXPLICIT wasm
         // choice cannot load — the wording is the contract worth pinning.
         const { WasmTransformUnavailableError } = await import('../src/transform-wasm.js');
-        const err = new WasmTransformUnavailableError('artifact not found');
+        const err = new WasmTransformUnavailableError('artifact not found', {
+            cause: new Error('artifact not found'),
+        });
         expect(err.name).toBe('WasmTransformUnavailableError');
-        expect(err.message).toBe('transformWasm: wasm engine unavailable - artifact not found');
+        expect(err.message).toBe(
+            '[csszyx] wasm-engine-unavailable:\n' +
+                '  The wasm engine in `@csszyx/core` did not load, so the `wasm` parser cannot run.\n' +
+                '  help: reinstall `@csszyx/core`; the wasm engine ships inside it as `parser-wasm`.\n' +
+                '  note: the loader reported: artifact not found.\n' +
+                '  docs: https://csszyx.com/e/wasm-engine-unavailable',
+        );
         expect(err).toBeInstanceOf(Error);
     });
 

@@ -15,6 +15,10 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+// Imported directly, not through `./report.js`: Node loads this module, and
+// the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
+// where only these entries are needed.
+import { WASM_ENGINE_UNAVAILABLE } from './diagnostic-browser.generated.js';
 import {
     diagnosticPath,
     type EngineDiagnosticFieldsOf,
@@ -24,18 +28,22 @@ import {
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, EXPECTED_ENGINE, wasmEngineIdentity } from './engine-identity.js';
 import { locateEngineSpans } from './engine-spans.js';
+import { CsszyxError } from './errors.js';
 import type {
     GlobalVarSourceFile,
     GlobalVarUsageDiagnostic,
     GlobalVarUsageQuery,
 } from './global-var-diagnostics.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
+import { renderThrown } from './thrown-words.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
     aggregateCssVariableMap,
     encodeCrossModuleStatics,
+    internalError,
     normalizeGlobalVarAliases,
     type TransformRustFile,
+    thrownMessage,
 } from './transform-rust.js';
 
 /** One merge group as the wasm JSON spells it. */
@@ -90,13 +98,31 @@ interface ParserWasmModule {
 
 /**
  * Thrown when the wasm parser artifact cannot be loaded.
+ *
+ * A csszyx error: `wasm-engine-unavailable`, with what loading the artifact
+ * threw as its `cause`. Given `where` instead, or without a load failure to
+ * wrap, as when the artifact answers a file with no result, the state is a
+ * csszyx bug: `internal-error`, with `detail` as the check that failed.
  */
-export class WasmTransformUnavailableError extends Error {
+export class WasmTransformUnavailableError extends CsszyxError {
     /**
-     * @param detail Loader failure detail.
+     * @param detail Loader failure detail, or the check that failed.
+     * @param options What it wraps.
+     * @param options.cause What loading the artifact threw, or what the engine threw.
+     * @param options.where Where a csszyx bug was found; the engine's refusal names it.
      */
-    constructor(detail: string) {
-        super(`transformWasm: wasm engine unavailable - ${detail}`);
+    constructor(detail: string, options: { cause?: unknown; where?: string } = {}) {
+        const { cause, where } = options;
+        super(
+            cause === undefined || where !== undefined
+                ? internalError({ where: where ?? 'transformWasm', detail }, cause)
+                : {
+                      code: 'wasm-engine-unavailable',
+                      args: { detail },
+                      message: renderThrown(WASM_ENGINE_UNAVAILABLE, { detail }),
+                      cause,
+                  },
+        );
         this.name = 'WasmTransformUnavailableError';
     }
 }
@@ -106,6 +132,8 @@ let wasmIdentityChecked = false;
 /** Memoized wasm module: loading instantiates the wasm once per process. */
 let wasmModule: ParserWasmModule | null | undefined;
 let wasmLoadError = '';
+/** What loading the wasm module threw, kept as the unavailable error's cause. */
+let wasmLoadCause: unknown;
 
 /**
  * Require the wasm module once; remember failure so probes stay cheap.
@@ -120,7 +148,9 @@ function loadParserWasm(): ParserWasmModule | null {
         const requireFromHere = createRequire(import.meta.url);
         wasmModule = requireFromHere('@csszyx/core/parser-wasm') as ParserWasmModule;
     } catch (err) {
-        wasmLoadError = err instanceof Error ? err.message : String(err);
+        // Its first line: Node's resolver appends the require stack.
+        wasmLoadError = thrownMessage(err).split('\n')[0];
+        wasmLoadCause = err;
         wasmModule = null;
     }
     return wasmModule;
@@ -136,13 +166,12 @@ function requireParserWasm(): ParserWasmModule {
     const wasm = loadParserWasm();
     if (!wasm) {
         // `loadParserWasm` records why whenever it has no module to return.
-        throw new WasmTransformUnavailableError(wasmLoadError);
+        throw new WasmTransformUnavailableError(wasmLoadError, { cause: wasmLoadCause });
     }
     if (!wasmIdentityChecked && EXPECTED_ENGINE !== null) {
         assertEngineIdentity({
             expected: EXPECTED_ENGINE,
             reported: wasmEngineIdentity(wasm),
-            artifact: 'wasm',
         });
         wasmIdentityChecked = true;
     }
@@ -258,7 +287,7 @@ function transformWasmOne(
         fields,
     );
     if (!result) {
-        throw new WasmTransformUnavailableError('wasm transform returned no result');
+        throw new WasmTransformUnavailableError('the wasm engine returned no result');
     }
     return result;
 }
@@ -322,9 +351,18 @@ function runWasmBatch(
     );
     const optionsJson = JSON.stringify(wasmTransformOptions(options));
 
-    const results = JSON.parse(
-        wasm.transform_batch_json(filesJson, optionsJson),
-    ) as WasmResultJson[];
+    let resultsJson: string;
+    try {
+        resultsJson = wasm.transform_batch_json(filesJson, optionsJson);
+    } catch (err) {
+        // The engine refuses a batch only for a csszyx bug: this module wrote
+        // both JSON strings, and the artifact was built with the engine.
+        throw new WasmTransformUnavailableError(thrownMessage(err), {
+            cause: err,
+            where: 'runWasmBatch',
+        });
+    }
+    const results = JSON.parse(resultsJson) as WasmResultJson[];
     return results.map((result, index) =>
         fromWasmResult(
             result,

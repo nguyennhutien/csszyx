@@ -6,7 +6,9 @@
  */
 
 import { createHash } from 'node:crypto';
-
+import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
+import { renderSzDiagnostic } from './diagnostic-render-root.js';
+import { CsszyxError } from './errors.js';
 import type { RecoveryMode, TokenMetadata } from './recovery.js';
 import { sortStrings } from './sort.js';
 
@@ -225,13 +227,46 @@ export function serializeManifest(manifest: RecoveryManifest, pretty = false): s
  * ```
  */
 export function parseManifest(json: string): RecoveryManifest {
-    const parsed = JSON.parse(json);
-
-    if (!parsed.buildId || !parsed.checksum || !parsed.tokens) {
-        throw new Error('Invalid recovery manifest format');
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(json);
+    } catch (error) {
+        throw unreadable({ form: 'parse', error: (error as Error).message }, error);
     }
-
+    // JSON that is not an object, `null` included, has none of the fields.
+    const fields = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<
+        string,
+        unknown
+    >;
+    const missing = MANIFEST_FIELDS.filter(field => !fields[field]);
+    if (missing.length > 0) throw unreadable({ form: 'format', missing });
     return parsed as RecoveryManifest;
+}
+
+/** The fields {@link parseManifest} cannot read a manifest without. */
+const MANIFEST_FIELDS = ['buildId', 'checksum', 'tokens'] as const;
+
+/**
+ * The error {@link parseManifest} throws, in the registry's words.
+ *
+ * @param args - What it names.
+ * @param cause - What `JSON.parse` threw, when it threw.
+ * @returns The error.
+ */
+function unreadable(
+    args: { form: 'parse'; error: string } | { form: 'format'; missing: string[] },
+    cause?: unknown,
+): CsszyxError {
+    return new CsszyxError({
+        code: 'recovery-manifest-unreadable',
+        args,
+        message: renderSzDiagnostic({
+            diagnostic: { code: 'recovery-manifest-unreadable', args },
+            file: '',
+            computed: SZ_DIAGNOSTIC_COMPUTED_VALUES,
+        }),
+        cause,
+    });
 }
 
 /**

@@ -5,6 +5,12 @@
  * @module
  */
 
+import { brandCsszyxError } from '@csszyx/compiler/errors';
+import { SZ_ATTRIBUTE_SYNTAX, szRender } from '@csszyx/compiler/report';
+
+/** What an `sz-attribute-syntax` error names, as the registry types it. */
+export type SzAttributeSyntaxArgs = NonNullable<(typeof SZ_ATTRIBUTE_SYNTAX)['argsType']>;
+
 /**
  * Safe JS object literal parser for sz attributes. Handles single-quoted
  * strings, unquoted keys, numbers, booleans, nested objects, and arbitrary
@@ -30,13 +36,31 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
     // Maps a position in `input` back to `rawInput`: undo the added `{` and
     // the leading whitespace `trim` removed, so the report points at the
     // character the author wrote.
-    const offset = rawInput.length - rawInput.trimStart().length - (wrapped ? 1 : 0);
+    const leading = rawInput.length - rawInput.trimStart().length;
+    const offset = leading - (wrapped ? 1 : 0);
+
+    // Where the author's text ends in `input`: before the `}` added around
+    // brace-less input, which is never the character a report names.
+    const end = wrapped ? input.length - 1 : input.length;
     let pos = 0;
 
-    // Only called inside a loop that runs while `pos` is in range.
+    // The error stays a `SyntaxError` and carries the code and args of the
+    // runtime's line (`sz-attribute-syntax`). A key that never reaches its
+    // `:` runs `pos` off the end, or onto the added `}`, where there is no
+    // character of the author's to name, so the line names where the
+    // attribute ends instead.
     const unexpected = (): never => {
-        throw new SyntaxError(
-            `[csszyx] Unexpected ${JSON.stringify(input[pos])} at ${pos + offset} in sz attribute "${rawInput}"`,
+        const args: SzAttributeSyntaxArgs =
+            pos < end
+                ? { form: 'char', input: rawInput, char: input[pos] as string, index: pos + offset }
+                : { form: 'end', input: rawInput, index: leading + trimmed.length };
+        throw brandCsszyxError(
+            new SyntaxError(
+                process.env.NODE_ENV !== 'production'
+                    ? szRender({ diagnostic: SZ_ATTRIBUTE_SYNTAX, args })
+                    : `[csszyx] sz-attribute-syntax: ${JSON.stringify(args)} https://csszyx.com/e/sz-attribute-syntax`,
+            ),
+            { code: 'sz-attribute-syntax', args },
         );
     };
 

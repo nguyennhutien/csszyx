@@ -94,11 +94,33 @@ describe('a Tailwind prefix that changes during a dev session', () => {
 
         expect(dev.sent).toContainEqual({ type: 'full-reload' });
         expect(dev.invalidated()).toBeGreaterThan(0);
-        expect(dev.warnings.join('\n')).toContain(
-            'src/index.css changed the Tailwind prefix from no prefix to `tw`',
+        expect(dev.warnings).toContain(
+            '[csszyx] project-reload: src/index.css\n' +
+                '  This file set the Tailwind prefix `tw`, so csszyx recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
         );
         expect(await dev.transformApp()).toContain('tw:p-4');
         expect(readFileSync(join(dev.root, SAFELIST_FILE), 'utf8').split('\n')).toContain('tw:p-4');
+    }, 60_000);
+
+    it('names both prefixes when one replaces another, and the one removed', async () => {
+        const dev = await devServer();
+        await dev.edit('src/index.css', PREFIXED);
+
+        await dev.edit('src/index.css', '@import "tailwindcss" prefix(ui);\n');
+        await dev.edit('src/index.css', STOCK);
+
+        expect(dev.warnings.filter(line => line.startsWith('[csszyx] project-reload:'))).toEqual([
+            '[csszyx] project-reload: src/index.css\n' +
+                '  This file set the Tailwind prefix `tw`, so csszyx recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
+            '[csszyx] project-reload: src/index.css\n' +
+                '  This file changed the Tailwind prefix from `tw` to `ui`, so csszyx recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
+            '[csszyx] project-reload: src/index.css\n' +
+                '  This file removed the Tailwind prefix `ui`, so csszyx recompiled every module and reloaded the page.\n' +
+                '  docs: https://csszyx.com/e/project-reload',
+        ]);
     }, 60_000);
 
     it('keeps the ordinary hot update for an edit that leaves the prefix alone', async () => {
@@ -115,8 +137,17 @@ describe('a Tailwind prefix that changes during a dev session', () => {
 
         await dev.edit('legacy/old.css', '@import "tailwindcss" prefix(old);\n');
 
-        expect(dev.warnings.join('\n')).toContain('set different prefixes');
-        expect(dev.warnings.join('\n')).toContain('keeps the prefix it last read');
+        const [kept, ...more] = dev.warnings.filter(line =>
+            line.startsWith('[csszyx] prefix-disagreement:'),
+        );
+        expect(more).toEqual([]);
+        // The build's note says nothing was written, which a server that goes
+        // on serving cannot say; the session's note takes its place, above
+        // the link.
+        expect(kept).not.toContain('nothing was written');
+        expect(kept).toMatch(
+            /\n {2}note: the dev server keeps the prefix it last read \(no prefix\) until the stylesheets agree again\.\n {2}docs: https:\/\/csszyx\.com\/e\/prefix-disagreement$/,
+        );
         expect(dev.sent).not.toContainEqual({ type: 'full-reload' });
         expect(await dev.transformApp()).not.toContain('tw:');
     }, 60_000);
@@ -136,6 +167,6 @@ describe('a Tailwind prefix that changes during a dev session', () => {
         await dev.edit('src/index.css', PREFIXED);
 
         expect(dev.sent).not.toContainEqual({ type: 'full-reload' });
-        expect(dev.warnings.join('\n')).not.toContain('changed the Tailwind prefix');
+        expect(dev.warnings.join('\n')).not.toContain('Tailwind prefix');
     }, 60_000);
 });

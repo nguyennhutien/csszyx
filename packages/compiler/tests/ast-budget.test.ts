@@ -40,8 +40,13 @@ describe('AST budget guard', () => {
         // A file-wide code: the header names the file alone, no line or column.
         expect(result.diagnostics).toHaveLength(1);
         expect(result.diagnostics[0]).toContain(`[csszyx] ast-budget: ${filename}\n`);
-        expect(result.diagnostics[0]).toContain('The file exceeds the AST node budget');
-        expect(result.diagnostics[0]).toContain('help: raise `build.astBudgetLimit`');
+        expect(result.diagnostics[0]).toContain(
+            [
+                'This file exceeds the AST node budget.',
+                'help: split the file, or raise `build.astBudgetLimit` in the plugin options; the Turbopack loader takes no budget option, so split the file there.',
+                'note: the file is left unchanged, and none of its classes are collected.',
+            ].join('\n  '),
+        );
     }
 
     /**

@@ -30,9 +30,11 @@ describe('Collision Regression', () => {
 
         it('font: should emit dev warning suggesting weight or fontFamily', () => {
             const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-            t({ font: 'bold' } as SzObject);
+            expect(t({ font: 'bold' } as SzObject)).toBe('');
             expect(consoleSpy).toHaveBeenCalledWith(
-                expect.stringContaining('weight (for font-weight) or fontFamily (for family)'),
+                expect.stringContaining(
+                    '`font` is not an sz key, and nothing is emitted for it.\n  help: write `weight` for the font weight, or `fontFamily` for the font family.',
+                ),
             );
             consoleSpy.mockRestore();
         });

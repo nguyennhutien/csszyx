@@ -26,5 +26,8 @@ describe('assertRustLane', () => {
 
     it('ignores the way out under CI, where the native build must have run', () => {
         expect(() => assertRustLane(false, { CI: 'true', [WASM_ONLY_ENV]: '1' })).toThrow(/CI/);
+        expect(() =>
+            assertRustLane(false, { CSSZYX_REQUIRE_NATIVE: '1', [WASM_ONLY_ENV]: '1' }),
+        ).toThrow(/CSSZYX_REQUIRE_NATIVE=1/);
     });
 });

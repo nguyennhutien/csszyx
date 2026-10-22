@@ -45,9 +45,11 @@ name, even a `const` from `<script setup>`, a prop, a conditional, a call, an
 array value such as `{ p: [4] }`, and a template string with `${}`:
 
 ```text
-[csszyx] src/Card.vue:3:15: this sz value is only known at runtime, and a template has no csszyx runtime to resolve it
-help: write the value as a literal, e.g. { p: 4 }, or bind class or style yourself for a value that changes at runtime
-note: the attribute is left as written; no class is generated for it
+[csszyx] template-runtime-value: src/Card.vue:3:15
+  This `sz` value is only known at runtime, and a template has no csszyx runtime to resolve it, so it gets no class.
+  help: write the value as a literal, such as `{ p: 4 }`, or bind `class` or `style` yourself for a value that changes at runtime.
+  note: the attribute is left as written.
+  docs: https://csszyx.com/e/template-runtime-value
 ```
 
 For a value that changes at runtime, bind `class` or `style` yourself:

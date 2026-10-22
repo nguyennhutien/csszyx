@@ -10,7 +10,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { needsRuntimeMangleRegistration } from '../src/mangle-delivery.js';
+import {
+    needsRuntimeMangleRegistration,
+    removedInjectChecksumMessage,
+    removedMangleMapDeliveryMessage,
+} from '../src/mangle-delivery.js';
 import { vitePlugin } from '../src/unplugin.js';
 import { freshFixtureRoot } from './fixture-root.js';
 
@@ -42,7 +46,7 @@ describe('the removed mangleMapDelivery option', () => {
             try {
                 vitePlugin({ production: { mangleMapDelivery: value } as never });
                 expect(removedWarnings(warn), value).toBe(1);
-                expect(warn.mock.calls[0]?.[0]).toContain('has been removed');
+                expect(warn.mock.calls[0]?.[0]).toBe(removedMangleMapDeliveryMessage());
             } finally {
                 warn.mockRestore();
             }
@@ -138,5 +142,27 @@ describe('the removed injectChecksum option', () => {
         } finally {
             warn.mockRestore();
         }
+    });
+});
+
+describe('the removed-option lines', () => {
+    it('words injectChecksum from the registry', () => {
+        expect(removedInjectChecksumMessage()).toBe(
+            '[csszyx] removed-option:\n' +
+                '  `production.injectChecksum` was removed and was never read: every production build carries the hydration checksum and the census, whatever it is set to.\n' +
+                '  help: delete the option.\n' +
+                '  note: the census lists no classes when `production.mangle` is off, and the browser runs neither the checksum nor the census as script; see https://csszyx.com/docs/security/.\n' +
+                '  docs: https://csszyx.com/e/removed-option',
+        );
+    });
+
+    it('words mangleMapDelivery from the registry', () => {
+        expect(removedMangleMapDeliveryMessage()).toBe(
+            '[csszyx] removed-option:\n' +
+                '  `production.mangleMapDelivery` was removed and is ignored: the runtime mangle map is always registered from inside the JS bundle, and the built HTML carries no inline `<script>`.\n' +
+                '  help: delete the option.\n' +
+                "  note: a strict `script-src 'self'` policy needs no exception; `window.__csszyx` is opt-in through `production.mangleDebugGlobal`.\n" +
+                '  docs: https://csszyx.com/e/removed-option',
+        );
     });
 });

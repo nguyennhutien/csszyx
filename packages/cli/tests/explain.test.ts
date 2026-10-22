@@ -60,9 +60,15 @@ describe('explain', () => {
     it('fails, naming the runtime fallback and its reason, for an object the build leaves to `_sz()`', () => {
         const lines = capture();
         explain('{ ...props }');
-        expect(lines).toHaveLength(1);
-        expect(lines[0]).toMatch(/^✗ Could not explain sz: the build emits no classes for it/);
-        expect(lines[0]).toContain('[csszyx] unresolvable-spread');
+        expect(lines).toHaveLength(2);
+        expect(lines[0]).toBe(
+            '[csszyx] explain-input-invalid:\n' +
+                '  The build emits no classes for `{ ...props }`, because `_sz()` resolves it at runtime.\n' +
+                '  help: write its values as literals to see the classes the build emits; a warning printed below, when there is one, names the value that needs the runtime.\n' +
+                '  docs: https://csszyx.com/e/explain-input-invalid',
+        );
+        // The engine's own line names the value, under the refusal.
+        expect(lines[1]).toMatch(/^⚠ \[csszyx\] unresolvable-spread/);
         expect(process.exitCode).toBe(1);
     });
 
@@ -70,7 +76,11 @@ describe('explain', () => {
         const lines = capture();
         explain('{ p:');
         expect(lines).toEqual([
-            '✗ Could not explain sz: could not be parsed as a JavaScript expression',
+            '[csszyx] parse-error:\n' +
+                '  This `sz` value could not be parsed as a JavaScript expression.\n' +
+                '  help: write the value as an object literal, such as `{ p: 4 }`.\n' +
+                '  note: the attribute is left as written, and no class is generated for it.\n' +
+                '  docs: https://csszyx.com/e/parse-error',
         ]);
         expect(process.exitCode).toBe(1);
     });

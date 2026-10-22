@@ -93,9 +93,11 @@ describe('the signature a merge reads', () => {
         expect(model.mergeSignature('p-4')).toBeNull();
         expect(originWarning(model, root)).toBe(
             [
-                '[csszyx] csszyx merges no class in this build: app.css did not compile with its `@utility` blocks and plugin classes taken out (not the real API).',
-                '  help: report it at https://github.com/nguyennhutien/csszyx/issues with the plugin or `@utility` block the stylesheet uses.',
-                '  note: every class is kept: `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays next to the `sz` classes, and `szcn` removes only exact repeats.',
+                '[csszyx] merge-origin-unreadable: app.css',
+                "  This Tailwind stylesheet did not compile once csszyx took out its `@utility` blocks and plugin classes, so csszyx cannot tell Tailwind's classes from the project's and merges no class in this build.",
+                '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message and the plugin or `@utility` block the stylesheet uses.',
+                '  note: every class is kept, so `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays beside the `sz` classes, and `szcn` removes only exact repeats; the compile reported: not the real API.',
+                '  docs: https://csszyx.com/e/merge-origin-unreadable',
             ].join('\n'),
         );
     });
@@ -399,7 +401,11 @@ describe('when the classes cannot be told apart', () => {
         )) as { code: string };
 
         expect(code).toContain('className="pb-2 p-4"');
-        expect(warnings.filter(line => line.includes('merges no class'))).toHaveLength(1);
+        expect(
+            warnings.filter(line =>
+                line.startsWith('[csszyx] merge-origin-unreadable: src/index.css\n'),
+            ),
+        ).toHaveLength(1);
     }, 60_000);
 
     it('`next prebuild` says so', async () => {
@@ -410,7 +416,8 @@ describe('when the classes cannot be told apart', () => {
         });
         const facts = await prepareNextStylesheetFacts({ explicitRoot: root });
         expect(facts.warning).toContain(
-            'csszyx merges no class in this build: app/globals.css did not compile with its `@utility` blocks and plugin classes taken out (not the real API).',
+            '[csszyx] merge-origin-unreadable: app/globals.css\n  This Tailwind stylesheet did not compile once csszyx took out',
         );
+        expect(facts.warning).toContain('; the compile reported: not the real API.\n');
     }, 60_000);
 });

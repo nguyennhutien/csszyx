@@ -107,7 +107,7 @@ describe('Next watcher cycle', () => {
                     isProcessAlive: () => true,
                 },
             }),
-        ).toThrow(/already locked/);
+        ).toThrow(/^\[csszyx\] next-safelist-locked:\n {2}Process 999 on /);
     });
 
     it('tombstones deleted source shards during materialization', () => {

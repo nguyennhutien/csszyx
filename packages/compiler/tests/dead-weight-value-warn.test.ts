@@ -12,11 +12,29 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { type SzObject, setSzWarnLocation, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    type SzObject,
+    setSzWarnLocation,
+    transform,
+} from '../src/transform-core.js';
+import { engineMessage, runtimeMessage } from './engine-message.js';
+import { szCodeOf } from './helpers/sz-console-line.js';
+
+/**
+ * The body of the numeric-weight line for one value.
+ *
+ * @param value - The weight as written.
+ * @returns The sentence and the help.
+ */
+const numericWeight = (value: string) => [
+    `\`weight: '${value}'\` is a numeric string, so \`font-${value}\` produces no CSS.`,
+    `help: write \`weight: ${value}\` as a number; it emits \`font-[${value}]\`.`,
+];
 
 describe('dead font-weight value warning', () => {
     beforeEach(() => {
-        vi.resetModules();
+        __resetSzWarnDedupForTests();
     });
 
     const warns = (sz: SzObject): string[] => {
@@ -26,16 +44,12 @@ describe('dead font-weight value warning', () => {
         });
         transform(sz);
         spy.mockRestore();
-        return calls.filter(c => c.includes('font weight'));
+        return calls.filter(c => szCodeOf(c) === 'numeric-font-weight');
     };
 
     it('warns that a numeric string weight generates no CSS, and says what to write', () => {
         const w = warns({ weight: '700' } as SzObject);
-        expect(w).toHaveLength(1);
-        expect(w[0]).toContain(`"weight: '700'"`);
-        expect(w[0]).toContain('generates no CSS');
-        expect(w[0]).toContain('"font-700"');
-        expect(w[0]).toContain('weight: 700');
+        expect(w).toEqual([runtimeMessage('numeric-font-weight', ...numericWeight('700'))]);
     });
 
     it('still emits the class it warned about, rather than guessing', () => {
@@ -58,8 +72,9 @@ describe('dead font-weight value warning', () => {
     it('names the place the value was written when the build supplies one', () => {
         setSzWarnLocation('App.tsx:12');
         try {
-            const [message] = warns({ weight: '300' } as SzObject);
-            expect(message).toContain('at App.tsx:12');
+            expect(warns({ weight: '300' } as SzObject)).toEqual([
+                engineMessage('numeric-font-weight', 'App.tsx:12', ...numericWeight('300')),
+            ]);
         } finally {
             setSzWarnLocation(undefined);
         }

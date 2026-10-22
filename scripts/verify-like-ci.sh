@@ -36,6 +36,13 @@ done
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
+# GitHub Actions sets CI=true on every job, and tools read it: picocolors
+# colours output whenever it is set, TTY or not. A local shell has no CI, so
+# a test that pinned a printed line without stripping the colour codes passed
+# here and failed on every runner (PR #396). The mirror runs with the same
+# variable the runner has.
+export CI=true
+
 echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start fresh..."
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find packages -name .tsout -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
