@@ -5,11 +5,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+    CLEAN_SCAVENGE_CEILING,
     cleanModule,
     countScavenges,
     judge,
     noisyModule,
-    SCAVENGE_RATIO_BUDGETS,
+    SCAVENGE_DELTA_BUDGETS,
 } from './check-diagnostic-cost.mjs';
 
 describe('countScavenges', () => {
@@ -34,17 +35,36 @@ describe('countScavenges', () => {
 });
 
 describe('judge', () => {
-    it('passes at each budget and fails just above it', () => {
-        const at = {
-            clean: 100,
-            eager: 100 * SCAVENGE_RATIO_BUDGETS.eager,
-            lane: 100 * SCAVENGE_RATIO_BUDGETS.lane,
-        };
-        assert.equal(judge(at, SCAVENGE_RATIO_BUDGETS).ok, true);
-        const over = judge({ ...at, lane: at.lane + 1 }, SCAVENGE_RATIO_BUDGETS);
+    const limits = { ceiling: CLEAN_SCAVENGE_CEILING, budgets: SCAVENGE_DELTA_BUDGETS };
+    const at = {
+        clean: CLEAN_SCAVENGE_CEILING,
+        eager: CLEAN_SCAVENGE_CEILING + SCAVENGE_DELTA_BUDGETS.eager,
+        lane: CLEAN_SCAVENGE_CEILING + SCAVENGE_DELTA_BUDGETS.lane,
+    };
+
+    it('passes at the ceiling and each budget, and fails a workload just past its budget', () => {
+        assert.equal(judge(at, limits).ok, true);
+        const over = judge({ ...at, lane: at.lane + 1 }, limits);
         assert.equal(over.ok, false);
-        assert.match(over.lines[1] ?? '', /^diagnostic cost \(lane\): .*over budget/);
-        assert.doesNotMatch(over.lines[0] ?? '', /over budget/);
+        assert.match(over.lines[2] ?? '', /^diagnostic cost \(lane\): .*over budget/);
+        assert.doesNotMatch(over.lines[0] ?? '', /over/);
+        assert.doesNotMatch(over.lines[1] ?? '', /over/);
+    });
+
+    it('fails a clean control past its ceiling, though the differences shrink', () => {
+        // The 0.18.0 shape: clean grew, and every ratio to it fell.
+        const grown = { clean: at.clean + 11, eager: at.eager, lane: at.lane };
+        const verdict = judge(grown, limits);
+        assert.equal(verdict.ok, false);
+        assert.match(verdict.lines[0] ?? '', /^transform cost \(clean\): .*over the ceiling/);
+        assert.doesNotMatch(verdict.lines[1] ?? '', /over/);
+    });
+
+    it('budgets the diagnostic path as a difference, so a cheaper control does not fail it', () => {
+        // Measured: 88e1b319 against the baseline, the control fell by 14 and
+        // the diagnostic path stayed within 2 scavenges.
+        assert.equal(judge({ clean: 111, eager: 262, lane: 164 }, limits).ok, true);
+        assert.equal(judge({ clean: 80, eager: 231, lane: 133 }, limits).ok, true);
     });
 });
 

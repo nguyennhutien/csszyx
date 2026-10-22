@@ -15,7 +15,7 @@
 // in child processes, each 20 passes over 800 modules after one warm pass:
 //
 // - `clean`: modules with no diagnostic, through `transformRust` — the
-//   control, so the ratios below cancel what the transform itself allocates;
+//   control, held under an absolute ceiling of its own;
 // - `eager`: modules with six diagnostics each, four of them unknown keys
 //   named afresh each pass, through `transformRust`, which renders every one
 //   and computes every suggestion;
@@ -23,21 +23,30 @@
 //   position as the router does and rendering the first 20 per pass, as many
 //   as a build lists.
 //
-// Measured 2026-10-19 on Node 24.18.0, linux arm64 (scavenges; ratio to clean;
-// identical over repeated runs; a build with no unrendered transform runs the
-// lane workload through `transformRust`):
+// The diagnostic path is what `eager` and `lane` allocate beyond `clean`, so
+// each is budgeted as that difference. It used to be a ratio to `clean`,
+// which read a regression of the control as an improvement: 0.18.0 grew
+// `clean` from 64 to 125 with the per-class merge lists and the ratios fell,
+// while the fix for it raised them toward their budget. The difference
+// stayed put across both (149 and 52 before, 151 and 53 after).
 //
-//   build                                  clean  eager       lane
-//   main (bd3f3f33, renders in the engine)  120   176 1.47   176 1.47
-//   af62dd86 (renders every diagnostic)     123  8204 66.7  8204 66.7
-//   122dd14a (lanes render what they print) 125   270 2.16   177 1.42
+// Measured 2026-10-22 on Node 24.18.0, linux arm64 (scavenges; difference to
+// clean; identical over repeated runs):
 //
-// The lane budget holds the build lanes to `main`'s ratio plus about 9%; the
-// eager budget sits about 11% above what the public transform costs now: it
-// renders in TypeScript what `main` rendered in Rust. Not yet measured on x64,
-// so the first CI run on that runner is that measurement. A legitimate rise is
-// a change to `SCAVENGE_RATIO_BUDGETS` plus a sentence in the commit saying
-// what grew it. The three workloads take about 1.7 s together.
+//   build                                      clean  eager      lane
+//   v0.17.2                                      64
+//   88e1b319 (merge lists recorded twice,
+//             positions resolved eagerly)       125   274 +149   177 +52
+//   this gate's baseline                        111   262 +151   164 +53
+//
+// The clean ceiling is the baseline plus 3%, so a change that makes every
+// transform allocate more fails here even when no diagnostic is involved; the
+// two budgets sit about 10% and 13% above their differences. Not yet
+// measured on x64, so the first CI run on that runner is that measurement. A
+// legitimate rise is a change to `CLEAN_SCAVENGE_CEILING` or
+// `SCAVENGE_DELTA_BUDGETS` plus a sentence in the commit saying what grew it;
+// a fall should lower the ceiling with it. The three workloads take about
+// 1.7 s together.
 //
 // Reads `packages/compiler/dist` and needs the host native addon:
 // `pnpm --filter @csszyx/core native:build` and
@@ -51,8 +60,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The highest ratio of scavenges to the clean control each workload may reach. */
-export const SCAVENGE_RATIO_BUDGETS = { eager: 2.4, lane: 1.6 };
+/** The most scavenges the clean control may reach: what every transform allocates. */
+export const CLEAN_SCAVENGE_CEILING = 114;
+
+/** The most scavenges each workload may run beyond the clean control. */
+export const SCAVENGE_DELTA_BUDGETS = { eager: 165, lane: 60 };
 
 /** V8 flags that make the scavenge count repeat: a fixed 1 MB nursery, one thread. */
 export const V8_FLAGS = [
@@ -130,22 +142,33 @@ export function countScavenges(output) {
 }
 
 /**
- * Compare each workload's ratio to the clean control with its budget.
+ * Hold the clean control under its ceiling, and what each workload allocates
+ * beyond it under its budget.
  *
  * @param {{ clean: number, eager: number, lane: number }} counts - Scavenges per workload.
- * @param {{ eager: number, lane: number }} budgets - The highest ratio each may reach.
+ * @param {{ ceiling: number, budgets: { eager: number, lane: number } }} limits - The
+ *        clean ceiling, and the most each workload may run beyond clean.
  * @returns {{ ok: boolean, lines: string[] }} The verdict and the lines to print.
  */
-export function judge(counts, budgets) {
+export function judge(counts, limits) {
     const lines = [];
     let ok = true;
+    const clean = `${counts.clean} scavenges, ceiling ${limits.ceiling}`;
+    if (counts.clean > limits.ceiling) {
+        ok = false;
+        lines.push(
+            `transform cost (clean): ${clean}, over the ceiling. Every transform allocates more than it did; find what, or raise CLEAN_SCAVENGE_CEILING in scripts/check-diagnostic-cost.mjs only with the reason in the commit.`,
+        );
+    } else {
+        lines.push(`transform cost (clean): ${clean}.`);
+    }
     for (const workload of /** @type {const} */ (['eager', 'lane'])) {
-        const ratio = counts[workload] / counts.clean;
-        const share = `${counts[workload]} scavenges against ${counts.clean} clean, ratio ${ratio.toFixed(2)} of ${budgets[workload]}`;
-        if (ratio > budgets[workload]) {
+        const beyond = counts[workload] - counts.clean;
+        const share = `${counts[workload]} scavenges against ${counts.clean} clean, ${beyond} beyond it of ${limits.budgets[workload]}`;
+        if (beyond > limits.budgets[workload]) {
             ok = false;
             lines.push(
-                `diagnostic cost (${workload}): ${share}, over budget. Find what in the diagnostic path allocates more; raise SCAVENGE_RATIO_BUDGETS in scripts/check-diagnostic-cost.mjs only with the reason in the commit.`,
+                `diagnostic cost (${workload}): ${share}, over budget. Find what in the diagnostic path allocates more; raise SCAVENGE_DELTA_BUDGETS in scripts/check-diagnostic-cost.mjs only with the reason in the commit.`,
             );
         } else {
             lines.push(`diagnostic cost (${workload}): ${share}.`);
@@ -221,7 +244,10 @@ function measure(workload) {
 /** Run the gate and exit non-zero on a failure. */
 function main() {
     const counts = { clean: measure('clean'), eager: measure('eager'), lane: measure('lane') };
-    const { ok, lines } = judge(counts, SCAVENGE_RATIO_BUDGETS);
+    const { ok, lines } = judge(counts, {
+        ceiling: CLEAN_SCAVENGE_CEILING,
+        budgets: SCAVENGE_DELTA_BUDGETS,
+    });
     for (const line of lines) (ok ? console.log : console.error)(line);
     if (!ok) process.exit(1);
 }
