@@ -14,10 +14,16 @@
  */
 
 /**
- * Defined by the development CDN bundle's build (`packages/csszyx/cdn-build.mjs`)
- * and by no other; absent when run from source or from any other bundle.
+ * `globalThis.__CSSZYX_SZ_WARNINGS_IN_BROWSER__`, which the development CDN
+ * bundle's build (`packages/csszyx/cdn-build.mjs`) defines, and no other; absent
+ * when run from source or from any other bundle. Read as a property of
+ * `globalThis`, written out at the read, so a bundle that does not define it
+ * reads `undefined` instead of throwing on an undeclared name, and esbuild's
+ * `define` replaces that member expression where it is defined.
  */
-declare const __CSSZYX_SZ_WARNINGS_IN_BROWSER__: true | undefined;
+interface BrowserWarningsGlobal {
+    __CSSZYX_SZ_WARNINGS_IN_BROWSER__?: true;
+}
 
 /**
  * Whether a dev-mode sz diagnostic may print here: in a Node/SSR context only
@@ -43,7 +49,7 @@ declare const __CSSZYX_SZ_WARNINGS_IN_BROWSER__: true | undefined;
  */
 export function szNodeWarningsUnmuted(): boolean {
     return (
-        (typeof __CSSZYX_SZ_WARNINGS_IN_BROWSER__ !== 'undefined' ||
+        ((globalThis as BrowserWarningsGlobal).__CSSZYX_SZ_WARNINGS_IN_BROWSER__ !== undefined ||
             typeof window === 'undefined') &&
         process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
     );

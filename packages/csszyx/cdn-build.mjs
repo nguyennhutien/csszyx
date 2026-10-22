@@ -72,7 +72,9 @@ export function cdnBuildOptions(mode) {
             // warnings that every other bundle keeps to Node print in the
             // browser here (`szNodeWarningsUnmuted`). The production bundle
             // folds them out on `NODE_ENV` before this is read.
-            ...(mode === 'development' ? { __CSSZYX_SZ_WARNINGS_IN_BROWSER__: 'true' } : {}),
+            ...(mode === 'development'
+                ? { 'globalThis.__CSSZYX_SZ_WARNINGS_IN_BROWSER__': 'true' }
+                : {}),
         },
     };
 }

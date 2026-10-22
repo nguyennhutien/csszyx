@@ -33,9 +33,9 @@ export interface ThrownPlace {
 export function renderThrown<Args extends object>(
     diagnostic: SzBrowserDiagnostic<Args>,
     args: NoInfer<Args>,
-    place: ThrownPlace = { file: '' },
+    place?: ThrownPlace,
 ): string {
-    const { file, line, column } = place;
+    const { file = '', line, column } = place ?? {};
     return szDiagnosticRenderer({ [diagnostic.id]: diagnostic }).message({
         diagnostic: { code: diagnostic.id, args, line, column },
         file,

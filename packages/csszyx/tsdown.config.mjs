@@ -26,10 +26,13 @@ export default defineBuild({
 
             // The CDN bundles, built from the compiler's `dist` (see
             // `cdn-build.mjs`, which the size gate reads them back with).
+            // Each writes its own file, so they build side by side.
             const { build } = await import('esbuild');
-            for (const { file, mode } of CDN_BUNDLES) {
-                await build({ ...cdnBuildOptions(mode), outfile: resolve(outDir, file) });
-            }
+            await Promise.all(
+                CDN_BUNDLES.map(({ file, mode }) =>
+                    build({ ...cdnBuildOptions(mode), outfile: resolve(outDir, file) }),
+                ),
+            );
 
             // The declaration bundler drops the triple-slash reference in
             // src/index.ts, so stamp it back. Both entries need it: a consumer

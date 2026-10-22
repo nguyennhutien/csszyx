@@ -438,25 +438,44 @@ export async function verifyMangleChecksumAsync(
     const computed = await digestMangleMap(source.map);
     if (computed === expectedChecksum) return true;
     if (source.found) {
-        const args = { computed, expected: expectedChecksum };
-        if (process.env.NODE_ENV !== 'production') {
-            szReport({ diagnostic: MANGLE_CHECKSUM_MISMATCH, args });
-        } else {
-            console.warn(
-                `[csszyx] mangle-checksum-mismatch: ${JSON.stringify(args)} https://csszyx.com/e/mangle-checksum-mismatch`,
-            );
-        }
+        reportMangleChecksumMismatch(computed, expectedChecksum);
     } else {
-        const args = { checksum: expectedChecksum };
-        if (process.env.NODE_ENV !== 'production') {
-            szReport({ diagnostic: MANGLE_MAP_UNAVAILABLE, args });
-        } else {
-            console.warn(
-                `[csszyx] mangle-map-unavailable: ${JSON.stringify(args)} https://csszyx.com/e/mangle-map-unavailable`,
-            );
-        }
+        reportMangleMapUnavailable(expectedChecksum);
     }
     return false;
+}
+
+/**
+ * Say that the map recomputes to a checksum other than the expected one.
+ *
+ * @param computed - The checksum recomputed from the map.
+ * @param expected - The checksum it had to match.
+ */
+function reportMangleChecksumMismatch(computed: string, expected: string): void {
+    const args = { computed, expected };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MANGLE_CHECKSUM_MISMATCH, args });
+    } else {
+        console.warn(
+            `[csszyx] mangle-checksum-mismatch: ${JSON.stringify(args)} https://csszyx.com/e/mangle-checksum-mismatch`,
+        );
+    }
+}
+
+/**
+ * Say that the page carries a checksum and no map to recompute it from.
+ *
+ * @param checksum - The checksum the page carries.
+ */
+function reportMangleMapUnavailable(checksum: string): void {
+    const args = { checksum };
+    if (process.env.NODE_ENV !== 'production') {
+        szReport({ diagnostic: MANGLE_MAP_UNAVAILABLE, args });
+    } else {
+        console.warn(
+            `[csszyx] mangle-map-unavailable: ${JSON.stringify(args)} https://csszyx.com/e/mangle-map-unavailable`,
+        );
+    }
 }
 
 /**

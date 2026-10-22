@@ -3381,6 +3381,59 @@ const _warnedUnknownSzProperties = new Set<string>();
 let _announcedUnknownSzPropertyCap = false;
 
 /**
+ * Whether a report of `token` is admitted: the first time it is seen, and
+ * while the cache is under its cap. The report that meets the cap announces
+ * it, once.
+ *
+ * @param token - The key and place the report is for.
+ * @returns Whether to print it.
+ */
+function admitUnknownSzPropertyWarning(token: string): boolean {
+    if (_warnedUnknownSzProperties.has(token)) return false;
+    if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
+        if (!_announcedUnknownSzPropertyCap) {
+            _announcedUnknownSzPropertyCap = true;
+            szReport({
+                diagnostic: DIAGNOSTICS_CAPPED,
+                args: { form: 'unknown-keys', count: UNKNOWN_SZ_PROPERTY_WARNINGS_MAX },
+            });
+        }
+        return false;
+    }
+    _warnedUnknownSzProperties.add(token);
+    return true;
+}
+
+/**
+ * Report a key that lowers to no supported utility, under the code its
+ * spelling decides: an alias or a split shorthand (`canonical-key`, in the
+ * form its key takes), a numeric key (`numeric-key`), or any other
+ * (`unknown-key`, with the known key it is most likely a typo of). A removed
+ * key never reaches here: `collectTransformProperty` reports it first. The
+ * unknown key's class is not dropped: it is lowered as a literal class exactly
+ * like a known one, and a project can serve it with `@utility`, so the line
+ * says it styles nothing rather than that it is ignored.
+ *
+ * @param key - The key.
+ * @param at - Where it is written.
+ */
+function reportUnknownSzProperty(key: string, at: string | undefined): void {
+    const form = SUGGESTION_MAP[key] ? 'alias' : SPLIT_SHORTHAND_KEYS[key];
+    if (form !== undefined) {
+        szReport({ diagnostic: CANONICAL_KEY, args: { form, key }, at });
+    } else if (/^\d+(?:\.\d+)?$/.test(key)) {
+        szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
+    } else {
+        const suggestion = suggestSzKey(key);
+        szReport({
+            diagnostic: UNKNOWN_KEY,
+            args: suggestion === null ? { key } : { key, suggestion },
+            at,
+        });
+    }
+}
+
+/**
  * Warns when a fallback key cannot produce a supported sz utility. Callers
  * check {@link isKnownSzPropertyKey} first, so known keys pay no
  * `process.env` read.
@@ -3389,40 +3442,8 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
     if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
         // One report per key and place: the key decides the code, and a located
         // build reports each file it meets.
-        const token = `${key}\u0000${szWarnLocation ?? ''}`;
-        if (_warnedUnknownSzProperties.has(token)) return;
-        if (_warnedUnknownSzProperties.size >= UNKNOWN_SZ_PROPERTY_WARNINGS_MAX) {
-            if (!_announcedUnknownSzPropertyCap) {
-                _announcedUnknownSzPropertyCap = true;
-                szReport({
-                    diagnostic: DIAGNOSTICS_CAPPED,
-                    args: { form: 'unknown-keys', count: UNKNOWN_SZ_PROPERTY_WARNINGS_MAX },
-                });
-            }
-            return;
-        }
-        _warnedUnknownSzProperties.add(token);
-        // The key's spelling decides the code: an alias or a split shorthand
-        // (`canonical-key`, in the form its key takes), a numeric key
-        // (`numeric-key`), or any other (`unknown-key`, with the known key it
-        // is most likely a typo of). A removed key never reaches here: `collectTransformProperty` reports it first. The unknown key's
-        // class is not dropped: it is lowered as a literal class exactly like a
-        // known one, and a project can serve it with `@utility`, so the line
-        // says it styles nothing rather than that it is ignored.
-        const at = szWarnLocation ?? runtimeSzWarnContext(szProp);
-        const form = SUGGESTION_MAP[key] ? 'alias' : SPLIT_SHORTHAND_KEYS[key];
-        if (form !== undefined) {
-            szReport({ diagnostic: CANONICAL_KEY, args: { form, key }, at });
-        } else if (/^\d+(?:\.\d+)?$/.test(key)) {
-            szReport({ diagnostic: NUMERIC_KEY, args: { key }, at });
-        } else {
-            const suggestion = suggestSzKey(key);
-            szReport({
-                diagnostic: UNKNOWN_KEY,
-                args: suggestion === null ? { key } : { key, suggestion },
-                at,
-            });
-        }
+        if (!admitUnknownSzPropertyWarning(`${key}\u0000${szWarnLocation ?? ''}`)) return;
+        reportUnknownSzProperty(key, szWarnLocation ?? runtimeSzWarnContext(szProp));
         if (!szWarnLocation) hintProjectScanOnce();
     }
 }
