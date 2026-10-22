@@ -20,8 +20,24 @@
  * @module
  */
 
+import { createRequire } from 'node:module';
+
 import { CsszyxError } from '@csszyx/compiler/errors';
-import { OPTIONS_OBJECT_REQUIRED, szRender } from '@csszyx/compiler/report';
+
+/**
+ * The `report` module, loaded only when a call is refused.
+ *
+ * `next.config` imports this entry on every `next dev` and `next build`, and
+ * the registry it words errors from was nearly two thirds of its import time
+ * (2.79 ms against 0.98 measured, Node 24, linux arm64). Loaded with
+ * `require`, so the throw stays synchronous; the module only renders text,
+ * so its CommonJS copy changes nothing a caller compares.
+ *
+ * @returns The module.
+ */
+function report(): typeof import('@csszyx/compiler/report') {
+    return createRequire(import.meta.url)('@csszyx/compiler/report');
+}
 
 /** Options forwarded to the csszyx Next Turbopack loader. */
 export interface CsszyxTurbopackOptions {
@@ -132,6 +148,7 @@ export function csszyxTurbopack(
         // This entry loads in `next.config`, so it words the error from the
         // light `report` module rather than the plugin's renderer; `at: ''`
         // lays it out as a Node line, the sentence under the code.
+        const { OPTIONS_OBJECT_REQUIRED, szRender } = report();
         throw new CsszyxError({
             code: 'options-object-required',
             args,
