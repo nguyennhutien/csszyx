@@ -629,7 +629,9 @@ describe('csszyx next-watch command', () => {
     }, 30_000);
 
     it('fails startup when no source files match', async () => {
-        const root = tempRoot();
+        // Resolved like the other cases: the message names the root as
+        // given, and macOS hands out a `/var` temp path that is a link.
+        const root = realpathSync(tempRoot());
 
         await expect(
             startNextWatch({
@@ -640,7 +642,7 @@ describe('csszyx next-watch command', () => {
                 silent: true,
             }),
         ).rejects.toThrow(
-            `No source file under \`${realpathSync(root)}\` matches \`src/**/*.tsx\`, so there is nothing to scan for classes.`,
+            `No source file under \`${root}\` matches \`src/**/*.tsx\`, so there is nothing to scan for classes.`,
         );
     });
 
