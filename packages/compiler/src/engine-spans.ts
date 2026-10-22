@@ -291,6 +291,69 @@ class LocatedOverride extends LocatedSpan implements SzMergeOverride {
     }
 }
 
+/**
+ * A located merge group: its positions are built on the first read, from the
+ * key offsets the engine reported.
+ *
+ * A group per static object, and a position per class, made on every
+ * transform; most are never read — the build reads one only for a dead class
+ * it names, and a store keeps the offsets ({@link storeEngineSpans}). `keys`
+ * and `classes` stay own fields; `positions` is an accessor, which
+ * `JSON.stringify` writes through `toJSON`.
+ */
+class LocatedGroup implements SzMergeGroup {
+    keys: string[];
+    classes: string[];
+    readonly #keyStarts: number[];
+    readonly #locate: ByteOffsetLocator;
+    #positions: SourcePosition[] | undefined;
+
+    /**
+     * @param group - The group as reported.
+     * @param locate - The file's locator.
+     */
+    constructor(group: RawMergeGroup, locate: ByteOffsetLocator) {
+        this.keys = group.keys;
+        this.classes = group.classes;
+        this.#keyStarts = group.keyStarts;
+        this.#locate = locate;
+    }
+
+    /** @returns Where each class's key is written, index-parallel to `classes`. */
+    get positions(): SourcePosition[] {
+        this.#positions ??= this.#keyStarts.map(start => new LocatedSpan(start, this.#locate));
+        return this.#positions;
+    }
+
+    /** @returns The group as plain data, positions resolved. */
+    toJSON(): SzMergeGroup {
+        return { keys: this.keys, positions: this.positions, classes: this.classes };
+    }
+
+    /**
+     * @param group - Any group.
+     * @returns The key offsets it was located from, or `undefined` for one built elsewhere.
+     */
+    static keyStartsOf(group: object): readonly number[] | undefined {
+        return #keyStarts in group ? group.#keyStarts : undefined;
+    }
+}
+
+/**
+ * The byte offset each class's key is written at, for a group this module
+ * located; `undefined` for one built elsewhere, which carries only positions.
+ *
+ * Offsets order like positions within one file, and reading them resolves
+ * nothing.
+ *
+ * @internal Read by the bundler plugin's dead-class report.
+ * @param group - A group a result carries.
+ * @returns Its key offsets, index-parallel to `classes`, or `undefined`.
+ */
+export function szMergeGroupKeyStarts(group: SzMergeGroup): readonly number[] | undefined {
+    return LocatedGroup.keyStartsOf(group);
+}
+
 /** One diagnostic as the engine reports it. */
 interface RawIssue {
     code: string;
@@ -365,8 +428,7 @@ function locateIssue(issue: RawIssue, locate: ByteOffsetLocator): SzDiagnosticIs
  * @returns It located.
  */
 function locateGroup(group: RawMergeGroup, locate: ByteOffsetLocator): SzMergeGroup {
-    const { keys, keyStarts, classes } = group;
-    return { keys, positions: keyStarts.map(start => new LocatedSpan(start, locate)), classes };
+    return new LocatedGroup(group, locate);
 }
 
 /**
@@ -403,6 +465,10 @@ export interface StoredEngineSpans {
  *          group unchanged when one of them was built elsewhere.
  */
 function storeGroup(group: SzMergeGroup): RawMergeGroup | SzMergeGroup {
+    const located = LocatedGroup.keyStartsOf(group);
+    if (located !== undefined) {
+        return { keys: group.keys, keyStarts: [...located], classes: group.classes };
+    }
     const keyStarts = group.positions.map(position => LocatedSpan.startOf(position));
     return keyStarts.every(start => start !== undefined)
         ? { keys: group.keys, keyStarts: keyStarts as number[], classes: group.classes }

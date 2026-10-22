@@ -62,6 +62,7 @@ export {
     type SzMergeGroup,
     type SzMergeOverride,
     storeEngineSpans,
+    szMergeGroupKeyStarts,
 } from './engine-spans.js';
 export type {
     GlobalVarSourceFile,

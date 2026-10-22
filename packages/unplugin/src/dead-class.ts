@@ -41,6 +41,7 @@ import {
     type SzMergeGroup,
     sortStrings,
     stateVariantForm,
+    szMergeGroupKeyStarts,
 } from '@csszyx/compiler';
 import type { DiagnosticLimiter, LimitedFinding } from './diagnostic-limiter.js';
 import { diagnosticMessage } from './diagnostic-message.js';
@@ -120,6 +121,53 @@ function writtenBefore(left: SourcePosition, right: SourcePosition): boolean {
     return left.line < right.line || (left.line === right.line && left.column < right.column);
 }
 
+/** The key one class is placed at: an entry of a group. */
+interface Placement {
+    readonly group: SzMergeGroup;
+    readonly index: number;
+    /** The key's byte offset, when every group of the result carries one. */
+    readonly offset: number | undefined;
+}
+
+/**
+ * Each class one transform emitted, at the entry of the key written first.
+ *
+ * Groups the compiler located carry the key offsets the engine reported, and
+ * two offsets of one file order as their positions do, so they are compared
+ * without resolving a line: a build places every class of every transform and
+ * names only the few that are dead. When a group was built elsewhere, with
+ * positions only, every group is compared by line and column.
+ *
+ * @param result - The first pass's result.
+ * @returns Class to its entry.
+ */
+function placeClasses(result: EmittedClassPlacement): Map<string, Placement> {
+    const groups = [...(result.mergeGroups ?? []), ...(result.singleClassGroups ?? [])];
+    const offsets = groups.map(group => szMergeGroupKeyStarts(group));
+    const byOffset = offsets.every(starts => starts !== undefined);
+    const placed = new Map<string, Placement>();
+    for (const [at, group] of groups.entries()) {
+        const starts = offsets[at];
+        const { classes } = group;
+        for (let index = 0; index < classes.length; index++) {
+            const className = classes[index] as string;
+            const offset = starts?.[index];
+            const held = placed.get(className);
+            if (held !== undefined) {
+                const earlier = byOffset
+                    ? (offset as number) < (held.offset as number)
+                    : writtenBefore(
+                          group.positions[index] as SourcePosition,
+                          held.group.positions[held.index] as SourcePosition,
+                      );
+                if (!earlier) continue;
+            }
+            placed.set(className, { group, index, offset });
+        }
+    }
+    return placed;
+}
+
 /**
  * Each class one transform emitted that the engine placed at its key.
  *
@@ -130,24 +178,82 @@ function writtenBefore(left: SourcePosition, right: SourcePosition): boolean {
  * source (line, then column), whichever list holds it; on the same position
  * the first one read wins, `mergeGroups` before `singleClassGroups`.
  *
+ * Resolves the position of every class it places: for a store that keeps
+ * them (a Next shard). A build that names only dead classes reads
+ * {@link szClassSites}, which resolves none until one is named.
+ *
  * @param result - The first pass's result.
  * @returns Class to site, for the classes the engine placed.
  */
 export function emittedClassSites(result: EmittedClassPlacement): Map<string, EmittedClassSite> {
-    const placed = new Map<string, EmittedClassSite>();
-    for (const group of [...(result.mergeGroups ?? []), ...(result.singleClassGroups ?? [])]) {
-        for (const [index, className] of group.classes.entries()) {
-            const { line, column } = group.positions[index] as SourcePosition;
-            const held = placed.get(className);
-            if (held !== undefined && !writtenBefore({ line, column }, held)) continue;
-            placed.set(className, { line, column, key: group.keys[index] as string });
-        }
+    const sites = new Map<string, EmittedClassSite>();
+    for (const [className, { group, index }] of placeClasses(result)) {
+        const { line, column } = group.positions[index] as SourcePosition;
+        sites.set(className, { line, column, key: group.keys[index] as string });
     }
-    return placed;
+    return sites;
+}
+
+/**
+ * A class's site as a build records it on every transform: the file, and the
+ * entry of its key, whose line and column are resolved only when read.
+ */
+class PlacedClassSite implements DeadClassSite {
+    readonly file: string;
+    readonly #placement: Placement;
+
+    /**
+     * @param file - The file, project-relative.
+     * @param placement - The entry of the class's key.
+     */
+    constructor(file: string, placement: Placement) {
+        this.file = file;
+        this.#placement = placement;
+    }
+
+    /** @returns The key's 1-based line. */
+    get line(): number {
+        return this.#position().line;
+    }
+
+    /** @returns The key's 1-based column. */
+    get column(): number {
+        return this.#position().column;
+    }
+
+    /** @returns The key the class was lowered from. */
+    get key(): string {
+        return this.#placement.group.keys[this.#placement.index] as string;
+    }
+
+    /** @returns The site as plain fields, as {@link deadClassSite} hands it on. */
+    resolved(): DeadClassSite {
+        return { file: this.file, line: this.line, column: this.column, key: this.key };
+    }
+
+    /** @returns The key's position. */
+    #position(): SourcePosition {
+        return this.#placement.group.positions[this.#placement.index] as SourcePosition;
+    }
+}
+
+/**
+ * A site as plain fields, its line and column resolved: what a finding
+ * carries and a message names.
+ *
+ * @param site - A site from {@link szClassSites}, or one built elsewhere.
+ * @returns The same site, as plain data.
+ */
+export function deadClassSite(site: DeadClassSite): DeadClassSite {
+    return site instanceof PlacedClassSite ? site.resolved() : site;
 }
 
 /**
  * Where one file emits each of its classes.
+ *
+ * Runs on every transform a build records, so no position is resolved here:
+ * a site's line and column are read only for a class the report names
+ * ({@link deadClassSite}).
  *
  * @param file - The file, project-relative.
  * @param classes - The classes the file's `sz` lowered to.
@@ -159,9 +265,15 @@ export function szClassSites(
     classes: Iterable<string>,
     result: EmittedClassPlacement,
 ): Map<string, DeadClassSite> {
-    const placed = emittedClassSites(result);
+    const placed = placeClasses(result);
     const sites = new Map<string, DeadClassSite>();
-    for (const className of classes) sites.set(className, { file, ...placed.get(className) });
+    for (const className of classes) {
+        const placement = placed.get(className);
+        sites.set(
+            className,
+            placement === undefined ? { file } : new PlacedClassSite(file, placement),
+        );
+    }
     return sites;
 }
 
@@ -351,7 +463,8 @@ export function findDeadSzClasses(
         if (unsigned !== null) found = { className, unsigned };
         else if (variant !== null) found = { className, variant };
         if (typeof origin === 'string') return { ...found, file: origin };
-        const [first, ...others] = origin as readonly DeadClassSite[];
+        // Resolved here, for the dead classes only.
+        const [first, ...others] = (origin as readonly DeadClassSite[]).map(deadClassSite);
         return others.length === 0 ? { ...found, ...first } : { ...found, ...first, others };
     });
 }
