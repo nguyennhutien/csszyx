@@ -176,7 +176,7 @@ describe('waitFor reports what it saw', () => {
 
 describe('csszyx next-watch command', () => {
     it('records the stylesheet facts again when a stylesheet changes', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -217,7 +217,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('writes the diagnostic policy the Turbopack loader reads when it starts', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -241,7 +241,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('names a dead sz class and a config problem when it starts', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -279,7 +279,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('reads an edited config, rewrites the policy file and says what it now lists', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -332,7 +332,7 @@ describe('csszyx next-watch command', () => {
             // watch's own process reads the config's edit and every module it
             // imports as first read: a policy file with fresh inputs and stale
             // levels, which every lane then trusts.
-            const root = realpathSync(tempRoot());
+            const root = realpathSync.native(tempRoot());
             linkTailwind(root);
             mkdirSync(join(root, 'app'), { recursive: true });
             writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -373,7 +373,7 @@ describe('csszyx next-watch command', () => {
     );
 
     it('reads the config again when a module it imports outside the root changes', async () => {
-        const outside = realpathSync(tempRoot());
+        const outside = realpathSync.native(tempRoot());
         const root = join(outside, 'app');
         mkdirSync(join(root, 'src'), { recursive: true });
         writeFileSync(join(root, 'package.json'), '{"name":"app","private":true}\n');
@@ -406,7 +406,7 @@ describe('csszyx next-watch command', () => {
         // One delete is two things here: an input of the levels gone and a
         // source of classes gone. Reading the levels again must not stand in
         // for reaping the source's shard.
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         writeFileSync(join(root, 'globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 2 }} />;');
@@ -442,7 +442,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('rewrites the merge registration when a stylesheet drops a theme token', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         const stylesheet = join(root, 'app/globals.css');
@@ -478,12 +478,13 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('warns and keeps watching when the merge table cannot be written', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
         writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
-        // A directory where the file goes: the rename that writes it fails.
+        // A directory where the file goes: the rename that writes it fails,
+        // with EISDIR on POSIX and EPERM on Windows.
         mkdirSync(join(root, '.csszyx/merge-registration.mjs/keep'), { recursive: true });
         const warnings = captureWarnings();
         const session = await startNextWatch(
@@ -492,7 +493,7 @@ describe('csszyx next-watch command', () => {
         );
         try {
             expect(warnings[0]).toMatch(
-                /^\u26a0 \[csszyx\] could not write \.csszyx\/merge-registration\.mjs: EISDIR: .*\n {2}note: the safelist is written; until the file can be written, `szcn` under Turbopack and jest removes only exact repeats, and a Turbopack build keeps every key of an sz object rather than merging one a later key covers\.$/,
+                /^\u26a0 \[csszyx\] could not write \.csszyx\/merge-registration\.mjs: (?:EISDIR|EPERM): .*\n {2}note: the safelist is written; until the file can be written, `szcn` under Turbopack and jest removes only exact repeats, and a Turbopack build keeps every key of an sz object rather than merging one a later key covers\.$/,
             );
         } finally {
             await session.close();
@@ -500,7 +501,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('reports a stylesheet edit that stops the facts, and keeps watching', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
@@ -539,7 +540,7 @@ describe('csszyx next-watch command', () => {
     }, 60_000);
 
     it('replaces the build note of a prefix disagreement with its own, above `docs:`', async () => {
-        const root = realpathSync(tempRoot());
+        const root = realpathSync.native(tempRoot());
         linkTailwind(root);
         mkdirSync(join(root, 'app'), { recursive: true });
         writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
