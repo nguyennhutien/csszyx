@@ -213,7 +213,7 @@ pub fn lower_static_sz_object_with_class_prefix(
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
-    if super::merge::collecting() {
+    if super::merge::recording_groups() {
         return lower_static_sz_object_recorded(object);
     }
     let mut classes = Vec::with_capacity(object.properties.len());
@@ -1241,13 +1241,20 @@ pub(crate) struct GlobalKeywordSettlement<'a> {
 /// Settle the stand-alone keywords of one object level; see
 /// [`GlobalKeywordSettlement`].
 pub(crate) fn settle_global_keywords(object: &StaticSzObject) -> GlobalKeywordSettlement<'_> {
+    settle_global_keyword_properties(&object.properties)
+}
+
+/// [`settle_global_keywords`] over one level's properties, for a caller that
+/// holds them outside an object.
+pub(crate) fn settle_global_keyword_properties(
+    properties: &[StaticSzProperty],
+) -> GlobalKeywordSettlement<'_> {
     let mut settlement = GlobalKeywordSettlement {
         skipped: Vec::new(),
         replaced: Vec::new(),
     };
     // Runs on every object level; almost none holds a stand-alone keyword, so
     // answer those without allocating.
-    let properties = &object.properties;
     if !properties
         .iter()
         .any(|property| super::generated::tables::global_keyword_groups(&property.key).is_some())

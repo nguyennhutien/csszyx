@@ -10,7 +10,7 @@
 //!
 //! No table, no change: a lane that cannot build one emits what it always did.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -84,6 +84,9 @@ thread_local! {
     static MERGE_GROUPS: RefCell<Option<MergeLists>> = const { RefCell::new(None) };
     /// The classes the table removed while the current scope lives.
     static MERGE_REMOVED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// Whether lowering records no group while a pass collects: set while the
+    /// engine rewrites objects its class report already recorded.
+    static GROUPS_PAUSED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// The merge table for every static object lowered while it lives.
@@ -154,8 +157,9 @@ impl MergeGroupScope {
     /// The lists collected, each once, restoring what was collected before
     /// the scope.
     ///
-    /// The engine lowers one object on more than one path — the rewrite and
-    /// the class report — so a list arrives once per path.
+    /// The parser lowers some objects while it reads them and the class report
+    /// lowers them again, so a list can arrive twice; the rewrite records
+    /// nothing ([`GroupsPaused`]).
     pub fn finish(mut self) -> MergeLists {
         self.finished = true;
         let previous = self.previous.take();
@@ -163,26 +167,78 @@ impl MergeGroupScope {
             .with(|cell| cell.replace(previous))
             .unwrap_or_default();
         MergeLists {
-            groups: first_of_each(lists.groups),
-            single_class_groups: first_of_each(lists.single_class_groups),
-            overrides: first_of_each(lists.overrides),
+            groups: first_of_each(lists.groups, group_place),
+            single_class_groups: first_of_each(lists.single_class_groups, group_place),
+            overrides: first_of_each(lists.overrides, |pair| u64::from(pair.start)),
         }
     }
 }
 
-/// The first of each distinct item, in order, compared in place rather than
-/// through a copy of each: a group holds every class of its object, and the
-/// copy cost more than the lowering that produced it.
-fn first_of_each<T: Eq + std::hash::Hash>(items: Vec<T>) -> Vec<T> {
+/// The first of each distinct item, in order.
+///
+/// Items are bucketed by `place` — where they are written, which two copies of
+/// one item share — and compared whole only inside a bucket: a group holds
+/// every class and key of its object, and hashing those cost more than the
+/// lowering that produced them. Two different items in one bucket both
+/// survive.
+///
+/// `O(n)` expected time for `n` items in distinct places; items sharing a
+/// place are compared pairwise, `O(k²)` for `k` of them.
+fn first_of_each<T: Eq>(items: Vec<T>, place: impl Fn(&T) -> u64) -> Vec<T> {
     let first: Vec<bool> = {
-        let mut seen = HashSet::with_capacity(items.len());
-        items.iter().map(|item| seen.insert(item)).collect()
+        let mut seen: HashMap<u64, Vec<usize>> = HashMap::with_capacity(items.len());
+        (0..items.len())
+            .map(|index| {
+                let bucket = seen.entry(place(&items[index])).or_default();
+                let fresh = bucket.iter().all(|&held| items[held] != items[index]);
+                if fresh {
+                    bucket.push(index);
+                }
+                fresh
+            })
+            .collect()
     };
     items
         .into_iter()
         .zip(first)
         .filter_map(|(item, first)| first.then_some(item))
         .collect()
+}
+
+/// Where a group is written: a hash of its keys' offsets.
+fn group_place(group: &MergeGroup) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    group.key_starts.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// No lowering records a group while it lives, though a pass collects.
+///
+/// For a lowering that repeats one already recorded: the engine rewrites the
+/// objects its class report lowered from the same IR, and recording them a
+/// second time cost as much as the first, only to be dropped again by
+/// [`MergeGroupScope::finish`]. Class-name pairs ([`apply_over_active`]) are
+/// still recorded: only the rewrite sees them. Dropping it restores the
+/// previous state even when the rewrite unwinds.
+#[must_use = "groups are paused only while the scope is alive"]
+pub struct GroupsPaused {
+    previous: bool,
+}
+
+impl GroupsPaused {
+    /// Pause group recording on this thread until the scope drops.
+    pub fn enter() -> Self {
+        Self {
+            previous: GROUPS_PAUSED.with(|cell| cell.replace(true)),
+        }
+    }
+}
+
+impl Drop for GroupsPaused {
+    fn drop(&mut self) {
+        GROUPS_PAUSED.with(|cell| cell.set(self.previous));
+    }
 }
 
 impl Drop for MergeGroupScope {
@@ -295,6 +351,12 @@ pub(crate) fn collecting() -> bool {
     MERGE_GROUPS.with(|lists| lists.borrow().is_some())
 }
 
+/// Whether a lowering records its object: a pass is collecting and no
+/// [`GroupsPaused`] is alive.
+pub(crate) fn recording_groups() -> bool {
+    !GROUPS_PAUSED.with(Cell::get) && collecting()
+}
+
 /// Record one object's classes for the plugin to check, when a pass is
 /// collecting them.
 ///
@@ -379,7 +441,8 @@ pub(crate) fn apply_over_active(start: u32, base: Vec<String>, over: &[String]) 
 mod tests {
     use super::{
         apply, apply_active, apply_over, apply_over_active, collecting, decode, record_group,
-        MergeGroup, MergeGroupScope, MergeOverride, MergeTableScope,
+        recording_groups, GroupsPaused, MergeGroup, MergeGroupScope, MergeOverride,
+        MergeTableScope,
     };
 
     /// A group at offset 0 whose keys are its classes.
@@ -481,6 +544,41 @@ mod tests {
         };
         record_group(elsewhere.clone());
         assert_eq!(groups.finish().groups, [group(&["pb-2", "p-4"]), elsewhere]);
+    }
+
+    #[test]
+    fn two_groups_at_one_place_both_survive_once() {
+        let groups = MergeGroupScope::enter(true);
+        record_group(group(&["pb-2", "p-4"]));
+        record_group(group(&["m-2", "p-4"]));
+        record_group(group(&["pb-2", "p-4"]));
+        assert_eq!(
+            groups.finish().groups,
+            [group(&["pb-2", "p-4"]), group(&["m-2", "p-4"])]
+        );
+    }
+
+    #[test]
+    fn a_paused_scope_stops_lowering_from_recording_until_it_drops() {
+        let groups = MergeGroupScope::enter(true);
+        assert!(recording_groups());
+        {
+            let _paused = GroupsPaused::enter();
+            assert!(collecting());
+            assert!(!recording_groups());
+            {
+                let _nested = GroupsPaused::enter();
+            }
+            assert!(!recording_groups(), "a nested pause restores the outer one");
+            // Class-name pairs are recorded through a pause.
+            let _ = apply_over_active(3, classes(&["pb-2"]), &classes(&["p-4"]));
+        }
+        assert!(recording_groups());
+        assert_eq!(groups.finish().overrides.len(), 1);
+        assert!(
+            !recording_groups(),
+            "nothing records outside a collecting pass"
+        );
     }
 
     #[test]

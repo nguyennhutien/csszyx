@@ -5547,18 +5547,21 @@ fn merge_static_properties_deep(
 }
 
 /// Leave out the properties one object level's stand-alone keywords settle away.
+///
+/// Called once per array layer on everything merged so far: a level with
+/// nothing to settle, almost every one, is left where it is rather than moved
+/// out and collected back.
 fn drop_settled_properties(properties: &mut Vec<StaticSzProperty>) {
-    let object = StaticSzObject {
-        properties: std::mem::take(properties),
-    };
-    let skipped = super::lower::settle_global_keywords(&object).skipped;
-    *properties = object
-        .properties
-        .into_iter()
-        .enumerate()
-        .filter(|(index, _)| !skipped.contains(index))
-        .map(|(_, property)| property)
-        .collect();
+    let skipped = super::lower::settle_global_keyword_properties(properties).skipped;
+    if skipped.is_empty() {
+        return;
+    }
+    let mut index = 0;
+    properties.retain(|_| {
+        let kept = !skipped.contains(&index);
+        index += 1;
+        kept
+    });
 }
 
 /// Merge one later property into the merged level, at the place the key
@@ -5942,6 +5945,36 @@ mod tests {
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
+
+    /// One level merged so far, as `drop_settled_properties` reads it: a
+    /// stand-alone keyword a later group of its family replaces goes, every
+    /// other property stays in place, and a level with nothing to settle is
+    /// left as it was.
+    #[test]
+    fn a_merged_level_drops_only_what_its_keywords_settle() {
+        use super::{StaticSzProperty, StaticSzValue, TextSpan};
+        let level = |keys: &[&str]| -> Vec<StaticSzProperty> {
+            keys.iter()
+                .map(|key| StaticSzProperty {
+                    key: (*key).to_string(),
+                    span: TextSpan { start: 0, end: 1 },
+                    value: StaticSzValue::String("x".to_string()),
+                })
+                .collect()
+        };
+        let keys = |properties: &[StaticSzProperty]| {
+            properties
+                .iter()
+                .map(|property| property.key.clone())
+                .collect::<Vec<_>>()
+        };
+        let mut settled = level(&["p", "touch", "m", "touchPanX", "touch"]);
+        super::drop_settled_properties(&mut settled);
+        assert_eq!(keys(&settled), ["p", "m", "touchPanX"]);
+        let mut plain = level(&["p", "m", "px"]);
+        super::drop_settled_properties(&mut plain);
+        assert_eq!(plain, level(&["p", "m", "px"]));
+    }
 
     /// A syntax error the parser recovers from still marks the file: the
     /// summary line is what the plugin turns into a build warning, and a
