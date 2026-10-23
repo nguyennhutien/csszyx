@@ -668,12 +668,22 @@ export const SIZE_BUDGETS = [
     // messages. Minifying these entries (about −5.3 / −6.1 KB) was measured
     // and not taken: most build tools ship readable Node code, and a
     // minified stack trace names `I` where it named `runWasmBatch`.
+    //
+    // Raised 2026-10-23 from 28,500 / 31,550, measured 28,641 / 31,671
+    // (+442 / +437 against 28,199 / 31,234): the byte-offset locator in
+    // `engine-spans.ts` reads only the lines holding non-ASCII text, which
+    // takes 42% off placing positions across this repository's 382 source
+    // files and 63% off the index memory a cached result holds. One shared
+    // walk for indexing and lookup, and one table builder for ASCII and
+    // non-ASCII sources, saved 187 bytes; the rest is the line table and the
+    // marks that keep a lookup on a long minified line bounded. The built
+    // chunk carries no comments, so this is code. Raised on the user's call.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 28_500,
+        maxGzipBytes: 28_950,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -681,7 +691,7 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 31_550,
+        maxGzipBytes: 31_950,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

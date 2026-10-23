@@ -9,7 +9,7 @@ use string_wizard::{MagicString, UpdateOptions};
 use super::{
     css_var_planner::apply_css_variable_mangling,
     lower::{lower_static_sz_object, lower_sz_attribute_classes},
-    recovery::{generate_inline_recovery_token, offset_to_line_column},
+    recovery::{generate_inline_recovery_token, SourceLines},
     DynamicCssVarCategory, DynamicCssVarIr, SourceIr,
 };
 
@@ -76,6 +76,9 @@ pub fn rewrite_static_sz_attributes_with_options(
         rewrote = true;
     }
 
+    // Built on the first token, as in the engine's token list: each element
+    // is placed by a lookup, not by scanning the source before it.
+    let mut lines = SourceLines::new(source);
     for element in &ir.jsx_opening_elements {
         if let Some(recovery_index) = element.recovery_attribute_index {
             let recovery = &ir.recovery_attributes[recovery_index];
@@ -83,8 +86,7 @@ pub fn rewrite_static_sz_attributes_with_options(
             rewrote = true;
             if !element.has_recovery_token_attribute {
                 if let Some(last_attribute_end) = element.last_attribute_end {
-                    let (line, column) =
-                        offset_to_line_column(source, recovery.attribute_span.start);
+                    let (line, column) = lines.line_column(recovery.attribute_span.start);
                     let token = generate_inline_recovery_token(
                         filename,
                         line,

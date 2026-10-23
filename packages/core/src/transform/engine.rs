@@ -11,7 +11,7 @@ use super::{
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
     parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
-    recovery::{generate_inline_recovery_token, offset_to_line_column},
+    recovery::{generate_inline_recovery_token, SourceLines},
     rewrite::rewrite_static_sz_attributes,
     DroppedKeyReason, DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile,
     TransformMetadata, TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -521,13 +521,14 @@ fn transform_static_classes_with_options(
 }
 
 fn recovery_tokens(file: &TransformFile, ir: &super::SourceIr) -> Vec<RecoveryToken> {
+    let mut lines = SourceLines::new(&file.source);
     ir.jsx_opening_elements
         .iter()
         .filter(|element| !element.has_recovery_token_attribute)
         .filter_map(|element| {
             let recovery_index = element.recovery_attribute_index?;
             let recovery = &ir.recovery_attributes[recovery_index];
-            let (line, column) = offset_to_line_column(&file.source, recovery.attribute_span.start);
+            let (line, column) = lines.line_column(recovery.attribute_span.start);
             let token =
                 generate_inline_recovery_token(&file.filename, line, column, &element.element_name);
 
@@ -1500,11 +1501,12 @@ mod tests {
 
     /// The 1-based line and column of every issue, in order.
     fn positions(result: &TransformResult, source: &str) -> Vec<(u32, u32)> {
+        let mut lines = super::SourceLines::new(source);
         result
             .issues
             .iter()
             .map(|issue| {
-                let (line, column) = super::offset_to_line_column(source, issue.start);
+                let (line, column) = lines.line_column(issue.start);
                 (line, column + 1)
             })
             .collect()
@@ -1529,7 +1531,7 @@ mod tests {
             .zip(&result.issues)
             .filter(|(line, _)| line.contains(needle))
             .map(|(text, issue)| {
-                let (line, column) = super::offset_to_line_column(source, issue.start);
+                let (line, column) = super::SourceLines::new(source).line_column(issue.start);
                 (text, line, column + 1)
             })
             .collect()
@@ -1558,7 +1560,9 @@ mod tests {
             let result = transform_static_classes(&file, 0, std::time::Instant::now());
             assert_eq!(lines(&result).len(), 1, "{defect}: {:?}", lines(&result));
             assert_eq!(
-                super::offset_to_line_column(&file.source, result.issues[0].start).0,
+                super::SourceLines::new(&file.source)
+                    .line_column(result.issues[0].start)
+                    .0,
                 1
             );
             let parsed = super::super::parser::parse_source_shell(&file);

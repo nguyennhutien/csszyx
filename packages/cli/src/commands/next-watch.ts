@@ -381,6 +381,10 @@ export async function startNextWatch(
         DELIVERY_PROBE_NAME,
     );
 
+    // Set by `close()`. A platform watcher can still deliver an event after it
+    // was asked to stop, and the work it would start would outlive the
+    // session: read a project already gone, and print into whatever ran next.
+    let closed = false;
     let factsWrites: Promise<void> = Promise.resolve();
     // A stylesheet edit can change the prefix. Rewriting the facts file re-runs
     // the loader for every module that depends on it. An edit that leaves the
@@ -413,6 +417,7 @@ export async function startNextWatch(
         });
     };
     fsWatcher.on('all', (event, filePath) => {
+        if (closed) return;
         // The platform saw a change and could not say where, so anything may
         // have changed: the stylesheets are read again and every shard is
         // reconciled against the disk.
@@ -483,7 +488,6 @@ export async function startNextWatch(
     }, dependencies.sourceSweepMs ?? SOURCE_SWEEP_MS);
     sweep.unref();
 
-    let closed = false;
     return {
         root,
         sourcePattern: pattern,
@@ -496,8 +500,9 @@ export async function startNextWatch(
             }
             closed = true;
             clearInterval(sweep);
-            await factsWrites;
+            // The watcher first, so no event queues a step behind the wait.
             await fsWatcher.close();
+            await factsWrites;
             controller.close();
         },
     };
