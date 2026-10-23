@@ -491,9 +491,11 @@ describe('csszyx next-watch command', () => {
         const late: NextWatchFactory = (paths, options) => {
             const watcher = nextWatchFactoryFor()(paths, options);
             const close = watcher.close.bind(watcher);
+            // Delivered as the session closes, while its listeners are still
+            // attached: some watchers drop them on close, some deliver after.
             watcher.close = async () => {
-                await close();
                 watcher.emit('all', 'change', stylesheet);
+                await close();
             };
             return watcher;
         };
