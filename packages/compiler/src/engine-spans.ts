@@ -103,88 +103,180 @@ function utf8Length(code: number): number {
     return 3;
 }
 
-/** Bytes between two marks inside one line, at least. */
+/** Bytes between two marks inside one long line, at least. */
 const MARK_STRIDE = 64;
+
+/** UTF-16 units from which a line holding non-ASCII text gets marks of its own. */
+const LONG_LINE = 1024;
+
+/**
+ * Any character whose UTF-8 bytes and UTF-16 units differ in number. A
+ * search for it skips the ASCII text between two such characters without a
+ * call per character, which in source code is nearly all of it.
+ */
+const NON_ASCII = /[\u0080-\uffff]/g;
+
+/** A source's lines, built on the first position asked for. */
+interface LineTable {
+    /** The UTF-16 index each line starts at. */
+    units: number[];
+    /** The byte offset each line starts at: `units` itself for an ASCII source. */
+    bytes: number[];
+    /** 1 for a line holding non-ASCII text, whose columns need a walk. */
+    wide: Uint8Array;
+    /** Marks inside long non-ASCII lines: byte offset and UTF-16 index of each. */
+    markBytes: number[];
+    markUnits: number[];
+    /** The source's length in bytes. */
+    total: number;
+}
+
+/** Where {@link walk} stopped: a byte offset and the UTF-16 index at it. */
+const cursor = { byte: 0, unit: 0 };
+
+/**
+ * The last index whose value is at or before `value`.
+ *
+ * @param sorted - Ascending numbers.
+ * @param value - The value.
+ * @returns Its index; 0 when none is.
+ */
+function lastAtOrBefore(sorted: readonly number[], value: number): number {
+    let low = 0;
+    let high = sorted.length - 1;
+    while (low < high) {
+        const middle = (low + high + 1) >> 1;
+        if ((sorted[middle] as number) <= value) low = middle;
+        else high = middle - 1;
+    }
+    return low;
+}
+
+/**
+ * Walk {@link cursor} a character at a time until it reaches `end` units or
+ * `offset` bytes, adding a mark to `table` every {@link MARK_STRIDE} bytes
+ * when `long`. Stops at the first character boundary at or after `offset`.
+ *
+ * @param source - The text.
+ * @param table - The table marks go to.
+ * @param end - The UTF-16 index to stop at.
+ * @param offset - The byte offset to stop at.
+ * @param long - Whether to mark.
+ */
+function walk(source: string, table: LineTable, end: number, offset: number, long: boolean): void {
+    let { byte, unit } = cursor;
+    let next = byte + MARK_STRIDE;
+    while (unit < end && byte < offset) {
+        // A surrogate pair is one character: step over both halves.
+        const code = source.codePointAt(unit) as number;
+        if (code > LAST_SINGLE_UNIT) {
+            byte += 4;
+            unit += 2;
+        } else {
+            byte += utf8Length(code);
+            unit += 1;
+        }
+        if (long && byte >= next) {
+            table.markBytes.push(byte);
+            table.markUnits.push(unit);
+            next = byte + MARK_STRIDE;
+        }
+    }
+    cursor.byte = byte;
+    cursor.unit = unit;
+}
+
+/**
+ * Each line's start in units and bytes.
+ *
+ * Lines are found by searching for `\n`, which V8 runs as `memchr`. Every
+ * line before the next non-ASCII character is ASCII and is placed by adding
+ * the bytes the lines before it gained; only a line holding one is read,
+ * once, then the search resumes after it. Source code holds a non-ASCII
+ * character in under one place in a thousand, so most lines are never read,
+ * and an ASCII source reads none; prose in another script reads nearly every
+ * line, with one search per line on top.
+ *
+ * @param source - The text.
+ * @returns The table.
+ */
+function indexLines(source: string): LineTable {
+    const units = [0];
+    for (let at = source.indexOf('\n'); at !== -1; at = source.indexOf('\n', at + 1)) {
+        units.push(at + 1);
+    }
+    const table: LineTable = {
+        units,
+        bytes: units,
+        wide: new Uint8Array(0),
+        markBytes: [],
+        markUnits: [],
+        total: source.length,
+    };
+    NON_ASCII.lastIndex = 0;
+    let wide = NON_ASCII.exec(source)?.index ?? -1;
+    if (wide === -1) return table;
+    table.bytes = new Array<number>(units.length);
+    table.wide = new Uint8Array(units.length);
+    // Bytes beyond one per unit in the lines read so far.
+    let extra = 0;
+    for (let line = 0; line < units.length; line++) {
+        const start = units[line] as number;
+        const end = line + 1 < units.length ? (units[line + 1] as number) : source.length;
+        table.bytes[line] = start + extra;
+        if (wide === -1 || wide >= end) continue;
+        table.wide[line] = 1;
+        // The text before the line's first non-ASCII character is a byte a unit.
+        cursor.byte = wide + extra;
+        cursor.unit = wide;
+        walk(source, table, end, Number.POSITIVE_INFINITY, end - start > LONG_LINE);
+        extra = cursor.byte - end;
+        NON_ASCII.lastIndex = end;
+        wide = NON_ASCII.exec(source)?.index ?? -1;
+    }
+    table.total = source.length + extra;
+    return table;
+}
 
 /**
  * A locator for one source text, building its index on the first call.
  *
- * The index marks each line start and, within a line, one character boundary
- * every {@link MARK_STRIDE} bytes or so, with the line each mark is on. A
- * lookup finds the last mark at or before the offset by binary search and
- * walks from there, so it reads at most a stride of text: `O(n)` once for
- * the index, then `O(log n)` per lookup, however long the line. A minified
- * module on one line with thousands of diagnostics walked that line up to
- * each of them when a lookup started at the line.
+ * `n` is the source's length and `L` its line count. The index is
+ * {@link indexLines}: `O(n)` once, reading only the lines that hold
+ * non-ASCII text, the shape of rust-analyzer's `line-index` and of oxc's
+ * `Utf8ToUtf16` table. A lookup on an ASCII line is a subtraction, and on
+ * another a walk from the line start, `O(log L)` plus at most
+ * {@link LONG_LINE} units. A long line of non-ASCII text, such as a minified
+ * module, also gets a mark every {@link MARK_STRIDE} bytes, so a lookup on it
+ * walks at most a stride: thousands of diagnostics on one such line each
+ * walked the line up to them when a lookup started at the line. A source of
+ * only `\n` makes a table entry per byte, as any line table does.
  *
  * An offset past the end resolves to the end, as the engine's own clamp does;
- * one inside a character, to the character after it.
+ * one inside a character, to the character after it; a negative one, to the
+ * start.
  *
  * @param source - The module the engine was given.
  * @returns The locator.
  */
 export function createByteOffsetLocator(source: string): ByteOffsetLocator {
-    // Each mark's byte offset, UTF-16 index and line; each line's UTF-16
-    // start. Built on first use.
-    let markBytes: number[] | undefined;
-    let markUnits: number[] = [];
-    let markLines: number[] = [];
-    let lineUnits: number[] = [];
-    const build = (): number[] => {
-        const bytes = [0];
-        const units = [0];
-        const lines = [0];
-        const starts = [0];
-        let byte = 0;
-        let next = MARK_STRIDE;
-        for (let index = 0; index < source.length; ) {
-            const code = source.codePointAt(index) as number;
-            if (code > LAST_SINGLE_UNIT) {
-                byte += 4;
-                index += 2;
-            } else {
-                byte += utf8Length(code);
-                index += 1;
-            }
-            if (code === 0x0a) {
-                starts.push(index);
-            } else if (byte < next) {
-                continue;
-            }
-            bytes.push(byte);
-            units.push(index);
-            lines.push(starts.length - 1);
-            next = byte + MARK_STRIDE;
-        }
-        markUnits = units;
-        markLines = lines;
-        lineUnits = starts;
-        return bytes;
-    };
+    let table: LineTable | undefined;
     return offset => {
-        markBytes ??= build();
-        let low = 0;
-        let high = markBytes.length - 1;
-        while (low < high) {
-            const middle = (low + high + 1) >> 1;
-            if ((markBytes[middle] as number) <= offset) low = middle;
-            else high = middle - 1;
-        }
-        let byte = markBytes[low] as number;
-        let unit = markUnits[low] as number;
-        while (unit < source.length && byte < offset) {
-            // A surrogate pair is one character: step over both halves.
-            const code = source.codePointAt(unit) as number;
-            if (code > LAST_SINGLE_UNIT) {
-                byte += 4;
-                unit += 2;
-            } else {
-                byte += utf8Length(code);
-                unit += 1;
-            }
-        }
-        const line = markLines[low] as number;
-        return { line: line + 1, column: unit - (lineUnits[line] as number) + 1 };
+        table ??= indexLines(source);
+        // The engine reports no negative offset; one reads as the start.
+        const at = Math.min(Math.max(offset, 0), table.total);
+        const line = lastAtOrBefore(table.bytes, at);
+        const lineByte = table.bytes[line] as number;
+        const lineUnit = table.units[line] as number;
+        if (table.wide[line] !== 1) return { line: line + 1, column: at - lineByte + 1 };
+        // A mark past the line start and at or before the offset is on this line.
+        const mark = lastAtOrBefore(table.markBytes, at);
+        const markByte = table.markBytes[mark] ?? -1;
+        const marked = markByte > lineByte && markByte <= at;
+        cursor.byte = marked ? markByte : lineByte;
+        cursor.unit = marked ? (table.markUnits[mark] as number) : lineUnit;
+        walk(source, table, source.length, at, false);
+        return { line: line + 1, column: cursor.unit - lineUnit + 1 };
     };
 }
 

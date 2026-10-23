@@ -88,10 +88,12 @@ describe('createByteOffsetLocator', () => {
     });
 
     it('builds its index once, on the first lookup', () => {
+        // Non-ASCII text, which the index reads character by character; an
+        // ASCII source is placed without reading one.
         let reads = 0;
-        const text = new Proxy(new String('ab\ncd'), {
+        const text = new Proxy(new String('éb\ncd'), {
             get(target, property, receiver) {
-                if (property === 'codePointAt') reads++;
+                if (property === 'codePointAt' || property === 'charCodeAt') reads++;
                 const value = Reflect.get(target, property, receiver);
                 return typeof value === 'function' ? value.bind(target) : value;
             },
@@ -99,9 +101,9 @@ describe('createByteOffsetLocator', () => {
         const locate = createByteOffsetLocator(text);
 
         expect(reads).toBe(0);
-        locate(4);
+        locate(5);
         const afterFirst = reads;
-        locate(4);
+        locate(5);
 
         expect(afterFirst).toBeGreaterThan(0);
         // The second lookup only walks its own line.
@@ -221,16 +223,16 @@ describe('locateEngineSpans', () => {
 
     it('resolves the line index once for the whole file, on the first read', () => {
         let reads = 0;
-        const source = new Proxy(new String('x\ny'), {
+        const source = new Proxy(new String('é\ny'), {
             get(target, property, receiver) {
-                if (property === 'codePointAt') reads++;
+                if (property === 'codePointAt' || property === 'charCodeAt') reads++;
                 const value = Reflect.get(target, property, receiver);
                 return typeof value === 'function' ? value.bind(target) : value;
             },
         }) as unknown as string;
         const located = locateEngineSpans(source, {
-            issues: [{ code: 'unknown-key', start: 2 }],
-            mergeGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-1'] }],
+            issues: [{ code: 'unknown-key', start: 3 }],
+            mergeGroups: [{ keys: ['m'], keyStarts: [3], classes: ['m-1'] }],
             mergeOverrides: [],
         });
 
