@@ -13,12 +13,15 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { transformRust, transformWasm } from '@csszyx/compiler/engine';
 import { renderEngineDiagnostic } from '@csszyx/compiler/internal';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    type DeadClassSite,
     deadClassMessage,
+    deadClassSite,
     emittedClassSites,
     findDeadSzClasses,
     reportDeadSzClasses,
@@ -743,6 +746,15 @@ describe('asking the design system about emitted classes', () => {
 });
 
 describe('where a file emits each class', () => {
+    /**
+     * Each site as plain fields, as a finding carries it.
+     *
+     * @param sites - What {@link szClassSites} returned.
+     * @returns The entries, resolved.
+     */
+    const resolved = (sites: Map<string, DeadClassSite>) =>
+        [...sites].map(([className, site]) => [className, deadClassSite(site)]);
+
     it('places a class at the key of the first object that emits it', () => {
         const group = (keys: string[], classes: string[], line: number) => ({
             keys,
@@ -755,7 +767,7 @@ describe('where a file emits each class', () => {
                 group(['break'], ['break-bogus'], 9),
             ],
         });
-        expect([...sites]).toEqual([
+        expect(resolved(sites)).toEqual([
             ['break-bogus', { file: 'src/A.tsx', line: 2, column: 1, key: 'break' }],
             ['p-4', { file: 'src/A.tsx', line: 2, column: 2, key: 'p' }],
             ['only-one', { file: 'src/A.tsx' }],
@@ -782,7 +794,7 @@ describe('where a file emits each class', () => {
                 },
             ],
         });
-        expect([...sites]).toEqual([
+        expect(resolved(sites)).toEqual([
             ['justify-safe-center', { file: 'src/A.tsx', line: 7, column: 4, key: 'justify' }],
             ['p-4', { file: 'src/A.tsx', line: 3, column: 5, key: 'p' }],
         ]);
@@ -824,9 +836,48 @@ describe('where a file emits each class', () => {
     });
 
     it('names the file alone for a result an older cache entry wrote without groups', () => {
-        expect([...szClassSites('src/A.tsx', ['p-4'], {})]).toEqual([
+        expect(resolved(szClassSites('src/A.tsx', ['p-4'], {}))).toEqual([
             ['p-4', { file: 'src/A.tsx' }],
         ]);
+    });
+
+    it.each([
+        ['rust', transformRust],
+        ['wasm', transformWasm],
+    ])('places an engine result by its key offsets, as by its positions (%s)', (_lane, run) => {
+        // `p-4` is written three times, first in a one-class object, though
+        // the merge groups are read first; `m-2` once, after a character of two
+        // UTF-8 bytes on its line, so an offset is not a column.
+        const source = [
+            'export const A = () => <><i sz={{ p: 4 }} /><b sz={{ px: 2, p: 4 }} /></>;',
+            'export const B = () => <><i sz={{ m: 1, p: 4 }} />é<b sz={{ m: 2, mt: 1 }} /></>;',
+        ].join('\n');
+        const result = run(source, '/repo/src/App.tsx');
+        const classes = [...result.classes];
+        const sites = szClassSites('src/App.tsx', classes, result);
+        const byPosition = emittedClassSites({
+            mergeGroups: JSON.parse(JSON.stringify(result.mergeGroups)),
+            singleClassGroups: JSON.parse(JSON.stringify(result.singleClassGroups)),
+        });
+        const [first, second] = source.split('\n') as [string, string];
+        expect(deadClassSite(sites.get('p-4') as DeadClassSite)).toEqual({
+            file: 'src/App.tsx',
+            line: 1,
+            column: first.indexOf('p: 4') + 1,
+            key: 'p',
+        });
+        expect(deadClassSite(sites.get('m-2') as DeadClassSite)).toEqual({
+            file: 'src/App.tsx',
+            line: 2,
+            column: second.indexOf('m: 2') + 1,
+            key: 'm',
+        });
+        // Every class lands where the plain positions would put it.
+        for (const className of classes) {
+            const { file: _file, ...site } = deadClassSite(sites.get(className) as DeadClassSite);
+            expect(site, className).toEqual(byPosition.get(className) ?? {});
+        }
+        expect(emittedClassSites(result)).toEqual(byPosition);
     });
 });
 

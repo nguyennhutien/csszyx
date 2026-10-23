@@ -173,6 +173,18 @@ impl Drop for ClassPrefixScope {
     }
 }
 
+/// Each lowered class with the active prefix written before it, the
+/// thread-local read once for the whole list.
+fn with_class_prefix_all(classes: Vec<String>) -> Vec<String> {
+    CLASS_PREFIX.with(|cell| match cell.borrow().as_deref() {
+        Some(prefix) => classes
+            .into_iter()
+            .map(|class_name| format!("{prefix}:{class_name}"))
+            .collect(),
+        None => classes,
+    })
+}
+
 /// A lowered class with the active prefix written before it.
 fn with_class_prefix(class_name: String) -> String {
     CLASS_PREFIX.with(|cell| match cell.borrow().as_deref() {
@@ -213,7 +225,7 @@ pub fn lower_static_sz_object_with_class_prefix(
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
-    if super::merge::collecting() {
+    if super::merge::recording_groups() {
         return lower_static_sz_object_recorded(object);
     }
     let mut classes = Vec::with_capacity(object.properties.len());
@@ -225,12 +237,8 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
 fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
     // Merged last: the table names classes as they are emitted, prefix
     // included, and the text-size/leading pair is one class by then.
-    super::merge::apply_active(
-        merge_text_size_and_leading(classes)
-            .into_iter()
-            .map(with_class_prefix)
-            .collect(),
-    )
+    let classes = merge_text_size_and_leading(classes);
+    super::merge::apply_active(with_class_prefix_all(classes))
 }
 
 /// [`lower_static_sz_object`] on a pass that collects what a merge would
@@ -241,32 +249,36 @@ fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
 /// property marks where its classes start, and the marks are read only here.
 fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
     let mut classes = Vec::with_capacity(object.properties.len());
-    let mut marks: Vec<(usize, usize)> = Vec::new();
+    // The property behind each class, index-parallel to `classes`: each class
+    // belongs to the last property that started at or before it.
+    let mut owners: Vec<&StaticSzProperty> = Vec::with_capacity(object.properties.len());
+    let mut current: Option<usize> = None;
     lower_object_into_marked(object, "", &mut classes, &mut |index, len| {
-        marks.push((index, len));
+        if let Some(owner) = current {
+            owners.resize(len, &object.properties[owner]);
+        }
+        current = Some(index);
     });
     // A one-class object merges with nothing but is recorded all the same:
     // the group is where its key and offset travel to a dead-class report.
     if classes.is_empty() {
         return finish_lowered_classes(classes);
     }
-    // Each class belongs to the last property that started at or before it.
-    let mut owners = Vec::with_capacity(classes.len());
-    for (position, &(index, start)) in marks.iter().enumerate() {
-        let end = marks.get(position + 1).map_or(classes.len(), |next| next.1);
-        owners.extend((start..end).map(|_| &object.properties[index]));
+    if let Some(owner) = current {
+        owners.resize(classes.len(), &object.properties[owner]);
     }
     let consumed = fuse_text_size_and_leading(&mut classes);
     let mut keys = Vec::with_capacity(classes.len());
     let mut key_starts = Vec::with_capacity(classes.len());
     let mut kept = Vec::with_capacity(classes.len());
-    for ((owner, class_name), consumed) in owners.into_iter().zip(classes).zip(consumed) {
-        if !consumed {
+    for (index, (owner, class_name)) in owners.into_iter().zip(classes).enumerate() {
+        if !consumed.get(index).copied().unwrap_or(false) {
             keys.push(owner.key.clone());
             key_starts.push(owner.span.start);
-            kept.push(with_class_prefix(class_name));
+            kept.push(class_name);
         }
     }
+    let kept = with_class_prefix_all(kept);
     super::merge::record_group(super::merge::MergeGroup {
         keys,
         key_starts,
@@ -1150,6 +1162,9 @@ fn is_dead_spacing_step(key: &str, value: f64) -> bool {
 
 fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
     let consumed = fuse_text_size_and_leading(&mut classes);
+    if consumed.is_empty() {
+        return classes;
+    }
     classes
         .into_iter()
         .zip(consumed)
@@ -1160,14 +1175,17 @@ fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
 /// Fold each leading class into the text size of the same variant, in place,
 /// and say which leading classes were folded so the caller drops them.
 fn fuse_text_size_and_leading(classes: &mut [String]) -> Vec<bool> {
-    let mut consumed = vec![false; classes.len()];
+    // Empty until a pair fuses: almost no object holds one, and the caller
+    // reads a missing entry as not consumed.
+    let mut consumed: Vec<bool> = Vec::new();
 
     for text_index in 0..classes.len() {
         let Some((text_prefix, text_size)) = text_size_class_parts(&classes[text_index]) else {
             continue;
         };
         for leading_index in 0..classes.len() {
-            if consumed[leading_index] || leading_index == text_index {
+            // The text class itself never reads as a leading one.
+            if consumed.get(leading_index).copied().unwrap_or(false) {
                 continue;
             }
             let Some((leading_prefix, leading_value)) =
@@ -1179,6 +1197,9 @@ fn fuse_text_size_and_leading(classes: &mut [String]) -> Vec<bool> {
                 continue;
             }
             classes[text_index] = format!("{text_prefix}text-{text_size}/{leading_value}");
+            if consumed.is_empty() {
+                consumed = vec![false; classes.len()];
+            }
             consumed[leading_index] = true;
             break;
         }
@@ -1241,13 +1262,20 @@ pub(crate) struct GlobalKeywordSettlement<'a> {
 /// Settle the stand-alone keywords of one object level; see
 /// [`GlobalKeywordSettlement`].
 pub(crate) fn settle_global_keywords(object: &StaticSzObject) -> GlobalKeywordSettlement<'_> {
+    settle_global_keyword_properties(&object.properties)
+}
+
+/// [`settle_global_keywords`] over one level's properties, for a caller that
+/// holds them outside an object.
+pub(crate) fn settle_global_keyword_properties(
+    properties: &[StaticSzProperty],
+) -> GlobalKeywordSettlement<'_> {
     let mut settlement = GlobalKeywordSettlement {
         skipped: Vec::new(),
         replaced: Vec::new(),
     };
     // Runs on every object level; almost none holds a stand-alone keyword, so
     // answer those without allocating.
-    let properties = &object.properties;
     if !properties
         .iter()
         .any(|property| super::generated::tables::global_keyword_groups(&property.key).is_some())
@@ -3109,6 +3137,7 @@ mod tests {
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
+    use super::ClassPrefixScope;
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -3116,6 +3145,8 @@ mod tests {
         is_removed_sz_key, is_tailwind_build_function, is_unsigned_decimal,
         lower_source_ir_classes, lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
+    use crate::transform::merge::{GroupsPaused, MergeGroup, MergeGroupScope};
+    use crate::transform::test_rng::Rng;
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
         TextSpan,
@@ -5637,5 +5668,114 @@ mod tests {
             .map(|(key, canonical, value, _)| (key.as_str(), *canonical, *value))
             .collect();
         assert_eq!(hits, [("flex", "display", "flex")]);
+    }
+
+    /// What the recorded lowering records, read the plain way: a mark per
+    /// lowered property, each class owned by the last property marked at or
+    /// before it, a leading class folded into its text size dropped with its
+    /// key, and the prefix on every kept class.
+    fn recorded_by_marks(object: &StaticSzObject) -> (Vec<String>, Option<MergeGroup>) {
+        let mut classes = Vec::new();
+        let mut marks: Vec<(usize, usize)> = Vec::new();
+        super::lower_object_into_marked(object, "", &mut classes, &mut |index, len| {
+            marks.push((index, len));
+        });
+        if classes.is_empty() {
+            return (Vec::new(), None);
+        }
+        let mut owners = Vec::new();
+        for (position, &(index, start)) in marks.iter().enumerate() {
+            let end = marks.get(position + 1).map_or(classes.len(), |next| next.1);
+            owners.extend((start..end).map(|_| &object.properties[index]));
+        }
+        let consumed = super::fuse_text_size_and_leading(&mut classes);
+        let mut group = MergeGroup {
+            keys: Vec::new(),
+            key_starts: Vec::new(),
+            classes: Vec::new(),
+        };
+        for (index, (owner, class_name)) in owners.into_iter().zip(classes).enumerate() {
+            if !consumed.get(index).copied().unwrap_or(false) {
+                group.keys.push(owner.key.clone());
+                group.key_starts.push(owner.span.start);
+                group.classes.push(super::with_class_prefix(class_name));
+            }
+        }
+        (group.classes.clone(), Some(group))
+    }
+
+    /// A random object over keys that fold (`text` and `leading`), nest
+    /// (`hover`, `md`), are dropped (`padding`), lower to nothing
+    /// (`borderT: 'dashed'`) or reset others (`nums`).
+    fn random_object(rng: &mut Rng, depth: usize) -> StaticSzObject {
+        let leaves: [(&str, &[&str]); 9] = [
+            ("p", &["4", "8"]),
+            ("m", &["2"]),
+            ("text", &["sm", "lg", "red-500"]),
+            ("leading", &["tight", "6"]),
+            ("bg", &["red-500"]),
+            ("padding", &["4"]),
+            ("borderT", &["dashed", "2"]),
+            ("nums", &["normal"]),
+            ("numSpacing", &["tabular"]),
+        ];
+        let len = rng.below(7);
+        let mut properties = Vec::with_capacity(len);
+        for index in 0..len {
+            let start = u32::try_from(index * 7 + depth).expect("small");
+            let span = TextSpan {
+                start,
+                end: start + 3,
+            };
+            if depth < 2 && rng.below(5) == 0 {
+                properties.push(StaticSzProperty {
+                    key: (*rng.pick(&["hover", "md"])).to_string(),
+                    span,
+                    value: StaticSzValue::Object(random_object(rng, depth + 1)),
+                });
+                continue;
+            }
+            let (key, values) = *rng.pick(&leaves);
+            properties.push(StaticSzProperty {
+                key: key.to_string(),
+                span,
+                value: StaticSzValue::String((*rng.pick(values)).to_string()),
+            });
+        }
+        StaticSzObject { properties }
+    }
+
+    /// The recorded lowering records and returns what the plain reading of
+    /// its marks says, with and without a Tailwind prefix.
+    #[test]
+    fn a_recorded_object_keeps_the_key_behind_each_class() {
+        let mut rng = Rng::new(0x5eed_0a01);
+        for case in 0..3000 {
+            let object = random_object(&mut rng, 0);
+            let prefix = (case % 2 == 0).then_some("tw");
+            let _prefix = ClassPrefixScope::enter(prefix);
+            let (expected_classes, expected_group) = {
+                let scope = MergeGroupScope::enter(true);
+                let paused = GroupsPaused::enter();
+                let expected = recorded_by_marks(&object);
+                drop(paused);
+                drop(scope);
+                expected
+            };
+            let scope = MergeGroupScope::enter(true);
+            let classes = lower_static_sz_object(&object);
+            let lists = scope.finish();
+            assert_eq!(classes, expected_classes, "{object:?} {prefix:?}");
+            let recorded: Vec<MergeGroup> = lists
+                .groups
+                .into_iter()
+                .chain(lists.single_class_groups)
+                .collect();
+            assert_eq!(
+                recorded,
+                expected_group.into_iter().collect::<Vec<_>>(),
+                "{object:?}"
+            );
+        }
     }
 }

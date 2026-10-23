@@ -118,18 +118,51 @@ pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
 /// Transform one file through fast-path triage and parser-backed static rewrite.
 pub(super) fn transform_file_with_options(
     file: &TransformFile,
+    mut options: TransformOptions,
+) -> TransformResult {
+    let table = BatchMergeTable::read(options.merge_table_json.take().as_deref());
+    transform_file_with_table(file, options, &table)
+}
+
+/// The merge table a batch was handed, read once for all of its files.
+///
+/// One table serves every file of a batch, and decoding it per file cost a
+/// parse of the whole project's table per module.
+pub(super) struct BatchMergeTable {
+    table: Option<std::sync::Arc<super::merge::MergeTable>>,
+    problem: Option<super::merge::TableProblem>,
+}
+
+impl BatchMergeTable {
+    /// Read the table's JSON, keeping why it was refused for each file to report.
+    pub(super) fn read(json: Option<&str>) -> Self {
+        match json.map(super::merge::decode) {
+            Some(Ok(table)) => Self {
+                table: Some(table),
+                problem: None,
+            },
+            Some(Err(problem)) => Self {
+                table: None,
+                problem: Some(problem),
+            },
+            None => Self {
+                table: None,
+                problem: None,
+            },
+        }
+    }
+}
+
+/// [`transform_file_with_options`] with the batch's table already read; the
+/// options' own table JSON is not read.
+pub(super) fn transform_file_with_table(
+    file: &TransformFile,
     options: TransformOptions,
+    batch_table: &BatchMergeTable,
 ) -> TransformResult {
     let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
-    let (table, table_problem) = match options
-        .merge_table_json
-        .as_deref()
-        .map(super::merge::decode)
-    {
-        Some(Ok(table)) => (Some(table), None),
-        Some(Err(problem)) => (None, Some(problem)),
-        None => (None, None),
-    };
+    let table = batch_table.table.clone();
+    let table_problem = batch_table.problem.clone();
     // A pass with a table has already been told which lists cover each other.
     let groups = super::merge::MergeGroupScope::enter(table.is_none());
     let merge_table = super::merge::MergeTableScope::enter(table);
@@ -214,7 +247,7 @@ fn transform_fast_static_ir_with_options(
     let lowered = lower_source_ir_classes(lower_ir);
     let lower_ns = elapsed_ns(lower_start);
     let rewrite_start = Instant::now();
-    let rewritten_code = rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok();
+    let rewritten_code = rewrite_reported(file, lower_ir);
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
     let mut diagnostics = unknown_property_diagnostics(lower_ir);
@@ -343,7 +376,7 @@ fn transform_static_classes_with_options(
     let rewritten_code = if has_parser_errors || parsed.ast_budget_exceeded || parsed.panicked {
         None
     } else {
-        rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok()
+        rewrite_reported(file, lower_ir)
     };
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
@@ -1384,6 +1417,17 @@ fn noop_result(file: &TransformFile) -> TransformResult {
     }
 }
 
+/// Rewrite the `sz` attributes of an IR the class report has already lowered.
+///
+/// Every object the rewrite lowers, the report lowered from the same IR and
+/// recorded for the merge lists, so the rewrite records no group a second
+/// time. The second recording cost what the first did, about 1 ms of 6.8 in
+/// the engine over 800 small modules, only for the copy to be dropped again.
+fn rewrite_reported(file: &TransformFile, lower_ir: &super::SourceIr) -> Option<String> {
+    let _recorded = super::merge::GroupsPaused::enter();
+    rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok()
+}
+
 fn elapsed_ns(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
@@ -1399,6 +1443,60 @@ mod tests {
         CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, TransformFile, TransformOptions,
         TransformProducer, TransformResult,
     };
+
+    /// Every lane of the rewrite, and the objects it lowers in each: a static
+    /// object, one beside a class name (static and dynamic), conditionals with
+    /// and without static siblings, arrays, variants, spreads, fused text and
+    /// leading, one-class objects, and one object written twice.
+    const REWRITE_SHAPES: &[&str] = &[
+        "export const A = () => <div sz={{ p: 4, mt: 1, mb: 'x' }} />;",
+        "export const A = () => <div className=\"card pb-2\" sz={{ p: 4, px: 2 }} />;",
+        "export const A = ({ c }) => <div className={c} sz={{ p: 4, m: 2 }} />;",
+        "export const A = ({ on }) => <div sz={on ? { bg: 'blue-500' } : { bg: 'red-500', ml: 2 }} />;",
+        "const B = { m: 1 };\nexport const A = ({ on }) => <div sz={{ ...B, p: 2, bg: on ? 'red-500' : 'blue-500' }} />;",
+        "export const A = ({ on }) => <b sz={[{ text: 'sm', py: 1 }, on && { py: 2 }, { m: 3 }]} />;",
+        "export const A = () => <a sz={{ m: 2, hover: { bg: 'red-500', md: { p: 8 } } }} />;",
+        "export const A = () => <a sz={{ text: 'lg', leading: 'tight', p: 1 }} />;",
+        "export const A = () => <><i sz={{ p: 1 }} /><i sz={{ p: 1 }} /><i sz={{ p: 1, m: 1 }} /></>;",
+        "export const A = ({ w }) => <div className=\"pb-2\" sz={{ p: 4, w }} />;",
+        "import { useState } from 'react';\nexport const A = ({ on }) => { const [x] = useState(0); return <div sz={{ p: 4, mt: 1, hover: { bg: 'red-500' } }}><span sz={on ? { bg: 'blue-500' } : { bg: 'red-500', ml: 2 }} /><a className=\"card\" sz={{ m: 2, mr: 3 }} /></div>; };",
+    ];
+
+    /// The rewrite records no merge group: everything it lowers, the class
+    /// report recorded from the same IR. Run unpaused here, each group it would
+    /// record is already in the transform's lists, so pausing it changes
+    /// nothing the plugin reads; the class-name pairs only it sees still are.
+    #[test]
+    fn the_rewrite_records_no_group_the_class_report_did_not() {
+        let mut checked = 0;
+        for source in REWRITE_SHAPES {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".into(),
+                source: (*source).into(),
+            };
+            let result = transform_file(&file);
+            assert!(result.metadata.transformed, "{source}");
+            let parsed = super::super::parser::parse_source_shell(&file);
+            let scope = crate::transform::merge::MergeGroupScope::enter(true);
+            let _ = rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir);
+            let rewrite = scope.finish();
+            checked += rewrite.groups.len() + rewrite.single_class_groups.len();
+            for group in &rewrite.groups {
+                assert!(result.merge_groups.contains(group), "{source}: {group:?}");
+            }
+            for group in &rewrite.single_class_groups {
+                assert!(
+                    result.single_class_groups.contains(group),
+                    "{source}: {group:?}"
+                );
+            }
+            assert_eq!(rewrite.overrides, result.merge_overrides, "{source}");
+        }
+        assert!(
+            checked >= REWRITE_SHAPES.len(),
+            "only {checked} groups checked"
+        );
+    }
 
     /// The 1-based line and column of every issue, in order.
     fn positions(result: &TransformResult, source: &str) -> Vec<(u32, u32)> {

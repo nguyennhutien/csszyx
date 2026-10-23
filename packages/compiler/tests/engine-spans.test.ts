@@ -12,7 +12,9 @@ import {
     createByteOffsetLocator,
     locateEngineSpans,
     restoreEngineSpans,
+    type SzMergeGroup,
     storeEngineSpans,
+    szMergeGroupKeyStarts,
 } from '../src/engine-spans.js';
 import { transformRust } from '../src/transform-rust.js';
 import { RUST_LANE } from './engine-parity-harness.js';
@@ -128,14 +130,14 @@ describe('a lone surrogate before a diagnostic', () => {
 });
 
 describe('locateEngineSpans', () => {
-    it('reads the args of either artifact: an object, or the JSON the native binding writes', () => {
+    it('reads the args an issue carries, and none from an issue without them', () => {
         const spans = (issue: object) =>
             locateEngineSpans('x', {
                 issues: [issue as never],
                 mergeGroups: [],
                 mergeOverrides: [],
             }).issues[0]?.args;
-        expect(spans({ code: 'unknown-key', start: 0, argsJson: '{"key":"k"}' })).toEqual({
+        expect(spans({ code: 'unknown-key', start: 0, args: { key: 'k' } })).toEqual({
             key: 'k',
         });
         expect(spans({ code: 'style-override', start: 0 })).toEqual({});
@@ -181,6 +183,40 @@ describe('locateEngineSpans', () => {
             { line: 1, column: 1 },
             { line: 2, column: 1 },
         ]);
+    });
+
+    it("builds a group's positions on the first read and hands its offsets on without them", () => {
+        const { source, reads } = (() => {
+            let count = 0;
+            const text = new Proxy(new String('x\ny'), {
+                get(target, property, receiver) {
+                    if (property === 'codePointAt') count++;
+                    const value = Reflect.get(target, property, receiver);
+                    return typeof value === 'function' ? value.bind(target) : value;
+                },
+            }) as unknown as string;
+            return { source: text, reads: () => count };
+        })();
+        const [group] = locateEngineSpans(source, {
+            issues: [],
+            mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
+            mergeOverrides: [],
+        }).mergeGroups as [SzMergeGroup];
+
+        expect(szMergeGroupKeyStarts(group)).toEqual([0, 2]);
+        expect(storeEngineSpans({ mergeGroups: [group] }).mergeGroups).toEqual([
+            { keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] },
+        ]);
+        expect(reads()).toBe(0);
+        expect(group.positions).toBe(group.positions);
+        expect(group.positions[1]?.line).toBe(2);
+        expect(storeEngineSpans({ mergeGroups: [group] }).mergeGroups?.[0]).toEqual({
+            keys: ['m', 'p'],
+            keyStarts: [0, 2],
+            classes: ['m-1', 'p-4'],
+        });
+        const plain = { keys: ['p'], positions: [{ line: 1, column: 1 }], classes: ['p-4'] };
+        expect(szMergeGroupKeyStarts(plain)).toBeUndefined();
     });
 
     it('resolves the line index once for the whole file, on the first read', () => {

@@ -10,8 +10,9 @@
 //!
 //! No table, no change: a lane that cannot build one emits what it always did.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -36,8 +37,10 @@ pub struct MergeTable {
 }
 
 /// One static object's classes, merged later over earlier, and where each
-/// came from.
+/// came from. Serialized in the spelling `@csszyx/compiler` reads
+/// (`keyStarts`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MergeGroup {
     /// The key each class was lowered from, index-parallel to `classes`: a
     /// variant key owns every class its object lowers to.
@@ -84,6 +87,9 @@ thread_local! {
     static MERGE_GROUPS: RefCell<Option<MergeLists>> = const { RefCell::new(None) };
     /// The classes the table removed while the current scope lives.
     static MERGE_REMOVED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// Whether lowering records no group while a pass collects: set while the
+    /// engine rewrites objects its class report already recorded.
+    static GROUPS_PAUSED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// The merge table for every static object lowered while it lives.
@@ -154,8 +160,9 @@ impl MergeGroupScope {
     /// The lists collected, each once, restoring what was collected before
     /// the scope.
     ///
-    /// The engine lowers one object on more than one path — the rewrite and
-    /// the class report — so a list arrives once per path.
+    /// The parser lowers some objects while it reads them and the class report
+    /// lowers them again, so a list can arrive twice; the rewrite records
+    /// nothing ([`GroupsPaused`]).
     pub fn finish(mut self) -> MergeLists {
         self.finished = true;
         let previous = self.previous.take();
@@ -163,26 +170,105 @@ impl MergeGroupScope {
             .with(|cell| cell.replace(previous))
             .unwrap_or_default();
         MergeLists {
-            groups: first_of_each(lists.groups),
-            single_class_groups: first_of_each(lists.single_class_groups),
-            overrides: first_of_each(lists.overrides),
+            groups: first_of_each(lists.groups, group_place),
+            single_class_groups: first_of_each(lists.single_class_groups, group_place),
+            overrides: first_of_each(lists.overrides, |pair| u64::from(pair.start)),
         }
     }
 }
 
-/// The first of each distinct item, in order, compared in place rather than
-/// through a copy of each: a group holds every class of its object, and the
-/// copy cost more than the lowering that produced it.
-fn first_of_each<T: Eq + std::hash::Hash>(items: Vec<T>) -> Vec<T> {
+/// The first of each distinct item, in order.
+///
+/// Items are bucketed by `place` — where they are written, which two copies of
+/// one item share — and compared whole only inside a bucket: a group holds
+/// every class and key of its object, and hashing those cost more than the
+/// lowering that produced them. Two different items in one bucket both
+/// survive.
+///
+/// `O(n)` expected time for `n` items in distinct places; items sharing a
+/// place are compared pairwise, `O(k²)` for `k` of them.
+fn first_of_each<T: Eq>(items: Vec<T>, place: impl Fn(&T) -> u64) -> Vec<T> {
     let first: Vec<bool> = {
-        let mut seen = HashSet::with_capacity(items.len());
-        items.iter().map(|item| seen.insert(item)).collect()
+        let mut seen: HashMap<u64, Vec<usize>, BuildHasherDefault<PlaceHasher>> =
+            HashMap::with_capacity_and_hasher(items.len(), BuildHasherDefault::default());
+        (0..items.len())
+            .map(|index| {
+                let bucket = seen.entry(place(&items[index])).or_default();
+                let fresh = bucket.iter().all(|&held| items[held] != items[index]);
+                if fresh {
+                    bucket.push(index);
+                }
+                fresh
+            })
+            .collect()
     };
     items
         .into_iter()
         .zip(first)
         .filter_map(|(item, first)| first.then_some(item))
         .collect()
+}
+
+/// Where a group is written: its keys' offsets, folded FNV-1a style. Any
+/// function equal groups share would do; this one costs no SipHash round.
+fn group_place(group: &MergeGroup) -> u64 {
+    group
+        .key_starts
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &start| {
+            (hash ^ u64::from(start)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+}
+
+/// The hasher of [`first_of_each`]'s buckets. A place is already a hash, or
+/// an offset, so the map spreads it with one multiply instead of a SipHash
+/// round; equality still decides what a bucket holds.
+#[derive(Default)]
+struct PlaceHasher(u64);
+
+impl Hasher for PlaceHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        // Spread a small offset into the high bits the table reads too.
+        self.0 = value.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+}
+
+/// No lowering records a group while it lives, though a pass collects.
+///
+/// For a lowering that repeats one already recorded: the engine rewrites the
+/// objects its class report lowered from the same IR, and recording them a
+/// second time cost as much as the first, only to be dropped again by
+/// [`MergeGroupScope::finish`]. Class-name pairs ([`apply_over_active`]) are
+/// still recorded: only the rewrite sees them. Dropping it restores the
+/// previous state even when the rewrite unwinds.
+#[must_use = "groups are paused only while the scope is alive"]
+pub struct GroupsPaused {
+    previous: bool,
+}
+
+impl GroupsPaused {
+    /// Pause group recording on this thread until the scope drops.
+    pub fn enter() -> Self {
+        Self {
+            previous: GROUPS_PAUSED.with(|cell| cell.replace(true)),
+        }
+    }
+}
+
+impl Drop for GroupsPaused {
+    fn drop(&mut self) {
+        GROUPS_PAUSED.with(|cell| cell.set(self.previous));
+    }
 }
 
 impl Drop for MergeGroupScope {
@@ -295,6 +381,12 @@ pub(crate) fn collecting() -> bool {
     MERGE_GROUPS.with(|lists| lists.borrow().is_some())
 }
 
+/// Whether a lowering records its object: a pass is collecting and no
+/// [`GroupsPaused`] is alive.
+pub(crate) fn recording_groups() -> bool {
+    !GROUPS_PAUSED.with(Cell::get) && collecting()
+}
+
 /// Record one object's classes for the plugin to check, when a pass is
 /// collecting them.
 ///
@@ -378,9 +470,11 @@ pub(crate) fn apply_over_active(start: u32, base: Vec<String>, over: &[String]) 
 #[cfg(test)]
 mod tests {
     use super::{
-        apply, apply_active, apply_over, apply_over_active, collecting, decode, record_group,
-        MergeGroup, MergeGroupScope, MergeOverride, MergeTableScope,
+        apply, apply_active, apply_over, apply_over_active, collecting, decode, first_of_each,
+        record_group, recording_groups, GroupsPaused, MergeGroup, MergeGroupScope, MergeOverride,
+        MergeTableScope,
     };
+    use crate::transform::test_rng::Rng;
 
     /// A group at offset 0 whose keys are its classes.
     fn group(names: &[&str]) -> MergeGroup {
@@ -481,6 +575,41 @@ mod tests {
         };
         record_group(elsewhere.clone());
         assert_eq!(groups.finish().groups, [group(&["pb-2", "p-4"]), elsewhere]);
+    }
+
+    #[test]
+    fn two_groups_at_one_place_both_survive_once() {
+        let groups = MergeGroupScope::enter(true);
+        record_group(group(&["pb-2", "p-4"]));
+        record_group(group(&["m-2", "p-4"]));
+        record_group(group(&["pb-2", "p-4"]));
+        assert_eq!(
+            groups.finish().groups,
+            [group(&["pb-2", "p-4"]), group(&["m-2", "p-4"])]
+        );
+    }
+
+    #[test]
+    fn a_paused_scope_stops_lowering_from_recording_until_it_drops() {
+        let groups = MergeGroupScope::enter(true);
+        assert!(recording_groups());
+        {
+            let _paused = GroupsPaused::enter();
+            assert!(collecting());
+            assert!(!recording_groups());
+            {
+                let _nested = GroupsPaused::enter();
+            }
+            assert!(!recording_groups(), "a nested pause restores the outer one");
+            // Class-name pairs are recorded through a pause.
+            let _ = apply_over_active(3, classes(&["pb-2"]), &classes(&["p-4"]));
+        }
+        assert!(recording_groups());
+        assert_eq!(groups.finish().overrides.len(), 1);
+        assert!(
+            !recording_groups(),
+            "nothing records outside a collecting pass"
+        );
     }
 
     #[test]
@@ -600,5 +729,91 @@ mod tests {
             ["card"]
         );
         assert!(lists.finish().overrides.is_empty());
+    }
+
+    /// `first_of_each` against the plain reading of its contract: walk the
+    /// items in order and keep one unless an earlier kept item equals it.
+    /// Equal items always share a place; unequal ones share one often under
+    /// `a % 3` and always under `0`, so a bucket holding different items is
+    /// drawn as often as a clean one.
+    #[test]
+    fn first_of_each_keeps_what_a_pairwise_scan_keeps() {
+        type Place = fn(&(u8, u8)) -> u64;
+        let places: [Place; 3] = [
+            |item| u64::from(item.0),
+            |item| u64::from(item.0 % 3),
+            |_| 0,
+        ];
+        let mut rng = Rng::new(0x5eed_0b01);
+        for _ in 0..3000 {
+            let len = rng.below(24);
+            let items: Vec<(u8, u8)> = (0..len)
+                .map(|_| (*rng.pick(&[0, 1, 2, 3, 4, 5]), *rng.pick(&[0, 1, 2])))
+                .collect();
+            let mut expected: Vec<(u8, u8)> = Vec::new();
+            for item in &items {
+                if !expected.contains(item) {
+                    expected.push(*item);
+                }
+            }
+            for place in places {
+                assert_eq!(first_of_each(items.clone(), place), expected, "{items:?}");
+            }
+        }
+    }
+
+    /// Two groups whose keys sit at the same offsets are told apart by their
+    /// classes: both survive, and only the repeat of the first goes.
+    #[test]
+    fn different_groups_written_at_the_same_offsets_both_survive() {
+        let scope = MergeGroupScope::enter(true);
+        record_group(group(&["p-4", "m-2"]));
+        record_group(group(&["p-8", "m-2"]));
+        record_group(group(&["p-4", "m-2"]));
+        assert_eq!(
+            scope.finish().groups,
+            [group(&["p-4", "m-2"]), group(&["p-8", "m-2"])]
+        );
+    }
+
+    /// A group's place is its keys' offsets in order: groups at the same
+    /// offsets meet, and a different offset, one more or one fewer, or the
+    /// same offsets in another order each move it.
+    #[test]
+    fn a_group_place_follows_its_key_offsets() {
+        let at = |starts: &[u32]| {
+            super::group_place(&MergeGroup {
+                keys: Vec::new(),
+                key_starts: starts.to_vec(),
+                classes: Vec::new(),
+            })
+        };
+        assert_eq!(at(&[4, 9]), at(&[4, 9]));
+        let distinct = [
+            at(&[]),
+            at(&[0]),
+            at(&[1]),
+            at(&[2]),
+            at(&[0, 0]),
+            at(&[1, 2]),
+            at(&[2, 1]),
+        ];
+        for (index, place) in distinct.iter().enumerate() {
+            assert!(
+                !distinct[index + 1..].contains(place),
+                "place {index} repeats"
+            );
+        }
+    }
+
+    /// The bucket hasher reads any key, not only a place: bytes fold
+    /// FNV-style, so equal keys meet and a one-byte change moves the hash.
+    #[test]
+    fn the_place_hasher_hashes_bytes_as_well_as_places() {
+        use std::hash::{BuildHasher, BuildHasherDefault};
+        let build = BuildHasherDefault::<super::PlaceHasher>::default();
+        assert_eq!(build.hash_one("p-4"), build.hash_one("p-4"));
+        assert_ne!(build.hash_one("p-4"), build.hash_one("p-5"));
+        assert_ne!(build.hash_one(1_u64), build.hash_one(2_u64));
     }
 }

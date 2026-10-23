@@ -19,7 +19,7 @@ import {
     unrenderedDiagnosticFields,
 } from './engine-diagnostics.js';
 import { assertEngineIdentity, type EngineIdentity, EXPECTED_ENGINE } from './engine-identity.js';
-import { locateEngineSpans } from './engine-spans.js';
+import { decodeEngineSpans, type LocatedEngineSpans } from './engine-spans.js';
 import {
     CsszyxError,
     type CsszyxErrorFields,
@@ -499,7 +499,17 @@ function fromNativeResult(
     file: string,
     fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
-    const spans = locateEngineSpans(source, result);
+    let spans: LocatedEngineSpans;
+    try {
+        spans = decodeEngineSpans(source, result.spans);
+    } catch (err) {
+        // Only a binding from another build, or a csszyx bug, writes spans
+        // this compiler cannot read.
+        throw new RustTransformUnavailableError(thrownMessage(err), {
+            cause: err,
+            where: 'decodeEngineSpans',
+        });
+    }
     return {
         code: result.code,
         transformed: result.metadata.transformed,

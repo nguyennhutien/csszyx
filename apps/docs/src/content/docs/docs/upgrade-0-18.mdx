@@ -777,11 +777,12 @@ resolve it:
 
 This concerns code that calls the native binding `@csszyx/core/native`
 directly; the csszyx packages are already updated. A `transformBatch` result
-no longer carries `diagnostics`, the rendered sentences. Each entry of its new
-`issues` field is `{ code, start, argsJson }`: the diagnostic's code, its byte
-offset in the source, and the JSON object of the values it names.
-`@csszyx/compiler` renders the sentence from those. The `rootDir` option, which
-only shortened the file path inside a sentence, is no longer accepted.
+no longer carries `diagnostics`, the rendered sentences. Its new `spans`
+field is one text per file holding each diagnostic's code, its byte offset in
+the source and the values it names; its format is internal and can change
+between releases. `@csszyx/compiler` decodes it and renders the sentence. The
+`rootDir` option, which only shortened the file path inside a sentence, is no
+longer accepted.
 
 **The edit.** Call `transformRust` or `transformSource` from
 `@csszyx/compiler/engine` instead. Their result holds the rendered

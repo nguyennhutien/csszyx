@@ -499,7 +499,20 @@ export const SIZE_BUDGETS = [
         // fast path counting a bare `sz` (+200), the dropped family conflict
         // (+186) and the szr nudge (+90) are the rest, less 157 from one
         // issue per syntax error and the spread notice alone.
-        maxGzipBytes: 582_400,
+        //
+        // Raised from 582,400 on 2026-10-22: a file's spans cross to
+        // JavaScript as one length-prefixed text instead of a JSON object per
+        // span, and the recorded lowering copies each key and class once.
+        // 582,254 before, 583,616 after, as this script measures the
+        // un-optimized nodejs parser build, same machine; each part measured
+        // alone on the base: the text writer +949, the single-copy recording
+        // +183, the short-object key check +130, the cheaper dedupe hasher +2.
+        // Two more fixes were measured and not taken: sorting the dedupe by
+        // place (+3,796, nearly all of it `sort_unstable` instantiated per item
+        // type) and inlining the global-keyword fast check (+599, for an
+        // instruction-count gain inside wall-clock noise). ~300 bytes of
+        // headroom.
+        maxGzipBytes: 583_900,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -644,12 +657,23 @@ export const SIZE_BUDGETS = [
     // an entry's args as one string (`'form key replacement?'`) and its list
     // joiners apart (`templateArgs`, `templateJoiners`), which removes that
     // and keeps the check's semantics. Budgets the usual ~300 above.
+    //
+    // Raised 2026-10-22 from 27,400 / 30,450, measured 28,199 / 31,234
+    // (+1,096 / +1,099 against 27,103 / 30,135): the engine's per-file spans
+    // cross as length-prefixed text read by one decoder in
+    // `engine-spans.ts` instead of napi objects or `JSON.parse`, which takes
+    // 1.75 ms off 800 clean files and lowers the diagnostic-cost scavenges.
+    // Folding the decoder's readers into one shared list reader and dropping
+    // dead helpers saved 157 bytes; the rest is the decoder and its error
+    // messages. Minifying these entries (about −5.3 / −6.1 KB) was measured
+    // and not taken: most build tools ship readable Node code, and a
+    // minified stack trace names `I` where it named `runWasmBatch`.
     {
         name: '@csszyx/compiler `./engine`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 27_400,
+        maxGzipBytes: 28_500,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -657,7 +681,7 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 30_450,
+        maxGzipBytes: 31_550,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

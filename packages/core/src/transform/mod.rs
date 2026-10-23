@@ -37,8 +37,11 @@ pub(crate) mod rewrite;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod scope;
+pub mod spans;
 #[cfg(feature = "native-engine")]
 pub(crate) mod szv_precompile;
+#[cfg(test)]
+pub(crate) mod test_rng;
 #[cfg(feature = "native-engine")]
 pub(crate) mod var_hostile;
 
@@ -108,9 +111,11 @@ pub fn transform_batch_with_options(
 ) -> Result<Vec<TransformResult>, TransformError> {
     #[cfg(feature = "native-engine")]
     {
+        let mut options = options;
+        let table = engine::BatchMergeTable::read(options.merge_table_json.take().as_deref());
         Ok(files
             .par_iter()
-            .map(|file| engine::transform_file_with_options(file, options.clone()))
+            .map(|file| engine::transform_file_with_table(file, options.clone(), &table))
             .collect())
     }
 
@@ -149,6 +154,44 @@ mod tests {
         }];
 
         assert_eq!(transform_batch(&files), Err(TransformError::NotImplemented));
+    }
+
+    /// One table serves every file of a batch, and so does its refusal.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn every_file_of_a_batch_reads_the_one_table() {
+        let file = |name: &str| TransformFile {
+            filename: format!("/repo/src/{name}.tsx"),
+            source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
+        };
+        let files = [file("A"), file("B"), file("C")];
+        let with = |json: &str| super::TransformOptions {
+            merge_table_json: Some(json.to_string()),
+            ..super::TransformOptions::default()
+        };
+        let merged = super::transform_batch_with_options(
+            &files,
+            with(r#"{"format":1,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#),
+        )
+        .expect("native engine result");
+        for result in &merged {
+            assert_eq!(result.code, "const App = () => <div className=\"p-4\" />;");
+            assert!(result.merge_groups.is_empty() && result.issues.is_empty());
+        }
+        let refused =
+            super::transform_batch_with_options(&files, with("[]")).expect("native engine result");
+        for result in &refused {
+            assert_eq!(
+                result.code,
+                "const App = () => <div className=\"pb-2 p-4\" />;"
+            );
+            assert_eq!(result.issues.len(), 1);
+            assert_eq!(
+                result.merge_groups.len(),
+                1,
+                "a refused table merges nothing"
+            );
+        }
     }
 
     #[cfg(feature = "native-engine")]

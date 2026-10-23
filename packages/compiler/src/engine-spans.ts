@@ -15,8 +15,11 @@
  * cache entry by ~45%, while the source is at hand again when it is read
  * ({@link restoreEngineSpans}).
  *
- * Shared by both engine artifacts' result mapping (`transform-rust.ts`,
- * `transform-wasm.ts`), so the two cannot place one diagnostic differently.
+ * Both engine artifacts hand a file's spans over as the same text, written by
+ * one writer in the engine (`packages/core/src/transform/spans.rs`), and
+ * {@link decodeEngineSpans} is the one reader of it for both
+ * (`transform-rust.ts`, `transform-wasm.ts`), so the two cannot place one
+ * diagnostic differently.
  *
  * @module engine-spans
  */
@@ -291,14 +294,77 @@ class LocatedOverride extends LocatedSpan implements SzMergeOverride {
     }
 }
 
+/**
+ * A located merge group: its positions are built on the first read, from the
+ * key offsets the engine reported.
+ *
+ * A group per static object, and a position per class, made on every
+ * transform; most are never read — the build reads one only for a dead class
+ * it names, and a store keeps the offsets ({@link storeEngineSpans}). `keys`
+ * and `classes` stay own fields; `positions` is an accessor, which
+ * `JSON.stringify` writes through `toJSON`.
+ */
+class LocatedGroup implements SzMergeGroup {
+    keys: string[];
+    classes: string[];
+    readonly #keyStarts: number[];
+    readonly #locate: ByteOffsetLocator;
+    #positions: SourcePosition[] | undefined;
+
+    /**
+     * @param keys - The key behind each class.
+     * @param keyStarts - The byte offset of each key, index-parallel.
+     * @param classes - The classes.
+     * @param locate - The file's locator.
+     */
+    constructor(keys: string[], keyStarts: number[], classes: string[], locate: ByteOffsetLocator) {
+        this.keys = keys;
+        this.classes = classes;
+        this.#keyStarts = keyStarts;
+        this.#locate = locate;
+    }
+
+    /** @returns Where each class's key is written, index-parallel to `classes`. */
+    get positions(): SourcePosition[] {
+        this.#positions ??= this.#keyStarts.map(start => new LocatedSpan(start, this.#locate));
+        return this.#positions;
+    }
+
+    /** @returns The group as plain data, positions resolved. */
+    toJSON(): SzMergeGroup {
+        return { keys: this.keys, positions: this.positions, classes: this.classes };
+    }
+
+    /**
+     * @param group - Any group.
+     * @returns The key offsets it was located from, or `undefined` for one built elsewhere.
+     */
+    static keyStartsOf(group: object): readonly number[] | undefined {
+        return #keyStarts in group ? group.#keyStarts : undefined;
+    }
+}
+
+/**
+ * The byte offset each class's key is written at, for a group this module
+ * located; `undefined` for one built elsewhere, which carries only positions.
+ *
+ * Offsets order like positions within one file, and reading them resolves
+ * nothing.
+ *
+ * @internal Read by the bundler plugin's dead-class report.
+ * @param group - A group a result carries.
+ * @returns Its key offsets, index-parallel to `classes`, or `undefined`.
+ */
+export function szMergeGroupKeyStarts(group: SzMergeGroup): readonly number[] | undefined {
+    return LocatedGroup.keyStartsOf(group);
+}
+
 /** One diagnostic as the engine reports it. */
 interface RawIssue {
     code: string;
     start: number;
-    /** From the wasm artifact and from a store: the object itself. */
+    /** The values the diagnostic names; absent from a hand-built one. */
     args?: object;
-    /** From the native binding: the same object as the JSON the wasm writes. */
-    argsJson?: string;
 }
 
 /** One merge group as the engine reports it. */
@@ -315,11 +381,11 @@ interface RawMergeOverride {
     over: string[];
 }
 
-/** The raw spans one engine result carries, in either artifact's spelling. */
+/** The raw spans of one engine result, as a store or a test writes them. */
 export interface RawEngineSpans {
     issues: ReadonlyArray<RawIssue>;
     mergeGroups: ReadonlyArray<RawMergeGroup>;
-    /** Absent from a native binding that predates it. */
+    /** Absent from a store written before one-class groups. */
     singleClassGroups?: ReadonlyArray<RawMergeGroup>;
     mergeOverrides: ReadonlyArray<RawMergeOverride>;
 }
@@ -330,6 +396,291 @@ export interface LocatedEngineSpans {
     mergeGroups: SzMergeGroup[];
     singleClassGroups: SzMergeGroup[];
     mergeOverrides: SzMergeOverride[];
+}
+
+/**
+ * The spans text format this compiler reads: the first number of every
+ * spans text. The engine keeps its own number for what it writes
+ * (`SPANS_FORMAT` in `packages/core/src/transform/spans.rs`); a test holds
+ * the two equal in one release, and text in any other format is refused.
+ */
+export const ENGINE_SPANS_FORMAT = 1;
+
+/**
+ * Thrown when an engine's spans text cannot be read: it is in another format,
+ * or it breaks the grammar. Only an engine from another build, or a csszyx
+ * bug, writes either; each lane reports it as an `internal-error`.
+ */
+export class EngineSpansWireError extends Error {
+    /**
+     * @param detail - What could not be read.
+     */
+    constructor(detail: string) {
+        super(detail);
+        this.name = 'EngineSpansWireError';
+    }
+}
+
+/** `,` ends a number, `:` a string's length. */
+const COMMA = 44;
+const COLON = 58;
+
+/** The largest number the engine writes: offsets and counts are `u32`. */
+const MAX_NUMBER = 0xffffffff;
+
+/**
+ * The text being read and the cursor into it. Module state rather than a
+ * closure per call: one file's spans are read on every transform, and the
+ * closures cost more young-generation collections than the reading did.
+ */
+let wire = '';
+let at = 0;
+
+/**
+ * Refuse the text being read.
+ *
+ * @param what - What was found where the grammar wants something else.
+ * @throws {EngineSpansWireError} always.
+ */
+function malformed(what: string): never {
+    throw new EngineSpansWireError(
+        `the engine's spans text has ${what} at character ${at} of ${wire.length}`,
+    );
+}
+
+/**
+ * `<digits><end>`: a whole number of at most {@link MAX_NUMBER}. Past the end
+ * reads as `-1`, which is neither a digit nor `end`.
+ *
+ * @param end - The character that ends it.
+ * @returns The number.
+ */
+function readNumber(end: number): number {
+    let code = wire.codePointAt(at) ?? -1;
+    // 48 to 57: `0` to `9`.
+    if (!(code >= 48 && code <= 57)) malformed('no digit');
+    let value = 0;
+    do {
+        value = value * 10 + code - 48;
+        if (value > MAX_NUMBER) malformed('a number past 32 bits');
+        code = wire.codePointAt(++at) ?? -1;
+    } while (code >= 48 && code <= 57);
+    if (code !== end) malformed(end === COMMA ? 'no `,` after a number' : 'no `:` after a length');
+    at++;
+    return value;
+}
+
+/**
+ * `<count>,`, refused when the rest of the text cannot hold that many items:
+ * each takes at least one character, so no array is ever sized past the
+ * text's own length.
+ *
+ * @returns The count.
+ */
+function readCount(): number {
+    const count = readNumber(COMMA);
+    if (count > wire.length - at) malformed('a count the rest cannot hold');
+    return count;
+}
+
+/**
+ * `<length>:`, the length of a string in UTF-16 units, refused when it runs
+ * past the end.
+ *
+ * @returns The length.
+ */
+function readLength(): number {
+    const length = readNumber(COLON);
+    if (length > wire.length - at) malformed('a string past the end');
+    return length;
+}
+
+/** Slots in {@link seen}: a power of two, so a hash masks into one. */
+const SEEN_SLOTS = 4096;
+
+/**
+ * The names this reader has made, by a hash of their characters, so a key or
+ * class read again is the string read before rather than a fresh copy.
+ * `JSON.parse` gets the same from V8, which internalizes string values under
+ * 10 characters; a slice of the text internalizes nothing. Direct-mapped, as
+ * msgpackr's `keyCache` is: a collision replaces the slot's name. It only
+ * decides which equal string is returned, never what is read.
+ */
+const seen: Array<string | undefined> = /* @__PURE__ */ new Array(SEEN_SLOTS).fill(undefined);
+
+/**
+ * `<length>:<text>`, through {@link seen}.
+ *
+ * @returns The string.
+ */
+function readName(): string {
+    const length = readLength();
+    const end = at + length;
+    let hash = length;
+    for (let index = at; index < end; index++) {
+        hash = (Math.imul(hash, 31) + (wire.codePointAt(index) as number)) | 0;
+    }
+    const slot = hash & (SEEN_SLOTS - 1);
+    let name = seen[slot];
+    if (name?.length !== length || !wire.startsWith(name, at)) {
+        name = wire.slice(at, end);
+        seen[slot] = name;
+    }
+    at = end;
+    return name;
+}
+
+/** The file's locator, while its text is read. */
+let wireLocate: ByteOffsetLocator;
+
+/**
+ * `<count>,` then that many items, each read by `item`.
+ *
+ * @param item - The reader of one item.
+ * @returns The items.
+ */
+function readList<T>(item: () => T): T[] {
+    const count = readCount();
+    const items = new Array<T>(count);
+    for (let index = 0; index < count; index++) items[index] = item();
+    return items;
+}
+
+/**
+ * The args of every issue of the file, one JSON list read with one parse:
+ * a parse per issue cost a fixed quarter microsecond each.
+ *
+ * @param issues - The file's issues, in order.
+ */
+function readArgs(issues: LocatedIssue[]): void {
+    const length = readLength();
+    const text = wire.slice(at, at + length);
+    at += length;
+    let args: unknown;
+    try {
+        args = JSON.parse(text);
+    } catch {
+        malformed('args that are not JSON');
+    }
+    if (!Array.isArray(args) || args.length !== issues.length) {
+        malformed('args that are not one entry per issue');
+    }
+    for (let index = 0; index < issues.length; index++) {
+        const entry: unknown = args[index];
+        if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+            malformed('args that are not an object');
+        }
+        (issues[index] as LocatedIssue).args = entry as SzDiagnosticArgsByCode[SzDiagnosticCode];
+    }
+}
+
+/**
+ * One group: `<count>,` entries of key, key offset and class.
+ *
+ * @returns The group, located.
+ */
+function readGroup(): SzMergeGroup {
+    const size = readCount();
+    const keys = new Array<string>(size);
+    const keyStarts = new Array<number>(size);
+    const classes = new Array<string>(size);
+    for (let index = 0; index < size; index++) {
+        keys[index] = readName();
+        keyStarts[index] = readNumber(COMMA);
+        classes[index] = readName();
+    }
+    return new LocatedGroup(keys, keyStarts, classes, wireLocate);
+}
+
+/**
+ * One issue: its code and offset; its args come after every issue's.
+ *
+ * @returns The issue, located.
+ */
+function readIssue(): LocatedIssue {
+    const code = readName() as SzDiagnosticCode;
+    // Its args are set once the file's list of them is read.
+    return new LocatedIssue(code, undefined as never, readNumber(COMMA), wireLocate);
+}
+
+/**
+ * One class-name pair: its offset, the class name's classes, the `sz` ones.
+ *
+ * @returns The pair, located.
+ */
+function readPair(): SzMergeOverride {
+    const start = readNumber(COMMA);
+    const base = readList(readName);
+    return new LocatedOverride(base, readList(readName), start, wireLocate);
+}
+
+/**
+ * The format number the text starts with, refused unless it is
+ * {@link ENGINE_SPANS_FORMAT}.
+ */
+function readFormat(): void {
+    let format: number;
+    try {
+        format = readNumber(COMMA);
+    } catch {
+        throw new EngineSpansWireError(
+            `the engine's spans text starts with no format number; this compiler reads format ${ENGINE_SPANS_FORMAT}`,
+        );
+    }
+    if (format !== ENGINE_SPANS_FORMAT) {
+        throw new EngineSpansWireError(
+            `the engine wrote its spans in format ${format}; this compiler reads format ${ENGINE_SPANS_FORMAT}`,
+        );
+    }
+}
+
+/**
+ * Read one engine result's spans, located against the source lazily: the
+ * text both artifacts write for a file, the native binding as `spans` and
+ * the wasm build as its result's `spans` field.
+ *
+ * The text, all numbers decimal:
+ *
+ * ```text
+ * spans    = format "," issues groups groups overrides   (merge, then one-class groups)
+ * issues   = count "," { str(code) num(start) } [ str(args) ]   (args when count > 0)
+ * groups   = count "," { count "," { str(key) num(keyStart) str(class) } }
+ * overrides= count "," { num(start) count "," { str(base) } count "," { str(over) } }
+ * num(n)   = digits ","          str(s) = utf16Length(s) ":" s
+ * ```
+ *
+ * `args` is one JSON list, an object per issue. A string is counted, never
+ * escaped, so any character may appear in a key or a class.
+ *
+ * `n` is the length of the text: `O(n)` time — every character is read once
+ * and a name hashed and compared once more — and no array is made longer
+ * than the text, whatever a count says. The worst case is a text of
+ * distinct long names that all land in one cache slot: each is still read,
+ * hashed and compared once.
+ *
+ * Every list is present in what this returns, empty when the file has none:
+ * an absent `mergeGroups` reads as "the whole file is one group" to the
+ * plugin, which no engine result means.
+ *
+ * @param source - The module the engine was given.
+ * @param spans - The spans text the engine wrote.
+ * @returns The located spans.
+ * @throws {EngineSpansWireError} when the text is in another format or breaks
+ *         the grammar.
+ */
+export function decodeEngineSpans(source: string, spans: string): LocatedEngineSpans {
+    wire = spans;
+    at = 0;
+    readFormat();
+    wireLocate = createByteOffsetLocator(source);
+    const issues = readList(readIssue);
+    if (issues.length > 0) readArgs(issues);
+    const mergeGroups = readList(readGroup);
+    const singleClassGroups = readList(readGroup);
+    const mergeOverrides = readList(readPair);
+    if (at !== wire.length) malformed('text after the last list');
+    wire = '';
+    return { issues, mergeGroups, singleClassGroups, mergeOverrides };
 }
 
 /**
@@ -355,7 +706,8 @@ export function locateEngineSpans(source: string, raw: RawEngineSpans): LocatedE
  * @returns It located.
  */
 function locateIssue(issue: RawIssue, locate: ByteOffsetLocator): SzDiagnosticIssue {
-    const args = issue.args ?? JSON.parse(issue.argsJson ?? '{}');
+    // The engine writes each code's args as the registry names them.
+    const args = (issue.args ?? {}) as SzDiagnosticArgsByCode[SzDiagnosticCode];
     return new LocatedIssue(issue.code as SzDiagnosticCode, args, issue.start, locate);
 }
 
@@ -365,8 +717,7 @@ function locateIssue(issue: RawIssue, locate: ByteOffsetLocator): SzDiagnosticIs
  * @returns It located.
  */
 function locateGroup(group: RawMergeGroup, locate: ByteOffsetLocator): SzMergeGroup {
-    const { keys, keyStarts, classes } = group;
-    return { keys, positions: keyStarts.map(start => new LocatedSpan(start, locate)), classes };
+    return new LocatedGroup(group.keys, group.keyStarts, group.classes, locate);
 }
 
 /**
@@ -403,6 +754,10 @@ export interface StoredEngineSpans {
  *          group unchanged when one of them was built elsewhere.
  */
 function storeGroup(group: SzMergeGroup): RawMergeGroup | SzMergeGroup {
+    const located = LocatedGroup.keyStartsOf(group);
+    if (located !== undefined) {
+        return { keys: group.keys, keyStarts: [...located], classes: group.classes };
+    }
     const keyStarts = group.positions.map(position => LocatedSpan.startOf(position));
     return keyStarts.every(start => start !== undefined)
         ? { keys: group.keys, keyStarts: keyStarts as number[], classes: group.classes }

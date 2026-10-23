@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { csszyxTurbopack } from '../src/next-config.js';
@@ -176,5 +179,40 @@ describe('csszyxTurbopack', () => {
         expect(first).toMatchObject(settings);
         expect(csszyxTurbopack(options)).toEqual(first);
         expect(Object.keys(settings)).toHaveLength(count);
+    });
+
+    it('loads the report module only when it refuses a call', () => {
+        // `next.config` imports this entry on every run; the registry that
+        // words the refusal is most of its import time. Every module the real
+        // graph resolves is recorded, before the call and after it.
+        const entry = pathToFileURL(
+            fileURLToPath(new URL('../src/next-config.ts', import.meta.url)),
+        ).href;
+        const script = [
+            "import { registerHooks } from 'node:module';",
+            'const loaded = [];',
+            'registerHooks({ resolve(specifier, context, next) {',
+            '    const resolved = next(specifier, context);',
+            '    loaded.push(resolved.url);',
+            '    return resolved;',
+            '} });',
+            'const reports = () => loaded.filter(url => /\\/report\\.[cm]?js$/.test(url)).length;',
+            `const { csszyxTurbopack } = await import(${JSON.stringify(entry)});`,
+            'const atImport = reports();',
+            'let message;',
+            'try { csszyxTurbopack({ bogus: 1 }); } catch (error) { message = error.message; }',
+            'console.log(JSON.stringify({ atImport, atThrow: reports(), message }));',
+        ].join('\n');
+        const stripTypes = process.features.typescript ? [] : ['--experimental-strip-types'];
+        const child = spawnSync(
+            process.execPath,
+            [...stripTypes, '--input-type=module', '-e', script],
+            { encoding: 'utf8', timeout: 30_000 },
+        );
+        expect(child.stderr).not.toMatch(/Error/);
+        const { atImport, atThrow, message } = JSON.parse(child.stdout);
+        expect(atImport).toBe(0);
+        expect(atThrow).toBeGreaterThan(0);
+        expect(message).toMatch(/^\[csszyx\] options-object-required:\n.*`bogus`/s);
     });
 });

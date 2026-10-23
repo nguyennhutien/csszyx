@@ -156,14 +156,16 @@ pub fn transform_source(filename: String, source: String) -> Result<String, JsVa
     let files = [transform::TransformFile { filename, source }];
     let results =
         transform::transform_batch(&files).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_json::to_string(&results[0]).map_err(|e| JsValue::from_str(&e.to_string()))
+    serde_json::to_string(&transform::spans::WasmResult::new(&results[0]))
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Whole-BATCH transform with full options across the WASM boundary.
 ///
 /// The lane's main entry: cross-module registries, mangling and recovery all
 /// arrive through `TransformOptions`, and the batch crosses the boundary once
-/// for the whole file set.
+/// for the whole file set. Each file's `spans` is the text the native
+/// binding returns as its `spans` string.
 ///
 /// # Errors
 ///
@@ -177,6 +179,10 @@ pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<Stri
         serde_json::from_str(options_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let results = transform::transform_batch_with_options(&files, options)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let results: Vec<_> = results
+        .iter()
+        .map(transform::spans::WasmResult::new)
+        .collect();
     serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 

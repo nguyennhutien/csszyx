@@ -332,9 +332,12 @@ function assertNativeEngineTransform(binding) {
   }
 }
 
-// The binding returns each issue's code, offset and args, and no sentence:
-// the compiler renders the text from the diagnostic registry. `column` is
-// 1-based on a one-line ASCII source, so the offset is one less.
+// The binding returns each issue's code, offset and args in the file's spans
+// text, and no sentence: the compiler renders the text from the diagnostic
+// registry. The text opens with its format, the issue count, each issue's
+// code and offset, then every issue's args as one JSON list (`index.d.ts`
+// writes out the grammar). `column` is 1-based on a one-line ASCII source,
+// so the first offset is one less.
 function assertIdentifierFallbackDiagnostic(result, column, label, alsoExpect = []) {
   if ("diagnostics" in result) {
     fail(`Expected ${label} result to carry no rendered diagnostics: ${JSON.stringify(result.diagnostics)}`);
@@ -346,13 +349,18 @@ function assertIdentifierFallbackDiagnostic(result, column, label, alsoExpect = 
     ],
     ...alsoExpect,
   ];
-  const received = (result.issues ?? []).map(issue => [issue.code, issue.argsJson]);
-  if (JSON.stringify(received) !== JSON.stringify(expected)) {
-    fail(`Unexpected ${label} issues: ${JSON.stringify(received)}`);
+  const issues = expected
+    .map(([code], index) => `${code.length}:${code}${index === 0 ? column - 1 : "\\d+"},`)
+    .join("");
+  const args = `[${expected.map(([, json]) => json).join(",")}]`;
+  const opening = new RegExp(`^1,${expected.length},${issues}${args.length}:${escapeRegExp(args)}`);
+  if (typeof result.spans !== "string" || !opening.test(result.spans)) {
+    fail(`Unexpected ${label} issues: ${JSON.stringify(result.spans)}`);
   }
-  if (result.issues[0].start !== column - 1) {
-    fail(`Unexpected ${label} fallback offset: ${JSON.stringify(result.issues[0])}`);
-  }
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function assertNativeEngineMangleVars(binding) {
