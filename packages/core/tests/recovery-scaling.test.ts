@@ -1,6 +1,6 @@
 /**
  * Placing `szRecover` elements grows with the file, on both artifacts
- * (tdd.md TDD-2, TDD-6).
+ * (tdd.md TDD-2, TDD-6), in CPU time.
  *
  * `tests/recovery_scaling.rs` holds the same relation for the crate; this
  * holds it for what ships: the native addon and the wasm build, each timed
@@ -89,12 +89,15 @@ describe('placing recovered elements', () => {
         if (!transform) return;
         const small = page(200);
         const large = page(2000);
+        // CPU time, not the clock: CI runs every package's suite at once, and
+        // a clock counts the time this process waited for a core, which fell
+        // on the large size and read 48x for work that measures 10x.
         const timed = (file: SourceFile, rows: number): number => {
-            const started = process.hrtime.bigint();
+            const started = process.cpuUsage();
             const code = transform(file);
-            const elapsed = Number(process.hrtime.bigint() - started) / 1e6;
+            const { user, system } = process.cpuUsage(started);
             expect(tokensIn(code)).toBe(rows);
-            return elapsed;
+            return (user + system) / 1000;
         };
         timed(small, 200);
         let smallBest = Number.POSITIVE_INFINITY;
