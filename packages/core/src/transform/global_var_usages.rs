@@ -20,7 +20,7 @@ use oxc_parser::Parser;
 use serde::{Serialize, Serializer};
 
 use super::parser::{parse_errors, source_type_for_path};
-use super::recovery::LineIndex;
+use super::recovery::SourceLines;
 use super::TransformFile;
 
 /// What one record reports.
@@ -130,7 +130,7 @@ fn usages_of(file: &TransformFile, tokens: Option<&HashSet<&str>>) -> Vec<Global
     let mut records = Records {
         file,
         tokens,
-        lines: None,
+        lines: SourceLines::new(&file.source),
         found: Vec::new(),
     };
     if let Some((start, error)) = parse_errors(&parsed).into_iter().next() {
@@ -159,8 +159,8 @@ fn usages_of(file: &TransformFile, tokens: Option<&HashSet<&str>>) -> Vec<Global
 struct Records<'f> {
     file: &'f TransformFile,
     tokens: Option<&'f HashSet<&'f str>>,
-    /// Built on the first record, so a file with none never pays for it.
-    lines: Option<LineIndex>,
+    /// Indexed on the first record, so a file with none never pays for it.
+    lines: SourceLines<'f>,
     found: Vec<GlobalVarUsage>,
 }
 
@@ -179,10 +179,7 @@ impl Records<'_> {
 
     fn push_record(&mut self, kind: GlobalVarUsageKind, name: String, start: u32, message: String) {
         let source = self.file.source.as_str();
-        let (line, byte_column) = self
-            .lines
-            .get_or_insert_with(|| LineIndex::new(source))
-            .line_column(source, start);
+        let (line, byte_column) = self.lines.line_column(start);
         let line_start = (start - byte_column) as usize;
         let units = source[line_start..line_start + byte_column as usize]
             .encode_utf16()
