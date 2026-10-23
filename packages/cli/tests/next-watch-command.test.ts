@@ -477,6 +477,39 @@ describe('csszyx next-watch command', () => {
         }
     }, 60_000);
 
+    it('does nothing for an event that arrives while it closes', async () => {
+        // A platform watcher can deliver an event after it was asked to stop;
+        // on Windows a stylesheet change did. The session must not act on it:
+        // the work outlived `close()`, read a project already deleted, and
+        // printed into whatever ran next.
+        const root = realpathSync.native(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        const stylesheet = join(root, 'app/globals.css');
+        writeFileSync(stylesheet, '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        const late: NextWatchFactory = (paths, options) => {
+            const watcher = nextWatchFactoryFor()(paths, options);
+            const close = watcher.close.bind(watcher);
+            watcher.close = async () => {
+                await close();
+                watcher.emit('all', 'change', stylesheet);
+            };
+            return watcher;
+        };
+        const warnings = captureWarnings();
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: late },
+        );
+        await session.close();
+        const atClose = warnings.length;
+        rmSync(root, { recursive: true, force: true });
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        expect(warnings.slice(atClose)).toEqual([]);
+    });
+
     it('warns and keeps watching when the merge table cannot be written', async () => {
         const root = realpathSync.native(tempRoot());
         linkTailwind(root);
