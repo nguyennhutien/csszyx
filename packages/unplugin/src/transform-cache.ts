@@ -380,14 +380,19 @@ export function evictOldTransformCacheEntries(
 }
 
 /**
- * Build the cache entry path for a key.
+ * Build the cache entry path for a key: one file in the root, no directory
+ * per key prefix. The eviction cap keeps the root to 10,000 entries, which
+ * every file system lists without trouble, and a cold 800-file build no
+ * longer creates 256 directories (33.6 -> 17.3 ms of writes). Entries a
+ * release before this one wrote in such directories are never read again
+ * and age out through the eviction, which walks every directory.
  *
  * @param cacheRoot Absolute cache root.
  * @param key Short cache key.
  * @returns Absolute cache entry path.
  */
 function cacheEntryPath(cacheRoot: string, key: string): string {
-    return path.join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+    return path.join(cacheRoot, `${key}.json`);
 }
 
 /** The fields of a transform result that carry over unconverted. */
