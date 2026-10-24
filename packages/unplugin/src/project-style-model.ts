@@ -149,7 +149,9 @@ export interface ProjectStyleModel {
      * replace the ones this model was given before, so a hook an edit removed
      * is gone; the stylesheets' own hooks stay.
      *
-     * @param hooks - Everything the sources select on.
+     * @param hooks - Everything the sources select on, read as they are now:
+     *        the model answers from them for its whole life, so a caller
+     *        does not change them afterwards.
      * @returns A model whose merge signature is null for those classes too.
      */
     withSourceHooks(hooks: ClassHooks): ProjectStyleModel;
@@ -830,51 +832,62 @@ export async function openProjectStyleModel(
      * @param sourceHooks - What the sources select on.
      * @returns The model.
      */
-    const withSourceHooks = (sourceHooks: ClassHooks): ProjectStyleModel => ({
-        entries,
-        facts: first === undefined ? null : agreedFacts(first, rest),
-        imports: [...importedByRoots],
-        unserved(classes) {
-            if (compiled.length === 0) return [];
-            const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
-            return classes.filter(token => perEntry.every(dead => dead.has(token)));
-        },
-        candidates() {
-            // Every root's sources, once each: two roots that scan one tree
-            // would otherwise read it twice for the same answer.
-            // Automatic detection inside a workspace walks every linked package
-            // under node_modules: 26,942 files and 10 s measured on one
-            // playground. The build warns about that setup already; the table
-            // does not pay for it again, and keeps what it cannot prove.
-            const unscoped = (source: ScanSource): boolean =>
-                source.pattern === '**/*' && source.base === resolveFrom && !source.negated;
-            const inWorkspace = selectedRoots.some(root => root.scanSources.some(unscoped))
-                ? isMonorepoPackage(resolveFrom)
-                : false;
-            const sources = new Map<string, ScanSource>();
-            for (const root of selectedRoots) {
-                for (const source of root.scanSources) {
-                    if (inWorkspace && unscoped(source)) continue;
-                    sources.set(JSON.stringify(source), source);
+    const withSourceHooks = (sourceHooks: ClassHooks): ProjectStyleModel => {
+        // One answer per class for the view: a build's merges ask about the
+        // same few hundred classes 60,000 times on an 800-file app.
+        const mergeSignatures = new Map<string, MergeSignature | null>();
+        return {
+            entries,
+            facts: first === undefined ? null : agreedFacts(first, rest),
+            imports: [...importedByRoots],
+            unserved(classes) {
+                if (compiled.length === 0) return [];
+                const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
+                return classes.filter(token => perEntry.every(dead => dead.has(token)));
+            },
+            candidates() {
+                // Every root's sources, once each: two roots that scan one tree
+                // would otherwise read it twice for the same answer.
+                // Automatic detection inside a workspace walks every linked package
+                // under node_modules: 26,942 files and 10 s measured on one
+                // playground. The build warns about that setup already; the table
+                // does not pay for it again, and keeps what it cannot prove.
+                const unscoped = (source: ScanSource): boolean =>
+                    source.pattern === '**/*' && source.base === resolveFrom && !source.negated;
+                const inWorkspace = selectedRoots.some(root => root.scanSources.some(unscoped))
+                    ? isMonorepoPackage(resolveFrom)
+                    : false;
+                const sources = new Map<string, ScanSource>();
+                for (const root of selectedRoots) {
+                    for (const source of root.scanSources) {
+                        if (inWorkspace && unscoped(source)) continue;
+                        sources.set(JSON.stringify(source), source);
+                    }
                 }
-            }
-            if (sources.size === 0) return [];
-            const scan = loadCandidateScanner(resolveFrom);
-            // No scanner to load: the census stays what the build saw, and the
-            // merge keeps what it cannot prove.
-            if (scan === null) return [];
-            return sortStrings(new Set(scan([...sources.values()])));
-        },
-        mergeSignature(candidate) {
-            return !isHook(hooks, candidate) &&
-                !isHook(sourceHooks, candidate) &&
-                compiled.every(entry => entry.origin(candidate) === 'tailwind')
-                ? agreedSignature(candidate)
-                : null;
-        },
-        signature: agreedSignature,
-        variantHooks,
-        withSourceHooks,
-    });
+                if (sources.size === 0) return [];
+                const scan = loadCandidateScanner(resolveFrom);
+                // No scanner to load: the census stays what the build saw, and the
+                // merge keeps what it cannot prove.
+                if (scan === null) return [];
+                return sortStrings(new Set(scan([...sources.values()])));
+            },
+            mergeSignature(candidate) {
+                let signature = mergeSignatures.get(candidate);
+                if (signature === undefined) {
+                    signature =
+                        !isHook(hooks, candidate) &&
+                        !isHook(sourceHooks, candidate) &&
+                        compiled.every(entry => entry.origin(candidate) === 'tailwind')
+                            ? agreedSignature(candidate)
+                            : null;
+                    mergeSignatures.set(candidate, signature);
+                }
+                return signature;
+            },
+            signature: agreedSignature,
+            variantHooks,
+            withSourceHooks,
+        };
+    };
     return withSourceHooks(noClassHooks());
 }

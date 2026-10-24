@@ -430,6 +430,31 @@ export function candidateDeclarationsFromCss(
 /** Each signature's resolved sides, kept as long as the signature is. */
 const resolvedSignatures = new WeakMap<MergeSignature, ResolvedSignature>();
 
+/** Per later signature, whether it covers each earlier one it was asked about. */
+const coveredBy = new WeakMap<ResolvedSignature, WeakMap<ResolvedSignature, boolean>>();
+
+/**
+ * {@link signatureCovers}, memoized per pair: a build asks about the same few
+ * hundred classes in every list, 170,000 pairs on an 800-file app.
+ *
+ * @param later - Candidate signature that may replace the earlier one.
+ * @param earlier - Existing candidate signature.
+ * @returns What `signatureCovers` returns.
+ */
+function covers(later: ResolvedSignature, earlier: ResolvedSignature): boolean {
+    let row = coveredBy.get(later);
+    if (row === undefined) {
+        row = new WeakMap();
+        coveredBy.set(later, row);
+    }
+    let answer = row.get(earlier);
+    if (answer === undefined) {
+        answer = signatureCovers(later, earlier);
+        row.set(earlier, answer);
+    }
+    return answer;
+}
+
 /**
  * The class lists a merge would read, for one transform result.
  *
@@ -532,7 +557,7 @@ export function removedByOverride(
     return base.filter(className => {
         if (over.includes(className)) return true;
         const resolved = resolvedOf(signatureOf, className);
-        return resolved !== null && covering.some(later => signatureCovers(later, resolved));
+        return resolved !== null && covering.some(later => covers(later, resolved));
     });
 }
 
@@ -556,7 +581,7 @@ export function removedByMerge(
             const earlier = survivor.resolved;
             const removed =
                 classes[survivor.at] === name ||
-                (resolved !== null && earlier !== null && signatureCovers(resolved, earlier));
+                (resolved !== null && earlier !== null && covers(resolved, earlier));
             if (removed) gone.add(survivor.at);
             return !removed;
         });
@@ -615,7 +640,7 @@ export function mergeRemovesFrom(
     for (const className of classes) {
         const resolved = resolvedOf(signatureOf, className);
         if (resolved === null) continue;
-        if (earlier.some(previous => signatureCovers(resolved, previous))) return true;
+        if (earlier.some(previous => covers(resolved, previous))) return true;
         earlier.push(resolved);
     }
     return false;
