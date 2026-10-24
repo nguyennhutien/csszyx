@@ -5272,7 +5272,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
-            recordAuthoredClasses(content);
+            recordAuthoredClassesOf(filePath, content);
             if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
                 prescanSawServerModule = true;
             }
@@ -5614,6 +5614,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             addSafelistClass(className);
             state.authoredClasses.add(className);
         }
+    }
+
+    /** Per file, a digest of the text its authored classes were last read from. */
+    const authoredRead = new Map<string, string>();
+
+    /**
+     * {@link recordAuthoredClasses} for one file, once per text: the transform
+     * reads the text the prescan already read, and every set it adds to only
+     * grows, so reading it again adds nothing. 11 us a file to read, against
+     * a hash.
+     *
+     * @param file - Its path or bundler id.
+     * @param code - Its text.
+     */
+    function recordAuthoredClassesOf(file: string, code: string): void {
+        const key = normalizeSourceFilename(file);
+        const digest = createHash('sha256').update(code).digest('base64');
+        if (authoredRead.get(key) === digest) return;
+        authoredRead.set(key, digest);
+        recordAuthoredClasses(code);
     }
 
     /**
@@ -6298,6 +6318,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return model.facts?.prefix ?? null;
     }
 
+    /** The root `relativeOf` was computed under; a new root starts it again. */
+    let relativeRoot = '';
+    /** Each file's relative name under `relativeRoot`: asked several times per file a build. */
+    const relativeOf = new Map<string, string>();
+
     /**
      * A file path the way the author writes it: relative to the project root,
      * with forward slashes, a root spelled in another case included where the
@@ -6307,7 +6332,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns The relative name.
      */
     function projectRelative(file: string): string {
-        return relativeToRoot(state.rootDir, file);
+        if (relativeRoot !== state.rootDir) {
+            relativeRoot = state.rootDir;
+            relativeOf.clear();
+        }
+        let relative = relativeOf.get(file);
+        if (relative === undefined) {
+            relative = relativeToRoot(state.rootDir, file);
+            relativeOf.set(file, relative);
+        }
+        return relative;
     }
 
     /**
@@ -6903,7 +6937,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (!shouldProcessCss(id) && !shouldProcessSource(id)) return false;
         if (shouldProcessSource(id)) {
             trackGlobalVarSourceFile(id, code);
-            recordAuthoredClasses(code);
+            recordAuthoredClassesOf(id, code);
             if (!markup) readSourceHooks(id, code);
         }
         return true;
