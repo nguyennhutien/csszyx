@@ -110,15 +110,23 @@ export function loadCandidateScanner(resolveFrom: string): CandidateScanner | nu
     return sources => new Scanner({ sources: [...sources] }).scan();
 }
 
-/** Tailwind's extractor over text the caller already read. */
-export type ContentScanner = (content: string, extension: string) => string[];
+/** Text the caller already read, and its extension without the dot. */
+export interface ContentFile {
+    readonly content: string;
+    readonly extension: string;
+}
+
+/** Tailwind's extractor over text the caller already read: every file's candidates, together. */
+export type ContentScanner = (files: readonly ContentFile[]) => string[];
 
 /**
  * Load the project's extractor for text already in memory.
  *
  * Each call gets a fresh Scanner: one Scanner reports a candidate only the
- * first time it meets it, and a caller asking per file needs every
- * candidate that file holds.
+ * first time it meets it, and a caller needs every candidate its files hold.
+ * Ask for many files in one call where you can: Scanner splits each call's
+ * work across its thread pool, 0.25 ms for a 1.4 KB file asked alone against
+ * 3.4 ms for 800 of them asked together.
  *
  * @param resolveFrom - Directory whose `package.json` anchors resolution.
  * @returns A scanner, or null when the project has none to load.
@@ -126,5 +134,10 @@ export type ContentScanner = (content: string, extension: string) => string[];
 export function loadContentScanner(resolveFrom: string): ContentScanner | null {
     const Scanner = loadScannerClass(resolveFrom);
     if (Scanner === null) return null;
-    return (content, extension) => new Scanner({ sources: [] }).scanFiles([{ content, extension }]);
+    // Only the two fields: an entry that also carries `file` came back with no
+    // candidates for its in-memory content (oxide 4.3.3).
+    return files =>
+        new Scanner({ sources: [] }).scanFiles(
+            files.map(({ content, extension }) => ({ content, extension })),
+        );
 }

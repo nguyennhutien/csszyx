@@ -227,7 +227,7 @@ import {
     styleModelWarning,
     unresolvedImportWarning,
 } from './project-style-model.js';
-import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
+import { MARKUP_EXTENSIONS, SourceHookRegistry, type SourceText } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
@@ -4217,11 +4217,38 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param text - Its text.
      */
     function readSourceHooks(file: string, text: string): void {
-        if (file.includes('?') || options.build?.mergeCoveredClasses === false) return;
-        const extension = path.extname(file).slice(1);
-        if (sourceHooks.readText(normalizeSourceFilename(file), text, extension)) {
+        const entry = sourceHookText(file, text);
+        if (entry !== null && sourceHooks.readText(entry.file, entry.text, entry.extension)) {
             followSourceHooks();
         }
+    }
+
+    /**
+     * Read many sources' text for what they select on, with one scan: a walk
+     * over the project, where asking Tailwind's extractor file by file cost
+     * 27x the time.
+     *
+     * @param texts - Their texts, from `sourceHookText`.
+     */
+    function readSourceHooksOf(texts: readonly SourceText[]): void {
+        if (sourceHooks.readTexts(texts)) followSourceHooks();
+    }
+
+    /**
+     * One source's text as the hook registry reads it.
+     *
+     * @param file - Its path or bundler id; a query means a part of a file,
+     *        which the whole file's read already covers.
+     * @param text - Its text.
+     * @returns The entry, or null when the source is not read for hooks.
+     */
+    function sourceHookText(file: string, text: string): SourceText | null {
+        if (file.includes('?') || options.build?.mergeCoveredClasses === false) return null;
+        return {
+            file: normalizeSourceFilename(file),
+            text,
+            extension: path.extname(file).slice(1),
+        };
     }
 
     // Whether a file a watcher reported is one the project walk would read
@@ -5125,20 +5152,30 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Read a component or page csszyx does not lower here for what its markup
-     * and `<style>` blocks select on.
+     * A component or page csszyx does not lower here, as the hook registry
+     * reads it for what its markup and `<style>` blocks select on.
      *
      * @param filePath - Markup file path.
+     * @returns Its entry, or null when it is excluded or gone.
      */
-    function readMarkupHooks(filePath: string): void {
-        if (isHardIgnored(filePath) || isUserExcluded(filePath)) return;
-        let content: string;
+    function markupHookText(filePath: string): SourceText | null {
+        if (isHardIgnored(filePath) || isUserExcluded(filePath)) return null;
+        return walkedHookText(filePath);
+    }
+
+    /**
+     * A file the project walk listed, as the hook registry reads it.
+     *
+     * @param filePath - Its path.
+     * @returns Its entry, or null when it is gone since the walk: a file
+     *          that is gone selects on nothing.
+     */
+    function walkedHookText(filePath: string): SourceText | null {
         try {
-            content = fs.readFileSync(filePath, 'utf-8');
+            return sourceHookText(filePath, fs.readFileSync(filePath, 'utf-8'));
         } catch {
-            return;
+            return null;
         }
-        readSourceHooks(filePath, content);
     }
 
     /**
@@ -5148,17 +5185,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function readProjectSourceHooks(): void {
         if (options.build?.mergeCoveredClasses === false) return;
+        const texts: SourceText[] = [];
         walkProjectFiles('skip', (filePath, extension, readsHooks) => {
             if (!readsHooks) return;
-            if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+            let entry: SourceText | null = null;
+            if (MARKUP_EXTENSIONS.has(extension)) entry = markupHookText(filePath);
             else if (SOURCE_EXTENSIONS.has(extension) && shouldProcessSource(filePath)) {
-                try {
-                    readSourceHooks(filePath, fs.readFileSync(filePath, 'utf-8'));
-                } catch {
-                    // A file gone since the walk selects on nothing.
-                }
+                entry = walkedHookText(filePath);
             }
+            if (entry !== null) texts.push(entry);
         });
+        readSourceHooksOf(texts);
     }
 
     /**
@@ -5209,6 +5246,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const szObjectDemand = new Set<string>();
         // Modules whose text names a stylesheet, read once the walk finishes.
         const cssImportingSources: ScannedSource[] = [];
+        // What the walk reads for merge hooks, read in one scan once it finishes.
+        const hookTexts: SourceText[] = [];
 
         /**
          * Read one processable source into the prescan queue.
@@ -5228,7 +5267,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return;
             }
             if (mayImportStylesheet(content)) cssImportingSources.push({ filePath, content });
-            if (readsHooks) readSourceHooks(filePath, content);
+            const hookText = readsHooks ? sourceHookText(filePath, content) : null;
+            if (hookText !== null) hookTexts.push(hookText);
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
@@ -5281,8 +5321,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // cannot read an sz object. Only what git keeps adds merge hooks.
         walkProjectFiles('mark', (filePath, extension, readsHooks) => {
             if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
-            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
+                const hookText = markupHookText(filePath);
+                if (hookText !== null) hookTexts.push(hookText);
+            }
         });
+        readSourceHooksOf(hookTexts);
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
             state.rootDir,

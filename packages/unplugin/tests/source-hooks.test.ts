@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { auditMerges } from '../src/merge-audit.js';
 import { MERGE_TABLE_FILE, writeMergeRegistration } from '../src/merge-registration.js';
 import { prepareNextStylesheetFacts } from '../src/next-stylesheet-facts.js';
-import { openProjectStyleModel } from '../src/project-style-model.js';
+import { openProjectStyleModel, type ProjectStyleModel } from '../src/project-style-model.js';
 import { SourceHookRegistry } from '../src/source-hooks.js';
 import { rollupPlugin, vitePlugin } from '../src/unplugin.js';
 import { RESOLVED_UNSERVED_VIRTUAL_ID } from '../src/virtual-modules.js';
@@ -463,6 +463,77 @@ describe('the source hook registry', () => {
         expect(registry.readText('a.vue', '<style>[class~="x"]{}</style>', 'vue')).toBe(false);
         expect(registry.readText('a.vue', '<style>[class~="y"]{}</style>', 'vue')).toBe(true);
         expect(registry.readText('a.vue', '<style>[class~="y"] {}</style>', 'vue')).toBe(false);
+    });
+
+    /** A model whose every candidate selects on its own name, to read the union back. */
+    const echoModel = {
+        variantHooks: (candidates: readonly string[]) => ({
+            names: new Set(candidates),
+            attributes: [],
+        }),
+    } as unknown as ProjectStyleModel;
+    /**
+     * Tailwind's extractor, cut down to whitespace-separated words.
+     *
+     * @param files - The texts.
+     * @returns Every word in them.
+     */
+    const words: ContentScanner = files => files.flatMap(file => file.content.split(/\s+/));
+    const FILES = [
+        { file: 'a.tsx', text: 'hover:p-1 p-2 group-[.x]:p-3', extension: 'tsx' },
+        { file: 'b.vue', text: 'focus:p-4 <style>.card.shadow-md{}</style>', extension: 'vue' },
+        { file: 'c.tsx', text: 'hover:p-1', extension: 'tsx' },
+    ];
+    const namesOf = (registry: SourceHookRegistry) =>
+        [...registry.hooksFor(echoModel).names].sort();
+
+    it('reads many files with one scan, and hands the model what reading each would', () => {
+        const scan = vi.fn(words);
+        const batched = new SourceHookRegistry(() => scan);
+        expect(batched.readTexts(FILES)).toBe(true);
+        expect(scan).toHaveBeenCalledTimes(1);
+
+        const single = new SourceHookRegistry(() => words);
+        for (const { file, text, extension } of FILES) single.readText(file, text, extension);
+        expect(namesOf(batched)).toEqual(namesOf(single));
+        expect(namesOf(batched)).toEqual(
+            ['card', 'focus:p-4', 'group-[.x]:p-3', 'hover:p-1', 'shadow-md'].sort(),
+        );
+    });
+
+    it('scans nothing for a batch whose files it already read', () => {
+        const scan = vi.fn(words);
+        const registry = new SourceHookRegistry(() => scan);
+        registry.readTexts(FILES);
+        expect(registry.readTexts(FILES)).toBe(false);
+        expect(registry.readTexts([])).toBe(false);
+        expect(scan).toHaveBeenCalledTimes(1);
+        for (const { file, text, extension } of FILES) {
+            expect(registry.readText(file, text, extension)).toBe(false);
+        }
+        expect(scan).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads a file edited after a batch on its own, and keeps what the batch found', () => {
+        // Tailwind's own dev server keeps every candidate it has seen until a
+        // restart; a batch does the same, which keeps a class, never drops one.
+        const scan = vi.fn(words);
+        const registry = new SourceHookRegistry(() => scan);
+        registry.readTexts(FILES);
+        expect(registry.readText('a.tsx', 'peer-[.y]:p-5', 'tsx')).toBe(true);
+        expect(scan).toHaveBeenCalledTimes(2);
+        expect(scan).toHaveBeenLastCalledWith([{ content: 'peer-[.y]:p-5', extension: 'tsx' }]);
+        expect(namesOf(registry)).toContain('peer-[.y]:p-5');
+        expect(namesOf(registry)).toContain('group-[.x]:p-3');
+    });
+
+    it('reads a batch without Tailwind’s extractor as it reads each file', () => {
+        const batched = new SourceHookRegistry(() => null);
+        batched.readTexts(FILES);
+        const single = new SourceHookRegistry(() => null);
+        for (const { file, text, extension } of FILES) single.readText(file, text, extension);
+        expect(namesOf(batched)).toEqual(namesOf(single));
+        expect(namesOf(batched)).toContain('group-[.x]:p-3');
     });
 });
 

@@ -13,6 +13,7 @@
  */
 export {
     type CandidateScanner,
+    type ContentFile,
     type ContentScanner,
     loadCandidateScanner,
     loadContentScanner,

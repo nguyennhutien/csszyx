@@ -92,11 +92,17 @@ export function auditMerges(input: {
     // Every file first: a hook in the last one keeps a class in the first,
     // as the build reads every source before it merges.
     const sources = new SourceHookRegistry(() => input.scanner ?? null);
+    sources.readTexts(
+        input.files.map(file => ({
+            file: file.path,
+            text: file.source,
+            extension: path.extname(file.path).slice(1),
+        })),
+    );
     const firstPasses = input.files.map(file => {
         const first = transformSourceUnrendered(file.source, file.path, {
             classPrefix: input.classPrefix,
         });
-        sources.readText(file.path, file.source, path.extname(file.path).slice(1));
         sources.readLowered(file.path, first.classes);
         return { file, first };
     });

@@ -202,11 +202,25 @@ describe('the content scanner', () => {
     it('finds the candidates Tailwind would in any file, fresh on every call', () => {
         const scan = loadContentScanner(REPO);
         if (scan === null) throw new Error('expected a scanner');
-        const text = '<b className="group-[.shadow-md]:p-2" />';
-        expect(scan(text, 'tsx')).toContain('group-[.shadow-md]:p-2');
-        expect(scan(text, 'tsx')).toContain('group-[.shadow-md]:p-2');
-        expect(scan('<template><i class="in-[.is-on]:p-1" /></template>', 'vue')).toContain(
-            'in-[.is-on]:p-1',
-        );
+        const text = { content: '<b className="group-[.shadow-md]:p-2" />', extension: 'tsx' };
+        expect(scan([text])).toContain('group-[.shadow-md]:p-2');
+        expect(scan([text])).toContain('group-[.shadow-md]:p-2');
+        expect(
+            scan([
+                { content: '<template><i class="in-[.is-on]:p-1" /></template>', extension: 'vue' },
+            ]),
+        ).toContain('in-[.is-on]:p-1');
+    });
+
+    it('finds every file’s candidates in one call for many files', () => {
+        const scan = loadContentScanner(REPO);
+        if (scan === null) throw new Error('expected a scanner');
+        const found = scan([
+            { content: '<b className="group-[.shadow-md]:p-2" />', extension: 'tsx' },
+            { content: '<template><i class="in-[.is-on]:p-1" /></template>', extension: 'vue' },
+            { content: '<b className="group-[.shadow-md]:p-2" />', extension: 'tsx' },
+        ]);
+        expect(found).toContain('group-[.shadow-md]:p-2');
+        expect(found).toContain('in-[.is-on]:p-1');
     });
 });
