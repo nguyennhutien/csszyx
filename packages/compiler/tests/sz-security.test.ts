@@ -33,7 +33,9 @@ describe('compiler recursion limits', () => {
 describe('prototype-pollution-safe transform', () => {
     it('does not pollute Object.prototype through a JSON __proto__ key', () => {
         const evil = JSON.parse('{"__proto__":{"polluted":"yes"},"p":"4"}');
-        expect(transform(evil).className).toBe('p-4');
+        // An own `__proto__` key is an unknown variant key, as the engine
+        // reads it: written out, never followed into the prototype.
+        expect(transform(evil).className).toBe('__proto__:polluted-yes p-4');
         expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     });
 });

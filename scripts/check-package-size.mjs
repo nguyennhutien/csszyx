@@ -595,11 +595,16 @@ export const SIZE_BUDGETS = [
     // (+319): `unserved-variant` prints only in Node, but its gate reads
     // `typeof window`, which no bundler folds, so the table (84), the words
     // (120) and the report (~109) ride along, as every Node-only line does.
+    // Raised to 22,800 on 2026-10-24, measured 22,724 (+41): every table the
+    // lowering reads with an authored key or value goes through one own-entry
+    // lookup, so `constructor` or `toString` no longer reads `Object.prototype`
+    // and writes the text of a function as a class. Making the tables
+    // themselves prototype-free cost +137 here and was dropped.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 22_700,
+        maxGzipBytes: 22_800,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },

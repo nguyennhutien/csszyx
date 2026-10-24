@@ -222,7 +222,7 @@ const EXCLUSIVE_SUB_KEY_GROUPS: Readonly<Record<string, readonly (readonly strin
  * @returns The merged value with displaced groups removed.
  */
 function dropDisplacedSubKeys(key: string, merged: SzValue, incoming: SzValue): SzValue {
-    const groups = EXCLUSIVE_SUB_KEY_GROUPS[key];
+    const groups = own(EXCLUSIVE_SUB_KEY_GROUPS, key);
     if (
         groups === undefined ||
         merged === null ||
@@ -322,7 +322,7 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
  * @returns The utility suffix, or null.
  */
 function typedVariableValue(rawKey: string, value: string): string | null {
-    const hint = CSS_VAR_TYPE_HINTS[rawKey];
+    const hint = own(CSS_VAR_TYPE_HINTS, rawKey);
     if (hint === undefined) return null;
     if (value.startsWith('--') && !value.includes('(')) return `(${hint}:${value})`;
     if (/^\(--[^()]*\)$/.test(value)) return `(${hint}:${value.slice(1, -1)})`;
@@ -608,10 +608,8 @@ function warnAlignmentValue(rawKey: string, written: string): void {
         // The important modifier is a class suffix, not part of the value, as the
         // engine reads it: `flex-start!` is still `flex-start`.
         const { value } = handleImportant(written);
-        // Own keys only: `constructor` or `toString` would read Object members.
-        // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
-        if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
-        const hint = ALIGNMENT_CSS_VALUE_HINT[value];
+        const hint = own(ALIGNMENT_CSS_VALUE_HINT, value);
+        if (hint === undefined) return;
         const sig = `${rawKey}:${value}`;
         if (warnedAlignmentValues.has(sig)) return;
         warnedAlignmentValues.add(sig);
@@ -812,7 +810,7 @@ const _warnedSpacingSteps = new Set<string>();
  * @returns True when the bare class would generate no CSS.
  */
 function isDeadSpacingStep(key: string, value: number): boolean {
-    return PROPERTY_CATEGORY_MAP[key] === PropertyCategory.SPACING && (value * 4) % 1 !== 0;
+    return own(PROPERTY_CATEGORY_MAP, key) === PropertyCategory.SPACING && (value * 4) % 1 !== 0;
 }
 
 /**
@@ -847,8 +845,8 @@ function warnDeadSpacingStep(key: string, value: number): void {
  * @returns The column letters Tailwind serves for the key.
  */
 function capabilityRow(rawKey: string): string | undefined {
-    if (typeof PROPERTY_MAP[rawKey] !== 'string') return undefined;
-    return SZ_CAPABILITIES[rawKey] ?? '';
+    if (typeof own(PROPERTY_MAP, rawKey) !== 'string') return undefined;
+    return own(SZ_CAPABILITIES, rawKey) ?? '';
 }
 
 /** Per-side border keys: the sides Tailwind can size and colour one at a time. */
@@ -1349,6 +1347,24 @@ const FONT_STRETCH_KEYWORDS = new Set([
 */
 
 /**
+ * A table's own entry for text an author wrote. An index or `in` reads
+ * `Object.prototype` too: `{ constructor: 'inherit' }` wrote no class and
+ * named `Object` in a `removed-key` line, and `{ wrap: 'constructor' }` wrote
+ * the text of the `Object` function as a class, where the engine reads both
+ * as the words they are.
+ *
+ * @param table - The table, or none.
+ * @param name - The authored key or value.
+ * @returns Its own entry, or `undefined`.
+ */
+function own<T>(table: Readonly<Record<string, T>> | undefined, name: string): T | undefined {
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
+    return table !== undefined && Object.prototype.hasOwnProperty.call(table, name)
+        ? table[name]
+        : undefined;
+}
+
+/**
  * Converts a camelCase CSS property name to kebab-case.
  * CSS custom properties (--*) are returned unchanged.
  * @param prop - camelCase property name (e.g. "writingMode", "touchAction")
@@ -1367,12 +1383,8 @@ function camelToKebab(prop: string): string {
  * @returns the mapped or kebab-cased variant prefix
  */
 export function getVariantPrefix(key: string): string {
-    // Check VARIANT_MAP first
-    if (VARIANT_MAP[key]) {
-        return VARIANT_MAP[key];
-    }
-    // Fallback: convert camelCase to kebab-case
-    return key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    // VARIANT_MAP first, then camelCase to kebab-case.
+    return own(VARIANT_MAP, key) || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
 /**
@@ -2298,7 +2310,7 @@ function collectContainerQueryVariants(
     prefix: string,
     classes: string[],
 ): void {
-    const mappedKey = VARIANT_MAP[key] || key;
+    const mappedKey = own(VARIANT_MAP, key) || key;
     for (const [nestedKey, value] of Object.entries(values)) {
         if (isInactiveVariantValue(value)) continue;
         const target = resolveContainerQueryTarget(mappedKey, nestedKey, value);
@@ -2725,8 +2737,8 @@ function collectTextFlowProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    if (key === 'break') utility = WORD_BREAK_CLASSES[value] || `break-${value}`;
-    else if (key === 'wrap') utility = OVERFLOW_WRAP_CLASSES[value] || `wrap-${value}`;
+    if (key === 'break') utility = own(WORD_BREAK_CLASSES, value) || `break-${value}`;
+    else if (key === 'wrap') utility = own(OVERFLOW_WRAP_CLASSES, value) || `wrap-${value}`;
     else if (key === 'textOverflow') utility = formatTextOverflow(value);
     else if (key === 'lineClamp') utility = formatLineClamp(value);
     else if (key === 'list' || key === 'listStyle') utility = formatListStyle(value);
@@ -3418,7 +3430,7 @@ function admitUnknownSzPropertyWarning(token: string): boolean {
  * @param at - Where it is written.
  */
 function reportUnknownSzProperty(key: string, at: string | undefined): void {
-    const form = SUGGESTION_MAP[key] ? 'alias' : SPLIT_SHORTHAND_KEYS[key];
+    const form = own(SUGGESTION_MAP, key) ? 'alias' : own(SPLIT_SHORTHAND_KEYS, key);
     if (form !== undefined) {
         szReport({ diagnostic: CANONICAL_KEY, args: { form, key }, at });
     } else if (/^\d+(?:\.\d+)?$/.test(key)) {
@@ -3451,10 +3463,10 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
 /** Returns whether a key belongs to any supported property or variant family. */
 export function isKnownSzPropertyKey(key: string): boolean {
     return Boolean(
-        PROPERTY_MAP[key] ||
+        own(PROPERTY_MAP, key) ||
             KNOWN_SPECIAL_PROPERTIES.has(key) ||
             BOOLEAN_SHORTHANDS.has(key) ||
-            SNAP_DIRECT_MAP[key] ||
+            own(SNAP_DIRECT_MAP, key) ||
             isGradientPositionKey(key) ||
             key.startsWith('--') ||
             key.startsWith('[') ||
@@ -3720,7 +3732,7 @@ function collectFallbackProperty(
     if (!isKnownSzPropertyKey(rawKey)) warnUnknownSzProperty(rawKey, szProp);
     if (/^\d+(?:\.\d+)?$/.test(rawKey)) return;
     if (value === true) {
-        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? BOOLEAN_TO_CLASS[rawKey] || key : key;
+        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? own(BOOLEAN_TO_CLASS, rawKey) || key : key;
         classes.push(`${prefix}${utility}`);
         return;
     }
@@ -3818,13 +3830,13 @@ function collectObjectProperty(
         }
         return true;
     }
-    if (rawKey in PROPERTY_MAP && 'color' in value) {
+    if (own(PROPERTY_MAP, rawKey) !== undefined && 'color' in value) {
         classes.push(
             buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
         );
         return true;
     }
-    if (rawKey in PROPERTY_MAP) warnPropertyObjectValue(rawKey, value);
+    if (own(PROPERTY_MAP, rawKey) !== undefined) warnPropertyObjectValue(rawKey, value);
     warnOwnedKeyVariantObject(rawKey);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
@@ -3914,7 +3926,7 @@ export function __resetSzWarnDedupForTests(): void {
  * generate no CSS. Keys that are genuine variants (hover, sm, group…) never
  * reach here with a property meaning: PROPERTY_MAP and the variant sets are
  * disjoint (locked by test).
- * The caller checks `key in PROPERTY_MAP` first.
+ * The caller checks `own(PROPERTY_MAP, key) !== undefined` first.
  * @param key - The sz key holding the object.
  * @param value - The stray object value (used to name the nested keys).
  */
@@ -4034,7 +4046,7 @@ function warnUnservedStateVariant(variant: string, classNames: string): void {
  */
 function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
-    const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
+    const removed = own(REMOVED_BOOLEAN_SUGAR, rawKey);
     if (!removed) return false;
     warnRemovedKey(
         rawKey,
@@ -4084,7 +4096,7 @@ function collectUnresolvedStringProperty(
 ): boolean {
     if (typeof value !== 'string') return false;
     if (rawKey.startsWith('@')) {
-        classes.push(`${prefix}${VARIANT_MAP[rawKey] || rawKey}/${value}`);
+        classes.push(`${prefix}${own(VARIANT_MAP, rawKey) || rawKey}/${value}`);
         return true;
     }
     if (rawKey === 'group' || rawKey === 'peer') {
@@ -4092,7 +4104,7 @@ function collectUnresolvedStringProperty(
         return true;
     }
     if (dropSlashOpacityString(rawKey, value.replace(/!$/, ''))) return true;
-    const snapClass = SNAP_DIRECT_MAP[rawKey]?.[value];
+    const snapClass = own(own(SNAP_DIRECT_MAP, rawKey), value);
     if (snapClass) {
         classes.push(`${prefix}${snapClass}`);
         return true;
@@ -4140,10 +4152,10 @@ function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject)
     const base = typeof value === 'string' ? handleImportant(value).value : undefined;
     const moved =
         base !== undefined
-            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${base}`]
+            ? CLOSED_ENUM_VALUE_MOVES[`${own(SUGGESTION_MAP, rawKey)}:${base}`]
             : undefined;
     if (moved !== undefined) warnMovedValue(rawKey, base as string);
-    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey, 'removed');
+    else if (own(MIGRATION_NOTES, rawKey) !== undefined) warnRemovedKey(rawKey, 'removed');
     // No alias or removed key is a known key; a test pins that.
     else warnUnknownSzProperty(rawKey, szProp);
 }
@@ -4159,11 +4171,15 @@ function collectTransformProperty(
     if (value === false || value === null || value === undefined) return;
     // A flag that joined a group under a new name emits nothing; say so in
     // every mode, as for the other replaced keys.
-    if (REPLACED_KEYS.has(rawKey) && rawKey in SUGGESTION_MAP) {
-        warnRemovedKey(rawKey, 'replaced', `${SUGGESTION_MAP[rawKey]}: true`);
+    if (REPLACED_KEYS.has(rawKey) && own(SUGGESTION_MAP, rawKey) !== undefined) {
+        warnRemovedKey(rawKey, 'replaced', `${own(SUGGESTION_MAP, rawKey)}: true`);
         return;
     }
-    if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES || rawKey in SPLIT_SHORTHAND_KEYS) {
+    if (
+        own(SUGGESTION_MAP, rawKey) !== undefined ||
+        own(MIGRATION_NOTES, rawKey) !== undefined ||
+        own(SPLIT_SHORTHAND_KEYS, rawKey) !== undefined
+    ) {
         warnAliasOrRemovedKey(rawKey, value, szProp);
         return;
     }
@@ -4173,7 +4189,7 @@ function collectTransformProperty(
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 
-    const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
+    const key = own(PROPERTY_MAP, rawKey) || camelToKebab(rawKey);
     if (collectBasicSpecialProperty(rawKey, value, prefix, classes)) return;
     if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
     collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
