@@ -1,6 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { transformWasm } from '@csszyx/compiler/engine';
 import {
@@ -8,6 +16,7 @@ import {
     renderEngineDiagnostic,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
+import { loadCandidateScanner } from '@csszyx/tailwind-oracle';
 import { afterEach, describe, expect, it } from 'vitest';
 import { emittedClassSites } from '../src/dead-class.js';
 import {
@@ -28,6 +37,19 @@ type TransformHook = {
 };
 
 const tempDirs: string[] = [];
+
+/**
+ * Where an entry lives in the cache root.
+ *
+ * @param cacheRoot - The transform cache directory.
+ * @param key - The entry's key.
+ * @returns The entry's path.
+ */
+function entryFile(cacheRoot: string, key: string): string {
+    return join(cacheRoot, `${key}.json`);
+}
+/** The repository root, whose Tailwind the scanner loads from. */
+const REPO = resolve(import.meta.dirname, '../../..');
 const PLUGIN_VERSION = packageVersion('../package.json');
 const COMPILER_VERSION = packageVersion('../../compiler/package.json');
 
@@ -96,6 +118,37 @@ describe('transform cache', () => {
         );
     });
 
+    it("keeps its entries out of Tailwind's scan of the project", () => {
+        // Tailwind scans every file it is not told to ignore. Read as a
+        // source, an entry doubled the files of an 800-module app and kept a
+        // class deleted from the code in the CSS until the entry aged out.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'));
+        writeFileSync(join(root, 'src/App.tsx'), 'export const A = () => <b className="p-3" />;\n');
+        const cacheRoot = resolveTransformCacheDir(root);
+        writeTransformCache(cacheRoot, input(), {
+            ...result(),
+            code: 'const App=()=> <div className="bg-lime-700" />;',
+        });
+
+        expect(readFileSync(join(cacheRoot, '.gitignore'), 'utf8')).toBe('*\n');
+        const scan = loadCandidateScanner(REPO);
+        if (scan === null) throw new Error('expected a scanner');
+        const found = scan([{ base: root, pattern: '**/*', negated: false }]);
+        expect(found).toContain('p-3');
+        expect(found).not.toContain('bg-lime-700');
+    });
+
+    it('leaves an ignore file it finds in the cache as it was', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        mkdirSync(cacheRoot, { recursive: true });
+        writeFileSync(join(cacheRoot, '.gitignore'), '*.json\n');
+        writeTransformCache(cacheRoot, input(), result());
+
+        expect(readFileSync(join(cacheRoot, '.gitignore'), 'utf8')).toBe('*.json\n');
+        expect(readTransformCache(cacheRoot, input())?.code).toBe(result().code);
+    });
+
     it('round-trips transform results through disk', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input(), result());
@@ -158,9 +211,9 @@ describe('transform cache', () => {
         writeTransformCache(cacheRoot, spannedInput, { ...result(), ...engine });
 
         const { key } = createTransformCacheKey(spannedInput);
-        const stored = JSON.parse(
-            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
-        ) as { result: Record<string, unknown> };
+        const stored = JSON.parse(readFileSync(entryFile(cacheRoot, key), 'utf8')) as {
+            result: Record<string, unknown>;
+        };
         expect(JSON.stringify(stored.result)).not.toMatch(/"line"|"column"|"positions"/);
         expect(stored.result.issues).toEqual([
             // The args travel with the offset, so a cache hit reads the key back.
@@ -188,9 +241,9 @@ describe('transform cache', () => {
         writeTransformCache(cacheRoot, spannedInput, { ...result(), ...engine });
 
         const { key } = createTransformCacheKey(spannedInput);
-        const stored = JSON.parse(
-            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
-        ) as { result: Record<string, unknown> };
+        const stored = JSON.parse(readFileSync(entryFile(cacheRoot, key), 'utf8')) as {
+            result: Record<string, unknown>;
+        };
         expect(stored.result.singleClassGroups).toEqual([
             {
                 keys: ['justify'],
@@ -266,13 +319,15 @@ describe('transform cache', () => {
         expect(first.inputSha256).toBe(second.inputSha256);
     });
 
-    it('writes entries atomically without leaving tmp files on success', () => {
+    it('writes each entry atomically, straight into the cache root', () => {
+        // A directory per key prefix made a cold 800-file build create 256 of
+        // them: 33.6 ms of writes, against 17.3 ms for the same files flat.
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input(), result());
 
         const { key } = createTransformCacheKey(input());
-        const shardDir = join(cacheRoot, key.slice(0, 2));
-        const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
+        expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
+        const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
         expect(content).toContain('"version":22');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
@@ -286,9 +341,9 @@ describe('transform cache', () => {
         writeTransformCache(cacheRoot, keyInput, lazy);
 
         const { key } = createTransformCacheKey(keyInput);
-        const entry = JSON.parse(
-            readFileSync(join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`), 'utf8'),
-        ) as { result: { diagnostics: string[]; diagnosticFile?: string } };
+        const entry = JSON.parse(readFileSync(entryFile(cacheRoot, key), 'utf8')) as {
+            result: { diagnostics: string[]; diagnosticFile?: string };
+        };
         expect(entry.result.diagnostics).toEqual([]);
         expect(entry.result.diagnosticFile).toBe('src/A.tsx');
 
@@ -305,7 +360,7 @@ describe('transform cache', () => {
         writeTransformCache(cacheRoot, input(), result());
 
         const { key } = createTransformCacheKey(input());
-        const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+        const file = entryFile(cacheRoot, key);
         const entry = JSON.parse(readFileSync(file, 'utf8')) as { version: number };
         // Simulate a schema-9 entry surviving at the current key: its result
         // predates usesSpacingVar/usesUnitVar, so serving it would resurrect
@@ -355,7 +410,7 @@ describe('transform cache', () => {
         const asked = input({ classPrefix: 'tw' });
         writeTransformCache(cacheRoot, asked, result());
         const { key } = createTransformCacheKey(asked);
-        const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+        const file = entryFile(cacheRoot, key);
         const entry = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
         entry.classPrefix = 'ui';
         writeFileSync(file, JSON.stringify(entry));
@@ -367,7 +422,7 @@ describe('transform cache', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input(), result());
         const { key } = createTransformCacheKey(input());
-        const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+        const file = entryFile(cacheRoot, key);
         const entry = JSON.parse(readFileSync(file, 'utf8')) as { timestamp: string };
         entry.timestamp = new Date('2026-01-01T00:00:00.000Z').toISOString();
         writeFileSync(file, JSON.stringify(entry), 'utf8');
@@ -392,7 +447,7 @@ describe('transform cache', () => {
             const entryInput = input({ source: `const n = ${i}; <div sz={{ p: ${i} }} />;` });
             writeTransformCache(cacheRoot, entryInput, result());
             const { key } = createTransformCacheKey(entryInput);
-            const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+            const file = entryFile(cacheRoot, key);
             const entry = JSON.parse(readFileSync(file, 'utf8')) as { timestamp: string };
             entry.timestamp = new Date(`2026-05-17T00:00:0${i}.000Z`).toISOString();
             writeFileSync(file, JSON.stringify(entry), 'utf8');

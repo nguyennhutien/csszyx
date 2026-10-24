@@ -298,6 +298,7 @@ export function writeTransformCache(
 
     try {
         fs.mkdirSync(dir, { recursive: true });
+        ignoreCacheRoot(cacheRoot);
         fs.writeFileSync(tmp, JSON.stringify(entry), 'utf8');
         fs.renameSync(tmp, file);
     } catch {
@@ -307,6 +308,31 @@ export function writeTransformCache(
             // Ignore cleanup failures: cache writes must never fail the build.
         }
     }
+}
+
+/** Cache roots that hold their ignore file, so a build writes it once. */
+const ignoredCacheRoots = new Set<string>();
+
+/**
+ * Put an ignore file in the cache root, as pytest and ruff do in theirs.
+ *
+ * Tailwind's scan honours `.gitignore` in any directory, git repository or
+ * not. Read as sources, the entries doubled the files an 800-module app
+ * scans and kept a class deleted from the code in the CSS until its entry
+ * aged out. The root is the `transform` directory csszyx alone writes, never
+ * the configured cache directory, which a project could point anywhere.
+ * An ignore file already there is left as it is.
+ *
+ * @param cacheRoot Absolute transform cache directory, already created.
+ */
+function ignoreCacheRoot(cacheRoot: string): void {
+    if (ignoredCacheRoots.has(cacheRoot)) return;
+    try {
+        fs.writeFileSync(path.join(cacheRoot, '.gitignore'), '*\n', { flag: 'wx' });
+    } catch {
+        // Already there, or not writable: the entries are read the same way.
+    }
+    ignoredCacheRoots.add(cacheRoot);
 }
 
 /**
@@ -354,14 +380,19 @@ export function evictOldTransformCacheEntries(
 }
 
 /**
- * Build the cache entry path for a key.
+ * Build the cache entry path for a key: one file in the root, no directory
+ * per key prefix. The eviction cap keeps the root to 10,000 entries, which
+ * every file system lists without trouble, and a cold 800-file build no
+ * longer creates 256 directories (33.6 -> 17.3 ms of writes). Entries a
+ * release before this one wrote in such directories are never read again
+ * and age out through the eviction, which walks every directory.
  *
  * @param cacheRoot Absolute cache root.
  * @param key Short cache key.
  * @returns Absolute cache entry path.
  */
 function cacheEntryPath(cacheRoot: string, key: string): string {
-    return path.join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+    return path.join(cacheRoot, `${key}.json`);
 }
 
 /** The fields of a transform result that carry over unconverted. */

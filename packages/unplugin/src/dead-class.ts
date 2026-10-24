@@ -196,44 +196,55 @@ export function emittedClassSites(result: EmittedClassPlacement): Map<string, Em
 
 /**
  * A class's site as a build records it on every transform: the file, and the
- * entry of its key, whose line and column are resolved only when read.
+ * entry of its key, which is looked for only when the site is read.
  */
 class PlacedClassSite implements DeadClassSite {
     readonly file: string;
-    readonly #placement: Placement;
+    readonly #className: string;
+    readonly #placed: () => ReadonlyMap<string, Placement>;
 
     /**
      * @param file - The file, project-relative.
-     * @param placement - The entry of the class's key.
+     * @param className - The class.
+     * @param placed - The file's placements, placed on the first call.
      */
-    constructor(file: string, placement: Placement) {
+    constructor(file: string, className: string, placed: () => ReadonlyMap<string, Placement>) {
         this.file = file;
-        this.#placement = placement;
+        this.#className = className;
+        this.#placed = placed;
     }
 
-    /** @returns The key's 1-based line. */
-    get line(): number {
-        return this.#position().line;
+    /** @returns The key's 1-based line, when the engine placed the class. */
+    get line(): number | undefined {
+        return this.#position()?.line;
     }
 
-    /** @returns The key's 1-based column. */
-    get column(): number {
-        return this.#position().column;
+    /** @returns The key's 1-based column, when the engine placed the class. */
+    get column(): number | undefined {
+        return this.#position()?.column;
     }
 
-    /** @returns The key the class was lowered from. */
-    get key(): string {
-        return this.#placement.group.keys[this.#placement.index] as string;
+    /** @returns The key the class was lowered from, when the engine placed it. */
+    get key(): string | undefined {
+        const placement = this.#placed().get(this.#className);
+        return placement?.group.keys[placement.index];
     }
 
     /** @returns The site as plain fields, as {@link deadClassSite} hands it on. */
     resolved(): DeadClassSite {
-        return { file: this.file, line: this.line, column: this.column, key: this.key };
+        if (!this.#placed().has(this.#className)) return { file: this.file };
+        return {
+            file: this.file,
+            line: this.line as number,
+            column: this.column as number,
+            key: this.key as string,
+        };
     }
 
-    /** @returns The key's position. */
-    #position(): SourcePosition {
-        return this.#placement.group.positions[this.#placement.index] as SourcePosition;
+    /** @returns The key's position, when the engine placed the class. */
+    #position(): SourcePosition | undefined {
+        const placement = this.#placed().get(this.#className);
+        return placement?.group.positions[placement.index];
     }
 }
 
@@ -251,9 +262,10 @@ export function deadClassSite(site: DeadClassSite): DeadClassSite {
 /**
  * Where one file emits each of its classes.
  *
- * Runs on every transform a build records, so no position is resolved here:
- * a site's line and column are read only for a class the report names
- * ({@link deadClassSite}).
+ * Runs on every transform a build records, so nothing is placed here: the
+ * file's groups are read once, when the report names one of its classes
+ * ({@link deadClassSite}). Placing every class of an 800-file app on every
+ * transform cost 4.6 ms for a report that names a few.
  *
  * @param file - The file, project-relative.
  * @param classes - The classes the file's `sz` lowered to.
@@ -265,14 +277,16 @@ export function szClassSites(
     classes: Iterable<string>,
     result: EmittedClassPlacement,
 ): Map<string, DeadClassSite> {
-    const placed = placeClasses(result);
+    // The groups alone, not the result: a site outlives its transform.
+    const groups = { mergeGroups: result.mergeGroups, singleClassGroups: result.singleClassGroups };
+    let placements: Map<string, Placement> | undefined;
+    const placed = (): Map<string, Placement> => {
+        placements ??= placeClasses(groups);
+        return placements;
+    };
     const sites = new Map<string, DeadClassSite>();
     for (const className of classes) {
-        const placement = placed.get(className);
-        sites.set(
-            className,
-            placement === undefined ? { file } : new PlacedClassSite(file, placement),
-        );
+        sites.set(className, new PlacedClassSite(file, className, placed));
     }
     return sites;
 }

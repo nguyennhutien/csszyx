@@ -6,7 +6,9 @@
  * arbitrary variant (`group-[.shadow-md]:p-2`, written in markup or lowered
  * from an `sz` key) and a `<style>` block in a Vue, Svelte or Astro component
  * or an HTML page. This registry keeps what each file contributes, so an edit
- * that removes a hook takes it away again, and hands the model the union.
+ * that removes a hook takes it away again, and hands the model the union. The
+ * candidates of files read together in one scan are the exception, kept
+ * together (`readTexts`).
  *
  * Only the classes each source names are kept, never its text: the rules are
  * written by the project's own Tailwind (`ProjectStyleModel.variantHooks`), so
@@ -19,6 +21,7 @@ import { createHash } from 'node:crypto';
 import {
     addClassHooks,
     type ClassHooks,
+    type ContentFile,
     type ContentScanner,
     noClassHooks,
     styleBlockHooks,
@@ -34,6 +37,19 @@ export const MARKUP_EXTENSIONS: ReadonlySet<string> = new Set([
     '.astro',
     '.html',
 ]);
+
+/** One file's text, as `SourceHookRegistry.readTexts` reads it. */
+export interface SourceText {
+    /** The file, as a stable key. */
+    readonly file: string;
+    /** Its text. */
+    readonly text: string;
+    /** Its extension without the dot, as Tailwind's extractor names languages. */
+    readonly extension: string;
+}
+
+/** Where the candidates of every file read in a batch are kept, together. */
+const BATCH_READ = '\0batch-read';
 
 /** What one file contributes. */
 interface FileHooks {
@@ -84,6 +100,29 @@ function styleKey(hooks: ClassHooks): string {
     ]);
 }
 
+/**
+ * A digest of a file's text, so reading the same text again costs a hash.
+ *
+ * @param text - The text.
+ * @returns Its SHA-256, base64.
+ */
+function digestOf(text: string): string {
+    return createHash('sha256').update(text).digest('base64');
+}
+
+/**
+ * What a file's `<style>` blocks select on, when it is markup.
+ *
+ * @param text - Its text.
+ * @param extension - Its extension without the dot.
+ * @returns The hooks; none for a file that is not markup.
+ */
+function styleOf(text: string, extension: string): ClassHooks {
+    const style = noClassHooks();
+    if (MARKUP_EXTENSIONS.has(`.${extension}`)) styleBlockHooks(text, style);
+    return style;
+}
+
 /** Every file's contribution, and the union a model is given. */
 export class SourceHookRegistry {
     private readonly files = new Map<string, FileHooks>();
@@ -112,18 +151,63 @@ export class SourceHookRegistry {
     readText(file: string, text: string, extension: string): boolean {
         // The transform reads the text the prescan already read: 0.55 ms a
         // file to scan on the docs app, against a hash.
-        const digest = createHash('sha256').update(text).digest('base64');
+        const digest = digestOf(text);
         if (this.files.get(file)?.digest === digest) return false;
+        return this.update(file, {
+            written: withColon(this.scan([{ content: text, extension }])),
+            style: styleOf(text, extension),
+            digest,
+        });
+    }
+
+    /**
+     * Read many files' text with one scan: what `readText` reads in each, for
+     * all of them at once.
+     *
+     * Tailwind's extractor answers a list of files with one list, and asking
+     * it file by file cost 1864 ms against 68 ms on a 4,700-file project. So
+     * the candidates of a batch are kept together rather than per file, and
+     * only grow: a file read again on its own later keeps what the batch found
+     * in it until the registry is rebuilt, as Tailwind's own dev server keeps
+     * every candidate it has seen. That keeps a class, never drops one.
+     *
+     * @param texts - The files.
+     * @returns True when what the files contribute changed.
+     */
+    readTexts(texts: Iterable<SourceText>): boolean {
+        const unread: Array<SourceText & { digest: string }> = [];
+        for (const entry of texts) {
+            const digest = digestOf(entry.text);
+            if (this.files.get(entry.file)?.digest !== digest) unread.push({ ...entry, digest });
+        }
+        if (unread.length === 0) return false;
+        let changed = false;
+        for (const { file, text, extension, digest } of unread) {
+            changed =
+                this.update(file, { written: [], style: styleOf(text, extension), digest }) ||
+                changed;
+        }
+        const found = this.scan(
+            unread.map(({ text, extension }) => ({ content: text, extension })),
+        );
+        const written = withColon([...(this.files.get(BATCH_READ)?.written ?? []), ...found]);
+        return this.update(BATCH_READ, { written }) || changed;
+    }
+
+    /**
+     * Every candidate the files hold, by Tailwind's extractor when the project
+     * has one.
+     *
+     * @param files - The texts.
+     * @returns Their candidates, together.
+     */
+    private scan(files: readonly ContentFile[]): string[] {
         this.scanner ??= this.loadScanner();
-        const found =
-            this.scanner === null
-                ? // Without Tailwind's extractor, every quoted or spaced token
-                  // is a candidate: too many only keeps classes.
-                  text.split(/[\s"'`]+/)
-                : this.scanner(text, extension);
-        const style = noClassHooks();
-        if (MARKUP_EXTENSIONS.has(`.${extension}`)) styleBlockHooks(text, style);
-        return this.update(file, { written: withColon(found), style, digest });
+        return this.scanner === null
+            ? // Without Tailwind's extractor, every quoted or spaced token
+              // is a candidate: too many only keeps classes.
+              files.flatMap(({ content }) => content.split(/[\s"'`]+/))
+            : this.scanner(files);
     }
 
     /**

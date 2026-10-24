@@ -774,6 +774,33 @@ describe('where a file emits each class', () => {
         ]);
     });
 
+    it('reads no group until a site is named, and then places the file once', () => {
+        // A build records every class of every transform and names only the
+        // few that are dead; placing them all cost 4.6 ms on an 800-file app.
+        let reads = 0;
+        const group = {
+            keys: ['break', 'p'],
+            positions: [
+                { line: 2, column: 1 },
+                { line: 2, column: 2 },
+            ],
+            get classes() {
+                reads++;
+                return ['break-bogus', 'p-4'];
+            },
+        };
+        const sites = szClassSites('src/A.tsx', ['break-bogus', 'p-4'], { mergeGroups: [group] });
+        expect(reads).toBe(0);
+        expect(deadClassSite(sites.get('p-4') as DeadClassSite)).toEqual({
+            file: 'src/A.tsx',
+            line: 2,
+            column: 2,
+            key: 'p',
+        });
+        expect(deadClassSite(sites.get('break-bogus') as DeadClassSite).key).toBe('break');
+        expect(reads).toBe(1);
+    });
+
     it('places a one-class object through singleClassGroups', () => {
         const sites = szClassSites('src/A.tsx', ['justify-safe-center', 'p-4'], {
             mergeGroups: [
