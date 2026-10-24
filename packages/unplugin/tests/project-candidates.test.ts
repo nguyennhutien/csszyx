@@ -83,6 +83,32 @@ describe('the candidates of a project', () => {
         expect(model.candidates()).toEqual(expect.arrayContaining(['px-2', 'text-lg']));
     }, 60_000);
 
+    it('leave out what csszyx writes, so a class it held once does not hold itself', async () => {
+        // The merge table is built from this scan and written to `.csszyx/`.
+        // Read back, it kept every class it ever held: one deleted from the
+        // sources stayed in the table and in the CSS, build after build.
+        const root = tailwindProject('csszyx-candidates-state-', {
+            'src/app.css': '@import "tailwindcss";\n',
+            'src/sizes.ts': SIZES,
+            '.csszyx/csszyx-classes.txt': 'bg-lime-600\n',
+            '.csszyx/merge-table.json': '{"format":1,"signatures":{"bg-lime-900":0}}\n',
+            '.csszyx/merge-registration.mjs': 'export const table = ["bg-lime-800"];\n',
+            '.csszyx/merge-registration.cjs': 'exports.table = ["bg-lime-500"];\n',
+            '.csszyx/theme.d.ts': "export type Color = 'bg-lime-400';\n",
+            '.csszyx/cache/transform/ab/cdef.json': '{"code":"bg-lime-700"}\n',
+        });
+        linkTailwindIntegration(root);
+        const model = await openProjectStyleModel(root, [join(root, 'src/app.css')]);
+
+        const candidates = model.candidates();
+        // The safelist is the one file there Tailwind is meant to read.
+        expect(candidates).toEqual(expect.arrayContaining(['px-2', 'bg-lime-600']));
+        for (const held of ['bg-lime-900', 'bg-lime-800', 'bg-lime-500', 'bg-lime-400']) {
+            expect(candidates).not.toContain(held);
+        }
+        expect(candidates).not.toContain('bg-lime-700');
+    }, 60_000);
+
     it('are empty when the project has no Tailwind scanner to ask', async () => {
         // No integration installed: the census stays what the build saw, the
         // merge keeps what it cannot prove, and nothing fails.

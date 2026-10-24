@@ -409,6 +409,14 @@ function agreedFacts(first: CompiledEntry, rest: readonly CompiledEntry[]): Styl
     };
 }
 
+/**
+ * What csszyx writes under `.csszyx/` beside the safelist: the merge table and
+ * registration, the theme types, the cache. The table is built from the
+ * candidates scan, so reading it back kept every class it once held, one
+ * deleted from the sources included. The safelist is a `.txt` and stays in.
+ */
+const STATE_FILES = '.csszyx/**/*.{json,mjs,cjs,ts}';
+
 /** Text a stylesheet must contain to reach Tailwind at all: an import or a directive. */
 const MAY_REACH_TAILWIND = /@(?:import|tailwind)\b/;
 
@@ -865,6 +873,8 @@ export async function openProjectStyleModel(
                     }
                 }
                 if (sources.size === 0) return [];
+                const own = { base: resolveFrom, pattern: STATE_FILES, negated: true };
+                sources.set(JSON.stringify(own), own);
                 const scan = loadCandidateScanner(resolveFrom);
                 // No scanner to load: the census stays what the build saw, and the
                 // merge keeps what it cannot prove.

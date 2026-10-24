@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { transformWasm } from '@csszyx/compiler/engine';
 import {
@@ -8,6 +8,7 @@ import {
     renderEngineDiagnostic,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
+import { loadCandidateScanner } from '@csszyx/tailwind-oracle';
 import { afterEach, describe, expect, it } from 'vitest';
 import { emittedClassSites } from '../src/dead-class.js';
 import {
@@ -28,6 +29,8 @@ type TransformHook = {
 };
 
 const tempDirs: string[] = [];
+/** The repository root, whose Tailwind the scanner loads from. */
+const REPO = resolve(import.meta.dirname, '../../..');
 const PLUGIN_VERSION = packageVersion('../package.json');
 const COMPILER_VERSION = packageVersion('../../compiler/package.json');
 
@@ -94,6 +97,37 @@ describe('transform cache', () => {
         expect(resolveTransformCacheDir('/repo', '.custom-cache')).toBe(
             '/repo/.custom-cache/transform',
         );
+    });
+
+    it("keeps its entries out of Tailwind's scan of the project", () => {
+        // Tailwind scans every file it is not told to ignore. Read as a
+        // source, an entry doubled the files of an 800-module app and kept a
+        // class deleted from the code in the CSS until the entry aged out.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'));
+        writeFileSync(join(root, 'src/App.tsx'), 'export const A = () => <b className="p-3" />;\n');
+        const cacheRoot = resolveTransformCacheDir(root);
+        writeTransformCache(cacheRoot, input(), {
+            ...result(),
+            code: 'const App=()=> <div className="bg-lime-700" />;',
+        });
+
+        expect(readFileSync(join(cacheRoot, '.gitignore'), 'utf8')).toBe('*\n');
+        const scan = loadCandidateScanner(REPO);
+        if (scan === null) throw new Error('expected a scanner');
+        const found = scan([{ base: root, pattern: '**/*', negated: false }]);
+        expect(found).toContain('p-3');
+        expect(found).not.toContain('bg-lime-700');
+    });
+
+    it('leaves an ignore file it finds in the cache as it was', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        mkdirSync(cacheRoot, { recursive: true });
+        writeFileSync(join(cacheRoot, '.gitignore'), '*.json\n');
+        writeTransformCache(cacheRoot, input(), result());
+
+        expect(readFileSync(join(cacheRoot, '.gitignore'), 'utf8')).toBe('*.json\n');
+        expect(readTransformCache(cacheRoot, input())?.code).toBe(result().code);
     });
 
     it('round-trips transform results through disk', () => {
