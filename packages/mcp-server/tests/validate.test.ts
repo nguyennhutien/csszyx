@@ -47,10 +47,29 @@ describe('csszyx_validate', () => {
         ]);
     });
 
-    it('catches unknown props', () => {
-        const data = JSON.parse(handleValidate({ sz: { unknownProp: 'value' } }).content[0].text);
+    it('catches unknown props, in the engine words, at any depth', () => {
+        const data = JSON.parse(
+            handleValidate({ sz: { unknownProp: 'value', hover: { foo: 4 } } }).content[0].text,
+        );
         expect(data.valid).toBe(false);
-        expect(data.errors[0].message).toContain("Unknown prop 'unknownProp'");
+        expect(
+            data.errors.map((error: { key: string; code: string }) => [error.key, error.code]),
+        ).toEqual([
+            ['unknownProp', 'unknown-key'],
+            ['hover.foo', 'unknown-key'],
+        ]);
+    });
+
+    // The key check is the compiler's own, so a key the transform compiles is
+    // never called unknown in the same reply (vui, 0.17.2).
+    it('accepts a custom property and a project breakpoint, as the compiler does', () => {
+        const data = JSON.parse(
+            handleValidate({ sz: { '--tag-color': 'red', p: 4, tablet: { p: 2 } } }).content[0]
+                .text,
+        );
+        expect(data.valid).toBe(true);
+        expect(data.errors).toBeUndefined();
+        expect(data.transformResult.className).toBe('[--tag-color:red] p-4 tablet:p-2');
     });
 
     it('surfaces compiler console warnings as warnings', () => {

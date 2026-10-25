@@ -46,6 +46,17 @@ describe('MCP request handlers over an in-memory transport', () => {
         await client.close();
     });
 
+    it('names the compiler that answered on every tool reply', async () => {
+        const result = await client.callTool({
+            name: 'csszyx_expand',
+            arguments: { sz: { p: 4 } },
+        });
+        expect((result._meta as { compilerVersion?: string }).compilerVersion).toMatch(
+            /^\d+\.\d+\.\d+/,
+        );
+        expect(client.getInstructions()).toMatch(/@csszyx\/compiler \d+\.\d+\.\d+/);
+    });
+
     it('lists every registered tool', async () => {
         const { tools } = await client.listTools();
         expect(tools).toHaveLength(TOOLS.length);

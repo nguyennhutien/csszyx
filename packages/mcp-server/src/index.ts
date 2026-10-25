@@ -35,6 +35,11 @@ const packageJson = _require(
 ) as { version: string };
 const VERSION = packageJson.version;
 
+import {
+    compilerInstructions,
+    installedCompilerVersion,
+    withCompilerVersions,
+} from './compiler-version.js';
 import { getPrompt, listPrompts } from './prompts/index.js';
 import { listResources, readResource } from './resources/index.js';
 import { batchSchema, handleBatch } from './tools/batch.js';
@@ -50,12 +55,19 @@ import { handleValidate, validateSchema } from './tools/validate.js';
 // SERVER INIT
 // ============================================================================
 
+/** The compiler that answers, beside this file, and the one the project has. */
+const COMPILER_VERSIONS = {
+    answering: installedCompilerVersion(path.dirname(fileURLToPath(import.meta.url))),
+    project: installedCompilerVersion(process.cwd()),
+};
+
 export const server = new McpServer(
     {
         name: 'csszyx-mcp-server',
         version: VERSION,
     },
     {
+        instructions: compilerInstructions(COMPILER_VERSIONS),
         capabilities: {
             tools: {},
             resources: {},
@@ -263,7 +275,10 @@ server.server.setRequestHandler(CallToolRequestSchema, request => {
 
     try {
         const validated = entry.schema.parse(args);
-        return entry.handler(validated as Record<string, unknown>);
+        return withCompilerVersions(
+            entry.handler(validated as Record<string, unknown>),
+            COMPILER_VERSIONS,
+        );
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return {
