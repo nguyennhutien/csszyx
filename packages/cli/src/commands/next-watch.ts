@@ -20,13 +20,13 @@ import {
 import {
     createRootIgnoreMatcher,
     prepareNextStylesheetFacts,
-    runNextPrebuild,
+    writeNextPrebuildShards,
 } from '@csszyx/unplugin/next-prebuild';
 import {
-    NEXT_WATCH_LOCK_COMMAND,
     type NextSafelistMaterializeResult,
     type NextSafelistWatchEvent,
     NextSafelistWatcher,
+    runNextWatcherCycleUnlessLoaderHolds,
 } from '@csszyx/unplugin/next-watcher';
 import { type ChokidarOptions, watch } from 'chokidar';
 import fg from 'fast-glob';
@@ -297,7 +297,7 @@ export async function startNextWatch(
     // Kept for the session: a dead class is said once, not after every cycle.
     const deadClassLimiter = createDiagnosticLimiter();
 
-    const prebuild = runNextPrebuild({
+    const prebuild = writeNextPrebuildShards({
         files,
         explicitRoot: root,
         cwd,
@@ -308,11 +308,12 @@ export async function startNextWatch(
         importedStaticSz: options.importedStaticSz,
         tailwindStylesheet: options.tailwindStylesheet && [...options.tailwindStylesheet],
         config: { mangleVars: false },
-        // The Turbopack loader steps aside only for a watcher. This pass is the
-        // watcher's own startup, and the initial cycle below reads every shard
-        // the loader writes while it runs, so it records the watcher's command.
-        lockCommand: NEXT_WATCH_LOCK_COMMAND,
     });
+    // The safelist `next dev` reads is written now, under the watcher's command,
+    // which the Turbopack loader steps aside for. A loader holding the lock at
+    // this moment has its turn: null, and the watcher's initial cycle, queued
+    // behind the lock, writes it and the census once the loader lets go.
+    const first = runNextWatcherCycleUnlessLoaderHolds(prebuild.context);
 
     let resolveFailure: (error: Error) => void = () => {};
     let failed = false;
@@ -330,8 +331,9 @@ export async function startNextWatch(
     // The merge table and the unserved list the loader imports: rewritten
     // after every cycle, since the shards carry the census, and after every
     // stylesheet edit, since the design system signs the table.
-    let census: NextSafelistMaterializeResult = prebuild.cycle.materialize;
+    let census: NextSafelistMaterializeResult | null = first?.materialize ?? null;
     const writeRegistration = (): void => {
+        if (census === null) return;
         const registration = tryWriteMergeRegistration({
             root,
             model,
@@ -479,7 +481,11 @@ export async function startNextWatch(
     }
 
     const sweep = setInterval(() => {
-        if (!controller.pending && census.sourcePaths.some(source => !fs.existsSync(source))) {
+        if (
+            census !== null &&
+            !controller.pending &&
+            census.sourcePaths.some(source => !fs.existsSync(source))
+        ) {
             controller.rescan();
         }
         // The watcher sees only the root's tree, and not what it ignores; a
@@ -491,8 +497,8 @@ export async function startNextWatch(
     return {
         root,
         sourcePattern: pattern,
-        safelistOutputPath: prebuild.safelistOutputPath,
-        manifestPath: prebuild.manifestPath,
+        safelistOutputPath: prebuild.context.safelist.outputPath,
+        manifestPath: prebuild.context.manifestPath,
         failure,
         close: async () => {
             if (closed) {

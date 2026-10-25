@@ -63,16 +63,6 @@ export interface NextPrebuildOptions extends NextLaneOptions {
      */
     importedStaticSz?: boolean;
     createdAt?: string;
-    /**
-     * What this pass records on the state lock; `csszyx next prebuild` by
-     * default.
-     *
-     * The Turbopack loader steps aside only for a watcher's command. `next
-     * watch` passes that command here because its initial cycle follows this
-     * pass and reads every shard the loader wrote meanwhile. A standalone
-     * prebuild keeps the default: nothing after it would pick those shards up.
-     */
-    lockCommand?: string;
 }
 
 /** Per-file result captured by one prebuild pass. */
@@ -84,17 +74,21 @@ export interface NextPrebuildFileResult {
     producer: NextSourceTransformOutput['producer'];
 }
 
-/** Aggregated result returned by `runNextPrebuild`. */
-export interface NextPrebuildResult {
+/** What a prebuild pass wrote before it materializes: one shard per file. */
+export interface NextPrebuildShards {
     context: NextStateContext;
     scannedCount: number;
     transformedCount: number;
     skippedMissingCount: number;
+    files: NextPrebuildFileResult[];
+}
+
+/** Aggregated result returned by `runNextPrebuild`. */
+export interface NextPrebuildResult extends NextPrebuildShards {
     classCount: number;
     sourceCount: number;
     manifestPath: string;
     safelistOutputPath: string;
-    files: NextPrebuildFileResult[];
     cycle: NextWatcherCycleResult;
 }
 
@@ -110,6 +104,39 @@ export interface NextPrebuildResult {
  * @returns Summary covering scanned/transformed counts and materialization paths.
  */
 export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResult {
+    const shards = writeNextPrebuildShards(options);
+    const { context } = shards;
+    const cycle = runNextWatcherCycle(context, {
+        writeOptions: options.writeOptions,
+        lockOptions: {
+            root: context.root,
+            mode: context.manifestExpectation.mode,
+            command: NEXT_PREBUILD_LOCK_COMMAND,
+        },
+        createdAt: options.createdAt,
+    });
+
+    return {
+        ...shards,
+        classCount: cycle.materialize.classCount,
+        sourceCount: cycle.materialize.sourceCount,
+        manifestPath: context.manifestPath,
+        safelistOutputPath: context.safelist.outputPath,
+        cycle,
+    };
+}
+
+/**
+ * Transform each file and write its safelist shard, without materializing.
+ *
+ * `next watch` materializes on its own, under the watcher's command, and steps
+ * aside when the Turbopack loader holds the lock; {@link runNextPrebuild}
+ * materializes after this under its own.
+ *
+ * @param options Prebuild input options.
+ * @returns The state context, the counts and one result per file.
+ */
+export function writeNextPrebuildShards(options: NextPrebuildOptions): NextPrebuildShards {
     assertNextMangleBoundary(options, (options.mode ?? 'production') === 'production', 'prebuild');
 
     const csszyxVersion =
@@ -227,28 +254,7 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         });
     }
 
-    const cycle = runNextWatcherCycle(context, {
-        writeOptions: options.writeOptions,
-        lockOptions: {
-            root: context.root,
-            mode: context.manifestExpectation.mode,
-            command: options.lockCommand ?? NEXT_PREBUILD_LOCK_COMMAND,
-        },
-        createdAt: options.createdAt,
-    });
-
-    return {
-        context,
-        scannedCount,
-        transformedCount,
-        skippedMissingCount,
-        classCount: cycle.materialize.classCount,
-        sourceCount: cycle.materialize.sourceCount,
-        manifestPath: context.manifestPath,
-        safelistOutputPath: context.safelist.outputPath,
-        files,
-        cycle,
-    };
+    return { context, scannedCount, transformedCount, skippedMissingCount, files };
 }
 
 /**

@@ -9,8 +9,10 @@ import {
     type AtomicWriteOptions,
     acquireNextSafelistStateLock,
     materializeNextSafelist,
+    NEXT_TURBO_LOADER_LOCK_COMMAND,
     NEXT_WATCH_LOCK_COMMAND,
     type NextSafelistMaterializeResult,
+    NextSafelistStateLockedError,
     type NextSafelistStateLockOptions,
 } from './next-safelist-state.js';
 import {
@@ -86,5 +88,48 @@ export function runNextWatcherCycle(
         };
     } finally {
         lock.release();
+    }
+}
+
+/**
+ * Whether a cycle failed only because the Turbopack loader was mid-cycle.
+ *
+ * The documented Next setup runs `csszyx next watch` beside `next dev`, and the
+ * loader takes the same lock for a cycle of its own after writing a shard. The
+ * loader already steps aside for a watcher; this is the same overlap seen from
+ * the watcher's side. Reported as a failure, it ended the watch process, and
+ * `concurrently --kill-others-on-fail` then stopped `next dev` with it.
+ *
+ * @param error - What the cycle threw.
+ * @returns True when the lock is held by the loader and nothing else went wrong.
+ */
+export function isHeldByTurbopackLoader(error: unknown): error is NextSafelistStateLockedError {
+    return (
+        error instanceof NextSafelistStateLockedError &&
+        error.holder.command === NEXT_TURBO_LOADER_LOCK_COMMAND
+    );
+}
+
+/**
+ * Run one watcher cycle, or step aside when the Turbopack loader holds the lock.
+ *
+ * `next watch` materializes once at startup, before its watcher starts. The
+ * loader can hold the lock at that moment, and then it is the loader's turn:
+ * the watcher's initial cycle, queued behind the lock, reads every shard once
+ * the loader lets go. Any other failure is thrown.
+ *
+ * @param context Shared Next state context.
+ * @param options Lock/write/time options.
+ * @returns The cycle's result, or null when the loader holds the lock.
+ */
+export function runNextWatcherCycleUnlessLoaderHolds(
+    context: NextStateContext,
+    options: NextWatcherCycleOptions = {},
+): NextWatcherCycleResult | null {
+    try {
+        return runNextWatcherCycle(context, options);
+    } catch (error) {
+        if (isHeldByTurbopackLoader(error)) return null;
+        throw error;
     }
 }

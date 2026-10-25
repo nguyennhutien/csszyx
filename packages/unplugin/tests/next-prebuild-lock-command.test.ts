@@ -1,13 +1,13 @@
 /**
- * What a prebuild records on the safelist state lock.
+ * What a prebuild records on the safelist state lock, and how `next watch`
+ * materializes at startup.
  *
  * The Turbopack loader steps aside only for a lock recorded under the watcher's
  * command, because a watcher's next cycle reads every shard the loader wrote
- * while it waited. `next watch` runs a prebuild at startup and its initial cycle
- * follows, so that prebuild has to record the watcher's command: under its own
- * name the loader treated it as a stranger and failed the compile when the two
- * overlapped. A standalone `next prebuild` has no cycle after it, so it keeps its
- * own name and the loader still refuses to yield to it.
+ * while it waited. A standalone `next prebuild` has no cycle after it, so it
+ * keeps its own name and the loader refuses to yield to it. `next watch` writes
+ * the shards without materializing, then runs the watcher's own cycle, which
+ * steps aside when the loader holds the lock.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,8 +28,14 @@ vi.mock('../src/next-watcher-cycle.js', async importOriginal => {
     };
 });
 
-import { runNextPrebuild } from '../src/next-prebuild.js';
-import { NEXT_WATCH_LOCK_COMMAND } from '../src/next-safelist-state.js';
+import { runNextPrebuild, writeNextPrebuildShards } from '../src/next-prebuild.js';
+import {
+    acquireNextSafelistStateLock,
+    NEXT_PREBUILD_LOCK_COMMAND,
+    NEXT_TURBO_LOADER_LOCK_COMMAND,
+    NextSafelistStateLockedError,
+} from '../src/next-safelist-state.js';
+import { runNextWatcherCycleUnlessLoaderHolds } from '../src/next-watcher-cycle.js';
 
 const tempDirs: string[] = [];
 
@@ -82,11 +88,51 @@ describe('next prebuild lock command', () => {
         expect(lockCommands).toEqual(['csszyx next prebuild']);
     });
 
-    it("records the watcher's command when next watch runs it at startup", () => {
+    it('writes the shards without materializing when asked for them alone', () => {
         const { root, file } = project();
 
-        runNextPrebuild({ ...options(root, file), lockCommand: NEXT_WATCH_LOCK_COMMAND });
+        const shards = writeNextPrebuildShards(options(root, file));
 
-        expect(lockCommands).toEqual([NEXT_WATCH_LOCK_COMMAND]);
+        expect(lockCommands).toEqual([]);
+        expect(shards.files).toHaveLength(1);
+        expect(shards.transformedCount).toBe(1);
+    });
+});
+
+describe('the watcher cycle at startup', () => {
+    /**
+     * @param command - Who holds the lock.
+     * @returns The shards' context and a release for the lock.
+     */
+    function heldBy(command: string) {
+        const { root, file } = project();
+        const { context } = writeNextPrebuildShards(options(root, file));
+        const lock = acquireNextSafelistStateLock(join(context.cacheDir, 'state.lock'), {
+            root: context.root,
+            mode: 'development',
+            command,
+        });
+        return { context, lock };
+    }
+
+    it('steps aside for the loader, and runs once it lets go', () => {
+        const { context, lock } = heldBy(NEXT_TURBO_LOADER_LOCK_COMMAND);
+        try {
+            expect(runNextWatcherCycleUnlessLoaderHolds(context)).toBeNull();
+        } finally {
+            lock.release();
+        }
+        expect(runNextWatcherCycleUnlessLoaderHolds(context)?.materialize.classes).toContain('p-4');
+    });
+
+    it('still throws for any other holder', () => {
+        const { context, lock } = heldBy(NEXT_PREBUILD_LOCK_COMMAND);
+        try {
+            expect(() => runNextWatcherCycleUnlessLoaderHolds(context)).toThrow(
+                NextSafelistStateLockedError,
+            );
+        } finally {
+            lock.release();
+        }
     });
 });

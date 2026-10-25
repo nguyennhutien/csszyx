@@ -1,10 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
-import {
-    NEXT_TURBO_LOADER_LOCK_COMMAND,
-    NextSafelistStateLockedError,
-} from './next-safelist-state.js';
 import type { NextStateContext } from './next-state-context.js';
 import {
+    isHeldByTurbopackLoader,
     type NextWatcherCycleOptions,
     type NextWatcherCycleResult,
     runNextWatcherCycle,
@@ -49,25 +46,6 @@ export const LOADER_LOCK_WARN_AFTER_MS = 1_000;
  * so past this point waiting explains nothing and the failure is reported.
  */
 export const LOADER_LOCK_GIVE_UP_AFTER_MS = 60_000;
-
-/**
- * Whether a cycle failed only because the Turbopack loader was mid-cycle.
- *
- * The documented Next setup runs `csszyx next watch` beside `next dev`, and the
- * loader takes the same lock for a cycle of its own after writing a shard. The
- * loader already steps aside for a watcher; this is the same overlap seen from
- * the watcher's side. Reported as a failure, it ended the watch process, and
- * `concurrently --kill-others-on-fail` then stopped `next dev` with it.
- *
- * @param error - What the cycle threw.
- * @returns True when the lock is held by the loader and nothing else went wrong.
- */
-function isHeldByTurbopackLoader(error: unknown): error is NextSafelistStateLockedError {
-    return (
-        error instanceof NextSafelistStateLockedError &&
-        error.holder.command === NEXT_TURBO_LOADER_LOCK_COMMAND
-    );
-}
 
 /** Timer hooks kept injectable so debounce behavior is deterministic in tests. */
 export interface NextWatcherLoopTimerHooks {
