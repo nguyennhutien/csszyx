@@ -143,6 +143,14 @@ export const PROPERTY_CATEGORY_MAP: Record<string, PropertyCategory> = {
     to: PropertyCategory.COLOR,
     dropShadowColor: PropertyCategory.COLOR,
     scrollbarThumb: PropertyCategory.COLOR,
+    borderTColor: PropertyCategory.COLOR,
+    borderRColor: PropertyCategory.COLOR,
+    borderBColor: PropertyCategory.COLOR,
+    borderLColor: PropertyCategory.COLOR,
+    borderXColor: PropertyCategory.COLOR,
+    borderYColor: PropertyCategory.COLOR,
+    insetRingColor: PropertyCategory.COLOR,
+    insetShadowColor: PropertyCategory.COLOR,
     scrollbarTrack: PropertyCategory.COLOR,
 
     // ---- UNITLESS ----

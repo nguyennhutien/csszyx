@@ -318,6 +318,17 @@ describe.each(LANES)('a slash opacity string — %s', (_name, lower) => {
         [{ color: 'red-500/50' }],
         [{ borderColor: 'red-500/50!' }],
         [{ hover: { from: 'red-500/50' } }],
+        // Every colour key, a border side and the inset family included.
+        ...[
+            'borderTColor',
+            'borderRColor',
+            'borderBColor',
+            'borderLColor',
+            'borderXColor',
+            'borderYColor',
+            'insetRingColor',
+            'insetShadowColor',
+        ].map(key => [{ [key]: 'red-500/50' }]),
     ])('drops %j on a colour key, which takes the object form, and says so', sz => {
         // Nothing is emitted, so the drop is missing output (ADR 0011): every
         // lane reports it, the engines with the code the runtime text maps to.

@@ -808,6 +808,14 @@ pub(crate) fn is_color_property(key: &str) -> bool {
             | "to"
             | "dropShadowColor"
             | "scrollbarThumb"
+            | "borderTColor"
+            | "borderRColor"
+            | "borderBColor"
+            | "borderLColor"
+            | "borderXColor"
+            | "borderYColor"
+            | "insetRingColor"
+            | "insetShadowColor"
             | "scrollbarTrack"
     )
 }

@@ -557,10 +557,23 @@ fn disambiguate_and_parse(
     if opacity == SzValue::Null {
         return Err(Unread::NoRule);
     }
+    // A modifier is an opacity only on a key that takes a colour, by the
+    // lowering's own list: `m-auto/50` is no colour, and no Tailwind class.
+    if !takes_colour(&result.prop) {
+        return Err(Unread::NotColour);
+    }
     let mut colour = SzObject::new();
     colour.insert("color".to_string(), SzValue::from(text.as_str()));
     colour.insert("op".to_string(), opacity);
     Ok(ParsedClass::new(&result.prop, SzValue::Object(colour)))
+}
+
+/// Whether the sz key `prop` takes a colour: a colour key (`bg`,
+/// `borderColor`), or a key whose colour sibling is one (`borderT` for
+/// `borderTColor`), which writes the same class for a colour.
+fn takes_colour(prop: &str) -> bool {
+    use crate::transform::generated::tables::is_color_property;
+    is_color_property(prop) || is_color_property(&format!("{prop}Color"))
 }
 
 /// The `leading` value a `text-*/modifier` carries: a bare number rides the
@@ -770,6 +783,35 @@ mod tests {
             parse_class("border-b").map(|parsed| parsed.prop),
             Some("borderB".into())
         );
+    }
+
+    /// A modifier is an opacity only on a key that takes a colour: the
+    /// reading must write the class back. `m-auto/50` is no colour, and stays.
+    #[test]
+    fn a_modifier_reads_as_an_opacity_only_where_a_colour_writes_it_back() {
+        for class in ["m-auto/50", "w-full/50", "p-px/25", "rounded-lg/50"] {
+            assert_eq!(
+                parse_class(class).map(|parsed| parsed.prop),
+                None,
+                "{class}"
+            );
+        }
+        for (class, prop, color) in [
+            ("bg-brand/50", "bg", "brand"),
+            ("bg-red-500/50", "bg", "red-500"),
+            ("border-red-500/50", "borderColor", "red-500"),
+            ("border-t-red-500/50", "borderT", "red-500"),
+        ] {
+            let parsed = parse_class(class).unwrap_or_else(|| panic!("{class} unread"));
+            let SzValue::Object(object) = &parsed.value else {
+                panic!("{class} is no colour object");
+            };
+            assert_eq!(
+                (parsed.prop.as_str(), object.get("color")),
+                (prop, Some(&SzValue::from(color))),
+                "{class}"
+            );
+        }
     }
 
     #[test]
