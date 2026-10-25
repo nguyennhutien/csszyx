@@ -27,6 +27,7 @@ export {
     type DeadClassSite,
     deadClassMessage,
     hoistedSignUtility,
+    inertKeywordMessage,
     reportDeadSzClasses,
     type UnservedVariant,
     unservedVariantMessage,
@@ -66,6 +67,7 @@ export {
     diagnosticPolicyWatchFiles,
     isDiagnosticPolicyWatchFile,
 } from './diagnostic-policy-inputs.js';
+export { cssWideKeywordOf, inertKeywordOf, inertUnderEveryRoot } from './inert-keyword.js';
 export { keptSessionMessage } from './kept-session-message.js';
 export { loadCurrentDiagnosticPolicy } from './sync-lane-policy.js';
 export {

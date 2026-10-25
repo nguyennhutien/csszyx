@@ -269,7 +269,6 @@
         "bgClip|slash-opacity": "dead",
         "bgClip|space": "dead",
         "bgClip|var": "dead",
-        "bgImg|css-wide": "inert",
         "bgImg|data-container": "dead",
         "bgImg|half-step": "dead",
         "bgImg|hover": "dead",

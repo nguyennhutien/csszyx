@@ -2951,6 +2951,9 @@ function formatGradientPosition(key: string, value: string): string {
 function formatBackgroundImage(rawValue: string): string {
     const value = rawValue.trim();
     if (value === 'none') return 'bg-none';
+    // A CSS-wide keyword is the property's value, never a URL: the `image:`
+    // hint sets `background-image` to it, as `format_bg_img_string` does.
+    if (CSS_WIDE_KEYWORDS.has(value)) return `bg-[image:${value}]`;
     const typed = typedVariableValue('bgImg', value);
     if (typed) return `bg-${typed}`;
     const normalized = value.startsWith('-') ? value.slice(1) : value;

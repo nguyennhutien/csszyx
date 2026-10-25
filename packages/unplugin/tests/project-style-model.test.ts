@@ -140,6 +140,16 @@ describe('openProjectStyleModel', () => {
         expect(model.unserved(['bg-brand', 'zz-not-a-class'])).toEqual(['zz-not-a-class']);
     });
 
+    it('names the served keyword classes no property takes, from the CSS it compiled', async () => {
+        const files = writeStylesheets({ 'app.css': '@import "tailwindcss";' });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        // `ring-inherit` sets `--tw-ring-color: inherit`; `cursor-[inherit]`
+        // sets `cursor: inherit`.
+        expect(model.inert(['ring-inherit', 'cursor-[inherit]'])).toEqual(['ring-inherit']);
+    });
+
     it('derives merge signatures from the same compiled design system', async () => {
         const files = writeStylesheets({ 'app.css': '@import "tailwindcss";' });
 

@@ -47,9 +47,11 @@ import {
 } from '@csszyx/tailwind-oracle';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 import {
+    cssWideKeywordOf,
     type DiagnosticPolicy,
     diagnosticConfigProblemsMessage,
     hoistedSignUtility,
+    inertUnderEveryRoot,
     isAtLeastLevel,
     isRemovedRuleId,
     loadDiagnosticPolicy,
@@ -384,6 +386,35 @@ function agreedPrefix(
 }
 
 /**
+ * The served classes whose CSS-wide keyword no property they set takes
+ * (`ring-[inherit]`, served as `--tw-ring-color: inherit`), by the same
+ * consensus as the dead pass: one stylesheet setting a property to it is
+ * enough. Asked of the served keyword classes only.
+ *
+ * @param oracles - Every compiled stylesheet.
+ * @param origins - Emitted class mapped to the file that first emitted it.
+ * @param skip - The dead classes and the ones the project vouched for.
+ * @returns Each such class with its origin.
+ */
+function inertKeywordClasses(
+    oracles: OpenedOracles['oracles'],
+    origins: ReadonlyMap<string, string>,
+    skip: ReadonlySet<string>,
+): Array<readonly [string, string]> {
+    const asked = [...origins.keys()].filter(
+        token => !skip.has(token) && cssWideKeywordOf(token) !== null,
+    );
+    if (asked.length === 0) return [];
+    const inert = new Set(
+        inertUnderEveryRoot(
+            asked,
+            oracles.map(oracle => oracle.cssFor(asked)),
+        ),
+    );
+    return [...origins].filter(([token]) => inert.has(token));
+}
+
+/**
  * Ask Tailwind which of the emitted classes produce no CSS, and report them.
  *
  * A class that styles nothing is the failure csszyx exists to prevent, and it
@@ -516,6 +547,11 @@ function reportDeadClasses(
             value: brokenPerOracle[0].get(token) as string,
         }));
     printDeadClassReport(out, {
+        inert: inertKeywordClasses(
+            oracles,
+            origins,
+            new Set([...found.map(([token]) => token), ...vouched]),
+        ),
         dead: dead.filter(([token]) => !signed(token) && !variants.has(token)),
         unsigned: dead.filter(([token]) => signed(token)),
         variants: dead
@@ -554,6 +590,8 @@ interface DeadClassReport {
     dead: ReadonlyArray<readonly [string, string]>;
     /** The dead classes with a hoisted sign whose unsigned form is served. */
     unsigned: ReadonlyArray<readonly [string, string]>;
+    /** The served classes whose CSS-wide keyword no property takes. */
+    inert: ReadonlyArray<readonly [string, string]>;
     /** The dead classes served with one variant dropped, with that variant. */
     variants: readonly UnservedVariantFinding[];
     broken: readonly BrokenOpacityFinding[];
@@ -606,12 +644,68 @@ function levelTag(level: SzDiagnosticLevel): string {
     return level === 'error' ? '' : `(${level}) `;
 }
 
+/** One dead-class kind listed under its own heading, in the registry's words. */
+interface KindList {
+    kind: 'inert-keyword' | 'unsigned-value';
+    /** The line above the list. */
+    heading: string;
+    /** The classes, with their origin. */
+    entries: ReadonlyArray<readonly [string, string]>;
+    /** The registry arguments for one class. */
+    args: (token: string) => Record<string, string>;
+    /** The summary's words after its count. */
+    summary: string;
+}
+
+/**
+ * Print one dead-class kind: each class at its level, then a summary. Never
+ * said again as `dead-class`, and a level or a `--rule` for either id reaches
+ * it.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param list - The kind, its classes and its words.
+ * @param wants - The run's rule selection.
+ * @param failOn - The quietest level that fails the run.
+ */
+function printKindList(
+    out: Reporter,
+    list: KindList,
+    wants: RuleSelection,
+    failOn: SzDiagnosticLevel,
+): void {
+    const { kind } = list;
+    if (!wants('dead-class', kind)) return;
+    const shown = list.entries
+        .map(([token, origin]) => ({
+            token,
+            origin,
+            level: out.levelOf({ rule: 'dead-class', kind, file: origin }),
+        }))
+        .filter(entry => entry.level !== 'off');
+    if (shown.length === 0) return;
+    out.warn(`\n${list.heading}`);
+    for (const { token, origin, level } of shown) {
+        out.push(
+            registryFinding({
+                rule: 'dead-class',
+                code: kind,
+                file: origin,
+                args: list.args(token),
+            }),
+        );
+        out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
+    }
+    const { mark, below } = summaryMark(
+        shown.map(entry => entry.level),
+        failOn,
+    );
+    out.warn(`\n${mark} ${shown.length} ${list.summary}${belowNote(below, failOn)}`);
+}
+
 /**
  * Print the dead classes whose utility carries a hoisted sign: the project's
  * Tailwind serves no negative form of it (`{ p: -2 }` → `-p-2`), and serves
- * the class without the sign. Reported by
- * the dead-class pass under the kind `unsigned-value`, so a level or a
- * `--rule` for either id reaches it, and never also as `dead-class`.
+ * the class without the sign. Reported under the kind `unsigned-value`.
  *
  * @param out - Where this pass sends its prose and its findings.
  * @param unsigned - The dead classes with a hoisted sign, with their origin.
@@ -624,36 +718,53 @@ function printUnsignedValues(
     wants: RuleSelection,
     failOn: SzDiagnosticLevel,
 ): void {
-    if (!wants('dead-class', 'unsigned-value')) return;
-    const shown = unsigned
-        .map(([token, origin]) => ({
-            token,
-            origin,
-            level: out.levelOf({ rule: 'dead-class', kind: 'unsigned-value', file: origin }),
-        }))
-        .filter(entry => entry.level !== 'off');
-    if (shown.length === 0) return;
-    out.warn("\nNegative values this project's Tailwind does not serve:");
-    for (const { token, origin, level } of shown) {
-        out.push(
-            registryFinding({
-                rule: 'dead-class',
-                code: 'unsigned-value',
-                file: origin,
-                // Only a class with a hoisted sign reaches this list.
-                args: { className: token, utility: hoistedSignUtility(token) as string },
-            }),
-        );
-        out.info(`  ${levelTag(level)}${token.padEnd(28)} ${origin}`);
-    }
-    const { mark, below } = summaryMark(
-        shown.map(entry => entry.level),
+    printKindList(
+        out,
+        {
+            kind: 'unsigned-value',
+            heading: "Negative values this project's Tailwind does not serve:",
+            entries: unsigned,
+            // Only a class with a hoisted sign reaches this list.
+            args: token => ({ className: token, utility: hoistedSignUtility(token) as string }),
+            summary:
+                "emitted class(es) produce no CSS: this project's Tailwind serves no negative form " +
+                "of their utility; drop the sign, or define the negative with Tailwind's `@utility`.",
+        },
+        wants,
         failOn,
     );
-    out.warn(
-        `\n${mark} ${shown.length} emitted class(es) produce no CSS: this project's Tailwind serves no ` +
-            "negative form of their utility; drop the sign, or define the negative with Tailwind's " +
-            `\`@utility\`.${belowNote(below, failOn)}`,
+}
+
+/**
+ * Print the served classes whose CSS-wide keyword no property they set takes
+ * (`{ ring: 'inherit' }` → `ring-inherit`, served as `--tw-ring-color:
+ * inherit`). Reported under the kind `inert-keyword`.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param inert - The classes, with their origin.
+ * @param wants - The run's rule selection.
+ * @param failOn - The quietest level that fails the run.
+ */
+function printInertKeywords(
+    out: Reporter,
+    inert: ReadonlyArray<readonly [string, string]>,
+    wants: RuleSelection,
+    failOn: SzDiagnosticLevel,
+): void {
+    printKindList(
+        out,
+        {
+            kind: 'inert-keyword',
+            heading: 'CSS-wide keywords no property takes:',
+            entries: inert,
+            // Only a class carrying a keyword reaches this list.
+            args: token => ({ className: token, keyword: cssWideKeywordOf(token) as string }),
+            summary:
+                'emitted class(es) style nothing: no property they set takes their CSS-wide ' +
+                'keyword; set the property in `css: { … }`.',
+        },
+        wants,
+        failOn,
     );
 }
 
@@ -719,7 +830,8 @@ function printUnservedVariants(
  * @param report - What the scan concluded.
  */
 function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
-    const { dead, unsigned, variants, broken, acceptedCount, emittedCount, wants, failOn } = report;
+    const { dead, unsigned, inert, variants, broken, acceptedCount, emittedCount, wants, failOn } =
+        report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
@@ -727,6 +839,7 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
     if (
         dead.length === 0 &&
         unsigned.length === 0 &&
+        inert.length === 0 &&
         variants.length === 0 &&
         broken.length === 0
     ) {
@@ -743,6 +856,7 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): void {
     // `unsigned-value`.
     printUnsignedValues(out, unsigned, wants, failOn);
     printUnservedVariants(out, variants, wants, failOn);
+    printInertKeywords(out, inert, wants, failOn);
     const shownDead = wants('dead-class', 'dead-class')
         ? dead
               .map(([token, origin]) => ({
@@ -1526,7 +1640,8 @@ function runDeadClassPass(
         wantsRule('dead-class') ||
         wantsRule('broken-opacity') ||
         wants('dead-class', 'unsigned-value') ||
-        wants('dead-class', 'unserved-variant');
+        wants('dead-class', 'unserved-variant') ||
+        wants('dead-class', 'inert-keyword');
     const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
     if (!deadClassPass) return;
     if (disagreementLeftOut) {

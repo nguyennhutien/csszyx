@@ -1163,6 +1163,28 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "inert-keyword",
+        "summary": "A CSS-wide keyword on a served class that no property it sets takes.",
+        "surfaces": {
+            "check": {
+                "group": "dead-class"
+            },
+            "runtime": {
+                "production": false,
+                "host": "node"
+            }
+        },
+        "position": "file",
+        "args": {
+            "className": {
+                "type": "string"
+            },
+            "keyword": {
+                "type": "string"
+            }
+        }
+    },
+    {
         "id": "dead-class",
         "summary": "An emitted class this project's Tailwind generates no CSS for.",
         "surfaces": {

@@ -165,6 +165,18 @@ describe.each(LANES)(
     },
 );
 
+describe.each(LANES)('a CSS-wide keyword on bgImg — %s', (_name, lower) => {
+    // `bg-[url(inherit)]` sets `background-image: url(inherit)`, a file named
+    // `inherit`; the `image:` hint sets the property to the keyword.
+    it.each([
+        [{ bgImg: 'inherit' }, 'bg-[image:inherit]'],
+        [{ bgImg: 'revert-layer' }, 'bg-[image:revert-layer]'],
+        [{ hover: { bgImg: 'unset!' } }, 'hover:bg-[image:unset]!'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
+
 describe.each(LANES)('one trailing `!` is the important modifier — %s', (_name, lower) => {
     // Only the last `!` is split off; any other stays in the value, so the
     // runtime and the engines write the same class for `x!!`.

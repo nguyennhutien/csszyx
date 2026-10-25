@@ -437,6 +437,11 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         "args": "className utility"
     },
     {
+        "id": "inert-keyword",
+        "position": "file",
+        "args": "className keyword"
+    },
+    {
         "id": "dead-class",
         "position": "file",
         "args": "className"

@@ -920,6 +920,17 @@ export const DIAGNOSTICS = [
         sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
     },
     {
+        id: 'inert-keyword',
+        summary: 'A CSS-wide keyword on a served class that no property it sets takes.',
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false, host: 'node' } },
+        position: 'file',
+        args: { className: STRING, keyword: STRING },
+        text: "`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+        help: "set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
+        note: 'the class is still emitted, and it styles nothing.',
+        sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
+    },
+    {
         id: 'dead-class',
         summary: "An emitted class this project's Tailwind generates no CSS for.",
         surfaces: { check: { group: 'dead-class' }, runtime: { production: false, host: 'node' } },

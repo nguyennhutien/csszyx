@@ -68,6 +68,9 @@ export const OPACITY_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['opacity-value'
 /** `unsigned-value`: A negative value on a key Tailwind serves no negative utility for. */
 export const UNSIGNED_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['unsigned-value']> = {"id":"unsigned-value","args":"className utility","text":"`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.","help":"drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.","note":"the class is still emitted, and it styles nothing."};
 
+/** `inert-keyword`: A CSS-wide keyword on a served class that no property it sets takes. */
+export const INERT_KEYWORD: SzBrowserDiagnostic<SzDiagnosticArgs['inert-keyword']> = {"id":"inert-keyword","args":"className keyword","text":"`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.","help":"set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.","note":"the class is still emitted, and it styles nothing."};
+
 /** `dead-class`: An emitted class this project's Tailwind generates no CSS for. */
 export const DEAD_CLASS: SzBrowserDiagnostic<SzDiagnosticArgs['dead-class']> = {"id":"dead-class","args":"className","text":"`{className}` produces no CSS: this project's Tailwind serves no such utility.","help":"fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.","note":"the class is still emitted, and it styles nothing."};
 

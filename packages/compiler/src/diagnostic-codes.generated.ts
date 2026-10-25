@@ -79,6 +79,7 @@ export interface SzDiagnosticArgs {
     'bracketed-value': { readonly key: string; readonly value: string; readonly inner: string };
     'opacity-value': { readonly key: string; readonly op: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
+    'inert-keyword': { readonly className: string; readonly keyword: string };
     'dead-class': { readonly className: string };
     'prefix-disagreement': { readonly form: 'build' | 'next' | 'check'; readonly entries: readonly string[]; readonly setting?: string; readonly ignoreSetting?: string };
     'sibling-keyword': { readonly key: string; readonly value: string; readonly className: string; readonly sets: readonly string[] };
@@ -310,6 +311,7 @@ export type SzSettableDiagnosticId =
     | 'bracketed-value'
     | 'opacity-value'
     | 'unsigned-value'
+    | 'inert-keyword'
     | 'prefix-disagreement'
     | 'unserved-variant';
 
@@ -357,6 +359,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'bracketed-value',
     'opacity-value',
     'unsigned-value',
+    'inert-keyword',
     'prefix-disagreement',
     'unserved-variant',
 ];
@@ -398,6 +401,7 @@ export type SzDiagnosticId =
     | 'bracketed-value'
     | 'opacity-value'
     | 'unsigned-value'
+    | 'inert-keyword'
     | 'dead-class'
     | 'prefix-disagreement'
     | 'sibling-keyword'

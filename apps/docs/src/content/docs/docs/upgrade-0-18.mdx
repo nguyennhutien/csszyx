@@ -86,6 +86,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
 | [A variant Tailwind does not serve](#a-variant-your-tailwind-does-not-serve-is-reported) | `[csszyx] unserved-variant:` on `{ hidden: { p: 4 } }` | the build, `csszyx check`, dev runtime | you |
+| [A CSS-wide keyword no property takes](#a-css-wide-keyword-no-property-takes-is-reported) | `[csszyx] inert-keyword:` on `{ ring: 'inherit' }` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
 | [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
@@ -1368,6 +1369,41 @@ Tailwind csszyx is built with does not serve, and never for another name.
 every dead-class finding, and `rules['unserved-variant']` of this one alone.
 
 **Tooling.** `csszyx check --rule unserved-variant`. `csszyx migrate` does not
+rewrite it.
+
+## A CSS-wide keyword no property takes is reported
+
+Every key takes `inherit`, `initial`, `unset`, `revert` and `revert-layer`, but
+on some keys Tailwind puts the keyword where it sets nothing:
+`{ ring: 'inherit' }` writes `ring-inherit`, which sets
+`--tw-ring-color: inherit`, and `{ brightness: 'inherit' }` writes
+`brightness-[inherit]`, which sets `brightness(inherit)` inside `filter`. 0.17
+wrote these without a word. The build and `csszyx check` now read the CSS your
+Tailwind emits for each class carrying a keyword:
+
+```text
+[csszyx] inert-keyword: src/Card.tsx:3:22
+  `ring-inherit` sets no property to `inherit`: this project's Tailwind writes the keyword into a custom property or inside another value.
+  help: set the CSS property to `'inherit'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.
+  note: the class is still emitted, and it styles nothing.
+```
+
+**You are affected** when an `sz` object gives a CSS-wide keyword to a ring,
+shadow, gradient stop, filter, `content` or scrollbar key.
+
+**What you see.** The line above, where the build prints
+[`dead-class`](#the-build-names-sz-classes-that-produce-no-css), and in
+`csszyx check` under `CSS-wide keywords no property takes:`. It is a kind of
+`dead-class`, at `error` under both presets. A keyword a property takes
+(`{ cursor: 'inherit' }` → `cursor: inherit`) is never reported. `bgImg` with a
+keyword now writes `bg-[image:inherit]`, which sets `background-image`; 0.17
+wrote `bg-[url(inherit)]`, a URL.
+
+**The edit.** Set the property itself: `css: { boxShadow: 'inherit' }`.
+`rules['dead-class']` sets the level of every dead-class finding, and
+`rules['inert-keyword']` of this one alone.
+
+**Tooling.** `csszyx check --rule inert-keyword`. `csszyx migrate` does not
 rewrite it.
 
 ## A runtime value under a variant key is reported

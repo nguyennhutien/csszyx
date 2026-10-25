@@ -2915,6 +2915,11 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
     if value == "none" {
         return format!("{prefix}bg-none");
     }
+    // A CSS-wide keyword is the property's value, never a URL: the `image:`
+    // hint sets `background-image` to it. Mirrors `formatBackgroundImage`.
+    if super::generated::tables::is_css_wide_keyword(value) {
+        return format!("{prefix}bg-[image:{value}]");
+    }
     if let Some(typed) = typed_variable_value("bgImg", value) {
         return format!("{prefix}bg-{typed}");
     }
@@ -3459,6 +3464,18 @@ mod tests {
             ],
         });
         assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// A CSS-wide keyword on `bgImg` is the property's value, never a URL.
+    #[test]
+    fn a_css_wide_keyword_on_bg_img_takes_the_image_hint() {
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![property(
+                "bgImg",
+                StaticSzValue::String("inherit".to_string()),
+            )],
+        });
+        assert_eq!(classes, ["bg-[image:inherit]"]);
     }
 
     /// A custom property is written in Tailwind's `(…)` form on the keys the

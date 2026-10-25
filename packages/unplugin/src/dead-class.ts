@@ -28,6 +28,12 @@
  * table, the form of the name (an ARIA state, one that is an HTML attribute
  * too, or neither).
  *
+ * A served class carrying a CSS-wide keyword that no property it sets takes
+ * (`ring-[inherit]`, served as `--tw-ring-color: inherit`) is reported as
+ * `inert-keyword` ({@link inertKeywordOf}): it produces CSS and styles
+ * nothing, the same outcome in other words. Asked of the served keyword
+ * classes only, of the same design system.
+ *
  * No new CSS read: the question goes to the style model every lane already
  * opened (`css-reading-entry-points.test.ts`).
  *
@@ -46,6 +52,7 @@ import {
 import type { DiagnosticLimiter, LimitedFinding } from './diagnostic-limiter.js';
 import { diagnosticMessage } from './diagnostic-message.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
+import { cssWideKeywordOf } from './inert-keyword.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { channelOfLevel, type QuietMode } from './transform-diagnostics.js';
 
@@ -80,6 +87,12 @@ export interface DeadClassFinding extends DeadClassSite {
      * form its line takes. Absent for every other dead class.
      */
     variant?: UnservedVariant;
+    /**
+     * `inert-keyword` when the class is served and no property it sets takes
+     * the CSS-wide keyword it carries: that keyword. Absent for every other
+     * finding.
+     */
+    inert?: string;
     /** Every later file that emits the class, in path order. */
     others?: readonly DeadClassSite[];
 }
@@ -401,16 +414,18 @@ export function unservedVariantOf(
 }
 
 /** The ids the dead-class pass reports a class under. */
-type DeadClassId = 'dead-class' | 'unsigned-value' | 'unserved-variant';
+type DeadClassId = 'dead-class' | 'inert-keyword' | 'unsigned-value' | 'unserved-variant';
 
 /**
  * The id a dead class is reported under.
  *
  * @param finding - The dead class.
- * @returns `unsigned-value` for a hoisted sign, `unserved-variant` for a
- *          variant the project does not serve, `dead-class` otherwise.
+ * @returns `inert-keyword` for a keyword no property takes, `unsigned-value`
+ *          for a hoisted sign, `unserved-variant` for a variant the project
+ *          does not serve, `dead-class` otherwise.
  */
 function findingId(finding: DeadClassFinding): DeadClassId {
+    if (finding.inert !== undefined) return 'inert-keyword';
     if (finding.unsigned !== undefined) return 'unsigned-value';
     return finding.variant === undefined ? 'dead-class' : 'unserved-variant';
 }
@@ -430,7 +445,9 @@ const verdicts = new WeakMap<object, Map<string, boolean>>();
  * together: with a hoisted sign, its {@link unsignedClass}, and `unsigned` is
  * set only when that one is served; with variants, each of its
  * {@link variantDroppedForms}, and `variant` is set when exactly one of them
- * is served and the sign is not the thing to name.
+ * is served and the sign is not the thing to name. A served class carrying a
+ * CSS-wide keyword is asked once more, and is a finding with `inert` set when
+ * no property it sets takes the keyword.
  *
  * @param model - The project's style model.
  * @param origins - Each emitted class, and the file that emits it or every
@@ -438,7 +455,7 @@ const verdicts = new WeakMap<object, Map<string, boolean>>();
  * @returns The dead classes, sorted; empty without a design system.
  */
 export function findDeadSzClasses(
-    model: Pick<ProjectStyleModel, 'facts' | 'unserved'>,
+    model: Pick<ProjectStyleModel, 'facts' | 'inert' | 'unserved'>,
     origins: ReadonlyMap<string, string | readonly DeadClassSite[]>,
 ): DeadClassFinding[] {
     if (model.facts === null || origins.size === 0) return [];
@@ -467,17 +484,27 @@ export function findDeadSzClasses(
         ]),
     );
     const served = (className: string): boolean => known.get(className) === false;
-    return deadClasses.map(className => {
-        const origin = origins.get(className) as string | readonly DeadClassSite[];
+    const keywordClasses = classes.filter(
+        className => served(className) && cssWideKeywordOf(className) !== null,
+    );
+    const inert = new Set(keywordClasses.length === 0 ? [] : model.inert(keywordClasses));
+    // What a finding says beyond its class: the keyword, the sign or the variant.
+    const detail = (className: string): Omit<DeadClassFinding, 'file'> => {
+        if (inert.has(className))
+            return { className, inert: cssWideKeywordOf(className) as string };
         const unsignedForm = unsignedClass(className);
         const unsigned =
             unsignedForm !== null && served(unsignedForm) ? hoistedSignUtility(className) : null;
-        const variant = unsigned === null ? unservedVariantOf(className, served) : null;
-        let found: Omit<DeadClassFinding, 'file'> = { className };
-        if (unsigned !== null) found = { className, unsigned };
-        else if (variant !== null) found = { className, variant };
+        if (unsigned !== null) return { className, unsigned };
+        const variant = unservedVariantOf(className, served);
+        return variant === null ? { className } : { className, variant };
+    };
+    const findings = classes.filter(className => inert.has(className) || !served(className));
+    return findings.map(className => {
+        const origin = origins.get(className) as string | readonly DeadClassSite[];
+        const found = detail(className);
         if (typeof origin === 'string') return { ...found, file: origin };
-        // Resolved here, for the dead classes only.
+        // Resolved here, for the findings only.
         const [first, ...others] = (origin as readonly DeadClassSite[]).map(deadClassSite);
         return others.length === 0 ? { ...found, ...first } : { ...found, ...first, others };
     });
@@ -531,6 +558,25 @@ function siteOf(file: string, site: Omit<DeadClassSite, 'file'>): string {
 }
 
 /**
+ * The line a build prints for one served class whose CSS-wide keyword no
+ * property takes.
+ *
+ * @param className - The class, as emitted.
+ * @param keyword - The keyword it carries.
+ * @param file - The file that emits it.
+ * @param site - The line, column and key, when the engine recorded them.
+ * @returns The warning, `[csszyx]`-prefixed.
+ */
+export function inertKeywordMessage(
+    className: string,
+    keyword: string,
+    file: string,
+    site: Omit<DeadClassSite, 'file'> = {},
+): string {
+    return diagnosticMessage('inert-keyword', { className, keyword }, siteOf(file, site));
+}
+
+/**
  * The line a build prints for one dead class served with one variant dropped,
  * in the registry's words.
  *
@@ -562,6 +608,9 @@ export function unservedVariantMessage(
  * @returns The warning.
  */
 function findingMessage(finding: DeadClassFinding, site: DeadClassSite): string {
+    if (finding.inert !== undefined) {
+        return inertKeywordMessage(finding.className, finding.inert, site.file, site);
+    }
     if (finding.unsigned !== undefined) {
         return unsignedValueMessage(finding.className, finding.unsigned, site.file, site);
     }
@@ -612,9 +661,10 @@ function firstListedSite(
  * The lines to print for a lane's dead classes, at the levels the policy sets.
  *
  * A class whose utility carries a hoisted sign is said under
- * `unsigned-value` (`rule: 'dead-class'`, `kind: 'unsigned-value'`), and one
- * served with a variant dropped under `unserved-variant`, so a level for
- * either id reaches it, the kind's winning; every other one under
+ * `unsigned-value` (`rule: 'dead-class'`, `kind: 'unsigned-value'`), one
+ * served with a variant dropped under `unserved-variant`, and a served class
+ * whose keyword no property takes under `inert-keyword`, so a level for any of
+ * those ids reaches it, the kind's winning; every other one under
  * `dead-class`. Each class is said once, under one id.
  *
  * `allow.classes` leaves a class out, as `check --allow` does. The level is
@@ -637,6 +687,7 @@ export function reportDeadSzClasses(
     let held = 0;
     const present: Record<DeadClassId, LimitedFinding[]> = {
         'dead-class': [],
+        'inert-keyword': [],
         'unsigned-value': [],
         'unserved-variant': [],
     };

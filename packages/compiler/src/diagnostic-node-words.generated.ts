@@ -12,6 +12,11 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "help": "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
         "note": "the class is still emitted, and it styles nothing."
     },
+    "inert-keyword": {
+        "text": "`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+        "help": "set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
+        "note": "the class is still emitted, and it styles nothing."
+    },
     "dead-class": {
         "text": "`{className}` produces no CSS: this project's Tailwind serves no such utility.",
         "help": "fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.",
