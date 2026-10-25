@@ -93,6 +93,23 @@ export const A = () => <>
 <div sz={{ tablet: { hover: { mb: 21, ...(flag ? {} : { mt: 21 }) } } }} />
 </>;`;
 
+    // The groups the build reads to merge and to place a dead class name the
+    // classes the file emits: a spread's group under `hover` once named a bare
+    // `mt-13` beside `hover:mb-13`.
+    it('names in its merge groups only classes the file emits', () => {
+        const result = engine(source, '/p/src/A.tsx') as {
+            classes: Iterable<string>;
+            mergeGroups?: ReadonlyArray<{ classes: string[] }>;
+            singleClassGroups?: ReadonlyArray<{ classes: string[] }>;
+        };
+        const emitted = new Set(result.classes);
+        const named = [...(result.mergeGroups ?? []), ...(result.singleClassGroups ?? [])].flatMap(
+            group => group.classes,
+        );
+        expect(named.filter(className => !emitted.has(className))).toEqual([]);
+        expect(named).toContain('tablet:hover:mt-21');
+    });
+
     it('collects the spread classes under a custom variant as under a known one', () => {
         const classes = [...(engine(source, '/p/src/A.tsx').classes as Iterable<string>)].sort();
         expect(classes).toEqual([

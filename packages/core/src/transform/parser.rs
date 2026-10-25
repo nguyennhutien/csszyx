@@ -2903,7 +2903,7 @@ fn dynamic_array_part(
         // Same safety vocabulary as the szr proof: a provably string-or-falsy
         // element never needs the object lowering at runtime.
         dynamic_provable: is_provably_non_object_argument(expression),
-        candidates: candidate_classes_from_expression(expression, ctx),
+        candidates: candidate_classes_from_expression(expression, ctx, &[]),
         dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
         group_conflicts: Vec::new(),
         resolved_objects: Vec::new(),
@@ -3728,82 +3728,77 @@ fn candidate_classes_from_jsx_expression(
     let _unmerged = super::merge::MergeTableScope::enter(None);
     match expression {
         JSXExpression::ObjectExpression(object) => {
-            candidate_classes_from_object_expression(object, ctx, None, &[])
+            candidate_classes_from_object_expression(object, ctx, &[])
         }
         JSXExpression::ArrayExpression(array) => {
-            candidate_classes_from_array_expression(array, ctx)
+            candidate_classes_from_array_expression(array, ctx, &[])
         }
         JSXExpression::TSAsExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
+            candidate_classes_from_expression(&value.expression, ctx, &[])
         }
         JSXExpression::TSSatisfiesExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
+            candidate_classes_from_expression(&value.expression, ctx, &[])
         }
         JSXExpression::TSNonNullExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
+            candidate_classes_from_expression(&value.expression, ctx, &[])
         }
         JSXExpression::ParenthesizedExpression(parenthesized) => {
-            candidate_classes_from_expression(&parenthesized.expression, ctx)
+            candidate_classes_from_expression(&parenthesized.expression, ctx, &[])
         }
         JSXExpression::Identifier(identifier) => ctx
             .scope
             .resolve_initializer_before(&identifier.name, identifier.span.start, ctx.program)
             .map_or_else(Vec::new, |initializer| {
-                candidate_classes_from_expression(initializer, ctx)
+                candidate_classes_from_expression(initializer, ctx, &[])
             }),
         JSXExpression::ConditionalExpression(conditional) => {
-            let mut classes = candidate_classes_from_expression(&conditional.consequent, ctx);
+            let mut classes = candidate_classes_from_expression(&conditional.consequent, ctx, &[]);
             classes.extend(candidate_classes_from_expression(
                 &conditional.alternate,
                 ctx,
+                &[],
             ));
             classes
         }
         JSXExpression::LogicalExpression(logical) => {
-            candidate_classes_from_expression(&logical.right, ctx)
+            candidate_classes_from_expression(&logical.right, ctx, &[])
         }
         _ => Vec::new(),
     }
 }
 
+/// Candidate classes for an expression, lowered under the variant keys it sits
+/// in, so an object reached through a conditional or a spread is lowered as
+/// `hover:mt-1` from the start, as a static one is, and the merge groups the
+/// lowering records name the classes the file emits.
 fn candidate_classes_from_expression(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
+    let under =
+        |inner: &Expression<'_>| candidate_classes_from_expression(inner, ctx, variant_keys);
     match expression {
-        Expression::ArrayExpression(array) => candidate_classes_from_array_expression(array, ctx),
+        Expression::ArrayExpression(array) => {
+            candidate_classes_from_array_expression(array, ctx, variant_keys)
+        }
         Expression::ObjectExpression(object) => {
-            candidate_classes_from_object_expression(object, ctx, None, &[])
+            candidate_classes_from_object_expression(object, ctx, variant_keys)
         }
         Expression::Identifier(identifier) => ctx
             .scope
             .resolve_initializer_before(&identifier.name, identifier.span.start, ctx.program)
-            .map_or_else(Vec::new, |initializer| {
-                candidate_classes_from_expression(initializer, ctx)
-            }),
+            .map_or_else(Vec::new, under),
         Expression::ConditionalExpression(conditional) => {
-            let mut classes = candidate_classes_from_expression(&conditional.consequent, ctx);
-            classes.extend(candidate_classes_from_expression(
-                &conditional.alternate,
-                ctx,
-            ));
+            let mut classes = under(&conditional.consequent);
+            classes.extend(under(&conditional.alternate));
             classes
         }
-        Expression::LogicalExpression(logical) => {
-            candidate_classes_from_expression(&logical.right, ctx)
-        }
-        Expression::ParenthesizedExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
-        }
-        Expression::TSAsExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
-        }
-        Expression::TSSatisfiesExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
-        }
-        Expression::TSNonNullExpression(value) => {
-            candidate_classes_from_expression(&value.expression, ctx)
-        }
+        Expression::LogicalExpression(logical) => under(&logical.right),
+        Expression::ParenthesizedExpression(value) => under(&value.expression),
+        Expression::TSAsExpression(value) => under(&value.expression),
+        Expression::TSSatisfiesExpression(value) => under(&value.expression),
+        Expression::TSNonNullExpression(value) => under(&value.expression),
         _ => Vec::new(),
     }
 }
@@ -3812,7 +3807,6 @@ fn candidate_classes_from_expression(
 fn candidate_classes_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_prefix: Option<&str>,
     variant_keys: &[VariantKey],
 ) -> Vec<String> {
     // Lowered under its variant keys rather than prefixed afterwards: the merge
@@ -3842,17 +3836,13 @@ fn candidate_classes_from_object_expression(
                                 )
                                 || super::lower::is_unclaimed_key(&key) =>
                         {
-                            let variant = variant_prefix_string(variant_prefix, &key);
                             let mut next_keys = variant_keys.to_vec();
                             next_keys.push(VariantKey {
                                 name: key.clone(),
                                 span: text_span(property.span),
                             });
                             classes.extend(candidate_classes_from_object_expression(
-                                nested,
-                                ctx,
-                                Some(variant.as_str()),
-                                &next_keys,
+                                nested, ctx, &next_keys,
                             ));
                         }
                         Expression::ConditionalExpression(conditional) => {
@@ -3866,9 +3856,10 @@ fn candidate_classes_from_object_expression(
                                     variant_keys,
                                 ));
                             } else {
-                                classes.extend(prefix_classes(
-                                    candidate_classes_from_expression(&conditional.consequent, ctx),
-                                    variant_prefix,
+                                classes.extend(candidate_classes_from_expression(
+                                    &conditional.consequent,
+                                    ctx,
+                                    variant_keys,
                                 ));
                             }
                             if let Some(alternate) =
@@ -3881,9 +3872,10 @@ fn candidate_classes_from_object_expression(
                                     variant_keys,
                                 ));
                             } else {
-                                classes.extend(prefix_classes(
-                                    candidate_classes_from_expression(&conditional.alternate, ctx),
-                                    variant_prefix,
+                                classes.extend(candidate_classes_from_expression(
+                                    &conditional.alternate,
+                                    ctx,
+                                    variant_keys,
                                 ));
                             }
                         }
@@ -3924,9 +3916,10 @@ fn candidate_classes_from_object_expression(
                                     single_object,
                                 )));
                             } else {
-                                classes.extend(prefix_classes(
-                                    candidate_classes_from_expression(val, ctx),
-                                    variant_prefix,
+                                classes.extend(candidate_classes_from_expression(
+                                    val,
+                                    ctx,
+                                    variant_keys,
                                 ));
                             }
                         }
@@ -3941,9 +3934,10 @@ fn candidate_classes_from_object_expression(
                         static_obj,
                     )));
                 } else {
-                    classes.extend(prefix_classes(
-                        candidate_classes_from_expression(&spread.argument, ctx),
-                        variant_prefix,
+                    classes.extend(candidate_classes_from_expression(
+                        &spread.argument,
+                        ctx,
+                        variant_keys,
                     ));
                 }
             }
@@ -4043,20 +4037,10 @@ fn candidate_classes_from_keyed_object(
     classes
 }
 
-fn prefix_classes(classes: Vec<String>, prefix: Option<&str>) -> Vec<String> {
-    if let Some(p) = prefix {
-        classes
-            .into_iter()
-            .map(|c| super::lower::with_variant(p, &c))
-            .collect()
-    } else {
-        classes
-    }
-}
-
 fn candidate_classes_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
+    variant_keys: &[VariantKey],
 ) -> Vec<String> {
     let mut classes = Vec::new();
     for element in &array.elements {
@@ -4080,7 +4064,10 @@ fn candidate_classes_from_array_expression(
             _ => None,
         };
         if let Some(object) = object {
-            classes.extend(lower_static_sz_object(&object));
+            classes.extend(lower_static_sz_object(&wrap_in_variant_keys(
+                variant_keys,
+                object,
+            )));
         }
     }
     classes

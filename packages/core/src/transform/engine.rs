@@ -3927,6 +3927,36 @@ mod tests {
         );
     }
 
+    /// The classes the runtime can emit under a variant reach the safelist when
+    /// the object is reached through a name or a type assertion, and under a
+    /// project's own variant.
+    #[test]
+    // The fixtures are JSX sources whose `{p:4}` object literals read as
+    // formatting placeholders to the lint; they are never format strings.
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn runtime_candidates_follow_a_name_an_assertion_and_a_project_variant() {
+        for (sz, expected) in [
+            ("{hover:{m:1,...(c ? base : {})},w:width}", "hover:p-4"),
+            (
+                "{hover:{m:1,...(c ? ({p:4} as Sz) : {})},w:width}",
+                "hover:p-4",
+            ),
+            // A project's own variant, which no table claims.
+            ("{tablet:{m:1,...(c ? base : {})},w:width}", "tablet:p-4"),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/Candidates.tsx".to_string(),
+                source: format!("const base = {{p:4}};\nconst A=({{c,width}})=><div sz={{{sz}}}/>"),
+            };
+            let result = transform_file_with_options(&file, TransformOptions::default());
+            assert!(
+                result.classes.iter().any(|class| class == expected),
+                "{sz}: {:?}",
+                result.classes
+            );
+        }
+    }
+
     /// Candidate collection cannot merge classes that the runtime still emits.
     #[test]
     fn runtime_spread_candidates_keep_covered_classes_under_variants() {

@@ -193,25 +193,6 @@ fn with_class_prefix(class_name: String) -> String {
     })
 }
 
-/// A variant added to a class that was already lowered, kept after the
-/// Tailwind prefix: `tw:p-4` under `hover` is `tw:hover:p-4`, never
-/// `hover:tw:p-4`, which Tailwind does not serve.
-#[cfg(feature = "native-engine")]
-pub(crate) fn with_variant(variant: &str, class_name: &str) -> String {
-    CLASS_PREFIX.with(|cell| {
-        let prefix = cell.borrow();
-        match prefix.as_deref().and_then(|prefix| {
-            class_name
-                .strip_prefix(prefix)
-                .and_then(|rest| rest.strip_prefix(':'))
-                .map(|rest| (prefix, rest))
-        }) {
-            Some((prefix, rest)) => format!("{prefix}:{variant}:{rest}"),
-            None => format!("{variant}:{class_name}"),
-        }
-    })
-}
-
 /// [`lower_static_sz_object`] with the project's Tailwind prefix written
 /// before every class.
 #[must_use]
