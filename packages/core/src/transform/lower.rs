@@ -1375,7 +1375,11 @@ fn lower_object_into_marked(
         // behind it, so emitting the class would leave the element naming a
         // rule nothing generates. `collect_border_side_styles` reports it.
         if let StaticSzValue::String(value) = &property.value {
-            if is_border_side_style_value(&property.key, value) {
+            // A value in the brackets csszyx writes itself is not read: the
+            // engine reports it (`collect_bracketed_values`).
+            if is_border_side_style_value(&property.key, value)
+                || bracketed_inner(&property.key, value).is_some()
+            {
                 continue;
             }
         }
@@ -3070,10 +3074,6 @@ fn is_bare_fraction(value: &str) -> bool {
 }
 
 fn needs_brackets(value: &str) -> bool {
-    if value.starts_with('[') && value.ends_with(']') {
-        return false;
-    }
-
     if value.starts_with('#') || contains_css_function_call(value) || value.contains(' ') {
         return true;
     }
@@ -3187,15 +3187,71 @@ fn is_tailwind_build_function(value: &str) -> bool {
 }
 
 pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
-    let stripped = value
-        .strip_prefix('[')
-        .and_then(|inner| inner.strip_suffix(']'))
-        .unwrap_or(value);
-    stripped.split_whitespace().collect::<Vec<_>>().join("_")
+    value.split_whitespace().collect::<Vec<_>>().join("_")
+}
+
+/// The value inside the brackets `value` starts and ends with, its sign kept
+/// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
+/// `1px!`), or `None` when it is not wrapped. Grid line names at both ends
+/// (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`, where
+/// a value is never read so. Mirrors `bracketWrappedInner` in
+/// `transform-core.ts`.
+pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
+    let (body, bang) = value
+        .strip_suffix('!')
+        .map_or((value, ""), |unmarked| (unmarked, "!"));
+    let (sign, rest) = body
+        .strip_prefix('-')
+        .map_or(("", body), |unsigned| ("-", unsigned));
+    let inner = rest.strip_prefix('[')?.strip_suffix(']')?;
+    Some(format!("{sign}{inner}{bang}"))
+}
+
+/// [`bracket_wrapped_inner`] for a key's value. A custom property's value is a
+/// declaration value, where `[a]` is a grid line name, so it never is wrapped.
+fn bracketed_inner(key: &str, value: &str) -> Option<String> {
+    if key.starts_with("--") {
+        return None;
+    }
+    bracket_wrapped_inner(value)
+}
+
+/// Each string value in the brackets csszyx writes itself
+/// ([`bracket_wrapped_inner`]), with its key, the value, what to write, and
+/// where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_bracketed_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if let Some(inner) = bracketed_inner(&property.key, value) {
+                    out.push((
+                        property.key.clone(),
+                        value.clone(),
+                        inner,
+                        property.span.start,
+                    ));
+                }
+            }
+            StaticSzValue::Object(nested)
+                if property.key != "css" && !is_color_object(&property.key, nested) =>
+            {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_bracketed_values(object, out);
+                });
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "native-engine")]
+    use super::collect_bracketed_values;
     #[cfg(feature = "native-engine")]
     use super::collect_color_slash_opacities;
     #[cfg(feature = "native-engine")]
@@ -3266,6 +3322,50 @@ mod tests {
         assert_eq!(
             found,
             [("bg".to_string(), "red-500/50".to_string(), None, 0)]
+        );
+    }
+
+    /// A value wrapped whole in one pair of brackets is named with what to
+    /// write, under a variant too; brackets that do not wrap all of it, a
+    /// colour object and `css` are not read.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_value_in_brackets_csszyx_writes_is_named_with_what_to_write() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let object = StaticSzObject {
+            properties: vec![
+                property("w", text("[100px]")),
+                property("top", text("-[1px]")),
+                property("gridCols", text("[a] 1fr")),
+                property("m", text("[a")),
+                property("p", text("4")),
+                property("--cols", text("[a]")),
+                property("bg", object(vec![property("color", text("[#fff]"))])),
+                property("css", object(vec![property("width", text("[1px]"))])),
+                property("hover", object(vec![property("h", text("[2px]"))])),
+                property("gridRows", text("[[a]_1fr]")),
+                property("mt", text("-[3px]!")),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_bracketed_values(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, value, inner, _)| (key, value, inner))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("w".to_string(), "[100px]".to_string(), "100px".to_string()),
+                ("top".to_string(), "-[1px]".to_string(), "-1px".to_string()),
+                ("h".to_string(), "[2px]".to_string(), "2px".to_string()),
+                (
+                    "gridRows".to_string(),
+                    "[[a]_1fr]".to_string(),
+                    "[a]_1fr".to_string()
+                ),
+                ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
+            ]
         );
     }
 

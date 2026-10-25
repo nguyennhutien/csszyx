@@ -89,6 +89,7 @@ import {
 // `@csszyx/compiler/report` subpath, so no entry bundles a copy and the
 // template filler shares no chunk with the entries Node loads.
 import {
+    BRACKETED_VALUE,
     BROKEN_OPACITY,
     CANONICAL_KEY,
     CLOSED_ENUM_VALUE,
@@ -1032,10 +1033,65 @@ export function normalizeArbitraryVariant(key: string): string {
  * @returns normalized value with spaces replaced by underscores
  */
 export function normalizeArbitraryValue(value: string): string {
-    // Strip user-provided outer brackets — sz auto-wraps arbitrary values;
-    // users must never pre-wrap (e.g. '[100px]' → '100px', then re-wrapped as needed).
-    const stripped = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
-    return normalizeDeclarationValue(stripped);
+    // A value in the brackets csszyx writes itself never gets here: it is
+    // reported at its key (`bracketWrappedInner`).
+    return normalizeDeclarationValue(value);
+}
+
+/**
+ * The value inside the brackets `value` starts and ends with, its sign kept in
+ * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
+ * `1px!`), or `undefined` when it is not wrapped. Grid line names at both
+ * ends (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`,
+ * where a value is never read so. Mirrors `bracket_wrapped_inner`.
+ *
+ * @param value - The value as written.
+ * @returns What to write instead, or `undefined`.
+ */
+function bracketWrappedInner(value: string): string | undefined {
+    const bang = value.endsWith('!') ? '!' : '';
+    const body = bang ? value.slice(0, -1) : value;
+    const sign = body.startsWith('-') ? '-' : '';
+    return body.startsWith('[', sign.length) && body.endsWith(']')
+        ? `${sign}${body.slice(sign.length + 1, -1)}${bang}`
+        : undefined;
+}
+
+/**
+ * Whether a key's value is wrapped in the brackets csszyx writes itself, which
+ * is reported and emits nothing. A custom property's value is a declaration
+ * value, where `[a]` is a grid line name, so it never is.
+ *
+ * @param key - The sz key.
+ * @param value - Its value.
+ * @returns True when the value is dropped.
+ */
+function dropBracketedValue(key: string, value: SzValue): boolean {
+    if (typeof value !== 'string' || key.startsWith('--')) return false;
+    const inner = bracketWrappedInner(value);
+    if (inner === undefined) return false;
+    warnBracketedValue(key, value, inner);
+    return true;
+}
+
+const _warnedBracketedValues = new Set<string>();
+
+/**
+ * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @param inner - What to write instead.
+ */
+function warnBracketedValue(key: string, value: string, inner: string): void {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedBracketedValues.has(`${key}:${value}`)
+    ) {
+        _warnedBracketedValues.add(`${key}:${value}`);
+        szReport({ diagnostic: BRACKETED_VALUE, args: { key, value, inner }, at: szWarnLocation });
+    }
 }
 
 /**
@@ -1156,13 +1212,11 @@ function isArbitraryLength(value: string): boolean {
  * @returns whether the value requires wrapping in brackets
  */
 function needsArbitraryBrackets(value: string): boolean {
-    // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
-    const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        isArbitraryLength(v) ||
-        v.startsWith('#') || // Hex colors
-        containsCssFunctionCall(v) ||
-        v.includes(' ') // Values with spaces need brackets
+        isArbitraryLength(value) ||
+        value.startsWith('#') || // Hex colors
+        containsCssFunctionCall(value) ||
+        value.includes(' ') // Values with spaces need brackets
     );
 }
 
@@ -3961,6 +4015,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
     _warnedOpacityValues.clear();
+    _warnedBracketedValues.clear();
     _warnedColorObjectSlashOpacity.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();
@@ -4225,6 +4280,7 @@ function collectTransformProperty(
     classes: string[],
 ): void {
     if (value === false || value === null || value === undefined) return;
+    if (dropBracketedValue(rawKey, value)) return;
     // A flag that joined a group under a new name emits nothing; say so in
     // every mode, as for the other replaced keys.
     if (REPLACED_KEYS.has(rawKey) && own(SUGGESTION_MAP, rawKey) !== undefined) {

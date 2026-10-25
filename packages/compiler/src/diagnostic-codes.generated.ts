@@ -35,6 +35,7 @@ export type SzDiagnosticCode =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'bracketed-value'
     | 'opacity-value';
 
 /**
@@ -75,6 +76,7 @@ export interface SzDiagnosticArgs {
     'ast-budget': { readonly form: 'transform' | 'prescan' };
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
     'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
+    'bracketed-value': { readonly key: string; readonly value: string; readonly inner: string };
     'opacity-value': { readonly key: string; readonly op: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
     'dead-class': { readonly className: string };
@@ -239,6 +241,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'bracketed-value',
     'opacity-value',
 ];
 
@@ -304,6 +307,7 @@ export type SzSettableDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'bracketed-value'
     | 'opacity-value'
     | 'unsigned-value'
     | 'prefix-disagreement'
@@ -350,6 +354,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'bracketed-value',
     'opacity-value',
     'unsigned-value',
     'prefix-disagreement',
@@ -390,6 +395,7 @@ export type SzDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'bracketed-value'
     | 'opacity-value'
     | 'unsigned-value'
     | 'dead-class'

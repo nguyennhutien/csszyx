@@ -849,6 +849,7 @@ struct KeyValueFindings {
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     invalid_opacities: Vec<(String, String, u32)>,
+    bracketed_values: Vec<(String, String, String, u32)>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -870,6 +871,7 @@ impl KeyValueFindings {
         self.slash_opacities.clear();
         self.color_slash_opacities.clear();
         self.invalid_opacities.clear();
+        self.bracketed_values.clear();
         self.mask_members.clear();
         self.moved_values.clear();
         self.mask_layers.clear();
@@ -910,6 +912,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
         super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
         super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
+        super::lower::collect_bracketed_values(object, &mut found.bracketed_values);
         super::lower::collect_moved_values(object, &mut found.moved_values);
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
@@ -932,6 +935,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.bracketed_values, 15, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -966,6 +970,9 @@ fn push_group_key_value_diagnostics<'a>(
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
     for (key, op, offset) in &found.invalid_opacities {
         out.push_issue(issue::opacity_value(key, op), *offset);
+    }
+    for (key, value, inner, offset) in &found.bracketed_values {
+        out.push_issue(issue::bracketed_value(key, value, inner), *offset);
     }
     push_mask_member_diagnostics(&found.mask_members, out);
     push_moved_value_diagnostics(&found.moved_values, out);
@@ -5346,7 +5353,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 33] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 34] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5515,6 +5522,11 @@ mod tests {
             (
                 DiagnosticCode::ColorSlashOpacity,
                 "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::BracketedValue,
+                "<div sz={{ w: '[100px]' }} />".into(),
                 TransformOptions::default(),
             ),
             (

@@ -623,7 +623,7 @@ describe('responsive breakpoints', () => {
     it('breakpoint × modifiers (important, negative, arbitrary value)', () => {
         expect(t({ md: { bg: 'red-500!' } })).toBe('md:bg-red-500!');
         expect(t({ md: { mt: -4 } })).toBe('md:-mt-4');
-        expect(t({ md: { w: '[320px]' } })).toBe('md:w-[320px]');
+        expect(t({ md: { w: '320px' } })).toBe('md:w-[320px]');
     });
 
     it('empty breakpoint object emits nothing without throwing', () => {

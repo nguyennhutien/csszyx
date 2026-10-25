@@ -7516,7 +7516,7 @@ export const C = ({ styles }) => <div sz={styles} />;
             ),
             ("{ variants: { s: { x: { p: '8!' } } } }", "p-8!"),
             ("{ variants: { s: { x: { mt: -2 } } } }", "-mt-2"),
-            ("{ variants: { s: { x: { w: '[400px]' } } } }", "w-[400px]"),
+            ("{ variants: { s: { x: { w: '400px' } } } }", "w-[400px]"),
             (
                 "{ variants: { s: { x: { bg: { color: 'warning', op: 10 } } } } }",
                 "bg-warning/10",

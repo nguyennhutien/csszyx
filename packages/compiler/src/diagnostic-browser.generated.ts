@@ -59,6 +59,9 @@ export const AST_BUDGET: SzBrowserDiagnostic<SzDiagnosticArgs['ast-budget']> = {
 /** `color-slash-opacity`: A colour object with a slash opacity in `color`; the object takes it in `op`. */
 export const COLOR_SLASH_OPACITY: SzBrowserDiagnostic<SzDiagnosticArgs['color-slash-opacity']> = {"id":"color-slash-opacity","args":"form key base opacity important? op?","text":{"op-given":"`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.","op-absent":"`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."},"help":{"op-given":"write `{ color: '{base}{important}', op: {op} }`.","op-absent":"write `{ color: '{base}{important}', op: {opacity} }`."},"note":{"op-given":"the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.","op-absent":"the class still applies opacity {opacity}."}};
 
+/** `bracketed-value`: A value wrapped in the brackets csszyx writes itself. */
+export const BRACKETED_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['bracketed-value']> = {"id":"bracketed-value","args":"key value inner","text":"`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.","help":"write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."};
+
 /** `opacity-value`: An `op` that is not a number from 0 to 100. */
 export const OPACITY_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['opacity-value']> = {"id":"opacity-value","args":"key op","text":"`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.","help":"write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`."};
 

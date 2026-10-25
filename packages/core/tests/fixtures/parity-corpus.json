@@ -187,7 +187,7 @@
         }
       ]
     },
-    "runtime": "gap-[10px]"
+    "runtime": ""
   },
   {
     "sz": "{\"autoCols\":12}",
@@ -396,7 +396,7 @@
         }
       ]
     },
-    "runtime": "h-[var(--h)]"
+    "runtime": ""
   },
   {
     "sz": "{\"text\":\"--spacing(4)\"}",
@@ -1834,7 +1834,7 @@
         }
       ]
     },
-    "runtime": "text-[13px]"
+    "runtime": ""
   },
   {
     "sz": "{\"font\":\"bold\"}",
@@ -2138,7 +2138,7 @@
         }
       ]
     },
-    "runtime": "rounded-[4px]"
+    "runtime": ""
   },
   {
     "sz": "{\"border\":2}",

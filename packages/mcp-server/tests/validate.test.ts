@@ -181,7 +181,7 @@ describe('csszyx_validate', () => {
     it('reads a value holding `<`, `>` or a line separator the way the runtime does', () => {
         // The object is spliced into source for the engine, escaped so no
         // character in it can end the expression; the answer must not change.
-        const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
+        const sz = { touch: 'pan-x', content: "'</p>\u2028'" };
         const data = JSON.parse(handleValidate({ sz }).content[0].text);
         expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
         expect(data.errors[0].message).toBe(

@@ -1094,6 +1094,31 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "bracketed-value",
+        "summary": "A value wrapped in the brackets csszyx writes itself.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "value": {
+                "type": "string"
+            },
+            "inner": {
+                "type": "string"
+            }
+        },
+        "text": "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+        "help": "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."
+    },
+    {
         "id": "opacity-value",
         "summary": "An `op` that is not a number from 0 to 100.",
         "surfaces": {

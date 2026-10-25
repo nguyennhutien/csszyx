@@ -75,6 +75,8 @@ pub enum DiagnosticCode {
     MangleVarsHoistSkipped,
     /// A colour object with a slash opacity in `color`; the object takes it in `op`.
     ColorSlashOpacity,
+    /// A value wrapped in the brackets csszyx writes itself.
+    BracketedValue,
     /// An `op` that is not a number from 0 to 100.
     OpacityValue,
 }
@@ -116,13 +118,14 @@ impl DiagnosticCode {
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
             Self::ColorSlashOpacity => "color-slash-opacity",
+            Self::BracketedValue => "bracketed-value",
             Self::OpacityValue => "opacity-value",
         }
     }
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 33] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 34] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -155,6 +158,7 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 33] = [
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
     DiagnosticCode::ColorSlashOpacity,
+    DiagnosticCode::BracketedValue,
     DiagnosticCode::OpacityValue,
 ];
 
@@ -963,6 +967,19 @@ pub mod issue {
         )
     }
 
+    /// `bracketed-value`: A value wrapped in the brackets csszyx writes itself.
+    #[must_use]
+    #[inline]
+    pub fn bracketed_value(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::BracketedValue,
+            Args::default()
+                .text("key", key)
+                .text("value", value)
+                .text("inner", inner),
+        )
+    }
+
     /// `opacity-value`: An `op` that is not a number from 0 to 100.
     #[must_use]
     #[inline]
@@ -1499,6 +1516,18 @@ mod tests {
         assert_eq!(
             args.to_json(),
             r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
+        );
+        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
         );
         let (code, args) = issue::opacity_value("key", "op");
         assert_eq!(code, DiagnosticCode::OpacityValue);

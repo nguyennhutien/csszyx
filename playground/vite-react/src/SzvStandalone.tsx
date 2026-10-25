@@ -2,27 +2,27 @@
 // szv catalogs and resolves them via `szr` only. The build prescan qualifies the
 // file by its `szv(` token (0.10.4+) AND collects its catalog even though the
 // native and wasm artifacts report transformed=false for a no-`sz=` file (the fix in this
-// change) — so the catalog, incl. the arbitrary [Npx] values and the large
+// change) — so the catalog, incl. the arbitrary Npx values and the large
 // off-scale enum numbers below, is safelisted and Tailwind generates the CSS.
 // IMPORTANT: do not write any of these class names as literal text/comments —
 // Tailwind's unscoped scan would pick them up and mask whether szv safelisting
 // actually works.
 import { szr, szv } from '@csszyx/runtime';
 
-// Arbitrary [Npx] values — pattern the design system uses for exact pixel sizes
+// Arbitrary Npx values — pattern the design system uses for exact pixel sizes
 // outside the Tailwind spacing scale.
 const arbitrarySz = szv({
     variants: {
         margin: {
-            a: { m: '[100px]' },
-            b: { m: '[137px]' },
+            a: { m: '100px' },
+            b: { m: '137px' },
         },
         size: {
-            square: { w: '[100px]', h: '[100px]' },
-            wide: { w: '[250px]', h: '[80px]' }, //    → w-[250px] h-[80px]
+            square: { w: '100px', h: '100px' },
+            wide: { w: '250px', h: '80px' }, //    → w-[250px] h-[80px]
         },
         gap: {
-            px: { gap: '[100px]' },
+            px: { gap: '100px' },
         },
     },
 });

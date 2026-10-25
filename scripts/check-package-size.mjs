@@ -603,12 +603,16 @@ export const SIZE_BUDGETS = [
     // 23,000 the same day, measured 22,949 (+225): `op` is read as a percent
     // (`/[33.3%]`, where `/[33.3]` was 3,330%), a percent string is kept, and
     // anything else writes the colour alone with `opacity-value`, whose words
-    // the development build prints; the production one measured +139.
+    // the development build prints; the production one measured +139. Raised
+    // to 23,200 on 2026-10-25, measured 23,147 (+163): a value in the brackets
+    // csszyx writes itself (`w: '[100px]'`) writes nothing and reports
+    // `bracketed-value`, whose words only this build prints; the production
+    // one measured +46, against +105 for a matched-bracket scan.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 23_000,
+        maxGzipBytes: 23_200,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
