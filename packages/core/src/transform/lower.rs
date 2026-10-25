@@ -2771,12 +2771,12 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
         .map(|prop| &prop.value);
 
     match (op_value, slash_opacity) {
-        (Some(op_value), _) => {
-            let op_str = format_opacity_value(op_value)?;
-            Some(format!(
-                "{prefix}{tw_prefix}-{color_base}/{op_str}{important}"
-            ))
-        }
+        // An `op` that is not an opacity writes the colour alone; the engine
+        // reports it (`collect_invalid_opacities`).
+        (Some(op_value), _) => Some(format_opacity_value(op_value).map_or_else(
+            || format!("{prefix}{tw_prefix}-{color_base}{important}"),
+            |op| format!("{prefix}{tw_prefix}-{color_base}/{op}{important}"),
+        )),
         (None, Some(opacity)) => Some(format!(
             "{prefix}{tw_prefix}-{color_base}/{opacity}{important}"
         )),
@@ -2784,21 +2784,71 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     }
 }
 
+/// The modifier `op` writes, or `None` when it is not an opacity.
+///
+/// Tailwind reads a bracketed modifier as a fraction of one, so `/[33.3]` is
+/// 3,330%: a quarter step is served bare on every Tailwind v4 (`/75.5`), and any
+/// other number from 0 to 100 keeps its percent in the brackets, as a percent
+/// string does (`'78%'`). A custom property is read as the opacity it holds. Mirrors `formatOpacity` in
+/// `transform-core.ts`.
 fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
     match value {
-        // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
-        // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
-        // the removed JavaScript lanes `formatOpacity`.
-        StaticSzValue::Number(op) => {
-            if (op * 2.0).fract() == 0.0 {
-                Some(format_abs_number(*op))
+        StaticSzValue::Number(op) if (0.0..=100.0).contains(op) => {
+            Some(if (op * 4.0).fract() == 0.0 {
+                format_number_literal(*op)
             } else {
-                Some(format!("[{}]", format_abs_number(*op)))
-            }
+                format!("[{}%]", format_number_literal(*op))
+            })
         }
         StaticSzValue::String(op) if op.starts_with("--") => Some(format!("({op})")),
-        StaticSzValue::String(op) => Some(format!("[{op}]")),
+        StaticSzValue::String(op) if is_percent_opacity(op) => Some(format!("[{op}]")),
         _ => None,
+    }
+}
+
+/// Whether `op` is a percent from 0 to 100 written as a string: `'78%'`.
+fn is_percent_opacity(op: &str) -> bool {
+    op.strip_suffix('%')
+        .filter(|digits| is_unsigned_decimal(digits))
+        .and_then(|digits| digits.parse::<f64>().ok())
+        .is_some_and(|percent| percent <= 100.0)
+}
+
+/// Each colour object whose `op` is not an opacity ([`format_opacity_value`]),
+/// with the key, `op` as the author wrote it, and where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_invalid_opacities(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        if property_prefix(&property.key).is_some()
+            && object_string_property(nested, "color").is_some()
+        {
+            for op in nested.properties.iter().filter(|prop| prop.key == "op") {
+                if format_opacity_value(&op.value).is_none() {
+                    out.push((property.key.clone(), literal_of(&op.value), op.span.start));
+                }
+            }
+        } else {
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_invalid_opacities(object, out);
+            });
+        }
+    }
+}
+
+/// A static value as JS source: a string quoted, a number as written.
+#[cfg(feature = "native-engine")]
+fn literal_of(value: &StaticSzValue) -> String {
+    match value {
+        StaticSzValue::String(text) => format!("'{text}'"),
+        StaticSzValue::Number(number) => format_number_literal(*number),
+        StaticSzValue::Boolean(flag) => flag.to_string(),
+        StaticSzValue::Object(_) => "{…}".to_owned(),
     }
 }
 
@@ -3134,6 +3184,8 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
     #[cfg(feature = "native-engine")]
+    use super::collect_invalid_opacities;
+    #[cfg(feature = "native-engine")]
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
@@ -3195,6 +3247,49 @@ mod tests {
         assert_eq!(
             found,
             [("bg".to_string(), "red-500/50".to_string(), None, 0)]
+        );
+    }
+
+    /// Every `op` that is not an opacity is named as the author wrote it, under
+    /// a variant too; a percent string and a custom property are opacities.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn an_op_that_is_no_opacity_is_named_as_written() {
+        let colour = |op: StaticSzValue| {
+            object(vec![
+                property("color", StaticSzValue::String("red-500".to_string())),
+                property("op", op),
+            ])
+        };
+        let object = StaticSzObject {
+            properties: vec![
+                property("bg", colour(StaticSzValue::Number(150.0))),
+                property(
+                    "borderColor",
+                    colour(StaticSzValue::String("20".to_string())),
+                ),
+                property("outlineColor", colour(StaticSzValue::Boolean(true))),
+                property("ringColor", colour(object(vec![]))),
+                property("fill", colour(StaticSzValue::String("78%".to_string()))),
+                property("stroke", colour(StaticSzValue::String("--o".to_string()))),
+                property(
+                    "hover",
+                    object(vec![property("bg", colour(StaticSzValue::Number(-5.0)))]),
+                ),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_invalid_opacities(&object, &mut found);
+        let named: Vec<_> = found.into_iter().map(|(key, op, _)| (key, op)).collect();
+        assert_eq!(
+            named,
+            [
+                ("bg".to_string(), "150".to_string()),
+                ("borderColor".to_string(), "'20'".to_string()),
+                ("outlineColor".to_string(), "true".to_string()),
+                ("ringColor".to_string(), "{…}".to_string()),
+                ("bg".to_string(), "-5".to_string()),
+            ]
         );
     }
 
@@ -4473,6 +4568,9 @@ mod tests {
                 "decoration-invalid",
                 "diagonal-fractions",
                 "stacked-fractions",
+                // `op: true` is no opacity: the colour alone, and the engine
+                // reports `opacity-value`.
+                "bg-red-500",
             ]
         );
     }
@@ -4898,7 +4996,7 @@ mod tests {
         );
         assert_eq!(
             color_op("bg", "black", Some(StaticSzValue::Number(0.05))),
-            ["bg-black/[0.05]"]
+            ["bg-black/[0.05%]"]
         );
         assert_eq!(
             color_op(

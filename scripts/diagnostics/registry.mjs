@@ -885,6 +885,17 @@ export const DIAGNOSTICS = [
         },
         sources: [ENGINE, CORE_TS],
     },
+    {
+        id: 'opacity-value',
+        summary: 'An `op` that is not a number from 0 to 100.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        position: 'site',
+        // `op` is the JS literal the author wrote, quotes included for a string.
+        args: { key: STRING, op: STRING },
+        text: '`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.',
+        help: 'write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.',
+        sources: [ENGINE, CORE_TS],
+    },
 
     // --- check: kinds a non-engine `csszyx check` pass reports ---
     {

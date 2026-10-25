@@ -456,7 +456,7 @@ describe('the colour-object slash opacity diagnostic', () => {
         (_name, engine) => {
             const run = captureWarnings(
                 engine,
-                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
+                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '78%' } }} />;",
                 '/p/src/Spelling.jsx',
             );
 
@@ -464,9 +464,9 @@ describe('the colour-object slash opacity diagnostic', () => {
                 engineMessage(
                     'color-slash-opacity',
                     '/p/src/Spelling.jsx:1:33',
-                    "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                    "help: write `{ color: 'red-500!', op: '20' }`.",
-                    "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                    "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                    "help: write `{ color: 'red-500!', op: '78%' }`.",
+                    "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
                 ),
             ]);
             expect(run.result.issues?.[0]?.args).toEqual({
@@ -475,7 +475,7 @@ describe('the colour-object slash opacity diagnostic', () => {
                 base: 'red-500',
                 opacity: '50',
                 important: '!',
-                op: "'20'",
+                op: "'78%'",
             });
         },
     );
@@ -484,7 +484,7 @@ describe('the colour-object slash opacity diagnostic', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         setSzWarnLocation('/p/src/Spelling.jsx:1');
         try {
-            transform({ bg: { color: 'red-500/50!', op: '20' } });
+            transform({ bg: { color: 'red-500/50!', op: '78%' } });
             vi.stubEnv('NODE_ENV', 'production');
             transform({ bg: { color: 'blue-500/50' } });
 
@@ -493,9 +493,9 @@ describe('the colour-object slash opacity diagnostic', () => {
                     engineMessage(
                         'color-slash-opacity',
                         '/p/src/Spelling.jsx:1',
-                        "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                        "help: write `{ color: 'red-500!', op: '20' }`.",
-                        "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                        "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                        "help: write `{ color: 'red-500!', op: '78%' }`.",
+                        "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
                     ),
                 ],
             ]);

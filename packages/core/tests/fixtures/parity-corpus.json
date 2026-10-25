@@ -1574,7 +1574,7 @@
         }
       ]
     },
-    "runtime": "bg-black/[0.05]"
+    "runtime": "bg-black/[0.05%]"
   },
   {
     "sz": "{\"bg\":{\"color\":\"pink-500\",\"op\":\"78%\"}}",
@@ -8659,6 +8659,50 @@
       ]
     },
     "runtime": "bg-[#333]"
+  },
+  {
+    "sz": "{\"bg\":{\"color\":\"black\",\"op\":7.3}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "black"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 7.3
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "bg-black/[7.3%]"
   },
   {
     "sz": "{\"bg\":{\"color\":\"black\",\"op\":75.5}}",

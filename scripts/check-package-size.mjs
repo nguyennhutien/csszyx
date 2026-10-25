@@ -599,12 +599,16 @@ export const SIZE_BUDGETS = [
     // lowering reads with an authored key or value goes through one own-entry
     // lookup, so `constructor` or `toString` no longer reads `Object.prototype`
     // and writes the text of a function as a class. Making the tables
-    // themselves prototype-free cost +137 here and was dropped.
+    // themselves prototype-free cost +137 here and was dropped. Raised to
+    // 23,000 the same day, measured 22,949 (+225): `op` is read as a percent
+    // (`/[33.3%]`, where `/[33.3]` was 3,330%), a percent string is kept, and
+    // anything else writes the colour alone with `opacity-value`, whose words
+    // the development build prints; the production one measured +139.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 22_800,
+        maxGzipBytes: 23_000,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },

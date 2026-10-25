@@ -7383,18 +7383,19 @@
    "source": "<div class=\"p-4>x</div><span class=\"m-2\">y</span>",
    "options": {},
    "result": {
-    "code": "<div class=\"class=\" sz=\"p: { color: '4>x<', op: 'div><span' }\"m-2\">y</span>",
-    "changed": true,
-    "warnings": [],
+    "changed": false,
+    "code": "<div class=\"p-4>x</div><span class=\"m-2\">y</span>",
+    "potentiallyUnusedImports": [],
     "stats": {
-     "classNamesTransformed": 1,
-     "classNamesSkipped": 0,
+     "classNamesSkipped": 1,
      "classNamesSkippedComponent": 0,
+     "classNamesTransformed": 0,
      "classesUnrecognized": [
+      "p-4>x</div><span",
       "class="
      ]
     },
-    "potentiallyUnusedImports": []
+    "warnings": []
    }
   },
   {

@@ -405,14 +405,21 @@ describe('round-trip: TW → migrate → compile', () => {
             'bg-white/90',
             'border-black/5',
             'text-black/50',
-            // Decimal opacity in brackets — was broken (op stayed as string)
-            'border-black/[0.05]',
-            'bg-white/[0.02]',
-            'bg-white/[0.04]',
-            'hover:border-black/[0.08]',
-            'dark:bg-white/[0.02]',
+            'bg-white/[33.3%]',
         ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
+        });
+
+        // Tailwind reads a bracket without `%` as a fraction of one, and `op`
+        // is a percent: `/[0.05]` is 5%, so it comes back as `/5`, the same CSS.
+        it.each([
+            ['border-black/[0.05]', 'border-black/5'],
+            ['bg-white/[0.02]', 'bg-white/2'],
+            ['bg-white/[0.333]', 'bg-white/[33.3%]'],
+            ['hover:border-black/[0.08]', 'hover:border-black/8'],
+            ['dark:bg-white/[0.02]', 'dark:bg-white/2'],
+        ])('%s comes back as %s', (cls, written) => {
+            expect(roundTrip(cls)).toBe(written);
         });
     });
 

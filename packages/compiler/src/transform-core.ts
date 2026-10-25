@@ -101,6 +101,7 @@ import {
     NUMERIC_FONT_WEIGHT,
     NUMERIC_KEY,
     OFF_SCALE_VALUE,
+    OPACITY_VALUE,
     OPTIONS_OBJECT_REQUIRED,
     PER_SIDE_BORDER_STYLE,
     PROPERTY_OBJECT,
@@ -950,27 +951,60 @@ function warnDeadWeightValue(rawKey: string, value: string): void {
 const _warnedOpacityTokens = new Set<string>();
 
 /**
- * Formats an opacity value for Tailwind class output.
- * Handles numbers, CSS variables, and arbitrary values.
- * @param op - the opacity value (number or string)
- * @returns formatted opacity string for Tailwind class
+ * The modifier `op` writes, or `undefined` when it is not an opacity.
+ *
+ * Tailwind reads a bracketed modifier as a fraction of one, so `/[33.3]` is
+ * 3,330%: a quarter step is served bare on every Tailwind v4 (`/75.5`), and any
+ * other number from 0 to 100 keeps its percent in the brackets, as a percent
+ * string does (`'78%'`). A custom property is read as the opacity it holds. Mirrors `format_opacity_value`.
+ *
+ * @param op - The `op` value as written.
+ * @returns The modifier, or `undefined`.
  */
-function formatOpacity(op: number | string): string {
-    if (typeof op === 'number') {
-        // Integers and half-step decimals (×2 is integer: 0, 0.5, 1, 50, 75.5, …) → plain "/50", "/0.5"
-        // Other decimals (e.g. 0.05, 0.02) are fraction-scale → arbitrary "/[0.05]"
-        if (Number.isInteger(op * 2)) {
-            return String(op);
-        }
+function formatOpacity(op: unknown): string | undefined {
+    if (typeof op === 'number' && op >= 0 && op <= 100) {
+        return Number.isInteger(op * 4) ? String(op) : `[${plainDecimal(op)}%]`;
+    }
+    if (typeof op === 'string' && op.startsWith('--')) return `(${op})`;
+    if (typeof op === 'string' && /^\d+(?:\.\d+)?%$/.test(op) && Number.parseFloat(op) <= 100) {
         return `[${op}]`;
     }
-    if (typeof op === 'string') {
-        if (op.startsWith('--')) {
-            return `(${op})`;
-        }
-        return `[${op}]`;
+    return undefined;
+}
+
+/**
+ * A number from 0 to 100 written without an exponent, as Rust writes it:
+ * `1e-7` is `0.0000001`.
+ *
+ * @param value - The number.
+ * @returns Its digits.
+ */
+function plainDecimal(value: number): string {
+    const written = String(value);
+    const exponent = written.indexOf('e-');
+    if (exponent === -1) return written;
+    const digits = written.slice(0, exponent).replace('.', '');
+    return `0.${'0'.repeat(Number(written.slice(exponent + 2)) - 1)}${digits}`;
+}
+
+const _warnedOpacityValues = new Set<string>();
+
+/**
+ * Name an `op` that is not an opacity; the colour is written without one.
+ *
+ * @param key - Colour property key.
+ * @param op - The `op` value as written.
+ */
+function warnOpacityValue(key: string, op: unknown): void {
+    const literal = typeof op === 'string' ? `'${op}'` : String(op);
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedOpacityValues.has(`${key}:${literal}`)
+    ) {
+        _warnedOpacityValues.add(`${key}:${literal}`);
+        szReport({ diagnostic: OPACITY_VALUE, args: { key, op: literal }, at: szWarnLocation });
     }
-    return String(op);
 }
 
 /**
@@ -2099,12 +2133,17 @@ function buildColorObjectClass(
         !rawColor.includes('(')
             ? `(color:${rawColor})`
             : formatColorObjectBase(rawColor);
-    if (color.op === undefined) {
+    // A null `op` is no `op`, as any null value.
+    if (color.op === undefined || color.op === null) {
         return slashOpacity === undefined
             ? `${prefix}${utilityPrefix}-${colorValue}${important}`
             : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
     }
     const opacity = formatOpacity(color.op);
+    if (opacity === undefined) {
+        warnOpacityValue(key, color.op);
+        return `${prefix}${utilityPrefix}-${colorValue}${important}`;
+    }
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`);
     return `${prefix}${utilityPrefix}-${colorValue}/${opacity}${important}`;
 }
@@ -3905,6 +3944,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedSpacingSteps.clear();
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
+    _warnedOpacityValues.clear();
     _warnedColorObjectSlashOpacity.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();

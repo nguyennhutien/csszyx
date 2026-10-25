@@ -46,14 +46,14 @@ describe('formatOpacity via bg color object', () => {
     it('emits a bare half-step decimal opacity', () => {
         expect(cls({ bg: { color: 'red-500', op: 0.5 } })).toBe('bg-red-500/0.5');
     });
-    it('wraps a fraction-scale decimal opacity in brackets', () => {
-        expect(cls({ bg: { color: 'red-500', op: 0.05 } })).toBe('bg-red-500/[0.05]');
+    it('keeps the percent of an off-step decimal opacity in its brackets', () => {
+        expect(cls({ bg: { color: 'red-500', op: 0.05 } })).toBe('bg-red-500/[0.05%]');
     });
     it('wraps a CSS-variable opacity in parentheses', () => {
         expect(cls({ bg: { color: 'red-500', op: '--o' } })).toBe('bg-red-500/(--o)');
     });
-    it('wraps an arbitrary string opacity in brackets', () => {
-        expect(cls({ bg: { color: 'red-500', op: 'var(--o)' } })).toBe('bg-red-500/[var(--o)]');
+    it('writes the colour alone for a string opacity that is not a percent', () => {
+        expect(cls({ bg: { color: 'red-500', op: 'var(--o)' } })).toBe('bg-red-500');
     });
     it('lowers a color object with no opacity', () => {
         expect(cls({ bg: { color: 'red-500' } })).toBe('bg-red-500');

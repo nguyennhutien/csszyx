@@ -15369,21 +15369,21 @@
     "prop": "bg",
     "value": {
      "color": "black",
-     "op": 0.05
+     "op": 5
     }
    },
    "o": {
     "sz": {
      "bg": {
       "color": "black",
-      "op": 0.05
+      "op": 5
      }
     },
-    "szText": "{\"bg\":{\"color\":\"black\",\"op\":0.05}}",
+    "szText": "{\"bg\":{\"color\":\"black\",\"op\":5}}",
     "u": [],
     "k": [],
-    "g": "{ bg: { color: 'black', op: 0.05 } }",
-    "h": "bg: { color: 'black', op: 0.05 }"
+    "g": "{ bg: { color: 'black', op: 5 } }",
+    "h": "bg: { color: 'black', op: 5 }"
    }
   },
   {
@@ -63773,44 +63773,35 @@
     "prop": "bg",
     "value": {
      "color": "red-500",
-     "op": 0.5
+     "op": 50
     }
    },
    "o": {
     "sz": {
      "bg": {
       "color": "red-500",
-      "op": 0.5
+      "op": 50
      }
     },
-    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":0.5}}",
+    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":50}}",
     "u": [],
     "k": [],
-    "g": "{ bg: { color: 'red-500', op: 0.5 } }",
-    "h": "bg: { color: 'red-500', op: 0.5 }"
+    "g": "{ bg: { color: 'red-500', op: 50 } }",
+    "h": "bg: { color: 'red-500', op: 50 }"
    }
   },
   {
    "c": "bg-red-500/foo",
-   "p": {
-    "prop": "bg",
-    "value": {
-     "color": "red-500",
-     "op": "foo"
-    }
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "bg": {
-      "color": "red-500",
-      "op": "foo"
-     }
-    },
-    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":\"foo\"}}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "bg-red-500/foo"
+    ],
     "k": [],
-    "g": "{ bg: { color: 'red-500', op: 'foo' } }",
-    "h": "bg: { color: 'red-500', op: 'foo' }"
+    "g": "{}",
+    "h": ""
    }
   },
   {

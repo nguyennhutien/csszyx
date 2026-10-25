@@ -117,14 +117,16 @@ describe('Color Opacity Object Form', () => {
             expect(result.className).toBe('bg-blue-500/[73%]');
         });
 
-        it('should use [] syntax for leading dot opacity', () => {
+        // Tailwind reads `/[.5]` as 50% and `/[70.8]` as 7,080%: a number
+        // written as a string is no opacity, so the colour is written alone.
+        it('writes the colour alone for a leading-dot string opacity', () => {
             const result = transform({ bg: { color: 'pink-500', op: '.5' } } as SzObject);
-            expect(result.className).toBe('bg-pink-500/[.5]');
+            expect(result.className).toBe('bg-pink-500');
         });
 
-        it('should use [] syntax for non-half-step decimal', () => {
+        it('writes the colour alone for a decimal string opacity', () => {
             const result = transform({ bg: { color: 'pink-500', op: '70.8' } } as SzObject);
-            expect(result.className).toBe('bg-pink-500/[70.8]');
+            expect(result.className).toBe('bg-pink-500');
         });
     });
 

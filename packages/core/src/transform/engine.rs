@@ -848,6 +848,7 @@ struct KeyValueFindings {
     dead_enums: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
+    invalid_opacities: Vec<(String, String, u32)>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -868,6 +869,7 @@ impl KeyValueFindings {
         self.dead_enums.clear();
         self.slash_opacities.clear();
         self.color_slash_opacities.clear();
+        self.invalid_opacities.clear();
         self.mask_members.clear();
         self.moved_values.clear();
         self.mask_layers.clear();
@@ -907,6 +909,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
         super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
         super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
+        super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
         super::lower::collect_moved_values(object, &mut found.moved_values);
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
@@ -928,6 +931,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.slash_opacities, 11, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -960,6 +964,9 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(&found.dead_enums, out);
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
+    for (key, op, offset) in &found.invalid_opacities {
+        out.push_issue(issue::opacity_value(key, op), *offset);
+    }
     push_mask_member_diagnostics(&found.mask_members, out);
     push_moved_value_diagnostics(&found.moved_values, out);
     push_mask_layer_diagnostics(&found.mask_layers, out);
@@ -5339,7 +5346,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 32] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 33] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5510,6 +5517,11 @@ mod tests {
                 "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
                 TransformOptions::default(),
             ),
+            (
+                DiagnosticCode::OpacityValue,
+                "<div sz={{ bg: { color: 'red-500', op: 150 } }} />".into(),
+                TransformOptions::default(),
+            ),
         ];
         // Every code the engine emits has a case; `unsigned-value`, the
         // build-time oracle's verdict (ADR 0012, 0022), is not one of them.
@@ -5659,9 +5671,9 @@ mod tests {
     fn a_colour_object_with_a_slash_opacity_writes_its_class_and_points_at_op() {
         let cases: [(&str, &str, &str); 6] = [
             (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
-                r#"className="bg-red-500/[20]!""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"'20'"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: 20 } }} />;",
+                r#"className="bg-red-500/20!""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"20"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
@@ -5674,9 +5686,9 @@ mod tests {
                 r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50"}"#,
             ),
             (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '20' } }} />;",
-                r#"className="bg-red-500/[20]""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'20'"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '78%' } }} />;",
+                r#"className="bg-red-500/[78%]""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'78%'"}"#,
             ),
             (
                 "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",

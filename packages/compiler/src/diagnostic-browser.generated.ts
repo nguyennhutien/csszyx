@@ -59,6 +59,9 @@ export const AST_BUDGET: SzBrowserDiagnostic<SzDiagnosticArgs['ast-budget']> = {
 /** `color-slash-opacity`: A colour object with a slash opacity in `color`; the object takes it in `op`. */
 export const COLOR_SLASH_OPACITY: SzBrowserDiagnostic<SzDiagnosticArgs['color-slash-opacity']> = {"id":"color-slash-opacity","args":"form key base opacity important? op?","text":{"op-given":"`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.","op-absent":"`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."},"help":{"op-given":"write `{ color: '{base}{important}', op: {op} }`.","op-absent":"write `{ color: '{base}{important}', op: {opacity} }`."},"note":{"op-given":"the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.","op-absent":"the class still applies opacity {opacity}."}};
 
+/** `opacity-value`: An `op` that is not a number from 0 to 100. */
+export const OPACITY_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['opacity-value']> = {"id":"opacity-value","args":"key op","text":"`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.","help":"write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`."};
+
 /** `unsigned-value`: A negative value on a key Tailwind serves no negative utility for. */
 export const UNSIGNED_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['unsigned-value']> = {"id":"unsigned-value","args":"className utility","text":"`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.","help":"drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.","note":"the class is still emitted, and it styles nothing."};
 

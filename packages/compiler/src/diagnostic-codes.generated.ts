@@ -34,7 +34,8 @@ export type SzDiagnosticCode =
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
-    | 'color-slash-opacity';
+    | 'color-slash-opacity'
+    | 'opacity-value';
 
 /**
  * The named values each live id carries, by id: what a site passes with it,
@@ -74,6 +75,7 @@ export interface SzDiagnosticArgs {
     'ast-budget': { readonly form: 'transform' | 'prescan' };
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
     'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
+    'opacity-value': { readonly key: string; readonly op: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
     'dead-class': { readonly className: string };
     'prefix-disagreement': { readonly form: 'build' | 'next' | 'check'; readonly entries: readonly string[]; readonly setting?: string; readonly ignoreSetting?: string };
@@ -237,6 +239,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'opacity-value',
 ];
 
 /** A pass of `csszyx check`; setting one sets every kind it reports. */
@@ -301,6 +304,7 @@ export type SzSettableDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'opacity-value'
     | 'unsigned-value'
     | 'prefix-disagreement'
     | 'unserved-variant';
@@ -346,6 +350,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'opacity-value',
     'unsigned-value',
     'prefix-disagreement',
     'unserved-variant',
@@ -385,6 +390,7 @@ export type SzDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'opacity-value'
     | 'unsigned-value'
     | 'dead-class'
     | 'prefix-disagreement'

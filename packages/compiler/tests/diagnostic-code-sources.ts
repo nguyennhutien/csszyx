@@ -40,6 +40,7 @@ export const CODE_SOURCES: ReadonlyArray<
         "export const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
     ],
     ['off-scale-value', 'export const A = () => <div sz={{ p: 1.3 }} />;'],
+    ['opacity-value', "export const A = () => <div sz={{ bg: { color: 'red-500', op: 150 } }} />;"],
     ['numeric-font-weight', "export const A = () => <div sz={{ weight: '700' }} />;"],
     [
         'per-side-border-style',

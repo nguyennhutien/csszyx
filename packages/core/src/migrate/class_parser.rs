@@ -546,6 +546,10 @@ fn disambiguate_and_parse(
     if SHADOW_SIZE_PROPS.contains(&result.prop.as_str()) {
         return Ok(ParsedClass::new(&result.prop, raw_value));
     }
+    // No `op` writes this modifier's opacity, so the class stays as written.
+    if opacity == SzValue::Null {
+        return Err(Unread::NoRule);
+    }
     let mut colour = SzObject::new();
     colour.insert("color".to_string(), SzValue::from(text.as_str()));
     colour.insert("op".to_string(), opacity);
@@ -589,23 +593,39 @@ fn extract_opacity<'a>(prefix: &str, raw_value: &'a str) -> (&'a str, Option<SzV
     )
 }
 
-/// `50`, `[50%]`, `[0.5]`, `(--op)`: a number where the text is one, the
-/// text otherwise.
+/// `50`, `[50%]`, `[0.5]`, `(--op)` as the `op` that writes the same opacity,
+/// or `null` when the modifier is no opacity `op` can take.
+///
+/// `op` is a percent, and Tailwind reads a bracket without `%` as a fraction of
+/// one: `/[0.5]` is 50%, so it becomes `op: 50`, where `op: 0.5` is 0.5%.
 fn parse_opacity(raw: &str) -> SzValue {
     if let Some(inner) = wrapped(raw, '[', ']') {
         if inner.contains('%') {
             return SzValue::from(inner);
         }
-        return numeric_opacity(inner);
+        return match js_number(inner) {
+            Some(fraction) if is_plain_decimal(inner) && fraction <= 1.0 => {
+                // Rounded so `0.05` reads `5`, not `5.000000000000001`.
+                SzValue::Number((fraction * 100.0 * 1e9).round() / 1e9)
+            }
+            _ => SzValue::Null,
+        };
     }
     if let Some(inner) = wrapped(raw, '(', ')') {
         return SzValue::from(inner);
     }
-    numeric_opacity(raw)
+    js_number(raw)
+        .filter(|_| is_plain_decimal(raw))
+        .map_or(SzValue::Null, SzValue::Number)
 }
 
-fn numeric_opacity(value: &str) -> SzValue {
-    js_number(value).map_or_else(|| SzValue::from(value), SzValue::Number)
+/// Digits with at most one point: `50`, `0.5`, `.5`.
+fn is_plain_decimal(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+        && text.bytes().filter(|&byte| byte == b'.').count() <= 1
 }
 
 /// Pick the prefix's key by the value's shape and spell the value.
@@ -968,6 +988,21 @@ mod tests {
             ("shadow-lg/50", r#"shadow="lg/50""#),
         ] {
             assert_eq!(prop_value(class), expected, "{class}");
+        }
+        // `op` is a percent, and Tailwind reads a bracket without `%` as a
+        // fraction of one: `/[0.5]` is 50%, which `op: 0.5` is not.
+        for (class, expected) in [
+            ("bg-black/[0.05]", r#"bg={"color":"black","op":5}"#),
+            ("bg-black/[0.5]", r#"bg={"color":"black","op":50}"#),
+            ("bg-black/[.333]", r#"bg={"color":"black","op":33.3}"#),
+            ("bg-black/[78%]", r#"bg={"color":"black","op":"78%"}"#),
+            ("bg-black/75.5", r#"bg={"color":"black","op":75.5}"#),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+        // No `op` writes these opacities, so the class stays as written.
+        for class in ["bg-black/[20]", "bg-black/[1.5]", "bg-black/abc"] {
+            assert_eq!(prop_value(class), "null", "{class}");
         }
         assert_eq!(
             parse_class("text-sm/6").map(|parsed| parsed.prop),

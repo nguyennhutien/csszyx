@@ -75,6 +75,8 @@ pub enum DiagnosticCode {
     MangleVarsHoistSkipped,
     /// A colour object with a slash opacity in `color`; the object takes it in `op`.
     ColorSlashOpacity,
+    /// An `op` that is not a number from 0 to 100.
+    OpacityValue,
 }
 
 impl DiagnosticCode {
@@ -114,12 +116,13 @@ impl DiagnosticCode {
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
             Self::ColorSlashOpacity => "color-slash-opacity",
+            Self::OpacityValue => "opacity-value",
         }
     }
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 33] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -152,6 +155,7 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
     DiagnosticCode::ColorSlashOpacity,
+    DiagnosticCode::OpacityValue,
 ];
 
 /// Shared with the renderer, which prints it.
@@ -958,6 +962,16 @@ pub mod issue {
                 .optional_text("op", op),
         )
     }
+
+    /// `opacity-value`: An `op` that is not a number from 0 to 100.
+    #[must_use]
+    #[inline]
+    pub fn opacity_value(key: &str, op: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OpacityValue,
+            Args::default().text("key", key).text("op", op),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1486,5 +1500,11 @@ mod tests {
             args.to_json(),
             r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
         );
+        let (code, args) = issue::opacity_value("key", "op");
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(args.to_json(), r#"{"key":"key","op":"op"}"#);
+        let (code, args) = issue::opacity_value("key", "op");
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(args.to_json(), r#"{"key":"key","op":"op"}"#);
     }
 }
