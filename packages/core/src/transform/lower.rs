@@ -237,8 +237,26 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
 fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
     // Merged last: the table names classes as they are emitted, prefix
     // included, and the text-size/leading pair is one class by then.
-    let classes = merge_text_size_and_leading(classes);
+    let classes = merge_text_size_and_leading(one_class_each(classes));
     super::merge::apply_active(with_class_prefix_all(classes))
+}
+
+/// Each class one value lowered to, as one class: a space inside a value
+/// becomes `_`, as Tailwind reads it in an arbitrary value. Written raw,
+/// `brightness: 'calc(1 + 2)'` split the attribute into three names that
+/// style nothing, and `display: 'flex hidden'` into two that do. Mirrors
+/// `oneClassEach` in `transform-core.ts`.
+fn one_class_each(classes: Vec<String>) -> Vec<String> {
+    classes
+        .into_iter()
+        .map(|class_name| {
+            if class_name.contains(char::is_whitespace) {
+                class_name.split_whitespace().collect::<Vec<_>>().join("_")
+            } else {
+                class_name
+            }
+        })
+        .collect()
 }
 
 /// [`lower_static_sz_object`] on a pass that collects what a merge would
@@ -259,6 +277,7 @@ fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
         }
         current = Some(index);
     });
+    let mut classes = one_class_each(classes);
     // A one-class object merges with nothing but is recorded all the same:
     // the group is where its key and offset travel to a dead-class report.
     if classes.is_empty() {

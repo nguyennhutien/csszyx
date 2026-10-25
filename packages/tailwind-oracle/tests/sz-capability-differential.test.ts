@@ -57,8 +57,16 @@ const BASELINE_FORMAT = 2;
  *   diagnostic: the oracle cannot see it, so nothing reports it.
  * - `silent`, `silent-runtime`, `silent-engine`: nothing written, and no
  *   lowering diagnostic on either side, the runtime, or the engine.
+ * - `split`: one value written as several classes, as a space in it did.
  */
-type Failure = 'dead' | 'diverge' | 'inert' | 'silent' | 'silent-engine' | 'silent-runtime';
+type Failure =
+    | 'dead'
+    | 'diverge'
+    | 'inert'
+    | 'silent'
+    | 'silent-engine'
+    | 'silent-runtime'
+    | 'split';
 
 /**
  * Which lanes kept quiet about a value they wrote nothing for.
@@ -109,7 +117,8 @@ describe('every sz key against every value shape', async () => {
         const tokens = tokensOf(c.runtime.className);
         const engineReported = outputs.every(output => output.reported);
         let failure: Failure | null = null;
-        if (tokens.length === 0) failure = silence(c.runtime.reported, engineReported);
+        if (c.shape === 'space' && tokens.length > 1) failure = 'split';
+        else if (tokens.length === 0) failure = silence(c.runtime.reported, engineReported);
         else if (tokens.some(token => dead.has(token))) failure = 'dead';
         else if (c.shape === 'css-wide' && !tokens.every(keywordReachesAProperty)) {
             failure = engineReported ? null : 'inert';

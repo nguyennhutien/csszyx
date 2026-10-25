@@ -64996,16 +64996,19 @@
   },
   {
    "c": "content-[😀_x]",
-   "p": null,
+   "p": {
+    "prop": "content",
+    "value": "😀 x"
+   },
    "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "content-[😀_x]"
-    ],
+    "sz": {
+     "content": "😀 x"
+    },
+    "szText": "{\"content\":\"😀 x\"}",
+    "u": [],
     "k": [],
-    "g": "{}",
-    "h": ""
+    "g": "{ content: '😀 x' }",
+    "h": "content: '😀 x'"
    }
   },
   {

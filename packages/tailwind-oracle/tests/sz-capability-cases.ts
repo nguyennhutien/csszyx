@@ -45,6 +45,8 @@ const VALUE_SHAPES: ReadonlyArray<readonly [shape: string, value: number | strin
     ['slash-opacity', 'red-500/50'],
     // Tailwind's custom-property shorthand.
     ['var', '(--v)'],
+    // A space inside a value: one class, the space as `_`, never several.
+    ['space', 'calc(1px + 2px)'],
 ];
 
 /**

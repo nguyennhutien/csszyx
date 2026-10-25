@@ -1514,7 +1514,7 @@ function collectNamedGroupPeer(
 /** Appends transformed classes for one variant value. */
 function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
     const result = transformNested(value as SzObject, prefix);
-    if (result.className) classes.push(result.className);
+    if (result.className) classes.push(...result.className.split(' '));
 }
 
 /** Returns whether a variant value is intentionally absent. */
@@ -1623,7 +1623,7 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
         const variantPrefix = `${prefix}has-[${selectorStr}]:`;
         const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
-            classes.push(result.className);
+            classes.push(...result.className.split(' '));
         }
     }
 
@@ -1645,12 +1645,12 @@ function transformNotEntry(key: string, value: SzValue, prefix: string): string[
                 condValue as SzObject,
                 `${prefix}not-supports-[${condition}]:`,
             );
-            return result.className ? [result.className] : [];
+            return result.className ? result.className.split(' ') : [];
         });
     }
 
     const result = transformNested(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
-    return result.className ? [result.className] : [];
+    return result.className ? result.className.split(' ') : [];
 }
 
 /**
@@ -1692,7 +1692,7 @@ function handleData(dataObj: SzObject, prefix: string): string[] {
         const variantPrefix = `${prefix}data-[${key}]:`;
         const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
-            classes.push(result.className);
+            classes.push(...result.className.split(' '));
         }
     }
 
@@ -1726,7 +1726,7 @@ function handleAria(ariaObj: SzObject, prefix: string): string[] {
 
         const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
-            classes.push(result.className);
+            classes.push(...result.className.split(' '));
         }
     }
 
@@ -1751,7 +1751,7 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
         const variantPrefix = `${prefix}supports-[${condition}]:`;
         const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
-            classes.push(result.className);
+            classes.push(...result.className.split(' '));
         }
     }
 
@@ -3725,12 +3725,28 @@ function findMatchingLeading(
     return entries.find(entry => entry.prefix === prefix && !consumedIndices.has(entry.index));
 }
 
+/**
+ * Each class one value lowered to, as one class: a space inside a value
+ * becomes `_`, as Tailwind reads it in an arbitrary value. Written raw,
+ * `brightness: 'calc(1 + 2)'` split the attribute into three names that style
+ * nothing, and `display: 'flex hidden'` into two that do. Mirrors
+ * `one_class_each`.
+ *
+ * @param classes - The classes, one per entry.
+ * @returns The same, none holding a space.
+ */
+function oneClassEach(classes: string[]): string[] {
+    return classes.map(className =>
+        /\s/.test(className) ? className.trim().split(/\s+/).join('_') : className,
+    );
+}
+
 /** Filters empty utilities, applies optional mangling, and joins the result. */
 function finalizeTransformResult(
     classes: string[],
     mangleMap?: Record<string, string>,
 ): TransformResult {
-    const finalClasses = mergeTextSizeAndLeading(classes).filter(Boolean);
+    const finalClasses = mergeTextSizeAndLeading(oneClassEach(classes)).filter(Boolean);
     const outputClasses = mangleMap
         ? finalClasses.map(className => mangleMap[className] || className)
         : finalClasses;
@@ -4032,7 +4048,7 @@ function collectNestedVariant(
         : getVariantPrefix(rawKey);
     const nestedResult = transformNested(value, `${prefix}${variantName}:`);
     if (nestedResult.className) {
-        classes.push(nestedResult.className);
+        classes.push(...nestedResult.className.split(' '));
         warnUnservedStateVariant(variantName, nestedResult.className);
     }
 }

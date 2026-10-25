@@ -1276,10 +1276,12 @@ mod tests {
     }
 
     #[test]
-    fn a_value_the_lowering_writes_with_a_space_stays_in_class_name() {
-        // `brightness-[calc(1px + 2px)]` is two classes on the page.
-        assert_eq!(prop_value("brightness-[calc(1px_+_2px)]"), "null");
-        // Where the lowering writes the underscores back, the value migrates.
+    fn a_value_with_a_space_migrates_where_the_lowering_writes_it_back() {
+        // The lowering writes every space as `_`, so the value migrates.
+        assert_eq!(
+            prop_value("brightness-[calc(1px_+_2px)]"),
+            r#"brightness="calc(1px + 2px)""#
+        );
         assert_eq!(prop_value("p-[calc(1px_+_2px)]"), r#"p="calc(1px + 2px)""#);
         assert_eq!(prop_value("grid-cols-[1fr_2fr]"), r#"gridCols="1fr 2fr""#);
     }
