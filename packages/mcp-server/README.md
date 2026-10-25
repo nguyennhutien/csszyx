@@ -6,50 +6,69 @@ reverse, and migrate `sz` props directly inside your editor.
 
 ## Install
 
-```bash
-# run without installing (recommended for MCP clients)
-npx @csszyx/mcp-server
+Install the server next to the compiler, at the same version, so the lockfile
+pins the two together and the server answers with the rules your build uses:
 
-# or install globally
-npm install -g @csszyx/mcp-server
+```bash
+npm install -D @csszyx/mcp-server
 ```
 
 Requires Node.js >= 22.12.
 
 ## Configure your editor
 
-### Claude Desktop / Claude Code
+Each setup below runs the installed binary, `csszyx-mcp`. `npx --no-install`
+runs it from `node_modules/.bin` without a registry request, and installs
+nothing: a project without the server gets an error, never a release it has not
+installed.
 
-Add to `~/.config/claude/claude_desktop_config.json`:
+### Claude Code
+
+Add `.mcp.json` to the project root:
 
 ```json
 {
   "mcpServers": {
     "csszyx": {
       "command": "npx",
-      "args": ["-y", "@csszyx/mcp-server"]
+      "args": ["--no-install", "csszyx-mcp"]
     }
   }
 }
 ```
+
+or run `claude mcp add csszyx -- npx --no-install csszyx-mcp` in the project.
 
 ### Cursor
 
-Add to `.cursor/mcp.json` in your project root:
+Add the same block to `.cursor/mcp.json` in the project root.
+
+### Claude Desktop
+
+Claude Desktop starts servers outside any project, so give the binary's
+absolute path in `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "csszyx": {
-      "command": "npx",
-      "args": ["-y", "@csszyx/mcp-server"]
+      "command": "/path/to/your-app/node_modules/.bin/csszyx-mcp"
     }
   }
 }
 ```
 
-The server speaks MCP over stdio, so any MCP-compatible client uses the same
-`npx @csszyx/mcp-server` command.
+For a client that cannot run a project's binary, pin the version your
+compiler has and read the npm cache first:
+`npx --prefer-offline -y @csszyx/mcp-server@<version>`.
+
+The server speaks MCP over stdio, so any MCP-compatible client runs the same
+command.
+
+The server answers with the `@csszyx/compiler` it was installed with. Every
+tool reply names it in `_meta.compilerVersion`, beside the project's in
+`_meta.projectCompilerVersion`; when the two differ, the reply opens with a line
+saying so, and the server's instructions say it at startup.
 
 ## Tools
 
