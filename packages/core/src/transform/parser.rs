@@ -3831,11 +3831,16 @@ fn candidate_classes_from_object_expression(
                 if let Some(key) = static_property_key(&property.key) {
                     let val = unwrap_expression(&property.value);
                     match val {
+                        // A known variant, or a key no table claims: the
+                        // project's own (`tablet`, `desktop-sm`), which the
+                        // lowering takes as a variant too. Collected the same
+                        // way, so a spread under it still reaches the safelist.
                         Expression::ObjectExpression(nested)
                             if super::generated::tables::is_known_variant(&key)
                                 || super::generated::tables::is_known_variant(
                                     super::generated::tables::variant_prefix(&key).unwrap_or(&key),
-                                ) =>
+                                )
+                                || super::lower::is_unclaimed_key(&key) =>
                         {
                             let variant = variant_prefix_string(variant_prefix, &key);
                             let mut next_keys = variant_keys.to_vec();

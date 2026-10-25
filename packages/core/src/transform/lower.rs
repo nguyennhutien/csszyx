@@ -1659,14 +1659,23 @@ fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
 /// variable behind `tablet-(--_sz-tablet)` would hold the object.
 #[cfg(feature = "native-engine")]
 pub(crate) fn is_variant_key(key: &str) -> bool {
-    property_prefix(key).is_none()
-        && (variant_string_prefix(key).is_some()
-            || key.starts_with('@')
-            || matches!(
-                key,
-                "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
-            )
-            || !is_known_sz_key(key))
+    is_unclaimed_key(key)
+        || property_prefix(key).is_none()
+            && (variant_string_prefix(key).is_some()
+                || key.starts_with('@')
+                || matches!(
+                    key,
+                    "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+                ))
+}
+
+/// Whether no table claims `key`: no property, no sz key csszyx knows. Such a
+/// key holding an object is the project's own variant (`@custom-variant`,
+/// `--breakpoint-*` in `@theme`, which this engine never reads), and is
+/// lowered and collected exactly as a known variant is.
+#[cfg(feature = "native-engine")]
+pub(crate) fn is_unclaimed_key(key: &str) -> bool {
+    property_prefix(key).is_none() && !is_known_sz_key(key)
 }
 
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or

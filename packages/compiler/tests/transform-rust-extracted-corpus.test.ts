@@ -32,7 +32,7 @@ const KNOWN_DIVERGENT_SNIPPETS: ReadonlyArray<{ id: string; reason: string }> = 
 ];
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 175 - KNOWN_DIVERGENT_SNIPPETS.length,
+    parity: 176 - KNOWN_DIVERGENT_SNIPPETS.length,
     'code-divergence': KNOWN_DIVERGENT_SNIPPETS.length,
     'class-divergence': 0,
     'metadata-divergence': 0,
@@ -48,7 +48,7 @@ describe('Rust engine — extracted compiler corpus, native vs wasm', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(175);
+        expect(snippets).toHaveLength(176);
     });
 
     it('matches the native-vs-wasm category summary', () => {
