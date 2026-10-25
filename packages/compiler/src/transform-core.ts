@@ -607,9 +607,7 @@ const warnedAlignmentValues = new Set<string>();
  */
 function warnAlignmentValue(rawKey: string, written: string): void {
     if (process.env.NODE_ENV !== 'production') {
-        // The important modifier is a class suffix, not part of the value, as the
-        // engine reads it: `flex-start!` is still `flex-start`.
-        const { value } = handleImportant(written);
+        const value = written;
         const hint = own(ALIGNMENT_CSS_VALUE_HINT, value);
         if (hint === undefined) return;
         const sig = `${rawKey}:${value}`;
@@ -2473,13 +2471,10 @@ function collectBasicSpecialProperty(
     }
     const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(rawKey) : undefined;
     if (legal !== undefined && typeof value === 'string') {
-        // The important modifier is a class suffix, never part of the value:
-        // `flex!` is a legal display value that a raw lookup would refuse.
-        const { value: base, important } = handleImportant(value);
-        const bang = important ? '!' : '';
+        const base = value;
         const utility = legal.get(base);
         if (utility !== undefined) {
-            classes.push(`${prefix}${utility}${bang}`);
+            classes.push(`${prefix}${utility}`);
             return true;
         }
         if (CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`] !== undefined) {
@@ -2488,7 +2483,7 @@ function collectBasicSpecialProperty(
         }
         const bare = bareClosedEnumClass(rawKey, base);
         warnClosedEnumValue(rawKey, base, bare);
-        classes.push(`${prefix}${bare}${bang}`);
+        classes.push(`${prefix}${bare}`);
         return true;
     }
     if (isGradientPositionKey(rawKey) && typeof value === 'number') {
@@ -2798,10 +2793,6 @@ function collectTextKeywordProperty(
         classes.push(`${prefix}normal-case`);
         return true;
     }
-    if (key === 'textWrap') {
-        classes.push(`${prefix}text-${value}`);
-        return true;
-    }
     return false;
 }
 
@@ -2830,30 +2821,12 @@ function collectTextFlowProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    if (key === 'break') utility = own(WORD_BREAK_CLASSES, value) || `break-${value}`;
-    else if (key === 'wrap') utility = own(OVERFLOW_WRAP_CLASSES, value) || `wrap-${value}`;
-    else if (key === 'textOverflow') utility = formatTextOverflow(value);
-    else if (key === 'lineClamp') utility = formatLineClamp(value);
+    if (key === 'break') utility = own(WORD_BREAK_CLASSES, value) ?? null;
+    else if (key === 'wrap') utility = own(OVERFLOW_WRAP_CLASSES, value) ?? null;
     else if (key === 'list' || key === 'listStyle') utility = formatListStyle(value);
-    else if (key === 'listPos') utility = `list-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
     return true;
-}
-
-/** Formats a text-overflow utility. */
-function formatTextOverflow(value: string): string {
-    return value === 'ellipsis' || value === 'clip' ? `text-${value}` : `text-[${value}]`;
-}
-
-/** Formats a line-clamp utility. */
-function formatLineClamp(value: string): string {
-    if (value === 'none') return 'line-clamp-none';
-    if (value.startsWith('--')) return `line-clamp-(${value})`;
-    const numeric = Number(value);
-    return !Number.isNaN(numeric) && Number.isInteger(numeric)
-        ? `line-clamp-${value}`
-        : `line-clamp-[${value}]`;
 }
 
 /** Formats a list-style utility. */
@@ -2870,13 +2843,8 @@ function collectDecorationProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    if (key === 'divideStyle') utility = `divide-${value}`;
-    else if (key === 'decorationStyle' || key === 'textDecorationStyle') {
-        utility = `decoration-${value}`;
-    } else if (key === 'decorationThickness' || key === 'textDecorationThickness') {
-        // The important modifier belongs to the class, as on every other key.
-        const { value: thickness, important } = handleImportant(value);
-        utility = formatDecorationThickness(thickness) + (important ? '!' : '');
+    if (key === 'decorationThickness' || key === 'textDecorationThickness') {
+        utility = formatDecorationThickness(value);
     } else if (key === 'fontStretch') utility = formatFontStretch(value);
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -2890,7 +2858,7 @@ function formatDecorationThickness(value: string): string {
     if (needsArbitraryBrackets(value)) {
         return `decoration-[${normalizeArbitraryValue(value)}]`;
     }
-    return `decoration-${value}`;
+    return buildGenericStringClass('decorationThickness', 'decoration', value, '');
 }
 
 /** Formats font-stretch keywords, variables, and percentages. */
@@ -2927,10 +2895,7 @@ function collectEffectStringProperty(
     } else if (key === 'insetShadowColor') {
         utility = formatShadowFamilyColor(key, 'inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
-        // The important modifier belongs to the class, not inside the bracket
-        // (`scale-[1.5]!`, never `scale-[1.5!]`, which Tailwind does not serve).
-        const important = handleImportant(value);
-        utility = formatArbitraryEffect(key, important.value) + (important.important ? '!' : '');
+        utility = formatArbitraryEffect(key, value);
     } else if (key === 'textShadow') utility = formatTextShadow(value);
     else if (key === 'textShadowColor') {
         utility = formatShadowFamilyColor(key, 'text-shadow', value);
@@ -2947,8 +2912,9 @@ function collectEffectStringProperty(
  * VALUE, not its color; the `color:` hint from `CSS_VAR_TYPE_HINTS` keeps the
  * var on the family's `--tw-*-shadow-color` slot.
  */
-function formatShadowFamilyColor(key: string, base: string, value: string): string {
-    return `${base}-${typedVariableValue(key, value) ?? value}`;
+function formatShadowFamilyColor(key: string, base: string, value: string): string | null {
+    const typed = typedVariableValue(key, value);
+    return typed ? `${base}-${typed}` : null;
 }
 
 /** Formats string-valued filters and scale without numeric coercion. */
@@ -2956,7 +2922,11 @@ function formatArbitraryEffect(key: string, value: string): string {
     // The two keywords `scale` serves by name; any other value is a number.
     if (key === 'scale' && (value === '3d' || value === 'none')) return `scale-${value}`;
     const property = key.startsWith('backdrop') ? `backdrop-${key.slice(8).toLowerCase()}` : key;
-    return value.startsWith('--') ? `${property}-(${value})` : `${property}-[${value}]`;
+    if (value.startsWith('--')) return `${property}-(${value})`;
+    // A signed custom property hoists its sign, as on every other key:
+    // `-scale-(--v)`, where `scale-[-(--v)]` wrote `scale: -(--v)`.
+    if (value.startsWith('-(')) return `-${property}-${value.slice(1)}`;
+    return `${property}-[${value}]`;
 }
 
 /** Formats a text-shadow utility. */
@@ -2966,7 +2936,7 @@ function formatTextShadow(value: string): string {
     if (bracketsCssWideKeyword('textShadow', 'text-shadow', value)) return `text-shadow-[${value}]`;
     return needsArbitraryBrackets(value)
         ? `text-shadow-[${normalizeArbitraryValue(value)}]`
-        : `text-shadow-${value}`;
+        : buildGenericStringClass('textShadow', 'text-shadow', value, '');
 }
 
 /** Formats a string-valued gradient stop position. */
@@ -3044,11 +3014,10 @@ const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
  */
 function collectBackgroundMaskProperty(
     key: string,
-    rawValue: string,
+    value: string,
     prefix: string,
     classes: string[],
 ): boolean {
-    const { value, important } = handleImportant(rawValue);
     let utility: string | null = null;
     if (key === 'bgPos') utility = formatBackgroundPosition(value);
     else if (key === 'bgSize') utility = formatBackgroundSize(value);
@@ -3065,7 +3034,7 @@ function collectBackgroundMaskProperty(
     else if (key === 'maskClip') utility = formatMaskClip(value);
     else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
     if (utility === null) return false;
-    classes.push(`${prefix}${utility}${important ? '!' : ''}`);
+    classes.push(`${prefix}${utility}`);
     return true;
 }
 
@@ -3078,7 +3047,7 @@ function formatBackgroundPosition(value: string): string {
     if (typed) return `bg-${typed}`;
     return value.includes('_') || needsArbitraryBrackets(value)
         ? `bg-[${normalizeArbitraryValue(value)}]`
-        : `bg-${value}`;
+        : buildGenericStringClass('bgPos', 'bg', value, '');
 }
 
 /**
@@ -3387,7 +3356,6 @@ function collectContentBorderProperty(
     let utility: string | null = null;
     if (key === 'alignContent') utility = `content-${value}`;
     else if (key === 'content') utility = formatContentValue(value);
-    else if (key === 'transitionBehavior') utility = `transition-${value}`;
     else if (key === 'dropShadowColor') {
         utility = formatShadowFamilyColor(key, 'drop-shadow', value);
     }
@@ -3441,7 +3409,6 @@ function collectTransformStringProperty(
     } else if (key === 'transformStyle') utility = `transform-${value}`;
     else if (key === 'perspective') utility = formatPerspective(value);
     else if (key === 'perspectiveOrigin') utility = formatPerspectiveOrigin(value);
-    else if (key === 'backface') utility = `backface-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
     return true;
@@ -3466,14 +3433,14 @@ function formatPerspective(value: string): string {
     if (value.startsWith('--')) return `perspective-(${value})`;
     return needsArbitraryBrackets(value)
         ? `perspective-[${normalizeArbitraryValue(value)}]`
-        : `perspective-${value}`;
+        : buildGenericStringClass('perspective', 'perspective', value, '');
 }
 
 /** Formats a perspective-origin utility. */
 function formatPerspectiveOrigin(value: string): string {
-    return STANDARD_PERSPECTIVE_ORIGINS.has(value)
-        ? `perspective-origin-${value}`
-        : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
+    if (STANDARD_PERSPECTIVE_ORIGINS.has(value)) return `perspective-origin-${value}`;
+    if (value.startsWith('--')) return `perspective-origin-(${value})`;
+    return `perspective-origin-[${normalizeArbitraryValue(value)}]`;
 }
 
 // Runtime lowering has no source location, and server-side rendering lowers
@@ -3579,17 +3546,15 @@ function buildGenericStringClass(
     value: string,
     prefix: string,
 ): string {
-    const importantValue = handleImportant(value);
-    const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    const finalValue = normalizeGenericStringValue(rawKey, key, value);
     // The minus belongs on the UTILITY, after any variant prefix:
     // hover:-translate-x-full, never -hover:translate-x-full (a selector
     // Tailwind never generates). Hoisted on every key, as the engine does:
     // `-X-v` is Tailwind's spelling on every v4, and whether the project's
     // Tailwind serves it is the build-time oracle's verdict, not the runtime's.
-    const className = finalValue.startsWith('-')
+    return finalValue.startsWith('-')
         ? `${prefix}-${key}-${finalValue.substring(1)}`
         : `${prefix}${key}-${finalValue}`;
-    return importantValue.important ? `${className}!` : className;
 }
 
 /**
@@ -3702,7 +3667,9 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
 
 /** Whether Tailwind needs a function-like value in arbitrary brackets. */
 function isArbitraryFunctionValue(value: string): boolean {
-    return isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('));
+    // `--spacing(4)` calls a function; `--v,calc(1px)` is a custom property
+    // with a fallback, which `(--v,calc(1px))` reads as `var(--v,calc(1px))`.
+    return isTailwindBuildFunction(value) || /^--[\w-]+\(/.test(value);
 }
 
 /** Normalize fraction and aspect-ratio strings without widening other props. */
@@ -3710,7 +3677,8 @@ function normalizeRatioValue(rawKey: string, key: string, value: string): string
     if (/^\d+\/\d+$/.test(value)) {
         return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
     }
-    if (key !== 'aspect' || !/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
+    // A signed ratio keeps its sign in the bracket, as `is_decimal_ratio` reads it.
+    if (key !== 'aspect' || !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
     return `[${value}]`;
 }
 
@@ -4258,9 +4226,8 @@ function collectUnresolvedDirectProperty(
  */
 function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): void {
     // An alias holding a value that moved: its canonical key no longer
-    // takes the value, so name where the value went instead. The important
-    // modifier is a class suffix, not part of the value, as on the key itself.
-    const base = typeof value === 'string' ? handleImportant(value).value : undefined;
+    // takes the value, so name where the value went instead.
+    const base = typeof value === 'string' ? value : undefined;
     const moved =
         base !== undefined
             ? CLOSED_ENUM_VALUE_MOVES[`${own(SUGGESTION_MAP, rawKey)}:${base}`]
@@ -4271,16 +4238,22 @@ function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject)
     else warnUnknownSzProperty(rawKey, szProp);
 }
 
-/** Collects one property after filtering inactive values and shortcut forms. */
+/**
+ * Collects one property after filtering inactive values and shortcut forms.
+ * `splitImportant` is false for the value left after one `!` was split off,
+ * so `x!!` keeps its second `!` in the value, as on the engine.
+ */
 function collectTransformProperty(
     rawKey: string,
     value: SzValue,
     prefix: string,
     szProp: SzObject,
     classes: string[],
+    splitImportant = true,
 ): void {
     if (value === false || value === null || value === undefined) return;
     if (dropBracketedValue(rawKey, value)) return;
+    if (splitImportant && collectImportantProperty(rawKey, value, prefix, szProp, classes)) return;
     // A flag that joined a group under a new name emits nothing; say so in
     // every mode, as for the other replaced keys.
     if (REPLACED_KEYS.has(rawKey) && own(SUGGESTION_MAP, rawKey) !== undefined) {
@@ -4307,6 +4280,36 @@ function collectTransformProperty(
     collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
 }
 
+/**
+ * The important modifier belongs to the class, never to the value: split one
+ * trailing `!` off a string, lower what is left, and put it back on every
+ * class that lowered to. Every decision on the value — brackets, a fraction,
+ * where a sign goes — then reads the value as written, as the engine's
+ * `format_static_class` does; per-formatter handling had `[4!]` where the
+ * engine wrote `[4]!`. A custom property keeps it: there it is part of the
+ * declaration value.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value.
+ * @param prefix - The variant prefix in effect.
+ * @param szProp - The object it sits in.
+ * @param classes - Where the classes go.
+ * @returns True when the value carried the modifier and was lowered here.
+ */
+function collectImportantProperty(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string' || !value.endsWith('!') || rawKey.startsWith('--')) return false;
+    const start = classes.length;
+    collectTransformProperty(rawKey, value.slice(0, -1), prefix, szProp, classes, false);
+    for (let index = start; index < classes.length; index++) classes[index] += '!';
+    return true;
+}
+
 /** Collects string utilities that require a resolved property context. */
 function collectResolvedStringProperty(
     rawKey: string,
@@ -4323,9 +4326,7 @@ function collectResolvedStringProperty(
     if (collectContentBorderProperty(rawKey, value, prefix, classes)) return true;
     if (collectTransformStringProperty(rawKey, value, prefix, classes)) return true;
     if (rawKey === 'bgImg') {
-        // The important modifier belongs to the class, as on every other key.
-        const { value: image, important } = handleImportant(value);
-        classes.push(`${prefix}${formatBackgroundImage(image)}${important ? '!' : ''}`);
+        classes.push(`${prefix}${formatBackgroundImage(value)}`);
         return true;
     }
     return collectBackgroundMaskProperty(rawKey, value, prefix, classes);

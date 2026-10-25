@@ -97,6 +97,28 @@ describe.each(LANES)('logical inline insets — %s', (_name, lower) => {
     });
 });
 
+describe.each(LANES)('custom properties in a value — %s', (_name, lower) => {
+    // `(--v…)` is Tailwind's custom-property shorthand, fallback included;
+    // the bracket wrote the name as the value (`perspective-origin: --v`,
+    // `margin: --v,calc(1px)`, `scale: -(--v)`). A dashed function call such
+    // as `--spacing(4)` keeps its bracket.
+    it.each([
+        [{ perspectiveOrigin: '--v' }, 'perspective-origin-(--v)'],
+        [{ m: '--v,calc(1px)' }, 'm-(--v,calc(1px))'],
+        [{ scale: '-(--v)' }, '-scale-(--v)'],
+        [{ m: '-(--v)' }, '-m-(--v)'],
+        [{ p: '--spacing(4)' }, 'p-[--spacing(4)]'],
+        [{ willChange: 'opacity' }, 'will-change-[opacity]'],
+        [{ willChange: 'transform' }, 'will-change-transform'],
+        [{ animationDelay: -200 }, '[animation-delay:-200ms]'],
+    ])('%j writes %s', (sz, className) => {
+        const result = lower(sz);
+
+        expect(result.className).toBe(className);
+        expect(result.kinds).toEqual([]);
+    });
+});
+
 describe.each(LANES)('background size — %s', (_name, lower) => {
     // `bg-size-*` exists from Tailwind 4.1 only; the `length:` hint inside
     // `bg-[…]` / `bg-(…)` is served on every v4 with the same declaration.
@@ -142,6 +164,17 @@ describe.each(LANES)(
         });
     },
 );
+
+describe.each(LANES)('one trailing `!` is the important modifier — %s', (_name, lower) => {
+    // Only the last `!` is split off; any other stays in the value, so the
+    // runtime and the engines write the same class for `x!!`.
+    it.each([
+        [{ color: 'definitely not a color!!!' }, 'text-[definitely_not_a_color!!]!'],
+        [{ display: 'flex!' }, 'flex!'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
 
 describe.each(LANES)('mask keys and the important modifier — %s', (_name, lower) => {
     // Tailwind serves the mask utilities from 4.1; each class below is served

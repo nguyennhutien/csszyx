@@ -1882,7 +1882,9 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
-            StaticSzValue::Number(num) => format!("{}ms", format_abs_number(*num)),
+            // A negative delay starts the animation part-way through: the
+            // sign is CSS, as the TypeScript core keeps it.
+            StaticSzValue::Number(num) => format!("{}ms", format_number_literal(*num)),
             StaticSzValue::String(s) => s.clone(),
             _ => return None,
         };
@@ -1989,12 +1991,16 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
             // mirroring the JavaScript transform it replaced. The boolean-sugar aliases were
             // removed, so these canonical string forms are the only spelling.
+            // Any other value takes the generic spelling below, as the
+            // TypeScript core writes it; the build's dead-class check judges it.
             if key == "textTransform" {
-                return Some(match value.as_str() {
-                    "none" | "normal-case" => format!("{prefix}normal-case"),
-                    "uppercase" | "lowercase" | "capitalize" => format!("{prefix}{value}"),
-                    _ => return None,
-                });
+                match value.as_str() {
+                    "none" | "normal-case" => return Some(format!("{prefix}normal-case")),
+                    "uppercase" | "lowercase" | "capitalize" => {
+                        return Some(format!("{prefix}{value}"))
+                    }
+                    _ => {}
+                }
             }
             if key == "fontStyle" {
                 return Some(match value.as_str() {
@@ -2097,15 +2103,15 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 });
             }
             // scroll-snap direct maps: the sub-axis is dropped (snap-mandatory,
-            // snap-center), except snap-align-none which keeps the axis.
+            // snap-center), except snap-align-none which keeps the axis. Any
+            // other value takes the generic spelling below, as the TypeScript
+            // core writes it, for the build's dead-class check to judge.
             if key == "snapAlign" {
-                return match value.as_str() {
-                    "start" => Some(format!("{prefix}snap-start")),
-                    "end" => Some(format!("{prefix}snap-end")),
-                    "center" => Some(format!("{prefix}snap-center")),
-                    "none" => Some(format!("{prefix}snap-align-none")),
-                    _ => None,
-                };
+                match value.as_str() {
+                    "start" | "end" | "center" => return Some(format!("{prefix}snap-{value}")),
+                    "none" => return Some(format!("{prefix}snap-align-none")),
+                    _ => {}
+                }
             }
             if key == "snapStrictness" {
                 return match value.as_str() {
@@ -2114,21 +2120,11 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     _ => None,
                 };
             }
-            if key == "snapStop" {
-                return match value.as_str() {
-                    "normal" => Some(format!("{prefix}snap-normal")),
-                    "always" => Some(format!("{prefix}snap-always")),
-                    _ => None,
-                };
+            if key == "snapStop" && matches!(value.as_str(), "normal" | "always") {
+                return Some(format!("{prefix}snap-{value}"));
             }
-            if key == "snapType" {
-                return match value.as_str() {
-                    "none" => Some(format!("{prefix}snap-none")),
-                    "x" => Some(format!("{prefix}snap-x")),
-                    "y" => Some(format!("{prefix}snap-y")),
-                    "both" => Some(format!("{prefix}snap-both")),
-                    _ => None,
-                };
+            if key == "snapType" && matches!(value.as_str(), "none" | "x" | "y" | "both") {
+                return Some(format!("{prefix}snap-{value}"));
             }
             // Named container: { '@container': 'sidebar' } → @container/sidebar.
             if key == "@container" {
@@ -2158,6 +2154,13 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             if key == "fontStretch" {
                 return Some(format!("{prefix}{}", format_font_stretch(value)));
             }
+            // will-change: the four keywords stay bare, anything else names
+            // properties and brackets (`will-change-[opacity]`, which Tailwind
+            // serves where `will-change-opacity` is no class). Mirrors
+            // `formatWillChange` in `transform-core.ts`.
+            if key == "willChange" {
+                return Some(format!("{prefix}{}", format_will_change(value)));
+            }
             // Filter functions take a unit-bearing numeric whose string form is
             // always arbitrary (brightness-[1.25]); scale takes two keywords.
             if matches!(
@@ -2177,6 +2180,12 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 }
                 return Some(if value.starts_with("--") {
                     format!("{prefix}{class_key}-({value})")
+                } else if let Some(unsigned) =
+                    value.strip_prefix('-').filter(|rest| rest.starts_with('('))
+                {
+                    // A signed custom property hoists its sign, as on every
+                    // other key: `-scale-(--v)`, never `scale-[-(--v)]`.
+                    format!("{prefix}-{class_key}-{unsigned}")
                 } else {
                     format!("{prefix}{class_key}-[{value}]")
                 });
@@ -2214,6 +2223,8 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                             | "bottom-right"
                     ) {
                         format!("{prefix}perspective-origin-{value}")
+                    } else if value.starts_with("--") {
+                        format!("{prefix}perspective-origin-({value})")
                     } else {
                         format!(
                             "{prefix}perspective-origin-[{}]",
@@ -2282,7 +2293,9 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 ));
             }
 
-            if value.starts_with("--") && value.contains('(') {
+            // `--spacing(4)` calls a function; `--v,calc(1px)` is a custom
+            // property with a fallback, written `(--v,calc(1px))` below.
+            if is_dashed_function_call(value) {
                 return Some(format!(
                     "{prefix}{class_key}-[{}]",
                     normalize_arbitrary_value(value)
@@ -2875,6 +2888,28 @@ fn literal_of(value: &StaticSzValue) -> String {
     }
 }
 
+/// Whether `value` calls a dashed function (`--spacing(4)`): the name runs
+/// straight into its `(`. Mirrors `isArbitraryFunctionValue`.
+fn is_dashed_function_call(value: &str) -> bool {
+    value.strip_prefix("--").is_some_and(|rest| {
+        let name = rest.len()
+            - rest
+                .trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                .len();
+        name > 0 && rest[name..].starts_with('(')
+    })
+}
+
+fn format_will_change(value: &str) -> String {
+    if matches!(value, "auto" | "scroll" | "contents" | "transform") {
+        format!("will-change-{value}")
+    } else if value.starts_with("--") {
+        format!("will-change-({value})")
+    } else {
+        format!("will-change-[{}]", normalize_arbitrary_value(value))
+    }
+}
+
 fn format_bg_img_string(value: &str, prefix: &str) -> String {
     let value = value.trim();
     if value == "none" {
@@ -3424,6 +3459,30 @@ mod tests {
             ],
         });
         assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// A custom property is written in Tailwind's `(…)` form on the keys the
+    /// runtime spells the same way; a `willChange` property name brackets.
+    #[test]
+    fn a_custom_property_takes_the_parenthesised_form() {
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property(
+                    "perspectiveOrigin",
+                    StaticSzValue::String("--o".to_string()),
+                ),
+                property("willChange", StaticSzValue::String("--w".to_string())),
+                property("willChange", StaticSzValue::String("opacity".to_string())),
+            ],
+        });
+        assert_eq!(
+            classes,
+            [
+                "perspective-origin-(--o)",
+                "will-change-(--w)",
+                "will-change-[opacity]"
+            ]
+        );
     }
 
     /// Only a key written wholly in brackets is an arbitrary variant that
@@ -4682,9 +4741,15 @@ mod tests {
                 "font-(family-name:--font)",
                 "font-(--weight)",
                 "text-(length:--size)",
+                // Outside the key's own keywords, the generic spelling: a
+                // class with no CSS, which the build's dead-class check names.
+                "text-invalid",
                 // Not a line keyword, so a `decoration-*` value, as in the
                 // TypeScript core; the build reports it as a class with no CSS.
                 "decoration-invalid",
+                "snap-invalid",
+                "snap-invalid",
+                "snap-invalid",
                 "diagonal-fractions",
                 "stacked-fractions",
                 // `op: true` is no opacity: the colour alone, and the engine

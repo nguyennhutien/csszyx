@@ -419,13 +419,13 @@ describe('string property handler chain', () => {
         expect(cls({ wrap: 'normal' })).toBe('wrap-normal');
         expect(cls({ wrap: 'balance' })).toBe('wrap-balance');
         expect(cls({ textOverflow: 'ellipsis' })).toBe('text-ellipsis');
-        expect(cls({ textOverflow: 'fade' })).toBe('text-[fade]');
+        expect(cls({ textOverflow: 'fade' })).toBe('text-fade');
     });
     it('lineClamp none / var / integer / decimal', () => {
         expect(cls({ lineClamp: 'none' })).toBe('line-clamp-none');
         expect(cls({ lineClamp: '--v' })).toBe('line-clamp-(--v)');
         expect(cls({ lineClamp: '3' })).toBe('line-clamp-3');
-        expect(cls({ lineClamp: '2.5' })).toBe('line-clamp-[2.5]');
+        expect(cls({ lineClamp: '2.5' })).toBe('line-clamp-2.5');
     });
     it('list / listPos / divideStyle / decoration* families', () => {
         expect(cls({ list: '--l' })).toBe('list-(--l)');

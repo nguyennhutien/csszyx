@@ -1170,11 +1170,11 @@ mod tests {
         assert_eq!(prop_value("-m-[var(--v)]"), r#"m="-(--v)""#);
         assert_eq!(prop_value("-z-[var(--v,1)]"), r#"z="-(--v,1)""#);
         // A `var()` with a nested fallback is still one call.
-        // A fallback with parens of its own is one call too, but the lowering
-        // brackets it (`m-[-(--v,calc(1px*2))]`), so it stays in `className`,
-        // signed or not.
+        // A fallback with parens of its own is one call too: the lowering
+        // writes it back as `m-(--v,calc(1px*2))`, so that class migrates; the
+        // signed bracket form is not what it writes, so that one stays.
         assert_eq!(prop_value("-m-[var(--v,calc(1px*2))]"), "null");
-        assert_eq!(prop_value("m-(--v,calc(1px*2))"), "null");
+        assert_eq!(prop_value("m-(--v,calc(1px*2))"), r#"m="--v,calc(1px*2)""#);
         // Nothing else has a signed form the lowering writes back: not a
         // call that does not name a custom property, not two calls.
         for class in [
@@ -1266,10 +1266,12 @@ mod tests {
 
     #[test]
     fn a_reference_the_lowering_cannot_write_back_stays_in_class_name() {
-        // `scale: '-(--v)'` lowers to `scale-[-(--v)]`, and a signed hint to
-        // `m-[-(length:--v)]`: neither is the class, so neither migrates.
-        for class in ["-scale-(--v)", "-scale-[var(--v)]", "-m-(length:--v)"] {
-            assert_eq!(prop_value(class), "null", "{class}");
+        // A signed hint lowers to `m-[-(length:--v)]`, which is not the class,
+        // so it does not migrate.
+        assert_eq!(prop_value("-m-(length:--v)"), "null");
+        // `scale: '-(--v)'` lowers to `-scale-(--v)`, so both spellings do.
+        for class in ["-scale-(--v)", "-scale-[var(--v)]"] {
+            assert_eq!(prop_value(class), r#"scale="-(--v)""#, "{class}");
         }
         // `perspectiveOrigin: '(length:--v)'` lowers to a bracket around it.
         assert_eq!(prop_value("perspective-origin-(length:--v)"), "null");
