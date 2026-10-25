@@ -19331,19 +19331,16 @@
   },
   {
    "c": "text-shadow",
-   "p": {
-    "prop": "color",
-    "value": "shadow"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "color": "shadow"
-    },
-    "szText": "{\"color\":\"shadow\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "text-shadow"
+    ],
     "k": [],
-    "g": "{ color: 'shadow' }",
-    "h": "color: 'shadow'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -50282,19 +50279,16 @@
   },
   {
    "c": "rounded-b",
-   "p": {
-    "prop": "rounded",
-    "value": "b"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "rounded": "b"
-    },
-    "szText": "{\"rounded\":\"b\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "rounded-b"
+    ],
     "k": [],
-    "g": "{ rounded: 'b' }",
-    "h": "rounded: 'b'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -50350,19 +50344,16 @@
   },
   {
    "c": "rounded-t",
-   "p": {
-    "prop": "rounded",
-    "value": "t"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "rounded": "t"
-    },
-    "szText": "{\"rounded\":\"t\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "rounded-t"
+    ],
     "k": [],
-    "g": "{ rounded: 't' }",
-    "h": "rounded: 't'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -63953,36 +63944,30 @@
   },
   {
    "c": "-grow",
-   "p": {
-    "prop": "grow",
-    "value": true
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "grow": true
-    },
-    "szText": "{\"grow\":true}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-grow"
+    ],
     "k": [],
-    "g": "{ grow: true }",
-    "h": "grow: true"
+    "g": "{}",
+    "h": ""
    }
   },
   {
    "c": "-shrink",
-   "p": {
-    "prop": "shrink",
-    "value": true
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "shrink": true
-    },
-    "szText": "{\"shrink\":true}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-shrink"
+    ],
     "k": [],
-    "g": "{ shrink: true }",
-    "h": "shrink: true"
+    "g": "{}",
+    "h": ""
    }
   },
   {

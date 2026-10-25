@@ -352,46 +352,6 @@ export const UNSIGNED_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 // ============================================================================
-// FRACTION_SUPPORTED: Props that support fractions (e.g., w-1/2)
-// ============================================================================
-export const FRACTION_SUPPORTED: ReadonlySet<string> = new Set([
-    'w',
-    'min-w',
-    'max-w',
-    'h',
-    'min-h',
-    'max-h',
-    'size',
-    'basis',
-    'inset',
-    'inset-x',
-    'inset-y',
-    'top',
-    'right',
-    'bottom',
-    'left',
-    'start',
-    'end',
-    'inset-s',
-    'inset-e',
-    'inset-bs',
-    'inset-be',
-    // Logical sizing: block-1/2 is calc(1/2 * 100%) of the containing block.
-    'block',
-    'inline',
-    'min-block',
-    'max-block',
-    'min-inline',
-    'max-inline',
-    'translate-x',
-    'translate-y',
-    'translate',
-    'aspect',
-    // flex-1/2 → flex: calc(1/2 * 100%) — a fraction, not a color modifier
-    'flex',
-]);
-
-// ============================================================================
 // SPACING_PROPS: Props that support 0.5-step decimals
 // ============================================================================
 export const SPACING_PROPS: ReadonlySet<string> = new Set([

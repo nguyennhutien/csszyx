@@ -770,6 +770,14 @@ pub fn is_valid_spacing_value(value: &str) -> bool {
         || value.contains('/')
 }
 
+/// Whether the sz key a class prefix lowers to has a fraction utility
+/// (`w-1/2`), by the lowering's own list: one list for both directions.
+pub fn prefix_takes_fractions(prefix: &str) -> bool {
+    crate::transform::generated::tables::is_fraction_supported_prop(
+        reverse_property_key(prefix).unwrap_or(prefix),
+    )
+}
+
 /// The general reading of a prefix's value, or `None` when the class has a
 /// sign no sz value carries.
 pub fn parse_value(prefix: &str, value: &str, negative: bool) -> Option<SzValue> {
@@ -780,7 +788,7 @@ pub fn parse_value(prefix: &str, value: &str, negative: bool) -> Option<SzValue>
     if let Some(inner) = wrapped(value, '(', ')') {
         return Some(SzValue::from(signed_reference(inner, negative)));
     }
-    if tables::fraction_supported(prefix) && is_fraction(value) {
+    if prefix_takes_fractions(prefix) && is_fraction(value) {
         return Some(SzValue::from(signed_string(value, negative)));
     }
     if let Some(number) = js_number(value) {
