@@ -1028,11 +1028,16 @@ export const DIAGNOSTICS = [
             runtime: { production: false, host: 'both' },
         },
         position: 'site',
-        forms: ['aria', 'attribute-or-aria', 'unknown'],
+        forms: ['aria', 'attribute-or-aria', 'unknown', 'container-name'],
+        // Only the build and `csszyx check` read a container query's name
+        // (`@md:sidebar:`), so no browser bundle carries its words.
+        buildForms: ['container-name'],
         args: {
-            form: formArg(['aria', 'attribute-or-aria', 'unknown']),
+            form: formArg(['aria', 'attribute-or-aria', 'unknown', 'container-name']),
             variant: STRING,
             className: STRING,
+            // The query a `container-name` name follows (`@md`).
+            query: OPTIONAL_STRING,
         },
         // The engines lower every bare key holding an object as an open
         // variant (a project's `@custom-variant`) and cannot see the project's
@@ -1045,6 +1050,8 @@ export const DIAGNOSTICS = [
             'attribute-or-aria':
                 "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
             unknown: 'check the spelling of `{variant}`.',
+            'container-name':
+                "write `{ '{query}/{variant}': { … } }` for a container named `{variant}`; a name under a query is a variant.",
         },
         note: 'the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`.',
         sources: [CHECK, 'packages/unplugin/src/dead-class.ts', CORE_TS],

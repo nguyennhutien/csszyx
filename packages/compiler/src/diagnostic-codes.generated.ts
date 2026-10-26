@@ -84,7 +84,7 @@ export interface SzDiagnosticArgs {
     'prefix-disagreement': { readonly form: 'build' | 'next' | 'check'; readonly entries: readonly string[]; readonly setting?: string; readonly ignoreSetting?: string };
     'sibling-keyword': { readonly key: string; readonly value: string; readonly className: string; readonly sets: readonly string[] };
     'broken-opacity': { readonly className: string; readonly value: string };
-    'unserved-variant': { readonly form: 'aria' | 'attribute-or-aria' | 'unknown'; readonly variant: string; readonly className: string };
+    'unserved-variant': { readonly form: 'aria' | 'attribute-or-aria' | 'unknown' | 'container-name'; readonly variant: string; readonly className: string; readonly query?: string };
     'theme-collision': { readonly form: 'classes' | 'utility-keyword' | 'value'; readonly name: string; readonly classes?: readonly string[] };
     'merge-covered-key': { readonly key: string; readonly className: string };
     'merge-covered-class': { readonly className: string };

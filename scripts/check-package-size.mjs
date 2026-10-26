@@ -622,12 +622,19 @@ export const SIZE_BUDGETS = [
     // 23,300 on 2026-10-26, measured 23,209 (+9 over): an `op` between 0 and
     // 1 is written as the percent it is and reported (`opacity-value`,
     // `fraction` form), because 0.17 wrote `op: 0.05` as 5%; the user chose
-    // the report over an upgrade note alone.
+    // the report over an upgrade note alone. Raised to 23,550 on 2026-10-26,
+    // measured 23,285 (+46 against 23,239): a named container's query is
+    // mapped when the key is camelCase (`@maxLg/sidebar` → `@max-lg/sidebar`,
+    // +41, the same in production). The help of `unserved-variant`'s new
+    // `container-name` form cost +44 more and was taken out: the registry
+    // marks a form only the build reports (`buildForms`), and the browser
+    // module leaves its words out. Budget 265 above, on the user's
+    // call.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 23_300,
+        maxGzipBytes: 23_550,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },

@@ -101,8 +101,14 @@ export interface DeadClassFinding extends DeadClassSite {
 export interface UnservedVariant {
     /** The variant, as the class writes it (`hidden`). */
     name: string;
-    /** An ARIA state, one that is an HTML attribute too, or a name csszyx does not know. */
-    form: StateVariantForm | 'unknown';
+    /**
+     * An ARIA state, one that is an HTML attribute too, a name right after a
+     * container query (a named container written nested), or a name csszyx
+     * does not know.
+     */
+    form: StateVariantForm | 'unknown' | 'container-name';
+    /** For `container-name`, the query the name follows (`@md`). */
+    query?: string;
 }
 
 /** Where the engine placed one emitted class: the key it was lowered from. */
@@ -407,10 +413,19 @@ export function unservedVariantOf(
     className: string,
     served: (className: string) => boolean,
 ): UnservedVariant | null {
-    const serving = variantDroppedForms(className).filter(form => served(form.without));
+    const forms = variantDroppedForms(className);
+    const serving = forms.filter(form => served(form.without));
     if (serving.length !== 1) return null;
-    const name = (serving[0] as { variant: string }).variant;
-    return { name, form: stateVariantForm(name) ?? 'unknown' };
+    const dropped = serving[0] as { variant: string; without: string };
+    const name = dropped.variant;
+    const form = stateVariantForm(name);
+    if (form !== null) return { name, form };
+    // 0.17 read a name nested under a query as the container's; it is one
+    // key now (`'@md/sidebar'`), and the nested form a variant.
+    const query = forms[forms.indexOf(dropped) - 1]?.variant;
+    return query?.startsWith('@') && !query.includes('/')
+        ? { name, form: 'container-name', query }
+        : { name, form: 'unknown' };
 }
 
 /** The ids the dead-class pass reports a class under. */
@@ -588,11 +603,16 @@ export function unservedVariantMessage(
     finding: Pick<DeadClassFinding, 'className'> & { variant: UnservedVariant },
     site: DeadClassSite,
 ): string {
-    const { name, form } = finding.variant;
+    const { name, form, query } = finding.variant;
     return renderSzDiagnostic({
         diagnostic: {
             code: 'unserved-variant',
-            args: { form, variant: name, className: finding.className },
+            args: {
+                form,
+                variant: name,
+                className: finding.className,
+                ...(query === undefined ? {} : { query }),
+            },
             ...(site.line === undefined ? {} : { line: site.line, column: site.column }),
         },
         file: site.file,

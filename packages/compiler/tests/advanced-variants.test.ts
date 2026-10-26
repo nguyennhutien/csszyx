@@ -476,7 +476,7 @@ describe('container queries', () => {
 
     // --- Named container query ---
     it('@md/sidebar:flex', () => {
-        expect(t({ '@md': { sidebar: { display: 'flex' } } })).toBe('@md/sidebar:flex');
+        expect(t({ '@md/sidebar': { display: 'flex' } })).toBe('@md/sidebar:flex');
     });
 
     // --- Arbitrary container breakpoint ---

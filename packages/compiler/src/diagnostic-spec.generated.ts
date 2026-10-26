@@ -43,6 +43,8 @@ export interface SzDiagnosticSpec {
     readonly position: 'site' | 'file' | 'none';
     readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
+    /** Forms only the build or `csszyx check` reports; no browser bundle carries their words. */
+    readonly buildForms?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
@@ -1330,7 +1332,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "forms": [
             "aria",
             "attribute-or-aria",
-            "unknown"
+            "unknown",
+            "container-name"
+        ],
+        "buildForms": [
+            "container-name"
         ],
         "args": {
             "form": {
@@ -1338,7 +1344,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "enum",
                     "aria",
                     "attribute-or-aria",
-                    "unknown"
+                    "unknown",
+                    "container-name"
                 ]
             },
             "variant": {
@@ -1346,6 +1353,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "className": {
                 "type": "string"
+            },
+            "query": {
+                "type": "string",
+                "optional": true
             }
         },
         "gaps": [

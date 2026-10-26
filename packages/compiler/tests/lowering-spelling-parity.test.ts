@@ -179,9 +179,11 @@ describe.each(LANES)('a CSS-wide keyword on bgImg — %s', (_name, lower) => {
 
 describe.each(LANES)('breakpoints and container queries — %s', (_name, lower) => {
     // A breakpoint name is written as it is, so a project's own (`tablet`,
-    // `sidebar`) is served; a length is bracketed as on every other key. The
-    // named and arbitrary container forms are the spec's. Measured against
-    // Tailwind 4.3.3 with `--breakpoint-tablet` and `--container-sidebar`.
+    // `sidebar`) is served; a length is bracketed as on every other key. A
+    // named container is the key Tailwind spells (`'@md/sidebar'`); a name
+    // nested under a query is a variant, as under any other variant, so a
+    // project's `tablet` chains on. Measured against Tailwind 4.3.3 with
+    // `--breakpoint-tablet` and `--container-sidebar`.
     it.each([
         [{ min: { md: { p: 4 } } }, 'min-md:p-4'],
         [{ min: { tablet: { p: 4 } } }, 'min-tablet:p-4'],
@@ -193,9 +195,13 @@ describe.each(LANES)('breakpoints and container queries — %s', (_name, lower) 
         [{ '@min': { '475px': { p: 4 } } }, '@min-[475px]:p-4'],
         [{ '@min': { '[475px]': { p: 4 } } }, '@min-[475px]:p-4'],
         [{ '@md': { p: 4 } }, '@md:p-4'],
-        [{ '@md': { sidebar: { p: 4 } } }, '@md/sidebar:p-4'],
-        [{ '@md': { toString: { p: 4 } } }, '@md/toString:p-4'],
+        [{ '@md/sidebar': { p: 4 } }, '@md/sidebar:p-4'],
+        [{ '@md/sidebar': { hover: { p: 4 } } }, '@md/sidebar:hover:p-4'],
+        [{ '@maxLg/sidebar': { p: 4 } }, '@max-lg/sidebar:p-4'],
+        [{ '@unknown/sidebar': { p: 4 } }, '@unknown/sidebar:p-4'],
+        [{ '@md': { tablet: { p: 4 } } }, '@md:tablet:p-4'],
         [{ '@md': { hover: { p: 4 } } }, '@md:hover:p-4'],
+        [{ '@md': { p: 4, hover: { m: 2 } } }, '@md:p-4 @md:hover:m-2'],
         [{ '@sm': { '@maxMd': { p: 4 } } }, '@sm:@max-md:p-4'],
         [{ '@container': 'sidebar' }, '@container/sidebar'],
     ])('%j writes %s', (sz, className) => {

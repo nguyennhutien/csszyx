@@ -2393,79 +2393,58 @@ function dropSlashOpacityString(key: string, value: string): boolean {
     return true;
 }
 
-/** Collects direct, named, and arbitrary container-query variants. */
+/**
+ * A container query key as Tailwind spells it: a camelCase query mapped
+ * (`@maxLg` → `@max-lg`), and a named container's query mapped with its name
+ * kept (`@maxLg/sidebar` → `@max-lg/sidebar`). Mirrors
+ * `object_variant_segment`.
+ *
+ * @param key - The authored key, starting with `@`.
+ * @returns The variant it writes.
+ */
+function containerQueryKey(key: string): string {
+    const slash = key.indexOf('/');
+    if (slash === -1) return own(VARIANT_MAP, key) || key;
+    const query = own(VARIANT_MAP, key.slice(0, slash));
+    return query ? `${query}${key.slice(slash)}` : key;
+}
+
+/**
+ * Collects a container query's classes. A query is a variant like any other
+ * (`@md:`), so its object lowers in one pass under it, a property staying a
+ * property and a name chaining on as a variant, a project's own too. A named
+ * container is the key Tailwind spells, `'@md/sidebar'`. `@min` and `@max`
+ * take a container size instead (`@min-sidebar`, `@min-[475px]`). Mirrors
+ * `lower_container_query_variant`.
+ */
 function collectContainerQueryVariants(
     key: string,
     values: SzObject,
     prefix: string,
     classes: string[],
 ): void {
-    const mappedKey = own(VARIANT_MAP, key) || key;
+    const mappedKey = containerQueryKey(key);
+    if (mappedKey !== '@min' && mappedKey !== '@max') {
+        appendVariantClasses(values, `${prefix}${mappedKey}:`, classes);
+        return;
+    }
     for (const [nestedKey, value] of Object.entries(values)) {
         if (isInactiveVariantValue(value)) continue;
-        const target = resolveContainerQueryTarget(mappedKey, nestedKey, value);
-        if (target.wrapProperty) {
-            appendVariantClasses({ [nestedKey]: value }, `${prefix}${target.segment}:`, classes);
+        if (
+            typeof value !== 'object' ||
+            own(PROPERTY_MAP, nestedKey) !== undefined ||
+            BOOLEAN_SHORTHANDS.has(nestedKey)
+        ) {
+            appendVariantClasses({ [nestedKey]: value }, `${prefix}${mappedKey}:`, classes);
         } else {
-            appendVariantClasses(value, `${prefix}${target.segment}:`, classes);
+            appendVariantClasses(
+                value,
+                `${prefix}${mappedKey}-${breakpointSegment(nestedKey)}:`,
+                classes,
+            );
         }
     }
 }
-
-/** Container-query prefix plus whether the nested key remains a property. */
-interface ContainerQueryTarget {
-    segment: string;
-    wrapProperty: boolean;
-}
-
-/**
- * Classifies one nested container-query key, as the spec writes them: a
- * property stays under the query (`@md:p-4`), a breakpoint follows `@min` and
- * `@max` (`@min-sidebar`, `@min-[475px]`), a variant chains on (`@md:hover:`),
- * and any other name is a named container (`@md/sidebar`). Mirrors
- * `lower_container_query_variant`.
- */
-function resolveContainerQueryTarget(
-    mappedKey: string,
-    nestedKey: string,
-    value: SzValue,
-): ContainerQueryTarget {
-    const property =
-        typeof value !== 'object' ||
-        own(PROPERTY_MAP, nestedKey) !== undefined ||
-        BOOLEAN_SHORTHANDS.has(nestedKey);
-    if (property) return { segment: mappedKey, wrapProperty: true };
-    if (mappedKey === '@min' || mappedKey === '@max') {
-        return { segment: `${mappedKey}-${breakpointSegment(nestedKey)}`, wrapProperty: false };
-    }
-    if (chainsUnderContainer(nestedKey)) return { segment: mappedKey, wrapProperty: true };
-    return { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
-}
-
-/**
- * Whether a key nested in a container query is a variant that chains on
- * rather than a container's name. Mirrors `chains_as_variant`.
- */
-function chainsUnderContainer(key: string): boolean {
-    return (
-        variantStringPrefix(key) !== null ||
-        key.startsWith('@') ||
-        PARAMETRIC_VARIANT_STEMS.has(key)
-    );
-}
-
-/** The variants whose members are parameters (`data: { open: … }`). */
-const PARAMETRIC_VARIANT_STEMS = new Set([
-    'min',
-    'max',
-    'group',
-    'peer',
-    'has',
-    'not',
-    'data',
-    'aria',
-    'supports',
-]);
 
 const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
 

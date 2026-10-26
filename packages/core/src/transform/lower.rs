@@ -1560,11 +1560,12 @@ fn breakpoint_segment(breakpoint: &str) -> Cow<'_, str> {
     }
 }
 
-/// Lowers a container query key (`@md`, `@min`), as the spec writes its
-/// members: a property stays under the query (`@md:p-4`), a breakpoint follows
-/// `@min` and `@max` (`@min-sidebar`, `@min-[475px]`), a variant chains on
-/// (`@md:hover:`), and any other name is a named container (`@md/sidebar`).
-/// Mirrors `resolveContainerQueryTarget`.
+/// Lowers a container query key (`@md`, `@min`). A query is a variant like
+/// any other, so its object lowers in one pass under it (`@md:p-4`,
+/// `@md:hover:`), a project's own variant name chaining on too; a named
+/// container is the key Tailwind spells, `@md/sidebar`. `@min` and `@max`
+/// take a container size instead (`@min-sidebar`, `@min-[475px]`). Mirrors
+/// `collectContainerQueryVariants`.
 fn lower_container_query_variant(
     key: &str,
     object: &StaticSzObject,
@@ -1572,30 +1573,30 @@ fn lower_container_query_variant(
     classes: &mut Vec<String>,
 ) {
     let query = object_variant_segment(key);
+    if !matches!(query.as_ref(), "@min" | "@max") {
+        lower_object_into(object, &format!("{prefix}{query}:"), classes);
+        return;
+    }
     for property in &object.properties {
-        let nested = match &property.value {
-            StaticSzValue::Object(nested) if property_prefix(&property.key).is_none() => nested,
-            _ => {
-                let single = StaticSzObject {
-                    properties: vec![property.clone()],
-                };
-                lower_object_into(&single, &format!("{prefix}{query}:"), classes);
-                continue;
-            }
-        };
-        let segment = if matches!(query.as_ref(), "@min" | "@max") {
-            format!("{query}-{}", breakpoint_segment(&property.key))
-        } else if chains_as_variant(&property.key) {
-            let single = StaticSzObject {
-                properties: vec![property.clone()],
-            };
-            lower_object_into(&single, &format!("{prefix}{query}:"), classes);
+        let StaticSzValue::Object(nested) = &property.value else {
+            lower_single_property(property, &format!("{prefix}{query}:"), classes);
             continue;
-        } else {
-            format!("{query}/{}", property.key)
         };
+        if property_prefix(&property.key).is_some() {
+            lower_single_property(property, &format!("{prefix}{query}:"), classes);
+            continue;
+        }
+        let segment = format!("{query}-{}", breakpoint_segment(&property.key));
         lower_object_into(nested, &format!("{prefix}{segment}:"), classes);
     }
+}
+
+/// One property lowered on its own under `prefix`, as a key of its own object.
+fn lower_single_property(property: &StaticSzProperty, prefix: &str, classes: &mut Vec<String>) {
+    let single = StaticSzObject {
+        properties: vec![property.clone()],
+    };
+    lower_object_into(&single, prefix, classes);
 }
 
 /// Lowers the `not` variant: `{ not: { first: {...} } }` → `not-first:…`, with a
@@ -1692,8 +1693,8 @@ pub(crate) fn is_variant_key(key: &str) -> bool {
 
 /// Whether a key is a variant by its name: one the tables know, a compound or
 /// arbitrary one, a container query, or a parametric stem whose members are
-/// parameters. Under a container query such a key chains on, where any other
-/// name is a container's. Mirrors `chainsUnderContainer`.
+/// parameters.
+#[cfg(feature = "native-engine")]
 fn chains_as_variant(key: &str) -> bool {
     variant_string_prefix(key).is_some()
         || key.starts_with('@')
@@ -1730,6 +1731,13 @@ pub(crate) fn object_variant_segment(key: &str) -> Cow<'_, str> {
         return Cow::Owned(key.chars().filter(|c| !c.is_whitespace()).collect());
     }
     if key.starts_with('@') {
+        // A named container (`@maxLg/sidebar`) maps its query, not its name.
+        if let Some((query, name)) = key.split_once('/') {
+            if let Some(mapped) = variant_prefix(query) {
+                return Cow::Owned(format!("{mapped}/{name}"));
+            }
+            return Cow::Borrowed(key);
+        }
         return variant_prefix(key).map_or(Cow::Borrowed(key), Cow::Borrowed);
     }
     get_variant_prefix(key)
@@ -3618,8 +3626,9 @@ mod tests {
     }
 
     /// A container query's members, as the spec writes them: a property stays
-    /// under the query, `@min` takes a breakpoint, a variant chains on, and
-    /// any other name is a named container.
+    /// under the query, `@min` takes a breakpoint, and any other name is a
+    /// variant that chains on, a project's own too. A named container is the
+    /// key Tailwind spells, `@md/sidebar`.
     #[test]
     fn lowers_container_query_members() {
         let p = |n: f64| object(vec![property("p", StaticSzValue::Number(n))]);
@@ -3635,12 +3644,23 @@ mod tests {
                         property("@maxLg", p(4.0)),
                     ]),
                 ),
+                property("@md/sidebar", p(8.0)),
+                property("@maxLg/sidebar", p(10.0)),
+                property("@unknown/sidebar", p(11.0)),
                 property(
                     "@min",
                     object(vec![
                         property("sidebar", p(5.0)),
                         property("475px", p(6.0)),
                         property("[30rem]", p(7.0)),
+                        property("p", StaticSzValue::Number(9.0)),
+                        property(
+                            "bg",
+                            object(vec![
+                                property("color", StaticSzValue::String("red-500".into())),
+                                property("op", StaticSzValue::Number(50.0)),
+                            ]),
+                        ),
                     ]),
                 ),
             ],
@@ -3650,12 +3670,17 @@ mod tests {
             [
                 "@md:p-1",
                 "@md:flex",
-                "@md/sidebar:p-2",
+                "@md:sidebar:p-2",
                 "@md:hover:p-3",
                 "@md:@max-lg:p-4",
+                "@md/sidebar:p-8",
+                "@max-lg/sidebar:p-10",
+                "@unknown/sidebar:p-11",
                 "@min-sidebar:p-5",
                 "@min-[475px]:p-6",
                 "@min-[30rem]:p-7",
+                "@min:p-9",
+                "@min:bg-red-500/50",
             ]
         );
     }

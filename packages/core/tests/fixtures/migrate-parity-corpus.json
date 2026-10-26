@@ -66484,17 +66484,15 @@
    "p": null,
    "o": {
     "sz": {
-     "@md": {
-      "sidebar": {
-       "p": 4
-      }
+     "@md/sidebar": {
+      "p": 4
      }
     },
-    "szText": "{\"@md\":{\"sidebar\":{\"p\":4}}}",
+    "szText": "{\"@md/sidebar\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@md': {\n    sidebar: { p: 4 },\n  },\n}",
-    "h": "'@md': {\n    sidebar: { p: 4 },\n  },"
+    "g": "{\n  '@md/sidebar': { p: 4 },\n}",
+    "h": "'@md/sidebar': { p: 4 },"
    }
   },
   {
@@ -66587,17 +66585,15 @@
    },
    "o": {
     "sz": {
-     "@container": {
-      "main": {
-       "p": 4
-      }
+     "@container/main": {
+      "p": 4
      }
     },
-    "szText": "{\"@container\":{\"main\":{\"p\":4}}}",
+    "szText": "{\"@container/main\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@container': {\n    main: { p: 4 },\n  },\n}",
-    "h": "'@container': {\n    main: { p: 4 },\n  },"
+    "g": "{\n  '@container/main': { p: 4 },\n}",
+    "h": "'@container/main': { p: 4 },"
    }
   },
   {
@@ -66605,17 +66601,15 @@
    "p": null,
    "o": {
     "sz": {
-     "@sm": {
-      "a/b": {
-       "p": 4
-      }
+     "@sm/a/b": {
+      "p": 4
      }
     },
-    "szText": "{\"@sm\":{\"a/b\":{\"p\":4}}}",
+    "szText": "{\"@sm/a/b\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@sm': {\n    'a/b': { p: 4 },\n  },\n}",
-    "h": "'@sm': {\n    'a/b': { p: 4 },\n  },"
+    "g": "{\n  '@sm/a/b': { p: 4 },\n}",
+    "h": "'@sm/a/b': { p: 4 },"
    }
   },
   {

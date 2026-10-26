@@ -254,8 +254,11 @@ describe('min/max breakpoints and @ container queries', () => {
     });
     it('@ query: direct property, named container, bracket and auto-bracket keys', () => {
         expect(cls({ '@md': { p: 4 } })).toBe('@md:p-4');
-        expect(cls({ '@md': { sidebar: { p: 4 } } })).toBe('@md/sidebar:p-4');
+        expect(cls({ '@md/sidebar': { p: 4 } })).toBe('@md/sidebar:p-4');
+        expect(cls({ '@md': { sidebar: { p: 4 } } })).toBe('@md:sidebar:p-4');
         expect(cls({ '@md': { sidebar: {} } })).toBe('');
+        expect(cls({ '@min': { p: 4 } })).toBe('@min:p-4');
+        expect(cls({ '@min': { x: null } })).toBe('');
         // An arbitrary variant chains on; `@md-[475px]` is served by no Tailwind.
         expect(cls({ '@md': { '[475px]': { p: 4 } } })).toBe('@md:[475px]:p-4');
         expect(cls({ '@md': { '[475px]': {} } })).toBe('');

@@ -91,7 +91,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
 | [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
-| [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`; the build writes `@md/sidebar:` | your snapshots | nothing |
+| [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`; `{ '@md': { sidebar: … } }` writes `@md:sidebar:` | the build (`unserved-variant`), your snapshots | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [`op` is a percent](#a-colour-objects-op-is-a-percent) | `op: 0.05` is 0.05%, where 0.17 wrote 5%; `[csszyx] opacity-value:` | the build, dev runtime | you |
 | [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` | the build, dev runtime | you |
@@ -1532,18 +1532,24 @@ gives `min-tablet`; a length is still bracketed, as on every other key
 (`'640px'` → `min-[640px]`). `@min` and `@max` read a container size the same
 way (`{ '@min': { sidebar: … } }` → `@min-sidebar`).
 
-The build's engine wrote two container forms of the spec as classes no
-Tailwind serves: `{ '@md': { sidebar: … } }` gave `@md:sidebar:` and
-`{ '@min': { '[475px]': … } }` gave `@min:[475px]:`. Both now give the spec's
-`@md/sidebar:` and `@min-[475px]:`, as the runtime did, and a variant under a
-query chains on (`{ '@md': { hover: … } }` → `@md:hover:`) on both.
+A named container query is one key, spelled as Tailwind spells the class:
+`{ '@md/sidebar': … }` gives `@md/sidebar:`. A name nested under a query is a
+variant, as under any other variant, so `{ '@md': { tablet: … } }` gives
+`@md:tablet:` and a project's own `tablet` applies inside the query. 0.17's
+runtime read that nested name as a container instead (`@md/tablet:`), which
+Tailwind serves for any name, so the style never applied and nothing said so,
+while the build's engine wrote `@md:tablet:`. `{ '@min': { '[475px]': … } }`
+gave `@min:[475px]:` on the engine and now gives `@min-[475px]:` on both.
 
 **You are affected** when an `sz` object uses a breakpoint or container name of
-your own under `min`, `max`, `@min` or `@max`, or a named container query.
+your own under `min`, `max`, `@min` or `@max`, or nests a container's name under
+a query (`{ '@md': { sidebar: … } }`).
 
-**The edit.** None: the classes now match the CSS you meant. A name that is
-neither a breakpoint nor a container size of the project is reported by the
-build as a dead class.
+**The edit.** Write a named container as one key, `{ '@md/sidebar': … }`;
+`csszyx migrate` writes it that way. A nested name the project serves no variant
+for is reported by the build as
+[`unserved-variant`](#a-variant-your-tailwind-does-not-serve-is-reported), and a
+breakpoint or container size it does not have as a dead class.
 
 ## Some classes take the spelling every Tailwind v4 serves
 

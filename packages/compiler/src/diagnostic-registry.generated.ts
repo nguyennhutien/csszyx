@@ -476,7 +476,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unserved-variant",
         "position": "site",
-        "args": "form variant className"
+        "args": "form variant className query?"
     },
     {
         "id": "theme-collision",

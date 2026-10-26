@@ -330,16 +330,16 @@ The `container` class sets `width: 100%` and applies responsive max-widths.
 
 The `@container` class enables CSS container queries.
 
-| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                                     |
-| :----------------------- | :------------------- | :----------------------------------------------- | :------------------------------------------------------- |
-| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                                          |
-| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name.                |
-| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.                             |
-| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { display: 'block' } } }`   | **Sugar**: Nest name inside query key.                   |
-| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                                          |
-| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                                          |
-| **Container Size**       | `@min-sidebar:flex`  | `{ '@min': { sidebar: { display: 'flex' } } }`   | A `--container-*` name, as `min`/`max` take breakpoints. |
-| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                                          |
+| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                                               |
+| :----------------------- | :------------------- | :----------------------------------------------- | :----------------------------------------------------------------- |
+| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                                                    |
+| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name.                          |
+| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.                                       |
+| **Named Query**          | `@md/sidebar:block`  | `{ '@md/sidebar': { display: 'block' } }`        | The key Tailwind spells; a name nested under a query is a variant. |
+| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                                                    |
+| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                                                    |
+| **Container Size**       | `@min-sidebar:flex`  | `{ '@min': { sidebar: { display: 'flex' } } }`   | A `--container-*` name, as `min`/`max` take breakpoints.           |
+| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                                                    |
 
 ## Dark mode
 
