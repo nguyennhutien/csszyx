@@ -31,10 +31,9 @@ describe('classNameToSzObject — customMap routes', () => {
     describe('object route', () => {
         it('maps a custom class to a direct sz object', () => {
             const customMap = { 'btn-primary': { bg: 'blue-500', color: 'white', px: 4, py: 2 } };
-            const { szObject, unrecognized, keepInClassName } = classNameToSzObject(
-                'btn-primary',
+            const { szObject, unrecognized, keepInClassName } = classNameToSzObject('btn-primary', {
                 customMap,
-            );
+            });
             expect(szObject).toEqual({ bg: 'blue-500', color: 'white', px: 4, py: 2 });
             expect(unrecognized).toEqual([]);
             expect(keepInClassName).toEqual([]);
@@ -42,7 +41,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('merges object-route class with other TW classes', () => {
             const customMap = { 'card-base': { rounded: 'lg', border: true } };
-            const { szObject } = classNameToSzObject('p-4 card-base bg-white', customMap);
+            const { szObject } = classNameToSzObject('p-4 card-base bg-white', { customMap });
             expect(szObject).toMatchObject({
                 p: 4,
                 rounded: 'lg',
@@ -59,7 +58,7 @@ describe('classNameToSzObject — customMap routes', () => {
                     dark: { bg: 'gray-800' },
                 },
             };
-            const { szObject } = classNameToSzObject('ds-card', customMap);
+            const { szObject } = classNameToSzObject('ds-card', { customMap });
             expect(szObject).toMatchObject({
                 rounded: 'xl',
                 shadow: 'md',
@@ -72,10 +71,10 @@ describe('classNameToSzObject — customMap routes', () => {
             // into an object the map supplied must nest into the output, not
             // into the map, or the next file to use the entry inherits it.
             const customMap: CsszyxTodoMap = { card: { p: 4, hover: { shadow: 'md' } } };
-            const first = classNameToSzObject('card hover:m-2', customMap);
+            const first = classNameToSzObject('card hover:m-2', { customMap });
             expect(first.szObject).toEqual({ p: 4, hover: { shadow: 'md', m: 2 } });
             expect(customMap).toEqual({ card: { p: 4, hover: { shadow: 'md' } } });
-            const second = classNameToSzObject('card', customMap);
+            const second = classNameToSzObject('card', { customMap });
             expect(second.szObject).toEqual({ p: 4, hover: { shadow: 'md' } });
         });
 
@@ -84,10 +83,9 @@ describe('classNameToSzObject — customMap routes', () => {
                 'btn-base': { px: 4, py: 2, rounded: 'md', weight: 'medium' },
                 'btn-primary': { bg: 'blue-500', color: 'white', hover: { bg: 'blue-600' } },
             };
-            const { szObject, unrecognized } = classNameToSzObject(
-                'btn-base btn-primary',
+            const { szObject, unrecognized } = classNameToSzObject('btn-base btn-primary', {
                 customMap,
-            );
+            });
             expect(szObject.px).toBe(4);
             expect(szObject.py).toBe(2);
             expect(szObject.bg).toBe('blue-500');
@@ -102,7 +100,7 @@ describe('classNameToSzObject — customMap routes', () => {
             const customMap = { 'text-muted': 'sz:keep' };
             const { szObject, unrecognized, keepInClassName } = classNameToSzObject(
                 'p-4 text-muted',
-                customMap,
+                { customMap },
             );
             expect(keepInClassName).toEqual(['text-muted']);
             expect(unrecognized).toEqual([]);
@@ -114,7 +112,9 @@ describe('classNameToSzObject — customMap routes', () => {
                 'text-muted': 'sz:keep',
                 'icon-sm': 'sz:keep',
             };
-            const { keepInClassName } = classNameToSzObject('flex text-muted icon-sm', customMap);
+            const { keepInClassName } = classNameToSzObject('flex text-muted icon-sm', {
+                customMap,
+            });
             expect(keepInClassName).toContain('text-muted');
             expect(keepInClassName).toContain('icon-sm');
             expect(keepInClassName).toHaveLength(2);
@@ -122,7 +122,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('sz:keep does NOT add to unrecognized', () => {
             const customMap = { 'legacy-class': 'sz:keep' };
-            const { unrecognized } = classNameToSzObject('legacy-class', customMap);
+            const { unrecognized } = classNameToSzObject('legacy-class', { customMap });
             expect(unrecognized).toEqual([]);
         });
 
@@ -133,7 +133,7 @@ describe('classNameToSzObject — customMap routes', () => {
             };
             const { szObject, keepInClassName, unrecognized } = classNameToSzObject(
                 'btn-base icon-only flex',
-                customMap,
+                { customMap },
             );
             expect(szObject.px).toBe(4);
             expect(keepInClassName).toEqual(['icon-only']);
@@ -147,7 +147,7 @@ describe('classNameToSzObject — customMap routes', () => {
             const customMap = { 'legacy-card': 'sz:remove' };
             const { szObject, unrecognized, keepInClassName } = classNameToSzObject(
                 'p-4 legacy-card flex',
-                customMap,
+                { customMap },
             );
             expect(szObject).toEqual({ p: 4, display: 'flex' });
             expect(unrecognized).toEqual([]);
@@ -159,10 +159,9 @@ describe('classNameToSzObject — customMap routes', () => {
                 'old-class-a': 'sz:remove',
                 'old-class-b': 'sz:remove',
             };
-            const { szObject, unrecognized } = classNameToSzObject(
-                'old-class-a old-class-b',
+            const { szObject, unrecognized } = classNameToSzObject('old-class-a old-class-b', {
                 customMap,
-            );
+            });
             expect(Object.keys(szObject)).toHaveLength(0);
             expect(unrecognized).toEqual([]);
         });
@@ -172,17 +171,16 @@ describe('classNameToSzObject — customMap routes', () => {
     describe('"sz:todo" route', () => {
         it('treats sz:todo as unresolved (goes to unrecognized[])', () => {
             const customMap = { 'custom-shadow': 'sz:todo' };
-            const { unrecognized, keepInClassName } = classNameToSzObject(
-                'custom-shadow',
+            const { unrecognized, keepInClassName } = classNameToSzObject('custom-shadow', {
                 customMap,
-            );
+            });
             expect(unrecognized).toContain('custom-shadow');
             expect(keepInClassName).toEqual([]);
         });
 
         it('sz:todo does not contribute to szObject', () => {
             const customMap = { 'brand-color': 'sz:todo' };
-            const { szObject } = classNameToSzObject('p-4 brand-color', customMap);
+            const { szObject } = classNameToSzObject('p-4 brand-color', { customMap });
             expect(szObject).toEqual({ p: 4 });
         });
 
@@ -191,7 +189,9 @@ describe('classNameToSzObject — customMap routes', () => {
                 'ds-primary': 'sz:todo',
                 'ds-secondary': 'sz:todo',
             };
-            const { unrecognized } = classNameToSzObject('ds-primary ds-secondary flex', customMap);
+            const { unrecognized } = classNameToSzObject('ds-primary ds-secondary flex', {
+                customMap,
+            });
             expect(unrecognized).toContain('ds-primary');
             expect(unrecognized).toContain('ds-secondary');
         });
@@ -201,7 +201,7 @@ describe('classNameToSzObject — customMap routes', () => {
             // But the developer marked it unresolved, so the resolution pass
             // must NOT silently convert it. It stays in unrecognized[].
             const customMap = { flex: 'sz:todo' };
-            const { szObject, unrecognized } = classNameToSzObject('flex', customMap);
+            const { szObject, unrecognized } = classNameToSzObject('flex', { customMap });
             expect(unrecognized).toContain('flex');
             expect(szObject).toEqual({});
         });
@@ -209,8 +209,8 @@ describe('classNameToSzObject — customMap routes', () => {
         it('null and false behave identically to sz:todo (block conversion)', () => {
             const mapNull: CsszyxTodoMap = { flex: null };
             const mapFalse: CsszyxTodoMap = { flex: false };
-            const r1 = classNameToSzObject('flex', mapNull);
-            const r2 = classNameToSzObject('flex', mapFalse);
+            const r1 = classNameToSzObject('flex', { customMap: mapNull });
+            const r2 = classNameToSzObject('flex', { customMap: mapFalse });
             expect(r1.unrecognized).toContain('flex');
             expect(r1.szObject).toEqual({});
             expect(r2.unrecognized).toContain('flex');
@@ -222,19 +222,19 @@ describe('classNameToSzObject — customMap routes', () => {
     describe('null / false / missing → unresolved', () => {
         it('null value → unresolved', () => {
             const customMap: CsszyxTodoMap = { 'custom-class': null };
-            const { unrecognized } = classNameToSzObject('custom-class', customMap);
+            const { unrecognized } = classNameToSzObject('custom-class', { customMap });
             expect(unrecognized).toContain('custom-class');
         });
 
         it('false value → unresolved', () => {
             const customMap: CsszyxTodoMap = { 'custom-class': false };
-            const { unrecognized } = classNameToSzObject('custom-class', customMap);
+            const { unrecognized } = classNameToSzObject('custom-class', { customMap });
             expect(unrecognized).toContain('custom-class');
         });
 
         it('token not in map → normal parse (unrecognized if unknown)', () => {
             const customMap = { 'other-class': 'sz:keep' };
-            const { unrecognized } = classNameToSzObject('totally-unknown', customMap);
+            const { unrecognized } = classNameToSzObject('totally-unknown', { customMap });
             expect(unrecognized).toContain('totally-unknown');
         });
     });
@@ -243,7 +243,7 @@ describe('classNameToSzObject — customMap routes', () => {
     describe('plain Tailwind string route', () => {
         it('converts a TW string value to sz', () => {
             const customMap = { 'btn-primary': 'bg-blue-500 text-white' };
-            const { szObject, unrecognized } = classNameToSzObject('btn-primary', customMap);
+            const { szObject, unrecognized } = classNameToSzObject('btn-primary', { customMap });
             expect(szObject.bg).toBe('blue-500');
             expect(szObject.color).toBe('white');
             expect(unrecognized).toEqual([]);
@@ -253,7 +253,7 @@ describe('classNameToSzObject — customMap routes', () => {
             const customMap = {
                 'btn-interactive': 'px-4 py-2 hover:bg-blue-600 focus:ring-2',
             };
-            const { szObject } = classNameToSzObject('btn-interactive', customMap);
+            const { szObject } = classNameToSzObject('btn-interactive', { customMap });
             expect(szObject.px).toBe(4);
             expect(szObject.py).toBe(2);
             expect((szObject.hover as CsszyxTodoMap).bg).toBe('blue-600');
@@ -264,7 +264,7 @@ describe('classNameToSzObject — customMap routes', () => {
             const customMap = {
                 'card-responsive': 'p-4 md:p-8 lg:p-12 dark:bg-gray-900',
             };
-            const { szObject } = classNameToSzObject('card-responsive', customMap);
+            const { szObject } = classNameToSzObject('card-responsive', { customMap });
             expect(szObject.p).toBe(4);
             expect((szObject.md as CsszyxTodoMap).p).toBe(8);
             expect((szObject.lg as CsszyxTodoMap).p).toBe(12);
@@ -273,13 +273,13 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('single-class TW string', () => {
             const customMap = { 'shadow-brand': 'shadow-md' };
-            const { szObject } = classNameToSzObject('shadow-brand', customMap);
+            const { szObject } = classNameToSzObject('shadow-brand', { customMap });
             expect(szObject.shadow).toBe('md');
         });
 
         it('TW string with fully-unknown classes → unresolved', () => {
             const customMap = { mystery: 'not-a-tw-class' };
-            const { unrecognized } = classNameToSzObject('mystery', customMap);
+            const { unrecognized } = classNameToSzObject('mystery', { customMap });
             // Falls back to unresolved because parsed TW string had no recognized classes
             expect(unrecognized).toContain('mystery');
         });
@@ -289,7 +289,7 @@ describe('classNameToSzObject — customMap routes', () => {
     describe('partial TW string cascade', () => {
         it('recognized TW classes go to sz; unrecognized cascade to unrecognized[]', () => {
             const customMap = { 'mixed-token': 'p-4 my-unknown-class' };
-            const { szObject, unrecognized } = classNameToSzObject('mixed-token', customMap);
+            const { szObject, unrecognized } = classNameToSzObject('mixed-token', { customMap });
             expect(szObject.p).toBe(4);
             expect(unrecognized).toContain('my-unknown-class');
             // The source token itself should NOT be in unrecognized
@@ -298,7 +298,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('multiple unknown classes in TW string all cascade', () => {
             const customMap = { 'btn-legacy': 'bg-blue-500 custom-a custom-b custom-c' };
-            const { szObject, unrecognized } = classNameToSzObject('btn-legacy', customMap);
+            const { szObject, unrecognized } = classNameToSzObject('btn-legacy', { customMap });
             expect(szObject.bg).toBe('blue-500');
             expect(unrecognized).toContain('custom-a');
             expect(unrecognized).toContain('custom-b');
@@ -307,7 +307,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('cascade does not include source token — only inner unknowns', () => {
             const customMap = { 'half-custom': 'flex unknown-x' };
-            const { unrecognized } = classNameToSzObject('half-custom', customMap);
+            const { unrecognized } = classNameToSzObject('half-custom', { customMap });
             expect(unrecognized).not.toContain('half-custom');
             expect(unrecognized).toContain('unknown-x');
         });
@@ -316,7 +316,7 @@ describe('classNameToSzObject — customMap routes', () => {
             const customMap = { 'btn-fancy': 'rounded-xl custom-ring' };
             const { szObject, unrecognized } = classNameToSzObject(
                 'p-4 btn-fancy hover:opacity-90',
-                customMap,
+                { customMap },
             );
             expect(szObject.p).toBe(4);
             expect(szObject.rounded).toBe('xl');
@@ -337,7 +337,7 @@ describe('classNameToSzObject — customMap routes', () => {
             };
             const { szObject, unrecognized, keepInClassName } = classNameToSzObject(
                 'flex btn-base icon-sm old-badge brand-color shadow-token',
-                customMap,
+                { customMap },
             );
             // Object route
             expect(szObject.px).toBe(4);
@@ -382,10 +382,9 @@ describe('classNameToSzObject — customMap routes', () => {
                 'hover:opacity-90',
             ].join(' ');
 
-            const { szObject, unrecognized, keepInClassName } = classNameToSzObject(
-                className,
+            const { szObject, unrecognized, keepInClassName } = classNameToSzObject(className, {
                 customMap,
-            );
+            });
 
             expect(szObject.bg).toBe('white');
             expect(szObject.color).toBe('gray-900');
@@ -551,23 +550,78 @@ describe('customMap priority — token in map is never parsed as plain TW', () =
         // Even if the class is valid TW (like 'flex'), it must NOT be converted.
         // Re-inject the marker so the developer can see that it remains pending.
         const customMap: CsszyxTodoMap = { flex: 'sz:todo' };
-        const { szObject, unrecognized } = classNameToSzObject('flex', customMap);
+        const { szObject, unrecognized } = classNameToSzObject('flex', { customMap });
         expect(unrecognized).toContain('flex'); // stays pending
         expect(szObject).not.toHaveProperty('flex'); // NOT converted
     });
 
     it('sz:todo on a custom class → unresolved', () => {
         const customMap: CsszyxTodoMap = { 'ds-elevation': 'sz:todo' };
-        const { unrecognized } = classNameToSzObject('ds-elevation', customMap);
+        const { unrecognized } = classNameToSzObject('ds-elevation', { customMap });
         expect(unrecognized).toContain('ds-elevation');
     });
 
     it('customMap overrides normal TW parsing for mapped tokens', () => {
         // 'p-4' is normally a TW class, but if mapped to sz:keep, respect the map
         const customMap: CsszyxTodoMap = { 'p-4': 'sz:keep' };
-        const { keepInClassName, szObject } = classNameToSzObject('p-4 m-2', customMap);
+        const { keepInClassName, szObject } = classNameToSzObject('p-4 m-2', { customMap });
         expect(keepInClassName).toContain('p-4');
         expect(szObject.p).toBeUndefined(); // NOT converted to sz
         expect(szObject.m).toBe(2); // m-2 still converted normally
+    });
+});
+
+// ============================================================================
+// classNameToSzObject — the options object
+// ============================================================================
+
+describe('classNameToSzObject — the options object', () => {
+    // A map passed where the options go, the 0.17 shape, would read no
+    // `customMap` and send every mapped class to `unrecognized` in silence.
+    // `tsc` lets it through when the map is typed `CsszyxTodoMap` or read
+    // from JSON, so the call says so instead.
+    const call = classNameToSzObject as (className: string, ...args: unknown[]) => unknown;
+
+    it('names the keys it does not have', () => {
+        expect(() => call('btn card', { btn: { p: 4 }, card: 'sz:keep' })).toThrow(
+            expect.objectContaining({
+                code: 'options-object-required',
+                args: { form: 'class-name-to-sz-object-option', options: ['btn', 'card'] },
+                message:
+                    '[csszyx] options-object-required:\n' +
+                    '  `classNameToSzObject` has no option(s) `btn`, `card`, so the call is refused.\n' +
+                    '  help: pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.\n' +
+                    '  docs: https://csszyx.com/e/options-object-required',
+            }),
+        );
+    });
+
+    it.each([
+        ['a string', 'btn'],
+        ['null', null],
+        ['an array', []],
+        // No own keys to name, and still not the options object.
+        ['a Map', new Map([['btn', 'p-4']])],
+        ['a class instance', new (class Mappings {})()],
+    ])('refuses %s in place of the object', (_label, options) => {
+        expect(() => call('btn', options)).toThrow(
+            expect.objectContaining({
+                code: 'options-object-required',
+                args: { form: 'class-name-to-sz-object' },
+            }),
+        );
+    });
+
+    it('refuses a third argument', () => {
+        expect(() => call('btn', {}, {})).toThrow(
+            expect.objectContaining({ args: { form: 'class-name-to-sz-object' } }),
+        );
+    });
+
+    it('takes no options, an empty object, or the map under `customMap`', () => {
+        expect(classNameToSzObject('p-4').szObject).toEqual({ p: 4 });
+        expect(classNameToSzObject('p-4', {}).szObject).toEqual({ p: 4 });
+        expect(classNameToSzObject('p-4', { customMap: undefined }).szObject).toEqual({ p: 4 });
+        expect(classNameToSzObject('p-4', Object.create(null)).szObject).toEqual({ p: 4 });
     });
 });

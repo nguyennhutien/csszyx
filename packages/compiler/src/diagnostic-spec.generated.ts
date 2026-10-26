@@ -2293,7 +2293,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "forms": [
             "transform",
             "csszyx-turbopack",
-            "csszyx-turbopack-option"
+            "csszyx-turbopack-option",
+            "class-name-to-sz-object",
+            "class-name-to-sz-object-option"
         ],
         "args": {
             "form": {
@@ -2301,7 +2303,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "enum",
                     "transform",
                     "csszyx-turbopack",
-                    "csszyx-turbopack-option"
+                    "csszyx-turbopack-option",
+                    "class-name-to-sz-object",
+                    "class-name-to-sz-object-option"
                 ]
             },
             "options": {

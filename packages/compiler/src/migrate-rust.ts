@@ -306,22 +306,31 @@ function readResult(result: NativeMigrateResult): MigrateRustResult {
     };
 }
 
+/** Options for converting one `className` attribute. */
+export interface MigrateRustClassNameOptions {
+    /** The migration-resolution map. */
+    customMap?: Record<string, unknown>;
+}
+
 /**
  * Convert one whole `className` attribute to an sz object.
  *
  * The class-level question the file entry points cannot answer: the corpus
  * round-trip, the per-key matrix and the sz golden all ask what a class
- * becomes, with no source file around it.
+ * becomes, with no source file around it. An options object, so the
+ * project's answers (`served`, as the file entry points take) join it
+ * without a second positional parameter.
  *
  * @param className - The whole class attribute value.
- * @param customMap - The migration-resolution map.
+ * @param options - The migration-resolution map.
  * @returns The sz object plus the tokens that stay in `className`.
  * @throws RustMigrateUnavailableError when the native engine cannot run here.
  */
 export function migrateRustClassName(
     className: string,
-    customMap?: Record<string, unknown>,
+    options: MigrateRustClassNameOptions = {},
 ): MigrateRustConversion {
+    const { customMap } = options;
     return guarded(
         () =>
             JSON.parse(

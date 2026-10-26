@@ -13,6 +13,7 @@
  *
  * @module
  */
+import { CsszyxError } from '@csszyx/compiler/errors';
 import {
     type CsszyxTodoMap,
     type MigrateRustConversion,
@@ -25,6 +26,7 @@ import {
     migrateRustHtml,
     migrateRustParseClass,
 } from '@csszyx/compiler/migrate';
+import { OPTIONS_OBJECT_REQUIRED, szRender } from '@csszyx/compiler/report';
 
 export type {
     CsszyxTodoEntry,
@@ -56,19 +58,56 @@ export function migrateSource(
     return result as MigrateRustResult;
 }
 
+/** Options for {@link classNameToSzObject}. */
+export interface ClassNameToSzObjectOptions {
+    /** The migration-resolution map. */
+    customMap?: CsszyxTodoMap;
+}
+
+/** The keys {@link ClassNameToSzObjectOptions} has. */
+const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap']);
+
 /**
  * Convert one whole `className` attribute to an sz object.
  *
  * @param className - The whole class attribute value.
- * @param customMap - The migration-resolution map.
+ * @param options - The migration-resolution map.
+ * @param rest - nothing; a third argument is refused.
  * @returns The sz object plus the tokens that stay in `className`.
  * @throws RustMigrateUnavailableError when this install has no native engine.
+ * @throws {CsszyxError} `options-object-required`, when the options are not
+ * one object of the keys above: a map passed in their place, the 0.17 shape,
+ * would otherwise read no `customMap` and leave every mapped class unresolved.
  */
 export function classNameToSzObject(
     className: string,
-    customMap?: CsszyxTodoMap,
+    options: ClassNameToSzObjectOptions = {},
+    // `never[]` rejects a third argument where the types are read; the throw
+    // catches a call from JavaScript, or a map typed loosely enough for `tsc`.
+    ...rest: never[]
 ): MigrateRustConversion {
-    return migrateRustClassName(className, customMap);
+    // A plain object: a `Map` or a class instance has no own keys to name and
+    // is still not the options.
+    const proto =
+        typeof options === 'object' && options !== null
+            ? Object.getPrototypeOf(options)
+            : undefined;
+    const isObject = proto === Object.prototype || proto === null;
+    const unknown = isObject
+        ? Object.keys(options).filter(key => !CLASS_NAME_OPTION_KEYS.has(key))
+        : [];
+    if (rest.length > 0 || !isObject || unknown.length > 0) {
+        const args =
+            rest.length > 0 || !isObject
+                ? ({ form: 'class-name-to-sz-object' } as const)
+                : ({ form: 'class-name-to-sz-object-option', options: unknown } as const);
+        throw new CsszyxError({
+            code: 'options-object-required',
+            args,
+            message: szRender({ diagnostic: OPTIONS_OBJECT_REQUIRED, args, at: '' }),
+        });
+    }
+    return migrateRustClassName(className, options);
 }
 
 /**

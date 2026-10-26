@@ -1737,9 +1737,21 @@ export const DIAGNOSTICS = [
         summary: 'An options argument that is not the one object the call takes.',
         surfaces: { error: { host: 'both' } },
         position: 'none',
-        forms: ['transform', 'csszyx-turbopack', 'csszyx-turbopack-option'],
+        forms: [
+            'transform',
+            'csszyx-turbopack',
+            'csszyx-turbopack-option',
+            'class-name-to-sz-object',
+            'class-name-to-sz-object-option',
+        ],
         args: {
-            form: formArg(['transform', 'csszyx-turbopack', 'csszyx-turbopack-option']),
+            form: formArg([
+                'transform',
+                'csszyx-turbopack',
+                'csszyx-turbopack-option',
+                'class-name-to-sz-object',
+                'class-name-to-sz-object-option',
+            ]),
             options: { type: 'string[]', joiner: '`, `', optional: true },
         },
         text: {
@@ -1749,6 +1761,10 @@ export const DIAGNOSTICS = [
                 '`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument is refused.',
             'csszyx-turbopack-option':
                 '`csszyxTurbopack` has no option(s) `{options}`, so the call is refused.',
+            'class-name-to-sz-object':
+                '`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
+            'class-name-to-sz-object-option':
+                '`classNameToSzObject` has no option(s) `{options}`, so the call is refused.',
         },
         help: {
             transform:
@@ -1757,8 +1773,12 @@ export const DIAGNOSTICS = [
                 'write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.',
             'csszyx-turbopack-option':
                 'use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.',
+            'class-name-to-sz-object':
+                'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
+            'class-name-to-sz-object-option':
+                'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
         },
-        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts'],
+        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts', 'packages/cli/src/migrate.ts'],
     },
     {
         id: 'lowering-not-loaded',

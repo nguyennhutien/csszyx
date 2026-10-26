@@ -152,7 +152,7 @@ describe('the class-level entry points', () => {
     });
 
     it.skipIf(!isRustMigrateAvailable())('lets a resolution map answer first', () => {
-        expect(migrateRustClassName('btn', { btn: { p: 4 } })).toEqual({
+        expect(migrateRustClassName('btn', { customMap: { btn: { p: 4 } } })).toEqual({
             szObject: { p: 4 },
             unrecognized: [],
             keepInClassName: [],
@@ -166,7 +166,9 @@ describe('the class-level entry points', () => {
 
     it.skipIf(!isRustMigrateAvailable())('refuses a resolution map that is not an object', () => {
         expect(() =>
-            migrateRustClassName('btn', [1] as unknown as Record<string, unknown>),
+            migrateRustClassName('btn', {
+                customMap: [1] as unknown as Record<string, unknown>,
+            }),
         ).toThrow(/resolution map/);
     });
 
