@@ -110,6 +110,59 @@ describe('findDeadSzClasses', () => {
         ]);
     });
 
+    // 0.18 reads a name nested under a query as a variant; the class 0.17
+    // wrote for it is the named container, which is one key now.
+    it('names a name right after a query as a container to write as one key', () => {
+        const origins = new Map<string, string>([
+            ['@md:sidebar:p-4', 'src/A.tsx'],
+            ['@max-lg:sidebar:hover:m-2', 'src/A.tsx'],
+            ['@md/main:hovr:p-4', 'src/A.tsx'],
+        ]);
+        // Tailwind serves no `sidebar` or `hovr` variant, so only dropping
+        // the name serves the class.
+        const model = modelServingAllBut([
+            '@md:sidebar:p-4',
+            'sidebar:p-4',
+            '@max-lg:sidebar:hover:m-2',
+            'sidebar:hover:m-2',
+            '@max-lg:sidebar:m-2',
+            '@md/main:hovr:p-4',
+            'hovr:p-4',
+        ]);
+        expect(findDeadSzClasses(model, origins)).toEqual([
+            {
+                className: '@max-lg:sidebar:hover:m-2',
+                variant: { name: 'sidebar', form: 'container-name', query: '@max-lg' },
+                file: 'src/A.tsx',
+            },
+            {
+                className: '@md/main:hovr:p-4',
+                variant: { name: 'hovr', form: 'unknown' },
+                file: 'src/A.tsx',
+            },
+            {
+                className: '@md:sidebar:p-4',
+                variant: { name: 'sidebar', form: 'container-name', query: '@md' },
+                file: 'src/A.tsx',
+            },
+        ]);
+        expect(
+            unservedVariantMessage(
+                {
+                    className: '@md:sidebar:p-4',
+                    variant: { name: 'sidebar', form: 'container-name', query: '@md' },
+                },
+                { file: 'src/A.tsx' },
+            ),
+        ).toBe(
+            '[csszyx] unserved-variant: src/A.tsx\n' +
+                '  `@md:sidebar:p-4` produces no CSS: Tailwind serves no `sidebar` variant.\n' +
+                "  help: write `{ '@md/sidebar': { … } }` for a container named `sidebar`; a name under a query is a variant.\n" +
+                '  note: the class is still emitted, and it styles nothing unless the project defines `sidebar` with `@custom-variant`.\n' +
+                '  docs: https://csszyx.com/e/unserved-variant',
+        );
+    });
+
     it('says a class dead without the variant too, or under two dead variants, as plain dead', () => {
         const origins = new Map<string, string>([
             ['hidden:p-bogus', 'src/A.tsx'],

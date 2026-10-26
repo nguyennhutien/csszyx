@@ -58,9 +58,9 @@ describe('shadow color object form { color, op } with fractional opacity', () =>
         expect(t({ [key]: { color, op } })).toBe(expected);
     });
 
-    it('brackets non-half-step decimal opacity', () => {
+    it('keeps the percent of an off-step decimal opacity in its brackets', () => {
         expect(t({ shadowColor: { color: 'blue-500', op: 12.499 } })).toBe(
-            'shadow-blue-500/[12.499]',
+            'shadow-blue-500/[12.499%]',
         );
     });
 

@@ -418,9 +418,34 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         }
     },
     {
+        "id": "bracketed-value",
+        "position": "site",
+        "args": "key value inner",
+        "text": "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+        "help": "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."
+    },
+    {
+        "id": "opacity-value",
+        "position": "site",
+        "args": "form key op percent?",
+        "text": {
+            "range": "`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.",
+            "fraction": "`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1."
+        },
+        "help": {
+            "range": "write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.",
+            "fraction": "write `op: {percent}` for {percent}%."
+        }
+    },
+    {
         "id": "unsigned-value",
         "position": "file",
         "args": "className utility"
+    },
+    {
+        "id": "inert-keyword",
+        "position": "file",
+        "args": "className keyword"
     },
     {
         "id": "dead-class",
@@ -451,7 +476,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "unserved-variant",
         "position": "site",
-        "args": "form variant className"
+        "args": "form variant className query?"
     },
     {
         "id": "theme-collision",

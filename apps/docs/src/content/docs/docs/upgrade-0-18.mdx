@@ -63,6 +63,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`transform` options](#transform-takes-an-options-object) | `[csszyx] options-object-required:` thrown | `tsc`, runtime throw | you |
 | [`csszyxTurbopack` options](#csszyxturbopack-takes-one-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`@csszyx/unplugin` exports](#csszyxunplugin-exports-seven-names) | an import that no longer resolves | `tsc`, the bundler | you |
+| [`runNextPrebuild` lock option](#runnextprebuild-drops-lockcommand) | `lockCommand` not accepted; `NEXT_WATCH_LOCK_COMMAND` not exported | `tsc`, the bundler | you |
 | [`@csszyx/compiler` exports](#csszyxcompiler-renames-one-error-and-drops-nine-exports) | an import that no longer resolves | `tsc`, the bundler | you |
 | [Engine on its own](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `transformSource` no longer exported from the root; `Cannot find package '@csszyx/core'` | `tsc`, the bundler, the import of `@csszyx/compiler/engine` | you |
 | [Engine at the compiler's version](#the-engine-moves-to-csszyxcompilerengine-and-is-installed-on-its-own) | `engine-version-skew` | the first engine call | you |
@@ -86,10 +87,17 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
 | [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
 | [A variant Tailwind does not serve](#a-variant-your-tailwind-does-not-serve-is-reported) | `[csszyx] unserved-variant:` on `{ hidden: { p: 4 } }` | the build, `csszyx check`, dev runtime | you |
+| [A CSS-wide keyword no property takes](#a-css-wide-keyword-no-property-takes-is-reported) | `[csszyx] inert-keyword:` on `{ ring: 'inherit' }` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
 | [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
+| [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`; `{ '@md': { sidebar: … } }` writes `@md:sidebar:` | the build (`unserved-variant`), your snapshots | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
+| [`op` is a percent](#a-colour-objects-op-is-a-percent) | `op: 0.05` is 0.05%, where 0.17 wrote 5%; `[csszyx] opacity-value:` | the build, dev runtime | you |
+| [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` | the build, dev runtime | you |
+| [A value with a space](#a-value-with-a-space-in-it-is-one-class) | `brightness-[calc(1px_+_2px)]` where 0.17 wrote two classes | your snapshots | nothing |
+| [One spelling on both lanes](#the-build-and-the-runtime-write-one-spelling) | `text-fade` where the runtime wrote `text-[fade]` | your snapshots | nothing |
+| [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
 | [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
@@ -557,6 +565,21 @@ The lane entries are `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`,
 
 **What you see.** `tsc` reports that the module has no such exported member, and an
 ES module import fails when the bundler or Node loads it.
+
+## runNextPrebuild drops lockCommand
+
+`runNextPrebuild` from `@csszyx/unplugin/next-prebuild` took a `lockCommand`
+option, the command recorded on the safelist lock while the pass runs. Only
+`csszyx next watch` passed it, and the watch now runs its startup pass through
+its own code, so the option is gone. `@csszyx/unplugin/next-watcher` no longer
+exports `NEXT_WATCH_LOCK_COMMAND`; that entry serves the CLI and is not one of
+the lane entries above.
+
+**What you see.** `tsc` reports `lockCommand` as an unknown property, and an
+import of `NEXT_WATCH_LOCK_COMMAND` no longer resolves.
+
+**The edit.** Drop `lockCommand`. A script that ran the watch's startup pass
+itself runs `csszyx next watch` instead.
 
 ## @csszyx/compiler renames one error and drops nine exports
 
@@ -1370,6 +1393,41 @@ every dead-class finding, and `rules['unserved-variant']` of this one alone.
 **Tooling.** `csszyx check --rule unserved-variant`. `csszyx migrate` does not
 rewrite it.
 
+## A CSS-wide keyword no property takes is reported
+
+Every key takes `inherit`, `initial`, `unset`, `revert` and `revert-layer`, but
+on some keys Tailwind puts the keyword where it sets nothing:
+`{ ring: 'inherit' }` writes `ring-inherit`, which sets
+`--tw-ring-color: inherit`, and `{ brightness: 'inherit' }` writes
+`brightness-[inherit]`, which sets `brightness(inherit)` inside `filter`. 0.17
+wrote these without a word. The build and `csszyx check` now read the CSS your
+Tailwind emits for each class carrying a keyword:
+
+```text
+[csszyx] inert-keyword: src/Card.tsx:3:22
+  `ring-inherit` sets no property to `inherit`: this project's Tailwind writes the keyword into a custom property or inside another value.
+  help: set the CSS property to `'inherit'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.
+  note: the class is still emitted, and it styles nothing.
+```
+
+**You are affected** when an `sz` object gives a CSS-wide keyword to a ring,
+shadow, gradient stop, filter, `content` or scrollbar key.
+
+**What you see.** The line above, where the build prints
+[`dead-class`](#the-build-names-sz-classes-that-produce-no-css), and in
+`csszyx check` under `CSS-wide keywords no property takes:`. It is a kind of
+`dead-class`, at `error` under both presets. A keyword a property takes
+(`{ cursor: 'inherit' }` → `cursor: inherit`) is never reported. `bgImg` with a
+keyword now writes `bg-[image:inherit]`, which sets `background-image`; 0.17
+wrote `bg-[url(inherit)]`, a URL.
+
+**The edit.** Set the property itself: `css: { boxShadow: 'inherit' }`.
+`rules['dead-class']` sets the level of every dead-class finding, and
+`rules['inert-keyword']` of this one alone.
+
+**Tooling.** `csszyx check --rule inert-keyword`. `csszyx migrate` does not
+rewrite it.
+
 ## A runtime value under a variant key is reported
 
 0.17 lowered `sz={{ m: 1, hover: x }}` into a CSS variable on a class Tailwind
@@ -1431,6 +1489,11 @@ production:
 [csszyx] slash-opacity-string: {"key":"bg","color":"red-500","opacity":"50"} https://csszyx.com/e/slash-opacity-string
 ```
 
+The border-side colour keys (`borderTColor` through `borderYColor`),
+`insetRingColor` and `insetShadowColor` are colour keys too: 0.17 wrote
+`{ borderTColor: 'red-500/50' }` as a class, and 0.18 reports it like
+`borderColor`.
+
 **The edit.** Write the object form the line names:
 
 ```tsx
@@ -1459,6 +1522,35 @@ the dead `bg-red-500!/20`.
 <div sz={{ bg: { color: "red-500", op: 50 } }} />
 ```
 
+## Breakpoints and container queries are spelled as Tailwind serves them
+
+`min` and `max` wrote a breakpoint name outside `sm`…`2xl` in brackets:
+`{ min: { tablet: { … } } }` gave `min-[tablet]`, which Tailwind compiles to
+`@media (width >= tablet)`, a query that matches nothing. A name is now written
+as it is, so a project's own breakpoint (`--breakpoint-tablet` in `@theme`)
+gives `min-tablet`; a length is still bracketed, as on every other key
+(`'640px'` → `min-[640px]`). `@min` and `@max` read a container size the same
+way (`{ '@min': { sidebar: … } }` → `@min-sidebar`).
+
+A named container query is one key, spelled as Tailwind spells the class:
+`{ '@md/sidebar': … }` gives `@md/sidebar:`. A name nested under a query is a
+variant, as under any other variant, so `{ '@md': { tablet: … } }` gives
+`@md:tablet:` and a project's own `tablet` applies inside the query. 0.17's
+runtime read that nested name as a container instead (`@md/tablet:`), which
+Tailwind serves for any name, so the style never applied and nothing said so,
+while the build's engine wrote `@md:tablet:`. `{ '@min': { '[475px]': … } }`
+gave `@min:[475px]:` on the engine and now gives `@min-[475px]:` on both.
+
+**You are affected** when an `sz` object uses a breakpoint or container name of
+your own under `min`, `max`, `@min` or `@max`, or nests a container's name under
+a query (`{ '@md': { sidebar: … } }`).
+
+**The edit.** Write a named container as one key, `{ '@md/sidebar': … }`;
+`csszyx migrate` writes it that way. A nested name the project serves no variant
+for is reported by the build as
+[`unserved-variant`](#a-variant-your-tailwind-does-not-serve-is-reported), and a
+breakpoint or container size it does not have as a dead class.
+
 ## Some classes take the spelling every Tailwind v4 serves
 
 One csszyx release serves every Tailwind from 4.0, so a key now writes the
@@ -1480,6 +1572,112 @@ does `bgSize` on 4.0.
 
 **The edit.** Update the snapshots and selectors. Nothing in your `sz` code
 changes.
+
+## A colour object's op is a percent
+
+`op` is the opacity in percent, from `0` to `100`, on a colour object and on a
+mask stop. 0.17 bracketed any decimal that was not a half step, and Tailwind
+reads a bracket without `%` as a fraction of one, so the same number meant two
+things:
+
+| `sz` | 0.17 | Opacity in 0.17 | 0.18 | Opacity in 0.18 |
+| --- | --- | --- | --- | --- |
+| `{ bg: { color: 'red-500', op: 0.05 } }` | `bg-red-500/[0.05]` | 5% | `bg-red-500/[0.05%]` | 0.05% |
+| `{ bg: { color: 'red-500', op: 33.3 } }` | `bg-red-500/[33.3]` | 3,330% | `bg-red-500/[33.3%]` | 33.3% |
+| `{ bg: { color: 'red-500', op: 0.5 } }` | `bg-red-500/0.5` | 0.5% | `bg-red-500/0.5` | 0.5% |
+| `{ bg: { color: 'red-500', op: 50 } }` | `bg-red-500/50` | 50% | `bg-red-500/50` | 50% |
+
+An `op` between 0 and 1 is written as the percent it is, and reported, with
+the number to write for the opacity 0.17 gave:
+
+```text
+[csszyx] opacity-value: src/Card.tsx:3:30
+  `bg: { op: 0.05 }` is 0.05% opacity: `op` is a percent, not a fraction of 1.
+  help: write `op: 5` for 5%.
+```
+
+An `op` that is no opacity (`150`, `'20'`, `true`) writes the colour alone and
+is reported the same way. A mask stop's `op` follows the same rules, named by
+its member (`from`, `to`).
+
+**You are affected** when an `op` is written as a fraction of one, or as a
+decimal that is not a quarter step.
+
+**The edit.** Write the percent: `op: 0.05` → `op: 5`.
+`rules['opacity-value']` sets the level.
+
+## A value in the brackets csszyx writes is reported
+
+csszyx brackets an arbitrary value itself, so a value written with the
+brackets is one spelling too many. 0.17 took the brackets off; 0.18 emits
+nothing for it and says so:
+
+```text
+[csszyx] bracketed-value: src/Card.tsx:3:22
+  `w: '[100px]'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.
+  help: write `w: '100px'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`.
+```
+
+A custom property (`{ '--x': '[a]' }`) is a declaration value and is not read.
+
+**The edit.** Drop the brackets.
+
+## A value with a space in it is one class
+
+A value with a space in it was split at the space into several classes on some
+keys: `{ brightness: 'calc(1px + 2px)' }` wrote `brightness-[calc(1px` and
+`+` and `2px)]`. Every key now writes one class with `_` for each space, as
+Tailwind reads it: `brightness-[calc(1px_+_2px)]`. A value no key takes, such
+as `{ display: 'flex hidden' }`, writes `flex_hidden` and is reported as a
+`closed-enum-value`.
+
+**The edit.** None. Update a snapshot that holds the split classes.
+
+## The build and the runtime write one spelling
+
+The build's engine and the runtime lowering wrote different classes for a few
+keys. Both now write the same one: the spelling Tailwind serves where they
+differed, the engine's otherwise. Classes in snapshots change:
+
+| `sz` | 0.17 runtime | 0.18 |
+| --- | --- | --- |
+| `{ textOverflow: 'fade' }` | `text-[fade]` | `text-fade` |
+| `{ lineClamp: '2.5' }` | `line-clamp-[2.5]` | `line-clamp-2.5` |
+| `{ scale: '-(--v)' }` | `scale-[-(--v)]` | `-scale-(--v)` |
+
+`textWrap`, `listPos`, `backface`, `transitionBehavior`, `divideStyle` and
+`decorationStyle` take the same spelling as any key for a value outside their
+keywords, and `textTransform` and the `snap*` keys no longer drop such a value.
+Whether the class is served is the build's `dead-class` check.
+
+**The edit.** Update the snapshots.
+
+## classNameToSzObject takes an options object
+
+`classNameToSzObject` from `@csszyx/cli` took the migration map as a second
+positional argument; it is now a key of one options object:
+
+```ts
+// before
+classNameToSzObject("p-4 card", customMap);
+
+// after
+classNameToSzObject("p-4 card", { customMap });
+```
+
+`tsc` flags the old call when the map is an object literal. A map typed
+`CsszyxTodoMap` or read from JSON passes the type check, so the call checks
+too: an options argument with any key besides `customMap` throws, and names
+the keys:
+
+```text
+[csszyx] options-object-required:
+  `classNameToSzObject` has no option(s) `btn`, `card`, so the call is refused.
+  help: pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.
+  docs: https://csszyx.com/e/options-object-required
+```
+
+**Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
 
 ## Logical block and inline keys need Tailwind 4.2
 

@@ -4,14 +4,9 @@ import { diagnosticError } from './diagnostic-message.js';
 import type { NextWatcherCycleResult } from './next-watcher-cycle.js';
 import { NextWatcherLoop, type NextWatcherLoopOptions } from './next-watcher-loop.js';
 
-/**
- * Re-exported for the CLI: `next watch` records it on the lock for the prebuild
- * it runs at startup, so the Turbopack loader steps aside for that pass too.
- */
-export {
-    NEXT_WATCH_LOCK_COMMAND,
-    type NextSafelistMaterializeResult,
-} from './next-safelist-state.js';
+export type { NextSafelistMaterializeResult } from './next-safelist-state.js';
+/** Re-exported for the CLI: `next watch` materializes once at startup with it. */
+export { runNextWatcherCycleUnlessLoaderHolds } from './next-watcher-cycle.js';
 
 /** Filesystem events that can change the materialized safelist. */
 export type NextSafelistWatchEvent = 'add' | 'change' | 'unlink';

@@ -15369,21 +15369,21 @@
     "prop": "bg",
     "value": {
      "color": "black",
-     "op": 0.05
+     "op": 5
     }
    },
    "o": {
     "sz": {
      "bg": {
       "color": "black",
-      "op": 0.05
+      "op": 5
      }
     },
-    "szText": "{\"bg\":{\"color\":\"black\",\"op\":0.05}}",
+    "szText": "{\"bg\":{\"color\":\"black\",\"op\":5}}",
     "u": [],
     "k": [],
-    "g": "{ bg: { color: 'black', op: 0.05 } }",
-    "h": "bg: { color: 'black', op: 0.05 }"
+    "g": "{ bg: { color: 'black', op: 5 } }",
+    "h": "bg: { color: 'black', op: 5 }"
    }
   },
   {
@@ -19331,19 +19331,16 @@
   },
   {
    "c": "text-shadow",
-   "p": {
-    "prop": "color",
-    "value": "shadow"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "color": "shadow"
-    },
-    "szText": "{\"color\":\"shadow\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "text-shadow"
+    ],
     "k": [],
-    "g": "{ color: 'shadow' }",
-    "h": "color: 'shadow'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -50282,19 +50279,16 @@
   },
   {
    "c": "rounded-b",
-   "p": {
-    "prop": "rounded",
-    "value": "b"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "rounded": "b"
-    },
-    "szText": "{\"rounded\":\"b\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "rounded-b"
+    ],
     "k": [],
-    "g": "{ rounded: 'b' }",
-    "h": "rounded: 'b'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -50350,19 +50344,16 @@
   },
   {
    "c": "rounded-t",
-   "p": {
-    "prop": "rounded",
-    "value": "t"
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "rounded": "t"
-    },
-    "szText": "{\"rounded\":\"t\"}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "rounded-t"
+    ],
     "k": [],
-    "g": "{ rounded: 't' }",
-    "h": "rounded: 't'"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -63275,25 +63266,16 @@
   },
   {
    "c": "w-x/2",
-   "p": {
-    "prop": "w",
-    "value": {
-     "color": "x",
-     "op": 2
-    }
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "w": {
-      "color": "x",
-      "op": 2
-     }
-    },
-    "szText": "{\"w\":{\"color\":\"x\",\"op\":2}}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "w-x/2"
+    ],
     "k": [],
-    "g": "{ w: { color: 'x', op: 2 } }",
-    "h": "w: { color: 'x', op: 2 }"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -63773,44 +63755,35 @@
     "prop": "bg",
     "value": {
      "color": "red-500",
-     "op": 0.5
+     "op": 50
     }
    },
    "o": {
     "sz": {
      "bg": {
       "color": "red-500",
-      "op": 0.5
+      "op": 50
      }
     },
-    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":0.5}}",
+    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":50}}",
     "u": [],
     "k": [],
-    "g": "{ bg: { color: 'red-500', op: 0.5 } }",
-    "h": "bg: { color: 'red-500', op: 0.5 }"
+    "g": "{ bg: { color: 'red-500', op: 50 } }",
+    "h": "bg: { color: 'red-500', op: 50 }"
    }
   },
   {
    "c": "bg-red-500/foo",
-   "p": {
-    "prop": "bg",
-    "value": {
-     "color": "red-500",
-     "op": "foo"
-    }
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "bg": {
-      "color": "red-500",
-      "op": "foo"
-     }
-    },
-    "szText": "{\"bg\":{\"color\":\"red-500\",\"op\":\"foo\"}}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "bg-red-500/foo"
+    ],
     "k": [],
-    "g": "{ bg: { color: 'red-500', op: 'foo' } }",
-    "h": "bg: { color: 'red-500', op: 'foo' }"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -63962,36 +63935,30 @@
   },
   {
    "c": "-grow",
-   "p": {
-    "prop": "grow",
-    "value": true
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "grow": true
-    },
-    "szText": "{\"grow\":true}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-grow"
+    ],
     "k": [],
-    "g": "{ grow: true }",
-    "h": "grow: true"
+    "g": "{}",
+    "h": ""
    }
   },
   {
    "c": "-shrink",
-   "p": {
-    "prop": "shrink",
-    "value": true
-   },
+   "p": null,
    "o": {
-    "sz": {
-     "shrink": true
-    },
-    "szText": "{\"shrink\":true}",
-    "u": [],
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-shrink"
+    ],
     "k": [],
-    "g": "{ shrink: true }",
-    "h": "shrink: true"
+    "g": "{}",
+    "h": ""
    }
   },
   {
@@ -65005,16 +64972,19 @@
   },
   {
    "c": "content-[😀_x]",
-   "p": null,
+   "p": {
+    "prop": "content",
+    "value": "😀 x"
+   },
    "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "content-[😀_x]"
-    ],
+    "sz": {
+     "content": "😀 x"
+    },
+    "szText": "{\"content\":\"😀 x\"}",
+    "u": [],
     "k": [],
-    "g": "{}",
-    "h": ""
+    "g": "{ content: '😀 x' }",
+    "h": "content: '😀 x'"
    }
   },
   {
@@ -66514,17 +66484,15 @@
    "p": null,
    "o": {
     "sz": {
-     "@md": {
-      "sidebar": {
-       "p": 4
-      }
+     "@md/sidebar": {
+      "p": 4
      }
     },
-    "szText": "{\"@md\":{\"sidebar\":{\"p\":4}}}",
+    "szText": "{\"@md/sidebar\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@md': {\n    sidebar: { p: 4 },\n  },\n}",
-    "h": "'@md': {\n    sidebar: { p: 4 },\n  },"
+    "g": "{\n  '@md/sidebar': { p: 4 },\n}",
+    "h": "'@md/sidebar': { p: 4 },"
    }
   },
   {
@@ -66617,17 +66585,15 @@
    },
    "o": {
     "sz": {
-     "@container": {
-      "main": {
-       "p": 4
-      }
+     "@container/main": {
+      "p": 4
      }
     },
-    "szText": "{\"@container\":{\"main\":{\"p\":4}}}",
+    "szText": "{\"@container/main\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@container': {\n    main: { p: 4 },\n  },\n}",
-    "h": "'@container': {\n    main: { p: 4 },\n  },"
+    "g": "{\n  '@container/main': { p: 4 },\n}",
+    "h": "'@container/main': { p: 4 },"
    }
   },
   {
@@ -66635,17 +66601,15 @@
    "p": null,
    "o": {
     "sz": {
-     "@sm": {
-      "a/b": {
-       "p": 4
-      }
+     "@sm/a/b": {
+      "p": 4
      }
     },
-    "szText": "{\"@sm\":{\"a/b\":{\"p\":4}}}",
+    "szText": "{\"@sm/a/b\":{\"p\":4}}",
     "u": [],
     "k": [],
-    "g": "{\n  '@sm': {\n    'a/b': { p: 4 },\n  },\n}",
-    "h": "'@sm': {\n    'a/b': { p: 4 },\n  },"
+    "g": "{\n  '@sm/a/b': { p: 4 },\n}",
+    "h": "'@sm/a/b': { p: 4 },"
    }
   },
   {
@@ -67492,16 +67456,19 @@
   },
   {
    "c": "-scale-(--v)",
-   "p": null,
+   "p": {
+    "prop": "scale",
+    "value": "-(--v)"
+   },
    "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "-scale-(--v)"
-    ],
+    "sz": {
+     "scale": "-(--v)"
+    },
+    "szText": "{\"scale\":\"-(--v)\"}",
+    "u": [],
     "k": [],
-    "g": "{}",
-    "h": ""
+    "g": "{ scale: '-(--v)' }",
+    "h": "scale: '-(--v)'"
    }
   },
   {

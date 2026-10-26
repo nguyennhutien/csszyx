@@ -4,7 +4,10 @@
  * Checks each key against the real compiler's generated canonical-key sets,
  * then compiles every entry with the engine and reads the diagnostics it
  * returns. An entry that emits no class and has a diagnostic is an error (a
- * moved value, a replaced or removed key); any other diagnostic is a warning.
+ * moved value, a replaced or removed key), and so is an `unknown-key`: which
+ * keys exist is the engine's answer, so a key the transform compiles (`--x`,
+ * a project breakpoint) is never called unknown in the same reply. Any other
+ * diagnostic is a warning.
  * The engine returns its diagnostics per call, so the answer is the same on
  * every call — the console warnings the runtime transform prints are deduped
  * per process and muted in production, and are not read.
@@ -19,7 +22,6 @@
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_SPECIAL_PROPERTIES,
-    KNOWN_VARIANTS,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
     REPLACED_KEYS,
@@ -70,9 +72,6 @@ interface ValidationError extends Partial<Omit<ToolDiagnostic, 'message'>> {
     suggestion?: string;
 }
 
-/** The tail of the key check's message for a key it does not know. */
-const UNKNOWN_KEY = ' Not a valid sz key, variant, or special prop.';
-
 /**
  * Return the validation error for one sz entry, if any.
  *
@@ -81,7 +80,8 @@ const UNKNOWN_KEY = ' Not a valid sz key, variant, or special prop.';
  * @returns Validation error when the entry is unsupported.
  */
 function validateEntry(key: string, value: unknown): ValidationError | undefined {
-    const suggestion = SUGGESTION_MAP[key];
+    // Own entries only: `toString` is a word an author can write as a key.
+    const suggestion = Object.hasOwn(SUGGESTION_MAP, key) ? SUGGESTION_MAP[key] : undefined;
     if (suggestion) {
         return {
             key,
@@ -92,7 +92,9 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
         };
     }
 
-    const removed = REMOVED_BOOLEAN_SUGAR[key];
+    const removed = Object.hasOwn(REMOVED_BOOLEAN_SUGAR, key)
+        ? REMOVED_BOOLEAN_SUGAR[key]
+        : undefined;
     if (removed && value === true) {
         return {
             key,
@@ -103,20 +105,7 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
         };
     }
 
-    const isSpecial =
-        ['@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
-    const isKnown =
-        key in PROPERTY_MAP ||
-        BOOLEAN_SHORTHANDS.has(key) ||
-        KNOWN_SPECIAL_PROPERTIES.has(key) ||
-        KNOWN_VARIANTS.has(key) ||
-        isSpecial;
-    return isKnown
-        ? undefined
-        : {
-              key,
-              message: `Unknown prop '${key}'.${UNKNOWN_KEY}`,
-          };
+    return undefined;
 }
 
 /** Filename the engine attributes diagnostics to; no message names it. */
@@ -136,7 +125,11 @@ interface Leaf {
  * @returns True when the compiler lowers the key as a property.
  */
 function isPropertyKey(key: string): boolean {
-    return key in PROPERTY_MAP || BOOLEAN_SHORTHANDS.has(key) || KNOWN_SPECIAL_PROPERTIES.has(key);
+    return (
+        Object.hasOwn(PROPERTY_MAP, key) ||
+        BOOLEAN_SHORTHANDS.has(key) ||
+        KNOWN_SPECIAL_PROPERTIES.has(key)
+    );
 }
 
 /**
@@ -245,10 +238,9 @@ function emitsNoClass(leaf: Leaf): boolean {
 }
 
 /**
- * File one entry's diagnostics: an entry that emits nothing is an error, one
- * per diagnostic, and an entry the key check already rejected keeps its
- * error, replaced by the compiler's diagnostics in place of "unknown key"
- * when the key was removed.
+ * File one entry's diagnostics: an entry that emits nothing, or whose key the
+ * engine does not know, is an error, one per diagnostic; an entry the key
+ * check already rejected keeps its error.
  *
  * @param key The entry's dotted path.
  * @param diagnostics The engine's diagnostics for it.
@@ -263,14 +255,10 @@ function recordEntryDiagnostics(
     errors: ValidationError[],
 ): boolean {
     const keyed = diagnostics.map(diagnostic => ({ key, ...diagnostic }));
-    const existing = errors.findIndex(error => error.key === key);
-    if (existing !== -1) {
-        if (emitsNothing && (errors[existing] as ValidationError).message.endsWith(UNKNOWN_KEY)) {
-            errors.splice(existing, 1, ...keyed);
-        }
-        return true;
+    if (errors.some(error => error.key === key)) return true;
+    if (!emitsNothing && !diagnostics.some(diagnostic => diagnostic.code === 'unknown-key')) {
+        return false;
     }
-    if (!emitsNothing) return false;
     errors.push(...keyed);
     return true;
 }

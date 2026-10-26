@@ -129,7 +129,7 @@ describe.each(PARSERS)('the %s artifact', parser => {
 
     it('escapes the class it writes', () => {
         const result = run(sfc(`<div :sz='{ content: "x\\" onclick=\\"y" }' />`));
-        expect(result.code).toBe(sfc('<div class="content-[x&#34; onclick=&#34;y]" />'));
+        expect(result.code).toBe(sfc('<div class="content-[x&#34;_onclick=&#34;y]" />'));
     });
 
     it('decodes character references the way Vue does before lowering', () => {

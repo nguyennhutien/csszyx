@@ -37,10 +37,12 @@ import {
 } from './helpers/sz-known-defects.js';
 
 /**
- * Variant vocabulary the harness is willing to compare across engines. Kept to
- * plain variants — an arbitrary variant (`[&>*]`) carries its own escaping
- * question, and a divergence there would be about the variant syntax rather
- * than about the lowering this file is aimed at.
+ * Variant vocabulary the harness is willing to compare across engines: plain
+ * variants, a container query, and the wrappers that take a parameter, written
+ * as a dotted path (`not.first` is `{ not: { first: … } }`). An arbitrary
+ * variant (`[&>*]`) is left out: it carries its own escaping question, and a
+ * divergence there would be about the variant syntax rather than about the
+ * lowering this file is aimed at.
  */
 const VARIANTS: readonly string[] = [
     'hover',
@@ -53,6 +55,14 @@ const VARIANTS: readonly string[] = [
     'group-hover',
     'motion-safe',
     'print',
+    // The wrappers that take a parameter, and a container query: each lowers
+    // its body through its own handler, which hands the classes up.
+    '@md',
+    'not.first',
+    'has.img',
+    'data.open',
+    'aria.checked',
+    'supports.display:grid',
 ];
 
 /**

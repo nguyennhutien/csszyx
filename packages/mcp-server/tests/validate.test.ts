@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { handleValidate } from '../src/tools/validate';
 
 describe('csszyx_validate', () => {
+    // `Object.prototype` members are words an author can write as keys; a
+    // table lookup that reads the prototype took them for a suggestion.
+    it.each(['toString', 'constructor', 'hasOwnProperty'])(
+        'reads %s as an unknown key, not a table entry',
+        key => {
+            const data = JSON.parse(handleValidate({ sz: { [key]: true } }).content[0].text);
+            expect(data.valid).toBe(false);
+            expect(data.errors.map((error: { key: string }) => error.key)).toEqual([key]);
+            expect(JSON.stringify(data.errors)).not.toContain('function');
+        },
+    );
+
     it('accepts a correct sz object', () => {
         const data = JSON.parse(handleValidate({ sz: { p: 4, bg: 'red-500' } }).content[0].text);
         expect(data.valid).toBe(true);
@@ -47,10 +59,29 @@ describe('csszyx_validate', () => {
         ]);
     });
 
-    it('catches unknown props', () => {
-        const data = JSON.parse(handleValidate({ sz: { unknownProp: 'value' } }).content[0].text);
+    it('catches unknown props, in the engine words, at any depth', () => {
+        const data = JSON.parse(
+            handleValidate({ sz: { unknownProp: 'value', hover: { foo: 4 } } }).content[0].text,
+        );
         expect(data.valid).toBe(false);
-        expect(data.errors[0].message).toContain("Unknown prop 'unknownProp'");
+        expect(
+            data.errors.map((error: { key: string; code: string }) => [error.key, error.code]),
+        ).toEqual([
+            ['unknownProp', 'unknown-key'],
+            ['hover.foo', 'unknown-key'],
+        ]);
+    });
+
+    // The key check is the compiler's own, so a key the transform compiles is
+    // never called unknown in the same reply (vui, 0.17.2).
+    it('accepts a custom property and a project breakpoint, as the compiler does', () => {
+        const data = JSON.parse(
+            handleValidate({ sz: { '--tag-color': 'red', p: 4, tablet: { p: 2 } } }).content[0]
+                .text,
+        );
+        expect(data.valid).toBe(true);
+        expect(data.errors).toBeUndefined();
+        expect(data.transformResult.className).toBe('[--tag-color:red] p-4 tablet:p-2');
     });
 
     it('surfaces compiler console warnings as warnings', () => {
@@ -181,7 +212,7 @@ describe('csszyx_validate', () => {
     it('reads a value holding `<`, `>` or a line separator the way the runtime does', () => {
         // The object is spliced into source for the engine, escaped so no
         // character in it can end the expression; the answer must not change.
-        const sz = { touch: 'pan-x', content: "['</p>\u2028']" };
+        const sz = { touch: 'pan-x', content: "'</p>\u2028'" };
         const data = JSON.parse(handleValidate({ sz }).content[0].text);
         expect(data.errors.map((error: { key: string }) => error.key)).toEqual(['touch']);
         expect(data.errors[0].message).toBe(

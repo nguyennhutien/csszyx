@@ -9,12 +9,15 @@
 // The mapping is exact where it exists: `eslint-plugin-sonarjs` is Sonar's own
 // implementation and every rule carries its RSPEC id in `meta.docs.url`, so an
 // active `typescript:S3776` lines up with `sonarjs/cognitive-complexity` with
-// no table to maintain.
+// no table to maintain. The rules SonarJS takes unchanged from ESLint core,
+// typescript-eslint and unicorn carry no RSPEC id of their own, but the
+// plugin's README lists one beside each, and this reads that table from the
+// installed plugin (`foreignRules`).
 //
 // READ THE SECOND BUCKET CAREFULLY. "A local rule exists and is off" does not
-// mean the check is missing: biome, typescript-eslint and unicorn cover a lot
-// of the same ground under different names, and this script cannot map those —
-// they publish no RSPEC id. The bucket is a list of candidates to look at, not
+// mean the check is missing: biome covers a lot of the same ground under
+// different names, and a rule SonarJS decorates reports differently from the
+// original, so neither is mapped here. The bucket is a list of candidates to look at, not
 // a list of rules to switch on, and switching one on can light up code nobody
 // intended to touch. Each one is its own decision: enable it, record here that
 // something else already covers it, or deactivate it on the Sonar profile
@@ -31,6 +34,7 @@
 // Usage: node scripts/check-sonar-rule-drift.mjs [--json] [--write-profile] [--language=<lang>]
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 /** The organisation and project this repository reports to. */
@@ -83,7 +87,88 @@ const FOREIGN_RULES = new Map([
     // flag the same lines, verified on that code.
     ['S7741', 'unicorn/no-typeof-undefined'],
     ['S7737', 'unicorn/no-object-as-default-parameter'],
+    // Reported on #401 (`main().catch(…)` at a module's top level). SonarJS
+    // decorates the unicorn rule, so the README's external table leaves it
+    // out; on that code the local rule flags the same line with the same
+    // sentence, and nothing on the `await` that replaced it.
+    ['S7785', 'unicorn/prefer-top-level-await'],
 ]);
+
+/**
+ * The rules SonarJS runs from ESLint core and other plugins without changing
+ * them, by RSPEC id, as `eslint-plugin-sonarjs` lists them in its README.
+ *
+ * {@link FOREIGN_RULES} was this table, copied a pair at a time after
+ * SonarCloud reported a rule the local gate had no name for: #387, #396 and
+ * #401 (`S6653` `prefer-object-has-own`, `S7785` `unicorn/prefer-top-level-await`).
+ * On 2026-10-26 the plugin's table named a local rule for 111 profile rules the
+ * drift report counted as having none. Read from the installed plugin, the
+ * table follows its version. The decorated table is left out: SonarJS changes
+ * those rules, so the original would not report what Sonar does.
+ *
+ * @param readme - The plugin's README.
+ * @returns RSPEC id to the rule as the README names it (`eslint/no-empty`).
+ */
+export function externalRulesFromReadme(readme) {
+    const start = readme.indexOf('<!--- start external rules -->');
+    const end = readme.indexOf('<!--- end external rules -->');
+    if (start === -1 || end === -1) return new Map();
+    return new Map(
+        [...readme.slice(start, end).matchAll(/^\|\s*(S\d+)\s*\|\s*\[([^\]]+)\]/gm)].map(
+            ([, id, rule]) => [id, rule],
+        ),
+    );
+}
+
+/** The README's plugin names, as the local eslint config registers them. */
+const LOCAL_PLUGIN_PREFIX = {
+    eslint: '',
+    'typescript-eslint': '@typescript-eslint/',
+    unicorn: 'unicorn/',
+};
+
+/**
+ * A rule the README names, as the local eslint config knows it.
+ *
+ * @param rule - `<plugin>/<rule>`, as the README writes it.
+ * @returns The local rule name, or null when no local config registers the plugin.
+ */
+export function localRuleName(rule) {
+    const slash = rule.indexOf('/');
+    const prefix = Object.hasOwn(LOCAL_PLUGIN_PREFIX, rule.slice(0, slash))
+        ? LOCAL_PLUGIN_PREFIX[rule.slice(0, slash)]
+        : null;
+    return prefix === null ? null : `${prefix}${rule.slice(slash + 1)}`;
+}
+
+/**
+ * {@link externalRulesFromReadme} on the installed plugin, kept to the rules
+ * the installed plugins define under that name, with {@link FOREIGN_RULES}
+ * on top.
+ *
+ * @returns RSPEC id to the local rule name.
+ */
+async function foreignRules() {
+    const require = createRequire(import.meta.url);
+    const readme = readFileSync(require.resolve('eslint-plugin-sonarjs/README.md'), 'utf8');
+    const { builtinRules } = await import('eslint/use-at-your-own-risk');
+    const { default: typescript } = await import('@typescript-eslint/eslint-plugin');
+    const { default: unicorn } = await import('eslint-plugin-unicorn');
+    const defined = name => {
+        if (name.startsWith('@typescript-eslint/')) {
+            return Object.hasOwn(typescript.rules, name.slice('@typescript-eslint/'.length));
+        }
+        if (name.startsWith('unicorn/'))
+            return Object.hasOwn(unicorn.rules, name.slice('unicorn/'.length));
+        return builtinRules.has(name);
+    };
+    const found = new Map();
+    for (const [id, rule] of externalRulesFromReadme(readme)) {
+        const local = localRuleName(rule);
+        if (local !== null && defined(local)) found.set(id, local);
+    }
+    return new Map([...found, ...FOREIGN_RULES]);
+}
 
 /**
  * Read `sonar-project.properties` into a plain map.
@@ -378,8 +463,9 @@ async function main({ language, json, writeProfile }) {
     const organization = properties['sonar.organization'];
     const project = properties['sonar.projectKey'];
     const localByRspec = await localSonarRules();
+    const foreign = await foreignRules();
     if (writeProfile) {
-        const localIds = new Set([...localByRspec.keys(), ...FOREIGN_RULES.keys()]);
+        const localIds = new Set([...localByRspec.keys(), ...foreign.keys()]);
         for (const [key, file] of Object.entries(PROFILE_RULES_FILES)) {
             const active = await completeActiveRules(
                 organization,
@@ -388,7 +474,8 @@ async function main({ language, json, writeProfile }) {
                 localIds,
             );
             const list = profileRuleList(
-                bucketRules(active.rules, localByRspec, new Set(), FOREIGN_RULES),
+                bucketRules(active.rules, localByRspec, new Set(), foreign),
+                foreign,
             );
             const runnable = list.filter(entry => runsOn(entry.rule, key));
             const written = profileFile(runnable, key, localIds);
@@ -407,7 +494,7 @@ async function main({ language, json, writeProfile }) {
                 : 'packages/unplugin/src/unplugin.ts',
         ),
     ]);
-    const buckets = bucketRules(rules, localByRspec, enabled, FOREIGN_RULES);
+    const buckets = bucketRules(rules, localByRspec, enabled, foreign);
 
     if (json) {
         console.log(JSON.stringify({ profile: profile.name, total, ...buckets }, null, 2));
@@ -438,8 +525,9 @@ async function main({ language, json, writeProfile }) {
             'those rules publish no RSPEC id.\n' +
             'The last list is where a finding arrives with no warning: a rule there is\n' +
             'reported by SonarCloud and by nothing that runs before the push. When one of\n' +
-            'them fires, find the plugin that implements it, verify the local rule reports\n' +
-            'the same defect on a deliberate violation, and add the pair to FOREIGN_RULES.',
+            'them fires and the plugin README lists no local rule for it, find the plugin\n' +
+            'that implements it, verify the local rule reports the same defect on a\n' +
+            'deliberate violation, and add the pair to FOREIGN_RULES.',
     );
     return 0;
 }

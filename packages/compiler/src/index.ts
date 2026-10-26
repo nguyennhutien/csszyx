@@ -126,6 +126,7 @@ export { nearestName, suggestSzKey } from './sz-key-suggestion.js';
 // Export transform-core constants needed by MCP and CLI
 export {
     BOOLEAN_SHORTHANDS,
+    CSS_WIDE_KEYWORDS,
     type CssVariableMangleValue,
     type EngineMergeTable,
     type GlobalVarAliasTableInput,

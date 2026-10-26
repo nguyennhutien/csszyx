@@ -17,6 +17,19 @@ import { DYNAMIC_UNSAFE_ARBITRARY, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
 import { isUtilityArbitrarySafe } from './css-sanitize.js';
 
+/**
+ * A table's own entry for text a class carries. An index or `in` reads
+ * `Object.prototype` too: `leading-constructor` wrote the text of the `Object`
+ * function as a `line-height`.
+ *
+ * @param table - The table.
+ * @param name - The text.
+ * @returns Its own entry, or undefined.
+ */
+function own<T>(table: Readonly<Record<string, T>>, name: string): T | undefined {
+    return Object.hasOwn(table, name) ? table[name] : undefined;
+}
+
 /** Warn once (in dev) when an arbitrary value is dropped for being unsafe. */
 let warnedUnsafeArbitrary = false;
 /**
@@ -238,7 +251,8 @@ function resolveNamedSpacingValue(value: string, property?: string): string | nu
     if (value === 'screen') {
         return property && HEIGHT_SIZE_PROPERTIES.has(property) ? '100vh' : '100vw';
     }
-    if (value in SIZE_KEYWORDS) return SIZE_KEYWORDS[value];
+    const keyword = own(SIZE_KEYWORDS, value);
+    if (keyword !== undefined) return keyword;
     if (value.startsWith('[') && value.endsWith(']')) {
         return expandArbitrarySpaces(value.slice(1, -1));
     }
@@ -739,8 +753,8 @@ export function parseVariants(cls: string): ParsedVariants {
             tier = variant as Tier;
         } else if (variant === 'dark' || variant === 'light') {
             selectorPrefix = `.${variant} `;
-        } else if (variant in PSEUDO_CLASS_MAP) {
-            pseudoSuffix += PSEUDO_CLASS_MAP[variant];
+        } else if (own(PSEUDO_CLASS_MAP, variant) !== undefined) {
+            pseudoSuffix += own(PSEUDO_CLASS_MAP, variant);
         }
         // Unknown variants (e.g. group-hover, aria-*, data-*) keep the base tier.
     }
@@ -856,9 +870,10 @@ function resolveRadiusDeclaration(utility: string): string | null {
     if (value === 'none') return 'border-radius: 0';
     if (value === 'full') return 'border-radius: calc(infinity * 1px)';
     if (RADIUS_SIZES.has(value)) return `border-radius: var(--radius-${value})`;
-    if (value in ROUNDED_DIRECTIONS) return ROUNDED_DIRECTIONS[value];
+    const direction = own(ROUNDED_DIRECTIONS, value);
+    if (direction !== undefined) return direction;
     const directional = /^([trblse]+)-(.+)$/.exec(value);
-    if (directional && directional[1] in ROUNDED_DIRECTIONS) {
+    if (directional && own(ROUNDED_DIRECTIONS, directional[1]) !== undefined) {
         return ROUNDED_DIRECTIONS[directional[1]].replaceAll(
             'var(--radius)',
             resolveRadiusValue(directional[2]),
@@ -913,7 +928,7 @@ function resolveLeadingDeclaration(utility: string): string | null {
         relaxed: '1.625',
         loose: '2',
     };
-    if (value in named) return `line-height: ${named[value]}`;
+    if (own(named, value) !== undefined) return `line-height: ${named[value]}`;
     if (value.startsWith('[') && value.endsWith(']')) return `line-height: ${value.slice(1, -1)}`;
     return Number.isNaN(Number.parseFloat(value))
         ? null
@@ -935,7 +950,7 @@ function resolveTrackingDeclaration(utility: string): string | null {
         wider: 'var(--tracking-wider)',
         widest: 'var(--tracking-widest)',
     };
-    if (value in named) return `letter-spacing: ${named[value]}`;
+    if (own(named, value) !== undefined) return `letter-spacing: ${named[value]}`;
     return value.startsWith('[') && value.endsWith(']')
         ? `letter-spacing: ${value.slice(1, -1)}`
         : null;
@@ -946,14 +961,14 @@ function resolveTrackingDeclaration(utility: string): string | null {
  * @param utility
  */
 function resolveFontDeclaration(utility: string): string | null {
-    if (!utility.startsWith('font-') || KEYWORD_RULES[utility]) return null;
+    if (!utility.startsWith('font-') || own(KEYWORD_RULES, utility)) return null;
     const value = utility.slice(5);
     const families: Record<string, string> = {
         sans: 'var(--font-sans, ui-sans-serif, system-ui, sans-serif)',
         serif: 'var(--font-serif, ui-serif, Georgia, serif)',
         mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
     };
-    if (value in families) return `font-family: ${families[value]}`;
+    if (own(families, value) !== undefined) return `font-family: ${families[value]}`;
     if (!value.startsWith('[') || !value.endsWith(']')) return null;
     const inner = expandArbitrarySpaces(value.slice(1, -1));
     // `font-[500]` is a weight, `font-[Inter]` a family — the same bracket
@@ -1098,7 +1113,7 @@ function resolveTransitionDeclaration(utility: string): string | null {
         out: 'cubic-bezier(0, 0, 0.2, 1)',
         'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
     };
-    const timingFunction = eases[value] ?? `var(--ease-${value})`;
+    const timingFunction = own(eases, value) ?? `var(--ease-${value})`;
     return `transition-timing-function: ${timingFunction}`;
 }
 
@@ -1204,8 +1219,9 @@ export function generateDeclarations(utility: string): string {
     }
 
     // ── 1. Keyword lookup (fastest path) ───────────────────────────────────
-    if (utility in KEYWORD_RULES) {
-        return KEYWORD_RULES[utility];
+    const keywordRule = own(KEYWORD_RULES, utility);
+    if (keywordRule !== undefined) {
+        return keywordRule;
     }
     for (const resolver of DECLARATION_RESOLVERS) {
         const declaration = resolver(utility);

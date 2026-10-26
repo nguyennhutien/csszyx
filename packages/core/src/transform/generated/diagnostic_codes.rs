@@ -75,6 +75,10 @@ pub enum DiagnosticCode {
     MangleVarsHoistSkipped,
     /// A colour object with a slash opacity in `color`; the object takes it in `op`.
     ColorSlashOpacity,
+    /// A value wrapped in the brackets csszyx writes itself.
+    BracketedValue,
+    /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
+    OpacityValue,
 }
 
 impl DiagnosticCode {
@@ -114,12 +118,14 @@ impl DiagnosticCode {
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
             Self::ColorSlashOpacity => "color-slash-opacity",
+            Self::BracketedValue => "bracketed-value",
+            Self::OpacityValue => "opacity-value",
         }
     }
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 34] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -152,6 +158,8 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 32] = [
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
     DiagnosticCode::ColorSlashOpacity,
+    DiagnosticCode::BracketedValue,
+    DiagnosticCode::OpacityValue,
 ];
 
 /// Shared with the renderer, which prints it.
@@ -958,6 +966,55 @@ pub mod issue {
                 .optional_text("op", op),
         )
     }
+
+    /// `bracketed-value`: A value wrapped in the brackets csszyx writes itself.
+    #[must_use]
+    #[inline]
+    pub fn bracketed_value(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::BracketedValue,
+            Args::default()
+                .text("key", key)
+                .text("value", value)
+                .text("inner", inner),
+        )
+    }
+
+    /// `opacity-value` (`range`): An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
+    #[must_use]
+    #[inline]
+    pub fn opacity_value_range(
+        key: &str,
+        op: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OpacityValue,
+            Args::default()
+                .text("form", "range")
+                .text("key", key)
+                .text("op", op)
+                .optional_text("percent", percent),
+        )
+    }
+
+    /// `opacity-value` (`fraction`): An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
+    #[must_use]
+    #[inline]
+    pub fn opacity_value_fraction(
+        key: &str,
+        op: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OpacityValue,
+            Args::default()
+                .text("form", "fraction")
+                .text("key", key)
+                .text("op", op)
+                .optional_text("percent", percent),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1485,6 +1542,39 @@ mod tests {
         assert_eq!(
             args.to_json(),
             r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
+        );
+        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::opacity_value_range("key", "op", Some("percent"));
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"range","key":"key","op":"op","percent":"percent"}"#
+        );
+        let (code, args) = issue::opacity_value_range("key", "op", None);
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(args.to_json(), r#"{"form":"range","key":"key","op":"op"}"#);
+        let (code, args) = issue::opacity_value_fraction("key", "op", Some("percent"));
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","op":"op","percent":"percent"}"#
+        );
+        let (code, args) = issue::opacity_value_fraction("key", "op", None);
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","op":"op"}"#
         );
     }
 }

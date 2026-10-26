@@ -848,6 +848,8 @@ struct KeyValueFindings {
     dead_enums: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
+    invalid_opacities: Vec<super::lower::InvalidOpacity>,
+    bracketed_values: Vec<(String, String, String, u32)>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -868,6 +870,8 @@ impl KeyValueFindings {
         self.dead_enums.clear();
         self.slash_opacities.clear();
         self.color_slash_opacities.clear();
+        self.invalid_opacities.clear();
+        self.bracketed_values.clear();
         self.mask_members.clear();
         self.moved_values.clear();
         self.mask_layers.clear();
@@ -907,6 +911,8 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
         super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
         super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
+        super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
+        super::lower::collect_bracketed_values(object, &mut found.bracketed_values);
         super::lower::collect_moved_values(object, &mut found.moved_values);
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
@@ -928,6 +934,8 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.slash_opacities, 11, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.bracketed_values, 15, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -960,6 +968,16 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(&found.dead_enums, out);
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
+    for (key, op, percent, offset) in &found.invalid_opacities {
+        let issue = percent.as_ref().map_or_else(
+            || issue::opacity_value_range(key, op, None),
+            |percent| issue::opacity_value_fraction(key, op, Some(percent)),
+        );
+        out.push_issue(issue, *offset);
+    }
+    for (key, value, inner, offset) in &found.bracketed_values {
+        out.push_issue(issue::bracketed_value(key, value, inner), *offset);
+    }
     push_mask_member_diagnostics(&found.mask_members, out);
     push_moved_value_diagnostics(&found.moved_values, out);
     push_mask_layer_diagnostics(&found.mask_layers, out);
@@ -3913,6 +3931,36 @@ mod tests {
         );
     }
 
+    /// The classes the runtime can emit under a variant reach the safelist when
+    /// the object is reached through a name or a type assertion, and under a
+    /// project's own variant.
+    #[test]
+    // The fixtures are JSX sources whose `{p:4}` object literals read as
+    // formatting placeholders to the lint; they are never format strings.
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn runtime_candidates_follow_a_name_an_assertion_and_a_project_variant() {
+        for (sz, expected) in [
+            ("{hover:{m:1,...(c ? base : {})},w:width}", "hover:p-4"),
+            (
+                "{hover:{m:1,...(c ? ({p:4} as Sz) : {})},w:width}",
+                "hover:p-4",
+            ),
+            // A project's own variant, which no table claims.
+            ("{tablet:{m:1,...(c ? base : {})},w:width}", "tablet:p-4"),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/Candidates.tsx".to_string(),
+                source: format!("const base = {{p:4}};\nconst A=({{c,width}})=><div sz={{{sz}}}/>"),
+            };
+            let result = transform_file_with_options(&file, TransformOptions::default());
+            assert!(
+                result.classes.iter().any(|class| class == expected),
+                "{sz}: {:?}",
+                result.classes
+            );
+        }
+    }
+
     /// Candidate collection cannot merge classes that the runtime still emits.
     #[test]
     fn runtime_spread_candidates_keep_covered_classes_under_variants() {
@@ -5339,7 +5387,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 32] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 34] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5510,6 +5558,16 @@ mod tests {
                 "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
                 TransformOptions::default(),
             ),
+            (
+                DiagnosticCode::BracketedValue,
+                "<div sz={{ w: '[100px]' }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::OpacityValue,
+                "<div sz={{ bg: { color: 'red-500', op: 150 } }} />".into(),
+                TransformOptions::default(),
+            ),
         ];
         // Every code the engine emits has a case; `unsigned-value`, the
         // build-time oracle's verdict (ADR 0012, 0022), is not one of them.
@@ -5655,13 +5713,31 @@ mod tests {
     /// A slash opacity in a colour object's `color` still writes a served
     /// class, takes `op` as the opacity when both are given, and points at
     /// `op`, found under variants too; a colour without one says nothing.
+    /// An `op` between 0 and 1 is the percent it is, and said, with the
+    /// percent to write for the opacity 0.17 gave it.
+    #[test]
+    fn an_op_below_one_is_written_as_a_percent_and_said() {
+        let result = run_variant_source(
+            "const A = () => <div sz={{ bg: { color: 'red-500', op: 0.05 } }} />;",
+        );
+        assert!(
+            result.code.contains(r#"className="bg-red-500/[0.05%]""#),
+            "{}",
+            result.code
+        );
+        assert_eq!(
+            lines(&result),
+            [r#"opacity-value {"form":"fraction","key":"bg","op":"0.05","percent":"5"}"#]
+        );
+    }
+
     #[test]
     fn a_colour_object_with_a_slash_opacity_writes_its_class_and_points_at_op() {
         let cases: [(&str, &str, &str); 6] = [
             (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
-                r#"className="bg-red-500/[20]!""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"'20'"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: 20 } }} />;",
+                r#"className="bg-red-500/20!""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"20"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
@@ -5674,14 +5750,14 @@ mod tests {
                 r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50"}"#,
             ),
             (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '20' } }} />;",
-                r#"className="bg-red-500/[20]""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'20'"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '78%' } }} />;",
+                r#"className="bg-red-500/[78%]""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'78%'"}"#,
             ),
             (
-                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",
-                r#"className="hover:bg-red-500/0.5""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"0.5"}"#,
+                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 2.5 } } }} />;",
+                r#"className="hover:bg-red-500/2.5""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"2.5"}"#,
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",

@@ -980,3 +980,53 @@ test('the docs data adds the placeholder grammar, each computed value and the lo
     assert.deepEqual(data.lookups, productionLookups(TABLES));
     assert.deepEqual(docsData(registryOf([entry()]), TABLES).computed, {});
 });
+
+test('the browser module leaves out the words of a form only the build reports', () => {
+    const input = {
+        ...registryOf([
+            entry({
+                id: 'unserved-variant',
+                surfaces: { engine: {}, runtime: { production: false, host: 'both' } },
+                forms: ['aria', 'container-name'],
+                buildForms: ['container-name'],
+                args: {
+                    form: { type: ['enum', 'aria', 'container-name'] },
+                    variant: { type: 'string' },
+                },
+                text: '`{variant}` is served by no variant.',
+                help: { aria: 'write `aria`.', 'container-name': 'write the one key.' },
+                note: {
+                    aria: 'still emitted.',
+                    'container-name': 'a name under a query is a variant.',
+                },
+            }),
+        ]),
+        CONSTANTS: {},
+    };
+    assert.deepEqual(validateRegistry(input), []);
+    const source = generator.renderBrowserModule?.(input) ?? '';
+    assert.ok(
+        source.includes(
+            '"text":"`{variant}` is served by no variant.","help":{"aria":"write `aria`."},"note":{"aria":"still emitted."}',
+        ),
+        source,
+    );
+    assert.ok(!source.includes('write the one key.'), source);
+});
+
+test('a build form is one of the entry forms', () => {
+    const problems = validateRegistry(
+        registryOf([
+            entry({
+                forms: ['a', 'b'],
+                buildForms: ['c'],
+                args: { form: { type: ['enum', 'a', 'b'] }, key: { type: 'string' } },
+                text: { a: 'a.', b: 'b.' },
+            }),
+        ]),
+    );
+    assert.ok(
+        problems.some(problem => /build form c is not one of its forms/.test(problem)),
+        problems.join('\n'),
+    );
+});

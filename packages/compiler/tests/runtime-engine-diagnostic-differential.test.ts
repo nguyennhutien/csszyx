@@ -127,6 +127,15 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { has: { img: { p: 1.3 } } },
         { group: { has: { img: { p: 1.1 } } } },
     ],
+    'bracketed-value': [{ w: '[100px]' }, { hover: { top: '-[1px]' } }],
+    'opacity-value/range': [
+        { bg: { color: 'red-500', op: 150 } },
+        { hover: { borderColor: { color: 'blue-600', op: '20' } } },
+    ],
+    'opacity-value/fraction': [
+        { bg: { color: 'red-500', op: 0.05 } },
+        { maskLinear: { from: { color: 'red-500', op: 0.3 } } },
+    ],
     'numeric-font-weight': [
         { weight: '700' },
         { peer: { focus: { weight: '600' } } },
@@ -235,7 +244,7 @@ describe('runtime and engine diagnostics', () => {
     });
 
     it('has a case for every (id, form) both lanes report', () => {
-        expect(SHARED.map(spec => spec.id)).toHaveLength(15);
+        expect(SHARED.map(spec => spec.id)).toHaveLength(17);
         expect([...Object.keys(CASES), ...Object.keys(ONE_LANE_FORMS)].sort()).toEqual(
             [...SHARED_FORMS].sort(),
         );

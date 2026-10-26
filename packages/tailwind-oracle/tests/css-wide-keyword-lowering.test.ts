@@ -77,16 +77,13 @@ describe('a CSS-wide keyword on a key whose arbitrary form is its own property',
         // path of their own (`content-[unset]`), or a filter function
         // (`brightness-[unset]`), which the differential suite counts as
         // unserved. `bgSize` writes `bg-[length:unset]`, the type hint every v4
-        // serves, so it is not a bare bracket and is not listed. `textOverflow`
-        // writes `text-[unset]`, a colour, on the runtime only; that
-        // divergence predates the keyword rule. Pinned so a new bracket shows
-        // up here.
+        // serves, so it is not a bare bracket and is not listed. Every lane
+        // writes the same list. Pinned so a new bracket shows up here.
         const others = Object.entries(prefixOf)
             .filter(([, prefix]) => /^[a-z]+(?:-[a-z]+)*$/.test(prefix))
             .filter(([key]) => !bracketed(key))
             .filter(([key]) => lower(key, 'unset').includes('[unset]'))
             .map(([key]) => key);
-        const runtimeOnly = _name === 'runtime' ? ['textOverflow'] : [];
         expect([...others].sort((a, b) => a.localeCompare(b))).toEqual(
             [
                 'content',
@@ -96,7 +93,6 @@ describe('a CSS-wide keyword on a key whose arbitrary form is its own property',
                 'backdropBrightness',
                 'backdropContrast',
                 'backdropSaturate',
-                ...runtimeOnly,
             ].sort((a, b) => a.localeCompare(b)),
         );
     });

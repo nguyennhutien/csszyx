@@ -209,7 +209,7 @@ describe('szv extraction — "dị" value cases lower to the right TW class', ()
         ['negative value', 'const b = szv({ variants: { s: { x: { mt: -2 } } } });', ['-mt-2']],
         [
             'arbitrary bracket value',
-            "const b = szv({ variants: { s: { x: { w: '[400px]' } } } });",
+            "const b = szv({ variants: { s: { x: { w: '400px' } } } });",
             ['w-[400px]'],
         ],
         [

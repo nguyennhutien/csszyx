@@ -108,9 +108,9 @@ font-variant-numeric groups (`numOrdinal`, `numSlashedZero`), default-or-value
 <div sz={{ bg: { color: '#0d0d12', op: 90 } }} />
 // → className="bg-[#0d0d12]/90"
 
-// Sub-half-step decimals use arbitrary brackets
-<div sz={{ bg: { color: 'black', op: 0.05 } }} />
-// → className="bg-black/[0.05]"
+// `op` is a percent from 0 to 100; off a quarter step it keeps its percent
+<div sz={{ bg: { color: 'black', op: 7.3 } }} />
+// → className="bg-black/[7.3%]"
 ```
 
 ## Variants

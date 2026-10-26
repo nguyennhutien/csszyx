@@ -107,7 +107,7 @@ describe('classNameToSzObject', () => {
 
     it('container query with name', () => {
         const { szObject } = classNameToSzObject('@md/sidebar:block');
-        expect(szObject).toEqual({ '@md': { sidebar: { display: 'block' } } });
+        expect(szObject).toEqual({ '@md/sidebar': { display: 'block' } });
     });
 
     it('@min arbitrary', () => {

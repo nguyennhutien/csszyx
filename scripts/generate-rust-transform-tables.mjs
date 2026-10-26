@@ -88,6 +88,7 @@ function readTables() {
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
             fractionSupportedProps: core.stringSet('FRACTION_SUPPORTED_PROPS'),
+            listStyleKeywords: core.stringSet('LIST_STYLE_STANDARD'),
             colorProperties: propertyTypes.objectKeysWhere(
                 'PROPERTY_CATEGORY_MAP',
                 'PropertyCategory.COLOR',
@@ -162,6 +163,7 @@ function renderRust({
     cssWideKeywords,
     cssWideKeywordUtilities,
     fractionSupportedProps,
+    listStyleKeywords,
     colorProperties,
     capabilityColumns,
     capabilityRows,
@@ -317,6 +319,15 @@ pub(crate) fn is_fraction_supported_prop(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(fractionSupportedProps)}
+    )
+}
+
+/// List-style keywords Tailwind serves bare (\`list-disc\`); any other value
+/// is bracketed. Mirrors \`LIST_STYLE_STANDARD\`.
+pub(crate) fn is_list_style_keyword(value: &str) -> bool {
+    matches!(
+        value,
+${renderMatchPatterns(listStyleKeywords)}
     )
 }
 

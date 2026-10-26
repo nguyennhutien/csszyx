@@ -132,10 +132,10 @@ describe.each(PARSERS)('the %s artifact', parser => {
     it('escapes the class it writes, so Svelte reads one attribute with the class', () => {
         const result = run(`<div sz={{ content: 'x" onclick="y{z}' }}></div>`);
         expect(result.code).toBe(
-            '<div class="content-[x&#34; onclick=&#34;y&#123;z&#125;]"></div>',
+            '<div class="content-[x&#34;_onclick=&#34;y&#123;z&#125;]"></div>',
         );
         const { js } = compile(result.code, { generate: 'server' });
-        expect(js.code).toContain('class="content-[x&quot; onclick=&quot;y{z}]"');
+        expect(js.code).toContain('class="content-[x&quot;_onclick=&quot;y{z}]"');
     });
 
     it('places a syntax error in the file', () => {

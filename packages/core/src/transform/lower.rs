@@ -193,25 +193,6 @@ fn with_class_prefix(class_name: String) -> String {
     })
 }
 
-/// A variant added to a class that was already lowered, kept after the
-/// Tailwind prefix: `tw:p-4` under `hover` is `tw:hover:p-4`, never
-/// `hover:tw:p-4`, which Tailwind does not serve.
-#[cfg(feature = "native-engine")]
-pub(crate) fn with_variant(variant: &str, class_name: &str) -> String {
-    CLASS_PREFIX.with(|cell| {
-        let prefix = cell.borrow();
-        match prefix.as_deref().and_then(|prefix| {
-            class_name
-                .strip_prefix(prefix)
-                .and_then(|rest| rest.strip_prefix(':'))
-                .map(|rest| (prefix, rest))
-        }) {
-            Some((prefix, rest)) => format!("{prefix}:{variant}:{rest}"),
-            None => format!("{variant}:{class_name}"),
-        }
-    })
-}
-
 /// [`lower_static_sz_object`] with the project's Tailwind prefix written
 /// before every class.
 #[must_use]
@@ -237,8 +218,28 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
 fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
     // Merged last: the table names classes as they are emitted, prefix
     // included, and the text-size/leading pair is one class by then.
-    let classes = merge_text_size_and_leading(classes);
+    let classes = merge_text_size_and_leading(one_class_each(classes));
     super::merge::apply_active(with_class_prefix_all(classes))
+}
+
+/// Each class one value lowered to, as one class: a space inside a value
+/// becomes `_`, as Tailwind reads it in an arbitrary value. Written raw,
+/// `brightness: 'calc(1 + 2)'` split the attribute into three names that
+/// style nothing, and `display: 'flex hidden'` into two that do. Mirrors
+/// `oneClassEach` in `transform-core.ts`.
+fn one_class_each(classes: Vec<String>) -> Vec<String> {
+    classes.into_iter().map(one_class).collect()
+}
+
+/// A class with whitespace in it, as one class: its runs of whitespace become
+/// `_`. Every lowered class goes through it, and so does the class a
+/// diagnostic names. Mirrors `oneClass`.
+fn one_class(class_name: String) -> String {
+    if class_name.contains(char::is_whitespace) {
+        class_name.split_whitespace().collect::<Vec<_>>().join("_")
+    } else {
+        class_name
+    }
 }
 
 /// [`lower_static_sz_object`] on a pass that collects what a merge would
@@ -259,6 +260,7 @@ fn lower_static_sz_object_recorded(object: &StaticSzObject) -> Vec<String> {
         }
         current = Some(index);
     });
+    let mut classes = one_class_each(classes);
     // A one-class object merges with nothing but is recorded all the same:
     // the group is where its key and offset travel to a dead-class report.
     if classes.is_empty() {
@@ -754,9 +756,11 @@ pub(crate) type MovedValue = (String, String, u32);
 /// IS the class. Mirrors `bareClosedEnumClass` in the TypeScript core, so the
 /// diagnostic names the class both engines emit.
 pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
-    super::generated::tables::closed_enum_affix(key).map_or_else(
-        || value.to_string(),
-        |(prefix, suffix)| format!("{prefix}{value}{suffix}"),
+    one_class(
+        super::generated::tables::closed_enum_affix(key).map_or_else(
+            || value.to_string(),
+            |(prefix, suffix)| format!("{prefix}{value}{suffix}"),
+        ),
     )
 }
 
@@ -1356,7 +1360,11 @@ fn lower_object_into_marked(
         // behind it, so emitting the class would leave the element naming a
         // rule nothing generates. `collect_border_side_styles` reports it.
         if let StaticSzValue::String(value) = &property.value {
-            if is_border_side_style_value(&property.key, value) {
+            // A value in the brackets csszyx writes itself is not read: the
+            // engine reports it (`collect_bracketed_values`).
+            if is_border_side_style_value(&property.key, value)
+                || bracketed_inner(&property.key, value).is_some()
+            {
                 continue;
             }
         }
@@ -1406,6 +1414,10 @@ fn lower_object_into_marked(
                 match property.key.as_str() {
                     "min" | "max" => {
                         lower_breakpoint_variant(nested, prefix, &property.key, classes);
+                        continue;
+                    }
+                    key if key.starts_with('@') => {
+                        lower_container_query_variant(key, nested, prefix, classes);
                         continue;
                     }
                     "supports" => {
@@ -1518,33 +1530,73 @@ fn lower_bracket_param_variant(
     }
 }
 
-/// Lowers a `min`/`max` breakpoint variant. The breakpoint joins its stem with
-/// a dash and is one variant segment: a named breakpoint (`min-md:`) or one
-/// already written in brackets passes through, any other value is a length
-/// and is bracketed (`min-[330px]:`). Without this arm the two stems fell
-/// through to the plain-variant path and came out as `min:330px:…` — three
-/// variants Tailwind does not have, so the rule generated no CSS.
+/// Lowers a `min`/`max` breakpoint variant: the breakpoint joins its stem with
+/// a dash as one variant segment ([`breakpoint_segment`]). Without this arm the
+/// two stems fell through to the plain-variant path and came out as
+/// `min:330px:…` — three variants Tailwind does not have.
 fn lower_breakpoint_variant(
     object: &StaticSzObject,
     prefix: &str,
     kind: &str,
     classes: &mut Vec<String>,
 ) {
-    const NAMED: &[&str] = &["sm", "md", "lg", "xl", "2xl"];
     for property in &object.properties {
         let StaticSzValue::Object(body) = &property.value else {
             continue;
         };
-        let breakpoint = property.key.as_str();
-        let direct = NAMED.contains(&breakpoint)
-            || (breakpoint.starts_with('[') && breakpoint.ends_with(']'));
-        let next_prefix = if direct {
-            format!("{prefix}{kind}-{breakpoint}:")
-        } else {
-            format!("{prefix}{kind}-[{breakpoint}]:")
-        };
-        lower_object_into(body, &next_prefix, classes);
+        let segment = breakpoint_segment(&property.key);
+        lower_object_into(body, &format!("{prefix}{kind}-{segment}:"), classes);
     }
+}
+
+/// A breakpoint after `min-`, `max-`, `@min-` or `@max-`: a name as written, so
+/// a project's own (`tablet`, `sidebar`) is served, and a length bracketed as
+/// on every other key (`640px` → `[640px]`). Mirrors `breakpointSegment`.
+fn breakpoint_segment(breakpoint: &str) -> Cow<'_, str> {
+    if (breakpoint.starts_with('[') && breakpoint.ends_with(']')) || !needs_brackets(breakpoint) {
+        Cow::Borrowed(breakpoint)
+    } else {
+        Cow::Owned(format!("[{breakpoint}]"))
+    }
+}
+
+/// Lowers a container query key (`@md`, `@min`). A query is a variant like
+/// any other, so its object lowers in one pass under it (`@md:p-4`,
+/// `@md:hover:`), a project's own variant name chaining on too; a named
+/// container is the key Tailwind spells, `@md/sidebar`. `@min` and `@max`
+/// take a container size instead (`@min-sidebar`, `@min-[475px]`). Mirrors
+/// `collectContainerQueryVariants`.
+fn lower_container_query_variant(
+    key: &str,
+    object: &StaticSzObject,
+    prefix: &str,
+    classes: &mut Vec<String>,
+) {
+    let query = object_variant_segment(key);
+    if !matches!(query.as_ref(), "@min" | "@max") {
+        lower_object_into(object, &format!("{prefix}{query}:"), classes);
+        return;
+    }
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            lower_single_property(property, &format!("{prefix}{query}:"), classes);
+            continue;
+        };
+        if property_prefix(&property.key).is_some() {
+            lower_single_property(property, &format!("{prefix}{query}:"), classes);
+            continue;
+        }
+        let segment = format!("{query}-{}", breakpoint_segment(&property.key));
+        lower_object_into(nested, &format!("{prefix}{segment}:"), classes);
+    }
+}
+
+/// One property lowered on its own under `prefix`, as a key of its own object.
+fn lower_single_property(property: &StaticSzProperty, prefix: &str, classes: &mut Vec<String>) {
+    let single = StaticSzObject {
+        properties: vec![property.clone()],
+    };
+    lower_object_into(&single, prefix, classes);
 }
 
 /// Lowers the `not` variant: `{ not: { first: {...} } }` → `not-first:…`, with a
@@ -1636,14 +1688,29 @@ fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
 /// variable behind `tablet-(--_sz-tablet)` would hold the object.
 #[cfg(feature = "native-engine")]
 pub(crate) fn is_variant_key(key: &str) -> bool {
-    property_prefix(key).is_none()
-        && (variant_string_prefix(key).is_some()
-            || key.starts_with('@')
-            || matches!(
-                key,
-                "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
-            )
-            || !is_known_sz_key(key))
+    is_unclaimed_key(key) || property_prefix(key).is_none() && chains_as_variant(key)
+}
+
+/// Whether a key is a variant by its name: one the tables know, a compound or
+/// arbitrary one, a container query, or a parametric stem whose members are
+/// parameters.
+#[cfg(feature = "native-engine")]
+fn chains_as_variant(key: &str) -> bool {
+    variant_string_prefix(key).is_some()
+        || key.starts_with('@')
+        || matches!(
+            key,
+            "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+        )
+}
+
+/// Whether no table claims `key`: no property, no sz key csszyx knows. Such a
+/// key holding an object is the project's own variant (`@custom-variant`,
+/// `--breakpoint-*` in `@theme`, which this engine never reads), and is
+/// lowered and collected exactly as a known variant is.
+#[cfg(feature = "native-engine")]
+pub(crate) fn is_unclaimed_key(key: &str) -> bool {
+    property_prefix(key).is_none() && !is_known_sz_key(key)
 }
 
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
@@ -1664,6 +1731,13 @@ pub(crate) fn object_variant_segment(key: &str) -> Cow<'_, str> {
         return Cow::Owned(key.chars().filter(|c| !c.is_whitespace()).collect());
     }
     if key.starts_with('@') {
+        // A named container (`@maxLg/sidebar`) maps its query, not its name.
+        if let Some((query, name)) = key.split_once('/') {
+            if let Some(mapped) = variant_prefix(query) {
+                return Cow::Owned(format!("{mapped}/{name}"));
+            }
+            return Cow::Borrowed(key);
+        }
         return variant_prefix(key).map_or(Cow::Borrowed(key), Cow::Borrowed);
     }
     get_variant_prefix(key)
@@ -1859,7 +1933,9 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
-            StaticSzValue::Number(num) => format!("{}ms", format_abs_number(*num)),
+            // A negative delay starts the animation part-way through: the
+            // sign is CSS, as the TypeScript core keeps it.
+            StaticSzValue::Number(num) => format!("{}ms", format_number_literal(*num)),
             StaticSzValue::String(s) => s.clone(),
             _ => return None,
         };
@@ -1966,12 +2042,16 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
             // mirroring the JavaScript transform it replaced. The boolean-sugar aliases were
             // removed, so these canonical string forms are the only spelling.
+            // Any other value takes the generic spelling below, as the
+            // TypeScript core writes it; the build's dead-class check judges it.
             if key == "textTransform" {
-                return Some(match value.as_str() {
-                    "none" | "normal-case" => format!("{prefix}normal-case"),
-                    "uppercase" | "lowercase" | "capitalize" => format!("{prefix}{value}"),
-                    _ => return None,
-                });
+                match value.as_str() {
+                    "none" | "normal-case" => return Some(format!("{prefix}normal-case")),
+                    "uppercase" | "lowercase" | "capitalize" => {
+                        return Some(format!("{prefix}{value}"))
+                    }
+                    _ => {}
+                }
             }
             if key == "fontStyle" {
                 return Some(match value.as_str() {
@@ -2001,10 +2081,11 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // listStyleType: standard keywords stay bare (list-disc), CSS vars use
             // the paren form, everything else is arbitrary (list-[upper-roman]).
+            // The keywords are `LIST_STYLE_STANDARD`'s, generated.
             if key == "list" || key == "listStyle" {
                 return Some(if value.starts_with("--") {
                     format!("{prefix}list-({value})")
-                } else if matches!(value.as_str(), "none" | "disc" | "decimal") {
+                } else if super::generated::tables::is_list_style_keyword(value) {
                     format!("{prefix}list-{value}")
                 } else {
                     format!("{prefix}list-[{value}]")
@@ -2074,15 +2155,12 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 });
             }
             // scroll-snap direct maps: the sub-axis is dropped (snap-mandatory,
-            // snap-center), except snap-align-none which keeps the axis.
-            if key == "snapAlign" {
-                return match value.as_str() {
-                    "start" => Some(format!("{prefix}snap-start")),
-                    "end" => Some(format!("{prefix}snap-end")),
-                    "center" => Some(format!("{prefix}snap-center")),
-                    "none" => Some(format!("{prefix}snap-align-none")),
-                    _ => None,
-                };
+            // snap-center, which the generic spelling below already writes),
+            // except snap-align-none which keeps the axis. Any other value
+            // takes the generic spelling, as the TypeScript core writes it, for
+            // the build's dead-class check to judge.
+            if key == "snapAlign" && value == "none" {
+                return Some(format!("{prefix}snap-align-none"));
             }
             if key == "snapStrictness" {
                 return match value.as_str() {
@@ -2091,21 +2169,11 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     _ => None,
                 };
             }
-            if key == "snapStop" {
-                return match value.as_str() {
-                    "normal" => Some(format!("{prefix}snap-normal")),
-                    "always" => Some(format!("{prefix}snap-always")),
-                    _ => None,
-                };
+            if key == "snapStop" && matches!(value.as_str(), "normal" | "always") {
+                return Some(format!("{prefix}snap-{value}"));
             }
-            if key == "snapType" {
-                return match value.as_str() {
-                    "none" => Some(format!("{prefix}snap-none")),
-                    "x" => Some(format!("{prefix}snap-x")),
-                    "y" => Some(format!("{prefix}snap-y")),
-                    "both" => Some(format!("{prefix}snap-both")),
-                    _ => None,
-                };
+            if key == "snapType" && matches!(value.as_str(), "none" | "x" | "y" | "both") {
+                return Some(format!("{prefix}snap-{value}"));
             }
             // Named container: { '@container': 'sidebar' } → @container/sidebar.
             if key == "@container" {
@@ -2135,6 +2203,13 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             if key == "fontStretch" {
                 return Some(format!("{prefix}{}", format_font_stretch(value)));
             }
+            // will-change: the four keywords stay bare, anything else names
+            // properties and brackets (`will-change-[opacity]`, which Tailwind
+            // serves where `will-change-opacity` is no class). Mirrors
+            // `formatWillChange` in `transform-core.ts`.
+            if key == "willChange" {
+                return Some(format!("{prefix}{}", format_will_change(value)));
+            }
             // Filter functions take a unit-bearing numeric whose string form is
             // always arbitrary (brightness-[1.25]); scale takes two keywords.
             if matches!(
@@ -2154,6 +2229,12 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 }
                 return Some(if value.starts_with("--") {
                     format!("{prefix}{class_key}-({value})")
+                } else if let Some(unsigned) =
+                    value.strip_prefix('-').filter(|rest| rest.starts_with('('))
+                {
+                    // A signed custom property hoists its sign, as on every
+                    // other key: `-scale-(--v)`, never `scale-[-(--v)]`.
+                    format!("{prefix}-{class_key}-{unsigned}")
                 } else {
                     format!("{prefix}{class_key}-[{value}]")
                 });
@@ -2191,6 +2272,8 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                             | "bottom-right"
                     ) {
                         format!("{prefix}perspective-origin-{value}")
+                    } else if value.starts_with("--") {
+                        format!("{prefix}perspective-origin-({value})")
                     } else {
                         format!(
                             "{prefix}perspective-origin-[{}]",
@@ -2259,7 +2342,9 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 ));
             }
 
-            if value.starts_with("--") && value.contains('(') {
+            // `--spacing(4)` calls a function; `--v,calc(1px)` is a custom
+            // property with a fallback, written `(--v,calc(1px))` below.
+            if is_dashed_function_call(value) {
                 return Some(format!(
                     "{prefix}{class_key}-[{}]",
                     normalize_arbitrary_value(value)
@@ -2423,15 +2508,14 @@ fn build_mask_stop_classes(base: &str, value: Option<&StaticSzValue>) -> Vec<Str
                 } else {
                     colour.to_string()
                 };
+                // Written as a colour object's `op` is; one that is no opacity
+                // leaves the colour alone (`collect_invalid_opacities`).
                 let opacity = object
                     .properties
                     .iter()
                     .find(|prop| prop.key == "op")
-                    .map_or_else(String::new, |prop| match &prop.value {
-                        StaticSzValue::Number(number) => format!("/{}", format_abs_number(*number)),
-                        StaticSzValue::String(text) => format!("/{text}"),
-                        StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
-                    });
+                    .and_then(|prop| format_opacity_value(&prop.value))
+                    .map_or_else(String::new, |op| format!("/{op}"));
                 out.push(format!("{base}-{rendered}{opacity}"));
             }
             out
@@ -2771,12 +2855,12 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
         .map(|prop| &prop.value);
 
     match (op_value, slash_opacity) {
-        (Some(op_value), _) => {
-            let op_str = format_opacity_value(op_value)?;
-            Some(format!(
-                "{prefix}{tw_prefix}-{color_base}/{op_str}{important}"
-            ))
-        }
+        // An `op` that is not an opacity writes the colour alone; the engine
+        // reports it (`collect_invalid_opacities`).
+        (Some(op_value), _) => Some(format_opacity_value(op_value).map_or_else(
+            || format!("{prefix}{tw_prefix}-{color_base}{important}"),
+            |op| format!("{prefix}{tw_prefix}-{color_base}/{op}{important}"),
+        )),
         (None, Some(opacity)) => Some(format!(
             "{prefix}{tw_prefix}-{color_base}/{opacity}{important}"
         )),
@@ -2784,21 +2868,133 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     }
 }
 
+/// The modifier `op` writes, or `None` when it is not an opacity.
+///
+/// Tailwind reads a bracketed modifier as a fraction of one, so `/[33.3]` is
+/// 3,330%: a quarter step is served bare on every Tailwind v4 (`/75.5`), and any
+/// other number from 0 to 100 keeps its percent in the brackets, as a percent
+/// string does (`'78%'`). A custom property is read as the opacity it holds. Mirrors `formatOpacity` in
+/// `transform-core.ts`.
 fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
     match value {
-        // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
-        // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
-        // the removed JavaScript lanes `formatOpacity`.
-        StaticSzValue::Number(op) => {
-            if (op * 2.0).fract() == 0.0 {
-                Some(format_abs_number(*op))
+        StaticSzValue::Number(op) if (0.0..=100.0).contains(op) => {
+            Some(if (op * 4.0).fract() == 0.0 {
+                format_number_literal(*op)
             } else {
-                Some(format!("[{}]", format_abs_number(*op)))
-            }
+                format!("[{}%]", format_number_literal(*op))
+            })
         }
         StaticSzValue::String(op) if op.starts_with("--") => Some(format!("({op})")),
-        StaticSzValue::String(op) => Some(format!("[{op}]")),
+        StaticSzValue::String(op) if is_percent_opacity(op) => Some(format!("[{op}]")),
         _ => None,
+    }
+}
+
+/// Whether `op` is a percent from 0 to 100 written as a string: `'78%'`.
+fn is_percent_opacity(op: &str) -> bool {
+    op.strip_suffix('%')
+        .filter(|digits| is_unsigned_decimal(digits))
+        .and_then(|digits| digits.parse::<f64>().ok())
+        .is_some_and(|percent| percent <= 100.0)
+}
+
+/// Each colour object whose `op` is not an opacity ([`format_opacity_value`]),
+/// with the key, `op` as the author wrote it, and where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_invalid_opacities(object: &StaticSzObject, out: &mut Vec<InvalidOpacity>) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        if property_prefix(&property.key).is_some()
+            && object_string_property(nested, "color").is_some()
+        {
+            for op in nested.properties.iter().filter(|prop| prop.key == "op") {
+                push_invalid_opacity(&property.key, op, out);
+            }
+        } else if mask_slot_members(&property.key).is_some() {
+            collect_invalid_mask_stop_opacities(nested, out);
+        } else {
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_invalid_opacities(object, out);
+            });
+        }
+    }
+}
+
+/// Each mask stop in a mask slot (`from`, `to`, a side's `from` / `to`) whose
+/// `op` is not an opacity, named by the stop's member, as the runtime does.
+#[cfg(feature = "native-engine")]
+fn collect_invalid_mask_stop_opacities(slot: &StaticSzObject, out: &mut Vec<InvalidOpacity>) {
+    for member in &slot.properties {
+        let StaticSzValue::Object(stop) = &member.value else {
+            continue;
+        };
+        if object_string_property(stop, "color").is_some() {
+            for op in stop.properties.iter().filter(|prop| prop.key == "op") {
+                push_invalid_opacity(&member.key, op, out);
+            }
+        } else {
+            collect_invalid_mask_stop_opacities(stop, out);
+        }
+    }
+}
+
+/// An `op` to report: its key, the literal the author wrote, the percent to
+/// write when it reads as a fraction of 1 (none when it is no opacity), and
+/// where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) type InvalidOpacity = (String, String, Option<String>, u32);
+
+/// Record `op` under `key` when it is no opacity, or a number between 0 and 1,
+/// which 0.17 wrote as a fraction of 1 and which is now the percent it is.
+#[cfg(feature = "native-engine")]
+fn push_invalid_opacity(key: &str, op: &StaticSzProperty, out: &mut Vec<InvalidOpacity>) {
+    let percent = match (&op.value, format_opacity_value(&op.value)) {
+        (_, None) => None,
+        (StaticSzValue::Number(number), Some(_)) if *number > 0.0 && *number < 1.0 => {
+            Some(format_number_literal((number * 100.0 * 1e9).round() / 1e9))
+        }
+        (_, Some(_)) => return,
+    };
+    out.push((
+        key.to_string(),
+        literal_of(&op.value),
+        percent,
+        op.span.start,
+    ));
+}
+
+/// A static value as JS source: a string quoted, a number as written.
+#[cfg(feature = "native-engine")]
+fn literal_of(value: &StaticSzValue) -> String {
+    match value {
+        StaticSzValue::String(text) => format!("'{text}'"),
+        StaticSzValue::Number(number) => format_number_literal(*number),
+        StaticSzValue::Boolean(flag) => flag.to_string(),
+        StaticSzValue::Object(_) => "{…}".to_owned(),
+    }
+}
+
+/// Whether `value` calls a dashed function (`--spacing(4)`): the name runs
+/// straight into its `(`. Mirrors `isArbitraryFunctionValue`.
+fn is_dashed_function_call(value: &str) -> bool {
+    value.strip_prefix("--").is_some_and(|rest| {
+        let name = rest.len()
+            - rest
+                .trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                .len();
+        name > 0 && rest[name..].starts_with('(')
+    })
+}
+
+fn format_will_change(value: &str) -> String {
+    if matches!(value, "auto" | "scroll" | "contents" | "transform") {
+        format!("will-change-{value}")
+    } else if value.starts_with("--") {
+        format!("will-change-({value})")
+    } else {
+        format!("will-change-[{}]", normalize_arbitrary_value(value))
     }
 }
 
@@ -2806,6 +3002,11 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
     let value = value.trim();
     if value == "none" {
         return format!("{prefix}bg-none");
+    }
+    // A CSS-wide keyword is the property's value, never a URL: the `image:`
+    // hint sets `background-image` to it. Mirrors `formatBackgroundImage`.
+    if super::generated::tables::is_css_wide_keyword(value) {
+        return format!("{prefix}bg-[image:{value}]");
     }
     if let Some(typed) = typed_variable_value("bgImg", value) {
         return format!("{prefix}bg-{typed}");
@@ -3001,10 +3202,6 @@ fn is_bare_fraction(value: &str) -> bool {
 }
 
 fn needs_brackets(value: &str) -> bool {
-    if value.starts_with('[') && value.ends_with(']') {
-        return false;
-    }
-
     if value.starts_with('#') || contains_css_function_call(value) || value.contains(' ') {
         return true;
     }
@@ -3118,15 +3315,71 @@ fn is_tailwind_build_function(value: &str) -> bool {
 }
 
 pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
-    let stripped = value
-        .strip_prefix('[')
-        .and_then(|inner| inner.strip_suffix(']'))
-        .unwrap_or(value);
-    stripped.split_whitespace().collect::<Vec<_>>().join("_")
+    value.split_whitespace().collect::<Vec<_>>().join("_")
+}
+
+/// The value inside the brackets `value` starts and ends with, its sign kept
+/// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
+/// `1px!`), or `None` when it is not wrapped. Grid line names at both ends
+/// (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`, where
+/// a value is never read so. Mirrors `bracketWrappedInner` in
+/// `transform-core.ts`.
+pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
+    let (body, bang) = value
+        .strip_suffix('!')
+        .map_or((value, ""), |unmarked| (unmarked, "!"));
+    let (sign, rest) = body
+        .strip_prefix('-')
+        .map_or(("", body), |unsigned| ("-", unsigned));
+    let inner = rest.strip_prefix('[')?.strip_suffix(']')?;
+    Some(format!("{sign}{inner}{bang}"))
+}
+
+/// [`bracket_wrapped_inner`] for a key's value. A custom property's value is a
+/// declaration value, where `[a]` is a grid line name, so it never is wrapped.
+fn bracketed_inner(key: &str, value: &str) -> Option<String> {
+    if key.starts_with("--") {
+        return None;
+    }
+    bracket_wrapped_inner(value)
+}
+
+/// Each string value in the brackets csszyx writes itself
+/// ([`bracket_wrapped_inner`]), with its key, the value, what to write, and
+/// where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_bracketed_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if let Some(inner) = bracketed_inner(&property.key, value) {
+                    out.push((
+                        property.key.clone(),
+                        value.clone(),
+                        inner,
+                        property.span.start,
+                    ));
+                }
+            }
+            StaticSzValue::Object(nested)
+                if property.key != "css" && !is_color_object(&property.key, nested) =>
+            {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_bracketed_values(object, out);
+                });
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "native-engine")]
+    use super::collect_bracketed_values;
     #[cfg(feature = "native-engine")]
     use super::collect_color_slash_opacities;
     #[cfg(feature = "native-engine")]
@@ -3134,10 +3387,13 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
     #[cfg(feature = "native-engine")]
+    use super::collect_invalid_opacities;
+    #[cfg(feature = "native-engine")]
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
     use super::ClassPrefixScope;
+    use super::{breakpoint_segment, format_static_class, is_dashed_function_call};
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -3198,6 +3454,237 @@ mod tests {
         );
     }
 
+    /// A value wrapped whole in one pair of brackets is named with what to
+    /// write, under a variant too; brackets that do not wrap all of it, a
+    /// colour object and `css` are not read.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_value_in_brackets_csszyx_writes_is_named_with_what_to_write() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let object = StaticSzObject {
+            properties: vec![
+                property("w", text("[100px]")),
+                property("top", text("-[1px]")),
+                property("gridCols", text("[a] 1fr")),
+                property("m", text("[a")),
+                property("p", text("4")),
+                property("--cols", text("[a]")),
+                property("bg", object(vec![property("color", text("[#fff]"))])),
+                property("css", object(vec![property("width", text("[1px]"))])),
+                property("hover", object(vec![property("h", text("[2px]"))])),
+                property("gridRows", text("[[a]_1fr]")),
+                property("mt", text("-[3px]!")),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_bracketed_values(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, value, inner, _)| (key, value, inner))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("w".to_string(), "[100px]".to_string(), "100px".to_string()),
+                ("top".to_string(), "-[1px]".to_string(), "-1px".to_string()),
+                ("h".to_string(), "[2px]".to_string(), "2px".to_string()),
+                (
+                    "gridRows".to_string(),
+                    "[[a]_1fr]".to_string(),
+                    "[a]_1fr".to_string()
+                ),
+                ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
+            ]
+        );
+    }
+
+    /// Every `op` that is not an opacity is named as the author wrote it, under
+    /// a variant too; a percent string and a custom property are opacities.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn an_op_that_is_no_opacity_is_named_as_written() {
+        let colour = |op: StaticSzValue| {
+            object(vec![
+                property("color", StaticSzValue::String("red-500".to_string())),
+                property("op", op),
+            ])
+        };
+        let object = StaticSzObject {
+            properties: vec![
+                property("bg", colour(StaticSzValue::Number(150.0))),
+                property(
+                    "borderColor",
+                    colour(StaticSzValue::String("20".to_string())),
+                ),
+                property("outlineColor", colour(StaticSzValue::Boolean(true))),
+                property("ringColor", colour(object(vec![]))),
+                property("fill", colour(StaticSzValue::String("78%".to_string()))),
+                property("stroke", colour(StaticSzValue::String("--o".to_string()))),
+                property("accent", colour(StaticSzValue::Number(0.05))),
+                property(
+                    "hover",
+                    object(vec![property("bg", colour(StaticSzValue::Number(-5.0)))]),
+                ),
+                // 0 and 1 are opacities as written: only what lies between is
+                // read as the fraction 0.17 took it for.
+                property("caret", colour(StaticSzValue::Number(0.0))),
+                property("decorationColor", colour(StaticSzValue::Number(1.0))),
+                // A variant holding `color` and `op` is no colour object.
+                property("focus", colour(StaticSzValue::String("x".to_string()))),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_invalid_opacities(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, op, percent, _)| (key, op, percent))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("bg".to_string(), "150".to_string(), None),
+                ("borderColor".to_string(), "'20'".to_string(), None),
+                ("outlineColor".to_string(), "true".to_string(), None),
+                ("ringColor".to_string(), "{…}".to_string(), None),
+                (
+                    "accent".to_string(),
+                    "0.05".to_string(),
+                    Some("5".to_string())
+                ),
+                ("bg".to_string(), "-5".to_string(), None),
+            ]
+        );
+    }
+
+    /// A mask stop's `op` is read as a colour object's is, and one that is no
+    /// opacity is named by the stop's member, at a side's stop too.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_mask_stop_op_that_is_no_opacity_is_named_by_its_member() {
+        let stop = |op: StaticSzValue| {
+            object(vec![
+                property("color", StaticSzValue::String("red-500".to_string())),
+                property("op", op),
+            ])
+        };
+        let object = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![
+                    property("angle", StaticSzValue::Number(45.0)),
+                    property("from", stop(StaticSzValue::Number(150.0))),
+                    property("to", stop(StaticSzValue::Number(50.0))),
+                    property(
+                        "top",
+                        object(vec![property("from", stop(StaticSzValue::Boolean(true)))]),
+                    ),
+                ]),
+            )],
+        };
+        let mut found = Vec::new();
+        collect_invalid_opacities(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, op, percent, _)| (key, op, percent))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("from".to_string(), "150".to_string(), None),
+                ("from".to_string(), "true".to_string(), None),
+            ]
+        );
+    }
+
+    /// A breakpoint is bracketed unless it is a name or already wrapped at both
+    /// ends; a bracket at one end only wraps nothing.
+    #[test]
+    fn a_breakpoint_is_bracketed_unless_wrapped_at_both_ends() {
+        assert_eq!(breakpoint_segment("tablet"), "tablet");
+        assert_eq!(breakpoint_segment("[640px]"), "[640px]");
+        assert_eq!(breakpoint_segment("640px"), "[640px]");
+        assert_eq!(breakpoint_segment("[a b"), "[[a b]");
+    }
+
+    /// `snapAlign` keeps the direct classes Tailwind serves for an edge.
+    #[test]
+    fn snap_align_writes_the_direct_edge_classes() {
+        for edge in ["start", "end", "center"] {
+            assert_eq!(
+                format_static_class("snapAlign", &StaticSzValue::String(edge.to_string()), ""),
+                Some(format!("snap-{edge}"))
+            );
+        }
+    }
+
+    /// A dashed function call names a function: `--` with no name is not one.
+    #[test]
+    fn a_dashed_function_call_needs_a_name() {
+        assert!(is_dashed_function_call("--spacing(4)"));
+        assert!(!is_dashed_function_call("--(4)"));
+        assert!(!is_dashed_function_call("--spacing"));
+    }
+
+    /// A container query's members, as the spec writes them: a property stays
+    /// under the query, `@min` takes a breakpoint, and any other name is a
+    /// variant that chains on, a project's own too. A named container is the
+    /// key Tailwind spells, `@md/sidebar`.
+    #[test]
+    fn lowers_container_query_members() {
+        let p = |n: f64| object(vec![property("p", StaticSzValue::Number(n))]);
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property(
+                    "@md",
+                    object(vec![
+                        property("p", StaticSzValue::Number(1.0)),
+                        property("display", StaticSzValue::String("flex".into())),
+                        property("sidebar", p(2.0)),
+                        property("hover", p(3.0)),
+                        property("@maxLg", p(4.0)),
+                    ]),
+                ),
+                property("@md/sidebar", p(8.0)),
+                property("@maxLg/sidebar", p(10.0)),
+                property("@unknown/sidebar", p(11.0)),
+                property(
+                    "@min",
+                    object(vec![
+                        property("sidebar", p(5.0)),
+                        property("475px", p(6.0)),
+                        property("[30rem]", p(7.0)),
+                        property("p", StaticSzValue::Number(9.0)),
+                        property(
+                            "bg",
+                            object(vec![
+                                property("color", StaticSzValue::String("red-500".into())),
+                                property("op", StaticSzValue::Number(50.0)),
+                            ]),
+                        ),
+                    ]),
+                ),
+            ],
+        });
+        assert_eq!(
+            classes,
+            [
+                "@md:p-1",
+                "@md:flex",
+                "@md:sidebar:p-2",
+                "@md:hover:p-3",
+                "@md:@max-lg:p-4",
+                "@md/sidebar:p-8",
+                "@max-lg/sidebar:p-10",
+                "@unknown/sidebar:p-11",
+                "@min-sidebar:p-5",
+                "@min-[475px]:p-6",
+                "@min-[30rem]:p-7",
+                "@min:p-9",
+                "@min:bg-red-500/50",
+            ]
+        );
+    }
+
     /// A CSS-wide keyword takes the bracket only on a key the table marks:
     /// `cursor` is marked, `bg` is not, so `bg-revert` is left as written for
     /// the build to judge.
@@ -3210,6 +3697,42 @@ mod tests {
             ],
         });
         assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// A CSS-wide keyword on `bgImg` is the property's value, never a URL.
+    #[test]
+    fn a_css_wide_keyword_on_bg_img_takes_the_image_hint() {
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![property(
+                "bgImg",
+                StaticSzValue::String("inherit".to_string()),
+            )],
+        });
+        assert_eq!(classes, ["bg-[image:inherit]"]);
+    }
+
+    /// A custom property is written in Tailwind's `(…)` form on the keys the
+    /// runtime spells the same way; a `willChange` property name brackets.
+    #[test]
+    fn a_custom_property_takes_the_parenthesised_form() {
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property(
+                    "perspectiveOrigin",
+                    StaticSzValue::String("--o".to_string()),
+                ),
+                property("willChange", StaticSzValue::String("--w".to_string())),
+                property("willChange", StaticSzValue::String("opacity".to_string())),
+            ],
+        });
+        assert_eq!(
+            classes,
+            [
+                "perspective-origin-(--o)",
+                "will-change-(--w)",
+                "will-change-[opacity]"
+            ]
+        );
     }
 
     /// Only a key written wholly in brackets is an arbitrary variant that
@@ -4099,10 +4622,8 @@ mod tests {
     #[test]
     fn lowers_min_max_breakpoint_variants() {
         // Each value shape exercises one branch of the bracket decision: a
-        // named breakpoint and a pre-bracketed one pass through, a length is
-        // bracketed, and a non-object value is skipped. The mutants that
-        // survived without this test were the empty body, and each half of
-        // the `named || bracketed` test flipped.
+        // name and a pre-bracketed value pass through, a length is bracketed
+        // as on every key, and a non-object value is skipped.
         let object = StaticSzObject {
             properties: vec![
                 property(
@@ -4120,9 +4641,9 @@ mod tests {
                             "[40rem]",
                             object(vec![property("p", StaticSzValue::Number(3.0))]),
                         ),
-                        // Only one bracket is not "already bracketed": the
-                        // key is a length with a stray character and is
-                        // wrapped like any other length.
+                        // Only one bracket is not "already bracketed", and
+                        // no length either: written as it is, for the build's
+                        // dead-class check to report.
                         property(
                             "[40rem",
                             object(vec![property("p", StaticSzValue::Number(5.0))]),
@@ -4159,7 +4680,7 @@ mod tests {
                 "min-[330px]:p-1",
                 "min-md:p-2",
                 "min-[40rem]:p-3",
-                "min-[[40rem]:p-5",
+                "min-[40rem:p-5",
                 "max-[900px]:hidden",
                 "hover:min-lg:p-4",
             ]
@@ -4468,11 +4989,20 @@ mod tests {
                 "font-(family-name:--font)",
                 "font-(--weight)",
                 "text-(length:--size)",
+                // Outside the key's own keywords, the generic spelling: a
+                // class with no CSS, which the build's dead-class check names.
+                "text-invalid",
                 // Not a line keyword, so a `decoration-*` value, as in the
                 // TypeScript core; the build reports it as a class with no CSS.
                 "decoration-invalid",
+                "snap-invalid",
+                "snap-invalid",
+                "snap-invalid",
                 "diagonal-fractions",
                 "stacked-fractions",
+                // `op: true` is no opacity: the colour alone, and the engine
+                // reports `opacity-value`.
+                "bg-red-500",
             ]
         );
     }
@@ -4671,7 +5201,7 @@ mod tests {
         };
         assert_eq!(
             build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(rich_stop))),
-            ["mask-from-25", "mask-from-(color:--brand)/40%"]
+            ["mask-from-25", "mask-from-(color:--brand)/[40%]"]
         );
 
         for at in [
@@ -4898,7 +5428,7 @@ mod tests {
         );
         assert_eq!(
             color_op("bg", "black", Some(StaticSzValue::Number(0.05))),
-            ["bg-black/[0.05]"]
+            ["bg-black/[0.05%]"]
         );
         assert_eq!(
             color_op(

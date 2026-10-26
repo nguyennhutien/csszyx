@@ -119,6 +119,12 @@ describe('szReport', () => {
         expect(DIAGNOSTICS.length).toBeGreaterThan(60);
         for (const [diagnostic, spec] of DIAGNOSTICS) {
             for (const args of argSets(spec) as Array<Record<string, ArgValue>>) {
+                // A form only the build reports has no words in the browser
+                // module; that it has none is checked below.
+                if (spec.buildForms?.includes(args.form as string)) {
+                    expect(JSON.stringify(diagnostic), spec.id).not.toContain(`"${args.form}":`);
+                    continue;
+                }
                 warn.mockClear();
                 error.mockClear();
                 szReport({ diagnostic, args });

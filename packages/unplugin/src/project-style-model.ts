@@ -43,6 +43,7 @@ import {
     type TailwindLoader,
 } from '@csszyx/tailwind-oracle';
 import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
+import { inertUnderEveryRoot } from './inert-keyword.js';
 import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { sortStrings } from './sort.js';
@@ -112,6 +113,15 @@ export interface ProjectStyleModel {
      * @returns The subset that styles nothing, in the given order.
      */
     unserved(classes: readonly string[]): string[];
+    /**
+     * Which of these served classes carry a CSS-wide keyword that no property
+     * they set takes, by every root that serves them
+     * ({@link inertUnderEveryRoot}).
+     *
+     * @param classes - Served class names, as emitted.
+     * @returns The subset that styles nothing, in the given order.
+     */
+    inert(classes: readonly string[]): string[];
     /**
      * Merge signature agreed by every compiled root.
      *
@@ -852,6 +862,12 @@ export async function openProjectStyleModel(
                 if (compiled.length === 0) return [];
                 const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
                 return classes.filter(token => perEntry.every(dead => dead.has(token)));
+            },
+            inert(classes) {
+                return inertUnderEveryRoot(
+                    classes,
+                    compiled.map(entry => entry.cssFor(classes)),
+                );
             },
             candidates() {
                 // Every root's sources, once each: two roots that scan one tree

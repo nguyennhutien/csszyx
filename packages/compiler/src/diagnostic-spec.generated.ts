@@ -43,6 +43,8 @@ export interface SzDiagnosticSpec {
     readonly position: 'site' | 'file' | 'none';
     readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
+    /** Forms only the build or `csszyx check` reports; no browser bundle carries their words. */
+    readonly buildForms?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
@@ -1094,6 +1096,74 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "bracketed-value",
+        "summary": "A value wrapped in the brackets csszyx writes itself.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "value": {
+                "type": "string"
+            },
+            "inner": {
+                "type": "string"
+            }
+        },
+        "text": "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+        "help": "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."
+    },
+    {
+        "id": "opacity-value",
+        "summary": "An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "position": "site",
+        "forms": [
+            "range",
+            "fraction"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "range",
+                    "fraction"
+                ]
+            },
+            "key": {
+                "type": "string"
+            },
+            "op": {
+                "type": "string"
+            },
+            "percent": {
+                "type": "string",
+                "optional": true
+            }
+        },
+        "text": {
+            "range": "`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.",
+            "fraction": "`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1."
+        },
+        "help": {
+            "range": "write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.",
+            "fraction": "write `op: {percent}` for {percent}%."
+        }
+    },
+    {
         "id": "unsigned-value",
         "summary": "A negative value on a key Tailwind serves no negative utility for.",
         "surfaces": {
@@ -1111,6 +1181,28 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             },
             "utility": {
+                "type": "string"
+            }
+        }
+    },
+    {
+        "id": "inert-keyword",
+        "summary": "A CSS-wide keyword on a served class that no property it sets takes.",
+        "surfaces": {
+            "check": {
+                "group": "dead-class"
+            },
+            "runtime": {
+                "production": false,
+                "host": "node"
+            }
+        },
+        "position": "file",
+        "args": {
+            "className": {
+                "type": "string"
+            },
+            "keyword": {
                 "type": "string"
             }
         }
@@ -1240,7 +1332,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "forms": [
             "aria",
             "attribute-or-aria",
-            "unknown"
+            "unknown",
+            "container-name"
+        ],
+        "buildForms": [
+            "container-name"
         ],
         "args": {
             "form": {
@@ -1248,7 +1344,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "enum",
                     "aria",
                     "attribute-or-aria",
-                    "unknown"
+                    "unknown",
+                    "container-name"
                 ]
             },
             "variant": {
@@ -1256,6 +1353,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "className": {
                 "type": "string"
+            },
+            "query": {
+                "type": "string",
+                "optional": true
             }
         },
         "gaps": [
@@ -2203,7 +2304,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "forms": [
             "transform",
             "csszyx-turbopack",
-            "csszyx-turbopack-option"
+            "csszyx-turbopack-option",
+            "class-name-to-sz-object",
+            "class-name-to-sz-object-option"
         ],
         "args": {
             "form": {
@@ -2211,7 +2314,9 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "enum",
                     "transform",
                     "csszyx-turbopack",
-                    "csszyx-turbopack-option"
+                    "csszyx-turbopack-option",
+                    "class-name-to-sz-object",
+                    "class-name-to-sz-object-option"
                 ]
             },
             "options": {

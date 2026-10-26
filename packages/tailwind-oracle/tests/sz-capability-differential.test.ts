@@ -35,6 +35,7 @@ import {
 } from '../../compiler/src/sz-capabilities.generated.js';
 import { NEGATIVE_ALLOWED, PROPERTY_MAP } from '../../compiler/src/transform-core.js';
 import { ENGINES } from '../../compiler/tests/engine-parity-harness.js';
+import { inertKeywordOf } from '../../unplugin/src/inert-keyword.js';
 import { candidateDeclarationsFromCss } from '../../unplugin/src/merge-signature.js';
 import { createEmittedClassOracle } from '../src/index.js';
 import { type CapabilityEngine, lowerEveryCase, SHAPES, tokensOf } from './sz-capability-cases.js';
@@ -53,12 +54,24 @@ const BASELINE_FORMAT = 2;
  *   build's dead-class check reports it, so it is not silent, but csszyx wrote
  *   it and the baseline keeps it from growing.
  * - `inert`: a CSS-wide keyword Tailwind serves on a class that sets no
- *   property to it (`blur-[inherit]` writes `blur(inherit)`), with no
- *   diagnostic: the oracle cannot see it, so nothing reports it.
+ *   property to it (`ring-inherit` writes `--tw-ring-color: inherit`); the
+ *   build's `inert-keyword` check reports it, so it is not silent, and the
+ *   baseline keeps it from growing.
+ * - `inert-silent`: the same outcome where that check cannot see the keyword
+ *   (`bg-[url(inherit)]` hid it in a URL), so nothing reports it.
  * - `silent`, `silent-runtime`, `silent-engine`: nothing written, and no
  *   lowering diagnostic on either side, the runtime, or the engine.
+ * - `split`: one value written as several classes, as a space in it did.
  */
-type Failure = 'dead' | 'diverge' | 'inert' | 'silent' | 'silent-engine' | 'silent-runtime';
+type Failure =
+    | 'dead'
+    | 'diverge'
+    | 'inert'
+    | 'inert-silent'
+    | 'silent'
+    | 'silent-engine'
+    | 'silent-runtime'
+    | 'split';
 
 /**
  * Which lanes kept quiet about a value they wrote nothing for.
@@ -109,10 +122,15 @@ describe('every sz key against every value shape', async () => {
         const tokens = tokensOf(c.runtime.className);
         const engineReported = outputs.every(output => output.reported);
         let failure: Failure | null = null;
-        if (tokens.length === 0) failure = silence(c.runtime.reported, engineReported);
+        if (c.shape === 'space' && tokens.length > 1) failure = 'split';
+        else if (tokens.length === 0) failure = silence(c.runtime.reported, engineReported);
         else if (tokens.some(token => dead.has(token))) failure = 'dead';
         else if (c.shape === 'css-wide' && !tokens.every(keywordReachesAProperty)) {
-            failure = engineReported ? null : 'inert';
+            // The build reports it when its reader sees the keyword in a class.
+            const reported = tokens.some(
+                token => inertKeywordOf(token, css.get(token) ?? null) !== null,
+            );
+            if (!engineReported) failure = reported ? 'inert' : 'inert-silent';
         }
         if (failure !== null) failures[c.id] = failure;
     }

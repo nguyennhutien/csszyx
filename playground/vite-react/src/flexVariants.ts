@@ -7,20 +7,20 @@
 // unscoped scan would pick them up and mask whether szv safelisting works.
 import { szv } from '@csszyx/runtime';
 
-// Arbitrary [Npx] + a couple of large off-scale enum numbers, to mirror the
+// Arbitrary Npx + a couple of large off-scale enum numbers, to mirror the
 // inline standalone fixture but sourced from a `.ts` module.
 export const cardSz = szv({
     variants: {
         pad: {
-            tight: { p: '[18px]' },
-            loose: { p: '[64px]' },
+            tight: { p: '18px' },
+            loose: { p: '64px' },
         },
         size: {
-            a: { w: '[220px]', h: '[140px]' },
+            a: { w: '220px', h: '140px' },
             b: { w: 96, h: 72 },
         },
         radius: {
-            big: { rounded: '[28px]' },
+            big: { rounded: '28px' },
         },
     },
 });
@@ -28,7 +28,7 @@ export const cardSz = szv({
 export const stackSz = szv({
     variants: {
         gap: {
-            xl: { gap: '[44px]' },
+            xl: { gap: '44px' },
             num: { gap: 50 },
         },
     },

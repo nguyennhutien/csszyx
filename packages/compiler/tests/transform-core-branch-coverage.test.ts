@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     __resetSzWarnDedupForTests,
     formatSzWarnLocation,
+    getVariantPrefix,
     type SzObject,
     setSzWarnLocation,
     transform,
@@ -46,14 +47,14 @@ describe('formatOpacity via bg color object', () => {
     it('emits a bare half-step decimal opacity', () => {
         expect(cls({ bg: { color: 'red-500', op: 0.5 } })).toBe('bg-red-500/0.5');
     });
-    it('wraps a fraction-scale decimal opacity in brackets', () => {
-        expect(cls({ bg: { color: 'red-500', op: 0.05 } })).toBe('bg-red-500/[0.05]');
+    it('keeps the percent of an off-step decimal opacity in its brackets', () => {
+        expect(cls({ bg: { color: 'red-500', op: 0.05 } })).toBe('bg-red-500/[0.05%]');
     });
     it('wraps a CSS-variable opacity in parentheses', () => {
         expect(cls({ bg: { color: 'red-500', op: '--o' } })).toBe('bg-red-500/(--o)');
     });
-    it('wraps an arbitrary string opacity in brackets', () => {
-        expect(cls({ bg: { color: 'red-500', op: 'var(--o)' } })).toBe('bg-red-500/[var(--o)]');
+    it('writes the colour alone for a string opacity that is not a percent', () => {
+        expect(cls({ bg: { color: 'red-500', op: 'var(--o)' } })).toBe('bg-red-500');
     });
     it('lowers a color object with no opacity', () => {
         expect(cls({ bg: { color: 'red-500' } })).toBe('bg-red-500');
@@ -254,9 +255,13 @@ describe('min/max breakpoints and @ container queries', () => {
     });
     it('@ query: direct property, named container, bracket and auto-bracket keys', () => {
         expect(cls({ '@md': { p: 4 } })).toBe('@md:p-4');
-        expect(cls({ '@md': { sidebar: { p: 4 } } })).toBe('@md/sidebar:p-4');
+        expect(cls({ '@md/sidebar': { p: 4 } })).toBe('@md/sidebar:p-4');
+        expect(cls({ '@md': { sidebar: { p: 4 } } })).toBe('@md:sidebar:p-4');
         expect(cls({ '@md': { sidebar: {} } })).toBe('');
-        expect(cls({ '@md': { '[475px]': { p: 4 } } })).toBe('@md-[475px]:p-4');
+        expect(cls({ '@min': { p: 4 } })).toBe('@min:p-4');
+        expect(cls({ '@min': { x: null } })).toBe('');
+        // An arbitrary variant chains on; `@md-[475px]` is served by no Tailwind.
+        expect(cls({ '@md': { '[475px]': { p: 4 } } })).toBe('@md:[475px]:p-4');
         expect(cls({ '@md': { '[475px]': {} } })).toBe('');
         expect(cls({ '@min': { '475px': { p: 4 } } })).toBe('@min-[475px]:p-4');
         expect(cls({ '@min': { '475px': {} } })).toBe('');
@@ -419,13 +424,13 @@ describe('string property handler chain', () => {
         expect(cls({ wrap: 'normal' })).toBe('wrap-normal');
         expect(cls({ wrap: 'balance' })).toBe('wrap-balance');
         expect(cls({ textOverflow: 'ellipsis' })).toBe('text-ellipsis');
-        expect(cls({ textOverflow: 'fade' })).toBe('text-[fade]');
+        expect(cls({ textOverflow: 'fade' })).toBe('text-fade');
     });
     it('lineClamp none / var / integer / decimal', () => {
         expect(cls({ lineClamp: 'none' })).toBe('line-clamp-none');
         expect(cls({ lineClamp: '--v' })).toBe('line-clamp-(--v)');
         expect(cls({ lineClamp: '3' })).toBe('line-clamp-3');
-        expect(cls({ lineClamp: '2.5' })).toBe('line-clamp-[2.5]');
+        expect(cls({ lineClamp: '2.5' })).toBe('line-clamp-2.5');
     });
     it('list / listPos / divideStyle / decoration* families', () => {
         expect(cls({ list: '--l' })).toBe('list-(--l)');
@@ -661,5 +666,37 @@ describe('formatSzWarnLocation', () => {
     });
     it('keeps the raw file when no root is given', () => {
         expect(formatSzWarnLocation('/a/b.tsx', 4, undefined)).toBe('/a/b.tsx:4');
+    });
+});
+
+describe('getVariantPrefix memo', () => {
+    // Keys are author text, so the memo starts over past 512 keys; every
+    // answer after that is the same one the table and the regex give.
+    it('starts over past its bound and answers the same after', () => {
+        const clear = vi.spyOn(Map.prototype, 'clear');
+        const keys = Array.from({ length: 600 }, (_, index) => `myState${index}`);
+        try {
+            expect(keys.map(getVariantPrefix)).toEqual(keys.map((_, index) => `my-state${index}`));
+            // 600 new keys cross the 512 bound once, whatever earlier tests left.
+            expect(clear.mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect(clear.mock.calls.length).toBeLessThanOrEqual(2);
+        } finally {
+            clear.mockRestore();
+        }
+        expect(getVariantPrefix('myState0')).toBe('my-state0');
+        expect(getVariantPrefix('focusVisible')).toBe('focus-visible');
+    });
+});
+
+describe('transform with a mangle map', () => {
+    // A class the map names is written as its mangled name; any other keeps
+    // its own, under a variant too.
+    it('maps the classes it names and keeps the rest', () => {
+        expect(
+            transform(
+                { p: 4, m: 2, hover: { p: 4 } },
+                { mangleMap: { 'p-4': 'a', 'hover:p-4': 'b' } },
+            ).className,
+        ).toBe('a m-2 b');
     });
 });

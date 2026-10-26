@@ -81,3 +81,44 @@ describe.each(ENGINES)('%s lane', (_lane, engine) => {
         ).toBeGreaterThan(0);
     });
 });
+
+describe.each(ENGINES)('%s lane, a block only the runtime can read', (_lane, engine) => {
+    // A conditional spread makes the block a runtime fallback; the classes the
+    // spread can add still reach the safelist under a known variant, and must
+    // under the project's own (vui, 0.17.2: `desktop-sm:mt-19` had no CSS).
+    const source = `const flag = Number(globalThis.location?.search?.length) > 3;
+export const A = () => <>
+<div sz={{ md: { mb: 15, ...(flag ? {} : { mt: 15 }) } }} />
+<div sz={{ 'desktop-sm': { mb: 19, ...(flag ? {} : { mt: 19 }) } }} />
+<div sz={{ tablet: { hover: { mb: 21, ...(flag ? {} : { mt: 21 }) } } }} />
+</>;`;
+
+    // The groups the build reads to merge and to place a dead class name the
+    // classes the file emits: a spread's group under `hover` once named a bare
+    // `mt-13` beside `hover:mb-13`.
+    it('names in its merge groups only classes the file emits', () => {
+        const result = engine(source, '/p/src/A.tsx') as {
+            classes: Iterable<string>;
+            mergeGroups?: ReadonlyArray<{ classes: string[] }>;
+            singleClassGroups?: ReadonlyArray<{ classes: string[] }>;
+        };
+        const emitted = new Set(result.classes);
+        const named = [...(result.mergeGroups ?? []), ...(result.singleClassGroups ?? [])].flatMap(
+            group => group.classes,
+        );
+        expect(named.filter(className => !emitted.has(className))).toEqual([]);
+        expect(named).toContain('tablet:hover:mt-21');
+    });
+
+    it('collects the spread classes under a custom variant as under a known one', () => {
+        const classes = [...(engine(source, '/p/src/A.tsx').classes as Iterable<string>)].sort();
+        expect(classes).toEqual([
+            'desktop-sm:mb-19',
+            'desktop-sm:mt-19',
+            'md:mb-15',
+            'md:mt-15',
+            'tablet:hover:mb-21',
+            'tablet:hover:mt-21',
+        ]);
+    });
+});

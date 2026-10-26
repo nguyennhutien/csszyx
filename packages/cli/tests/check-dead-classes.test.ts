@@ -541,3 +541,75 @@ describe('csszyx check — a variant the project does not serve', () => {
         expect(process.exitCode).not.toBe(1);
     });
 });
+
+describe('csszyx check — a CSS-wide keyword no property takes', () => {
+    /**
+     * Run the command in JSON mode over a project.
+     *
+     * @param cwd - Project root.
+     * @param rule - The `--rule` ids, when the run narrows to some.
+     * @returns The findings.
+     */
+    async function findingsFor(
+        cwd: string,
+        rule?: string[],
+    ): Promise<Array<{ rule: string; kind: string; file?: string; message: string }>> {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await check({ cwd, json: true, rule });
+        return JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+    }
+
+    // `ring-inherit` is served as `--tw-ring-color: inherit`; `cursor-[inherit]`
+    // sets `cursor: inherit`.
+    const KEYWORDS =
+        "export const A = () => <div sz={{ ring: 'inherit', cursor: 'inherit', break: 'bogus' }} />;";
+
+    it('reports the class once, as inert-keyword under the dead-class pass', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': KEYWORDS,
+        });
+        const findings = (await findingsFor(cwd)).filter(entry => entry.rule === 'dead-class');
+        expect(findings).toEqual([
+            {
+                rule: 'dead-class',
+                kind: 'inert-keyword',
+                file: 'src/A.tsx',
+                level: 'error',
+                message:
+                    "`ring-inherit` sets no property to `inherit`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+                help: "set the CSS property to `'inherit'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
+                note: 'the class is still emitted, and it styles nothing.',
+                args: { className: 'ring-inherit', keyword: 'inherit' },
+                url: 'https://csszyx.com/e/inert-keyword',
+            },
+            expect.objectContaining({ kind: 'dead-class', args: { className: 'break-bogus' } }),
+        ]);
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('runs the pass for --rule inert-keyword alone', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': KEYWORDS,
+        });
+        const findings = await findingsFor(cwd, ['inert-keyword']);
+        expect(findings.filter(entry => entry.rule === 'dead-class')).toEqual([
+            expect.objectContaining({ kind: 'inert-keyword', file: 'src/A.tsx' }),
+        ]);
+    });
+
+    it('says it apart from the dead classes in the human report', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': KEYWORDS,
+        });
+        const report = await reportFor(cwd);
+        expect(report).toMatch(/CSS-wide keywords no property takes:\n.*ring-inherit +src\/A\.tsx/);
+        expect(report).not.toContain('cursor-[inherit]');
+        expect(report).toContain(
+            '✖ 1 emitted class(es) style nothing: no property they set takes their CSS-wide keyword; set the property in `css: { … }`.',
+        );
+    });
+});

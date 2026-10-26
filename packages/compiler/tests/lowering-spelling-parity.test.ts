@@ -97,6 +97,28 @@ describe.each(LANES)('logical inline insets — %s', (_name, lower) => {
     });
 });
 
+describe.each(LANES)('custom properties in a value — %s', (_name, lower) => {
+    // `(--v…)` is Tailwind's custom-property shorthand, fallback included;
+    // the bracket wrote the name as the value (`perspective-origin: --v`,
+    // `margin: --v,calc(1px)`, `scale: -(--v)`). A dashed function call such
+    // as `--spacing(4)` keeps its bracket.
+    it.each([
+        [{ perspectiveOrigin: '--v' }, 'perspective-origin-(--v)'],
+        [{ m: '--v,calc(1px)' }, 'm-(--v,calc(1px))'],
+        [{ scale: '-(--v)' }, '-scale-(--v)'],
+        [{ m: '-(--v)' }, '-m-(--v)'],
+        [{ p: '--spacing(4)' }, 'p-[--spacing(4)]'],
+        [{ willChange: 'opacity' }, 'will-change-[opacity]'],
+        [{ willChange: 'transform' }, 'will-change-transform'],
+        [{ animationDelay: -200 }, '[animation-delay:-200ms]'],
+    ])('%j writes %s', (sz, className) => {
+        const result = lower(sz);
+
+        expect(result.className).toBe(className);
+        expect(result.kinds).toEqual([]);
+    });
+});
+
 describe.each(LANES)('background size — %s', (_name, lower) => {
     // `bg-size-*` exists from Tailwind 4.1 only; the `length:` hint inside
     // `bg-[…]` / `bg-(…)` is served on every v4 with the same declaration.
@@ -142,6 +164,61 @@ describe.each(LANES)(
         });
     },
 );
+
+describe.each(LANES)('a CSS-wide keyword on bgImg — %s', (_name, lower) => {
+    // `bg-[url(inherit)]` sets `background-image: url(inherit)`, a file named
+    // `inherit`; the `image:` hint sets the property to the keyword.
+    it.each([
+        [{ bgImg: 'inherit' }, 'bg-[image:inherit]'],
+        [{ bgImg: 'revert-layer' }, 'bg-[image:revert-layer]'],
+        [{ hover: { bgImg: 'unset!' } }, 'hover:bg-[image:unset]!'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
+
+describe.each(LANES)('breakpoints and container queries — %s', (_name, lower) => {
+    // A breakpoint name is written as it is, so a project's own (`tablet`,
+    // `sidebar`) is served; a length is bracketed as on every other key. A
+    // named container is the key Tailwind spells (`'@md/sidebar'`); a name
+    // nested under a query is a variant, as under any other variant, so a
+    // project's `tablet` chains on. Measured against Tailwind 4.3.3 with
+    // `--breakpoint-tablet` and `--container-sidebar`.
+    it.each([
+        [{ min: { md: { p: 4 } } }, 'min-md:p-4'],
+        [{ min: { tablet: { p: 4 } } }, 'min-tablet:p-4'],
+        [{ max: { '3xl': { p: 4 } } }, 'max-3xl:p-4'],
+        [{ min: { '640px': { p: 4 } } }, 'min-[640px]:p-4'],
+        [{ min: { '[640px]': { p: 4 } } }, 'min-[640px]:p-4'],
+        [{ '@min': { sidebar: { p: 4 } } }, '@min-sidebar:p-4'],
+        [{ '@max': { md: { p: 4 } } }, '@max-md:p-4'],
+        [{ '@min': { '475px': { p: 4 } } }, '@min-[475px]:p-4'],
+        [{ '@min': { '[475px]': { p: 4 } } }, '@min-[475px]:p-4'],
+        [{ '@md': { p: 4 } }, '@md:p-4'],
+        [{ '@md/sidebar': { p: 4 } }, '@md/sidebar:p-4'],
+        [{ '@md/sidebar': { hover: { p: 4 } } }, '@md/sidebar:hover:p-4'],
+        [{ '@maxLg/sidebar': { p: 4 } }, '@max-lg/sidebar:p-4'],
+        [{ '@unknown/sidebar': { p: 4 } }, '@unknown/sidebar:p-4'],
+        [{ '@md': { tablet: { p: 4 } } }, '@md:tablet:p-4'],
+        [{ '@md': { hover: { p: 4 } } }, '@md:hover:p-4'],
+        [{ '@md': { p: 4, hover: { m: 2 } } }, '@md:p-4 @md:hover:m-2'],
+        [{ '@sm': { '@maxMd': { p: 4 } } }, '@sm:@max-md:p-4'],
+        [{ '@container': 'sidebar' }, '@container/sidebar'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
+
+describe.each(LANES)('one trailing `!` is the important modifier — %s', (_name, lower) => {
+    // Only the last `!` is split off; any other stays in the value, so the
+    // runtime and the engines write the same class for `x!!`.
+    it.each([
+        [{ color: 'definitely not a color!!!' }, 'text-[definitely_not_a_color!!]!'],
+        [{ display: 'flex!' }, 'flex!'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
 
 describe.each(LANES)('mask keys and the important modifier — %s', (_name, lower) => {
     // Tailwind serves the mask utilities from 4.1; each class below is served
@@ -273,6 +350,17 @@ describe.each(LANES)('a slash opacity string — %s', (_name, lower) => {
         [{ color: 'red-500/50' }],
         [{ borderColor: 'red-500/50!' }],
         [{ hover: { from: 'red-500/50' } }],
+        // Every colour key, a border side and the inset family included.
+        ...[
+            'borderTColor',
+            'borderRColor',
+            'borderBColor',
+            'borderLColor',
+            'borderXColor',
+            'borderYColor',
+            'insetRingColor',
+            'insetShadowColor',
+        ].map(key => [{ [key]: 'red-500/50' }]),
     ])('drops %j on a colour key, which takes the object form, and says so', sz => {
         // Nothing is emitted, so the drop is missing output (ADR 0011): every
         // lane reports it, the engines with the code the runtime text maps to.
@@ -456,7 +544,7 @@ describe('the colour-object slash opacity diagnostic', () => {
         (_name, engine) => {
             const run = captureWarnings(
                 engine,
-                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '20' } }} />;",
+                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '78%' } }} />;",
                 '/p/src/Spelling.jsx',
             );
 
@@ -464,9 +552,9 @@ describe('the colour-object slash opacity diagnostic', () => {
                 engineMessage(
                     'color-slash-opacity',
                     '/p/src/Spelling.jsx:1:33',
-                    "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                    "help: write `{ color: 'red-500!', op: '20' }`.",
-                    "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                    "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                    "help: write `{ color: 'red-500!', op: '78%' }`.",
+                    "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
                 ),
             ]);
             expect(run.result.issues?.[0]?.args).toEqual({
@@ -475,7 +563,7 @@ describe('the colour-object slash opacity diagnostic', () => {
                 base: 'red-500',
                 opacity: '50',
                 important: '!',
-                op: "'20'",
+                op: "'78%'",
             });
         },
     );
@@ -484,7 +572,7 @@ describe('the colour-object slash opacity diagnostic', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         setSzWarnLocation('/p/src/Spelling.jsx:1');
         try {
-            transform({ bg: { color: 'red-500/50!', op: '20' } });
+            transform({ bg: { color: 'red-500/50!', op: '78%' } });
             vi.stubEnv('NODE_ENV', 'production');
             transform({ bg: { color: 'blue-500/50' } });
 
@@ -493,9 +581,9 @@ describe('the colour-object slash opacity diagnostic', () => {
                     engineMessage(
                         'color-slash-opacity',
                         '/p/src/Spelling.jsx:1',
-                        "`bg: { color: 'red-500/50!', op: '20' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                        "help: write `{ color: 'red-500!', op: '20' }`.",
-                        "note: the class uses `op: '20'`; the `/50` in `color` is ignored.",
+                        "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                        "help: write `{ color: 'red-500!', op: '78%' }`.",
+                        "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
                     ),
                 ],
             ]);
@@ -710,6 +798,11 @@ describe.each(ENGINES)('a runtime value on a width key — %s', (_name, engine) 
         ['decorationThickness', 'decoration-(length:--_sz-decoration-thickness)'],
         ['ringOffset', 'ring-offset-(length:--_sz-ring-offset)'],
         ['insetRing', 'inset-ring-(length:--_sz-inset-ring)'],
+        // A gradient stop position takes its stop's prefix, as its static
+        // value does (`from-10%`); `fromPos-(…)` named no utility.
+        ['fromPos', 'from-(length:--_sz-from-pos)'],
+        ['viaPos', 'via-(length:--_sz-via-pos)'],
+        ['toPos', 'to-(length:--_sz-to-pos)'],
     ])('%s writes %s', (key, className) => {
         const run = captureWarnings(
             engine,

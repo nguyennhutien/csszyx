@@ -35,7 +35,7 @@ describe('csszyx_expand', () => {
     });
 
     it('expands arbitrary value', () => {
-        const data = JSON.parse(handleExpand({ sz: { w: '[123px]' } }).content[0].text);
+        const data = JSON.parse(handleExpand({ sz: { w: '123px' } }).content[0].text);
         expect(data.className).toContain('w-[123px]');
     });
 

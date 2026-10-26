@@ -20,6 +20,7 @@ import {
     settleGlobalKeywords,
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
+import { own } from './own.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
@@ -73,6 +74,7 @@ import {
     bareClosedEnumClass,
     CLOSED_ENUM_CLASSES,
     CLOSED_ENUM_VALUE_MOVES,
+    oneClass,
 } from './closed-enum-tables.js';
 // The registry's words for every line this module prints, the reporter that
 // fills them in development and the suggestion an unknown key's line names
@@ -89,6 +91,7 @@ import {
 // `@csszyx/compiler/report` subpath, so no entry bundles a copy and the
 // template filler shares no chunk with the entries Node loads.
 import {
+    BRACKETED_VALUE,
     BROKEN_OPACITY,
     CANONICAL_KEY,
     CLOSED_ENUM_VALUE,
@@ -101,6 +104,7 @@ import {
     NUMERIC_FONT_WEIGHT,
     NUMERIC_KEY,
     OFF_SCALE_VALUE,
+    OPACITY_VALUE,
     OPTIONS_OBJECT_REQUIRED,
     PER_SIDE_BORDER_STYLE,
     PROPERTY_OBJECT,
@@ -222,7 +226,7 @@ const EXCLUSIVE_SUB_KEY_GROUPS: Readonly<Record<string, readonly (readonly strin
  * @returns The merged value with displaced groups removed.
  */
 function dropDisplacedSubKeys(key: string, merged: SzValue, incoming: SzValue): SzValue {
-    const groups = EXCLUSIVE_SUB_KEY_GROUPS[key];
+    const groups = own(EXCLUSIVE_SUB_KEY_GROUPS, key);
     if (
         groups === undefined ||
         merged === null ||
@@ -322,7 +326,7 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
  * @returns The utility suffix, or null.
  */
 function typedVariableValue(rawKey: string, value: string): string | null {
-    const hint = CSS_VAR_TYPE_HINTS[rawKey];
+    const hint = own(CSS_VAR_TYPE_HINTS, rawKey);
     if (hint === undefined) return null;
     if (value.startsWith('--') && !value.includes('(')) return `(${hint}:${value})`;
     if (/^\(--[^()]*\)$/.test(value)) return `(${hint}:${value.slice(1, -1)})`;
@@ -605,13 +609,9 @@ const warnedAlignmentValues = new Set<string>();
  */
 function warnAlignmentValue(rawKey: string, written: string): void {
     if (process.env.NODE_ENV !== 'production') {
-        // The important modifier is a class suffix, not part of the value, as the
-        // engine reads it: `flex-start!` is still `flex-start`.
-        const { value } = handleImportant(written);
-        // Own keys only: `constructor` or `toString` would read Object members.
-        // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
-        if (!Object.prototype.hasOwnProperty.call(ALIGNMENT_CSS_VALUE_HINT, value)) return;
-        const hint = ALIGNMENT_CSS_VALUE_HINT[value];
+        const value = written;
+        const hint = own(ALIGNMENT_CSS_VALUE_HINT, value);
+        if (hint === undefined) return;
         const sig = `${rawKey}:${value}`;
         if (warnedAlignmentValues.has(sig)) return;
         warnedAlignmentValues.add(sig);
@@ -756,24 +756,6 @@ export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'backdrop-hue-rotate',
 ]);
 
-// ============================================================================
-// COLOR_KEYWORDS & COLOR_SCALE_PATTERN: For color value detection
-// ============================================================================
-/*
-const COLOR_KEYWORDS = new Set(['inherit', 'current', 'transparent', 'black', 'white']);
-const COLOR_SCALE_PATTERN = /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+/;
-
-// function isColorValue(value: string): boolean {
-//     return COLOR_KEYWORDS.has(value) ||
-//            COLOR_SCALE_PATTERN.test(value) ||
-//            value.startsWith('#') ||
-//            value.includes('/');
-// }
-*/
-
-// Tailwind v4: opacity modifiers after / accept any integer or 0.5-step decimal bare.
-// Everything else (%, leading dot, non-0.5 decimals) goes in brackets.
-
 /**
  * Represents the result of a transformation.
  */
@@ -812,7 +794,7 @@ const _warnedSpacingSteps = new Set<string>();
  * @returns True when the bare class would generate no CSS.
  */
 function isDeadSpacingStep(key: string, value: number): boolean {
-    return PROPERTY_CATEGORY_MAP[key] === PropertyCategory.SPACING && (value * 4) % 1 !== 0;
+    return own(PROPERTY_CATEGORY_MAP, key) === PropertyCategory.SPACING && (value * 4) % 1 !== 0;
 }
 
 /**
@@ -847,8 +829,8 @@ function warnDeadSpacingStep(key: string, value: number): void {
  * @returns The column letters Tailwind serves for the key.
  */
 function capabilityRow(rawKey: string): string | undefined {
-    if (typeof PROPERTY_MAP[rawKey] !== 'string') return undefined;
-    return SZ_CAPABILITIES[rawKey] ?? '';
+    if (typeof own(PROPERTY_MAP, rawKey) !== 'string') return undefined;
+    return own(SZ_CAPABILITIES, rawKey) ?? '';
 }
 
 /** Per-side border keys: the sides Tailwind can size and colour one at a time. */
@@ -952,27 +934,87 @@ function warnDeadWeightValue(rawKey: string, value: string): void {
 const _warnedOpacityTokens = new Set<string>();
 
 /**
- * Formats an opacity value for Tailwind class output.
- * Handles numbers, CSS variables, and arbitrary values.
- * @param op - the opacity value (number or string)
- * @returns formatted opacity string for Tailwind class
+ * The modifier `op` writes, or `undefined` when it is not an opacity.
+ *
+ * Tailwind reads a bracketed modifier as a fraction of one, so `/[33.3]` is
+ * 3,330%: a quarter step is served bare on every Tailwind v4 (`/75.5`), and any
+ * other number from 0 to 100 keeps its percent in the brackets, as a percent
+ * string does (`'78%'`). A custom property is read as the opacity it holds. Mirrors `format_opacity_value`.
+ *
+ * @param op - The `op` value as written.
+ * @returns The modifier, or `undefined`.
  */
-function formatOpacity(op: number | string): string {
-    if (typeof op === 'number') {
-        // Integers and half-step decimals (×2 is integer: 0, 0.5, 1, 50, 75.5, …) → plain "/50", "/0.5"
-        // Other decimals (e.g. 0.05, 0.02) are fraction-scale → arbitrary "/[0.05]"
-        if (Number.isInteger(op * 2)) {
-            return String(op);
-        }
+function formatOpacity(op: unknown): string | undefined {
+    if (typeof op === 'number' && op >= 0 && op <= 100) {
+        return Number.isInteger(op * 4) ? String(op) : `[${plainDecimal(op)}%]`;
+    }
+    if (typeof op === 'string' && op.startsWith('--')) return `(${op})`;
+    if (typeof op === 'string' && /^\d+(?:\.\d+)?%$/.test(op) && Number.parseFloat(op) <= 100) {
         return `[${op}]`;
     }
-    if (typeof op === 'string') {
-        if (op.startsWith('--')) {
-            return `(${op})`;
-        }
-        return `[${op}]`;
+    return undefined;
+}
+
+/**
+ * A number from 0 to 100 written without an exponent, as Rust writes it:
+ * `1e-7` is `0.0000001`.
+ *
+ * @param value - The number.
+ * @returns Its digits.
+ */
+function plainDecimal(value: number): string {
+    const written = String(value);
+    const exponent = written.indexOf('e-');
+    if (exponent === -1) return written;
+    const digits = written.slice(0, exponent).replace('.', '');
+    return `0.${'0'.repeat(Number(written.slice(exponent + 2)) - 1)}${digits}`;
+}
+
+const _warnedOpacityValues = new Set<string>();
+
+/**
+ * `op` as the modifier it writes ({@link formatOpacity}), naming one that is
+ * no opacity (nothing is written) and one between 0 and 1, which is written
+ * as the percent it is and which 0.17 wrote as a fraction of 1.
+ *
+ * @param key - The key the colour is on, or the mask stop's member.
+ * @param op - The `op` value as written.
+ * @returns The modifier, or undefined when `op` is no opacity.
+ */
+function opacityModifier(key: string, op: unknown): string | undefined {
+    const written = formatOpacity(op);
+    if (written === undefined) warnOpacityValue(key, op);
+    else if (typeof op === 'number' && op > 0 && op < 1) {
+        warnOpacityValue(key, op, plainDecimal(Math.round(op * 100 * 1e9) / 1e9));
     }
-    return String(op);
+    return written;
+}
+
+/**
+ * Name an `op` that is no opacity (`range`), or one below 1 with the percent
+ * to write (`fraction`).
+ *
+ * @param key - Colour property key.
+ * @param op - The `op` value as written.
+ * @param percent - `op` times 100, for the fraction form.
+ */
+function warnOpacityValue(key: string, op: unknown, percent?: string): void {
+    const literal = typeof op === 'string' ? `'${op}'` : String(op);
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedOpacityValues.has(`${key}:${literal}`)
+    ) {
+        _warnedOpacityValues.add(`${key}:${literal}`);
+        szReport({
+            diagnostic: OPACITY_VALUE,
+            args:
+                percent === undefined
+                    ? { form: 'range', key, op: literal }
+                    : { form: 'fraction', key, op: literal, percent },
+            at: szWarnLocation,
+        });
+    }
 }
 
 /**
@@ -1000,10 +1042,65 @@ export function normalizeArbitraryVariant(key: string): string {
  * @returns normalized value with spaces replaced by underscores
  */
 export function normalizeArbitraryValue(value: string): string {
-    // Strip user-provided outer brackets — sz auto-wraps arbitrary values;
-    // users must never pre-wrap (e.g. '[100px]' → '100px', then re-wrapped as needed).
-    const stripped = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
-    return normalizeDeclarationValue(stripped);
+    // A value in the brackets csszyx writes itself never gets here: it is
+    // reported at its key (`bracketWrappedInner`).
+    return normalizeDeclarationValue(value);
+}
+
+/**
+ * The value inside the brackets `value` starts and ends with, its sign kept in
+ * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
+ * `1px!`), or `undefined` when it is not wrapped. Grid line names at both
+ * ends (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`,
+ * where a value is never read so. Mirrors `bracket_wrapped_inner`.
+ *
+ * @param value - The value as written.
+ * @returns What to write instead, or `undefined`.
+ */
+function bracketWrappedInner(value: string): string | undefined {
+    const bang = value.endsWith('!') ? '!' : '';
+    const body = bang ? value.slice(0, -1) : value;
+    const sign = body.startsWith('-') ? '-' : '';
+    return body.startsWith('[', sign.length) && body.endsWith(']')
+        ? `${sign}${body.slice(sign.length + 1, -1)}${bang}`
+        : undefined;
+}
+
+/**
+ * Whether a key's value is wrapped in the brackets csszyx writes itself, which
+ * is reported and emits nothing. A custom property's value is a declaration
+ * value, where `[a]` is a grid line name, so it never is.
+ *
+ * @param key - The sz key.
+ * @param value - Its value.
+ * @returns True when the value is dropped.
+ */
+function dropBracketedValue(key: string, value: SzValue): boolean {
+    if (typeof value !== 'string' || key.startsWith('--')) return false;
+    const inner = bracketWrappedInner(value);
+    if (inner === undefined) return false;
+    warnBracketedValue(key, value, inner);
+    return true;
+}
+
+const _warnedBracketedValues = new Set<string>();
+
+/**
+ * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @param inner - What to write instead.
+ */
+function warnBracketedValue(key: string, value: string, inner: string): void {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        szNodeWarningsUnmuted() &&
+        !_warnedBracketedValues.has(`${key}:${value}`)
+    ) {
+        _warnedBracketedValues.add(`${key}:${value}`);
+        szReport({ diagnostic: BRACKETED_VALUE, args: { key, value, inner }, at: szWarnLocation });
+    }
 }
 
 /**
@@ -1124,13 +1221,11 @@ function isArbitraryLength(value: string): boolean {
  * @returns whether the value requires wrapping in brackets
  */
 function needsArbitraryBrackets(value: string): boolean {
-    // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
-    const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        isArbitraryLength(v) ||
-        v.startsWith('#') || // Hex colors
-        containsCssFunctionCall(v) ||
-        v.includes(' ') // Values with spaces need brackets
+        isArbitraryLength(value) ||
+        value.startsWith('#') || // Hex colors
+        containsCssFunctionCall(value) ||
+        value.includes(' ') // Values with spaces need brackets
     );
 }
 
@@ -1367,13 +1462,23 @@ function camelToKebab(prop: string): string {
  * @returns the mapped or kebab-cased variant prefix
  */
 export function getVariantPrefix(key: string): string {
-    // Check VARIANT_MAP first
-    if (VARIANT_MAP[key]) {
-        return VARIANT_MAP[key];
+    let prefix = variantPrefixes.get(key);
+    if (prefix === undefined) {
+        // VARIANT_MAP first, then camelCase to kebab-case.
+        prefix = own(VARIANT_MAP, key) || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        // Keys are author text, so the memo is bounded: a project names a few
+        // dozen variants, and one that names more pays the regex again.
+        if (variantPrefixes.size >= VARIANT_PREFIX_MEMO_LIMIT) variantPrefixes.clear();
+        variantPrefixes.set(key, prefix);
     }
-    // Fallback: convert camelCase to kebab-case
-    return key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    return prefix;
 }
+
+/** Variant keys already resolved by {@link getVariantPrefix}. */
+const variantPrefixes = new Map<string, string>();
+
+/** The most keys {@link variantPrefixes} holds before it starts over. */
+const VARIANT_PREFIX_MEMO_LIMIT = 512;
 
 /**
  * Handles group/peer variants with special syntax
@@ -1467,8 +1572,7 @@ function collectNamedGroupPeer(
 
 /** Appends transformed classes for one variant value. */
 function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
-    const result = transformNested(value as SzObject, prefix);
-    if (result.className) classes.push(result.className);
+    classes.push(...nestedClasses(value as SzObject, prefix));
 }
 
 /** Returns whether a variant value is intentionally absent. */
@@ -1574,11 +1678,7 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
             selectorStr = selector;
         }
 
-        const variantPrefix = `${prefix}has-[${selectorStr}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(result.className);
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}has-[${selectorStr}]:`));
     }
 
     return classes;
@@ -1594,17 +1694,12 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
  */
 function transformNotEntry(key: string, value: SzValue, prefix: string): string[] {
     if (key === 'supports' && typeof value === 'object') {
-        return Object.entries(value as SzObject).flatMap(([condition, condValue]) => {
-            const result = transformNested(
-                condValue as SzObject,
-                `${prefix}not-supports-[${condition}]:`,
-            );
-            return result.className ? [result.className] : [];
-        });
+        return Object.entries(value as SzObject).flatMap(([condition, condValue]) =>
+            nestedClasses(condValue as SzObject, `${prefix}not-supports-[${condition}]:`),
+        );
     }
 
-    const result = transformNested(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
-    return result.className ? [result.className] : [];
+    return nestedClasses(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
 }
 
 /**
@@ -1643,11 +1738,7 @@ function handleData(dataObj: SzObject, prefix: string): string[] {
             continue;
         }
 
-        const variantPrefix = `${prefix}data-[${key}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(result.className);
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}data-[${key}]:`));
     }
 
     return classes;
@@ -1678,10 +1769,7 @@ function handleAria(ariaObj: SzObject, prefix: string): string[] {
             variantPrefix = `${prefix}aria-[${key}]:`;
         }
 
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(result.className);
-        }
+        classes.push(...nestedClasses(value as SzObject, variantPrefix));
     }
 
     return classes;
@@ -1702,11 +1790,7 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
             continue;
         }
 
-        const variantPrefix = `${prefix}supports-[${condition}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(result.className);
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}supports-[${condition}]:`));
     }
 
     return classes;
@@ -1947,36 +2031,41 @@ export function transform(
                     : `[csszyx] options-object-required: ${JSON.stringify(args)} https://csszyx.com/e/options-object-required`,
         });
     }
-    return transformNested(szProp, options.prefix ?? '', options.mangleMap);
+    const classes = nestedClasses(szProp, options.prefix ?? '');
+    const { mangleMap } = options;
+    return {
+        className: (mangleMap
+            ? classes.map(className => mangleMap[className] || className)
+            : classes
+        ).join(' '),
+    };
 }
 
 /**
- * Transform an sz object, bounding recursion depth via {@link szTransformDepth}.
+ * The classes of an sz object, bounding recursion depth via
+ * {@link szTransformDepth}.
  *
  * The lowering calls itself through this rather than through {@link transform}:
  * the options object is what a caller writes, not what a recursion allocates
- * per nested value.
+ * per nested value. Each level hands its classes up as they are: joining them
+ * into one string for the level above to split again cost a nested object 10
+ * to 18% of its lowering time.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
- * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className.
+ * @returns the classes, each one class, none empty.
  */
-function transformNested(
-    szProp: SzObject,
-    prefix = '',
-    mangleMap?: Record<string, string>,
-): TransformResult {
+function nestedClasses(szProp: SzObject, prefix: string): string[] {
     // Input validation
     if (!szProp || typeof szProp !== 'object') {
-        return { className: '' };
+        return [];
     }
     if (szTransformDepth >= MAX_SZ_DEPTH) {
         throw new SzDepthError();
     }
     szTransformDepth++;
     try {
-        return transformImpl(szProp, prefix, mangleMap);
+        return transformImpl(szProp, prefix);
     } finally {
         szTransformDepth--;
     }
@@ -2087,12 +2176,16 @@ function buildColorObjectClass(
         !rawColor.includes('(')
             ? `(color:${rawColor})`
             : formatColorObjectBase(rawColor);
-    if (color.op === undefined) {
+    // A null `op` is no `op`, as any null value.
+    if (color.op === undefined || color.op === null) {
         return slashOpacity === undefined
             ? `${prefix}${utilityPrefix}-${colorValue}${important}`
             : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
     }
-    const opacity = formatOpacity(color.op);
+    const opacity = opacityModifier(key, color.op);
+    if (opacity === undefined) {
+        return `${prefix}${utilityPrefix}-${colorValue}${important}`;
+    }
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`);
     return `${prefix}${utilityPrefix}-${colorValue}/${opacity}${important}`;
 }
@@ -2259,7 +2352,16 @@ function collectSpecialNestedVariant(
     }
 }
 
-const KNOWN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+/**
+ * A breakpoint after `min-`, `max-`, `@min-` or `@max-`: a name as written, so
+ * a project's own (`tablet`, `sidebar`) is served, and a length bracketed as
+ * on every other key (`640px` → `[640px]`). Mirrors `breakpoint_segment`.
+ */
+function breakpointSegment(breakpoint: string): string {
+    return isArbitraryVariant(breakpoint) || !needsArbitraryBrackets(breakpoint)
+        ? breakpoint
+        : `[${breakpoint}]`;
+}
 
 /** Collects named and arbitrary min/max breakpoint variants. */
 function collectMinMaxVariants(
@@ -2270,9 +2372,7 @@ function collectMinMaxVariants(
 ): void {
     for (const [breakpoint, value] of Object.entries(breakpoints)) {
         if (isInactiveVariantValue(value)) continue;
-        const direct = isArbitraryVariant(breakpoint) || KNOWN_BREAKPOINTS.has(breakpoint);
-        const segment = direct ? `${kind}-${breakpoint}` : `${kind}-[${breakpoint}]`;
-        appendVariantClasses(value, `${prefix}${segment}:`, classes);
+        appendVariantClasses(value, `${prefix}${kind}-${breakpointSegment(breakpoint)}:`, classes);
     }
 }
 
@@ -2291,66 +2391,57 @@ function dropSlashOpacityString(key: string, value: string): boolean {
     return true;
 }
 
-/** Collects direct, named, and arbitrary container-query variants. */
+/**
+ * A container query key as Tailwind spells it: a camelCase query mapped
+ * (`@maxLg` → `@max-lg`), and a named container's query mapped with its name
+ * kept (`@maxLg/sidebar` → `@max-lg/sidebar`). Mirrors
+ * `object_variant_segment`.
+ *
+ * @param key - The authored key, starting with `@`.
+ * @returns The variant it writes.
+ */
+function containerQueryKey(key: string): string {
+    const slash = key.indexOf('/');
+    if (slash === -1) return own(VARIANT_MAP, key) || key;
+    const query = own(VARIANT_MAP, key.slice(0, slash));
+    return query ? `${query}${key.slice(slash)}` : key;
+}
+
+/**
+ * Collects a container query's classes. A query is a variant like any other
+ * (`@md:`), so its object lowers in one pass under it, a property staying a
+ * property and a name chaining on as a variant, a project's own too. A named
+ * container is the key Tailwind spells, `'@md/sidebar'`. `@min` and `@max`
+ * take a container size instead (`@min-sidebar`, `@min-[475px]`). Mirrors
+ * `lower_container_query_variant`.
+ */
 function collectContainerQueryVariants(
     key: string,
     values: SzObject,
     prefix: string,
     classes: string[],
 ): void {
-    const mappedKey = VARIANT_MAP[key] || key;
+    const mappedKey = containerQueryKey(key);
+    if (mappedKey !== '@min' && mappedKey !== '@max') {
+        appendVariantClasses(values, `${prefix}${mappedKey}:`, classes);
+        return;
+    }
     for (const [nestedKey, value] of Object.entries(values)) {
         if (isInactiveVariantValue(value)) continue;
-        const target = resolveContainerQueryTarget(mappedKey, nestedKey, value);
-        if (target.wrapProperty) {
-            appendVariantClasses({ [nestedKey]: value }, `${prefix}${target.segment}:`, classes);
+        if (
+            typeof value !== 'object' ||
+            own(PROPERTY_MAP, nestedKey) !== undefined ||
+            BOOLEAN_SHORTHANDS.has(nestedKey)
+        ) {
+            appendVariantClasses({ [nestedKey]: value }, `${prefix}${mappedKey}:`, classes);
         } else {
-            appendVariantClasses(value, `${prefix}${target.segment}:`, classes);
+            appendVariantClasses(
+                value,
+                `${prefix}${mappedKey}-${breakpointSegment(nestedKey)}:`,
+                classes,
+            );
         }
     }
-}
-
-/** Container-query prefix plus whether the nested key remains a property. */
-interface ContainerQueryTarget {
-    segment: string;
-    wrapProperty: boolean;
-}
-
-/** Classifies one nested container-query key. */
-function resolveContainerQueryTarget(
-    mappedKey: string,
-    nestedKey: string,
-    value: SzValue,
-): ContainerQueryTarget {
-    if (isArbitraryVariant(nestedKey)) {
-        return { segment: `${mappedKey}-${nestedKey}`, wrapProperty: false };
-    }
-    if (isArbitraryContainerBreakpoint(mappedKey, nestedKey, value)) {
-        return { segment: `${mappedKey}-[${nestedKey}]`, wrapProperty: false };
-    }
-    const direct =
-        PROPERTY_MAP[nestedKey] ||
-        BOOLEAN_SHORTHANDS.has(nestedKey) ||
-        nestedKey.startsWith('@') ||
-        typeof value !== 'object';
-    return direct
-        ? { segment: mappedKey, wrapProperty: true }
-        : { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
-}
-
-/** Returns whether @min/@max should bracket a custom breakpoint key. */
-function isArbitraryContainerBreakpoint(
-    mappedKey: string,
-    nestedKey: string,
-    value: SzValue,
-): boolean {
-    return (
-        (mappedKey === '@min' || mappedKey === '@max') &&
-        typeof value === 'object' &&
-        !KNOWN_BREAKPOINTS.has(nestedKey) &&
-        !PROPERTY_MAP[nestedKey] &&
-        !BOOLEAN_SHORTHANDS.has(nestedKey)
-    );
 }
 
 const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
@@ -2368,13 +2459,10 @@ function collectBasicSpecialProperty(
     }
     const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(rawKey) : undefined;
     if (legal !== undefined && typeof value === 'string') {
-        // The important modifier is a class suffix, never part of the value:
-        // `flex!` is a legal display value that a raw lookup would refuse.
-        const { value: base, important } = handleImportant(value);
-        const bang = important ? '!' : '';
+        const base = value;
         const utility = legal.get(base);
         if (utility !== undefined) {
-            classes.push(`${prefix}${utility}${bang}`);
+            classes.push(`${prefix}${utility}`);
             return true;
         }
         if (CLOSED_ENUM_VALUE_MOVES[`${rawKey}:${base}`] !== undefined) {
@@ -2383,7 +2471,7 @@ function collectBasicSpecialProperty(
         }
         const bare = bareClosedEnumClass(rawKey, base);
         warnClosedEnumValue(rawKey, base, bare);
-        classes.push(`${prefix}${bare}${bang}`);
+        classes.push(`${prefix}${bare}`);
         return true;
     }
     if (isGradientPositionKey(rawKey) && typeof value === 'number') {
@@ -2693,10 +2781,6 @@ function collectTextKeywordProperty(
         classes.push(`${prefix}normal-case`);
         return true;
     }
-    if (key === 'textWrap') {
-        classes.push(`${prefix}text-${value}`);
-        return true;
-    }
     return false;
 }
 
@@ -2725,30 +2809,12 @@ function collectTextFlowProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    if (key === 'break') utility = WORD_BREAK_CLASSES[value] || `break-${value}`;
-    else if (key === 'wrap') utility = OVERFLOW_WRAP_CLASSES[value] || `wrap-${value}`;
-    else if (key === 'textOverflow') utility = formatTextOverflow(value);
-    else if (key === 'lineClamp') utility = formatLineClamp(value);
+    if (key === 'break') utility = own(WORD_BREAK_CLASSES, value) ?? null;
+    else if (key === 'wrap') utility = own(OVERFLOW_WRAP_CLASSES, value) ?? null;
     else if (key === 'list' || key === 'listStyle') utility = formatListStyle(value);
-    else if (key === 'listPos') utility = `list-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
     return true;
-}
-
-/** Formats a text-overflow utility. */
-function formatTextOverflow(value: string): string {
-    return value === 'ellipsis' || value === 'clip' ? `text-${value}` : `text-[${value}]`;
-}
-
-/** Formats a line-clamp utility. */
-function formatLineClamp(value: string): string {
-    if (value === 'none') return 'line-clamp-none';
-    if (value.startsWith('--')) return `line-clamp-(${value})`;
-    const numeric = Number(value);
-    return !Number.isNaN(numeric) && Number.isInteger(numeric)
-        ? `line-clamp-${value}`
-        : `line-clamp-[${value}]`;
 }
 
 /** Formats a list-style utility. */
@@ -2765,13 +2831,8 @@ function collectDecorationProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    if (key === 'divideStyle') utility = `divide-${value}`;
-    else if (key === 'decorationStyle' || key === 'textDecorationStyle') {
-        utility = `decoration-${value}`;
-    } else if (key === 'decorationThickness' || key === 'textDecorationThickness') {
-        // The important modifier belongs to the class, as on every other key.
-        const { value: thickness, important } = handleImportant(value);
-        utility = formatDecorationThickness(thickness) + (important ? '!' : '');
+    if (key === 'decorationThickness' || key === 'textDecorationThickness') {
+        utility = formatDecorationThickness(value);
     } else if (key === 'fontStretch') utility = formatFontStretch(value);
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -2785,7 +2846,7 @@ function formatDecorationThickness(value: string): string {
     if (needsArbitraryBrackets(value)) {
         return `decoration-[${normalizeArbitraryValue(value)}]`;
     }
-    return `decoration-${value}`;
+    return buildGenericStringClass('decorationThickness', 'decoration', value, '');
 }
 
 /** Formats font-stretch keywords, variables, and percentages. */
@@ -2822,10 +2883,7 @@ function collectEffectStringProperty(
     } else if (key === 'insetShadowColor') {
         utility = formatShadowFamilyColor(key, 'inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
-        // The important modifier belongs to the class, not inside the bracket
-        // (`scale-[1.5]!`, never `scale-[1.5!]`, which Tailwind does not serve).
-        const important = handleImportant(value);
-        utility = formatArbitraryEffect(key, important.value) + (important.important ? '!' : '');
+        utility = formatArbitraryEffect(key, value);
     } else if (key === 'textShadow') utility = formatTextShadow(value);
     else if (key === 'textShadowColor') {
         utility = formatShadowFamilyColor(key, 'text-shadow', value);
@@ -2842,8 +2900,9 @@ function collectEffectStringProperty(
  * VALUE, not its color; the `color:` hint from `CSS_VAR_TYPE_HINTS` keeps the
  * var on the family's `--tw-*-shadow-color` slot.
  */
-function formatShadowFamilyColor(key: string, base: string, value: string): string {
-    return `${base}-${typedVariableValue(key, value) ?? value}`;
+function formatShadowFamilyColor(key: string, base: string, value: string): string | null {
+    const typed = typedVariableValue(key, value);
+    return typed ? `${base}-${typed}` : null;
 }
 
 /** Formats string-valued filters and scale without numeric coercion. */
@@ -2851,7 +2910,11 @@ function formatArbitraryEffect(key: string, value: string): string {
     // The two keywords `scale` serves by name; any other value is a number.
     if (key === 'scale' && (value === '3d' || value === 'none')) return `scale-${value}`;
     const property = key.startsWith('backdrop') ? `backdrop-${key.slice(8).toLowerCase()}` : key;
-    return value.startsWith('--') ? `${property}-(${value})` : `${property}-[${value}]`;
+    if (value.startsWith('--')) return `${property}-(${value})`;
+    // A signed custom property hoists its sign, as on every other key:
+    // `-scale-(--v)`, where `scale-[-(--v)]` wrote `scale: -(--v)`.
+    if (value.startsWith('-(')) return `-${property}-${value.slice(1)}`;
+    return `${property}-[${value}]`;
 }
 
 /** Formats a text-shadow utility. */
@@ -2861,7 +2924,7 @@ function formatTextShadow(value: string): string {
     if (bracketsCssWideKeyword('textShadow', 'text-shadow', value)) return `text-shadow-[${value}]`;
     return needsArbitraryBrackets(value)
         ? `text-shadow-[${normalizeArbitraryValue(value)}]`
-        : `text-shadow-${value}`;
+        : buildGenericStringClass('textShadow', 'text-shadow', value, '');
 }
 
 /** Formats a string-valued gradient stop position. */
@@ -2876,6 +2939,9 @@ function formatGradientPosition(key: string, value: string): string {
 function formatBackgroundImage(rawValue: string): string {
     const value = rawValue.trim();
     if (value === 'none') return 'bg-none';
+    // A CSS-wide keyword is the property's value, never a URL: the `image:`
+    // hint sets `background-image` to it, as `format_bg_img_string` does.
+    if (CSS_WIDE_KEYWORDS.has(value)) return `bg-[image:${value}]`;
     const typed = typedVariableValue('bgImg', value);
     if (typed) return `bg-${typed}`;
     const normalized = value.startsWith('-') ? value.slice(1) : value;
@@ -2939,11 +3005,10 @@ const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
  */
 function collectBackgroundMaskProperty(
     key: string,
-    rawValue: string,
+    value: string,
     prefix: string,
     classes: string[],
 ): boolean {
-    const { value, important } = handleImportant(rawValue);
     let utility: string | null = null;
     if (key === 'bgPos') utility = formatBackgroundPosition(value);
     else if (key === 'bgSize') utility = formatBackgroundSize(value);
@@ -2960,7 +3025,7 @@ function collectBackgroundMaskProperty(
     else if (key === 'maskClip') utility = formatMaskClip(value);
     else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
     if (utility === null) return false;
-    classes.push(`${prefix}${utility}${important ? '!' : ''}`);
+    classes.push(`${prefix}${utility}`);
     return true;
 }
 
@@ -2973,7 +3038,7 @@ function formatBackgroundPosition(value: string): string {
     if (typed) return `bg-${typed}`;
     return value.includes('_') || needsArbitraryBrackets(value)
         ? `bg-[${normalizeArbitraryValue(value)}]`
-        : `bg-${value}`;
+        : buildGenericStringClass('bgPos', 'bg', value, '');
 }
 
 /**
@@ -3118,11 +3183,19 @@ function buildMaskPositionClass(base: string, value: string): string {
     return value.startsWith('--') ? `${base}-(${value})` : `${base}-${value}`;
 }
 
-/** Render the colour half of an explicit mask stop. */
+/**
+ * Render the colour half of an explicit mask stop. `op` is written as a colour
+ * object's is ({@link formatOpacity}); one that is no opacity leaves the colour
+ * alone and is reported under the stop's member (`from`, `to`).
+ */
 function buildMaskColourClass(base: string, value: MaskStopValue): string | null {
     if (typeof value.color !== 'string' || !value.color) return null;
     const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
-    const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
+    let opacity = '';
+    if (value.op !== undefined && value.op !== null) {
+        const written = opacityModifier(base.slice(base.lastIndexOf('-') + 1), value.op);
+        if (written !== undefined) opacity = `/${written}`;
+    }
     return `${base}-${colour}${opacity}`;
 }
 
@@ -3282,7 +3355,6 @@ function collectContentBorderProperty(
     let utility: string | null = null;
     if (key === 'alignContent') utility = `content-${value}`;
     else if (key === 'content') utility = formatContentValue(value);
-    else if (key === 'transitionBehavior') utility = `transition-${value}`;
     else if (key === 'dropShadowColor') {
         utility = formatShadowFamilyColor(key, 'drop-shadow', value);
     }
@@ -3336,7 +3408,6 @@ function collectTransformStringProperty(
     } else if (key === 'transformStyle') utility = `transform-${value}`;
     else if (key === 'perspective') utility = formatPerspective(value);
     else if (key === 'perspectiveOrigin') utility = formatPerspectiveOrigin(value);
-    else if (key === 'backface') utility = `backface-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
     return true;
@@ -3361,14 +3432,14 @@ function formatPerspective(value: string): string {
     if (value.startsWith('--')) return `perspective-(${value})`;
     return needsArbitraryBrackets(value)
         ? `perspective-[${normalizeArbitraryValue(value)}]`
-        : `perspective-${value}`;
+        : buildGenericStringClass('perspective', 'perspective', value, '');
 }
 
 /** Formats a perspective-origin utility. */
 function formatPerspectiveOrigin(value: string): string {
-    return STANDARD_PERSPECTIVE_ORIGINS.has(value)
-        ? `perspective-origin-${value}`
-        : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
+    if (STANDARD_PERSPECTIVE_ORIGINS.has(value)) return `perspective-origin-${value}`;
+    if (value.startsWith('--')) return `perspective-origin-(${value})`;
+    return `perspective-origin-[${normalizeArbitraryValue(value)}]`;
 }
 
 // Runtime lowering has no source location, and server-side rendering lowers
@@ -3418,7 +3489,7 @@ function admitUnknownSzPropertyWarning(token: string): boolean {
  * @param at - Where it is written.
  */
 function reportUnknownSzProperty(key: string, at: string | undefined): void {
-    const form = SUGGESTION_MAP[key] ? 'alias' : SPLIT_SHORTHAND_KEYS[key];
+    const form = own(SUGGESTION_MAP, key) ? 'alias' : own(SPLIT_SHORTHAND_KEYS, key);
     if (form !== undefined) {
         szReport({ diagnostic: CANONICAL_KEY, args: { form, key }, at });
     } else if (/^\d+(?:\.\d+)?$/.test(key)) {
@@ -3451,10 +3522,10 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
 /** Returns whether a key belongs to any supported property or variant family. */
 export function isKnownSzPropertyKey(key: string): boolean {
     return Boolean(
-        PROPERTY_MAP[key] ||
+        own(PROPERTY_MAP, key) ||
             KNOWN_SPECIAL_PROPERTIES.has(key) ||
             BOOLEAN_SHORTHANDS.has(key) ||
-            SNAP_DIRECT_MAP[key] ||
+            own(SNAP_DIRECT_MAP, key) ||
             isGradientPositionKey(key) ||
             key.startsWith('--') ||
             key.startsWith('[') ||
@@ -3474,17 +3545,15 @@ function buildGenericStringClass(
     value: string,
     prefix: string,
 ): string {
-    const importantValue = handleImportant(value);
-    const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    const finalValue = normalizeGenericStringValue(rawKey, key, value);
     // The minus belongs on the UTILITY, after any variant prefix:
     // hover:-translate-x-full, never -hover:translate-x-full (a selector
     // Tailwind never generates). Hoisted on every key, as the engine does:
     // `-X-v` is Tailwind's spelling on every v4, and whether the project's
     // Tailwind serves it is the build-time oracle's verdict, not the runtime's.
-    const className = finalValue.startsWith('-')
+    return finalValue.startsWith('-')
         ? `${prefix}-${key}-${finalValue.substring(1)}`
         : `${prefix}${key}-${finalValue}`;
-    return importantValue.important ? `${className}!` : className;
 }
 
 /**
@@ -3597,7 +3666,9 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
 
 /** Whether Tailwind needs a function-like value in arbitrary brackets. */
 function isArbitraryFunctionValue(value: string): boolean {
-    return isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('));
+    // `--spacing(4)` calls a function; `--v,calc(1px)` is a custom property
+    // with a fallback, which `(--v,calc(1px))` reads as `var(--v,calc(1px))`.
+    return isTailwindBuildFunction(value) || /^--[\w-]+\(/.test(value);
 }
 
 /** Normalize fraction and aspect-ratio strings without widening other props. */
@@ -3605,7 +3676,8 @@ function normalizeRatioValue(rawKey: string, key: string, value: string): string
     if (/^\d+\/\d+$/.test(value)) {
         return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
     }
-    if (key !== 'aspect' || !/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
+    // A signed ratio keeps its sign in the bracket, as `is_decimal_ratio` reads it.
+    if (key !== 'aspect' || !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
     return `[${value}]`;
 }
 
@@ -3657,6 +3729,14 @@ function collectTextLeadingEntry(
     leadingEntries: LeadingEntry[],
 ): void {
     const lastColon = className.lastIndexOf(':');
+    // Only a `text-` or `leading-` utility can merge; every other class is
+    // passed over before its prefix is cut out or a pattern is run.
+    if (
+        !className.startsWith('text-', lastColon + 1) &&
+        !className.startsWith('leading-', lastColon + 1)
+    ) {
+        return;
+    }
     const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
     const base = lastColon === -1 ? className : className.slice(lastColon + 1);
     const textMatch = TEXT_SIZE_BASE_RE.exec(base);
@@ -3674,16 +3754,23 @@ function findMatchingLeading(
     return entries.find(entry => entry.prefix === prefix && !consumedIndices.has(entry.index));
 }
 
-/** Filters empty utilities, applies optional mangling, and joins the result. */
-function finalizeTransformResult(
-    classes: string[],
-    mangleMap?: Record<string, string>,
-): TransformResult {
-    const finalClasses = mergeTextSizeAndLeading(classes).filter(Boolean);
-    const outputClasses = mangleMap
-        ? finalClasses.map(className => mangleMap[className] || className)
-        : finalClasses;
-    return { className: outputClasses.join(' ') };
+/**
+ * Each class one value lowered to, as one class: a space inside a value
+ * becomes `_`, as Tailwind reads it in an arbitrary value. Written raw,
+ * `brightness: 'calc(1 + 2)'` split the attribute into three names that style
+ * nothing, and `display: 'flex hidden'` into two that do. Mirrors
+ * `one_class_each`.
+ *
+ * @param classes - The classes, one per entry.
+ * @returns The same, none holding a space.
+ */
+function oneClassEach(classes: string[]): string[] {
+    return classes.map(oneClass);
+}
+
+/** One object's classes, each one class, merged and with the empty ones dropped. */
+function finalizeClasses(classes: string[]): string[] {
+    return mergeTextSizeAndLeading(oneClassEach(classes)).filter(Boolean);
 }
 
 /**
@@ -3720,7 +3807,7 @@ function collectFallbackProperty(
     if (!isKnownSzPropertyKey(rawKey)) warnUnknownSzProperty(rawKey, szProp);
     if (/^\d+(?:\.\d+)?$/.test(rawKey)) return;
     if (value === true) {
-        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? BOOLEAN_TO_CLASS[rawKey] || key : key;
+        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? own(BOOLEAN_TO_CLASS, rawKey) || key : key;
         classes.push(`${prefix}${utility}`);
         return;
     }
@@ -3818,13 +3905,13 @@ function collectObjectProperty(
         }
         return true;
     }
-    if (rawKey in PROPERTY_MAP && 'color' in value) {
+    if (own(PROPERTY_MAP, rawKey) !== undefined && 'color' in value) {
         classes.push(
             buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
         );
         return true;
     }
-    if (rawKey in PROPERTY_MAP) warnPropertyObjectValue(rawKey, value);
+    if (own(PROPERTY_MAP, rawKey) !== undefined) warnPropertyObjectValue(rawKey, value);
     warnOwnedKeyVariantObject(rawKey);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
@@ -3893,6 +3980,8 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedSpacingSteps.clear();
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
+    _warnedOpacityValues.clear();
+    _warnedBracketedValues.clear();
     _warnedColorObjectSlashOpacity.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();
@@ -3914,7 +4003,7 @@ export function __resetSzWarnDedupForTests(): void {
  * generate no CSS. Keys that are genuine variants (hover, sm, group…) never
  * reach here with a property meaning: PROPERTY_MAP and the variant sets are
  * disjoint (locked by test).
- * The caller checks `key in PROPERTY_MAP` first.
+ * The caller checks `own(PROPERTY_MAP, key) !== undefined` first.
  * @param key - The sz key holding the object.
  * @param value - The stray object value (used to name the nested keys).
  */
@@ -3978,10 +4067,10 @@ function collectNestedVariant(
     const variantName = isArbitraryVariant(rawKey)
         ? normalizeArbitraryVariant(rawKey)
         : getVariantPrefix(rawKey);
-    const nestedResult = transformNested(value, `${prefix}${variantName}:`);
-    if (nestedResult.className) {
-        classes.push(nestedResult.className);
-        warnUnservedStateVariant(variantName, nestedResult.className);
+    const nested = nestedClasses(value, `${prefix}${variantName}:`);
+    if (nested.length > 0) {
+        classes.push(...nested);
+        warnUnservedStateVariant(variantName, nested[0] as string);
     }
 }
 
@@ -3999,9 +4088,9 @@ const _warnedUnservedVariants = new Set<string>();
  * emitted.
  *
  * @param variant - The variant as the class writes it.
- * @param classNames - The classes emitted under it, space-separated.
+ * @param className - The first class emitted under it, which the line names.
  */
-function warnUnservedStateVariant(variant: string, classNames: string): void {
+function warnUnservedStateVariant(variant: string, className: string): void {
     if (
         process.env.NODE_ENV !== 'production' &&
         szNodeWarningsUnmuted() &&
@@ -4012,7 +4101,7 @@ function warnUnservedStateVariant(variant: string, classNames: string): void {
         _warnedUnservedVariants.add(variant);
         szReport({
             diagnostic: UNSERVED_VARIANT,
-            args: { form, variant, className: classNames.split(' ')[0] as string },
+            args: { form, variant, className },
             at: szWarnLocation,
         });
     }
@@ -4034,7 +4123,7 @@ function warnUnservedStateVariant(variant: string, classNames: string): void {
  */
 function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
-    const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
+    const removed = own(REMOVED_BOOLEAN_SUGAR, rawKey);
     if (!removed) return false;
     warnRemovedKey(
         rawKey,
@@ -4084,7 +4173,7 @@ function collectUnresolvedStringProperty(
 ): boolean {
     if (typeof value !== 'string') return false;
     if (rawKey.startsWith('@')) {
-        classes.push(`${prefix}${VARIANT_MAP[rawKey] || rawKey}/${value}`);
+        classes.push(`${prefix}${own(VARIANT_MAP, rawKey) || rawKey}/${value}`);
         return true;
     }
     if (rawKey === 'group' || rawKey === 'peer') {
@@ -4092,7 +4181,7 @@ function collectUnresolvedStringProperty(
         return true;
     }
     if (dropSlashOpacityString(rawKey, value.replace(/!$/, ''))) return true;
-    const snapClass = SNAP_DIRECT_MAP[rawKey]?.[value];
+    const snapClass = own(own(SNAP_DIRECT_MAP, rawKey), value);
     if (snapClass) {
         classes.push(`${prefix}${snapClass}`);
         return true;
@@ -4135,48 +4224,106 @@ function collectUnresolvedDirectProperty(
  */
 function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): void {
     // An alias holding a value that moved: its canonical key no longer
-    // takes the value, so name where the value went instead. The important
-    // modifier is a class suffix, not part of the value, as on the key itself.
-    const base = typeof value === 'string' ? handleImportant(value).value : undefined;
+    // takes the value, so name where the value went instead.
+    const base = typeof value === 'string' ? value : undefined;
     const moved =
         base !== undefined
-            ? CLOSED_ENUM_VALUE_MOVES[`${SUGGESTION_MAP[rawKey]}:${base}`]
+            ? CLOSED_ENUM_VALUE_MOVES[`${own(SUGGESTION_MAP, rawKey)}:${base}`]
             : undefined;
     if (moved !== undefined) warnMovedValue(rawKey, base as string);
-    else if (rawKey in MIGRATION_NOTES) warnRemovedKey(rawKey, 'removed');
+    else if (own(MIGRATION_NOTES, rawKey) !== undefined) warnRemovedKey(rawKey, 'removed');
     // No alias or removed key is a known key; a test pins that.
     else warnUnknownSzProperty(rawKey, szProp);
 }
 
-/** Collects one property after filtering inactive values and shortcut forms. */
+/**
+ * Every key {@link collectTransformProperty} answers with a warning instead of
+ * a class: a CSS name, a removed key, a split shorthand. One set answers a
+ * miss, which is nearly every key, in one lookup where three tables took one
+ * each. The tables are never written after load.
+ */
+const ALIAS_OR_REMOVED_KEYS: ReadonlySet<string> = new Set([
+    ...Object.keys(SUGGESTION_MAP),
+    ...Object.keys(MIGRATION_NOTES),
+    ...Object.keys(SPLIT_SHORTHAND_KEYS),
+]);
+
+/**
+ * Answers a key {@link ALIAS_OR_REMOVED_KEYS} holds with its warning; it
+ * emits no class.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value.
+ * @param szProp - The object it sits in.
+ * @returns True when the key was one and was answered here.
+ */
+function collectAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): boolean {
+    if (!ALIAS_OR_REMOVED_KEYS.has(rawKey)) return false;
+    // A flag that joined a group under a new name emits nothing; say so in
+    // every mode, as for the other replaced keys.
+    const replacement = REPLACED_KEYS.has(rawKey) ? own(SUGGESTION_MAP, rawKey) : undefined;
+    if (replacement !== undefined) warnRemovedKey(rawKey, 'replaced', `${replacement}: true`);
+    else warnAliasOrRemovedKey(rawKey, value, szProp);
+    return true;
+}
+
+/**
+ * Collects one property after filtering inactive values and shortcut forms.
+ * `splitImportant` is false for the value left after one `!` was split off,
+ * so `x!!` keeps its second `!` in the value, as on the engine.
+ */
 function collectTransformProperty(
     rawKey: string,
     value: SzValue,
     prefix: string,
     szProp: SzObject,
     classes: string[],
+    splitImportant = true,
 ): void {
     if (value === false || value === null || value === undefined) return;
-    // A flag that joined a group under a new name emits nothing; say so in
-    // every mode, as for the other replaced keys.
-    if (REPLACED_KEYS.has(rawKey) && rawKey in SUGGESTION_MAP) {
-        warnRemovedKey(rawKey, 'replaced', `${SUGGESTION_MAP[rawKey]}: true`);
-        return;
-    }
-    if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES || rawKey in SPLIT_SHORTHAND_KEYS) {
-        warnAliasOrRemovedKey(rawKey, value, szProp);
-        return;
-    }
+    if (dropBracketedValue(rawKey, value)) return;
+    if (splitImportant && collectImportantProperty(rawKey, value, prefix, szProp, classes)) return;
+    if (collectAliasOrRemovedKey(rawKey, value, szProp)) return;
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 
-    const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
+    const key = own(PROPERTY_MAP, rawKey) || camelToKebab(rawKey);
     if (collectBasicSpecialProperty(rawKey, value, prefix, classes)) return;
     if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
     collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
+}
+
+/**
+ * The important modifier belongs to the class, never to the value: split one
+ * trailing `!` off a string, lower what is left, and put it back on every
+ * class that lowered to. Every decision on the value — brackets, a fraction,
+ * where a sign goes — then reads the value as written, as the engine's
+ * `format_static_class` does; per-formatter handling had `[4!]` where the
+ * engine wrote `[4]!`. A custom property keeps it: there it is part of the
+ * declaration value.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value.
+ * @param prefix - The variant prefix in effect.
+ * @param szProp - The object it sits in.
+ * @param classes - Where the classes go.
+ * @returns True when the value carried the modifier and was lowered here.
+ */
+function collectImportantProperty(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string' || !value.endsWith('!') || rawKey.startsWith('--')) return false;
+    const start = classes.length;
+    collectTransformProperty(rawKey, value.slice(0, -1), prefix, szProp, classes, false);
+    for (let index = start; index < classes.length; index++) classes[index] += '!';
+    return true;
 }
 
 /** Collects string utilities that require a resolved property context. */
@@ -4195,9 +4342,7 @@ function collectResolvedStringProperty(
     if (collectContentBorderProperty(rawKey, value, prefix, classes)) return true;
     if (collectTransformStringProperty(rawKey, value, prefix, classes)) return true;
     if (rawKey === 'bgImg') {
-        // The important modifier belongs to the class, as on every other key.
-        const { value: image, important } = handleImportant(value);
-        classes.push(`${prefix}${formatBackgroundImage(image)}${important ? '!' : ''}`);
+        classes.push(`${prefix}${formatBackgroundImage(value)}`);
         return true;
     }
     return collectBackgroundMaskProperty(rawKey, value, prefix, classes);
@@ -4206,19 +4351,14 @@ function collectResolvedStringProperty(
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
- * Depth-unchecked transform body. Called by {@link transform} once the depth
- * guard has been applied.
+ * Depth-unchecked transform body. Called by {@link nestedClasses} once the
+ * depth guard has been applied.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
- * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className.
+ * @returns the emitted classes.
  */
-function transformImpl(
-    szProp: SzObject,
-    prefix: string,
-    mangleMap?: Record<string, string>,
-): TransformResult {
+function transformImpl(szProp: SzObject, prefix: string): string[] {
     const classes: string[] = [];
 
     const shadowed = keysShadowedByGlobalKeywords(szProp);
@@ -4227,7 +4367,7 @@ function transformImpl(
         collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 
-    return finalizeTransformResult(classes, mangleMap);
+    return finalizeClasses(classes);
 }
 
 /**

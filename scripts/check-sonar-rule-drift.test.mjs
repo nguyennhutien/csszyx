@@ -8,7 +8,9 @@ import { describe, it } from 'node:test';
 
 import {
     bucketRules,
+    externalRulesFromReadme,
     isEnabled,
+    localRuleName,
     parseSonarProperties,
     profileFile,
     profileRuleList,
@@ -255,5 +257,51 @@ describe('a properties value continued over lines', () => {
             'sonar.exclusions': '**/dist/**,**/*.rs',
             b: '2',
         });
+    });
+});
+
+describe('the rules SonarJS runs from other plugins', () => {
+    const readme = [
+        'intro | S1 | not a table row we read',
+        '<!--- start external rules -->',
+        '| Rule ID | Rule |',
+        '| ------- | ---- |',
+        '| S6653   | [eslint/prefer-object-has-own](https://eslint.org/docs/latest/rules/prefer-object-has-own) |',
+        '| S7785   | [unicorn/prefer-top-level-await](https://github.com/x) |',
+        '| S6590   | [typescript-eslint/prefer-as-const](https://typescript-eslint.io/x) |',
+        '| S6438   | [react/jsx-no-comment-textnodes](https://github.com/x) |',
+        '<!--- end external rules -->',
+        '<!--- start decorated rules -->',
+        '| S108    | [eslint/no-empty](https://eslint.org/x) |',
+        '<!--- end decorated rules -->',
+    ].join('\n');
+
+    it('reads the external table only, by RSPEC id', () => {
+        assert.deepEqual(
+            [...externalRulesFromReadme(readme)],
+            [
+                ['S6653', 'eslint/prefer-object-has-own'],
+                ['S7785', 'unicorn/prefer-top-level-await'],
+                ['S6590', 'typescript-eslint/prefer-as-const'],
+                ['S6438', 'react/jsx-no-comment-textnodes'],
+            ],
+        );
+    });
+
+    it('reads nothing from a README without the table', () => {
+        assert.deepEqual([...externalRulesFromReadme('# sonarjs')], []);
+    });
+
+    it('names a rule as the local eslint config does, or not at all', () => {
+        assert.equal(localRuleName('eslint/prefer-object-has-own'), 'prefer-object-has-own');
+        assert.equal(
+            localRuleName('unicorn/prefer-top-level-await'),
+            'unicorn/prefer-top-level-await',
+        );
+        assert.equal(
+            localRuleName('typescript-eslint/prefer-as-const'),
+            '@typescript-eslint/prefer-as-const',
+        );
+        assert.equal(localRuleName('react/jsx-no-comment-textnodes'), null);
     });
 });

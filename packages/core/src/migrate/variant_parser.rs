@@ -105,8 +105,10 @@ fn map_container_variant(variant: &str) -> Vec<String> {
     if variant == "@container" {
         return vec!["@container".to_string()];
     }
+    // A named container is one key, as Tailwind spells it: under a query, a
+    // nested name is a variant.
     if let Some((query, name)) = variant.split_once('/') {
-        return vec![normalize_variant_key(query), name.to_string()];
+        return vec![format!("{}/{name}", normalize_variant_key(query))];
     }
     for range in ["@min", "@max"] {
         if let Some(inner) = variant
@@ -785,7 +787,8 @@ mod tests {
     fn map_variant_keeps_a_container_query_and_an_arbitrary_selector_whole() {
         for (variant, keys) in [
             ("@md", vec!["@md"]),
-            ("@md/sidebar", vec!["@md", "sidebar"]),
+            ("@md/sidebar", vec!["@md/sidebar"]),
+            ("@container/main", vec!["@container/main"]),
             ("@min-[475px]", vec!["@min", "475px"]),
             ("@container", vec!["@container"]),
             ("[&>span]", vec!["[&>span]"]),

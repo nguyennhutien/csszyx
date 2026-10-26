@@ -334,3 +334,18 @@ describe('__szvPick1 equivalence (exhaustive)', () => {
         expect(seen.splice(0)).toEqual([unknownValueLine('pad', 'nopeFull', ['sm'])]);
     });
 });
+
+describe('a selection value named like an Object.prototype member', () => {
+    // Read as a word: no variant is named `toString`, so it selects nothing,
+    // as the object path does (vui pattern audit, 2026-10-25).
+    const table: SzvCompiledTable = { base: 'p-4', d: { size: { sm: 'text-sm' } } };
+
+    it.each(['toString', 'constructor', 'hasOwnProperty', '__proto__'])(
+        '%s selects nothing on either picker',
+        name => {
+            vi.stubEnv('NODE_ENV', 'production');
+            expect(__szvPick(table, { size: name })).toBe('p-4');
+            expect(__szvPick1(table, 'size', name)).toBe('p-4');
+        },
+    );
+});

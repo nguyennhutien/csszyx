@@ -12,6 +12,11 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "help": "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
         "note": "the class is still emitted, and it styles nothing."
     },
+    "inert-keyword": {
+        "text": "`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+        "help": "set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
+        "note": "the class is still emitted, and it styles nothing."
+    },
     "dead-class": {
         "text": "`{className}` produces no CSS: this project's Tailwind serves no such utility.",
         "help": "fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.",
@@ -44,7 +49,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "help": {
             "aria": "write `aria: { {variant}: { … } }` for the ARIA state.",
             "attribute-or-aria": "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
-            "unknown": "check the spelling of `{variant}`."
+            "unknown": "check the spelling of `{variant}`.",
+            "container-name": "write `{ '{query}/{variant}': { … } }` for a container named `{variant}`; a name under a query is a variant."
         },
         "note": "the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`."
     },
@@ -110,12 +116,16 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "text": {
             "transform": "`transform` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
             "csszyx-turbopack": "`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument is refused.",
-            "csszyx-turbopack-option": "`csszyxTurbopack` has no option(s) `{options}`, so the call is refused."
+            "csszyx-turbopack-option": "`csszyxTurbopack` has no option(s) `{options}`, so the call is refused.",
+            "class-name-to-sz-object": "`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
+            "class-name-to-sz-object-option": "`classNameToSzObject` has no option(s) `{options}`, so the call is refused."
         },
         "help": {
             "transform": "pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.",
             "csszyx-turbopack": "write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.",
-            "csszyx-turbopack-option": "use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`."
+            "csszyx-turbopack-option": "use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.",
+            "class-name-to-sz-object": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.",
+            "class-name-to-sz-object-option": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`."
         }
     },
     "native-engine-unavailable": {

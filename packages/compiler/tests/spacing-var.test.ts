@@ -131,3 +131,11 @@ describe('__szUnitVar', () => {
         expect(__szUnitVar(Number.NaN, 'deg', 'rotate')).toBeUndefined();
     });
 });
+
+describe('a value named like an Object.prototype member', () => {
+    // Read as a word, passed through like any other raw value; never the
+    // prototype's function as the variable's value.
+    it.each(['constructor', 'toString', '__proto__'])('passes %s through as written', name => {
+        expect(__szSpacingVar(name, 'w')).toBe(name);
+    });
+});

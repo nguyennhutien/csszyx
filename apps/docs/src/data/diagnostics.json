@@ -973,6 +973,67 @@
       }
     },
     {
+      "id": "bracketed-value",
+      "summary": "A value wrapped in the brackets csszyx writes itself.",
+      "surfaces": {
+        "engine": {},
+        "runtime": {
+          "production": false,
+          "host": "browser"
+        }
+      },
+      "position": "site",
+      "args": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "inner": {
+          "type": "string"
+        }
+      },
+      "text": "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+      "help": "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."
+    },
+    {
+      "id": "opacity-value",
+      "summary": "An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.",
+      "surfaces": {
+        "engine": {},
+        "runtime": {
+          "production": false,
+          "host": "browser"
+        }
+      },
+      "position": "site",
+      "forms": ["range", "fraction"],
+      "args": {
+        "form": {
+          "type": ["enum", "range", "fraction"]
+        },
+        "key": {
+          "type": "string"
+        },
+        "op": {
+          "type": "string"
+        },
+        "percent": {
+          "type": "string",
+          "optional": true
+        }
+      },
+      "text": {
+        "range": "`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.",
+        "fraction": "`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1."
+      },
+      "help": {
+        "range": "write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.",
+        "fraction": "write `op: {percent}` for {percent}%."
+      }
+    },
+    {
       "id": "unsigned-value",
       "summary": "A negative value on a key Tailwind serves no negative utility for.",
       "surfaces": {
@@ -995,6 +1056,31 @@
       },
       "text": "`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.",
       "help": "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
+      "note": "the class is still emitted, and it styles nothing."
+    },
+    {
+      "id": "inert-keyword",
+      "summary": "A CSS-wide keyword on a served class that no property it sets takes.",
+      "surfaces": {
+        "check": {
+          "group": "dead-class"
+        },
+        "runtime": {
+          "production": false,
+          "host": "node"
+        }
+      },
+      "position": "file",
+      "args": {
+        "className": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        }
+      },
+      "text": "`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+      "help": "set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
       "note": "the class is still emitted, and it styles nothing."
     },
     {
@@ -1127,16 +1213,27 @@
         }
       },
       "position": "site",
-      "forms": ["aria", "attribute-or-aria", "unknown"],
+      "forms": ["aria", "attribute-or-aria", "unknown", "container-name"],
+      "buildForms": ["container-name"],
       "args": {
         "form": {
-          "type": ["enum", "aria", "attribute-or-aria", "unknown"]
+          "type": [
+            "enum",
+            "aria",
+            "attribute-or-aria",
+            "unknown",
+            "container-name"
+          ]
         },
         "variant": {
           "type": "string"
         },
         "className": {
           "type": "string"
+        },
+        "query": {
+          "type": "string",
+          "optional": true
         }
       },
       "gaps": ["engine"],
@@ -1144,7 +1241,8 @@
       "help": {
         "aria": "write `aria: { {variant}: { … } }` for the ARIA state.",
         "attribute-or-aria": "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
-        "unknown": "check the spelling of `{variant}`."
+        "unknown": "check the spelling of `{variant}`.",
+        "container-name": "write `{ '{query}/{variant}': { … } }` for a container named `{variant}`; a name under a query is a variant."
       },
       "note": "the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`."
     },
@@ -2166,14 +2264,22 @@
         }
       },
       "position": "none",
-      "forms": ["transform", "csszyx-turbopack", "csszyx-turbopack-option"],
+      "forms": [
+        "transform",
+        "csszyx-turbopack",
+        "csszyx-turbopack-option",
+        "class-name-to-sz-object",
+        "class-name-to-sz-object-option"
+      ],
       "args": {
         "form": {
           "type": [
             "enum",
             "transform",
             "csszyx-turbopack",
-            "csszyx-turbopack-option"
+            "csszyx-turbopack-option",
+            "class-name-to-sz-object",
+            "class-name-to-sz-object-option"
           ]
         },
         "options": {
@@ -2185,12 +2291,16 @@
       "text": {
         "transform": "`transform` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
         "csszyx-turbopack": "`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument is refused.",
-        "csszyx-turbopack-option": "`csszyxTurbopack` has no option(s) `{options}`, so the call is refused."
+        "csszyx-turbopack-option": "`csszyxTurbopack` has no option(s) `{options}`, so the call is refused.",
+        "class-name-to-sz-object": "`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
+        "class-name-to-sz-object-option": "`classNameToSzObject` has no option(s) `{options}`, so the call is refused."
       },
       "help": {
         "transform": "pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.",
         "csszyx-turbopack": "write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.",
-        "csszyx-turbopack-option": "use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`."
+        "csszyx-turbopack-option": "use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.",
+        "class-name-to-sz-object": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.",
+        "class-name-to-sz-object-option": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`."
       }
     },
     {

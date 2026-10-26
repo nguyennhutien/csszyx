@@ -179,11 +179,13 @@ describe('the resolution entries a hand-written map holds', () => {
     // it is the only field of the answer no other suite in this package reads.
     runs('reads an object, an alias and each directive', () => {
         const answer = migrateRustClassName('mapped aliased kept removed pending', {
-            mapped: { m: 2 },
-            aliased: 'p-8',
-            kept: 'sz:keep',
-            removed: 'sz:remove',
-            pending: 'sz:todo',
+            customMap: {
+                mapped: { m: 2 },
+                aliased: 'p-8',
+                kept: 'sz:keep',
+                removed: 'sz:remove',
+                pending: 'sz:todo',
+            },
         });
 
         expect(answer.szObject).toMatchObject({ m: 2, p: 8 });
@@ -196,7 +198,7 @@ describe('the resolution entries a hand-written map holds', () => {
         ['null', null],
         ['false', false],
     ])('reads %s as unresolved, the way it meant before the directives existed', (_n, entry) => {
-        const answer = migrateRustClassName('legacy', { legacy: entry });
+        const answer = migrateRustClassName('legacy', { customMap: { legacy: entry } });
 
         expect(answer.unrecognized).toEqual(['legacy']);
         expect(answer.keepInClassName).toEqual([]);

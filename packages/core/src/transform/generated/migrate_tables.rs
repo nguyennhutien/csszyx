@@ -329,80 +329,6 @@ pub(crate) fn font_weight_keywords(value: &str) -> bool {
     )
 }
 
-/// `FRACTION_SUPPORTED` from reverse-map.ts, in source order.
-pub(crate) const FRACTION_SUPPORTED: &[&str] = &[
-    "w",
-    "min-w",
-    "max-w",
-    "h",
-    "min-h",
-    "max-h",
-    "size",
-    "basis",
-    "inset",
-    "inset-x",
-    "inset-y",
-    "top",
-    "right",
-    "bottom",
-    "left",
-    "start",
-    "end",
-    "inset-s",
-    "inset-e",
-    "inset-bs",
-    "inset-be",
-    "block",
-    "inline",
-    "min-block",
-    "max-block",
-    "min-inline",
-    "max-inline",
-    "translate-x",
-    "translate-y",
-    "translate",
-    "aspect",
-    "flex",
-];
-
-/// Whether `value` is in `FRACTION_SUPPORTED`.
-pub(crate) fn fraction_supported(value: &str) -> bool {
-    matches!(
-        value,
-        "w" | "min-w"
-            | "max-w"
-            | "h"
-            | "min-h"
-            | "max-h"
-            | "size"
-            | "basis"
-            | "inset"
-            | "inset-x"
-            | "inset-y"
-            | "top"
-            | "right"
-            | "bottom"
-            | "left"
-            | "start"
-            | "end"
-            | "inset-s"
-            | "inset-e"
-            | "inset-bs"
-            | "inset-be"
-            | "block"
-            | "inline"
-            | "min-block"
-            | "max-block"
-            | "min-inline"
-            | "max-inline"
-            | "translate-x"
-            | "translate-y"
-            | "translate"
-            | "aspect"
-            | "flex"
-    )
-}
-
 /// `KNOWN_BREAKPOINTS` from reverse-map.ts, in source order.
 pub(crate) const KNOWN_BREAKPOINTS: &[&str] = &["sm", "md", "lg", "xl", "2xl"];
 
@@ -1158,7 +1084,6 @@ pub(crate) const MIGRATE_SETS: &[MigrateSet] = &[
         FONT_WEIGHT_KEYWORDS,
         font_weight_keywords,
     ),
-    ("FRACTION_SUPPORTED", FRACTION_SUPPORTED, fraction_supported),
     ("KNOWN_BREAKPOINTS", KNOWN_BREAKPOINTS, known_breakpoints),
     (
         "KNOWN_SIMPLE_VARIANTS",

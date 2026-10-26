@@ -7,8 +7,8 @@
 //! the caller keeps it in `className`.
 
 use super::class_rules::{
-    self, decode_arbitrary_spaces, is_fraction, is_valid_spacing_value, signed_string, wrapped,
-    Shape, SHADOW_SIZE_PROPS,
+    self, decode_arbitrary_spaces, is_fraction, is_valid_spacing_value, prefix_takes_fractions,
+    signed_string, wrapped, Shape, SHADOW_SIZE_PROPS,
 };
 use super::value::{js_number, js_number_to_string, Extra, ParsedClass, SzObject, SzValue};
 use super::verdict::{lowered_class, lowers_back_to, Judge};
@@ -310,22 +310,19 @@ pub fn find_top_level_slash(text: &str) -> Option<usize> {
     None
 }
 
-/// The class read by the longest known prefix its text starts with.
+/// The class read by the longest known prefix its text is or starts with.
 ///
-/// A class that is exactly a prefix and refused by it still falls to a
-/// shorter one. A class with a value does not: the longest prefix `P` that
-/// matches `P-<value>` owns it, and its refusal is the answer. Every shorter
-/// prefix that matches is a strict prefix `Q` of `P` (`P = Q-…`), which would
-/// read `P`'s own segment as its value — `translate` taking `-z-1/2` that
-/// `translate-z` refused, as `{ color: '-z-1', op: 2 }`. `SORTED_PREFIXES`
-/// runs longest first, so the first valued match is that `P`.
+/// The longest prefix `P` that is the class, or matches `P-<value>`, owns it,
+/// and its refusal is the answer. Every shorter prefix that matches is a
+/// strict prefix `Q` of `P` (`P = Q-…`), which would read `P`'s own segment
+/// as its value — `translate` taking `-z-1/2` that `translate-z` refused, as
+/// `{ color: '-z-1', op: 2 }`, or `rounded` taking `rounded-b` as
+/// `rounded: 'b'`. `SORTED_PREFIXES` runs longest first, so the first match
+/// is that `P`.
 fn parse_longest_prefix(source: &str, negative: bool, judge: Judge<'_>) -> Option<ParsedClass> {
     for prefix in tables::SORTED_PREFIXES {
         if source == *prefix {
-            if let Some(exact) = parse_exact_prefix(prefix, negative) {
-                return Some(exact);
-            }
-            continue;
+            return parse_exact_prefix(prefix, negative, judge);
         }
         if valued_by(source, prefix) {
             return parse_valued_prefix(source, prefix, negative, judge);
@@ -343,25 +340,35 @@ fn valued_by(source: &str, prefix: &str) -> bool {
 }
 
 /// A class that is exactly a prefix: the boolean it implies, if any.
-fn parse_exact_prefix(prefix: &'static str, negative: bool) -> Option<ParsedClass> {
-    if negative && tables::negative_allowed(prefix) {
+///
+/// A sign needs a value, so `-border` is no class Tailwind writes. Otherwise
+/// the prefix's own key set to `true` (`rounded-b` → `roundedB: true`), when
+/// the project serves the bare class and that key writes it back. The table
+/// answers for a class nobody asked about ([`bare_utility`]).
+fn parse_exact_prefix(
+    prefix: &'static str,
+    negative: bool,
+    judge: Judge<'_>,
+) -> Option<ParsedClass> {
+    // A bare boolean (`flex`, `grow`) was read before the prefixes were.
+    if negative || !judge.served(prefix, bare_utility(prefix)) {
         return None;
     }
-    if let Some(prop) = tables::reverse_boolean(prefix) {
-        return Some(ParsedClass::new(prop, true));
-    }
-    let prop = reverse_property_key(prefix).unwrap_or(prefix);
-    if prefix == "divide-x" || prefix == "divide-y" || prefix == "border" {
-        return Some(ParsedClass::new(prop, true));
-    }
-    // Named rather than searched. A substring test would also accept a
-    // two-letter suffix that happens to sit next to itself in the list, such
-    // as "tr" or "se", and only the length test beside it was keeping those
-    // out — a pairing that holds today because no such prefix exists yet.
-    let border_side = prefix
-        .strip_prefix("border-")
-        .is_some_and(|side| matches!(side, "t" | "r" | "b" | "l" | "x" | "y" | "s" | "e"));
-    border_side.then(|| ParsedClass::new(prop, true))
+    let parsed = ParsedClass::new(reverse_property_key(prefix).unwrap_or(prefix), true);
+    lowers_back_to(&parsed, prefix).then_some(parsed)
+}
+
+/// Whether the table takes a bare prefix as a utility: `border`, a border
+/// side, `divide-x` and `divide-y`.
+///
+/// Named rather than searched. A substring test would also accept a
+/// two-letter suffix that happens to sit next to itself in the list, such as
+/// "tr" or "se".
+fn bare_utility(prefix: &str) -> bool {
+    matches!(prefix, "border" | "divide-x" | "divide-y")
+        || prefix
+            .strip_prefix("border-")
+            .is_some_and(|side| matches!(side, "t" | "r" | "b" | "l" | "x" | "y" | "s" | "e"))
 }
 
 /// A prefix followed by `-` and a value the prefix accepts.
@@ -546,10 +553,27 @@ fn disambiguate_and_parse(
     if SHADOW_SIZE_PROPS.contains(&result.prop.as_str()) {
         return Ok(ParsedClass::new(&result.prop, raw_value));
     }
+    // No `op` writes this modifier's opacity, so the class stays as written.
+    if opacity == SzValue::Null {
+        return Err(Unread::NoRule);
+    }
+    // A modifier is an opacity only on a key that takes a colour, by the
+    // lowering's own list: `m-auto/50` is no colour, and no Tailwind class.
+    if !takes_colour(&result.prop) {
+        return Err(Unread::NotColour);
+    }
     let mut colour = SzObject::new();
     colour.insert("color".to_string(), SzValue::from(text.as_str()));
     colour.insert("op".to_string(), opacity);
     Ok(ParsedClass::new(&result.prop, SzValue::Object(colour)))
+}
+
+/// Whether the sz key `prop` takes a colour: a colour key (`bg`,
+/// `borderColor`), or a key whose colour sibling is one (`borderT` for
+/// `borderTColor`), which writes the same class for a colour.
+fn takes_colour(prop: &str) -> bool {
+    use crate::transform::generated::tables::is_color_property;
+    is_color_property(prop) || is_color_property(&format!("{prop}Color"))
 }
 
 /// The `leading` value a `text-*/modifier` carries: a bare number rides the
@@ -575,12 +599,12 @@ fn is_leading_number(raw: &str) -> bool {
 }
 
 /// The value before a top-level `/` and the modifier after it, unless the
-/// slash is a fraction on a prefix that takes fractions.
+/// slash is a fraction on a prefix whose key takes fractions.
 fn extract_opacity<'a>(prefix: &str, raw_value: &'a str) -> (&'a str, Option<SzValue>) {
     let Some(slash) = find_top_level_slash(raw_value) else {
         return (raw_value, None);
     };
-    if tables::fraction_supported(prefix) && is_fraction(raw_value) {
+    if prefix_takes_fractions(prefix) && is_fraction(raw_value) {
         return (raw_value, None);
     }
     (
@@ -589,23 +613,39 @@ fn extract_opacity<'a>(prefix: &str, raw_value: &'a str) -> (&'a str, Option<SzV
     )
 }
 
-/// `50`, `[50%]`, `[0.5]`, `(--op)`: a number where the text is one, the
-/// text otherwise.
+/// `50`, `[50%]`, `[0.5]`, `(--op)` as the `op` that writes the same opacity,
+/// or `null` when the modifier is no opacity `op` can take.
+///
+/// `op` is a percent, and Tailwind reads a bracket without `%` as a fraction of
+/// one: `/[0.5]` is 50%, so it becomes `op: 50`, where `op: 0.5` is 0.5%.
 fn parse_opacity(raw: &str) -> SzValue {
     if let Some(inner) = wrapped(raw, '[', ']') {
         if inner.contains('%') {
             return SzValue::from(inner);
         }
-        return numeric_opacity(inner);
+        return match js_number(inner) {
+            Some(fraction) if is_plain_decimal(inner) && fraction <= 1.0 => {
+                // Rounded so `0.05` reads `5`, not `5.000000000000001`.
+                SzValue::Number((fraction * 100.0 * 1e9).round() / 1e9)
+            }
+            _ => SzValue::Null,
+        };
     }
     if let Some(inner) = wrapped(raw, '(', ')') {
         return SzValue::from(inner);
     }
-    numeric_opacity(raw)
+    js_number(raw)
+        .filter(|_| is_plain_decimal(raw))
+        .map_or(SzValue::Null, SzValue::Number)
 }
 
-fn numeric_opacity(value: &str) -> SzValue {
-    js_number(value).map_or_else(|| SzValue::from(value), SzValue::Number)
+/// Digits with at most one point: `50`, `0.5`, `.5`.
+fn is_plain_decimal(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+        && text.bytes().filter(|&byte| byte == b'.').count() <= 1
 }
 
 /// Pick the prefix's key by the value's shape and spell the value.
@@ -696,9 +736,7 @@ fn lowers_as_reference(parsed: &ParsedClass, nested: bool) -> bool {
 /// back. `aspect` is the exception: its fraction utility is the ratio itself,
 /// so `aspect-[16/9]` and `aspect-16/9` set the same `aspect-ratio`.
 fn is_bracketed_fraction_utility(prefix: &str, shape: &Shape<'_>) -> bool {
-    prefix != "aspect"
-        && tables::fraction_supported(prefix)
-        && shape.bracket.is_some_and(is_fraction)
+    prefix != "aspect" && prefix_takes_fractions(prefix) && shape.bracket.is_some_and(is_fraction)
 }
 
 #[cfg(test)]
@@ -707,6 +745,74 @@ mod tests {
 
     use super::*;
     use crate::migrate::class_rules::{prop_name, rules_for, select, RULE_TABLES};
+
+    /// A class that is exactly a longer prefix is that prefix's own key, set
+    /// to `true`, when the project serves it and that writes the class back:
+    /// `rounded-b` is `roundedB: true`, never `rounded: 'b'` from the shorter
+    /// prefix. Unasked, the table answers, and the class stays in `className`.
+    #[test]
+    fn a_class_that_is_exactly_a_longer_prefix_takes_its_own_key() {
+        let cases = [
+            ("rounded-b", "roundedB"),
+            ("rounded-t", "roundedT"),
+            ("rounded-tl", "roundedTl"),
+            ("inset-ring", "insetRing"),
+            ("transform", "transform"),
+        ];
+        let answers: crate::migrate::verdict::ServedAnswers = cases
+            .iter()
+            .map(|(class, _)| ((*class).to_string(), true))
+            .collect();
+        for (class, prop) in cases {
+            let parsed = parse_class_judged(class, Judge::new(Some(&answers), None))
+                .unwrap_or_else(|| panic!("{class} unread"));
+            assert_eq!(
+                (parsed.prop.as_str(), &parsed.value),
+                (prop, &SzValue::Bool(true)),
+                "{class}"
+            );
+            // `inset-ring` is a boolean the table already knows.
+            if class != "inset-ring" {
+                assert!(parse_class(class).is_none(), "{class} read with no answer");
+            }
+        }
+        // Unasked and not in the table: the class stays, never read by the
+        // shorter prefix as `color: 'shadow'`.
+        assert_eq!(parse_class("text-shadow").map(|parsed| parsed.prop), None);
+        assert_eq!(
+            parse_class("border-b").map(|parsed| parsed.prop),
+            Some("borderB".into())
+        );
+    }
+
+    /// A modifier is an opacity only on a key that takes a colour: the
+    /// reading must write the class back. `m-auto/50` is no colour, and stays.
+    #[test]
+    fn a_modifier_reads_as_an_opacity_only_where_a_colour_writes_it_back() {
+        for class in ["m-auto/50", "w-full/50", "p-px/25", "rounded-lg/50"] {
+            assert_eq!(
+                parse_class(class).map(|parsed| parsed.prop),
+                None,
+                "{class}"
+            );
+        }
+        for (class, prop, color) in [
+            ("bg-brand/50", "bg", "brand"),
+            ("bg-red-500/50", "bg", "red-500"),
+            ("border-red-500/50", "borderColor", "red-500"),
+            ("border-t-red-500/50", "borderT", "red-500"),
+        ] {
+            let parsed = parse_class(class).unwrap_or_else(|| panic!("{class} unread"));
+            let SzValue::Object(object) = &parsed.value else {
+                panic!("{class} is no colour object");
+            };
+            assert_eq!(
+                (parsed.prop.as_str(), object.get("color")),
+                (prop, Some(&SzValue::from(color))),
+                "{class}"
+            );
+        }
+    }
 
     #[test]
     fn a_sign_on_a_fraction_migrates_only_for_a_key_the_table_signs_fractions_for() {
@@ -756,10 +862,7 @@ mod tests {
         }
         for prefix in tables::SORTED_PREFIXES {
             if source == *prefix {
-                if parse_exact_prefix(prefix, negative).is_some() {
-                    return None;
-                }
-                continue;
+                return None;
             }
             if valued_by(source, prefix) {
                 parse_valued_prefix(source, prefix, negative, Judge::default())?;
@@ -954,9 +1057,18 @@ mod tests {
             "z-1/2",
             "bg-1/2",
             "text-1/2",
+            // A modifier is a plain decimal: an exponent, a hex number or a
+            // second point is no opacity `op` can take.
+            "bg-red-500/1e2",
+            "bg-red-500/[1e-1]",
+            "bg-red-500/0x10",
+            "bg-red-500/1.2.3",
         ] {
             assert_eq!(prop_value(class), "null", "{class}");
         }
+        // A bracketed fraction on a key with no fraction utility is its value;
+        // on one with a fraction utility the class stays in `className`.
+        assert_eq!(prop_value("m-[1/2]"), r#"m="1/2""#);
         // A colour keeps its modifier, a fraction utility its fraction, and
         // the size-and-line-height and shadow modifiers are their own forms.
         for (class, expected) in [
@@ -968,6 +1080,21 @@ mod tests {
             ("shadow-lg/50", r#"shadow="lg/50""#),
         ] {
             assert_eq!(prop_value(class), expected, "{class}");
+        }
+        // `op` is a percent, and Tailwind reads a bracket without `%` as a
+        // fraction of one: `/[0.5]` is 50%, which `op: 0.5` is not.
+        for (class, expected) in [
+            ("bg-black/[0.05]", r#"bg={"color":"black","op":5}"#),
+            ("bg-black/[0.5]", r#"bg={"color":"black","op":50}"#),
+            ("bg-black/[.333]", r#"bg={"color":"black","op":33.3}"#),
+            ("bg-black/[78%]", r#"bg={"color":"black","op":"78%"}"#),
+            ("bg-black/75.5", r#"bg={"color":"black","op":75.5}"#),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+        // No `op` writes these opacities, so the class stays as written.
+        for class in ["bg-black/[20]", "bg-black/[1.5]", "bg-black/abc"] {
+            assert_eq!(prop_value(class), "null", "{class}");
         }
         assert_eq!(
             parse_class("text-sm/6").map(|parsed| parsed.prop),
@@ -992,14 +1119,15 @@ mod tests {
         assert_eq!(prop_value("translate-z-px"), r#"translateZ="px""#);
     }
 
-    /// The longest known prefix the class text starts with, followed by a
-    /// `-` and a value.
+    /// The longest known prefix the class text is, or starts with followed
+    /// by a `-` and a value.
     fn longest_textual_prefix(source: &str) -> Option<&'static str> {
         tables::SORTED_PREFIXES.iter().copied().find(|prefix| {
-            source
-                .strip_prefix(prefix)
-                .and_then(|rest| rest.strip_prefix('-'))
-                .is_some_and(|value| !value.is_empty())
+            source == *prefix
+                || source
+                    .strip_prefix(prefix)
+                    .and_then(|rest| rest.strip_prefix('-'))
+                    .is_some_and(|value| !value.is_empty())
         })
     }
 
@@ -1135,11 +1263,11 @@ mod tests {
         assert_eq!(prop_value("-m-[var(--v)]"), r#"m="-(--v)""#);
         assert_eq!(prop_value("-z-[var(--v,1)]"), r#"z="-(--v,1)""#);
         // A `var()` with a nested fallback is still one call.
-        // A fallback with parens of its own is one call too, but the lowering
-        // brackets it (`m-[-(--v,calc(1px*2))]`), so it stays in `className`,
-        // signed or not.
+        // A fallback with parens of its own is one call too: the lowering
+        // writes it back as `m-(--v,calc(1px*2))`, so that class migrates; the
+        // signed bracket form is not what it writes, so that one stays.
         assert_eq!(prop_value("-m-[var(--v,calc(1px*2))]"), "null");
-        assert_eq!(prop_value("m-(--v,calc(1px*2))"), "null");
+        assert_eq!(prop_value("m-(--v,calc(1px*2))"), r#"m="--v,calc(1px*2)""#);
         // Nothing else has a signed form the lowering writes back: not a
         // call that does not name a custom property, not two calls.
         for class in [
@@ -1231,20 +1359,24 @@ mod tests {
 
     #[test]
     fn a_reference_the_lowering_cannot_write_back_stays_in_class_name() {
-        // `scale: '-(--v)'` lowers to `scale-[-(--v)]`, and a signed hint to
-        // `m-[-(length:--v)]`: neither is the class, so neither migrates.
-        for class in ["-scale-(--v)", "-scale-[var(--v)]", "-m-(length:--v)"] {
-            assert_eq!(prop_value(class), "null", "{class}");
+        // A signed hint lowers to `m-[-(length:--v)]`, which is not the class,
+        // so it does not migrate.
+        assert_eq!(prop_value("-m-(length:--v)"), "null");
+        // `scale: '-(--v)'` lowers to `-scale-(--v)`, so both spellings do.
+        for class in ["-scale-(--v)", "-scale-[var(--v)]"] {
+            assert_eq!(prop_value(class), r#"scale="-(--v)""#, "{class}");
         }
         // `perspectiveOrigin: '(length:--v)'` lowers to a bracket around it.
         assert_eq!(prop_value("perspective-origin-(length:--v)"), "null");
     }
 
     #[test]
-    fn a_value_the_lowering_writes_with_a_space_stays_in_class_name() {
-        // `brightness-[calc(1px + 2px)]` is two classes on the page.
-        assert_eq!(prop_value("brightness-[calc(1px_+_2px)]"), "null");
-        // Where the lowering writes the underscores back, the value migrates.
+    fn a_value_with_a_space_migrates_where_the_lowering_writes_it_back() {
+        // The lowering writes every space as `_`, so the value migrates.
+        assert_eq!(
+            prop_value("brightness-[calc(1px_+_2px)]"),
+            r#"brightness="calc(1px + 2px)""#
+        );
         assert_eq!(prop_value("p-[calc(1px_+_2px)]"), r#"p="calc(1px + 2px)""#);
         assert_eq!(prop_value("grid-cols-[1fr_2fr]"), r#"gridCols="1fr 2fr""#);
     }

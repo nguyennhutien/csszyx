@@ -307,6 +307,11 @@ function validateEntry(entry, groups, problems, computed = new Map(), browserFil
             problems.push(`${at}: forms must equal the values of its enum argument \`form\``);
         }
     }
+    for (const form of entry.buildForms ?? []) {
+        if (!(entry.forms ?? []).includes(form)) {
+            problems.push(`${at}: build form ${form} is not one of its forms`);
+        }
+    }
     for (const gap of entry.gaps ?? []) {
         if (!SURFACES.includes(gap)) problems.push(`${at}: gap ${gap} is not a surface`);
         if (entry.surfaces?.[gap]) problems.push(`${at}: lists ${gap} as both a surface and a gap`);
@@ -1157,6 +1162,8 @@ export interface SzDiagnosticSpec {
     readonly position: 'site' | 'file' | 'none';
     readonly args: Readonly<Record<string, SzDiagnosticArgSpec>>;
     readonly forms?: readonly string[];
+    /** Forms only the build or \`csszyx check\` reports; no browser bundle carries their words. */
+    readonly buildForms?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not \`form\`. */
     readonly variesBy?: string;
@@ -1212,15 +1219,33 @@ export function browserDiagnostics(input) {
  */
 function browserEntry(entry) {
     const { id, variesBy, text, help, note } = entry;
+    const runtime = browserWords(entry);
     return {
         id,
         args: templateArgs(entry),
         joiners: templateJoiners(entry),
         variesBy,
-        text,
-        help,
-        note,
+        text: runtime(text),
+        help: runtime(help),
+        note: runtime(note),
         console: entry.surfaces.runtime?.console,
+    };
+}
+
+/**
+ * The words of a template a browser bundle can print: a form only the build or
+ * \`csszyx check\` reports (\`buildForms\`) is left out, so no bundle carries a
+ * sentence the runtime never fills.
+ *
+ * @param {Record<string, any>} entry - A registry entry.
+ * @returns {(words: unknown) => unknown} The template, its build forms dropped.
+ */
+function browserWords(entry) {
+    const build = new Set(entry.buildForms ?? []);
+    return words => {
+        if (build.size === 0 || words === undefined || typeof words === 'string') return words;
+        const kept = Object.entries(words).filter(([form]) => !build.has(form));
+        return kept.length === 0 ? undefined : Object.fromEntries(kept);
     };
 }
 

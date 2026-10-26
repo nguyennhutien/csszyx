@@ -34,7 +34,9 @@ export type SzDiagnosticCode =
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
-    | 'color-slash-opacity';
+    | 'color-slash-opacity'
+    | 'bracketed-value'
+    | 'opacity-value';
 
 /**
  * The named values each live id carries, by id: what a site passes with it,
@@ -74,12 +76,15 @@ export interface SzDiagnosticArgs {
     'ast-budget': { readonly form: 'transform' | 'prescan' };
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
     'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
+    'bracketed-value': { readonly key: string; readonly value: string; readonly inner: string };
+    'opacity-value': { readonly form: 'range' | 'fraction'; readonly key: string; readonly op: string; readonly percent?: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
+    'inert-keyword': { readonly className: string; readonly keyword: string };
     'dead-class': { readonly className: string };
     'prefix-disagreement': { readonly form: 'build' | 'next' | 'check'; readonly entries: readonly string[]; readonly setting?: string; readonly ignoreSetting?: string };
     'sibling-keyword': { readonly key: string; readonly value: string; readonly className: string; readonly sets: readonly string[] };
     'broken-opacity': { readonly className: string; readonly value: string };
-    'unserved-variant': { readonly form: 'aria' | 'attribute-or-aria' | 'unknown'; readonly variant: string; readonly className: string };
+    'unserved-variant': { readonly form: 'aria' | 'attribute-or-aria' | 'unknown' | 'container-name'; readonly variant: string; readonly className: string; readonly query?: string };
     'theme-collision': { readonly form: 'classes' | 'utility-keyword' | 'value'; readonly name: string; readonly classes?: readonly string[] };
     'merge-covered-key': { readonly key: string; readonly className: string };
     'merge-covered-class': { readonly className: string };
@@ -119,7 +124,7 @@ export interface SzDiagnosticArgs {
     'dev-warnings-partial': Readonly<Record<string, never>>;
     'diagnostics-capped': { readonly form: 'per-id' | 'dev-warnings' | 'unknown-keys'; readonly id?: string; readonly count?: number };
     'sz-attribute-syntax': { readonly form: 'char' | 'end'; readonly input: string; readonly char?: string; readonly index: number };
-    'options-object-required': { readonly form: 'transform' | 'csszyx-turbopack' | 'csszyx-turbopack-option'; readonly options?: readonly string[] };
+    'options-object-required': { readonly form: 'transform' | 'csszyx-turbopack' | 'csszyx-turbopack-option' | 'class-name-to-sz-object' | 'class-name-to-sz-object-option'; readonly options?: readonly string[] };
     'lowering-not-loaded': Readonly<Record<string, never>>;
     'lite-sz-object': { readonly fnName: string; readonly received: string };
     'split-box-sz-string': { readonly value: string };
@@ -237,6 +242,8 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'bracketed-value',
+    'opacity-value',
 ];
 
 /** A pass of `csszyx check`; setting one sets every kind it reports. */
@@ -301,7 +308,10 @@ export type SzSettableDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'bracketed-value'
+    | 'opacity-value'
     | 'unsigned-value'
+    | 'inert-keyword'
     | 'prefix-disagreement'
     | 'unserved-variant';
 
@@ -346,7 +356,10 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'color-slash-opacity',
+    'bracketed-value',
+    'opacity-value',
     'unsigned-value',
+    'inert-keyword',
     'prefix-disagreement',
     'unserved-variant',
 ];
@@ -385,7 +398,10 @@ export type SzDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
+    | 'bracketed-value'
+    | 'opacity-value'
     | 'unsigned-value'
+    | 'inert-keyword'
     | 'dead-class'
     | 'prefix-disagreement'
     | 'sibling-keyword'

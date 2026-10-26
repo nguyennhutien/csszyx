@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { handleCliFlags, isEntrypoint, server, TOOLS } from '../src/index.js';
+import { handleCliFlags, isEntrypoint, server, startWhenEntrypoint, TOOLS } from '../src/index.js';
 
 describe('handleCliFlags', () => {
     afterEach(() => vi.restoreAllMocks());
@@ -44,6 +44,17 @@ describe('MCP request handlers over an in-memory transport', () => {
 
     afterAll(async () => {
         await client.close();
+    });
+
+    it('names the compiler that answered on every tool reply', async () => {
+        const result = await client.callTool({
+            name: 'csszyx_expand',
+            arguments: { sz: { p: 4 } },
+        });
+        expect((result._meta as { compilerVersion?: string }).compilerVersion).toMatch(
+            /^\d+\.\d+\.\d+/,
+        );
+        expect(client.getInstructions()).toMatch(/@csszyx\/compiler \d+\.\d+\.\d+/);
     });
 
     it('lists every registered tool', async () => {
@@ -143,5 +154,34 @@ describe('isEntrypoint', () => {
     it('is false when a different module is the entry', () => {
         process.argv[1] = fileURLToPath(import.meta.url);
         expect(isEntrypoint()).toBe(false);
+    });
+});
+
+describe('startWhenEntrypoint', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('starts nothing when the module is imported', async () => {
+        const start = vi.fn(async () => {});
+        await startWhenEntrypoint(false, start);
+        expect(start).not.toHaveBeenCalled();
+    });
+
+    it('starts the server when the module is the entry point', async () => {
+        const start = vi.fn(async () => {});
+        await startWhenEntrypoint(true, start);
+        expect(start).toHaveBeenCalledOnce();
+    });
+
+    it('names the error and exits 1 when the server fails to start', async () => {
+        const error = new Error('stdio closed');
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+        await startWhenEntrypoint(true, async () => {
+            throw error;
+        });
+        expect(logged).toHaveBeenCalledWith('Server error:', error);
+        expect(exit).toHaveBeenCalledWith(1);
     });
 });

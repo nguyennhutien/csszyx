@@ -512,7 +512,18 @@ export const SIZE_BUDGETS = [
         // type) and inlining the global-keyword fast check (+599, for an
         // instruction-count gain inside wall-clock noise). ~300 bytes of
         // headroom.
-        maxGzipBytes: 583_900,
+        //
+        // Raised from 583,900 on 2026-10-26: the 0.18 lowering fixes cost
+        // 3,166 gzip bytes, 583,289 after #399 to 586,455, as this script
+        // measures the un-optimized nodejs parser build, same machine. Most of
+        // it is diagnostics a user now sees: a value in the brackets csszyx
+        // writes (+709), an `op` read as a percent and its 0-1 form (+696,
+        // +269), and a mask stop's `op` (+171); breakpoints and container
+        // queries spelled as Tailwind serves them (+585), one spelling per
+        // key (+447) and a value with a space as one class (+295) are the
+        // rest. The wasm loads in Node at build time and never reaches a
+        // browser, so this is install size. ~300 bytes of headroom.
+        maxGzipBytes: 586_750,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -595,11 +606,35 @@ export const SIZE_BUDGETS = [
     // (+319): `unserved-variant` prints only in Node, but its gate reads
     // `typeof window`, which no bundler folds, so the table (84), the words
     // (120) and the report (~109) ride along, as every Node-only line does.
+    // Raised to 22,800 on 2026-10-24, measured 22,724 (+41): every table the
+    // lowering reads with an authored key or value goes through one own-entry
+    // lookup, so `constructor` or `toString` no longer reads `Object.prototype`
+    // and writes the text of a function as a class. Making the tables
+    // themselves prototype-free cost +137 here and was dropped. Raised to
+    // 23,000 the same day, measured 22,949 (+225): `op` is read as a percent
+    // (`/[33.3%]`, where `/[33.3]` was 3,330%), a percent string is kept, and
+    // anything else writes the colour alone with `opacity-value`, whose words
+    // the development build prints; the production one measured +139. Raised
+    // to 23,200 on 2026-10-25, measured 23,147 (+163): a value in the brackets
+    // csszyx writes itself (`w: '[100px]'`) writes nothing and reports
+    // `bracketed-value`, whose words only this build prints; the production
+    // one measured +46, against +105 for a matched-bracket scan. Raised to
+    // 23,300 on 2026-10-26, measured 23,209 (+9 over): an `op` between 0 and
+    // 1 is written as the percent it is and reported (`opacity-value`,
+    // `fraction` form), because 0.17 wrote `op: 0.05` as 5%; the user chose
+    // the report over an upgrade note alone. Raised to 23,550 on 2026-10-26,
+    // measured 23,285 (+46 against 23,239): a named container's query is
+    // mapped when the key is camelCase (`@maxLg/sidebar` → `@max-lg/sidebar`,
+    // +41, the same in production). The help of `unserved-variant`'s new
+    // `container-name` form cost +44 more and was taken out: the registry
+    // marks a form only the build reports (`buildForms`), and the browser
+    // module leaves its words out. Budget 265 above, on the user's
+    // call.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 22_700,
+        maxGzipBytes: 23_550,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -683,7 +718,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 28_950,
+        // 29,050 on 2026-10-26, measured 28,974: the `opacity-value`
+        // `fraction` form's words, which the engine's issues render with.
+        maxGzipBytes: 29_050,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -691,7 +728,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 31_950,
+        // 32,100 on 2026-10-26, measured 32,007: the same words, and the
+        // migrate class-name options object.
+        maxGzipBytes: 32_100,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

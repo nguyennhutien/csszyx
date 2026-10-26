@@ -166,7 +166,10 @@ export function generateSzObject(
             group[chosen.key] = chosen.value;
         }
         for (let level = 0; level < depth; level += 1) {
-            group = { [pick(rng, pool.variants)]: group };
+            // A dotted name is a path: `not.first` wraps as `{ not: { first } }`.
+            group = pick(rng, pool.variants)
+                .split('.')
+                .reduceRight<SzObject>((inner, key) => ({ [key]: inner }), group);
         }
         for (const [key, value] of Object.entries(group)) {
             object[key] = value;

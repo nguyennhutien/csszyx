@@ -885,6 +885,45 @@ export const DIAGNOSTICS = [
         },
         sources: [ENGINE, CORE_TS],
     },
+    {
+        id: 'bracketed-value',
+        summary: 'A value wrapped in the brackets csszyx writes itself.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        position: 'site',
+        args: { key: STRING, value: STRING, inner: STRING },
+        text: "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+        help: "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`.",
+        sources: [ENGINE, CORE_TS],
+    },
+    {
+        id: 'opacity-value',
+        summary:
+            'An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        position: 'site',
+        // `range`: no opacity is written. `fraction`: 0 < op < 1 is written as
+        // the percent it is, and said, because 0.17 bracketed such a decimal
+        // and Tailwind read it as a fraction of one (`op: 0.05` was 5%).
+        forms: ['range', 'fraction'],
+        // `op` is the JS literal the author wrote, quotes included for a string;
+        // `percent` is `op` times 100, the fraction form only.
+        args: {
+            form: formArg(['range', 'fraction']),
+            key: STRING,
+            op: STRING,
+            percent: OPTIONAL_STRING,
+        },
+        text: {
+            range: '`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.',
+            fraction:
+                '`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1.',
+        },
+        help: {
+            range: 'write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.',
+            fraction: 'write `op: {percent}` for {percent}%.',
+        },
+        sources: [ENGINE, CORE_TS],
+    },
 
     // --- check: kinds a non-engine `csszyx check` pass reports ---
     {
@@ -895,6 +934,17 @@ export const DIAGNOSTICS = [
         args: { className: STRING, utility: STRING },
         text: "`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.",
         help: "drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.",
+        note: 'the class is still emitted, and it styles nothing.',
+        sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
+    },
+    {
+        id: 'inert-keyword',
+        summary: 'A CSS-wide keyword on a served class that no property it sets takes.',
+        surfaces: { check: { group: 'dead-class' }, runtime: { production: false, host: 'node' } },
+        position: 'file',
+        args: { className: STRING, keyword: STRING },
+        text: "`{className}` sets no property to `{keyword}`: this project's Tailwind writes the keyword into a custom property or inside another value.",
+        help: "set the CSS property to `'{keyword}'` in `css: { … }`; `csszyx check --rule inert-keyword` lists every one.",
         note: 'the class is still emitted, and it styles nothing.',
         sources: [CHECK, 'packages/unplugin/src/dead-class.ts'],
     },
@@ -978,11 +1028,16 @@ export const DIAGNOSTICS = [
             runtime: { production: false, host: 'both' },
         },
         position: 'site',
-        forms: ['aria', 'attribute-or-aria', 'unknown'],
+        forms: ['aria', 'attribute-or-aria', 'unknown', 'container-name'],
+        // Only the build and `csszyx check` read a container query's name
+        // (`@md:sidebar:`), so no browser bundle carries its words.
+        buildForms: ['container-name'],
         args: {
-            form: formArg(['aria', 'attribute-or-aria', 'unknown']),
+            form: formArg(['aria', 'attribute-or-aria', 'unknown', 'container-name']),
             variant: STRING,
             className: STRING,
+            // The query a `container-name` name follows (`@md`).
+            query: OPTIONAL_STRING,
         },
         // The engines lower every bare key holding an object as an open
         // variant (a project's `@custom-variant`) and cannot see the project's
@@ -995,6 +1050,8 @@ export const DIAGNOSTICS = [
             'attribute-or-aria':
                 "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
             unknown: 'check the spelling of `{variant}`.',
+            'container-name':
+                "write `{ '{query}/{variant}': { … } }` for a container named `{variant}`; a name under a query is a variant.",
         },
         note: 'the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`.',
         sources: [CHECK, 'packages/unplugin/src/dead-class.ts', CORE_TS],
@@ -1687,9 +1744,21 @@ export const DIAGNOSTICS = [
         summary: 'An options argument that is not the one object the call takes.',
         surfaces: { error: { host: 'both' } },
         position: 'none',
-        forms: ['transform', 'csszyx-turbopack', 'csszyx-turbopack-option'],
+        forms: [
+            'transform',
+            'csszyx-turbopack',
+            'csszyx-turbopack-option',
+            'class-name-to-sz-object',
+            'class-name-to-sz-object-option',
+        ],
         args: {
-            form: formArg(['transform', 'csszyx-turbopack', 'csszyx-turbopack-option']),
+            form: formArg([
+                'transform',
+                'csszyx-turbopack',
+                'csszyx-turbopack-option',
+                'class-name-to-sz-object',
+                'class-name-to-sz-object-option',
+            ]),
             options: { type: 'string[]', joiner: '`, `', optional: true },
         },
         text: {
@@ -1699,6 +1768,10 @@ export const DIAGNOSTICS = [
                 '`csszyxTurbopack` takes one object, with the config to extend under `turbopack`, so a second argument is refused.',
             'csszyx-turbopack-option':
                 '`csszyxTurbopack` has no option(s) `{options}`, so the call is refused.',
+            'class-name-to-sz-object':
+                '`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
+            'class-name-to-sz-object-option':
+                '`classNameToSzObject` has no option(s) `{options}`, so the call is refused.',
         },
         help: {
             transform:
@@ -1707,8 +1780,12 @@ export const DIAGNOSTICS = [
                 'write `csszyxTurbopack({ turbopack: <your config>, ...options })`; loader options go beside `turbopack`.',
             'csszyx-turbopack-option':
                 'use `config`, `glob`, `importedStaticSz`, `mergeCoveredClasses`, `parserMode`, `safelistOutputFile`, `tailwindStylesheet` or `turbopack`; a Turbopack setting such as `rules` goes under `turbopack`.',
+            'class-name-to-sz-object':
+                'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
+            'class-name-to-sz-object-option':
+                'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
         },
-        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts'],
+        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts', 'packages/cli/src/migrate.ts'],
     },
     {
         id: 'lowering-not-loaded',
