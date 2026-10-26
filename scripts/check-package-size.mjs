@@ -512,7 +512,18 @@ export const SIZE_BUDGETS = [
         // type) and inlining the global-keyword fast check (+599, for an
         // instruction-count gain inside wall-clock noise). ~300 bytes of
         // headroom.
-        maxGzipBytes: 583_900,
+        //
+        // Raised from 583,900 on 2026-10-26: the 0.18 lowering fixes cost
+        // 3,166 gzip bytes, 583,289 after #399 to 586,455, as this script
+        // measures the un-optimized nodejs parser build, same machine. Most of
+        // it is diagnostics a user now sees: a value in the brackets csszyx
+        // writes (+709), an `op` read as a percent and its 0-1 form (+696,
+        // +269), and a mask stop's `op` (+171); breakpoints and container
+        // queries spelled as Tailwind serves them (+585), one spelling per
+        // key (+447) and a value with a space as one class (+295) are the
+        // rest. The wasm loads in Node at build time and never reaches a
+        // browser, so this is install size. ~300 bytes of headroom.
+        maxGzipBytes: 586_750,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
