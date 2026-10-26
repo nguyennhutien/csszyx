@@ -392,9 +392,24 @@ export function isEntrypoint(): boolean {
     }
 }
 
-if (isEntrypoint()) {
-    main().catch(error => {
+/**
+ * Start the server when this module is the process entry point; a failure to
+ * start is named and exits 1.
+ *
+ * @param entry - Whether this module is the entry point.
+ * @param start - What starts the server; the stdio server by default.
+ */
+export async function startWhenEntrypoint(
+    entry: boolean,
+    start: () => Promise<void> = main,
+): Promise<void> {
+    if (!entry) return;
+    try {
+        await start();
+    } catch (error) {
         console.error('Server error:', error);
         process.exit(1);
-    });
+    }
 }
+
+await startWhenEntrypoint(isEntrypoint());
