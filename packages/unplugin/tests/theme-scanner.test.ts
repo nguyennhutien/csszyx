@@ -38,7 +38,7 @@ body { margin: 0; }
             '@theme reference { --color-danger: red; --color-salmon-a-400: pink; }',
         ];
         for (const css of variants) {
-            expect(parseThemeBlocks(css).colors, css).toEqual(['danger', 'salmon-a']);
+            expect(parseThemeBlocks(css).colors, css).toEqual(['danger', 'salmon-a-400']);
         }
     });
 
@@ -51,29 +51,65 @@ body { margin: 0; }
         expect(parseThemeBlocks('@theme { --color-decoy: red;').colors).toEqual([]);
     });
 
-    it('strips trailing numeric shade suffix from color tokens', () => {
+    it('keeps a shade, which is part of the class Tailwind serves', () => {
+        // `--color-brand-500` is served as `bg-brand-500`; `bg-brand` styles
+        // nothing, so the token is the whole name.
         const css = `
 @theme {
     --color-brand-50: #fff8f0;
     --color-brand-500: #ff6600;
-    --color-brand-900: #1a0500;
+    --color-sky-a-400: oklch(72.08% 0.1632 239.291);
 }
 `;
-        const result = parseThemeBlocks(css);
-        // All three should deduplicate to a single 'brand' token
-        expect(result.colors).toEqual(['brand']);
+        expect(parseThemeBlocks(css).colors).toEqual(['brand-50', 'brand-500', 'sky-a-400']);
     });
 
-    it('keeps named segments that look like shades but are not purely numeric', () => {
+    it('reads every Tailwind namespace, the longer prefix first', () => {
         const css = `
 @theme {
-    --color-brand-dark: #cc0000;
-    --color-brand-dark-50: #ffddd0;
+    --animate-bulk-edit-actions-in: bulk-edit-actions-in 200ms ease-in-out;
+    --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+    --blur-soft: 6px;
+    --drop-shadow-lift: 0 2px 4px #0003;
+    --inset-shadow-well: inset 0 1px #0002;
+    --text-shadow-glow: 0 0 4px #fff;
+    --text-huge: 4rem;
+    --tracking-loose: 0.1em;
+    --leading-airy: 2;
+    --perspective-deep: 2000px;
+    --container-card: 24rem;
+    --aspect-poster: 2 / 3;
+    @keyframes bulk-edit-actions-in { from { transform: translateY(-100%); } }
 }
 `;
         const result = parseThemeBlocks(css);
-        // 'brand-dark-50' strips trailing -50 → 'brand-dark', deduped
-        expect(result.colors).toEqual(['brand-dark']);
+        expect(result.animations).toEqual(['bulk-edit-actions-in']);
+        expect(result.easings).toEqual(['snappy']);
+        expect(result.blurs).toEqual(['soft']);
+        expect(result.dropShadows).toEqual(['lift']);
+        expect(result.insetShadows).toEqual(['well']);
+        expect(result.textShadows).toEqual(['glow']);
+        expect(result.textSizes).toEqual(['huge']);
+        expect(result.trackings).toEqual(['loose']);
+        expect(result.leadings).toEqual(['airy']);
+        expect(result.perspectives).toEqual(['deep']);
+        expect(result.containers).toEqual(['card']);
+        expect(result.aspects).toEqual(['poster']);
+        expect(result.shadows).toEqual([]);
+    });
+
+    it('leaves out the companion variable of a token, which is no class', () => {
+        // `--text-xl--line-height` is the line height `text-xl` sets with it.
+        const css = `
+@theme {
+    --text-xl: 1.25rem;
+    --text-xl--line-height: 1.75rem;
+    --font-display--font-feature-settings: "ss01";
+}
+`;
+        const result = parseThemeBlocks(css);
+        expect(result.textSizes).toEqual(['xl']);
+        expect(result.fonts).toEqual([]);
     });
 
     it('extracts spacing tokens', () => {
@@ -209,13 +245,12 @@ body { margin: 0; }
     it('deduplicates tokens within the same block', () => {
         const css = `
 @theme {
-    --color-brand-100: #ffe0d0;
-    --color-brand-200: #ffc1a1;
+    --color-brand-500: #ffe0d0;
     --color-brand-500: #ff6600;
 }
 `;
         const result = parseThemeBlocks(css);
-        expect(result.colors).toEqual(['brand']);
+        expect(result.colors).toEqual(['brand-500']);
     });
 });
 

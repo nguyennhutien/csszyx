@@ -809,9 +809,7 @@ export const THEME_VALUE_PROPERTIES: Readonly<Record<ThemeValueCategory, readonl
             "roundedTr"
         ]),
         shadows: Object.freeze([
-            "insetShadow",
-            "shadow",
-            "textShadow"
+            "shadow"
         ]),
     });
 export { VALUE_SUGGESTIONS } from './value-suggestions';

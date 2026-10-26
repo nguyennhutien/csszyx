@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
+import { parseThemeBlocks } from '../src/theme-scanner.js';
 import { generateThemeDts } from '../src/theme-type-writer.js';
 
-const EMPTY_THEME = {
-    colors: [],
-    spacings: [],
-    fonts: [],
-    textSizes: [],
-    fontWeights: [],
-    radii: [],
-    shadows: [],
-    breakpoints: [],
-};
+const EMPTY_THEME = parseThemeBlocks('');
 
 describe('generateThemeDts', () => {
+    it('writes every namespace the scanner reads, under the name it reads it by', () => {
+        const theme = parseThemeBlocks(
+            '@theme { --animate-wiggle: wiggle 1s; --ease-snappy: linear; --text-shadow-glow: 0 0 4px; --container-card: 24rem; }',
+        );
+        const content = generateThemeDts({ outputPath: '/out/theme.d.ts', theme, sourceFiles: [] });
+        expect(content).toContain("        animations: 'wiggle';");
+        expect(content).toContain("        easings: 'snappy';");
+        expect(content).toContain("        textShadows: 'glow';");
+        expect(content).toContain("        containers: 'card';");
+    });
+
     it('produces valid module augmentation for a single category', () => {
         const output = generateThemeDts({
             outputPath: '/project/.csszyx/theme.d.ts',

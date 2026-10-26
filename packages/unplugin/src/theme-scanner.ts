@@ -8,7 +8,7 @@
  *   - Multiple @theme blocks per file
  *   - @theme option keywords (inline, static, reference, combinations — ignored)
  *   - @theme inside @layer (two-pass strip)
- *   - --color-brand-50 shade suffixes (deduped to 'brand')
+ *   - every namespace Tailwind v4 declares in its own `theme.css`
  *   - Multi-file merge via mergeThemes()
  */
 
@@ -16,34 +16,103 @@ import { sortStrings } from './sort.js';
 
 /** Extracted and categorized custom tokens from @theme blocks. */
 export interface ParsedTheme {
-    /** Custom color names (from --color-*): e.g. ['brand', 'brand-dark'] */
+    /** Colors (--color-*), each the whole class value: e.g. ['brand-500', 'brand-dark'] */
     colors: string[];
-    /** Custom spacing tokens (from --spacing-*): e.g. ['xl', '2xs'] */
+    /** Spacing tokens (--spacing-*): e.g. ['xl', '2xs'] */
     spacings: string[];
-    /** Custom font families (from --font-*): e.g. ['display', 'body'] */
+    /** Font families (--font-*): e.g. ['display', 'body'] */
     fonts: string[];
-    /** Custom font sizes (from --text-*): e.g. ['huge'] */
+    /** Font sizes (--text-*): e.g. ['huge'] */
     textSizes: string[];
-    /** Custom font weights (from --font-weight-*): e.g. ['chunky'] */
+    /** Font weights (--font-weight-*): e.g. ['chunky'] */
     fontWeights: string[];
-    /** Custom border radii (from --radius-*): e.g. ['button'] */
+    /** Border radii (--radius-*): e.g. ['button'] */
     radii: string[];
-    /** Custom shadows (from --shadow-*): e.g. ['card'] */
+    /** Box shadows (--shadow-*): e.g. ['card'] */
     shadows: string[];
-    /** Custom responsive breakpoints (from --breakpoint-*): e.g. ['tablet', '3xl'] */
+    /** Responsive breakpoints (--breakpoint-*): e.g. ['tablet', '3xl'] */
     breakpoints: string[];
+    /** Animations (--animate-*): e.g. ['wiggle'] */
+    animations: string[];
+    /** Timing functions (--ease-*): e.g. ['snappy'] */
+    easings: string[];
+    /** Blurs (--blur-*): e.g. ['soft'] */
+    blurs: string[];
+    /** Drop shadows (--drop-shadow-*): e.g. ['lift'] */
+    dropShadows: string[];
+    /** Inset shadows (--inset-shadow-*): e.g. ['well'] */
+    insetShadows: string[];
+    /** Text shadows (--text-shadow-*): e.g. ['glow'] */
+    textShadows: string[];
+    /** Letter spacings (--tracking-*): e.g. ['loose'] */
+    trackings: string[];
+    /** Line heights (--leading-*): e.g. ['airy'] */
+    leadings: string[];
+    /** Perspectives (--perspective-*): e.g. ['deep'] */
+    perspectives: string[];
+    /** Container sizes (--container-*): e.g. ['card'] */
+    containers: string[];
+    /** Aspect ratios (--aspect-*): e.g. ['poster'] */
+    aspects: string[];
 }
 
-const EMPTY_THEME: ParsedTheme = {
-    colors: [],
-    spacings: [],
-    fonts: [],
-    textSizes: [],
-    fontWeights: [],
-    radii: [],
-    shadows: [],
-    breakpoints: [],
-};
+/**
+ * Each namespace Tailwind v4 declares in its `theme.css`, by its prefix after
+ * `--`, the longer prefix first: `text-shadow-` is a text shadow, not a font
+ * size named `shadow-*`, and `font-weight-` a weight, not a family.
+ */
+const THEME_NAMESPACES: ReadonlyArray<readonly [string, keyof ParsedTheme]> = [
+    ['color-', 'colors'],
+    ['spacing-', 'spacings'],
+    ['font-weight-', 'fontWeights'],
+    ['font-', 'fonts'],
+    ['text-shadow-', 'textShadows'],
+    ['text-', 'textSizes'],
+    ['radius-', 'radii'],
+    ['inset-shadow-', 'insetShadows'],
+    ['drop-shadow-', 'dropShadows'],
+    ['shadow-', 'shadows'],
+    ['breakpoint-', 'breakpoints'],
+    ['animate-', 'animations'],
+    ['ease-', 'easings'],
+    ['blur-', 'blurs'],
+    ['tracking-', 'trackings'],
+    ['leading-', 'leadings'],
+    ['perspective-', 'perspectives'],
+    ['container-', 'containers'],
+    ['aspect-', 'aspects'],
+];
+
+/**
+ * Every category, in the table's order: what the type writer writes, and
+ * what a reply counts.
+ */
+export const THEME_CATEGORIES: readonly (keyof ParsedTheme)[] = THEME_NAMESPACES.map(
+    ([, category]) => category,
+);
+
+/**
+ * One empty set per category, to collect tokens into.
+ *
+ * @returns The sets, by category.
+ */
+function emptyThemeSets(): { [K in keyof ParsedTheme]: Set<string> } {
+    return Object.fromEntries(
+        THEME_NAMESPACES.map(([, category]) => [category, new Set<string>()]),
+    ) as { [K in keyof ParsedTheme]: Set<string> };
+}
+
+/**
+ * The collected sets as a theme, each category sorted.
+ *
+ * @param sets - The tokens collected, by category.
+ * @returns The theme.
+ */
+function sortedTheme(sets: { [K in keyof ParsedTheme]: Set<string> }): ParsedTheme {
+    return Object.fromEntries(
+        THEME_NAMESPACES.map(([, category]) => [category, sortStrings(sets[category])]),
+    ) as unknown as ParsedTheme;
+}
 
 /** The class names and namespaces a stylesheet claims with `@utility`. */
 export interface ParsedUtilities {
@@ -279,33 +348,13 @@ function extractThemeBlocks(css: string): string[] {
  * @returns { category, token } or null
  */
 function categorizeProperty(prop: string): { category: keyof ParsedTheme; token: string } | null {
-    const categoryMap: Array<[string, keyof ParsedTheme]> = [
-        ['color-', 'colors'],
-        ['spacing-', 'spacings'],
-        // `font-weight-` MUST precede `font-`: startsWith would otherwise route
-        // `font-weight-chunky` into font FAMILIES as token "weight-chunky".
-        ['font-weight-', 'fontWeights'],
-        ['font-', 'fonts'],
-        // `--text-*` defines font-size utilities (text-huge) in Tailwind v4.
-        ['text-', 'textSizes'],
-        ['radius-', 'radii'],
-        ['shadow-', 'shadows'],
-        ['breakpoint-', 'breakpoints'],
-    ];
-
-    for (const [prefix, category] of categoryMap) {
-        if (prop.startsWith(prefix)) {
-            let token = prop.slice(prefix.length);
-            // Breakpoint names are literal variant names (tablet, 3xl); only the
-            // design-token categories carry numeric shade suffixes that should be
-            // collapsed: "brand-500" → "brand", "brand-dark" → "brand-dark".
-            if (category !== 'breakpoints') {
-                token = token.replace(/-\d+$/, '');
-            }
-            if (token) {
-                return { category, token };
-            }
-        }
+    for (const [prefix, category] of THEME_NAMESPACES) {
+        if (!prop.startsWith(prefix)) continue;
+        // The token is the whole class value: `--color-brand-500` is served as
+        // `bg-brand-500`, not `bg-brand`. A `--` inside it names a companion
+        // variable (`--text-xl--line-height`), which is no class.
+        const token = prop.slice(prefix.length);
+        return token && !token.includes('--') ? { category, token } : null;
     }
     return null;
 }
@@ -317,16 +366,7 @@ function categorizeProperty(prop: string): { category: keyof ParsedTheme; token:
  * @returns Categorized design tokens
  */
 export function parseThemeBlocks(cssContent: string): ParsedTheme {
-    const result: { [K in keyof ParsedTheme]: Set<string> } = {
-        colors: new Set(),
-        spacings: new Set(),
-        fonts: new Set(),
-        textSizes: new Set(),
-        fontWeights: new Set(),
-        radii: new Set(),
-        shadows: new Set(),
-        breakpoints: new Set(),
-    };
+    const result = emptyThemeSets();
 
     const stripped = stripLayerWrappers(cssContent);
     const blocks = extractThemeBlocks(stripped);
@@ -344,16 +384,7 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
         }
     }
 
-    return {
-        colors: sortStrings(result.colors),
-        spacings: sortStrings(result.spacings),
-        fonts: sortStrings(result.fonts),
-        textSizes: sortStrings(result.textSizes),
-        fontWeights: sortStrings(result.fontWeights),
-        radii: sortStrings(result.radii),
-        shadows: sortStrings(result.shadows),
-        breakpoints: sortStrings(result.breakpoints),
-    };
+    return sortedTheme(result);
 }
 
 /**
@@ -363,36 +394,16 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
  * @returns Merged theme with unique tokens per category
  */
 export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
-    if (themes.length === 0) {
-        return { ...EMPTY_THEME };
-    }
-    const merged: { [K in keyof ParsedTheme]: Set<string> } = {
-        colors: new Set(),
-        spacings: new Set(),
-        fonts: new Set(),
-        textSizes: new Set(),
-        fontWeights: new Set(),
-        radii: new Set(),
-        shadows: new Set(),
-        breakpoints: new Set(),
-    };
+    const merged = emptyThemeSets();
     for (const theme of themes) {
         for (const cat of Object.keys(merged) as (keyof ParsedTheme)[]) {
-            for (const token of theme[cat]) {
+            // A theme of an older shape has no list for a newer namespace.
+            for (const token of theme[cat] ?? []) {
                 merged[cat].add(token);
             }
         }
     }
-    return {
-        colors: sortStrings(merged.colors),
-        spacings: sortStrings(merged.spacings),
-        fonts: sortStrings(merged.fonts),
-        textSizes: sortStrings(merged.textSizes),
-        fontWeights: sortStrings(merged.fontWeights),
-        radii: sortStrings(merged.radii),
-        shadows: sortStrings(merged.shadows),
-        breakpoints: sortStrings(merged.breakpoints),
-    };
+    return sortedTheme(merged);
 }
 
 /**

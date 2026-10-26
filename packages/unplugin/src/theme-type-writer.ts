@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { escapeSingleQuotedString, replaceEveryLiteral } from './string-escape.js';
-import type { ParsedTheme } from './theme-scanner.js';
+import { type ParsedTheme, THEME_CATEGORIES } from './theme-scanner.js';
 
 /** Options for generating the theme .d.ts file. */
 export interface ThemeTypeWriterOptions {
@@ -50,28 +50,11 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     const quoteKey = (key: string): string =>
         /^[a-z_$][\w$]*$/i.test(key) ? key : `'${escapeSingleQuotedString(key)}'`;
 
-    const entries: string[] = [];
-    if (theme.colors.length > 0) {
-        entries.push(`        colors: ${toUnion(theme.colors)};`);
-    }
-    if (theme.spacings.length > 0) {
-        entries.push(`        spacings: ${toUnion(theme.spacings)};`);
-    }
-    if (theme.fonts.length > 0) {
-        entries.push(`        fonts: ${toUnion(theme.fonts)};`);
-    }
-    if (theme.textSizes.length > 0) {
-        entries.push(`        textSizes: ${toUnion(theme.textSizes)};`);
-    }
-    if (theme.fontWeights.length > 0) {
-        entries.push(`        fontWeights: ${toUnion(theme.fontWeights)};`);
-    }
-    if (theme.radii.length > 0) {
-        entries.push(`        radii: ${toUnion(theme.radii)};`);
-    }
-    if (theme.shadows.length > 0) {
-        entries.push(`        shadows: ${toUnion(theme.shadows)};`);
-    }
+    // Every category but breakpoints, which are variant keys (below), in the
+    // scanner's order, so a namespace it reads is never left out here.
+    const entries = THEME_CATEGORIES.filter(
+        category => category !== 'breakpoints' && (theme[category]?.length ?? 0) > 0,
+    ).map(category => `        ${category}: ${toUnion(theme[category])};`);
 
     // Module body: always the CustomTheme token interface; plus a VariantModifiers
     // augmentation when custom breakpoints (--breakpoint-*) were declared, so

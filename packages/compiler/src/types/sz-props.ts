@@ -47,6 +47,26 @@ type CT_FontWeights = CustomTheme extends { fontWeights: infer T } ? T : never;
 type CT_Radii = CustomTheme extends { radii: infer T } ? T : never;
 /** Extracts custom shadow tokens from CustomTheme, or never if not defined. */
 type CT_Shadows = CustomTheme extends { shadows: infer T } ? T : never;
+/** Extracts custom animation tokens (--animate-*), or never if not defined. */
+type CT_Animations = CustomTheme extends { animations: infer T } ? T : never;
+/** Extracts custom timing-function tokens (--ease-*), or never if not defined. */
+type CT_Easings = CustomTheme extends { easings: infer T } ? T : never;
+/** Extracts custom blur tokens (--blur-*), or never if not defined. */
+type CT_Blurs = CustomTheme extends { blurs: infer T } ? T : never;
+/** Extracts custom drop-shadow tokens (--drop-shadow-*), or never if not defined. */
+type CT_DropShadows = CustomTheme extends { dropShadows: infer T } ? T : never;
+/** Extracts custom inset-shadow tokens (--inset-shadow-*), or never if not defined. */
+type CT_InsetShadows = CustomTheme extends { insetShadows: infer T } ? T : never;
+/** Extracts custom text-shadow tokens (--text-shadow-*), or never if not defined. */
+type CT_TextShadows = CustomTheme extends { textShadows: infer T } ? T : never;
+/** Extracts custom letter-spacing tokens (--tracking-*), or never if not defined. */
+type CT_Trackings = CustomTheme extends { trackings: infer T } ? T : never;
+/** Extracts custom line-height tokens (--leading-*), or never if not defined. */
+type CT_Leadings = CustomTheme extends { leadings: infer T } ? T : never;
+/** Extracts custom perspective tokens (--perspective-*), or never if not defined. */
+type CT_Perspectives = CustomTheme extends { perspectives: infer T } ? T : never;
+/** Extracts custom aspect-ratio tokens (--aspect-*), or never if not defined. */
+type CT_Aspects = CustomTheme extends { aspects: infer T } ? T : never;
 
 // ============================================================================
 // Helper Types
@@ -289,18 +309,11 @@ export type BorderRadiusValue =
     | true
     | (string & {});
 
-/** Shadow keywords */
-export type ShadowValue =
-    | 'sm'
-    | 'md'
-    | 'lg'
-    | 'xl'
-    | '2xl'
-    | 'inner'
-    | 'none'
-    | CT_Shadows
-    | true
-    | (string & {});
+/** The shadow keywords every shadow key takes. */
+type ShadowKeyword = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'inner' | 'none' | true | (string & {});
+
+/** Shadow keywords, and the project's `--shadow-*` tokens. */
+export type ShadowValue = ShadowKeyword | CT_Shadows;
 
 // ============================================================================
 // Layout Properties
@@ -311,7 +324,7 @@ export type ShadowValue =
  */
 export interface LayoutProps {
     /** @see https://tailwindcss.com/docs/aspect-ratio */
-    aspect?: 'auto' | 'square' | 'video' | (string & {});
+    aspect?: 'auto' | 'square' | 'video' | CT_Aspects | (string & {});
 
     /** @see https://tailwindcss.com/docs/columns */
     columns?:
@@ -951,7 +964,15 @@ export interface TypographyProps {
     numSlashedZero?: boolean;
 
     /** @see https://tailwindcss.com/docs/letter-spacing */
-    tracking?: 'tighter' | 'tight' | 'normal' | 'wide' | 'wider' | 'widest' | (string & {});
+    tracking?:
+        | 'tighter'
+        | 'tight'
+        | 'normal'
+        | 'wide'
+        | 'wider'
+        | 'widest'
+        | CT_Trackings
+        | (string & {});
 
     /** @see https://tailwindcss.com/docs/line-clamp */
     lineClamp?: 1 | 2 | 3 | 4 | 5 | 6 | 'none' | number | (string & {});
@@ -972,6 +993,7 @@ export interface TypographyProps {
         | 'normal'
         | 'relaxed'
         | 'loose'
+        | CT_Leadings
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/list-style-image */
@@ -1232,13 +1254,13 @@ export interface EffectsProps {
     /** @see https://tailwindcss.com/docs/box-shadow-color */
     shadowColor?: ColorPropValue;
 
-    /** Text shadow */
-    textShadow?: ShadowValue;
+    /** Text shadow; the project's tokens are `--text-shadow-*`. */
+    textShadow?: ShadowKeyword | CT_TextShadows;
     /** Text shadow color */
     textShadowColor?: ColorPropValue;
 
-    /** Inset shadow */
-    insetShadow?: ShadowValue;
+    /** Inset shadow; the project's tokens are `--inset-shadow-*`. */
+    insetShadow?: ShadowKeyword | CT_InsetShadows;
     /** Inset shadow color */
     insetShadowColor?: ColorPropValue;
 
@@ -1324,7 +1346,7 @@ export interface EffectsProps {
  */
 export interface FilterProps {
     /** @see https://tailwindcss.com/docs/blur */
-    blur?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | true | (string & {});
+    blur?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | true | CT_Blurs | (string & {});
 
     /** @see https://tailwindcss.com/docs/brightness */
     brightness?: 0 | 50 | 75 | 90 | 95 | 100 | 105 | 110 | 125 | 150 | 200 | number | (string & {});
@@ -1333,7 +1355,7 @@ export interface FilterProps {
     contrast?: 0 | 50 | 75 | 100 | 125 | 150 | 200 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/drop-shadow */
-    dropShadow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none' | true | (string & {});
+    dropShadow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none' | true | CT_DropShadows | (string & {});
 
     /** @see https://tailwindcss.com/docs/grayscale */
     grayscale?: BinaryFilterValue;
@@ -1351,7 +1373,17 @@ export interface FilterProps {
     sepia?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/backdrop-blur */
-    backdropBlur?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | true | (string & {});
+    backdropBlur?:
+        | 'none'
+        | 'sm'
+        | 'md'
+        | 'lg'
+        | 'xl'
+        | '2xl'
+        | '3xl'
+        | true
+        | CT_Blurs
+        | (string & {});
 
     /** @see https://tailwindcss.com/docs/backdrop-brightness */
     backdropBrightness?:
@@ -1481,7 +1513,7 @@ export interface TransformProps {
     transform?: 'none' | 'gpu' | 'cpu';
 
     /** @see https://tailwindcss.com/docs/perspective */
-    perspective?: 'none' | (string & {});
+    perspective?: 'none' | CT_Perspectives | (string & {});
     perspectiveOrigin?: string;
 
     /** @see https://tailwindcss.com/docs/backface-visibility */
@@ -1511,13 +1543,13 @@ export interface TransitionAnimationProps {
     duration?: TransitionTimeValue;
 
     /** @see https://tailwindcss.com/docs/transition-timing-function */
-    ease?: 'linear' | 'in' | 'out' | 'in-out' | (string & {});
+    ease?: 'linear' | 'in' | 'out' | 'in-out' | CT_Easings | (string & {});
 
     /** @see https://tailwindcss.com/docs/transition-delay */
     delay?: TransitionTimeValue;
 
     /** @see https://tailwindcss.com/docs/animation */
-    animate?: 'none' | 'spin' | 'ping' | 'pulse' | 'bounce' | (string & {});
+    animate?: 'none' | 'spin' | 'ping' | 'pulse' | 'bounce' | CT_Animations | (string & {});
 
     /**
      * Animation delay — sets `animation-delay` (distinct from `delay` which sets `transition-delay`).
