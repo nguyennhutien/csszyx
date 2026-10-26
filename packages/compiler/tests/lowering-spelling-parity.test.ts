@@ -813,3 +813,19 @@ describe.each(ENGINES)('a runtime value on a width key — %s', (_name, engine) 
         expect(run.className).toBe(className);
     });
 });
+
+describe.each(LANES)('a variable on `animationDelay` — %s', (_name, lower) => {
+    // Tailwind has no `animation-delay` utility, so the key writes the
+    // declaration; a variable in it is `var()`, as every other key reads `--x`.
+    // `animation-delay: --x` is no value a browser takes (Tailwind 4.3.3).
+    it.each([
+        [{ animationDelay: '--x' }, '[animation-delay:var(--x)]'],
+        [{ animationDelay: '--x!' }, '[animation-delay:var(--x)]!'],
+        [{ hover: { animationDelay: '--d' } }, 'hover:[animation-delay:var(--d)]'],
+        [{ animationDelay: '150ms' }, '[animation-delay:150ms]'],
+        [{ animationDelay: 200 }, '[animation-delay:200ms]'],
+        [{ animationDelay: 'var(--x)' }, '[animation-delay:var(--x)]'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});

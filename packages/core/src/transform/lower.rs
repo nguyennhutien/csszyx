@@ -1927,6 +1927,23 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
     format_static_class_value(key, value, prefix)
 }
 
+/// The declaration value `animationDelay` writes, which Tailwind has no utility
+/// for: a number is milliseconds, and a variable is `var()`, as `--x` reads on
+/// every key (`animation-delay: --x` is no value). Mirrors
+/// `animationDelayValue`.
+fn animation_delay_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        // A negative delay starts the animation part-way through: the sign is
+        // CSS, as the TypeScript core keeps it.
+        StaticSzValue::Number(num) => Some(format!("{}ms", format_number_literal(*num))),
+        StaticSzValue::String(text) if text.starts_with("--") && !text.contains('(') => {
+            Some(format!("var({text})"))
+        }
+        StaticSzValue::String(text) => Some(text.clone()),
+        _ => None,
+    }
+}
+
 /// Lower one key/value pair, with the important modifier already accounted for.
 ///
 /// Split from [`format_static_class`] so the bang is removed exactly once. The
@@ -1935,14 +1952,8 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
 #[allow(clippy::too_many_lines)]
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
-        let ms = match value {
-            // A negative delay starts the animation part-way through: the
-            // sign is CSS, as the TypeScript core keeps it.
-            StaticSzValue::Number(num) => format!("{}ms", format_number_literal(*num)),
-            StaticSzValue::String(s) => s.clone(),
-            _ => return None,
-        };
-        return Some(format!("{prefix}[animation-delay:{ms}]"));
+        return animation_delay_value(value)
+            .map(|delay| format!("{prefix}[animation-delay:{delay}]"));
     }
 
     // A purely numeric key can never be a CSS property or Tailwind utility —
@@ -4948,6 +4959,7 @@ mod tests {
                 property("animationDelay", StaticSzValue::Number(150.0)),
                 property("animationDelay", StaticSzValue::String("2s".into())),
                 property("animationDelay", StaticSzValue::Boolean(true)),
+                property("animationDelay", StaticSzValue::String("--delay".into())),
                 property("fromPos", StaticSzValue::String("--stop".into())),
                 property("viaPos", StaticSzValue::String("50%".into())),
                 property("toPos", StaticSzValue::String("12.5%".into())),
@@ -4994,6 +5006,7 @@ mod tests {
             [
                 "[animation-delay:150ms]",
                 "[animation-delay:2s]",
+                "[animation-delay:var(--delay)]",
                 "from-(length:--stop)",
                 "via-50%",
                 "to-[12.5%]",
