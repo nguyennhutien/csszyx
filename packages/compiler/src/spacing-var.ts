@@ -14,6 +14,7 @@
  * have lowered the same literal.
  */
 
+import { own } from './own.js';
 import { DYNAMIC_UNRESOLVABLE, szReport } from './report.js';
 
 /** Sizing keys whose `screen` token means the viewport WIDTH. */
@@ -115,7 +116,7 @@ export function __szSpacingVar(v: unknown, key: string): string | undefined {
         // (`p-screen`) generates nothing either. Omit for parity.
         return undefined;
     }
-    const named = NAMED_SIZE_TOKENS[v];
+    const named = own(NAMED_SIZE_TOKENS, v);
     if (named !== undefined) {
         return named;
     }

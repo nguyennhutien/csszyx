@@ -25,6 +25,20 @@
 
 import { warnSelection, warnSelectionValue } from './selection-value.js';
 
+const hasOwn = Object.prototype.hasOwnProperty;
+
+/**
+ * The classes a dimension's value selects: an own entry only, so a value named
+ * like an `Object.prototype` member (`toString`) selects nothing.
+ *
+ * @param values - The dimension's compiled values.
+ * @param value - The selected value, coerced as property access coerces it.
+ * @returns The classes, or undefined.
+ */
+function picked(values: Readonly<Record<string, string>>, value: unknown): string | undefined {
+    return hasOwn.call(values, value as string) ? values[value as string] : undefined;
+}
+
 /** A build-precompiled szv config: every branch lowered to its class string. */
 export interface SzvCompiledTable {
     /** Compiled `base` classes (empty string when the config had none). */
@@ -74,7 +88,7 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
         }
         // Property access coerces exactly like `variants[dim][value as string]`
         // did; an unknown value reads undefined and selects nothing.
-        const classes = table.d[dimension][value as string];
+        const classes = picked(table.d[dimension], value);
         if (classes) {
             result = result ? `${result} ${classes}` : classes;
         }
@@ -115,7 +129,7 @@ export function __szvPick1(table: SzvCompiledTable, dimension: string, value: un
     if (value === null || value === undefined) {
         return table.base;
     }
-    const classes = table.d[dimension][value as string];
+    const classes = picked(table.d[dimension], value);
     if (!classes) {
         return table.base;
     }

@@ -174,3 +174,22 @@ describe('generateCSSRule', () => {
         expect(generateDeclarations('definitely-not-a-utility-xyz')).toBe('');
     });
 });
+
+describe('a value named like an Object.prototype member', () => {
+    // Read as a word: no table names it, so it takes the path any unknown
+    // word takes, never the prototype's function as a declaration value.
+    it.each(['constructor', 'toString', 'hasOwnProperty', 'valueOf'])('%s', name => {
+        for (const utility of [
+            `leading-${name}`,
+            `tracking-${name}`,
+            `font-${name}`,
+            `w-${name}`,
+            `ease-${name}`,
+            `rounded-${name}`,
+            name,
+        ]) {
+            expect(generateDeclarations(utility) ?? '').not.toMatch(/\[native code\]|\[object /);
+        }
+        expect(parseVariants(`${name}:p-4`).pseudoSuffix ?? '').not.toMatch(/\[native code\]/);
+    });
+});
