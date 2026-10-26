@@ -427,9 +427,15 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "opacity-value",
         "position": "site",
-        "args": "key op",
-        "text": "`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.",
-        "help": "write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`."
+        "args": "form key op percent?",
+        "text": {
+            "range": "`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.",
+            "fraction": "`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1."
+        },
+        "help": {
+            "range": "write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.",
+            "fraction": "write `op: {percent}` for {percent}%."
+        }
     },
     {
         "id": "unsigned-value",

@@ -2889,10 +2889,7 @@ fn is_percent_opacity(op: &str) -> bool {
 /// Each colour object whose `op` is not an opacity ([`format_opacity_value`]),
 /// with the key, `op` as the author wrote it, and where it is written.
 #[cfg(feature = "native-engine")]
-pub(crate) fn collect_invalid_opacities(
-    object: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
-) {
+pub(crate) fn collect_invalid_opacities(object: &StaticSzObject, out: &mut Vec<InvalidOpacity>) {
     for property in &object.properties {
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
@@ -2901,9 +2898,7 @@ pub(crate) fn collect_invalid_opacities(
             && object_string_property(nested, "color").is_some()
         {
             for op in nested.properties.iter().filter(|prop| prop.key == "op") {
-                if format_opacity_value(&op.value).is_none() {
-                    out.push((property.key.clone(), literal_of(&op.value), op.span.start));
-                }
+                push_invalid_opacity(&property.key, op, out);
             }
         } else if mask_slot_members(&property.key).is_some() {
             collect_invalid_mask_stop_opacities(nested, out);
@@ -2918,24 +2913,44 @@ pub(crate) fn collect_invalid_opacities(
 /// Each mask stop in a mask slot (`from`, `to`, a side's `from` / `to`) whose
 /// `op` is not an opacity, named by the stop's member, as the runtime does.
 #[cfg(feature = "native-engine")]
-fn collect_invalid_mask_stop_opacities(
-    slot: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
-) {
+fn collect_invalid_mask_stop_opacities(slot: &StaticSzObject, out: &mut Vec<InvalidOpacity>) {
     for member in &slot.properties {
         let StaticSzValue::Object(stop) = &member.value else {
             continue;
         };
         if object_string_property(stop, "color").is_some() {
             for op in stop.properties.iter().filter(|prop| prop.key == "op") {
-                if format_opacity_value(&op.value).is_none() {
-                    out.push((member.key.clone(), literal_of(&op.value), op.span.start));
-                }
+                push_invalid_opacity(&member.key, op, out);
             }
         } else {
             collect_invalid_mask_stop_opacities(stop, out);
         }
     }
+}
+
+/// An `op` to report: its key, the literal the author wrote, the percent to
+/// write when it reads as a fraction of 1 (none when it is no opacity), and
+/// where it is written.
+#[cfg(feature = "native-engine")]
+pub(crate) type InvalidOpacity = (String, String, Option<String>, u32);
+
+/// Record `op` under `key` when it is no opacity, or a number between 0 and 1,
+/// which 0.17 wrote as a fraction of 1 and which is now the percent it is.
+#[cfg(feature = "native-engine")]
+fn push_invalid_opacity(key: &str, op: &StaticSzProperty, out: &mut Vec<InvalidOpacity>) {
+    let percent = match (&op.value, format_opacity_value(&op.value)) {
+        (_, None) => None,
+        (StaticSzValue::Number(number), Some(_)) if *number > 0.0 && *number < 1.0 => {
+            Some(format_number_literal((number * 100.0 * 1e9).round() / 1e9))
+        }
+        (_, Some(_)) => return,
+    };
+    out.push((
+        key.to_string(),
+        literal_of(&op.value),
+        percent,
+        op.span.start,
+    ));
 }
 
 /// A static value as JS source: a string quoted, a number as written.
@@ -3493,23 +3508,38 @@ mod tests {
                 property("ringColor", colour(object(vec![]))),
                 property("fill", colour(StaticSzValue::String("78%".to_string()))),
                 property("stroke", colour(StaticSzValue::String("--o".to_string()))),
+                property("accent", colour(StaticSzValue::Number(0.05))),
                 property(
                     "hover",
                     object(vec![property("bg", colour(StaticSzValue::Number(-5.0)))]),
                 ),
+                // 0 and 1 are opacities as written: only what lies between is
+                // read as the fraction 0.17 took it for.
+                property("caret", colour(StaticSzValue::Number(0.0))),
+                property("decorationColor", colour(StaticSzValue::Number(1.0))),
+                // A variant holding `color` and `op` is no colour object.
+                property("focus", colour(StaticSzValue::String("x".to_string()))),
             ],
         };
         let mut found = Vec::new();
         collect_invalid_opacities(&object, &mut found);
-        let named: Vec<_> = found.into_iter().map(|(key, op, _)| (key, op)).collect();
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, op, percent, _)| (key, op, percent))
+            .collect();
         assert_eq!(
             named,
             [
-                ("bg".to_string(), "150".to_string()),
-                ("borderColor".to_string(), "'20'".to_string()),
-                ("outlineColor".to_string(), "true".to_string()),
-                ("ringColor".to_string(), "{…}".to_string()),
-                ("bg".to_string(), "-5".to_string()),
+                ("bg".to_string(), "150".to_string(), None),
+                ("borderColor".to_string(), "'20'".to_string(), None),
+                ("outlineColor".to_string(), "true".to_string(), None),
+                ("ringColor".to_string(), "{…}".to_string(), None),
+                (
+                    "accent".to_string(),
+                    "0.05".to_string(),
+                    Some("5".to_string())
+                ),
+                ("bg".to_string(), "-5".to_string(), None),
             ]
         );
     }
@@ -3541,12 +3571,15 @@ mod tests {
         };
         let mut found = Vec::new();
         collect_invalid_opacities(&object, &mut found);
-        let named: Vec<_> = found.into_iter().map(|(key, op, _)| (key, op)).collect();
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, op, percent, _)| (key, op, percent))
+            .collect();
         assert_eq!(
             named,
             [
-                ("from".to_string(), "150".to_string()),
-                ("from".to_string(), "true".to_string()),
+                ("from".to_string(), "150".to_string(), None),
+                ("from".to_string(), "true".to_string(), None),
             ]
         );
     }

@@ -848,7 +848,7 @@ struct KeyValueFindings {
     dead_enums: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
-    invalid_opacities: Vec<(String, String, u32)>,
+    invalid_opacities: Vec<super::lower::InvalidOpacity>,
     bracketed_values: Vec<(String, String, String, u32)>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
@@ -968,8 +968,12 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(&found.dead_enums, out);
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
-    for (key, op, offset) in &found.invalid_opacities {
-        out.push_issue(issue::opacity_value(key, op), *offset);
+    for (key, op, percent, offset) in &found.invalid_opacities {
+        let issue = percent.as_ref().map_or_else(
+            || issue::opacity_value_range(key, op, None),
+            |percent| issue::opacity_value_fraction(key, op, Some(percent)),
+        );
+        out.push_issue(issue, *offset);
     }
     for (key, value, inner, offset) in &found.bracketed_values {
         out.push_issue(issue::bracketed_value(key, value, inner), *offset);
@@ -5709,6 +5713,24 @@ mod tests {
     /// A slash opacity in a colour object's `color` still writes a served
     /// class, takes `op` as the opacity when both are given, and points at
     /// `op`, found under variants too; a colour without one says nothing.
+    /// An `op` between 0 and 1 is the percent it is, and said, with the
+    /// percent to write for the opacity 0.17 gave it.
+    #[test]
+    fn an_op_below_one_is_written_as_a_percent_and_said() {
+        let result = run_variant_source(
+            "const A = () => <div sz={{ bg: { color: 'red-500', op: 0.05 } }} />;",
+        );
+        assert!(
+            result.code.contains(r#"className="bg-red-500/[0.05%]""#),
+            "{}",
+            result.code
+        );
+        assert_eq!(
+            lines(&result),
+            [r#"opacity-value {"form":"fraction","key":"bg","op":"0.05","percent":"5"}"#]
+        );
+    }
+
     #[test]
     fn a_colour_object_with_a_slash_opacity_writes_its_class_and_points_at_op() {
         let cases: [(&str, &str, &str); 6] = [
@@ -5733,9 +5755,9 @@ mod tests {
                 r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'78%'"}"#,
             ),
             (
-                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 0.5 } } }} />;",
-                r#"className="hover:bg-red-500/0.5""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"0.5"}"#,
+                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 2.5 } } }} />;",
+                r#"className="hover:bg-red-500/2.5""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"2.5"}"#,
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",

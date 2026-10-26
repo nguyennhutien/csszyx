@@ -75,11 +75,9 @@ describe.each(LANES)('the opacity of a colour object — %s', (_name, lower) => 
         ['5', 'bg-red-500/5'],
         ['88', 'bg-red-500/88'],
         ['100', 'bg-red-500/100'],
-        ['0.5', 'bg-red-500/0.5'],
         ['12.25', 'bg-red-500/12.25'],
         ['88.75', 'bg-red-500/88.75'],
         ['33.3', 'bg-red-500/[33.3%]'],
-        ['0.05', 'bg-red-500/[0.05%]'],
     ])('op: %s writes %s', (op, className) => {
         expect(lower(op)).toEqual({ className, kinds: [] });
     });
@@ -91,12 +89,32 @@ describe.each(LANES)('the opacity of a colour object — %s', (_name, lower) => 
         },
     );
 
+    // 0.17 bracketed a decimal below 1 and Tailwind read it as a fraction of
+    // one (`op: 0.05` was 5%); a percent says so, with the percent to write.
+    it.each([
+        ['0.05', 'bg-red-500/[0.05%]'],
+        ['0.25', 'bg-red-500/0.25'],
+        ['0.5', 'bg-red-500/0.5'],
+    ])('op: %s writes %s and says it is a percent', (op, className) => {
+        expect(lower(op)).toEqual({ className, kinds: ['opacity-value'] });
+    });
+
+    it.each([
+        ['0', 'bg-red-500/0'],
+        ['1', 'bg-red-500/1'],
+    ])('op: %s is no fraction to report', (op, className) => {
+        expect(lower(op)).toEqual({ className, kinds: [] });
+    });
+
     it('reads a null op as no op, as any null value', () => {
         expect(lower('null')).toEqual({ className: 'bg-red-500', kinds: [] });
     });
 
     it('writes a small decimal without an exponent', () => {
-        expect(lower('1e-7')).toEqual({ className: 'bg-red-500/[0.0000001%]', kinds: [] });
+        expect(lower('1e-7')).toEqual({
+            className: 'bg-red-500/[0.0000001%]',
+            kinds: ['opacity-value'],
+        });
     });
 
     it('keeps a percent string from 0 to 100 as written', () => {
@@ -121,6 +139,13 @@ describe.each(lanes(op => `{ maskLinear: { from: { color: 'red-500', op: ${op} }
             ["'40%'", 'mask-linear-from-red-500/[40%]'],
         ])('op: %s writes %s', (op, className) => {
             expect(lower(op).className).toBe(className);
+        });
+
+        it('op: 0.05 is said to be a percent at a stop too', () => {
+            expect(lower('0.05')).toEqual({
+                className: 'mask-linear-from-red-500/[0.05%]',
+                kinds: ['opacity-value'],
+            });
         });
 
         it.each(['150', 'true', "'abc'"])(

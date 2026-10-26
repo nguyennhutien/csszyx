@@ -77,7 +77,7 @@ pub enum DiagnosticCode {
     ColorSlashOpacity,
     /// A value wrapped in the brackets csszyx writes itself.
     BracketedValue,
-    /// An `op` that is not a number from 0 to 100.
+    /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
     OpacityValue,
 }
 
@@ -980,13 +980,39 @@ pub mod issue {
         )
     }
 
-    /// `opacity-value`: An `op` that is not a number from 0 to 100.
+    /// `opacity-value` (`range`): An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
     #[must_use]
     #[inline]
-    pub fn opacity_value(key: &str, op: &str) -> (DiagnosticCode, Args) {
+    pub fn opacity_value_range(
+        key: &str,
+        op: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
         (
             DiagnosticCode::OpacityValue,
-            Args::default().text("key", key).text("op", op),
+            Args::default()
+                .text("form", "range")
+                .text("key", key)
+                .text("op", op)
+                .optional_text("percent", percent),
+        )
+    }
+
+    /// `opacity-value` (`fraction`): An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
+    #[must_use]
+    #[inline]
+    pub fn opacity_value_fraction(
+        key: &str,
+        op: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OpacityValue,
+            Args::default()
+                .text("form", "fraction")
+                .text("key", key)
+                .text("op", op)
+                .optional_text("percent", percent),
         )
     }
 }
@@ -1529,11 +1555,26 @@ mod tests {
             args.to_json(),
             r#"{"key":"key","value":"value","inner":"inner"}"#
         );
-        let (code, args) = issue::opacity_value("key", "op");
+        let (code, args) = issue::opacity_value_range("key", "op", Some("percent"));
         assert_eq!(code, DiagnosticCode::OpacityValue);
-        assert_eq!(args.to_json(), r#"{"key":"key","op":"op"}"#);
-        let (code, args) = issue::opacity_value("key", "op");
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"range","key":"key","op":"op","percent":"percent"}"#
+        );
+        let (code, args) = issue::opacity_value_range("key", "op", None);
         assert_eq!(code, DiagnosticCode::OpacityValue);
-        assert_eq!(args.to_json(), r#"{"key":"key","op":"op"}"#);
+        assert_eq!(args.to_json(), r#"{"form":"range","key":"key","op":"op"}"#);
+        let (code, args) = issue::opacity_value_fraction("key", "op", Some("percent"));
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","op":"op","percent":"percent"}"#
+        );
+        let (code, args) = issue::opacity_value_fraction("key", "op", None);
+        assert_eq!(code, DiagnosticCode::OpacityValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","op":"op"}"#
+        );
     }
 }

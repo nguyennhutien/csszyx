@@ -607,12 +607,16 @@ export const SIZE_BUDGETS = [
     // to 23,200 on 2026-10-25, measured 23,147 (+163): a value in the brackets
     // csszyx writes itself (`w: '[100px]'`) writes nothing and reports
     // `bracketed-value`, whose words only this build prints; the production
-    // one measured +46, against +105 for a matched-bracket scan.
+    // one measured +46, against +105 for a matched-bracket scan. Raised to
+    // 23,300 on 2026-10-26, measured 23,209 (+9 over): an `op` between 0 and
+    // 1 is written as the percent it is and reported (`opacity-value`,
+    // `fraction` form), because 0.17 wrote `op: 0.05` as 5%; the user chose
+    // the report over an upgrade note alone.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 23_200,
+        maxGzipBytes: 23_300,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -696,7 +700,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './engine',
-        maxGzipBytes: 28_950,
+        // 29,050 on 2026-10-26, measured 28,974: the `opacity-value`
+        // `fraction` form's words, which the engine's issues render with.
+        maxGzipBytes: 29_050,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -704,7 +710,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './internal',
-        maxGzipBytes: 31_950,
+        // 32,100 on 2026-10-26, measured 32,007: the same words, and the
+        // migrate class-name options object.
+        maxGzipBytes: 32_100,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

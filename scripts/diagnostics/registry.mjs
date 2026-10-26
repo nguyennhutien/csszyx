@@ -897,13 +897,31 @@ export const DIAGNOSTICS = [
     },
     {
         id: 'opacity-value',
-        summary: 'An `op` that is not a number from 0 to 100.',
+        summary:
+            'An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
-        // `op` is the JS literal the author wrote, quotes included for a string.
-        args: { key: STRING, op: STRING },
-        text: '`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.',
-        help: 'write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.',
+        // `range`: no opacity is written. `fraction`: 0 < op < 1 is written as
+        // the percent it is, and said, because 0.17 bracketed such a decimal
+        // and Tailwind read it as a fraction of one (`op: 0.05` was 5%).
+        forms: ['range', 'fraction'],
+        // `op` is the JS literal the author wrote, quotes included for a string;
+        // `percent` is `op` times 100, the fraction form only.
+        args: {
+            form: formArg(['range', 'fraction']),
+            key: STRING,
+            op: STRING,
+            percent: OPTIONAL_STRING,
+        },
+        text: {
+            range: '`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.',
+            fraction:
+                '`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1.',
+        },
+        help: {
+            range: 'write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.',
+            fraction: 'write `op: {percent}` for {percent}%.',
+        },
         sources: [ENGINE, CORE_TS],
     },
 

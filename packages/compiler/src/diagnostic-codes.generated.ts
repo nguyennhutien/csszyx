@@ -77,7 +77,7 @@ export interface SzDiagnosticArgs {
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
     'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
     'bracketed-value': { readonly key: string; readonly value: string; readonly inner: string };
-    'opacity-value': { readonly key: string; readonly op: string };
+    'opacity-value': { readonly form: 'range' | 'fraction'; readonly key: string; readonly op: string; readonly percent?: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
     'inert-keyword': { readonly className: string; readonly keyword: string };
     'dead-class': { readonly className: string };

@@ -972,12 +972,32 @@ function plainDecimal(value: number): string {
 const _warnedOpacityValues = new Set<string>();
 
 /**
- * Name an `op` that is not an opacity; the colour is written without one.
+ * `op` as the modifier it writes ({@link formatOpacity}), naming one that is
+ * no opacity (nothing is written) and one between 0 and 1, which is written
+ * as the percent it is and which 0.17 wrote as a fraction of 1.
+ *
+ * @param key - The key the colour is on, or the mask stop's member.
+ * @param op - The `op` value as written.
+ * @returns The modifier, or undefined when `op` is no opacity.
+ */
+function opacityModifier(key: string, op: unknown): string | undefined {
+    const written = formatOpacity(op);
+    if (written === undefined) warnOpacityValue(key, op);
+    else if (typeof op === 'number' && op > 0 && op < 1) {
+        warnOpacityValue(key, op, plainDecimal(Math.round(op * 100 * 1e9) / 1e9));
+    }
+    return written;
+}
+
+/**
+ * Name an `op` that is no opacity (`range`), or one below 1 with the percent
+ * to write (`fraction`).
  *
  * @param key - Colour property key.
  * @param op - The `op` value as written.
+ * @param percent - `op` times 100, for the fraction form.
  */
-function warnOpacityValue(key: string, op: unknown): void {
+function warnOpacityValue(key: string, op: unknown, percent?: string): void {
     const literal = typeof op === 'string' ? `'${op}'` : String(op);
     if (
         process.env.NODE_ENV !== 'production' &&
@@ -985,7 +1005,14 @@ function warnOpacityValue(key: string, op: unknown): void {
         !_warnedOpacityValues.has(`${key}:${literal}`)
     ) {
         _warnedOpacityValues.add(`${key}:${literal}`);
-        szReport({ diagnostic: OPACITY_VALUE, args: { key, op: literal }, at: szWarnLocation });
+        szReport({
+            diagnostic: OPACITY_VALUE,
+            args:
+                percent === undefined
+                    ? { form: 'range', key, op: literal }
+                    : { form: 'fraction', key, op: literal, percent },
+            at: szWarnLocation,
+        });
     }
 }
 
@@ -2156,9 +2183,8 @@ function buildColorObjectClass(
             ? `${prefix}${utilityPrefix}-${colorValue}${important}`
             : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
     }
-    const opacity = formatOpacity(color.op);
+    const opacity = opacityModifier(key, color.op);
     if (opacity === undefined) {
-        warnOpacityValue(key, color.op);
         return `${prefix}${utilityPrefix}-${colorValue}${important}`;
     }
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`);
@@ -3189,10 +3215,8 @@ function buildMaskColourClass(base: string, value: MaskStopValue): string | null
     const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
     let opacity = '';
     if (value.op !== undefined && value.op !== null) {
-        const written = formatOpacity(value.op);
-        if (written === undefined)
-            warnOpacityValue(base.slice(base.lastIndexOf('-') + 1), value.op);
-        else opacity = `/${written}`;
+        const written = opacityModifier(base.slice(base.lastIndexOf('-') + 1), value.op);
+        if (written !== undefined) opacity = `/${written}`;
     }
     return `${base}-${colour}${opacity}`;
 }
