@@ -785,6 +785,12 @@ pub(crate) fn is_fraction_supported_prop(key: &str) -> bool {
     )
 }
 
+/// List-style keywords Tailwind serves bare (`list-disc`); any other value
+/// is bracketed. Mirrors `LIST_STYLE_STANDARD`.
+pub(crate) fn is_list_style_keyword(value: &str) -> bool {
+    matches!(value, "none" | "disc" | "decimal")
+}
+
 /// Keys whose value is a colour alone (`bg`, `color`, `fill`). Mirrors the
 /// `PropertyCategory.COLOR` entries of `PROPERTY_CATEGORY_MAP`.
 pub(crate) fn is_color_property(key: &str) -> bool {

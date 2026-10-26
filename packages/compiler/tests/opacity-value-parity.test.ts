@@ -23,46 +23,47 @@ interface LaneResult {
 type Lane = (op: string) => LaneResult;
 
 /**
- * The runtime lowering of `{ bg: { color: 'red-500', op } }`.
+ * Every lane, for an sz object that holds `op` where `wrap` puts it.
  *
- * @param op - The `op` value as JS source.
- * @returns What it wrote and reported.
+ * @param wrap - The sz object's JS source, given `op`'s.
+ * @returns The runtime lowering and each engine.
  */
-function runtimeLane(op: string): LaneResult {
-    const warnings: string[] = [];
-    const original = console.warn;
-    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
-    try {
-        const value = new Function(`return (${op});`)() as unknown;
-        return {
-            className: transform({ bg: { color: 'red-500', op: value } } as never).className,
-            kinds: szReportedCodes(warnings),
-        };
-    } finally {
-        console.warn = original;
-    }
+function lanes(wrap: (op: string) => string): ReadonlyArray<readonly [string, Lane]> {
+    const runtime: Lane = op => {
+        const warnings: string[] = [];
+        const original = console.warn;
+        console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+        try {
+            const sz = new Function(`return (${wrap(op)});`)() as never;
+            return { className: transform(sz).className, kinds: szReportedCodes(warnings) };
+        } finally {
+            console.warn = original;
+        }
+    };
+    return [
+        ['runtime', runtime],
+        ...ENGINES.map(
+            ([name, engine]) =>
+                [
+                    name,
+                    (op: string): LaneResult => {
+                        const run = captureWarnings(
+                            engine,
+                            `export const A = () => <p sz={${wrap(op)}} />;`,
+                            '/p/src/Opacity.jsx',
+                        );
+                        return {
+                            className: run.className ?? '',
+                            kinds: (run.result.issues ?? []).map(issue => issue.code),
+                        };
+                    },
+                ] as const,
+        ),
+    ];
 }
 
-const LANES: ReadonlyArray<readonly [string, Lane]> = [
-    ['runtime', runtimeLane],
-    ...ENGINES.map(
-        ([name, engine]) =>
-            [
-                name,
-                (op: string): LaneResult => {
-                    const run = captureWarnings(
-                        engine,
-                        `export const A = () => <p sz={{ bg: { color: 'red-500', op: ${op} } }} />;`,
-                        '/p/src/Opacity.jsx',
-                    );
-                    return {
-                        className: run.className ?? '',
-                        kinds: (run.result.issues ?? []).map(issue => issue.code),
-                    };
-                },
-            ] as const,
-    ),
-];
+const LANES = lanes(op => `{ bg: { color: 'red-500', op: ${op} } }`);
+const runtimeLane = (LANES[0] as readonly [string, Lane])[1];
 
 beforeEach(() => {
     __resetSzWarnDedupForTests();
@@ -107,6 +108,32 @@ describe.each(LANES)('the opacity of a colour object — %s', (_name, lower) => 
         expect(lower("'--a'")).toEqual({ className: 'bg-red-500/(--a)', kinds: [] });
     });
 });
+
+describe.each(lanes(op => `{ maskLinear: { from: { color: 'red-500', op: ${op} } } }`))(
+    'the opacity of a mask stop colour — %s',
+    (_name, lower) => {
+        // The same spelling as a colour object's (vui pattern audit): the stop
+        // wrote `/${op}` as given, `/33.3` and `/--x`.
+        it.each([
+            ['50', 'mask-linear-from-red-500/50'],
+            ['33.3', 'mask-linear-from-red-500/[33.3%]'],
+            ["'--x'", 'mask-linear-from-red-500/(--x)'],
+            ["'40%'", 'mask-linear-from-red-500/[40%]'],
+        ])('op: %s writes %s', (op, className) => {
+            expect(lower(op).className).toBe(className);
+        });
+
+        it.each(['150', 'true', "'abc'"])(
+            'op: %s is not an opacity, so the colour stands alone',
+            op => {
+                expect(lower(op)).toEqual({
+                    className: 'mask-linear-from-red-500',
+                    kinds: ['opacity-value'],
+                });
+            },
+        );
+    },
+);
 
 describe('the runtime opacity-value warning', () => {
     afterEach(() => {

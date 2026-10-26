@@ -2020,10 +2020,11 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // listStyleType: standard keywords stay bare (list-disc), CSS vars use
             // the paren form, everything else is arbitrary (list-[upper-roman]).
+            // The keywords are `LIST_STYLE_STANDARD`'s, generated.
             if key == "list" || key == "listStyle" {
                 return Some(if value.starts_with("--") {
                     format!("{prefix}list-({value})")
-                } else if matches!(value.as_str(), "none" | "disc" | "decimal") {
+                } else if super::generated::tables::is_list_style_keyword(value) {
                     format!("{prefix}list-{value}")
                 } else {
                     format!("{prefix}list-[{value}]")
@@ -2449,15 +2450,14 @@ fn build_mask_stop_classes(base: &str, value: Option<&StaticSzValue>) -> Vec<Str
                 } else {
                     colour.to_string()
                 };
+                // Written as a colour object's `op` is; one that is no opacity
+                // leaves the colour alone (`collect_invalid_opacities`).
                 let opacity = object
                     .properties
                     .iter()
                     .find(|prop| prop.key == "op")
-                    .map_or_else(String::new, |prop| match &prop.value {
-                        StaticSzValue::Number(number) => format!("/{}", format_abs_number(*number)),
-                        StaticSzValue::String(text) => format!("/{text}"),
-                        StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
-                    });
+                    .and_then(|prop| format_opacity_value(&prop.value))
+                    .map_or_else(String::new, |op| format!("/{op}"));
                 out.push(format!("{base}-{rendered}{opacity}"));
             }
             out
@@ -2859,10 +2859,35 @@ pub(crate) fn collect_invalid_opacities(
                     out.push((property.key.clone(), literal_of(&op.value), op.span.start));
                 }
             }
+        } else if mask_slot_members(&property.key).is_some() {
+            collect_invalid_mask_stop_opacities(nested, out);
         } else {
             for_each_sz_object_in(&property.key, nested, &mut |object| {
                 collect_invalid_opacities(object, out);
             });
+        }
+    }
+}
+
+/// Each mask stop in a mask slot (`from`, `to`, a side's `from` / `to`) whose
+/// `op` is not an opacity, named by the stop's member, as the runtime does.
+#[cfg(feature = "native-engine")]
+fn collect_invalid_mask_stop_opacities(
+    slot: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for member in &slot.properties {
+        let StaticSzValue::Object(stop) = &member.value else {
+            continue;
+        };
+        if object_string_property(stop, "color").is_some() {
+            for op in stop.properties.iter().filter(|prop| prop.key == "op") {
+                if format_opacity_value(&op.value).is_none() {
+                    out.push((member.key.clone(), literal_of(&op.value), op.span.start));
+                }
+            }
+        } else {
+            collect_invalid_mask_stop_opacities(stop, out);
         }
     }
 }
@@ -3438,6 +3463,43 @@ mod tests {
                 ("outlineColor".to_string(), "true".to_string()),
                 ("ringColor".to_string(), "{…}".to_string()),
                 ("bg".to_string(), "-5".to_string()),
+            ]
+        );
+    }
+
+    /// A mask stop's `op` is read as a colour object's is, and one that is no
+    /// opacity is named by the stop's member, at a side's stop too.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_mask_stop_op_that_is_no_opacity_is_named_by_its_member() {
+        let stop = |op: StaticSzValue| {
+            object(vec![
+                property("color", StaticSzValue::String("red-500".to_string())),
+                property("op", op),
+            ])
+        };
+        let object = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![
+                    property("angle", StaticSzValue::Number(45.0)),
+                    property("from", stop(StaticSzValue::Number(150.0))),
+                    property("to", stop(StaticSzValue::Number(50.0))),
+                    property(
+                        "top",
+                        object(vec![property("from", stop(StaticSzValue::Boolean(true)))]),
+                    ),
+                ]),
+            )],
+        };
+        let mut found = Vec::new();
+        collect_invalid_opacities(&object, &mut found);
+        let named: Vec<_> = found.into_iter().map(|(key, op, _)| (key, op)).collect();
+        assert_eq!(
+            named,
+            [
+                ("from".to_string(), "150".to_string()),
+                ("from".to_string(), "true".to_string()),
             ]
         );
     }
@@ -4960,7 +5022,7 @@ mod tests {
         };
         assert_eq!(
             build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(rich_stop))),
-            ["mask-from-25", "mask-from-(color:--brand)/40%"]
+            ["mask-from-25", "mask-from-(color:--brand)/[40%]"]
         );
 
         for at in [

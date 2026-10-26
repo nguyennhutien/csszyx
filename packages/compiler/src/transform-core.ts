@@ -20,6 +20,7 @@ import {
     settleGlobalKeywords,
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
+import { own } from './own.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
@@ -754,24 +755,6 @@ export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'backdrop-hue-rotate',
 ]);
 
-// ============================================================================
-// COLOR_KEYWORDS & COLOR_SCALE_PATTERN: For color value detection
-// ============================================================================
-/*
-const COLOR_KEYWORDS = new Set(['inherit', 'current', 'transparent', 'black', 'white']);
-const COLOR_SCALE_PATTERN = /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+/;
-
-// function isColorValue(value: string): boolean {
-//     return COLOR_KEYWORDS.has(value) ||
-//            COLOR_SCALE_PATTERN.test(value) ||
-//            value.startsWith('#') ||
-//            value.includes('/');
-// }
-*/
-
-// Tailwind v4: opacity modifiers after / accept any integer or 0.5-step decimal bare.
-// Everything else (%, leading dot, non-0.5 decimals) goes in brackets.
-
 /**
  * Represents the result of a transformation.
  */
@@ -1431,24 +1414,6 @@ const FONT_STRETCH_KEYWORDS = new Set([
     'gradient',
 ]);
 */
-
-/**
- * A table's own entry for text an author wrote. An index or `in` reads
- * `Object.prototype` too: `{ constructor: 'inherit' }` wrote no class and
- * named `Object` in a `removed-key` line, and `{ wrap: 'constructor' }` wrote
- * the text of the `Object` function as a class, where the engine reads both
- * as the words they are.
- *
- * @param table - The table, or none.
- * @param name - The authored key or value.
- * @returns Its own entry, or `undefined`.
- */
-function own<T>(table: Readonly<Record<string, T>> | undefined, name: string): T | undefined {
-    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.
-    return table !== undefined && Object.prototype.hasOwnProperty.call(table, name)
-        ? table[name]
-        : undefined;
-}
 
 /**
  * Converts a camelCase CSS property name to kebab-case.
@@ -3195,11 +3160,21 @@ function buildMaskPositionClass(base: string, value: string): string {
     return value.startsWith('--') ? `${base}-(${value})` : `${base}-${value}`;
 }
 
-/** Render the colour half of an explicit mask stop. */
+/**
+ * Render the colour half of an explicit mask stop. `op` is written as a colour
+ * object's is ({@link formatOpacity}); one that is no opacity leaves the colour
+ * alone and is reported under the stop's member (`from`, `to`).
+ */
 function buildMaskColourClass(base: string, value: MaskStopValue): string | null {
     if (typeof value.color !== 'string' || !value.color) return null;
     const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
-    const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
+    let opacity = '';
+    if (value.op !== undefined && value.op !== null) {
+        const written = formatOpacity(value.op);
+        if (written === undefined)
+            warnOpacityValue(base.slice(base.lastIndexOf('-') + 1), value.op);
+        else opacity = `/${written}`;
+    }
     return `${base}-${colour}${opacity}`;
 }
 
