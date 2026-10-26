@@ -5384,7 +5384,10 @@ fn dynamic_css_var_from_property(
 ) -> DynamicCssVarIr {
     DynamicCssVarIr {
         key: key.to_string(),
+        // A gradient stop position has no table entry; its prefix is its
+        // stop's, as for a static value (`fromPos` → `from-10%`).
         class_prefix: super::generated::tables::property_prefix(key)
+            .or_else(|| super::lower::gradient_stop_prefix(key))
             .unwrap_or(key)
             .to_string(),
         var_name: css_variable_name(key, variant_prefix),

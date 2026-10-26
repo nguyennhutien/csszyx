@@ -792,6 +792,11 @@ describe.each(ENGINES)('a runtime value on a width key — %s', (_name, engine) 
         ['decorationThickness', 'decoration-(length:--_sz-decoration-thickness)'],
         ['ringOffset', 'ring-offset-(length:--_sz-ring-offset)'],
         ['insetRing', 'inset-ring-(length:--_sz-inset-ring)'],
+        // A gradient stop position takes its stop's prefix, as its static
+        // value does (`from-10%`); `fromPos-(…)` named no utility.
+        ['fromPos', 'from-(length:--_sz-from-pos)'],
+        ['viaPos', 'via-(length:--_sz-via-pos)'],
+        ['toPos', 'to-(length:--_sz-to-pos)'],
     ])('%s writes %s', (key, className) => {
         const run = captureWarnings(
             engine,
