@@ -8,6 +8,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S108",
+            "rule": "no-empty",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S1119",
             "rule": "sonarjs/no-labels",
             "scope": "MAIN"
@@ -35,6 +40,11 @@
         {
             "key": "typescript:S1135",
             "rule": "sonarjs/todo-tag",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1199",
+            "rule": "no-lone-blocks",
             "scope": "MAIN"
         },
         {
@@ -73,6 +83,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S1314",
+            "rule": "no-octal",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S1439",
             "rule": "sonarjs/label-position",
             "scope": "MAIN"
@@ -98,6 +113,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S1516",
+            "rule": "no-multi-str",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S1523",
             "rule": "sonarjs/code-eval",
             "scope": "MAIN"
@@ -116,6 +136,16 @@
             "key": "typescript:S1607",
             "rule": "sonarjs/no-skipped-tests",
             "scope": "TEST"
+        },
+        {
+            "key": "typescript:S1656",
+            "rule": "no-self-assign",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S1751",
+            "rule": "no-unreachable-loop",
+            "scope": "MAIN"
         },
         {
             "key": "typescript:S1764",
@@ -258,6 +288,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S2685",
+            "rule": "no-caller",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S2692",
             "rule": "sonarjs/index-of-compare-to-positive-number",
             "scope": "MAIN"
@@ -378,6 +413,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S3812",
+            "rule": "no-unsafe-negation",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S3923",
             "rule": "sonarjs/no-all-duplicated-branches",
             "scope": "MAIN"
@@ -410,6 +450,16 @@
         {
             "key": "typescript:S4043",
             "rule": "sonarjs/no-misleading-array-reverse",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4124",
+            "rule": "@typescript-eslint/no-misused-new",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S4140",
+            "rule": "no-sparse-arrays",
             "scope": "MAIN"
         },
         {
@@ -793,6 +843,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6325",
+            "rule": "prefer-regex-literals",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6326",
             "rule": "sonarjs/no-regex-spaces",
             "scope": "MAIN"
@@ -883,6 +938,31 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6509",
+            "rule": "no-extra-boolean-cast",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6522",
+            "rule": "no-import-assign",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6523",
+            "rule": "no-unsafe-optional-chaining",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6534",
+            "rule": "no-loss-of-precision",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6550",
+            "rule": "@typescript-eslint/prefer-literal-enum-member",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6551",
             "rule": "@typescript-eslint/no-base-to-string",
             "scope": "MAIN"
@@ -898,8 +978,38 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6565",
+            "rule": "@typescript-eslint/prefer-return-this-type",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6568",
+            "rule": "@typescript-eslint/no-confusing-non-null-assertion",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6569",
+            "rule": "@typescript-eslint/no-unnecessary-type-constraint",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6578",
+            "rule": "@typescript-eslint/no-duplicate-enum-values",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6582",
             "rule": "@typescript-eslint/prefer-optional-chain",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6583",
+            "rule": "@typescript-eslint/no-mixed-enums",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6590",
+            "rule": "@typescript-eslint/prefer-as-const",
             "scope": "MAIN"
         },
         {
@@ -913,8 +1023,58 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S6635",
+            "rule": "no-constructor-return",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6637",
+            "rule": "no-extra-bind",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6638",
+            "rule": "no-constant-binary-expression",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6644",
+            "rule": "no-unneeded-ternary",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6650",
+            "rule": "no-useless-rename",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6653",
+            "rule": "prefer-object-has-own",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6654",
+            "rule": "no-proto",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6657",
+            "rule": "no-octal-escape",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6671",
+            "rule": "@typescript-eslint/prefer-promise-reject-errors",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S6759",
             "rule": "sonarjs/prefer-read-only-props",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S6836",
+            "rule": "no-case-declarations",
             "scope": "MAIN"
         },
         {
@@ -943,8 +1103,73 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S7718",
+            "rule": "unicorn/catch-error-name",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7719",
+            "rule": "unicorn/consistent-date-clone",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7720",
+            "rule": "unicorn/consistent-empty-array-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7721",
+            "rule": "unicorn/consistent-function-scoping",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7724",
+            "rule": "unicorn/no-abusive-eslint-disable",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7725",
+            "rule": "unicorn/no-accessor-recursion",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7726",
+            "rule": "unicorn/no-anonymous-default-export",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7732",
+            "rule": "unicorn/no-instanceof-builtins",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7733",
+            "rule": "unicorn/no-invalid-fetch-options",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7734",
+            "rule": "unicorn/no-named-default",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7736",
+            "rule": "unicorn/no-negation-in-equality-check",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S7737",
             "rule": "unicorn/no-object-as-default-parameter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7738",
+            "rule": "unicorn/no-single-promise-in-promise-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7740",
+            "rule": "unicorn/no-this-assignment",
             "scope": "MAIN"
         },
         {
@@ -953,8 +1178,143 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S7742",
+            "rule": "unicorn/no-unnecessary-polyfills",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7743",
+            "rule": "unicorn/no-unreadable-iife",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7744",
+            "rule": "unicorn/no-useless-fallback-in-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7745",
+            "rule": "unicorn/no-useless-length-check",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7746",
+            "rule": "unicorn/no-useless-promise-resolve-reject",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7747",
+            "rule": "unicorn/no-useless-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7749",
+            "rule": "unicorn/numeric-separators-style",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7750",
+            "rule": "unicorn/prefer-array-find",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7751",
+            "rule": "unicorn/prefer-array-flat",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7752",
+            "rule": "unicorn/prefer-array-flat-map",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7753",
+            "rule": "unicorn/prefer-array-index-of",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7754",
+            "rule": "unicorn/prefer-array-some",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7756",
+            "rule": "unicorn/prefer-blob-reading-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7757",
+            "rule": "unicorn/prefer-class-fields",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S7758",
             "rule": "unicorn/prefer-code-point",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7760",
+            "rule": "unicorn/prefer-default-parameters",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7761",
+            "rule": "unicorn/dom-node-dataset",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7762",
+            "rule": "unicorn/prefer-dom-node-remove",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7765",
+            "rule": "unicorn/prefer-includes",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7767",
+            "rule": "unicorn/prefer-math-trunc",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7768",
+            "rule": "unicorn/prefer-modern-dom-apis",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7769",
+            "rule": "unicorn/prefer-modern-math-apis",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7771",
+            "rule": "unicorn/prefer-negative-index",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7772",
+            "rule": "unicorn/prefer-node-protocol",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7773",
+            "rule": "unicorn/prefer-number-properties",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7774",
+            "rule": "unicorn/prefer-prototype-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7776",
+            "rule": "unicorn/prefer-set-has",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7777",
+            "rule": "unicorn/prefer-set-size",
             "scope": "MAIN"
         },
         {
@@ -965,6 +1325,26 @@
         {
             "key": "typescript:S7780",
             "rule": "unicorn/prefer-string-raw",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7783",
+            "rule": "unicorn/prefer-string-trim-start-end",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7785",
+            "rule": "unicorn/prefer-top-level-await",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7786",
+            "rule": "unicorn/prefer-type-error",
+            "scope": "MAIN"
+        },
+        {
+            "key": "typescript:S7787",
+            "rule": "unicorn/require-module-specifiers",
             "scope": "MAIN"
         },
         {
@@ -986,6 +1366,11 @@
             "key": "typescript:S8754",
             "rule": "sonarjs/no-duplicate-test-title",
             "scope": "TEST"
+        },
+        {
+            "key": "typescript:S878",
+            "rule": "no-sequences",
+            "scope": "MAIN"
         },
         {
             "key": "typescript:S8780",

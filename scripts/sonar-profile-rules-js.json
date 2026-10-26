@@ -8,6 +8,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S108",
+            "rule": "no-empty",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S1119",
             "rule": "sonarjs/no-labels",
             "scope": "MAIN"
@@ -40,6 +45,11 @@
         {
             "key": "javascript:S1135",
             "rule": "sonarjs/todo-tag",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S1199",
+            "rule": "no-lone-blocks",
             "scope": "MAIN"
         },
         {
@@ -78,6 +88,16 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S1314",
+            "rule": "no-octal",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S1321",
+            "rule": "no-with",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S1439",
             "rule": "sonarjs/label-position",
             "scope": "MAIN"
@@ -103,6 +123,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S1516",
+            "rule": "no-multi-str",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S1523",
             "rule": "sonarjs/code-eval",
             "scope": "MAIN"
@@ -123,9 +148,24 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S1536",
+            "rule": "no-dupe-args",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S1607",
             "rule": "sonarjs/no-skipped-tests",
             "scope": "TEST"
+        },
+        {
+            "key": "javascript:S1656",
+            "rule": "no-self-assign",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S1751",
+            "rule": "no-unreachable-loop",
+            "scope": "MAIN"
         },
         {
             "key": "javascript:S1764",
@@ -243,6 +283,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S2432",
+            "rule": "no-setter-return",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S2486",
             "rule": "sonarjs/no-ignored-exceptions",
             "scope": "MAIN"
@@ -270,6 +315,11 @@
         {
             "key": "javascript:S2681",
             "rule": "sonarjs/no-unenclosed-multiline-block",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S2685",
+            "rule": "no-caller",
             "scope": "MAIN"
         },
         {
@@ -428,6 +478,16 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S3812",
+            "rule": "no-unsafe-negation",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S3834",
+            "rule": "no-new-native-nonconstructor",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S3923",
             "rule": "sonarjs/no-all-duplicated-branches",
             "scope": "MAIN"
@@ -460,6 +520,11 @@
         {
             "key": "javascript:S4043",
             "rule": "sonarjs/no-misleading-array-reverse",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S4125",
+            "rule": "valid-typeof",
             "scope": "MAIN"
         },
         {
@@ -808,6 +873,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S6325",
+            "rule": "prefer-regex-literals",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S6326",
             "rule": "sonarjs/no-regex-spaces",
             "scope": "MAIN"
@@ -898,6 +968,26 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S6509",
+            "rule": "no-extra-boolean-cast",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6522",
+            "rule": "no-import-assign",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6523",
+            "rule": "no-unsafe-optional-chaining",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6534",
+            "rule": "no-loss-of-precision",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S6594",
             "rule": "sonarjs/prefer-regexp-exec",
             "scope": "MAIN"
@@ -905,6 +995,56 @@
         {
             "key": "javascript:S6627",
             "rule": "sonarjs/no-internal-api-use",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6635",
+            "rule": "no-constructor-return",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6637",
+            "rule": "no-extra-bind",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6638",
+            "rule": "no-constant-binary-expression",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6644",
+            "rule": "no-unneeded-ternary",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6645",
+            "rule": "no-undef-init",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6650",
+            "rule": "no-useless-rename",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6653",
+            "rule": "prefer-object-has-own",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6654",
+            "rule": "no-proto",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6657",
+            "rule": "no-octal-escape",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S6836",
+            "rule": "no-case-declarations",
             "scope": "MAIN"
         },
         {
@@ -928,8 +1068,73 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S7718",
+            "rule": "unicorn/catch-error-name",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7719",
+            "rule": "unicorn/consistent-date-clone",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7720",
+            "rule": "unicorn/consistent-empty-array-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7721",
+            "rule": "unicorn/consistent-function-scoping",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7724",
+            "rule": "unicorn/no-abusive-eslint-disable",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7725",
+            "rule": "unicorn/no-accessor-recursion",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7726",
+            "rule": "unicorn/no-anonymous-default-export",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7732",
+            "rule": "unicorn/no-instanceof-builtins",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7733",
+            "rule": "unicorn/no-invalid-fetch-options",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7734",
+            "rule": "unicorn/no-named-default",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7736",
+            "rule": "unicorn/no-negation-in-equality-check",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S7737",
             "rule": "unicorn/no-object-as-default-parameter",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7738",
+            "rule": "unicorn/no-single-promise-in-promise-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7740",
+            "rule": "unicorn/no-this-assignment",
             "scope": "MAIN"
         },
         {
@@ -938,8 +1143,143 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S7742",
+            "rule": "unicorn/no-unnecessary-polyfills",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7743",
+            "rule": "unicorn/no-unreadable-iife",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7744",
+            "rule": "unicorn/no-useless-fallback-in-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7745",
+            "rule": "unicorn/no-useless-length-check",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7746",
+            "rule": "unicorn/no-useless-promise-resolve-reject",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7747",
+            "rule": "unicorn/no-useless-spread",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7749",
+            "rule": "unicorn/numeric-separators-style",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7750",
+            "rule": "unicorn/prefer-array-find",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7751",
+            "rule": "unicorn/prefer-array-flat",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7752",
+            "rule": "unicorn/prefer-array-flat-map",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7753",
+            "rule": "unicorn/prefer-array-index-of",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7754",
+            "rule": "unicorn/prefer-array-some",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7756",
+            "rule": "unicorn/prefer-blob-reading-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7757",
+            "rule": "unicorn/prefer-class-fields",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S7758",
             "rule": "unicorn/prefer-code-point",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7760",
+            "rule": "unicorn/prefer-default-parameters",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7761",
+            "rule": "unicorn/dom-node-dataset",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7762",
+            "rule": "unicorn/prefer-dom-node-remove",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7765",
+            "rule": "unicorn/prefer-includes",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7767",
+            "rule": "unicorn/prefer-math-trunc",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7768",
+            "rule": "unicorn/prefer-modern-dom-apis",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7769",
+            "rule": "unicorn/prefer-modern-math-apis",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7771",
+            "rule": "unicorn/prefer-negative-index",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7772",
+            "rule": "unicorn/prefer-node-protocol",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7773",
+            "rule": "unicorn/prefer-number-properties",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7774",
+            "rule": "unicorn/prefer-prototype-methods",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7776",
+            "rule": "unicorn/prefer-set-has",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7777",
+            "rule": "unicorn/prefer-set-size",
             "scope": "MAIN"
         },
         {
@@ -950,6 +1290,26 @@
         {
             "key": "javascript:S7780",
             "rule": "unicorn/prefer-string-raw",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7783",
+            "rule": "unicorn/prefer-string-trim-start-end",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7785",
+            "rule": "unicorn/prefer-top-level-await",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7786",
+            "rule": "unicorn/prefer-type-error",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S7787",
+            "rule": "unicorn/require-module-specifiers",
             "scope": "MAIN"
         },
         {
@@ -965,6 +1325,11 @@
         {
             "key": "javascript:S8479",
             "rule": "sonarjs/dompurify-unsafe-config",
+            "scope": "MAIN"
+        },
+        {
+            "key": "javascript:S878",
+            "rule": "no-sequences",
             "scope": "MAIN"
         },
         {
