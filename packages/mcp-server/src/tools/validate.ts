@@ -80,7 +80,8 @@ interface ValidationError extends Partial<Omit<ToolDiagnostic, 'message'>> {
  * @returns Validation error when the entry is unsupported.
  */
 function validateEntry(key: string, value: unknown): ValidationError | undefined {
-    const suggestion = SUGGESTION_MAP[key];
+    // Own entries only: `toString` is a word an author can write as a key.
+    const suggestion = Object.hasOwn(SUGGESTION_MAP, key) ? SUGGESTION_MAP[key] : undefined;
     if (suggestion) {
         return {
             key,
@@ -91,7 +92,9 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
         };
     }
 
-    const removed = REMOVED_BOOLEAN_SUGAR[key];
+    const removed = Object.hasOwn(REMOVED_BOOLEAN_SUGAR, key)
+        ? REMOVED_BOOLEAN_SUGAR[key]
+        : undefined;
     if (removed && value === true) {
         return {
             key,
@@ -122,7 +125,11 @@ interface Leaf {
  * @returns True when the compiler lowers the key as a property.
  */
 function isPropertyKey(key: string): boolean {
-    return key in PROPERTY_MAP || BOOLEAN_SHORTHANDS.has(key) || KNOWN_SPECIAL_PROPERTIES.has(key);
+    return (
+        Object.hasOwn(PROPERTY_MAP, key) ||
+        BOOLEAN_SHORTHANDS.has(key) ||
+        KNOWN_SPECIAL_PROPERTIES.has(key)
+    );
 }
 
 /**

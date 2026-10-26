@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { handleValidate } from '../src/tools/validate';
 
 describe('csszyx_validate', () => {
+    // `Object.prototype` members are words an author can write as keys; a
+    // table lookup that reads the prototype took them for a suggestion.
+    it.each(['toString', 'constructor', 'hasOwnProperty'])(
+        'reads %s as an unknown key, not a table entry',
+        key => {
+            const data = JSON.parse(handleValidate({ sz: { [key]: true } }).content[0].text);
+            expect(data.valid).toBe(false);
+            expect(data.errors.map((error: { key: string }) => error.key)).toEqual([key]);
+            expect(JSON.stringify(data.errors)).not.toContain('function');
+        },
+    );
+
     it('accepts a correct sz object', () => {
         const data = JSON.parse(handleValidate({ sz: { p: 4, bg: 'red-500' } }).content[0].text);
         expect(data.valid).toBe(true);
