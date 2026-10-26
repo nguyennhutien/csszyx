@@ -74,3 +74,31 @@ describe.each(LANES)('a space inside a value — %s', (_name, lower) => {
         expect(lower(sz)).toBe(className);
     });
 });
+
+describe('the class a closed-enum line names', () => {
+    // The note names the class the lanes emit: a spaced value is one class
+    // with `_`, so `flex hidden` is never in the DOM to look for.
+    const note = 'the class `flex_hidden` is still emitted';
+
+    it('is the emitted class on the runtime', () => {
+        const warnings: string[] = [];
+        const original = console.warn;
+        console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+        try {
+            expect(transform({ display: 'flex hidden' } as never).className).toBe('flex_hidden');
+        } finally {
+            console.warn = original;
+        }
+        expect(warnings.join('\n')).toContain(note);
+    });
+
+    it.each(ENGINES)('is the emitted class on the %s engine', (_name, engine) => {
+        const run = captureWarnings(
+            engine,
+            `export const A = () => <p sz={{ display: 'flex hidden' }} />;`,
+            '/p/src/Space.jsx',
+        );
+        expect(run.className).toBe('flex_hidden');
+        expect(run.warnings.join('\n')).toContain(note);
+    });
+});

@@ -228,16 +228,18 @@ fn finish_lowered_classes(classes: Vec<String>) -> Vec<String> {
 /// style nothing, and `display: 'flex hidden'` into two that do. Mirrors
 /// `oneClassEach` in `transform-core.ts`.
 fn one_class_each(classes: Vec<String>) -> Vec<String> {
-    classes
-        .into_iter()
-        .map(|class_name| {
-            if class_name.contains(char::is_whitespace) {
-                class_name.split_whitespace().collect::<Vec<_>>().join("_")
-            } else {
-                class_name
-            }
-        })
-        .collect()
+    classes.into_iter().map(one_class).collect()
+}
+
+/// A class with whitespace in it, as one class: its runs of whitespace become
+/// `_`. Every lowered class goes through it, and so does the class a
+/// diagnostic names. Mirrors `oneClass`.
+fn one_class(class_name: String) -> String {
+    if class_name.contains(char::is_whitespace) {
+        class_name.split_whitespace().collect::<Vec<_>>().join("_")
+    } else {
+        class_name
+    }
 }
 
 /// [`lower_static_sz_object`] on a pass that collects what a merge would
@@ -754,9 +756,11 @@ pub(crate) type MovedValue = (String, String, u32);
 /// IS the class. Mirrors `bareClosedEnumClass` in the TypeScript core, so the
 /// diagnostic names the class both engines emit.
 pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
-    super::generated::tables::closed_enum_affix(key).map_or_else(
-        || value.to_string(),
-        |(prefix, suffix)| format!("{prefix}{value}{suffix}"),
+    one_class(
+        super::generated::tables::closed_enum_affix(key).map_or_else(
+            || value.to_string(),
+            |(prefix, suffix)| format!("{prefix}{value}{suffix}"),
+        ),
     )
 }
 

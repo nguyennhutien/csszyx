@@ -144,5 +144,17 @@ export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', str
  */
 export function bareClosedEnumClass(key: string, value: string): string {
     const affix = CLOSED_ENUM_AFFIXES[key];
-    return affix ? `${affix.prefix}${value}${affix.suffix}` : value;
+    return oneClass(affix ? `${affix.prefix}${value}${affix.suffix}` : value);
+}
+
+/**
+ * A class with whitespace in it, as one class: its runs of whitespace become
+ * `_`, as Tailwind reads them. Every lowered class goes through it, and so
+ * does the class a diagnostic names, so the two never differ.
+ *
+ * @param className - The class as lowered.
+ * @returns The class as emitted.
+ */
+export function oneClass(className: string): string {
+    return /\s/.test(className) ? className.trim().split(/\s+/).join('_') : className;
 }

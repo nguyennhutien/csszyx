@@ -74,6 +74,7 @@ import {
     bareClosedEnumClass,
     CLOSED_ENUM_CLASSES,
     CLOSED_ENUM_VALUE_MOVES,
+    oneClass,
 } from './closed-enum-tables.js';
 // The registry's words for every line this module prints, the reporter that
 // fills them in development and the suggestion an unknown key's line names
@@ -3779,9 +3780,7 @@ function findMatchingLeading(
  * @returns The same, none holding a space.
  */
 function oneClassEach(classes: string[]): string[] {
-    return classes.map(className =>
-        /\s/.test(className) ? className.trim().split(/\s+/).join('_') : className,
-    );
+    return classes.map(oneClass);
 }
 
 /** Filters empty utilities, applies optional mangling, and joins the result. */
