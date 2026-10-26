@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     __resetSzWarnDedupForTests,
     formatSzWarnLocation,
+    getVariantPrefix,
     type SzObject,
     setSzWarnLocation,
     transform,
@@ -665,5 +666,37 @@ describe('formatSzWarnLocation', () => {
     });
     it('keeps the raw file when no root is given', () => {
         expect(formatSzWarnLocation('/a/b.tsx', 4, undefined)).toBe('/a/b.tsx:4');
+    });
+});
+
+describe('getVariantPrefix memo', () => {
+    // Keys are author text, so the memo starts over past 512 keys; every
+    // answer after that is the same one the table and the regex give.
+    it('starts over past its bound and answers the same after', () => {
+        const clear = vi.spyOn(Map.prototype, 'clear');
+        const keys = Array.from({ length: 600 }, (_, index) => `myState${index}`);
+        try {
+            expect(keys.map(getVariantPrefix)).toEqual(keys.map((_, index) => `my-state${index}`));
+            // 600 new keys cross the 512 bound once, whatever earlier tests left.
+            expect(clear.mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect(clear.mock.calls.length).toBeLessThanOrEqual(2);
+        } finally {
+            clear.mockRestore();
+        }
+        expect(getVariantPrefix('myState0')).toBe('my-state0');
+        expect(getVariantPrefix('focusVisible')).toBe('focus-visible');
+    });
+});
+
+describe('transform with a mangle map', () => {
+    // A class the map names is written as its mangled name; any other keeps
+    // its own, under a variant too.
+    it('maps the classes it names and keeps the rest', () => {
+        expect(
+            transform(
+                { p: 4, m: 2, hover: { p: 4 } },
+                { mangleMap: { 'p-4': 'a', 'hover:p-4': 'b' } },
+            ).className,
+        ).toBe('a m-2 b');
     });
 });

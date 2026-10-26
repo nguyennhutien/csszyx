@@ -1462,9 +1462,23 @@ function camelToKebab(prop: string): string {
  * @returns the mapped or kebab-cased variant prefix
  */
 export function getVariantPrefix(key: string): string {
-    // VARIANT_MAP first, then camelCase to kebab-case.
-    return own(VARIANT_MAP, key) || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    let prefix = variantPrefixes.get(key);
+    if (prefix === undefined) {
+        // VARIANT_MAP first, then camelCase to kebab-case.
+        prefix = own(VARIANT_MAP, key) || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        // Keys are author text, so the memo is bounded: a project names a few
+        // dozen variants, and one that names more pays the regex again.
+        if (variantPrefixes.size >= VARIANT_PREFIX_MEMO_LIMIT) variantPrefixes.clear();
+        variantPrefixes.set(key, prefix);
+    }
+    return prefix;
 }
+
+/** Variant keys already resolved by {@link getVariantPrefix}. */
+const variantPrefixes = new Map<string, string>();
+
+/** The most keys {@link variantPrefixes} holds before it starts over. */
+const VARIANT_PREFIX_MEMO_LIMIT = 512;
 
 /**
  * Handles group/peer variants with special syntax
@@ -1558,8 +1572,7 @@ function collectNamedGroupPeer(
 
 /** Appends transformed classes for one variant value. */
 function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
-    const result = transformNested(value as SzObject, prefix);
-    if (result.className) classes.push(...result.className.split(' '));
+    classes.push(...nestedClasses(value as SzObject, prefix));
 }
 
 /** Returns whether a variant value is intentionally absent. */
@@ -1665,11 +1678,7 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
             selectorStr = selector;
         }
 
-        const variantPrefix = `${prefix}has-[${selectorStr}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(...result.className.split(' '));
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}has-[${selectorStr}]:`));
     }
 
     return classes;
@@ -1685,17 +1694,12 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
  */
 function transformNotEntry(key: string, value: SzValue, prefix: string): string[] {
     if (key === 'supports' && typeof value === 'object') {
-        return Object.entries(value as SzObject).flatMap(([condition, condValue]) => {
-            const result = transformNested(
-                condValue as SzObject,
-                `${prefix}not-supports-[${condition}]:`,
-            );
-            return result.className ? result.className.split(' ') : [];
-        });
+        return Object.entries(value as SzObject).flatMap(([condition, condValue]) =>
+            nestedClasses(condValue as SzObject, `${prefix}not-supports-[${condition}]:`),
+        );
     }
 
-    const result = transformNested(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
-    return result.className ? result.className.split(' ') : [];
+    return nestedClasses(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
 }
 
 /**
@@ -1734,11 +1738,7 @@ function handleData(dataObj: SzObject, prefix: string): string[] {
             continue;
         }
 
-        const variantPrefix = `${prefix}data-[${key}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(...result.className.split(' '));
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}data-[${key}]:`));
     }
 
     return classes;
@@ -1769,10 +1769,7 @@ function handleAria(ariaObj: SzObject, prefix: string): string[] {
             variantPrefix = `${prefix}aria-[${key}]:`;
         }
 
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(...result.className.split(' '));
-        }
+        classes.push(...nestedClasses(value as SzObject, variantPrefix));
     }
 
     return classes;
@@ -1793,11 +1790,7 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
             continue;
         }
 
-        const variantPrefix = `${prefix}supports-[${condition}]:`;
-        const result = transformNested(value as SzObject, variantPrefix);
-        if (result.className) {
-            classes.push(...result.className.split(' '));
-        }
+        classes.push(...nestedClasses(value as SzObject, `${prefix}supports-[${condition}]:`));
     }
 
     return classes;
@@ -2038,36 +2031,41 @@ export function transform(
                     : `[csszyx] options-object-required: ${JSON.stringify(args)} https://csszyx.com/e/options-object-required`,
         });
     }
-    return transformNested(szProp, options.prefix ?? '', options.mangleMap);
+    const classes = nestedClasses(szProp, options.prefix ?? '');
+    const { mangleMap } = options;
+    return {
+        className: (mangleMap
+            ? classes.map(className => mangleMap[className] || className)
+            : classes
+        ).join(' '),
+    };
 }
 
 /**
- * Transform an sz object, bounding recursion depth via {@link szTransformDepth}.
+ * The classes of an sz object, bounding recursion depth via
+ * {@link szTransformDepth}.
  *
  * The lowering calls itself through this rather than through {@link transform}:
  * the options object is what a caller writes, not what a recursion allocates
- * per nested value.
+ * per nested value. Each level hands its classes up as they are: joining them
+ * into one string for the level above to split again cost a nested object 10
+ * to 18% of its lowering time.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
- * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className.
+ * @returns the classes, each one class, none empty.
  */
-function transformNested(
-    szProp: SzObject,
-    prefix = '',
-    mangleMap?: Record<string, string>,
-): TransformResult {
+function nestedClasses(szProp: SzObject, prefix: string): string[] {
     // Input validation
     if (!szProp || typeof szProp !== 'object') {
-        return { className: '' };
+        return [];
     }
     if (szTransformDepth >= MAX_SZ_DEPTH) {
         throw new SzDepthError();
     }
     szTransformDepth++;
     try {
-        return transformImpl(szProp, prefix, mangleMap);
+        return transformImpl(szProp, prefix);
     } finally {
         szTransformDepth--;
     }
@@ -3731,6 +3729,14 @@ function collectTextLeadingEntry(
     leadingEntries: LeadingEntry[],
 ): void {
     const lastColon = className.lastIndexOf(':');
+    // Only a `text-` or `leading-` utility can merge; every other class is
+    // passed over before its prefix is cut out or a pattern is run.
+    if (
+        !className.startsWith('text-', lastColon + 1) &&
+        !className.startsWith('leading-', lastColon + 1)
+    ) {
+        return;
+    }
     const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
     const base = lastColon === -1 ? className : className.slice(lastColon + 1);
     const textMatch = TEXT_SIZE_BASE_RE.exec(base);
@@ -3762,16 +3768,9 @@ function oneClassEach(classes: string[]): string[] {
     return classes.map(oneClass);
 }
 
-/** Filters empty utilities, applies optional mangling, and joins the result. */
-function finalizeTransformResult(
-    classes: string[],
-    mangleMap?: Record<string, string>,
-): TransformResult {
-    const finalClasses = mergeTextSizeAndLeading(oneClassEach(classes)).filter(Boolean);
-    const outputClasses = mangleMap
-        ? finalClasses.map(className => mangleMap[className] || className)
-        : finalClasses;
-    return { className: outputClasses.join(' ') };
+/** One object's classes, each one class, merged and with the empty ones dropped. */
+function finalizeClasses(classes: string[]): string[] {
+    return mergeTextSizeAndLeading(oneClassEach(classes)).filter(Boolean);
 }
 
 /**
@@ -4068,10 +4067,10 @@ function collectNestedVariant(
     const variantName = isArbitraryVariant(rawKey)
         ? normalizeArbitraryVariant(rawKey)
         : getVariantPrefix(rawKey);
-    const nestedResult = transformNested(value, `${prefix}${variantName}:`);
-    if (nestedResult.className) {
-        classes.push(...nestedResult.className.split(' '));
-        warnUnservedStateVariant(variantName, nestedResult.className);
+    const nested = nestedClasses(value, `${prefix}${variantName}:`);
+    if (nested.length > 0) {
+        classes.push(...nested);
+        warnUnservedStateVariant(variantName, nested[0] as string);
     }
 }
 
@@ -4089,9 +4088,9 @@ const _warnedUnservedVariants = new Set<string>();
  * emitted.
  *
  * @param variant - The variant as the class writes it.
- * @param classNames - The classes emitted under it, space-separated.
+ * @param className - The first class emitted under it, which the line names.
  */
-function warnUnservedStateVariant(variant: string, classNames: string): void {
+function warnUnservedStateVariant(variant: string, className: string): void {
     if (
         process.env.NODE_ENV !== 'production' &&
         szNodeWarningsUnmuted() &&
@@ -4102,7 +4101,7 @@ function warnUnservedStateVariant(variant: string, classNames: string): void {
         _warnedUnservedVariants.add(variant);
         szReport({
             diagnostic: UNSERVED_VARIANT,
-            args: { form, variant, className: classNames.split(' ')[0] as string },
+            args: { form, variant, className },
             at: szWarnLocation,
         });
     }
@@ -4238,6 +4237,37 @@ function warnAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject)
 }
 
 /**
+ * Every key {@link collectTransformProperty} answers with a warning instead of
+ * a class: a CSS name, a removed key, a split shorthand. One set answers a
+ * miss, which is nearly every key, in one lookup where three tables took one
+ * each. The tables are never written after load.
+ */
+const ALIAS_OR_REMOVED_KEYS: ReadonlySet<string> = new Set([
+    ...Object.keys(SUGGESTION_MAP),
+    ...Object.keys(MIGRATION_NOTES),
+    ...Object.keys(SPLIT_SHORTHAND_KEYS),
+]);
+
+/**
+ * Answers a key {@link ALIAS_OR_REMOVED_KEYS} holds with its warning; it
+ * emits no class.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value.
+ * @param szProp - The object it sits in.
+ * @returns True when the key was one and was answered here.
+ */
+function collectAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObject): boolean {
+    if (!ALIAS_OR_REMOVED_KEYS.has(rawKey)) return false;
+    // A flag that joined a group under a new name emits nothing; say so in
+    // every mode, as for the other replaced keys.
+    const replacement = REPLACED_KEYS.has(rawKey) ? own(SUGGESTION_MAP, rawKey) : undefined;
+    if (replacement !== undefined) warnRemovedKey(rawKey, 'replaced', `${replacement}: true`);
+    else warnAliasOrRemovedKey(rawKey, value, szProp);
+    return true;
+}
+
+/**
  * Collects one property after filtering inactive values and shortcut forms.
  * `splitImportant` is false for the value left after one `!` was split off,
  * so `x!!` keeps its second `!` in the value, as on the engine.
@@ -4253,20 +4283,7 @@ function collectTransformProperty(
     if (value === false || value === null || value === undefined) return;
     if (dropBracketedValue(rawKey, value)) return;
     if (splitImportant && collectImportantProperty(rawKey, value, prefix, szProp, classes)) return;
-    // A flag that joined a group under a new name emits nothing; say so in
-    // every mode, as for the other replaced keys.
-    if (REPLACED_KEYS.has(rawKey) && own(SUGGESTION_MAP, rawKey) !== undefined) {
-        warnRemovedKey(rawKey, 'replaced', `${own(SUGGESTION_MAP, rawKey)}: true`);
-        return;
-    }
-    if (
-        own(SUGGESTION_MAP, rawKey) !== undefined ||
-        own(MIGRATION_NOTES, rawKey) !== undefined ||
-        own(SPLIT_SHORTHAND_KEYS, rawKey) !== undefined
-    ) {
-        warnAliasOrRemovedKey(rawKey, value, szProp);
-        return;
-    }
+    if (collectAliasOrRemovedKey(rawKey, value, szProp)) return;
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
@@ -4334,19 +4351,14 @@ function collectResolvedStringProperty(
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
- * Depth-unchecked transform body. Called by {@link transform} once the depth
- * guard has been applied.
+ * Depth-unchecked transform body. Called by {@link nestedClasses} once the
+ * depth guard has been applied.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
- * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className.
+ * @returns the emitted classes.
  */
-function transformImpl(
-    szProp: SzObject,
-    prefix: string,
-    mangleMap?: Record<string, string>,
-): TransformResult {
+function transformImpl(szProp: SzObject, prefix: string): string[] {
     const classes: string[] = [];
 
     const shadowed = keysShadowedByGlobalKeywords(szProp);
@@ -4355,7 +4367,7 @@ function transformImpl(
         collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 
-    return finalizeTransformResult(classes, mangleMap);
+    return finalizeClasses(classes);
 }
 
 /**
