@@ -305,13 +305,14 @@ Extensibility.
 
 Targeting specific screen sizes and container states.
 
-| Concept                  | CSS Rule                    | Tailwind v4 Class         | `sz` Prop (Object Syntax)                         | Note                                |
-| :----------------------- | :-------------------------- | :------------------------ | :------------------------------------------------ | :---------------------------------- |
-| **Mobile First**         | `min-width: (etc)`          | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`                 | Unprefixed utilities target mobile. |
-| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { display: 'flex' } } }`          | **Sugar**: CamelCase for `max-xl`.  |
-| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { display: 'flex' } } }`          | Target specific range.              |
-| **Custom Breakpoint**    | `@media (min-width: 320px)` | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` | Arbitrary one-off breakpoint.       |
-| **Max-Width Breakpoint** | `@media (max-width: 600px)` | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`       |                                     |
+| Concept                  | CSS Rule                          | Tailwind v4 Class         | `sz` Prop (Object Syntax)                         | Note                                                                                         |
+| :----------------------- | :-------------------------------- | :------------------------ | :------------------------------------------------ | :------------------------------------------------------------------------------------------- |
+| **Mobile First**         | `min-width: (etc)`                | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`                 | Unprefixed utilities target mobile.                                                          |
+| **Breakpoint Range**     | `768px <= width < 1280px`         | `md:max-xl:flex`          | `{ md: { maxXl: { display: 'flex' } } }`          | **Sugar**: CamelCase for `max-xl`.                                                           |
+| **Single Breakpoint**    | `md only`                         | `md:max-lg:flex`          | `{ md: { maxLg: { display: 'flex' } } }`          | Target specific range.                                                                       |
+| **Custom Breakpoint**    | `@media (min-width: 320px)`       | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` | Arbitrary one-off breakpoint.                                                                |
+| **Max-Width Breakpoint** | `@media (max-width: 600px)`       | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`       |                                                                                              |
+| **Project Breakpoint**   | `--breakpoint-tablet` in `@theme` | `min-tablet:flex`         | `{ min: { tablet: { display: 'flex' } } }`        | A name is written as it is; a length is bracketed as on any key (`'640px'` → `min-[640px]`). |
 
 ## Container Query Disambiguation
 
@@ -329,15 +330,16 @@ The `container` class sets `width: 100%` and applies responsive max-widths.
 
 The `@container` class enables CSS container queries.
 
-| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                      |
-| :----------------------- | :------------------- | :----------------------------------------------- | :---------------------------------------- |
-| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                           |
-| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name. |
-| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.              |
-| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { display: 'block' } } }`   | **Sugar**: Nest name inside query key.    |
-| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                           |
-| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                           |
-| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                           |
+| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                                     |
+| :----------------------- | :------------------- | :----------------------------------------------- | :------------------------------------------------------- |
+| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                                          |
+| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name.                |
+| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.                             |
+| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { display: 'block' } } }`   | **Sugar**: Nest name inside query key.                   |
+| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                                          |
+| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                                          |
+| **Container Size**       | `@min-sidebar:flex`  | `{ '@min': { sidebar: { display: 'flex' } } }`   | A `--container-*` name, as `min`/`max` take breakpoints. |
+| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                                          |
 
 ## Dark mode
 

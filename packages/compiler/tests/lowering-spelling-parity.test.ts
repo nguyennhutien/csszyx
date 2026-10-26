@@ -177,6 +177,32 @@ describe.each(LANES)('a CSS-wide keyword on bgImg — %s', (_name, lower) => {
     });
 });
 
+describe.each(LANES)('breakpoints and container queries — %s', (_name, lower) => {
+    // A breakpoint name is written as it is, so a project's own (`tablet`,
+    // `sidebar`) is served; a length is bracketed as on every other key. The
+    // named and arbitrary container forms are the spec's. Measured against
+    // Tailwind 4.3.3 with `--breakpoint-tablet` and `--container-sidebar`.
+    it.each([
+        [{ min: { md: { p: 4 } } }, 'min-md:p-4'],
+        [{ min: { tablet: { p: 4 } } }, 'min-tablet:p-4'],
+        [{ max: { '3xl': { p: 4 } } }, 'max-3xl:p-4'],
+        [{ min: { '640px': { p: 4 } } }, 'min-[640px]:p-4'],
+        [{ min: { '[640px]': { p: 4 } } }, 'min-[640px]:p-4'],
+        [{ '@min': { sidebar: { p: 4 } } }, '@min-sidebar:p-4'],
+        [{ '@max': { md: { p: 4 } } }, '@max-md:p-4'],
+        [{ '@min': { '475px': { p: 4 } } }, '@min-[475px]:p-4'],
+        [{ '@min': { '[475px]': { p: 4 } } }, '@min-[475px]:p-4'],
+        [{ '@md': { p: 4 } }, '@md:p-4'],
+        [{ '@md': { sidebar: { p: 4 } } }, '@md/sidebar:p-4'],
+        [{ '@md': { toString: { p: 4 } } }, '@md/toString:p-4'],
+        [{ '@md': { hover: { p: 4 } } }, '@md:hover:p-4'],
+        [{ '@sm': { '@maxMd': { p: 4 } } }, '@sm:@max-md:p-4'],
+        [{ '@container': 'sidebar' }, '@container/sidebar'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
+    });
+});
+
 describe.each(LANES)('one trailing `!` is the important modifier — %s', (_name, lower) => {
     // Only the last `!` is split off; any other stays in the value, so the
     // runtime and the engines write the same class for `x!!`.

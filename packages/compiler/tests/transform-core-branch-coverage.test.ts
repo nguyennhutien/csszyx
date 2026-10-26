@@ -256,7 +256,8 @@ describe('min/max breakpoints and @ container queries', () => {
         expect(cls({ '@md': { p: 4 } })).toBe('@md:p-4');
         expect(cls({ '@md': { sidebar: { p: 4 } } })).toBe('@md/sidebar:p-4');
         expect(cls({ '@md': { sidebar: {} } })).toBe('');
-        expect(cls({ '@md': { '[475px]': { p: 4 } } })).toBe('@md-[475px]:p-4');
+        // An arbitrary variant chains on; `@md-[475px]` is served by no Tailwind.
+        expect(cls({ '@md': { '[475px]': { p: 4 } } })).toBe('@md:[475px]:p-4');
         expect(cls({ '@md': { '[475px]': {} } })).toBe('');
         expect(cls({ '@min': { '475px': { p: 4 } } })).toBe('@min-[475px]:p-4');
         expect(cls({ '@min': { '475px': {} } })).toBe('');

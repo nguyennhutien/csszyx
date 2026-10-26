@@ -1412,6 +1412,10 @@ fn lower_object_into_marked(
                         lower_breakpoint_variant(nested, prefix, &property.key, classes);
                         continue;
                     }
+                    key if key.starts_with('@') => {
+                        lower_container_query_variant(key, nested, prefix, classes);
+                        continue;
+                    }
                     "supports" => {
                         lower_bracket_param_variant(nested, prefix, "supports", classes);
                         continue;
@@ -1522,32 +1526,71 @@ fn lower_bracket_param_variant(
     }
 }
 
-/// Lowers a `min`/`max` breakpoint variant. The breakpoint joins its stem with
-/// a dash and is one variant segment: a named breakpoint (`min-md:`) or one
-/// already written in brackets passes through, any other value is a length
-/// and is bracketed (`min-[330px]:`). Without this arm the two stems fell
-/// through to the plain-variant path and came out as `min:330px:…` — three
-/// variants Tailwind does not have, so the rule generated no CSS.
+/// Lowers a `min`/`max` breakpoint variant: the breakpoint joins its stem with
+/// a dash as one variant segment ([`breakpoint_segment`]). Without this arm the
+/// two stems fell through to the plain-variant path and came out as
+/// `min:330px:…` — three variants Tailwind does not have.
 fn lower_breakpoint_variant(
     object: &StaticSzObject,
     prefix: &str,
     kind: &str,
     classes: &mut Vec<String>,
 ) {
-    const NAMED: &[&str] = &["sm", "md", "lg", "xl", "2xl"];
     for property in &object.properties {
         let StaticSzValue::Object(body) = &property.value else {
             continue;
         };
-        let breakpoint = property.key.as_str();
-        let direct = NAMED.contains(&breakpoint)
-            || (breakpoint.starts_with('[') && breakpoint.ends_with(']'));
-        let next_prefix = if direct {
-            format!("{prefix}{kind}-{breakpoint}:")
-        } else {
-            format!("{prefix}{kind}-[{breakpoint}]:")
+        let segment = breakpoint_segment(&property.key);
+        lower_object_into(body, &format!("{prefix}{kind}-{segment}:"), classes);
+    }
+}
+
+/// A breakpoint after `min-`, `max-`, `@min-` or `@max-`: a name as written, so
+/// a project's own (`tablet`, `sidebar`) is served, and a length bracketed as
+/// on every other key (`640px` → `[640px]`). Mirrors `breakpointSegment`.
+fn breakpoint_segment(breakpoint: &str) -> Cow<'_, str> {
+    if (breakpoint.starts_with('[') && breakpoint.ends_with(']')) || !needs_brackets(breakpoint) {
+        Cow::Borrowed(breakpoint)
+    } else {
+        Cow::Owned(format!("[{breakpoint}]"))
+    }
+}
+
+/// Lowers a container query key (`@md`, `@min`), as the spec writes its
+/// members: a property stays under the query (`@md:p-4`), a breakpoint follows
+/// `@min` and `@max` (`@min-sidebar`, `@min-[475px]`), a variant chains on
+/// (`@md:hover:`), and any other name is a named container (`@md/sidebar`).
+/// Mirrors `resolveContainerQueryTarget`.
+fn lower_container_query_variant(
+    key: &str,
+    object: &StaticSzObject,
+    prefix: &str,
+    classes: &mut Vec<String>,
+) {
+    let query = object_variant_segment(key);
+    for property in &object.properties {
+        let nested = match &property.value {
+            StaticSzValue::Object(nested) if property_prefix(&property.key).is_none() => nested,
+            _ => {
+                let single = StaticSzObject {
+                    properties: vec![property.clone()],
+                };
+                lower_object_into(&single, &format!("{prefix}{query}:"), classes);
+                continue;
+            }
         };
-        lower_object_into(body, &next_prefix, classes);
+        let segment = if matches!(query.as_ref(), "@min" | "@max") {
+            format!("{query}-{}", breakpoint_segment(&property.key))
+        } else if chains_as_variant(&property.key) {
+            let single = StaticSzObject {
+                properties: vec![property.clone()],
+            };
+            lower_object_into(&single, &format!("{prefix}{query}:"), classes);
+            continue;
+        } else {
+            format!("{query}/{}", property.key)
+        };
+        lower_object_into(nested, &format!("{prefix}{segment}:"), classes);
     }
 }
 
@@ -1640,14 +1683,20 @@ fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
 /// variable behind `tablet-(--_sz-tablet)` would hold the object.
 #[cfg(feature = "native-engine")]
 pub(crate) fn is_variant_key(key: &str) -> bool {
-    is_unclaimed_key(key)
-        || property_prefix(key).is_none()
-            && (variant_string_prefix(key).is_some()
-                || key.starts_with('@')
-                || matches!(
-                    key,
-                    "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
-                ))
+    is_unclaimed_key(key) || property_prefix(key).is_none() && chains_as_variant(key)
+}
+
+/// Whether a key is a variant by its name: one the tables know, a compound or
+/// arbitrary one, a container query, or a parametric stem whose members are
+/// parameters. Under a container query such a key chains on, where any other
+/// name is a container's. Mirrors `chainsUnderContainer`.
+fn chains_as_variant(key: &str) -> bool {
+    variant_string_prefix(key).is_some()
+        || key.starts_with('@')
+        || matches!(
+            key,
+            "min" | "max" | "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+        )
 }
 
 /// Whether no table claims `key`: no property, no sz key csszyx knows. Such a
@@ -2094,15 +2143,12 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 });
             }
             // scroll-snap direct maps: the sub-axis is dropped (snap-mandatory,
-            // snap-center), except snap-align-none which keeps the axis. Any
-            // other value takes the generic spelling below, as the TypeScript
-            // core writes it, for the build's dead-class check to judge.
-            if key == "snapAlign" {
-                match value.as_str() {
-                    "start" | "end" | "center" => return Some(format!("{prefix}snap-{value}")),
-                    "none" => return Some(format!("{prefix}snap-align-none")),
-                    _ => {}
-                }
+            // snap-center, which the generic spelling below already writes),
+            // except snap-align-none which keeps the axis. Any other value
+            // takes the generic spelling, as the TypeScript core writes it, for
+            // the build's dead-class check to judge.
+            if key == "snapAlign" && value == "none" {
+                return Some(format!("{prefix}snap-align-none"));
             }
             if key == "snapStrictness" {
                 return match value.as_str() {
@@ -3320,6 +3366,7 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
     use super::ClassPrefixScope;
+    use super::{breakpoint_segment, format_static_class, is_dashed_function_call};
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -3500,6 +3547,78 @@ mod tests {
             [
                 ("from".to_string(), "150".to_string()),
                 ("from".to_string(), "true".to_string()),
+            ]
+        );
+    }
+
+    /// A breakpoint is bracketed unless it is a name or already wrapped at both
+    /// ends; a bracket at one end only wraps nothing.
+    #[test]
+    fn a_breakpoint_is_bracketed_unless_wrapped_at_both_ends() {
+        assert_eq!(breakpoint_segment("tablet"), "tablet");
+        assert_eq!(breakpoint_segment("[640px]"), "[640px]");
+        assert_eq!(breakpoint_segment("640px"), "[640px]");
+        assert_eq!(breakpoint_segment("[a b"), "[[a b]");
+    }
+
+    /// `snapAlign` keeps the direct classes Tailwind serves for an edge.
+    #[test]
+    fn snap_align_writes_the_direct_edge_classes() {
+        for edge in ["start", "end", "center"] {
+            assert_eq!(
+                format_static_class("snapAlign", &StaticSzValue::String(edge.to_string()), ""),
+                Some(format!("snap-{edge}"))
+            );
+        }
+    }
+
+    /// A dashed function call names a function: `--` with no name is not one.
+    #[test]
+    fn a_dashed_function_call_needs_a_name() {
+        assert!(is_dashed_function_call("--spacing(4)"));
+        assert!(!is_dashed_function_call("--(4)"));
+        assert!(!is_dashed_function_call("--spacing"));
+    }
+
+    /// A container query's members, as the spec writes them: a property stays
+    /// under the query, `@min` takes a breakpoint, a variant chains on, and
+    /// any other name is a named container.
+    #[test]
+    fn lowers_container_query_members() {
+        let p = |n: f64| object(vec![property("p", StaticSzValue::Number(n))]);
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property(
+                    "@md",
+                    object(vec![
+                        property("p", StaticSzValue::Number(1.0)),
+                        property("display", StaticSzValue::String("flex".into())),
+                        property("sidebar", p(2.0)),
+                        property("hover", p(3.0)),
+                        property("@maxLg", p(4.0)),
+                    ]),
+                ),
+                property(
+                    "@min",
+                    object(vec![
+                        property("sidebar", p(5.0)),
+                        property("475px", p(6.0)),
+                        property("[30rem]", p(7.0)),
+                    ]),
+                ),
+            ],
+        });
+        assert_eq!(
+            classes,
+            [
+                "@md:p-1",
+                "@md:flex",
+                "@md/sidebar:p-2",
+                "@md:hover:p-3",
+                "@md:@max-lg:p-4",
+                "@min-sidebar:p-5",
+                "@min-[475px]:p-6",
+                "@min-[30rem]:p-7",
             ]
         );
     }
@@ -4441,10 +4560,8 @@ mod tests {
     #[test]
     fn lowers_min_max_breakpoint_variants() {
         // Each value shape exercises one branch of the bracket decision: a
-        // named breakpoint and a pre-bracketed one pass through, a length is
-        // bracketed, and a non-object value is skipped. The mutants that
-        // survived without this test were the empty body, and each half of
-        // the `named || bracketed` test flipped.
+        // name and a pre-bracketed value pass through, a length is bracketed
+        // as on every key, and a non-object value is skipped.
         let object = StaticSzObject {
             properties: vec![
                 property(
@@ -4462,9 +4579,9 @@ mod tests {
                             "[40rem]",
                             object(vec![property("p", StaticSzValue::Number(3.0))]),
                         ),
-                        // Only one bracket is not "already bracketed": the
-                        // key is a length with a stray character and is
-                        // wrapped like any other length.
+                        // Only one bracket is not "already bracketed", and
+                        // no length either: written as it is, for the build's
+                        // dead-class check to report.
                         property(
                             "[40rem",
                             object(vec![property("p", StaticSzValue::Number(5.0))]),
@@ -4501,7 +4618,7 @@ mod tests {
                 "min-[330px]:p-1",
                 "min-md:p-2",
                 "min-[40rem]:p-3",
-                "min-[[40rem]:p-5",
+                "min-[40rem:p-5",
                 "max-[900px]:hidden",
                 "hover:min-lg:p-4",
             ]

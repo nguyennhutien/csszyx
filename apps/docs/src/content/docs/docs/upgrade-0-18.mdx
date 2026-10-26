@@ -1500,6 +1500,29 @@ the dead `bg-red-500!/20`.
 <div sz={{ bg: { color: "red-500", op: 50 } }} />
 ```
 
+## Breakpoints and container queries are spelled as Tailwind serves them
+
+`min` and `max` wrote a breakpoint name outside `sm`…`2xl` in brackets:
+`{ min: { tablet: { … } } }` gave `min-[tablet]`, which Tailwind compiles to
+`@media (width >= tablet)`, a query that matches nothing. A name is now written
+as it is, so a project's own breakpoint (`--breakpoint-tablet` in `@theme`)
+gives `min-tablet`; a length is still bracketed, as on every other key
+(`'640px'` → `min-[640px]`). `@min` and `@max` read a container size the same
+way (`{ '@min': { sidebar: … } }` → `@min-sidebar`).
+
+The build's engine wrote two container forms of the spec as classes no
+Tailwind serves: `{ '@md': { sidebar: … } }` gave `@md:sidebar:` and
+`{ '@min': { '[475px]': … } }` gave `@min:[475px]:`. Both now give the spec's
+`@md/sidebar:` and `@min-[475px]:`, as the runtime did, and a variant under a
+query chains on (`{ '@md': { hover: … } }` → `@md:hover:`) on both.
+
+**You are affected** when an `sz` object uses a breakpoint or container name of
+your own under `min`, `max`, `@min` or `@max`, or a named container query.
+
+**The edit.** None: the classes now match the CSS you meant. A name that is
+neither a breakpoint nor a container size of the project is reported by the
+build as a dead class.
+
 ## Some classes take the spelling every Tailwind v4 serves
 
 One csszyx release serves every Tailwind from 4.0, so a key now writes the

@@ -2327,7 +2327,16 @@ function collectSpecialNestedVariant(
     }
 }
 
-const KNOWN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+/**
+ * A breakpoint after `min-`, `max-`, `@min-` or `@max-`: a name as written, so
+ * a project's own (`tablet`, `sidebar`) is served, and a length bracketed as
+ * on every other key (`640px` → `[640px]`). Mirrors `breakpoint_segment`.
+ */
+function breakpointSegment(breakpoint: string): string {
+    return isArbitraryVariant(breakpoint) || !needsArbitraryBrackets(breakpoint)
+        ? breakpoint
+        : `[${breakpoint}]`;
+}
 
 /** Collects named and arbitrary min/max breakpoint variants. */
 function collectMinMaxVariants(
@@ -2338,9 +2347,7 @@ function collectMinMaxVariants(
 ): void {
     for (const [breakpoint, value] of Object.entries(breakpoints)) {
         if (isInactiveVariantValue(value)) continue;
-        const direct = isArbitraryVariant(breakpoint) || KNOWN_BREAKPOINTS.has(breakpoint);
-        const segment = direct ? `${kind}-${breakpoint}` : `${kind}-[${breakpoint}]`;
-        appendVariantClasses(value, `${prefix}${segment}:`, classes);
+        appendVariantClasses(value, `${prefix}${kind}-${breakpointSegment(breakpoint)}:`, classes);
     }
 }
 
@@ -2384,42 +2391,54 @@ interface ContainerQueryTarget {
     wrapProperty: boolean;
 }
 
-/** Classifies one nested container-query key. */
+/**
+ * Classifies one nested container-query key, as the spec writes them: a
+ * property stays under the query (`@md:p-4`), a breakpoint follows `@min` and
+ * `@max` (`@min-sidebar`, `@min-[475px]`), a variant chains on (`@md:hover:`),
+ * and any other name is a named container (`@md/sidebar`). Mirrors
+ * `lower_container_query_variant`.
+ */
 function resolveContainerQueryTarget(
     mappedKey: string,
     nestedKey: string,
     value: SzValue,
 ): ContainerQueryTarget {
-    if (isArbitraryVariant(nestedKey)) {
-        return { segment: `${mappedKey}-${nestedKey}`, wrapProperty: false };
+    const property =
+        typeof value !== 'object' ||
+        own(PROPERTY_MAP, nestedKey) !== undefined ||
+        BOOLEAN_SHORTHANDS.has(nestedKey);
+    if (property) return { segment: mappedKey, wrapProperty: true };
+    if (mappedKey === '@min' || mappedKey === '@max') {
+        return { segment: `${mappedKey}-${breakpointSegment(nestedKey)}`, wrapProperty: false };
     }
-    if (isArbitraryContainerBreakpoint(mappedKey, nestedKey, value)) {
-        return { segment: `${mappedKey}-[${nestedKey}]`, wrapProperty: false };
-    }
-    const direct =
-        PROPERTY_MAP[nestedKey] ||
-        BOOLEAN_SHORTHANDS.has(nestedKey) ||
-        nestedKey.startsWith('@') ||
-        typeof value !== 'object';
-    return direct
-        ? { segment: mappedKey, wrapProperty: true }
-        : { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
+    if (chainsUnderContainer(nestedKey)) return { segment: mappedKey, wrapProperty: true };
+    return { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
 }
 
-/** Returns whether @min/@max should bracket a custom breakpoint key. */
-function isArbitraryContainerBreakpoint(
-    mappedKey: string,
-    nestedKey: string,
-    value: SzValue,
-): boolean {
+/**
+ * Whether a key nested in a container query is a variant that chains on
+ * rather than a container's name. Mirrors `chains_as_variant`.
+ */
+function chainsUnderContainer(key: string): boolean {
     return (
-        (mappedKey === '@min' || mappedKey === '@max') &&
-        typeof value === 'object' &&
-        !KNOWN_BREAKPOINTS.has(nestedKey) &&
-        !PROPERTY_MAP[nestedKey] &&
-        !BOOLEAN_SHORTHANDS.has(nestedKey)
+        variantStringPrefix(key) !== null ||
+        key.startsWith('@') ||
+        PARAMETRIC_VARIANT_STEMS.has(key)
     );
 }
+
+/** The variants whose members are parameters (`data: { open: … }`). */
+const PARAMETRIC_VARIANT_STEMS = new Set([
+    'min',
+    'max',
+    'group',
+    'peer',
+    'has',
+    'not',
+    'data',
+    'aria',
+    'supports',
+]);
 
 const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
 
