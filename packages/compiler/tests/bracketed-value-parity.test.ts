@@ -77,6 +77,8 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         // The important modifier sits outside the brackets.
         [{ w: '[10px]!' }],
         [{ top: '-[1px]!' }],
+        // A closed-enum key names it once, as `bracketed-value`.
+        [{ display: '[block]' }],
     ])('%j writes nothing and names the key', sz => {
         expect(lower(sz)).toEqual({ className: '', kinds: ['bracketed-value'] });
     });

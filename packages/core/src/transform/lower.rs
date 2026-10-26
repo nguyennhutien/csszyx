@@ -866,7 +866,10 @@ pub(crate) fn collect_dead_enum_values(
                         .iter()
                         .any(|(replaced, _)| std::ptr::eq(*replaced, property))
                         && is_stray_group_value(&property.key, base));
+                // A value in the brackets csszyx writes is named once, by
+                // `bracketed-value`, as the runtime names it.
                 if named
+                    && bracketed_inner(&property.key, value).is_none()
                     && (is_dead_enum_value(&property.key, base)
                         || unclassed_value(&property.key, base).is_some())
                 {
@@ -3986,6 +3989,26 @@ mod tests {
         let mut out = Vec::new();
         collect_unknown_sz_keys(&object, &mut out);
         assert!(out.is_empty(), "slot members are not sz keys: {out:?}");
+    }
+
+    /// A value in the brackets csszyx writes is named once, by
+    /// `bracketed-value`, so a closed-enum key does not name it a second time.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_bracketed_closed_enum_value_is_left_to_bracketed_value() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("[block]".to_string())),
+                property("isolation", StaticSzValue::String("bogus".to_string())),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_dead_enum_values(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, value, _)| (key, value))
+            .collect();
+        assert_eq!(named, [("isolation".to_string(), "bogus".to_string())]);
     }
 
     /// A dead enum value is reported wherever it sits, not only at the top.
