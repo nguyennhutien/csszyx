@@ -28,7 +28,12 @@ export {
     generateTypeDeclarations,
     writeDeclarationFile,
 } from './generator/type-generator.js';
-export { type ClassNameToSzObjectOptions, classNameToSzObject, migrateSource } from './migrate.js';
+export {
+    type ClassNameToSzObjectOptions,
+    classNameToSzObject,
+    type MigrateSourceOptions,
+    migrateSource,
+} from './migrate.js';
 export type { ResolvedTheme, ScanResult } from './scanner/tailwind-scanner.js';
 export {
     extractScreenKeys,

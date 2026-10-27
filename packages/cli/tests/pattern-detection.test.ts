@@ -36,7 +36,7 @@ function migrate(
     source: string,
     opts: { injectTodos?: boolean; customMap?: CsszyxTodoMap } = {},
 ): ReturnType<typeof transformSource> {
-    return transformSource(source, 'test.tsx', opts);
+    return transformSource(source, { filename: 'test.tsx', ...opts });
 }
 
 // ============================================================================
@@ -688,7 +688,11 @@ describe('@sz-todo comment round-trip', () => {
             '',
         );
         const customMap = { 'ds-card': { rounded: 'lg', shadow: 'sm' } };
-        const result = transformSource(stripped, 'test.tsx', { customMap, injectTodos: true });
+        const result = transformSource(stripped, {
+            filename: 'test.tsx',
+            customMap,
+            injectTodos: true,
+        });
 
         expect(result.changed).toBe(true);
         // ds-card resolved → no new unresolved marker for it.
@@ -699,7 +703,11 @@ describe('@sz-todo comment round-trip', () => {
     it('re-injects @sz-todo for still-unresolved classes after partial resolve', () => {
         const source = '<div className="p-4 resolved-token still-unknown" />';
         const customMap = { 'resolved-token': { bg: 'blue-500' } };
-        const result = transformSource(source, 'test.tsx', { customMap, injectTodos: true });
+        const result = transformSource(source, {
+            filename: 'test.tsx',
+            customMap,
+            injectTodos: true,
+        });
 
         expect(result.changed).toBe(true);
         // still-unknown → gets an unresolved marker.

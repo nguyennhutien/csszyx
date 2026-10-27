@@ -13,7 +13,7 @@ describe('migrate normalizes legacy sz prop keys', () => {
      * @param src - The JSX source to migrate.
      * @returns What migrate wrote.
      */
-    const run = (src: string) => transformSource(src, 'test.tsx');
+    const run = (src: string) => transformSource(src, { filename: 'test.tsx' });
 
     it('rewrites removed boolean sugar to the canonical value-keyed form', () => {
         const out = run('<div sz={{ flex: true }} />');

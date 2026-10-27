@@ -99,6 +99,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [One spelling on both lanes](#the-build-and-the-runtime-write-one-spelling) | `text-fade` where the runtime wrote `text-[fade]` | your snapshots | nothing |
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`serializeManifest` options](#serializemanifest-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
+| [`migrateSource` options](#migratesource-takes-the-path-in-its-options) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
 | [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
@@ -1679,6 +1680,30 @@ the keys:
 [csszyx] options-object-required:
   `classNameToSzObject` has no option(s) `btn`, `card`, so the call is refused.
   help: pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.
+  docs: https://csszyx.com/e/options-object-required
+```
+
+**Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
+
+## migrateSource takes the path in its options
+
+`migrateSource` from `@csszyx/cli` took the file path as a second string
+beside the source; it is now the `filename` key of the options object:
+
+```ts
+// before
+migrateSource(source, "Card.tsx", { injectTodos: true });
+
+// after
+migrateSource(source, { filename: "Card.tsx", injectTodos: true });
+```
+
+A second argument without `filename`, or a third argument, throws:
+
+```text
+[csszyx] options-object-required:
+  `migrateSource` takes the path under `filename` in one options object, so a second argument without it, or a third argument, is refused.
+  help: pass the path as a key beside the other options: `migrateSource(source, { filename: 'Card.tsx' })`.
   docs: https://csszyx.com/e/options-object-required
 ```
 

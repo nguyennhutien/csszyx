@@ -20,7 +20,7 @@ import { migrateSource as transformSource } from '../src/migrate.js';
  * @returns What migrate wrote.
  */
 const run = (source: string, customMap: Record<string, unknown>, injectTodos = false) =>
-    transformSource(source, 'Card.tsx', { customMap, injectTodos });
+    transformSource(source, { filename: 'Card.tsx', customMap, injectTodos });
 
 describe('resolve-todos merges into an existing sz prop', () => {
     it('appends the resolved classes and drops an emptied className', () => {
@@ -141,7 +141,7 @@ describe('resolve-todos merges into an existing sz prop', () => {
 
     it('still skips the element when no map is given', () => {
         const source = '<div sz={{ m: 1 }} className="p-4" />';
-        const out = transformSource(source, 'Card.tsx');
+        const out = transformSource(source, { filename: 'Card.tsx' });
         expect(out.code).toBe(source);
         expect(out.changed).toBe(false);
     });

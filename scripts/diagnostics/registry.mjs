@@ -1751,8 +1751,9 @@ export const DIAGNOSTICS = [
             'class-name-to-sz-object',
             'class-name-to-sz-object-option',
             'serialize-manifest',
+            'migrate-source',
         ],
-        buildForms: ['serialize-manifest'],
+        buildForms: ['serialize-manifest', 'migrate-source'],
         args: {
             form: formArg([
                 'transform',
@@ -1761,6 +1762,7 @@ export const DIAGNOSTICS = [
                 'class-name-to-sz-object',
                 'class-name-to-sz-object-option',
                 'serialize-manifest',
+                'migrate-source',
             ]),
             options: { type: 'string[]', joiner: '`, `', optional: true },
         },
@@ -1777,6 +1779,8 @@ export const DIAGNOSTICS = [
                 '`classNameToSzObject` has no option(s) `{options}`, so the call is refused.',
             'serialize-manifest':
                 '`serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
+            'migrate-source':
+                '`migrateSource` takes the path under `filename` in one options object, so a second argument without it, or a third argument, is refused.',
         },
         help: {
             transform:
@@ -1791,6 +1795,8 @@ export const DIAGNOSTICS = [
                 'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
             'serialize-manifest':
                 'pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.',
+            'migrate-source':
+                "pass the path as a key beside the other options: `migrateSource(source, { filename: 'Card.tsx' })`.",
         },
         sources: [
             CORE_TS,

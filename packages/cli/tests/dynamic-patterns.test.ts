@@ -22,7 +22,7 @@ import { migrateSource as transformSource } from '../src/migrate.js';
  * @returns TransformResult.
  */
 function migrate(source: string): ReturnType<typeof transformSource> {
-    return transformSource(source, 'test.tsx');
+    return transformSource(source, { filename: 'test.tsx' });
 }
 
 // ============================================================================

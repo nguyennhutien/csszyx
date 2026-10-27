@@ -75,7 +75,7 @@ describe('ast-transformer (simple)', () => {
             contains: ['md', 'hover'],
         },
     ])('handles $label', ({ source, changed, contains, excludes, stats, unrecognized }) => {
-        const result = transformSourceSimple(source, 'test.tsx');
+        const result = transformSourceSimple(source, { filename: 'test.tsx' });
         if (changed !== undefined) expect(result.changed).toBe(changed);
         for (const fragment of contains ?? []) expect(result.code).toContain(fragment);
         for (const fragment of excludes ?? []) expect(result.code).not.toContain(fragment);
@@ -88,7 +88,7 @@ describe('ast-transformer (simple)', () => {
     it('does not transform dynamic classNames', () => {
         // This regex approach only handles string literals
         const source = '<div className={someVar} />';
-        const result = transformSourceSimple(source, 'test.tsx');
+        const result = transformSourceSimple(source, { filename: 'test.tsx' });
         expect(result.changed).toBe(false);
     });
 
@@ -117,7 +117,7 @@ describe('ast-transformer (simple)', () => {
             ['colSpan: 3', 'gridCols: 12', "placeContent: 'center'"],
         ],
     ])('handles %s', (_label, source, expectedCode) => {
-        const result = transformSourceSimple(source, 'test.tsx');
+        const result = transformSourceSimple(source, { filename: 'test.tsx' });
         expect(result.changed).toBe(true);
         for (const fragment of expectedCode) expect(result.code).toContain(fragment);
     });

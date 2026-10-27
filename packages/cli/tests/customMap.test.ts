@@ -415,7 +415,7 @@ describe('transformSource — customMap (--resolve-todos)', () => {
         source: string,
         customMap: CsszyxTodoMap,
     ): ReturnType<typeof transformSource> {
-        return transformSource(source, 'test.tsx', { customMap });
+        return transformSource(source, { filename: 'test.tsx', customMap });
     }
 
     it('resolves custom class via object route in JSX', () => {
@@ -488,11 +488,11 @@ describe('transformSource — customMap (--resolve-todos)', () => {
             'resolved-class': { bg: 'blue-500' },
             'pending-class': 'sz:todo',
         };
-        const result = transformSource(
-            '<div className="resolved-class pending-class p-4" />',
-            'test.tsx',
-            { customMap, injectTodos: true },
-        );
+        const result = transformSource('<div className="resolved-class pending-class p-4" />', {
+            filename: 'test.tsx',
+            customMap,
+            injectTodos: true,
+        });
         expect(result.changed).toBe(true);
         expect(result.code).toContain('@sz-todo');
         expect(result.code).toContain('pending-class');
@@ -502,7 +502,8 @@ describe('transformSource — customMap (--resolve-todos)', () => {
 
     it('injectTodos with sz:keep: kept classes do NOT get @sz-todo comment', () => {
         const customMap = { 'sprite-class': 'sz:keep' };
-        const result = transformSource('<div className="p-4 sprite-class" />', 'test.tsx', {
+        const result = transformSource('<div className="p-4 sprite-class" />', {
+            filename: 'test.tsx',
             customMap,
             injectTodos: true,
         });
@@ -623,5 +624,41 @@ describe('classNameToSzObject — the options object', () => {
         expect(classNameToSzObject('p-4', {}).szObject).toEqual({ p: 4 });
         expect(classNameToSzObject('p-4', { customMap: undefined }).szObject).toEqual({ p: 4 });
         expect(classNameToSzObject('p-4', Object.create(null)).szObject).toEqual({ p: 4 });
+    });
+});
+
+// ============================================================================
+// migrateSource — the options object
+// ============================================================================
+
+describe('migrateSource — the options object', () => {
+    // The path sat beside the source as a second string, so a call that swapped
+    // them migrated the path and named the source in its warnings.
+    const call = transformSource as (source: string, ...args: unknown[]) => unknown;
+
+    it.each([
+        ['the path as a second string, the 0.17 shape', 'Card.tsx'],
+        ['null', null],
+        ['an object with no filename', { injectTodos: true }],
+    ])('refuses %s', (_label, options) => {
+        expect(() => call('<div className="p-4" />', options)).toThrow(
+            expect.objectContaining({
+                code: 'options-object-required',
+                args: { form: 'migrate-source' },
+                message: expect.stringContaining("migrateSource(source, { filename: 'Card.tsx' })"),
+            }),
+        );
+    });
+
+    it('refuses a third argument', () => {
+        expect(() => call('<div />', { filename: 'Card.tsx' }, {})).toThrow(
+            expect.objectContaining({ args: { form: 'migrate-source' } }),
+        );
+    });
+
+    it('reads the path from `filename`', () => {
+        expect(transformSource('<div className="p-4" />', { filename: 'Card.tsx' }).code).toContain(
+            'sz={{ p: 4 }}',
+        );
     });
 });

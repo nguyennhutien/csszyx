@@ -13,6 +13,7 @@
  *
  * @module
  */
+import { szDiagnosticError } from '@csszyx/compiler';
 import { CsszyxError } from '@csszyx/compiler/errors';
 import {
     type CsszyxTodoMap,
@@ -38,21 +39,41 @@ export type {
     MigrateRustResult,
 } from '@csszyx/compiler/migrate';
 
+/** Options for {@link migrateSource}. */
+export interface MigrateSourceOptions extends MigrateRustOptions {
+    /** Path used in warnings. */
+    readonly filename: string;
+}
+
 /**
  * Migrate one JSX/TSX source.
  *
+ * The path sat beside the source as a second string, so a call that swapped
+ * them type-checked; it is a key of the options.
+ *
  * @param source - Source file contents.
- * @param filePath - Path used in warnings.
- * @param options - Migrate options.
+ * @param options - The path used in warnings, and the migrate options.
+ * @param rest - nothing; a third argument is refused.
  * @returns The migrated source and its counts.
  * @throws RustMigrateUnavailableError when this install has no native engine.
+ * @throws {CsszyxError} `options-object-required`, when called the way the
+ * positional shape took, or without `filename`.
  */
 export function migrateSource(
     source: string,
-    filePath: string,
-    options: MigrateRustOptions = {},
+    options: MigrateSourceOptions,
+    ...rest: never[]
 ): MigrateRustResult {
-    const [result] = migrateRustBatch([{ filename: filePath, source }], options);
+    if (
+        rest.length > 0 ||
+        typeof options !== 'object' ||
+        options === null ||
+        typeof options.filename !== 'string'
+    ) {
+        throw szDiagnosticError('options-object-required', { form: 'migrate-source' });
+    }
+    const { filename, ...migrateOptions } = options;
+    const [result] = migrateRustBatch([{ filename, source }], migrateOptions);
     // A batch of one answers exactly once; the engine returns results in
     // input order and never drops one.
     return result as MigrateRustResult;

@@ -14,7 +14,7 @@ describe('migrate --keys-only', () => {
         'const App = () => (<><div className="p-4" /><span sz={{ fontWeight: \'bold\', padding: 2 }} /></>);';
 
     it('normalizes sz keys and leaves className byte-for-byte unchanged', () => {
-        const out = transformSource(SRC, 'test.tsx', { keysOnly: true });
+        const out = transformSource(SRC, { filename: 'test.tsx', keysOnly: true });
         expect(out.code).toBe(
             'const App = () => (<><div className="p-4" /><span sz={{ weight: \'bold\', p: 2 }} /></>);',
         );
@@ -25,7 +25,7 @@ describe('migrate --keys-only', () => {
     });
 
     it('without the flag, the standalone className is also converted to sz', () => {
-        const out = transformSource(SRC, 'test.tsx');
+        const out = transformSource(SRC, { filename: 'test.tsx' });
         expect(out.code).not.toContain('className=');
         expect(out.stats.classNamesTransformed).toBe(1);
         expect(out.stats.szKeysNormalized).toBe(2);
@@ -33,15 +33,17 @@ describe('migrate --keys-only', () => {
 
     it('is a no-op on a className-only file (nothing to normalize)', () => {
         const src = 'const App = () => <div className="p-4 flex" />;';
-        const out = transformSource(src, 'test.tsx', { keysOnly: true });
+        const out = transformSource(src, { filename: 'test.tsx', keysOnly: true });
         expect(out.changed).toBe(false);
         expect(out.code).toBe(src);
     });
 
     describe('font-variant-numeric keys (0.18.0)', () => {
         const run = (sz: string) =>
-            transformSource(`const A = ({ c }) => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true })
-                .code;
+            transformSource(`const A = ({ c }) => <p sz={${sz}} />;`, {
+                filename: 'a.tsx',
+                keysOnly: true,
+            }).code;
 
         it('moves each old flag onto its group key', () => {
             expect(run('{ tabularNums: true, ordinal: true, slashedZero: true }')).toBe(
@@ -82,7 +84,10 @@ describe('migrate --keys-only', () => {
 
     describe('touch values that moved to a group key (0.18.0)', () => {
         const run = (sz: string) =>
-            transformSource(`const A = () => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true }).code;
+            transformSource(`const A = () => <p sz={${sz}} />;`, {
+                filename: 'a.tsx',
+                keysOnly: true,
+            }).code;
 
         it('moves each onto its group key', () => {
             expect(run("{ touch: 'pan-x', md: { touch: 'pinch-zoom' } }")).toBe(
@@ -125,7 +130,10 @@ describe('migrate --keys-only', () => {
 
     describe('two old keys of one family keep what 0.17 rendered', () => {
         const run = (sz: string) =>
-            transformSource(`const A = () => <p sz={${sz}} />;`, 'a.tsx', { keysOnly: true }).code;
+            transformSource(`const A = () => <p sz={${sz}} />;`, {
+                filename: 'a.tsx',
+                keysOnly: true,
+            }).code;
 
         // Before 0.18 both classes shipped and Tailwind's stylesheet order
         // decided; `migrate-stylesheet-order.test.ts` pins that order.
@@ -151,10 +159,9 @@ describe('migrate --keys-only', () => {
             ['contain-strict contain-paint'],
             ['tabular-nums normal-nums'],
         ])('keeps %s in className', classes => {
-            const out = transformSource(
-                `const A = () => <p className="${classes} p-4" />;`,
-                'a.tsx',
-            ).code;
+            const out = transformSource(`const A = () => <p className="${classes} p-4" />;`, {
+                filename: 'a.tsx',
+            }).code;
             expect(out).toBe(`const A = () => <p className="${classes}" sz={{ p: 4 }} />;`);
         });
     });
