@@ -218,13 +218,10 @@ async function runPrescan(parser: 'rust' | 'wasm'): Promise<{
 }
 
 describe('prescan engine parity (real pipeline, no mocks)', () => {
-    beforeAll(() => {
-        loadNativeBinding();
-    });
-
     // Computed once; every assertion below reuses the same two runs.
     const runs = {} as Record<'rust' | 'wasm', ReturnType<typeof runPrescan>>;
     beforeAll(async () => {
+        loadNativeBinding();
         runs.rust = await runPrescan('rust');
         runs.wasm = await runPrescan('wasm');
     });
