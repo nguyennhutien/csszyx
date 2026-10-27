@@ -251,7 +251,7 @@ describe('validateDocument — unknown keys', () => {
  * @returns One entry per issue the engine reports.
  */
 function buildVerdict(source: string): Array<{ code: string; url: string; message: string }> {
-    const { issues = [] } = transformSource(source, 'differential.tsx');
+    const { issues = [] } = transformSource(source, { filename: 'differential.tsx' });
     return issues.map(issue => {
         const { text, help, note, docs } = renderSzDiagnosticParts(
             issue,

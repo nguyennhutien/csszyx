@@ -9,6 +9,7 @@ import {
     ignoredIssues,
     isIgnored,
     isSonarTest,
+    isSuppressed,
     newDiagnostics,
     rulesToRun,
     TYPED_CANARY,
@@ -160,5 +161,20 @@ describe('the type-aware profile rules can see types', () => {
         const problem = await typedCanaryProblem(await canaryLinter(null));
         assert.match(problem ?? '', /did not report a deliberate violation/);
         assert.ok(problem?.includes(typescriptCopies().parser));
+    });
+});
+
+describe('a NOSONAR comment', () => {
+    it('suppresses every finding on its line, as Sonar does', () => {
+        assert.equal(
+            isSuppressed('export const A: Old = Object.freeze({ // NOSONAR: S1874, see above'),
+            true,
+        );
+        assert.equal(isSuppressed('const a = 1; // NOSONAR'), true);
+    });
+
+    it('leaves a line without one, or one that only mentions the word, to the gate', () => {
+        assert.equal(isSuppressed('export const A: Old = {'), false);
+        assert.equal(isSuppressed("const word = 'NOSONARish';"), false);
     });
 });

@@ -169,6 +169,7 @@ export function loadManifestFromDOM(): RecoveryManifest | null {
  *
  * @param {unknown} manifest - Manifest to validate
  * @returns {boolean} True if valid
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function isValidManifest(manifest: unknown): manifest is RecoveryManifest {
     if (!manifest || typeof manifest !== 'object') {
@@ -204,6 +205,7 @@ export function isValidManifest(manifest: unknown): manifest is RecoveryManifest
  *     console.error('Found invalid tokens:', invalid);
  * }
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function verifyAllTokens(
     root: HTMLElement,

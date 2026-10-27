@@ -19,24 +19,20 @@ vi.mock('@csszyx/compiler/engine', async importActual => {
     const actual = await importActual<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
-        transformSource: (source: string, file?: string, options?: unknown) => {
+        transformSource: (
+            source: string,
+            options?: Parameters<typeof actual.transformSource>[1],
+        ) => {
+            const file = options?.filename;
             if (file?.includes('Explodes')) {
                 throw new Error('engine rejected this module');
             }
             if (file?.includes('Cached')) {
                 // A result cached before the engine reported codes has no issues.
-                const result = actual.transformSource(
-                    source,
-                    file,
-                    options as Parameters<typeof actual.transformSource>[2],
-                );
+                const result = actual.transformSource(source, options);
                 return { ...result, issues: undefined };
             }
-            return actual.transformSource(
-                source,
-                file,
-                options as Parameters<typeof actual.transformSource>[2],
-            );
+            return actual.transformSource(source, options);
         },
     };
 });

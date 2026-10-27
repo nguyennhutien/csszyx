@@ -293,12 +293,12 @@ function runNextSourceTransform(
     const compilerOptions = input.compilerOptions;
     if (input.parserMode === 'rust') {
         return {
-            result: transformRustUnrendered(input.source, filename, compilerOptions),
+            result: transformRustUnrendered(input.source, { ...compilerOptions, filename }),
             producer: 'rust',
         };
     }
     return {
-        result: transformWasmUnrendered(input.source, filename, compilerOptions),
+        result: transformWasmUnrendered(input.source, { ...compilerOptions, filename }),
         producer: 'wasm',
     };
 }

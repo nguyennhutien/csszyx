@@ -48,6 +48,7 @@ interface CommandOutput {
  * ```typescript
  * await generateTypes({ config: './tailwind.config.js', output: './src/csszyx.d.ts' });
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export async function generateTypes(options: GenerateTypesOptions = {}): Promise<void> {
     const cwd = options.cwd || process.cwd();

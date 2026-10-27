@@ -30,7 +30,7 @@ import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.j
  */
 function szObjects(source: string): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    for (const entry of extractCrossModuleRegistryEntries(source, '/p/styles.ts')) {
+    for (const entry of extractCrossModuleRegistryEntries(source, { filename: '/p/styles.ts' })) {
         if (entry.kind === 'sz-object') out[entry.exportName] = entry.value;
     }
     return out;
@@ -113,7 +113,7 @@ describe('an export list, which is the same module saying the same thing', () =>
             'export { table };',
         ].join('\n');
         expect(
-            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+            extractCrossModuleRegistryEntries(tsx, { filename: '/p/styles.ts' }).map(entry => [
                 entry.exportName,
                 entry.kind,
             ]),
@@ -179,7 +179,7 @@ describe('the default export, which is a slot rather than a name', () => {
             'export default szv({ base: { p: 4 }, variants: { tone: { a: { m: 2 } } } });',
         ].join('\n');
         expect(
-            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+            extractCrossModuleRegistryEntries(tsx, { filename: '/p/styles.ts' }).map(entry => [
                 entry.exportName,
                 entry.kind,
             ]),
@@ -244,7 +244,7 @@ describe('the two kinds stay apart', () => {
             'export const plain = { m: 2 };',
         ].join('\n');
         const kinds = Object.fromEntries(
-            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+            extractCrossModuleRegistryEntries(tsx, { filename: '/p/styles.ts' }).map(entry => [
                 entry.exportName,
                 entry.kind,
             ]),

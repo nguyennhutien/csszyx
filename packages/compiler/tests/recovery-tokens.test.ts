@@ -14,7 +14,7 @@ import { transformSource } from '../src/transform-select.js';
 describe('transformSource — szRecover handling', () => {
     it('emits data-sz-recovery-token + collects token entry for csr mode', () => {
         const source = 'const App = () => <div szRecover="csr">child</div>;';
-        const result = transformSource(source, 'src/App.tsx');
+        const result = transformSource(source, { filename: 'src/App.tsx' });
 
         expect(result.transformed).toBe(true);
         expect(result.code).toMatch(/data-sz-recovery-token="[0-9a-f]{12}"/);
@@ -30,7 +30,7 @@ describe('transformSource — szRecover handling', () => {
 
     it('emits a token for dev-only mode', () => {
         const source = 'const App = () => <section szRecover="dev-only">x</section>;';
-        const result = transformSource(source, 'src/Page.tsx');
+        const result = transformSource(source, { filename: 'src/Page.tsx' });
 
         const entries = [...result.recoveryTokens.entries()];
         expect(entries).toHaveLength(1);
@@ -40,7 +40,7 @@ describe('transformSource — szRecover handling', () => {
 
     it('skips emission and emits a diagnostic on dynamic szRecover values', () => {
         const source = 'const App = ({ mode }) => <div szRecover={mode}>x</div>;';
-        const result = transformSource(source, 'src/App.tsx');
+        const result = transformSource(source, { filename: 'src/App.tsx' });
 
         expect(result.recoveryTokens.size).toBe(0);
         expect(result.code).not.toContain('data-sz-recovery-token');
@@ -54,7 +54,7 @@ describe('transformSource — szRecover handling', () => {
 
     it('skips emission and emits a diagnostic on unknown mode strings', () => {
         const source = 'const App = () => <div szRecover="ssr">x</div>;';
-        const result = transformSource(source, 'src/App.tsx');
+        const result = transformSource(source, { filename: 'src/App.tsx' });
 
         expect(result.recoveryTokens.size).toBe(0);
         expect(result.code).not.toContain('data-sz-recovery-token');
@@ -66,10 +66,10 @@ describe('transformSource — szRecover handling', () => {
 
     it('is idempotent on re-transform (HMR safe)', () => {
         const source = 'const App = () => <div szRecover="csr">x</div>;';
-        const first = transformSource(source, 'src/App.tsx');
+        const first = transformSource(source, { filename: 'src/App.tsx' });
         // Feed first.code back through — simulates a downstream tool re-running
         // the transform on already-tagged JSX. The visitor must not double-tag.
-        const second = transformSource(first.code, 'src/App.tsx');
+        const second = transformSource(first.code, { filename: 'src/App.tsx' });
 
         // Either: second adds zero tokens AND code stays single-tagged.
         const tagCount = (second.code.match(/data-sz-recovery-token=/g) ?? []).length;
@@ -83,7 +83,7 @@ describe('transformSource — szRecover handling', () => {
             'const B = () => <span szRecover="dev-only">b</span>;',
             'const C = () => <p szRecover="csr">c</p>;',
         ].join('\n');
-        const result = transformSource(source, 'src/App.tsx');
+        const result = transformSource(source, { filename: 'src/App.tsx' });
 
         expect(result.recoveryTokens.size).toBe(3);
         const components = [...result.recoveryTokens.values()].map(t => t.component).sort();
@@ -94,8 +94,8 @@ describe('transformSource — szRecover handling', () => {
 
     it('produces stable tokens across rebuilds with the same source', () => {
         const source = 'const App = () => <div szRecover="csr">x</div>;';
-        const a = transformSource(source, 'src/App.tsx');
-        const b = transformSource(source, 'src/App.tsx');
+        const a = transformSource(source, { filename: 'src/App.tsx' });
+        const b = transformSource(source, { filename: 'src/App.tsx' });
         const tokenA = [...a.recoveryTokens.keys()][0];
         const tokenB = [...b.recoveryTokens.keys()][0];
         expect(tokenA).toBe(tokenB);
@@ -103,8 +103,8 @@ describe('transformSource — szRecover handling', () => {
 
     it('produces different tokens for the same JSX in different files', () => {
         const source = 'const App = () => <div szRecover="csr">x</div>;';
-        const a = transformSource(source, 'src/A.tsx');
-        const b = transformSource(source, 'src/B.tsx');
+        const a = transformSource(source, { filename: 'src/A.tsx' });
+        const b = transformSource(source, { filename: 'src/B.tsx' });
         const tokenA = [...a.recoveryTokens.keys()][0];
         const tokenB = [...b.recoveryTokens.keys()][0];
         expect(tokenA).not.toBe(tokenB);

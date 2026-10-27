@@ -42,11 +42,11 @@ describe('a wasm batch that returns no result', () => {
         ['transformWasm', transformWasm],
         ['transformWasmUnrendered', transformWasmUnrendered],
     ])('makes %s throw the unavailable error', (_name, transform) => {
-        expect(() => transform('export const a = 1;', 'a.tsx')).toThrow(
+        expect(() => transform('export const a = 1;', { filename: 'a.tsx' })).toThrow(
             new WasmTransformUnavailableError('the wasm engine returned no result'),
         );
         // Only a broken artifact answers so: a csszyx bug, not a missing engine.
-        expect(() => transform('export const a = 1;', 'a.tsx')).toThrow(
+        expect(() => transform('export const a = 1;', { filename: 'a.tsx' })).toThrow(
             expect.objectContaining({
                 code: 'internal-error',
                 args: { where: 'transformWasm', detail: 'the wasm engine returned no result' },
@@ -62,7 +62,7 @@ describe('a wasm batch the engine refuses', () => {
     ])('makes %s throw a csszyx bug that carries the message', (_name, transform) => {
         let error: unknown;
         try {
-            transform('export const a = 1;', 'refused.tsx');
+            transform('export const a = 1;', { filename: 'refused.tsx' });
         } catch (thrown) {
             error = thrown;
         }

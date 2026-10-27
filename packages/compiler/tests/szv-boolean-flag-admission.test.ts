@@ -34,12 +34,12 @@ const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
  * @returns The precompile refusals, empty when the config precompiled.
  */
 function refusals(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
+    engine: (source: string, options?: { filename?: string }) => { diagnostics?: string[] },
     config: string,
     selection = '{}',
 ): string[] {
     const source = `${IMPORT}const t = szv(${config});\nexport const a = szr(t(${selection}));`;
-    return (engine(source, '/p/t.tsx').diagnostics ?? [])
+    return (engine(source, { filename: '/p/t.tsx' }).diagnostics ?? [])
         .map(String)
         .filter(message => message.includes('could not be compiled'));
 }

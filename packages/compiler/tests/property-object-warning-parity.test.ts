@@ -51,12 +51,14 @@ describe('property-object warning parity', () => {
         // engine reports per RESULT, so the same source always carries its
         // warning — no cross-call latch for a cache or a re-run to trip over.
         const source = "export const A = () => <div sz={{ mx: { bg: 'red-500' } }} />;";
-        const wasm = transformWasm(source, '/p/t.tsx');
+        const wasm = transformWasm(source, { filename: '/p/t.tsx' });
         expect(
             wasm.issues.map(issue => [issue.code, (issue.args as { key?: string }).key]),
         ).toEqual([['property-object', 'mx']]);
         for (const [name, engine] of ENGINES) {
-            expect(engine(source, '/p/t.tsx').diagnostics, name).toEqual(wasm.diagnostics);
+            expect(engine(source, { filename: '/p/t.tsx' }).diagnostics, name).toEqual(
+                wasm.diagnostics,
+            );
         }
     });
 });

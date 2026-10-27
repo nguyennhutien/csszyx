@@ -12,7 +12,7 @@ describe('Next transform metadata', () => {
     it('collects generated classes separately from raw className strings', () => {
         const source =
             'const App=()=> <div className="existing" sz={{ p: 4, display: "flex" }} />;';
-        const result = transformSource(source, '/repo/src/App.tsx');
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
 
         expect(metadata.sourceHash).toBe(createHash('sha256').update(source).digest('hex'));
@@ -23,7 +23,7 @@ describe('Next transform metadata', () => {
 
     it('extracts static classes hidden inside runtime _sz fallback calls', () => {
         const source = 'const App=({rest})=> <div sz={{ p: 4, ...rest }} />;';
-        const result = transformSource(source, '/repo/src/App.tsx');
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
 
         expect(result.usesRuntime).toBe(true);
@@ -32,7 +32,7 @@ describe('Next transform metadata', () => {
 
     it('creates safelist shard input from generated class metadata', () => {
         const source = 'const App=()=> <div className="raw" sz={{ p: 2 }} />;';
-        const result = transformSource(source, '/repo/src/App.tsx');
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
 
         expect(createNextSafelistShardFromMetadata(metadata, 'cache-key')).toEqual({
@@ -50,7 +50,7 @@ describe('Next transform metadata', () => {
         // The dead-class line of a Next command names the line, column and
         // key, so the shard carries them from the first pass.
         const source = "const App=()=> <div sz={{ break: 'bogus', p: 4 }} />;";
-        const result = transformSource(source, '/repo/src/App.tsx');
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
         const column = source.indexOf('break') + 1;
 
@@ -65,7 +65,7 @@ describe('Next transform metadata', () => {
 
     it('places the class of a one-class object too', () => {
         const source = "const App=()=> <div sz={{ justify: 'safe-center' }} />;";
-        const result = transformSource(source, '/repo/src/App.tsx');
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
 
         expect(metadata.classSites).toEqual([

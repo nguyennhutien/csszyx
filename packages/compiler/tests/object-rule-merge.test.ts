@@ -49,7 +49,7 @@ function emit(
     const source = `export const A = ({ c, n }) => <div sz={${sz}} />;`;
     return ENGINES.map(([name, transform]) => [
         name,
-        normalizeEmit(transform(source, 'a.tsx', options).code ?? ''),
+        normalizeEmit(transform(source, { filename: 'a.tsx', ...options }).code ?? ''),
     ]);
 }
 
@@ -91,7 +91,7 @@ describe('the object rule with a merge table', () => {
         const source = 'export const A = () => <Card szs={{ root: { pb: 2, p: 4 } }} />;';
         for (const [name, transform] of ENGINES) {
             const code = normalizeEmit(
-                transform(source, 'a.tsx', { mergeTable: TABLE }).code ?? '',
+                transform(source, { filename: 'a.tsx', mergeTable: TABLE }).code ?? '',
             );
             expect(code, name).toContain('root: "p-4"');
         }
@@ -123,8 +123,9 @@ describe('what the table does not decide', () => {
             `export const A = ({ n }) => <div className={szr(F(${selection}))} />;`,
         ].join('\n');
         for (const [name, transform] of ENGINES) {
-            const withTable = transform(source, 'a.tsx', { mergeTable: TABLE }).code ?? '';
-            const without = transform(source, 'a.tsx').code ?? '';
+            const withTable =
+                transform(source, { filename: 'a.tsx', mergeTable: TABLE }).code ?? '';
+            const without = transform(source, { filename: 'a.tsx' }).code ?? '';
             expect(normalizeEmit(withTable), name).toBe(normalizeEmit(without));
             expect(without, name).toContain('pb-2 p-4');
         }
@@ -145,7 +146,7 @@ describe('what the table does not decide', () => {
         // that resolves at run time emits the class the merge removed, and a
         // class generated for nothing costs less than one generated for no one.
         for (const [name, transform] of ENGINES) {
-            const classes = transform(source, 'a.tsx', { mergeTable: TABLE }).classes;
+            const classes = transform(source, { filename: 'a.tsx', mergeTable: TABLE }).classes;
             expect([...classes], name).toEqual(expect.arrayContaining(['pb-2', 'p-4']));
         }
     });
@@ -174,8 +175,8 @@ describe('what the table does not decide', () => {
             coverage: [[1, 2], [], [], [4, 5], [], [], [7], []],
         };
         for (const [name, transform] of ENGINES) {
-            const without = transform(source, 'a.tsx');
-            const withTable = transform(source, 'a.tsx', { mergeTable: table });
+            const without = transform(source, { filename: 'a.tsx' });
+            const withTable = transform(source, { filename: 'a.tsx', mergeTable: table });
             expect(withTable.code, name).toBe(without.code);
             expect([...withTable.classes].sort(), name).toEqual([...without.classes].sort());
         }
@@ -190,7 +191,10 @@ describe('what the table does not decide', () => {
     it('refuses a table in a format it does not read, and says so', () => {
         const source = 'export const A = () => <div sz={{ pb: 2, p: 4 }} />;';
         for (const [name, transform] of ENGINES) {
-            const result = transform(source, 'a.tsx', { mergeTable: { ...TABLE, format: 99 } });
+            const result = transform(source, {
+                filename: 'a.tsx',
+                mergeTable: { ...TABLE, format: 99 },
+            });
             expect(normalizeEmit(result.code ?? ''), name).toContain('className="pb-2 p-4"');
             expect((result.diagnostics ?? []).join('\n'), name).toMatch(/merge table.*format 99/);
         }
@@ -209,7 +213,7 @@ describe('the groups a first pass reports', () => {
         // `toEqual` does not read as fields; JSON is how a consumer gets them.
         return ENGINES.map(([name, transform]) => [
             name,
-            JSON.parse(JSON.stringify(transform(source, 'a.tsx').mergeGroups)),
+            JSON.parse(JSON.stringify(transform(source, { filename: 'a.tsx' }).mergeGroups)),
         ]);
     }
 
@@ -336,7 +340,7 @@ describe('the groups a first pass reports', () => {
         ].join('\n');
         const crossModuleSzObjects = { './base': { base: { pb: 2, p: 4 } } };
         for (const [name, transform] of ENGINES) {
-            const { mergeGroups } = transform(source, 'a.tsx', { crossModuleSzObjects });
+            const { mergeGroups } = transform(source, { filename: 'a.tsx', crossModuleSzObjects });
             expect(JSON.parse(JSON.stringify(mergeGroups)), name).toEqual([
                 {
                     keys: ['pb', 'p'],
@@ -361,7 +365,10 @@ describe('the groups a first pass reports', () => {
         ].join('\n');
         const crossModuleSzObjects = { './base': { base: { hover: { bogus: 1, pb: 2 }, p: 4 } } };
         const places = ENGINES.map(([name, transform]) => {
-            const { mergeGroups, issues } = transform(source, 'a.tsx', { crossModuleSzObjects });
+            const { mergeGroups, issues } = transform(source, {
+                filename: 'a.tsx',
+                crossModuleSzObjects,
+            });
             const at = [
                 ...(issues ?? []).map(issue => [issue.code, issue.line, issue.column]),
                 ...(mergeGroups ?? []).flatMap(group =>
@@ -393,7 +400,7 @@ describe('the groups a first pass reports', () => {
         // reads; the class still needs its key to be reported at.
         const source = `export const A = () => ${jsx};`;
         for (const [name, transform] of ENGINES) {
-            const result = transform(source, 'a.tsx');
+            const result = transform(source, { filename: 'a.tsx' });
             expect(result.mergeGroups, name).toEqual([]);
             expect(JSON.parse(JSON.stringify(result.singleClassGroups)), name).toEqual([
                 groupAt(source, keys, classes),
@@ -405,7 +412,9 @@ describe('the groups a first pass reports', () => {
         const source = 'export const A = () => <><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>;';
         for (const [name, transform] of ENGINES) {
             expect(
-                JSON.parse(JSON.stringify(transform(source, 'a.tsx').singleClassGroups)),
+                JSON.parse(
+                    JSON.stringify(transform(source, { filename: 'a.tsx' }).singleClassGroups),
+                ),
                 name,
             ).toEqual([groupAt(source, ['p'], ['p-4']), groupAt(source, ['pb'], ['pb-2'])]);
         }

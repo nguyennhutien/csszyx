@@ -23,14 +23,13 @@ vi.mock('@csszyx/compiler/internal', async importOriginal => {
         transformRustBatchUnrendered: compilerMock.transformRustBatch,
         // Delegates unless a case installs its own behaviour, so the files
         // that compile go through the real engine.
-        transformRustUnrendered: (source: string, filename: string, options: unknown) =>
+        transformRustUnrendered: (
+            source: string,
+            options: Parameters<typeof actual.transformRustUnrendered>[1],
+        ) =>
             compilerMock.transformRust.getMockImplementation() === undefined
-                ? (actual.transformRustUnrendered as (s: string, f: string, o: unknown) => unknown)(
-                      source,
-                      filename,
-                      options,
-                  )
-                : compilerMock.transformRust(source, filename, options),
+                ? actual.transformRustUnrendered(source, options)
+                : compilerMock.transformRust(source, options),
     };
 });
 
@@ -135,9 +134,9 @@ describe('rust prescan batching', () => {
                 '@csszyx/compiler/engine',
             );
         compilerMock.transformRust.mockImplementation(
-            (source: string, filename: string, options: never) => {
-                if (filename === brokenPath) throw new Error('cannot read this file');
-                return real.transformRust(source, filename, options);
+            (source: string, options: Parameters<typeof real.transformRust>[1]) => {
+                if (options?.filename === brokenPath) throw new Error('cannot read this file');
+                return real.transformRust(source, options);
             },
         );
 

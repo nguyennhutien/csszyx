@@ -72,8 +72,8 @@ describe('vite global variable aliases', () => {
             '--brand-secondary': '---gy',
         });
         expect(globalVarMap).toEqual({
-            '--brand-primary': '---gz',
-            '--brand-secondary': '---gy',
+            format: 1,
+            aliases: { '--brand-primary': '---gz', '--brand-secondary': '---gy' },
         });
 
         // The deterministic build-output assertions above are the unit

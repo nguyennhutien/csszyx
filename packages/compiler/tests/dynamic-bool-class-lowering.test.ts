@@ -14,8 +14,8 @@ import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
 const ENGINES = [
-    ['native', (jsx: string) => transformSource(jsx, 'probe.tsx', {})],
-    ['wasm', (jsx: string) => transformWasm(jsx, 'probe.tsx', {})],
+    ['native', (jsx: string) => transformSource(jsx, { filename: 'probe.tsx' })],
+    ['wasm', (jsx: string) => transformWasm(jsx, { filename: 'probe.tsx' })],
 ] as const;
 
 describe.each(ENGINES)('dynamic boolean-only key lowering (%s)', (_name, run) => {

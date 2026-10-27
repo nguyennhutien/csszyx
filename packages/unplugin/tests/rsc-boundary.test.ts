@@ -118,7 +118,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={styles} />;
             }
         `;
-        const result = transformSource(source, SERVER_FILE);
+        const result = transformSource(source, { filename: SERVER_FILE });
 
         expect(result.code).toContain('_sz(styles)');
         expect(() => {
@@ -138,7 +138,7 @@ describe('RSC boundary guard', () => {
                 return <div className={className} sz={styles} />;
             }
         `;
-        const result = transformSource(source, SERVER_FILE);
+        const result = transformSource(source, { filename: SERVER_FILE });
 
         expect(result.code).toContain('_szMerge');
         expect(() => {
@@ -158,7 +158,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={{ p: 4, bg: 'red-500' }} />;
             }
         `;
-        const result = transformSource(source, SERVER_FILE);
+        const result = transformSource(source, { filename: SERVER_FILE });
 
         expect(result.usesRuntime).toBe(false);
         expect(() => assertNoRSCBoundaryViolation(result.code, SERVER_FILE)).not.toThrow();
@@ -170,7 +170,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={styles} />;
             }
         `;
-        const result = transformSource(source, '/repo/app/page.tsx');
+        const result = transformSource(source, { filename: '/repo/app/page.tsx' });
 
         expect(result.code).toContain('_sz(styles)');
         expect(() => {

@@ -67,6 +67,7 @@ export interface PreprocessorResult {
  * @param {SvelteAdapterOptions} options - Options
  * @returns The transformed source and its map, the number of sz props
  *   transformed, and the diagnostics
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function transformMarkup(
     content: string,

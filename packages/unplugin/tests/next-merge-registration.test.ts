@@ -57,14 +57,14 @@ describe('the census a Next source contributes', () => {
         const nested = `${'_szcn('.repeat(64)}'p-2'${')'.repeat(64)}`;
         const source = `import { szcn, _szcn } from '@csszyx/runtime';
 export const value = szcn('p-4', ${nested});`;
-        const result = transformSource(source, '/repo/src/value.ts');
+        const result = transformSource(source, { filename: '/repo/src/value.ts' });
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/value.ts');
         expect(metadata.mergeLiterals).toEqual(['p-2', 'p-4']);
         expect(createNextSafelistShardFromMetadata(metadata).mergeLiterals).toEqual(['p-2', 'p-4']);
     });
 
     it('records the strings written inside szcn calls beside the classes', () => {
-        const result = transformSource(SOURCE, '/repo/src/App.tsx');
+        const result = transformSource(SOURCE, { filename: '/repo/src/App.tsx' });
         const metadata = collectNextTransformMetadata(result, SOURCE, '/repo/src/App.tsx');
         expect(metadata.mergeLiterals).toEqual(['card', 'p-2', 'p-4']);
 

@@ -24,6 +24,7 @@ const ROOT = szDiagnosticRenderer(SZ_NODE_DIAGNOSTIC_WORDS);
  * @param diagnostic - The diagnostic.
  * @param computed - The helpers for computed values.
  * @returns The parts; `help` and `note` only when the code has them.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function renderSzDiagnosticParts(
     diagnostic: IdentifiedDiagnostic,
@@ -39,6 +40,7 @@ export function renderSzDiagnosticParts(
  * @param diagnostic - The diagnostic.
  * @param computed - The helpers for computed values.
  * @returns The body, its continuation lines indented by two spaces.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function renderSzDiagnosticBody(
     diagnostic: IdentifiedDiagnostic,
@@ -55,6 +57,7 @@ export function renderSzDiagnosticBody(
  * @param options.file - The file it is in, as the reader should see it.
  * @param options.computed - The helpers for computed values.
  * @returns The message.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function renderSzDiagnostic(options: {
     diagnostic: RenderableDiagnostic;

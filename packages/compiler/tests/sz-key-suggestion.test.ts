@@ -68,7 +68,7 @@ describe('suggestSzKey', () => {
 describe.each(ENGINES)('the suggestion on an unknown key — %s', (_name, transform) => {
     it('goes into the args and the message', () => {
         const source = "export const A = () => <div sz={{ workBreak: 'all' }} />;";
-        const result = transform(source, '/p/src/A.tsx');
+        const result = transform(source, { filename: '/p/src/A.tsx' });
 
         expect(result.issues?.[0]?.args).toEqual({ key: 'workBreak', suggestion: 'break' });
         expect(result.diagnostics?.[0]).toContain('help: write `break` if you meant it;');
@@ -76,7 +76,7 @@ describe.each(ENGINES)('the suggestion on an unknown key — %s', (_name, transf
 
     it('is left out when no known key is near', () => {
         const source = "export const A = () => <div sz={{ xyzzy: 'all' }} />;";
-        const result = transform(source, '/p/src/A.tsx');
+        const result = transform(source, { filename: '/p/src/A.tsx' });
 
         expect(result.issues?.[0]?.args).toEqual({ key: 'xyzzy' });
         expect(result.diagnostics?.[0]).toContain('help: check the spelling;');

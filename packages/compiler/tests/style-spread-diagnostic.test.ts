@@ -17,7 +17,12 @@ const diagnosticCode = 'style-override';
 function codesPerEngine(source: string): Array<readonly [string, string[]]> {
     return ENGINES.map(
         ([name, transform]) =>
-            [name, (transform(source, 'probe.tsx').issues ?? []).map(issue => issue.code)] as const,
+            [
+                name,
+                (transform(source, { filename: 'probe.tsx' }).issues ?? []).map(
+                    issue => issue.code,
+                ),
+            ] as const,
     );
 }
 
@@ -30,15 +35,15 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
 
     it('injects generated style into every conditional branch exactly once', () => {
         for (const [, transform] of ENGINES) {
-            const code = transform(collisionSource, 'probe.tsx').code ?? '';
+            const code = transform(collisionSource, { filename: 'probe.tsx' }).code ?? '';
             expect(code.match(/__szSpacingVar/g)).toHaveLength(2);
             expect(code).not.toMatch(/\sstyle=\{\{/);
         }
     });
 
     it.runIf(RUST_LANE)('native is byte-identical to wasm for safe branches', () => {
-        const wasm = transformWasm(collisionSource, 'probe.tsx');
-        const rust = transformRust(collisionSource, 'probe.tsx');
+        const wasm = transformWasm(collisionSource, { filename: 'probe.tsx' });
+        const rust = transformRust(collisionSource, { filename: 'probe.tsx' });
         expect(rust.code).toBe(wasm.code);
         expect(rust.diagnostics).toEqual(wasm.diagnostics);
     });
@@ -63,7 +68,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
     it('merges a safe expression-valued style without an explicit style attribute', () => {
         const source = 'const A=({width,base})=><div sz={{w:width}} {...{style:base,id:"x"}}/>;';
         for (const [, transform] of ENGINES) {
-            const result = transform(source, 'probe.tsx');
+            const result = transform(source, { filename: 'probe.tsx' });
             expect((result.issues ?? []).map(issue => issue.code)).not.toContain(diagnosticCode);
             expect(result.code).toMatch(/\.\.\.\(?base\)?/);
             expect(result.code).not.toMatch(/\sstyle=\{\{/);

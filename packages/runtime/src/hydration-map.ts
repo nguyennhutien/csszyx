@@ -20,6 +20,7 @@ import type { MangleVarValue } from './mangle-registry.js';
  * @param classMap - Original class name → mangled token.
  * @param varMap - Original custom property → emitted name(s).
  * @returns The payload the checksum is computed over.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function createHydrationMangleMap(
     classMap: Readonly<Record<string, string>>,

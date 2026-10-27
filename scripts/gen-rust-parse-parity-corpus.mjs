@@ -136,7 +136,7 @@ if (!isRustTransformAvailable()) {
 }
 
 const records = sources.map(source => {
-    const result = transformRust(source, 'file.tsx');
+    const result = transformRust(source, { filename: 'file.tsx' });
     return {
         source,
         classes: sorted(result.classes),

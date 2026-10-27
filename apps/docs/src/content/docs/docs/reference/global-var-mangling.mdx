@@ -76,6 +76,15 @@ map. Set `emitMap: false` to avoid that extra file. `csszyx-manifest.json` also
 carries `globalVarAliases`, but only when `build.emitManifest` is on — it is off
 by default, so this dedicated map is normally the only place they appear.
 
+The file carries the version of its shape beside the aliases, so a tool can
+refuse a shape it does not know. A key may be added without raising `format`,
+so a reader ignores keys it does not know; `format` rises only when an existing
+key changes what it means:
+
+```json
+{ "format": 1, "aliases": { "--brand-primary": "---gz" } }
+```
+
 ## When to Use
 
 Use global-variable aliasing only when all of these are true:

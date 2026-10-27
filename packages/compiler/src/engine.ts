@@ -14,6 +14,7 @@ export {
     type CrossModuleExportKind,
     type CrossModuleForward,
     type CrossModuleRegistryEntry,
+    type ExtractCrossModuleOptions,
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
 } from './cross-module-extract.js';
@@ -36,8 +37,14 @@ export {
     type ModuleLinks,
     type ModuleLinksFile,
     type ModuleLinksQuery,
+    type ScanModuleLinksOptions,
     scanModuleLinks,
 } from './module-links.js';
+export type {
+    SourceTransformResult,
+    TransformSourceCodeOptions,
+    TransformSourceOptions,
+} from './transform-core.js';
 export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,

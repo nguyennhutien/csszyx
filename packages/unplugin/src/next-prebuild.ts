@@ -135,6 +135,7 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
  *
  * @param options Prebuild input options.
  * @returns The state context, the counts and one result per file.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function writeNextPrebuildShards(options: NextPrebuildOptions): NextPrebuildShards {
     assertNextMangleBoundary(options, (options.mode ?? 'production') === 'production', 'prebuild');

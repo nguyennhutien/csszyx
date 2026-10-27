@@ -32,6 +32,7 @@ const warnedShapes = new Set<string>();
  * @param key - The sz key the value arrived on (diagnostics only).
  * @param className - The compiled bare class, variant prefix included.
  * @returns The class string to render, or an empty string for none.
+ * @internal Called by generated code, not written by hand.
  */
 export function __szBoolClass(v: unknown, key: string, className: string): string {
     if (v === true) {

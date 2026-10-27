@@ -58,7 +58,7 @@ describe('scanModuleLinks artifact dispatch', () => {
             throw new Error('engine-version-skew');
         });
 
-        expect(scanModuleLinks(FILES, QUERY, 'wasm')).toEqual([
+        expect(scanModuleLinks(FILES, { ...QUERY, parser: 'wasm' })).toEqual([
             { cssImports: ['from-wasm.css'], forwards: [] },
         ]);
         expect(isRustTransformAvailable).not.toHaveBeenCalled();

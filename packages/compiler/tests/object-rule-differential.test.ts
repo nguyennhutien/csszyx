@@ -60,7 +60,10 @@ function lower(
     options: { mergeTable?: EngineMergeTable; classPrefix?: string } = {},
 ): string[] | null {
     const sz = `[${elements.map(element => escapeUnsafeChars(JSON.stringify(element))).join(', ')}]`;
-    const code = transform(`export const A = () => <div sz={${sz}} />;`, 'a.tsx', options).code;
+    const code = transform(`export const A = () => <div sz={${sz}} />;`, {
+        filename: 'a.tsx',
+        ...options,
+    }).code;
     const match = /className="([^"]*)"/.exec(code ?? '');
     return match ? (match[1] as string).split(' ').filter(Boolean) : null;
 }

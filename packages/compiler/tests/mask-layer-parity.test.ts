@@ -138,7 +138,7 @@ describe('mask layer merge — the later group claims the CSS property', () => {
     function expectMergeParity(elements: string, expected: string): void {
         const source = `export const A = () => <div sz={${elements}} />;`;
         for (const [name, transform] of ENGINES) {
-            const code = transform(source, 'mask-merge.tsx').code ?? '';
+            const code = transform(source, { filename: 'mask-merge.tsx' }).code ?? '';
             const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
             expect(emitted, `${name} — ${elements}`).toBe(expected);
         }

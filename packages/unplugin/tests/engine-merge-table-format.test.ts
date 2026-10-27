@@ -12,7 +12,8 @@ import { ENGINE_MERGE_TABLE_FORMAT } from '../src/merge-signature.js';
 
 describe('the engine merge table format', () => {
     it.each(ENGINES)('is the one the %s engine reads', (_name, transform) => {
-        const result = transform('export const A = () => <div sz={{ pb: 2, p: 4 }} />;', 'a.tsx', {
+        const result = transform('export const A = () => <div sz={{ pb: 2, p: 4 }} />;', {
+            filename: 'a.tsx',
             mergeTable: {
                 format: ENGINE_MERGE_TABLE_FORMAT,
                 signatures: { 'p-4': 0, 'pb-2': 1 },

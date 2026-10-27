@@ -28,7 +28,11 @@ export type MergeAuditKind =
     /** An `sz` class covered a static class-name class beside it. */
     | 'merge-covered-class';
 
-/** Every merge rule, in the order the audit and the build name them. */
+/**
+ * Every merge rule, in the order the audit and the build name them.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export const MERGE_AUDIT_KINDS: readonly MergeAuditKind[] = [
     'merge-covered-key',
     'merge-covered-class',
@@ -100,7 +104,8 @@ export function auditMerges(input: {
         })),
     );
     const firstPasses = input.files.map(file => {
-        const first = transformSourceUnrendered(file.source, file.path, {
+        const first = transformSourceUnrendered(file.source, {
+            filename: file.path,
             classPrefix: input.classPrefix,
         });
         sources.readLowered(file.path, first.classes);

@@ -37,7 +37,7 @@ afterEach(() => {
 function tablePasses(): number {
     return [compiler.transformRustUnrendered, compiler.transformWasmUnrendered]
         .flatMap(engine => vi.mocked(engine).mock.calls)
-        .filter(call => (call[2] as { mergeTable?: unknown } | undefined)?.mergeTable !== undefined)
+        .filter(call => (call[1] as { mergeTable?: unknown } | undefined)?.mergeTable !== undefined)
         .length;
 }
 

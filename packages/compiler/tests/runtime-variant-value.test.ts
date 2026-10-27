@@ -32,7 +32,7 @@ const REGISTRY = { './base': { base: { pb: 2, p: 4 } } };
  */
 function compile(engine: (typeof ENGINES)[number][1], source: string) {
     return captureWarnings(
-        (code, filename) => engine(code, filename, { crossModuleSzObjects: REGISTRY }),
+        (code, options) => engine(code, { ...options, crossModuleSzObjects: REGISTRY }),
         source,
         '/p/App.tsx',
     );
@@ -325,7 +325,7 @@ describe('the runtime lowering of a deferred variant', () => {
         const [, engine] = ENGINES[0];
         const literal = engine(
             'export const A = () => <div sz={{ md: { hover: { pb: 2, p: 4 } } }} />;',
-            '/p/App.tsx',
+            { filename: '/p/App.tsx' },
         );
         const built = /className="([^"]*)"/.exec(literal.code ?? '')?.[1];
 

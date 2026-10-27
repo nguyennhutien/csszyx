@@ -35,21 +35,21 @@ describe('line endings survive migration', () => {
             '      <span className="text-sm font-bold">hi</span>\n' +
             '    </div>\n  );\n}\n';
 
-        const fromCrlf = transformSource(toCRLF(lf), 'Card.tsx').code;
+        const fromCrlf = transformSource(toCRLF(lf), { filename: 'Card.tsx' }).code;
 
         expect(hasLoneLf(fromCrlf)).toBe(false);
-        expect(fromCrlf).toBe(toCRLF(transformSource(lf, 'Card.tsx').code));
+        expect(fromCrlf).toBe(toCRLF(transformSource(lf, { filename: 'Card.tsx' }).code));
     });
 
     it('keeps CRLF through an injected follow-up comment', () => {
         const lf = 'export const K = () => (\n  <div className="p-4 mystery-class">x</div>\n);\n';
         const options = { injectTodos: true };
 
-        const fromCrlf = transformSource(toCRLF(lf), 'K.tsx', options).code;
+        const fromCrlf = transformSource(toCRLF(lf), { filename: 'K.tsx', ...options }).code;
 
         expect(fromCrlf).toContain('@sz-todo');
         expect(hasLoneLf(fromCrlf)).toBe(false);
-        expect(fromCrlf).toBe(toCRLF(transformSource(lf, 'K.tsx', options).code));
+        expect(fromCrlf).toBe(toCRLF(transformSource(lf, { filename: 'K.tsx', ...options }).code));
     });
 
     it('keeps CRLF through the HTML head and body injections', () => {
@@ -69,7 +69,7 @@ describe('line endings survive migration', () => {
         const lf =
             'export const A = () => <div className="flex items-center p-4 bg-blue-500" />;\n';
 
-        expect(transformSource(lf, 'A.tsx').code).not.toContain('\r');
+        expect(transformSource(lf, { filename: 'A.tsx' }).code).not.toContain('\r');
     });
 });
 

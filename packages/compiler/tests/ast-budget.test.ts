@@ -74,15 +74,18 @@ describe('AST budget guard', () => {
 
     it('leaves a synthetic over-budget file unchanged, with the diagnostic', () => {
         const source = parserPathSource();
-        const result = transformSource(source, 'huge.tsx', { astBudget: 40 });
+        const result = transformSource(source, { filename: 'huge.tsx', astBudget: 40 });
         expect(result.code).toBe(source);
         expectBudgetTrip(result, 'huge.tsx');
     });
 
     it('the diagnostic names the file, on both artifacts identically', () => {
         const source = parserPathSource();
-        const native = transformSource(source, 'src/generated/big.tsx', { astBudget: 40 });
-        const wasm = transformWasm(source, 'src/generated/big.tsx', { astBudget: 40 });
+        const native = transformSource(source, {
+            filename: 'src/generated/big.tsx',
+            astBudget: 40,
+        });
+        const wasm = transformWasm(source, { filename: 'src/generated/big.tsx', astBudget: 40 });
         expectBudgetTrip(native, 'src/generated/big.tsx');
         expect(wasm.diagnostics).toEqual(native.diagnostics);
     });
@@ -93,7 +96,7 @@ describe('AST budget guard', () => {
         // a full parse, so 60k literals cost nothing.
         const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
         const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
-        const result = transformSource(source, 'huge.tsx');
+        const result = transformSource(source, { filename: 'huge.tsx' });
         expect(result.transformed).toBe(true);
         expect([...result.classes]).toContain('p-1');
     });
@@ -112,7 +115,7 @@ describe('AST budget guard', () => {
         // or syntactically invalid for the TSX parser, but they are outside
         // csszyx's transform surface when they have no `sz` marker.
         const source = 'const broken = ;';
-        const result = transformSource(source, 'broken-generated.ts');
+        const result = transformSource(source, { filename: 'broken-generated.ts' });
 
         expect(result.transformed).toBe(false);
         expect(result.code).toBe(source);
@@ -126,7 +129,7 @@ describe('AST budget guard', () => {
         // protects generated files that merely CONTAIN the letters "sz".
         const source = wideArraySource(60_000, 'const szMarker = true;');
         expectBudgetTrip(
-            transformSource(source, 'huge-with-sz-marker.ts'),
+            transformSource(source, { filename: 'huge-with-sz-marker.ts' }),
             'huge-with-sz-marker.ts',
         );
     });
@@ -135,7 +138,7 @@ describe('AST budget guard', () => {
         // szRecover is a csszyx transform surface even without an sz prop;
         // on the parser path the budget must protect it as well.
         const source = `export const App = ({ x }) => (<section szRecover="csr"><div sz={{ w: x }} />${Array.from({ length: 200 }, () => '<i sz={{ p: 1 }} />').join('')}</section>);`;
-        const result = transformSource(source, 'huge-recovery.tsx', { astBudget: 40 });
+        const result = transformSource(source, { filename: 'huge-recovery.tsx', astBudget: 40 });
         expectBudgetTrip(result, 'huge-recovery.tsx');
     });
 
@@ -143,10 +146,13 @@ describe('AST budget guard', () => {
         const source = parserPathSource();
 
         // Low budget: trips.
-        expectBudgetTrip(transformSource(source, 'huge.tsx', { astBudget: 40 }), 'huge.tsx');
+        expectBudgetTrip(
+            transformSource(source, { filename: 'huge.tsx', astBudget: 40 }),
+            'huge.tsx',
+        );
 
         // Raised budget: transforms.
-        const raised = transformSource(source, 'huge.tsx', { astBudget: 100_000 });
+        const raised = transformSource(source, { filename: 'huge.tsx', astBudget: 100_000 });
         expect(raised.transformed).toBe(true);
         expect(raised.issues.some(issue => issue.code === 'ast-budget')).toBe(false);
         expect(raised.diagnostics.some(d => d.includes('AST budget'))).toBe(false);
@@ -156,16 +162,22 @@ describe('AST budget guard', () => {
         const source = parserPathSource();
 
         // Default budget: transforms.
-        const roomy = transformSource(source, 'small.tsx');
+        const roomy = transformSource(source, { filename: 'small.tsx' });
         expect(roomy.transformed).toBe(true);
 
         // Lowered budget: trips.
-        expectBudgetTrip(transformSource(source, 'small.tsx', { astBudget: 40 }), 'small.tsx');
+        expectBudgetTrip(
+            transformSource(source, { filename: 'small.tsx', astBudget: 40 }),
+            'small.tsx',
+        );
     });
 
     it('raising the budget silences the diagnostic on the same file', () => {
         const source = wideArraySource(60_000, 'const szMarker = true;');
-        const raised = transformSource(source, 'huge-with-sz-marker.ts', { astBudget: 500_000 });
+        const raised = transformSource(source, {
+            filename: 'huge-with-sz-marker.ts',
+            astBudget: 500_000,
+        });
         expect(raised.diagnostics).toEqual([]);
     });
 });

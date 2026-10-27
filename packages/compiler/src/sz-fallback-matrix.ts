@@ -292,6 +292,7 @@ function szFallbackKindOf(message: string): SzFallbackKind | undefined {
  *
  * @param message - One raw diagnostic line as an engine emitted it.
  * @returns The consequence, or undefined for messages outside the matrix.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function szFallbackConsequenceOf(message: string): SzFallbackConsequence | undefined {
     for (const site of Object.keys(SITE_LABEL) as SzFallbackSite[]) {

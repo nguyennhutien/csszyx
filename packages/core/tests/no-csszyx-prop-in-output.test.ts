@@ -306,7 +306,7 @@ describe('no csszyx authoring prop survives into the output', () => {
                 moduleOf(['<div className="block" sz={{ p: 4 }} id="x" sz={{ p: 2 }} />']),
             ];
             for (const source of sources) {
-                const code = engine(source, 'probe.tsx').code ?? '';
+                const code = engine(source, { filename: 'probe.tsx' }).code ?? '';
                 expect(leaksIn(code), `source:\n${source}\noutput:\n${code}`).toEqual([]);
             }
         });
@@ -318,7 +318,7 @@ describe('no csszyx authoring prop survives into the output', () => {
 
             for (let index = 0; index < cases; index += 1) {
                 const { source, objects } = drawModule(rng);
-                const code = engine(source, 'probe.tsx').code ?? '';
+                const code = engine(source, { filename: 'probe.tsx' }).code ?? '';
                 const leaks = leaksIn(code);
                 if (leaks.length === 0) continue;
 
@@ -326,7 +326,9 @@ describe('no csszyx authoring prop survives into the output', () => {
                 // report names the element rather than a five-element file.
                 const stillLeaks = (candidate: SzObject): boolean =>
                     leaksIn(
-                        engine(moduleOf([element('div', 'sz', candidate)]), 'probe.tsx').code ?? '',
+                        engine(moduleOf([element('div', 'sz', candidate)]), {
+                            filename: 'probe.tsx',
+                        }).code ?? '',
                     ).length > 0;
                 const culprit = objects.find(stillLeaks);
                 const minimal = culprit === undefined ? null : shrinkSzObject(culprit, stillLeaks);
@@ -351,7 +353,7 @@ describe('no csszyx authoring prop survives into the output', () => {
             // fixed, and its entry must go — with the pre-filter in
             // `drawModule` reconsidered at the same time.
             const fixed = KNOWN_LEAKS.filter(
-                k => leaksIn(engine(k.source, 'probe.tsx').code ?? '').length === 0,
+                k => leaksIn(engine(k.source, { filename: 'probe.tsx' }).code ?? '').length === 0,
             ).map(k => k.name);
             expect(
                 fixed,
@@ -381,7 +383,10 @@ describe('no csszyx authoring prop survives into the output', () => {
         for (const known of KNOWN_LEAKS) {
             const answers = ENGINES.map(
                 ([lane, engine]) =>
-                    [lane, leaksIn(engine(known.source, 'probe.tsx').code ?? '')] as const,
+                    [
+                        lane,
+                        leaksIn(engine(known.source, { filename: 'probe.tsx' }).code ?? ''),
+                    ] as const,
             );
             const shapes = new Set(answers.map(([, leaks]) => JSON.stringify(leaks)));
             const summary = answers.map(([l, k]) => `${l}=${JSON.stringify(k)}`).join(' vs ');

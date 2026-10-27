@@ -165,12 +165,13 @@ export interface RuntimeConfig {
 /**
  * Default runtime configuration.
  */
-export const DEFAULT_RUNTIME_CONFIG: Required<RuntimeConfig> = {
-    development: false,
-    allowCSRRecovery: false,
-    strictHydration: true,
-    debug: false,
-};
+export const DEFAULT_RUNTIME_CONFIG: Readonly<Required<RuntimeConfig>> =
+    /* @__PURE__ */ Object.freeze({
+        development: false,
+        allowCSRRecovery: false,
+        strictHydration: true,
+        debug: false,
+    });
 
 /**
  * Global runtime state.
@@ -258,6 +259,7 @@ export function isRuntimeInitialized(): boolean {
 
 /**
  * Resets the runtime state (for testing).
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function resetRuntime(): void {
     runtimeState.config = { ...DEFAULT_RUNTIME_CONFIG };

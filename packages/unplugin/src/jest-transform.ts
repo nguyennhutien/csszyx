@@ -292,6 +292,7 @@ class TransformCacheIndex {
  * @param source - Its current contents.
  * @param classPrefix - The Tailwind prefix the project sets, or null.
  * @returns The compiled code, or null when the build has no matching entry.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function findCachedTransform(
     cacheRoot: string,
@@ -632,7 +633,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     : mergedWithSettledTable(
                           first,
                           mergeTable =>
-                              transformSourceUnrendered(sourceText, sourcePath, {
+                              transformSourceUnrendered(sourceText, {
+                                  filename: sourcePath,
                                   classPrefix: prefix,
                                   mergeTable,
                               }),
@@ -649,7 +651,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     ),
                 };
             }
-            const first = transformSourceUnrendered(sourceText, sourcePath, {
+            const first = transformSourceUnrendered(sourceText, {
+                filename: sourcePath,
                 classPrefix: prefix,
             });
             const result = withTable(first) ?? first;

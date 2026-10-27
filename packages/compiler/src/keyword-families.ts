@@ -22,7 +22,9 @@
  * ({@link settleGlobalKeywords}). The engine reads a generated copy
  * (`scripts/generate-rust-transform-tables.mjs`).
  */
-export const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups', string>> = {
+export const GLOBAL_KEYWORD_GROUPS: Readonly<
+    Record<string, Readonly<Record<'property' | 'groups', string>>>
+> = /* @__PURE__ */ Object.freeze({
     nums: {
         property: 'font-variant-numeric',
         groups: 'numFigure numSpacing numFraction numOrdinal numSlashedZero',
@@ -32,7 +34,7 @@ export const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups',
         property: 'contain',
         groups: 'containSize containLayout containPaint containStyle',
     },
-};
+});
 
 /** `GLOBAL_KEYWORD_GROUPS` as entries, built once. */
 const GLOBAL_KEYWORD_ENTRIES = Object.entries(GLOBAL_KEYWORD_GROUPS);
@@ -59,6 +61,7 @@ export const GROUPS_OF_GLOBAL_KEYWORD: ReadonlyMap<string, readonly string[]> = 
  * key, the shape a spread override leaves and the lowering reports.
  * @param key - A key of the later layer.
  * @returns The keys it replaces; empty for a key of no such family.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function keysDisplacedBy(key: string): readonly string[] {
     const global = GLOBAL_KEYWORD_OF_GROUP.get(key);
@@ -131,6 +134,7 @@ export function settleGlobalKeywords(
  * reported.
  * @param szProp - One object level of an sz value.
  * @returns The keys the lowering leaves out.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function keysSettledAway(szProp: Readonly<Record<string, unknown>>): ReadonlySet<string> {
     return settleGlobalKeywords(szProp);

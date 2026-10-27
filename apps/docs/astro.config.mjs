@@ -245,6 +245,7 @@ export default defineConfig({
                     label: 'API Reference',
                     items: [
                         { label: 'Runtime Helpers', slug: 'docs/reference/runtime' },
+                        { label: 'Public API', slug: 'docs/reference/public-api' },
                         { label: 'Plugin Config', slug: 'docs/reference/config' },
                         { label: 'CLI Commands', slug: 'docs/reference/cli' },
                         { label: 'Warnings & Troubleshooting', slug: 'docs/reference/warnings' },

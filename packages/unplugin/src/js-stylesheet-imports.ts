@@ -89,8 +89,7 @@ export function stylesheetsImportedBy(
     if (importing.length === 0) return [];
     const links = scanModuleLinks(
         importing.map(source => ({ filename: source.filePath, source: source.content })),
-        {},
-        parser,
+        { parser },
     );
     const found = new Set<string>();
     importing.forEach((source, index) => {

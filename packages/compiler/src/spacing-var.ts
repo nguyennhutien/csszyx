@@ -87,6 +87,7 @@ function warnUnresolvable(key: string, value: unknown): void {
  * @param v - The runtime value from the sz object.
  * @param key - The sz key the value arrived on (axis + diagnostics).
  * @returns CSS-compatible value string, or undefined when there is none.
+ * @internal Called by generated code, not written by hand.
  */
 export function __szSpacingVar(v: unknown, key: string): string | undefined {
     if (typeof v === 'number') {
@@ -135,6 +136,7 @@ export function __szSpacingVar(v: unknown, key: string): string | undefined {
  * @param unit - The unit the bare-number form implies ('deg' | 'ms').
  * @param key - The sz key the value arrived on (diagnostics only).
  * @returns CSS-compatible value string, or undefined when there is none.
+ * @internal Called by generated code, not written by hand.
  */
 export function __szUnitVar(v: unknown, unit: string, key: string): string | undefined {
     if (typeof v === 'number') {

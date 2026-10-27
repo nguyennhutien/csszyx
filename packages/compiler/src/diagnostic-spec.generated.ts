@@ -45,6 +45,12 @@ export interface SzDiagnosticSpec {
     readonly forms?: readonly string[];
     /** Forms only the build or `csszyx check` reports; no browser bundle carries their words. */
     readonly buildForms?: readonly string[];
+    /**
+     * Forms with a browser-module export of their own, carrying that form's
+     * words alone: a module that throws only that form imports it, and leaves
+     * the other forms' words out of its bundle.
+     */
+    readonly formExports?: readonly string[];
     readonly gaps?: readonly string[];
     /** The enum arg a per-variant template is keyed by, when it is not `form`. */
     readonly variesBy?: string;
@@ -2306,7 +2312,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "csszyx-turbopack",
             "csszyx-turbopack-option",
             "class-name-to-sz-object",
-            "class-name-to-sz-object-option"
+            "class-name-to-sz-object-option",
+            "serialize-manifest",
+            "migrate-source",
+            "engine-call"
+        ],
+        "buildForms": [
+            "serialize-manifest",
+            "migrate-source",
+            "engine-call"
+        ],
+        "formExports": [
+            "engine-call"
         ],
         "args": {
             "form": {
@@ -2316,12 +2333,19 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "csszyx-turbopack",
                     "csszyx-turbopack-option",
                     "class-name-to-sz-object",
-                    "class-name-to-sz-object-option"
+                    "class-name-to-sz-object-option",
+                    "serialize-manifest",
+                    "migrate-source",
+                    "engine-call"
                 ]
             },
             "options": {
                 "type": "string[]",
                 "joiner": "`, `",
+                "optional": true
+            },
+            "call": {
+                "type": "string",
                 "optional": true
             }
         }

@@ -148,6 +148,18 @@ function baseSource(base, file) {
 }
 
 /**
+ * Whether a line carries a `NOSONAR` comment, which Sonar reads as "report
+ * nothing on this line". The gate mirrors Sonar, so it reports nothing there
+ * either; a line that only contains the word inside a string is not one.
+ *
+ * @param text - The line's text.
+ * @returns True when a `//` or `/*` comment on the line starts with NOSONAR.
+ */
+export function isSuppressed(text) {
+    return /(\/\/|\/\*)\s*NOSONAR\b/.test(text);
+}
+
+/**
  * Lint one text as the given file with the profile's rules.
  *
  * @param eslint - An ESLint instance carrying the rules.
@@ -174,7 +186,8 @@ async function lint(eslint, ruleKeys, file, source) {
             key: ruleKeys.get(message.ruleId),
             message: message.message,
             text: (lines[message.line - 1] ?? '').trim(),
-        }));
+        }))
+        .filter(diagnostic => !isSuppressed(diagnostic.text));
 }
 
 /**

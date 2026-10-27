@@ -70,7 +70,9 @@ function run(
     engine: ParityEngine,
     sz: string,
 ): { emitted: string; diagnostics: string[]; issues: NonNullable<EngineParityResult['issues']> } {
-    const result = engine(`export const A = () => <div sz={${sz}} />;`, 'owned-key.tsx');
+    const result = engine(`export const A = () => <div sz={${sz}} />;`, {
+        filename: 'owned-key.tsx',
+    });
     return {
         emitted: /className="([^"]*)"/.exec(result.code ?? '')?.[1] ?? '',
         diagnostics: result.diagnostics ?? [],

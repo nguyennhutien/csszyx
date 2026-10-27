@@ -20,7 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENGINES } from './engine-parity-harness.js';
 
-type Engine = (source: string, filename?: string) => { code?: string };
+type Engine = (source: string, options?: { filename?: string }) => { code?: string };
 
 /**
  * Both artifacts of the one engine. The shared list drops the `auto`
@@ -38,7 +38,7 @@ const LANES = ENGINES;
  * @returns True when the emitted import targets a `/core` subpath.
  */
 function rewrites(engine: Engine, source: string): boolean {
-    const code = engine(source, '/p/t.tsx').code ?? source;
+    const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
     return (
         code.includes('@csszyx/runtime/core') ||
         code.includes("'csszyx/core'") ||
@@ -148,7 +148,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
 
     it('leaves the rest of the module intact when rewriting', () => {
         const source = `${RUNTIME}export const a = szr('p-4');\nexport const other = 42;`;
-        const code = engine(source, '/p/t.tsx').code ?? source;
+        const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
         expect(code).toContain('@csszyx/runtime/core');
         expect(code).not.toMatch(/from ['"]@csszyx\/runtime['"]/);
         expect(code).toContain("szr('p-4')");
@@ -157,7 +157,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
 
     it('splits a mixed clause into barrel and core lines', () => {
         const source = "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');";
-        const code = engine(source, '/p/t.tsx').code ?? source;
+        const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
         // szv keeps the barrel; szr moves to the core entry; both lines exist.
         expect(code).toMatch(/szv[^\n]*from ['"]@csszyx\/runtime['"]/);
         expect(code).toMatch(/szr[^\n]*from ['"]@csszyx\/runtime\/core['"]/);

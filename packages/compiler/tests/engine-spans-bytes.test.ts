@@ -150,9 +150,10 @@ describe('generated keys and values', () => {
             for (const [lane, spans] of textsOf(text))
                 expectRewritten(text, spans, `${lane} ${label}`);
             if (!RUST_LANE) continue;
-            expect(JSON.stringify(storeEngineSpans(transformRust(text, '/p/t.tsx'))), label).toBe(
-                JSON.stringify(storeEngineSpans(transformWasm(text, '/p/t.tsx'))),
-            );
+            expect(
+                JSON.stringify(storeEngineSpans(transformRust(text, { filename: '/p/t.tsx' }))),
+                label,
+            ).toBe(JSON.stringify(storeEngineSpans(transformWasm(text, { filename: '/p/t.tsx' }))));
         }
     });
 });
@@ -161,7 +162,7 @@ describe('keys read back from a non-ASCII source', () => {
     it.each(ENGINES.map(([name, transform]) => [name, transform]))(
         'are the keys as written on the %s lane',
         (_, transform) => {
-            const result = transform(NON_ASCII[0] as string, '/p/t.tsx');
+            const result = transform(NON_ASCII[0] as string, { filename: '/p/t.tsx' });
             const [group] = result.mergeGroups ?? [];
 
             expect(group?.keys).toEqual(['pb', 'p', 'md']);
@@ -175,9 +176,9 @@ describe('keys read back from a non-ASCII source', () => {
 
     it('are the same on both lanes, positions included, for every non-ASCII source', () => {
         for (const text of NON_ASCII) {
-            const wasm = transformWasm(text, '/p/t.tsx');
+            const wasm = transformWasm(text, { filename: '/p/t.tsx' });
             if (!RUST_LANE) continue;
-            const rust = transformRust(text, '/p/t.tsx');
+            const rust = transformRust(text, { filename: '/p/t.tsx' });
             expect(JSON.stringify(rust.mergeGroups), text).toBe(JSON.stringify(wasm.mergeGroups));
             expect(JSON.stringify(rust.singleClassGroups), text).toBe(
                 JSON.stringify(wasm.singleClassGroups),
@@ -190,7 +191,7 @@ describe('keys read back from a non-ASCII source', () => {
     // boundary refuses one. The binding writes U+FFFD for it, three bytes.
     it.skipIf(!RUST_LANE)('are the keys as written after a lone surrogate', () => {
         const text = 'export const A = () => <div title="\uD800" sz={{ pb: 2, p: 4 }} />;';
-        const [group] = transformRust(text, '/p/t.tsx').mergeGroups ?? [];
+        const [group] = transformRust(text, { filename: '/p/t.tsx' }).mergeGroups ?? [];
 
         expect(group?.keys).toEqual(['pb', 'p']);
         expect(group?.positions.map(({ column }) => column)).toEqual([

@@ -77,6 +77,7 @@ export {
     ManifestBuilder,
     parseManifest,
     type RecoveryManifest,
+    type SerializeManifestOptions,
     serializeManifest,
     type TokenData,
     validateManifest,
@@ -145,6 +146,7 @@ export {
     type SzValue,
     type TransformOptions,
     type TransformSourceCodeOptions,
+    type TransformSourceOptions,
     transform,
 } from './transform-core.js';
 
@@ -212,10 +214,11 @@ export interface CompilerOptions {
 /**
  * Default compiler options.
  */
-export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
-    buildId: Date.now().toString(),
-    development: process.env.NODE_ENV !== 'production',
-};
+export const DEFAULT_COMPILER_OPTIONS: Readonly<Required<CompilerOptions>> =
+    /* @__PURE__ */ Object.freeze({
+        buildId: Date.now().toString(),
+        development: process.env.NODE_ENV !== 'production',
+    });
 
 /**
  * Merges user options with defaults.
@@ -227,6 +230,7 @@ export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
  * ```typescript
  * const options = mergeOptions({ development: true });
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function mergeOptions(options: Partial<CompilerOptions> = {}): Required<CompilerOptions> {
     return {

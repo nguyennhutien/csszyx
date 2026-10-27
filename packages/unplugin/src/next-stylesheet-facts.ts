@@ -323,6 +323,7 @@ function readText(file: string): string | null {
  * @param input.setting - What messages call the setting that names the stylesheets.
  * @param input.ignoreSetting - What messages call the setting that carries `ignore`.
  * @returns The model, the stylesheets it compiled, and the patterns applied.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export async function openStylesheetModel(input: {
     root: string;

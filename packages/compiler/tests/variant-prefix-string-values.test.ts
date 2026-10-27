@@ -160,7 +160,9 @@ describe('both Rust artifacts already agreed, and still do', () => {
     // native:build` before trusting a green here.
     it.each(ENGINES)('%s emits what transform() emits', (_lane, engine) => {
         for (const [key, value, bare, source] of STRING_VALUED) {
-            const emitted = normalizeEmit(engine(source, 'variant-prefix.tsx').code ?? '');
+            const emitted = normalizeEmit(
+                engine(source, { filename: 'variant-prefix.tsx' }).code ?? '',
+            );
             expect(emitted, `${key}: ${value}`).toContain(`sm:${bare}`);
         }
     });

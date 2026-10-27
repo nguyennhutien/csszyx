@@ -82,11 +82,11 @@ const NON_VARIANT_CASES: ReadonlyArray<readonly [string, string]> = [
  * @returns The emitted className string.
  */
 function classNameFor(
-    transform: (source: string, filename?: string) => { code?: string },
+    transform: (source: string, options?: { filename?: string }) => { code?: string },
     szObject: string,
 ): string | undefined {
     const source = `export const A = () => <div sz={${szObject}} />;`;
-    return transform(source, '/p/t.tsx').code?.match(/className="([^"]*)"/)?.[1];
+    return transform(source, { filename: '/p/t.tsx' }).code?.match(/className="([^"]*)"/)?.[1];
 }
 
 /**

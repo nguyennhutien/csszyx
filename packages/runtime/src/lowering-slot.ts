@@ -112,6 +112,7 @@ function applySzClassPrefix(prefix: string | null): void {
  * copy that registered is not always the copy that lowers.
  *
  * @param prefix - The prefix, such as `tw` for `prefix(tw)`; null or empty for none.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function setSzClassPrefix(prefix: string | null): void {
     const globals = globalThis as typeof globalThis & SzLoweringGlobals;

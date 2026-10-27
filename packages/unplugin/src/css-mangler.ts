@@ -61,6 +61,7 @@ export interface ClassAttributeSelector {
  *
  * @param selector - One collected selector.
  * @returns A key equal for two selectors that compare the same way.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function classAttributeSelectorKey(selector: ClassAttributeSelector): string {
     return `${selector.operator}\u0000${selector.value}\u0000${selector.insensitive ? 'i' : ''}`;
@@ -113,6 +114,7 @@ export interface CSSManglerResult {
  *
  * @param {string} escapedName - The escaped class name from CSS selector
  * @returns {string} The unescaped class name
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function unescapeTailwindClass(escapedName: string): string {
     let result = '';
@@ -200,6 +202,7 @@ function escapeClassCharacter(char: string): string {
  *
  * @param {string} className - The unescaped class name
  * @returns {string} The escaped class name for CSS
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function escapeCSSClassName(className: string): string {
     let result = '';
@@ -426,6 +429,7 @@ export function mangleCSSSync(
  *     createPostCSSPlugin(mangleMap, { debug: true })
  * ]).process(css);
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function createPostCSSPlugin(
     mangleMap: MangleMap,

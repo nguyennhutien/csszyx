@@ -38,11 +38,11 @@ const PREAMBLE = "import { szcn } from 'csszyx';\n";
  * @returns The precedence advisories, whole.
  */
 function advisories(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
+    engine: (source: string, options?: { filename?: string }) => { diagnostics?: string[] },
     element: string,
 ): string[] {
     const source = `${PREAMBLE}export const W = ({ className }) => ${element};`;
-    return (engine(source, '/p/W.tsx').diagnostics ?? [])
+    return (engine(source, { filename: '/p/W.tsx' }).diagnostics ?? [])
         .map(String)
         .filter(message => message.startsWith('[csszyx] class-precedence:'));
 }

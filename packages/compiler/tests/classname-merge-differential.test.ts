@@ -67,7 +67,8 @@ function lower(
             ? ''
             : `className="${testCase.base.join(options.separator ?? ' ')}"`;
     const attributes = options.classNameFirst ? `${className} ${sz}` : `${sz} ${className}`;
-    const code = transform(`export const A = () => <div ${attributes} />;`, 'a.tsx', {
+    const code = transform(`export const A = () => <div ${attributes} />;`, {
+        filename: 'a.tsx',
         mergeTable: options.mergeTable,
     }).code;
     const match = /className="([^"]*)"/.exec(code ?? '');

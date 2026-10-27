@@ -46,7 +46,7 @@ describe('safelist scan robustness', () => {
         for (const ext of ['js', 'mjs', 'cjs']) {
             for (const [name, engine] of ENGINES) {
                 it(`${name} extracts classes from JSX in a .${ext} file (no silent empty scan)`, () => {
-                    const result = engine(jsxInJs, `Toolbar.${ext}`);
+                    const result = engine(jsxInJs, { filename: `Toolbar.${ext}` });
                     expect([...result.classes].sort()).toEqual(['mx-0', 'my-4']);
                     expect([...result.rawClassNames].sort()).toEqual(['date', 'toolbar']);
                     expect(result.diagnostics).toEqual([]);
@@ -57,7 +57,7 @@ describe('safelist scan robustness', () => {
         it('plain JS without JSX still parses everywhere', () => {
             const plainJs = 'const lt = 1 < 2; export const gt = lt && 2 > 1;';
             for (const [, engine] of ENGINES) {
-                expect(() => engine(plainJs, 'math.js')).not.toThrow();
+                expect(() => engine(plainJs, { filename: 'math.js' })).not.toThrow();
             }
         });
 
@@ -65,7 +65,7 @@ describe('safelist scan robustness', () => {
             'rust still flags a genuinely broken file with a parse-error diagnostic',
             () => {
                 const broken = 'export const A = () => <div sz={{ p: 4 } ;';
-                const result = transformRust(broken, 'Broken.tsx');
+                const result = transformRust(broken, { filename: 'Broken.tsx' });
                 expect(result.classes.size).toBe(0);
                 expect(
                     result.issues.some(issue => issue.code === 'parse-error'),
@@ -90,10 +90,9 @@ describe('safelist scan robustness', () => {
         for (const [name, engine] of ENGINES) {
             it(`${name} catalogs className before and after sz`, () => {
                 for (const source of fixtures) {
-                    expect([...engine(source, 'A.tsx').rawClassNames].sort()).toEqual([
-                        'raw',
-                        'token',
-                    ]);
+                    expect([...engine(source, { filename: 'A.tsx' }).rawClassNames].sort()).toEqual(
+                        ['raw', 'token'],
+                    );
                 }
             });
         }
@@ -106,10 +105,14 @@ describe('safelist scan robustness', () => {
 
         for (const [name, engine] of ENGINES) {
             it(`${name} skips a numeric key in sz`, () => {
-                expect([...engine(numericSz, 'A.tsx').classes].sort()).toEqual(['p-2']);
+                expect([...engine(numericSz, { filename: 'A.tsx' }).classes].sort()).toEqual([
+                    'p-2',
+                ]);
             });
             it(`${name} skips a numeric key inside an szv catalog`, () => {
-                expect([...engine(numericSzvLeaf, 'A.tsx').classes].sort()).toEqual(['m-6']);
+                expect([...engine(numericSzvLeaf, { filename: 'A.tsx' }).classes].sort()).toEqual([
+                    'm-6',
+                ]);
             });
         }
     });

@@ -51,7 +51,7 @@ describe('HTML class attribute branches', () => {
 describe('dynamic className rejection branches', () => {
     it('skips a clsx call whose only string argument is fully unrecognized', () => {
         const src = 'const A = () => <div className={clsx("totally-unknownx")} />;';
-        const out = transformSource(src, 'test.tsx');
+        const out = transformSource(src, { filename: 'test.tsx' });
         expect(out.changed).toBe(false);
         expect(out.code).toContain('clsx("totally-unknownx")');
     });
@@ -63,7 +63,7 @@ describe('dynamic className rejection branches', () => {
             '  <b className={on ? "" : "m-2"} />',
             '</div>);',
         ].join('\n');
-        const out = transformSource(src, 'test.tsx');
+        const out = transformSource(src, { filename: 'test.tsx' });
         expect(out.changed).toBe(true);
         expect(out.code).toContain('p: 4');
         expect(out.code).toContain('m: 2');
@@ -71,20 +71,20 @@ describe('dynamic className rejection branches', () => {
 
     it('skips a ternary branch that carries an unrecognized class', () => {
         const src = 'const A = ({ on }) => <div className={on ? "totally-unknownx" : "m-2"} />;';
-        const out = transformSource(src, 'test.tsx');
+        const out = transformSource(src, { filename: 'test.tsx' });
         // An unrecognized branch makes the whole ternary unmigratable → left as-is.
         expect(out.code).toContain('totally-unknownx');
     });
 
     it('skips a logical && whose right side is an unrecognized class', () => {
         const src = 'const A = ({ on }) => <div className={on && "totally-unknownx"} />;';
-        const out = transformSource(src, 'test.tsx');
+        const out = transformSource(src, { filename: 'test.tsx' });
         expect(out.code).toContain('&& "totally-unknownx"');
     });
 
     it('skips a template literal that has no static base classes', () => {
         const src = 'const A = ({ x }) => <div className={`${x}`} />;';
-        const out = transformSource(src, 'test.tsx');
+        const out = transformSource(src, { filename: 'test.tsx' });
         expect(out.changed).toBe(false);
     });
 });

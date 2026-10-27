@@ -814,9 +814,12 @@ test('the committed browser module carries every worded console or thrown id', (
     const exported = [...source.matchAll(/^export const (\w+)/gm)].map(([, name]) => name);
     assert.deepEqual(
         exported,
-        (generator.browserDiagnostics?.(registry) ?? []).map(({ id }) =>
+        (generator.browserDiagnostics?.(registry) ?? []).flatMap(({ id, formExports = [] }) => [
             generator.browserConstName(id),
-        ),
+            ...formExports.map(
+                form => `${generator.browserConstName(id)}__${generator.browserConstName(form)}`,
+            ),
+        ]),
     );
     assert.ok(!source.includes('diagnostic-registry.generated'));
 });
@@ -1012,6 +1015,89 @@ test('the browser module leaves out the words of a form only the build reports',
         source,
     );
     assert.ok(!source.includes('write the one key.'), source);
+});
+
+test('a form export carries that form alone, a build form included', () => {
+    const input = {
+        ...registryOf([
+            entry({
+                id: 'options-object-required',
+                surfaces: { error: { host: 'both' } },
+                forms: ['transform', 'engine-call'],
+                buildForms: ['engine-call'],
+                formExports: ['engine-call'],
+                args: {
+                    form: { type: ['enum', 'transform', 'engine-call'] },
+                    call: { type: 'string', optional: true },
+                },
+                text: { transform: '`transform` takes one.', 'engine-call': '`{call}` takes one.' },
+                help: { transform: 'write the object.', 'engine-call': 'write the keys.' },
+            }),
+        ]),
+        CONSTANTS: {},
+    };
+    assert.deepEqual(validateRegistry(input), []);
+    const source = generator.renderBrowserModule?.(input) ?? '';
+    const sliced = source
+        .split('\n')
+        .find(line => line.startsWith('export const OPTIONS_OBJECT_REQUIRED__ENGINE_CALL:'));
+    assert.ok(sliced, source);
+    assert.ok(sliced.includes('"text":{"engine-call":"`{call}` takes one."}'), sliced);
+    assert.ok(sliced.includes('"help":{"engine-call":"write the keys."}'), sliced);
+    assert.ok(!sliced.includes('`transform` takes one.'), sliced);
+    // The whole entry still leaves the build form out.
+    const whole = source
+        .split('\n')
+        .find(line => line.startsWith('export const OPTIONS_OBJECT_REQUIRED:'));
+    assert.ok(whole && !whole.includes('`{call}` takes one.'), whole);
+});
+
+test('a form export leaves out the words of every other form, whatever their shape', () => {
+    const input = {
+        ...registryOf([
+            entry({
+                id: 'options-object-required',
+                surfaces: { error: { host: 'both' } },
+                forms: ['transform', 'engine-call'],
+                formExports: ['engine-call'],
+                args: {
+                    form: { type: ['enum', 'transform', 'engine-call'] },
+                    call: { type: 'string', optional: true },
+                },
+                text: { transform: '`transform` takes one.', 'engine-call': '`{call}` takes one.' },
+                help: { transform: 'write the object.' },
+                note: 'both are refused.',
+            }),
+        ]),
+        CONSTANTS: {},
+    };
+    assert.deepEqual(validateRegistry(input), []);
+    const sliced = (generator.renderBrowserModule?.(input) ?? '')
+        .split('\n')
+        .find(line => line.startsWith('export const OPTIONS_OBJECT_REQUIRED__ENGINE_CALL:'));
+    assert.ok(sliced);
+    // A help with no words for the form carries none, not the other forms'.
+    assert.ok(!sliced.includes('write the object.'), sliced);
+    assert.ok(!sliced.includes('"help"'), sliced);
+    // A sentence shared by every form is the form's too.
+    assert.ok(sliced.includes('"note":"both are refused."'), sliced);
+});
+
+test('a form export is one of the entry forms', () => {
+    const problems = validateRegistry(
+        registryOf([
+            entry({
+                forms: ['a', 'b'],
+                formExports: ['c'],
+                args: { form: { type: ['enum', 'a', 'b'] }, key: { type: 'string' } },
+                text: { a: 'a.', b: 'b.' },
+            }),
+        ]),
+    );
+    assert.ok(
+        problems.some(problem => /form export c is not one of its forms/.test(problem)),
+        problems.join('\n'),
+    );
 });
 
 test('a build form is one of the entry forms', () => {

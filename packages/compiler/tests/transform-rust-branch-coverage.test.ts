@@ -22,7 +22,7 @@ describe('transform-rust with the real native addon', () => {
     });
 
     it('transformRust lowers a single sz object', () => {
-        const result = transformRust(SZ_SOURCE, 'a.tsx');
+        const result = transformRust(SZ_SOURCE, { filename: 'a.tsx' });
         expect(result.code).toContain('p-4');
         expect(result.classes.has('p-4')).toBe(true);
         expect(result.transformed).toBe(true);

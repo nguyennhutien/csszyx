@@ -221,11 +221,11 @@ describe('the mask layer-value warning fires in a browser dev context', () => {
 describe('revived value mappings', () => {
     it.each(ENGINES)('%s lowers ring none to ring-0', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ ring: 'none' }} />;";
-        expect(engine(tsx, '/p/t.tsx').code).toContain('ring-0');
+        expect(engine(tsx, { filename: '/p/t.tsx' }).code).toContain('ring-0');
     });
 
     it.each(ENGINES)('%s lowers fontFeatures normal to the bracketed form', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ fontFeatures: 'normal' }} />;";
-        expect(engine(tsx, '/p/t.tsx').code).toContain('font-features-[normal]');
+        expect(engine(tsx, { filename: '/p/t.tsx' }).code).toContain('font-features-[normal]');
     });
 });

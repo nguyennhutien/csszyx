@@ -62,16 +62,27 @@ const constName = (id: string): string => id.toUpperCase().replaceAll('-', '_');
  * literals of the module (`//#region src/diagnostic-browser.generated.ts`).
  */
 const THROWN_BY_ENTRY = {
-    'engine.ts': ['ENGINE_VERSION_SKEW', 'INTERNAL_ERROR', 'WASM_ENGINE_UNAVAILABLE'],
+    'engine.ts': [
+        'ENGINE_VERSION_SKEW',
+        'INTERNAL_ERROR',
+        'OPTIONS_OBJECT_REQUIRED__ENGINE_CALL',
+        'WASM_ENGINE_UNAVAILABLE',
+    ],
     'internal.ts': [
         'ENGINE_VERSION_SKEW',
         'INTERNAL_ERROR',
+        'OPTIONS_OBJECT_REQUIRED__ENGINE_CALL',
         'PEER_MODULE_UNRESOLVED',
         'TEMPLATE_RUNTIME_VALUE',
         'TEMPLATE_SZ_INVALID',
         'WASM_ENGINE_UNAVAILABLE',
     ],
-    'migrate-rust.ts': ['ENGINE_VERSION_SKEW', 'INTERNAL_ERROR', 'NATIVE_MIGRATE_UNAVAILABLE'],
+    'migrate-rust.ts': [
+        'ENGINE_VERSION_SKEW',
+        'INTERNAL_ERROR',
+        'NATIVE_MIGRATE_UNAVAILABLE',
+        'OPTIONS_OBJECT_REQUIRED__ENGINE_CALL',
+    ],
 } as const;
 
 describe('the engine entries load no lowering', () => {
@@ -106,7 +117,9 @@ describe('the engine entries load no lowering', () => {
             return host === 'node' || host === 'both';
         }).map(spec => constName(spec.id));
         for (const thrown of Object.values(THROWN_BY_ENTRY)) {
-            expect(nodeErrors).toEqual(expect.arrayContaining([...thrown]));
+            // A one-form export (`<ID>__<FORM>`) is the words of its id.
+            const ids = thrown.map(name => name.split('__')[0]);
+            expect(nodeErrors).toEqual(expect.arrayContaining(ids));
         }
     });
 

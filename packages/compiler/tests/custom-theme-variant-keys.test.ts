@@ -97,7 +97,7 @@ export const A = () => <>
     // classes the file emits: a spread's group under `hover` once named a bare
     // `mt-13` beside `hover:mb-13`.
     it('names in its merge groups only classes the file emits', () => {
-        const result = engine(source, '/p/src/A.tsx') as {
+        const result = engine(source, { filename: '/p/src/A.tsx' }) as {
             classes: Iterable<string>;
             mergeGroups?: ReadonlyArray<{ classes: string[] }>;
             singleClassGroups?: ReadonlyArray<{ classes: string[] }>;
@@ -111,7 +111,9 @@ export const A = () => <>
     });
 
     it('collects the spread classes under a custom variant as under a known one', () => {
-        const classes = [...(engine(source, '/p/src/A.tsx').classes as Iterable<string>)].sort();
+        const classes = [
+            ...(engine(source, { filename: '/p/src/A.tsx' }).classes as Iterable<string>),
+        ].sort();
         expect(classes).toEqual([
             'desktop-sm:mb-19',
             'desktop-sm:mt-19',

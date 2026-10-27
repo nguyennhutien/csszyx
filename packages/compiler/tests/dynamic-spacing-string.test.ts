@@ -14,7 +14,10 @@ import { ENGINES } from './engine-parity-harness.js';
 
 const RUNNERS = ENGINES.map(
     ([name, transform]) =>
-        [name, (jsx: string) => transform(jsx, 'probe.tsx', {}) as SourceTransformResult] as const,
+        [
+            name,
+            (jsx: string) => transform(jsx, { filename: 'probe.tsx' }) as SourceTransformResult,
+        ] as const,
 );
 
 describe.each(RUNNERS)('dynamic spacing/unit lowering (%s)', (_name, run) => {

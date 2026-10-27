@@ -4,7 +4,7 @@ import { ENGINES as engines } from './engine-parity-harness.js';
 
 function expectClasses(source: string, expected: readonly string[]): void {
     for (const [name, transform] of engines) {
-        const result = transform(source, 'special-case.tsx');
+        const result = transform(source, { filename: 'special-case.tsx' });
         expect([...(result.classes ?? [])].sort(), name).toEqual([...expected].sort());
     }
 }
@@ -42,7 +42,7 @@ describe('static special-case parser parity', () => {
         `;
         expectClasses(source, ['p-4', 'bg-linear-to-br']);
         for (const [name, transform] of engines) {
-            const result = transform(source, 'static-array.tsx');
+            const result = transform(source, { filename: 'static-array.tsx' });
             expect(result.code, name).not.toContain('_sz(');
             expect(result.code, name).toContain('p-4 bg-linear-to-br');
         }
@@ -55,7 +55,7 @@ describe('static special-case parser parity', () => {
         `;
         expectClasses(source, ['p-4', 'm-2']);
         for (const [name, transform] of engines) {
-            const result = transform(source, 'conditional-array.tsx');
+            const result = transform(source, { filename: 'conditional-array.tsx' });
             expect(result.code, name).toContain('szcn("p-4", active && "m-2")');
             expect(result.code, name).not.toContain('_sz([layout');
         }
@@ -103,7 +103,7 @@ describe('static special-case parser parity', () => {
         // Every engine resolves it at build time: static classes stay literal
         // and only the conditional becomes a runtime ternary — no `_sz(...)`.
         for (const [name, transform] of engines) {
-            const result = transform(tsx, 'spread-conditional.tsx');
+            const result = transform(tsx, { filename: 'spread-conditional.tsx' });
             expect(result.code, name).not.toContain('_sz(');
             expect(result.code, name).toContain('shrunk ? "scale-75" : "scale-100"');
             expect(result.code, name).toContain('ease-(--custom-backinout)');

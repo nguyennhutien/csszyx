@@ -36,7 +36,7 @@ it('places a cached diagnostic at its line and column', () => {
     const source = "export const A = () => (\n    <div sz={{ workBreak: 'all' }} />\n);\n";
     writeFileSync(file, source);
     const cacheRoot = join(root, '.csszyx/cache/transform');
-    const result = transformSource(source, file);
+    const result = transformSource(source, { filename: file });
     expect(result.issues?.[0]?.line).toBe(2);
     writeTransformCache(
         cacheRoot,
@@ -74,7 +74,7 @@ it('replays a finding the build cached unrendered, rendered whole with its sugge
     const source = "export const A = () => (\n    <div sz={{ workBreak: 'all' }} />\n);\n";
     writeFileSync(file, source);
     const cacheRoot = join(root, '.csszyx/cache/transform');
-    const result = transformSourceUnrendered(source, file, { rootDir: root });
+    const result = transformSourceUnrendered(source, { filename: file, rootDir: root });
     writeTransformCache(
         cacheRoot,
         {

@@ -1,3 +1,4 @@
+import { engineCallOptions } from './engine-call-options.js';
 import { chooseEngine } from './engine-choice.js';
 import type { ParserMode } from './parser-mode.js';
 import { scanGlobalVarUsagesRust } from './transform-rust.js';
@@ -46,6 +47,8 @@ export interface ScanGlobalVarUsagesOptions {
      * choice when omitted.
      */
     parser?: ParserMode;
+    /** Source filename; its extension picks the grammar. `file.tsx` when absent. */
+    filename?: string;
 }
 
 /** Which usages a batch scan reports, as it crosses into the engine. */
@@ -70,15 +73,18 @@ export interface GlobalVarSourceFile {
  * syntax error: none of its usages could be checked.
  *
  * @param source Source text.
- * @param filename Source filename.
- * @param options Scanner options.
+ * @param options Its filename, and the scanner options.
+ * @param rest nothing; a third argument is refused.
  * @returns Out-of-band usage diagnostics.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function scanGlobalVarUsages(
     source: string,
-    filename = 'file.tsx',
     options: ScanGlobalVarUsagesOptions = {},
+    ...rest: never[]
 ): GlobalVarUsageDiagnostic[] {
+    engineCallOptions('scanGlobalVarUsages', options, rest);
+    const { filename = 'file.tsx' } = options;
     const scan =
         chooseEngine(options.parser) === 'rust' ? scanGlobalVarUsagesRust : scanGlobalVarUsagesWasm;
     const query: GlobalVarUsageQuery =

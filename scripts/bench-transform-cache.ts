@@ -137,7 +137,7 @@ function tryPreloadRustBinding(): boolean {
     // Final smoke: `transformRust` must reach the binding through the public
     // entry without throwing `RustTransformUnavailableError`.
     try {
-        transformRust('const X = () => <div sz={{ p: 4 }} />;', '/bench/preload.tsx');
+        transformRust('const X = () => <div sz={{ p: 4 }} />;', { filename: '/bench/preload.tsx' });
         return true;
     } catch {
         return false;
@@ -271,7 +271,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of szFiles) {
-                        transformWasm(file.source, file.filename);
+                        transformWasm(file.source, { filename: file.filename });
                     }
                 },
                 'Baseline: transform every sz file with the wasm artifact and do no cache I/O.',
@@ -289,7 +289,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                         const cacheRoot = resolveTransformCacheDir(root);
                         for (const file of szFiles) {
                             const input = cacheInput(file.filename, file.source);
-                            const result = transformWasm(file.source, file.filename);
+                            const result = transformWasm(file.source, { filename: file.filename });
                             writeTransformCache(cacheRoot, input, result);
                         }
                     } finally {
@@ -307,7 +307,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 writeTransformCache(
                     warmCacheRoot,
                     cacheInput(file.filename, file.source),
-                    transformWasm(file.source, file.filename),
+                    transformWasm(file.source, { filename: file.filename }),
                 );
             }
             stats.push(
@@ -338,7 +338,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
             const input = cacheInput(file.filename, file.source);
             memoryCache.set(
                 createTransformCacheKey(input).key,
-                transformWasm(file.source, file.filename),
+                transformWasm(file.source, { filename: file.filename }),
             );
         }
         stats.push(
@@ -386,7 +386,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of noSzFiles) {
-                        transformWasm(file.source, file.filename);
+                        transformWasm(file.source, { filename: file.filename });
                     }
                 },
                 'Compiler-only no-sz fast path for comparison; real unplugin skips before this.',
@@ -417,7 +417,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of files) {
-                        transformSource(file.source, file.filename);
+                        transformSource(file.source, { filename: file.filename });
                     }
                 },
                 'Engine selection via transformSource(): native when the addon loads, else wasm.',
@@ -430,7 +430,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of files) {
-                        transformWasm(file.source, file.filename);
+                        transformWasm(file.source, { filename: file.filename });
                     }
                 },
                 'Wasm artifact of the Rust engine via transformWasm().',
@@ -444,7 +444,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     opts,
                     () => {
                         for (const file of files) {
-                            transformRust(file.source, file.filename);
+                            transformRust(file.source, { filename: file.filename });
                         }
                     },
                     'Rust native maximum-speed parser path (oxc-parser + string_wizard via napi-rs).',
@@ -496,7 +496,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
             opts,
             () => {
                 for (const file of hmrFiles) {
-                    transformWasm(file.source, file.filename);
+                    transformWasm(file.source, { filename: file.filename });
                 }
             },
             'HMR-shaped baseline: one edited file per transformWasm call through the wasm artifact.',
@@ -510,7 +510,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of hmrFiles) {
-                        transformRust(file.source, file.filename);
+                        transformRust(file.source, { filename: file.filename });
                     }
                 },
                 'HMR-shaped Rust path: one edited file per transformRust call.',
@@ -556,7 +556,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 1,
                 opts,
                 () => {
-                    transformSource(fixture.source, `/bench/${fixture.name}.tsx`);
+                    transformSource(fixture.source, { filename: `/bench/${fixture.name}.tsx` });
                 },
                 'Single-fixture transformSource() timing (native when present, else wasm).',
             ),
@@ -567,7 +567,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 1,
                 opts,
                 () => {
-                    transformWasm(fixture.source, `/bench/${fixture.name}.tsx`);
+                    transformWasm(fixture.source, { filename: `/bench/${fixture.name}.tsx` });
                 },
                 'Single-fixture wasm artifact timing.',
             ),
@@ -579,7 +579,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     1,
                     opts,
                     () => {
-                        transformRust(fixture.source, `/bench/${fixture.name}.tsx`);
+                        transformRust(fixture.source, { filename: `/bench/${fixture.name}.tsx` });
                     },
                     'Single-fixture Rust path timing.',
                 ),
@@ -680,7 +680,7 @@ function countParserPaths(rows: NativeTransformResult[]): Record<string, number>
  */
 function assertRustUnavailableThrows(source: string, filename: string): void {
     try {
-        transformRust(source, filename);
+        transformRust(source, { filename: filename });
     } catch (err) {
         if (err instanceof Error && err.name === 'RustTransformUnavailableError') {
             return;

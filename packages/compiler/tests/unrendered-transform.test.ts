@@ -29,8 +29,8 @@ describe.each(UNRENDERED_ENGINES)(
             let issues = 0;
             for (const { source, filename, options } of FREEZE_SOURCES) {
                 const file = filename ?? 'src/freeze.tsx';
-                const eager = rendered(source, file, options);
-                const lazy = unrendered(source, file, options);
+                const eager = rendered(source, { filename: file, ...options });
+                const lazy = unrendered(source, { filename: file, ...options });
 
                 expect(lazy.diagnostics).toEqual([]);
                 expect(lazy.issues?.map(issue => issue.code)).toEqual(
@@ -50,7 +50,7 @@ describe.each(UNRENDERED_ENGINES)(
 
         it('computes no suggestion for an unknown key until it is rendered', () => {
             const authored = "export const A = () => <div sz={{ workBreak: 'all' }} />;";
-            const [issue] = unrendered(authored, '/p/src/A.tsx').issues ?? [];
+            const [issue] = unrendered(authored, { filename: '/p/src/A.tsx' }).issues ?? [];
 
             expect(issue?.args).toEqual({ key: 'workBreak' });
         });
@@ -58,11 +58,11 @@ describe.each(UNRENDERED_ENGINES)(
         it('names the file a rendered header names: relative to the root it was given', () => {
             const authored = "export const A = () => <div sz={{ workBreak: 'all' }} />;";
 
-            expect(unrendered(authored, '/p/src/A.tsx', { rootDir: '/p' }).diagnosticFile).toBe(
-                'src/A.tsx',
-            );
             expect(
-                rendered(authored, '/p/src/A.tsx', { rootDir: '/p' }).diagnostics?.[0],
+                unrendered(authored, { filename: '/p/src/A.tsx', rootDir: '/p' }).diagnosticFile,
+            ).toBe('src/A.tsx');
+            expect(
+                rendered(authored, { filename: '/p/src/A.tsx', rootDir: '/p' }).diagnostics?.[0],
             ).toContain('unknown-key: src/A.tsx:1:');
         });
     },
@@ -91,8 +91,8 @@ describe.skipIf(!RUST_LANE)('transformRustBatchUnrendered', () => {
 describe('transformSourceUnrendered', () => {
     it('answers as the artifact transformSource picks does, unrendered', () => {
         const authored = "export const A = () => <div sz={{ workBreak: 'all', p: 4 }} />;";
-        const eager = transformSource(authored, '/p/src/A.tsx');
-        const lazy = transformSourceUnrendered(authored, '/p/src/A.tsx');
+        const eager = transformSource(authored, { filename: '/p/src/A.tsx' });
+        const lazy = transformSourceUnrendered(authored, { filename: '/p/src/A.tsx' });
 
         expect(lazy.code).toBe(eager.code);
         expect(lazy.diagnostics).toEqual([]);
@@ -106,9 +106,11 @@ describe('diagnosticFileOf', () => {
     it('reads the path of an unrendered result, and nothing from a rendered one', () => {
         const authored = "export const A = () => <div sz={{ workBreak: 'all' }} />;";
 
-        expect(diagnosticFileOf(transformSourceUnrendered(authored, 'src/A.tsx'))).toBe(
-            'src/A.tsx',
-        );
-        expect(diagnosticFileOf(transformSource(authored, 'src/A.tsx'))).toBeUndefined();
+        expect(
+            diagnosticFileOf(transformSourceUnrendered(authored, { filename: 'src/A.tsx' })),
+        ).toBe('src/A.tsx');
+        expect(
+            diagnosticFileOf(transformSource(authored, { filename: 'src/A.tsx' })),
+        ).toBeUndefined();
     });
 });

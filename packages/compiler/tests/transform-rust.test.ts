@@ -40,10 +40,9 @@ describe('isRustTransformAvailable — non-throwing native probe', () => {
 describe('transformRust native wrapper', () => {
     it('transforms through native when available and otherwise fails explicitly', () => {
         try {
-            const result = transformRust(
-                'const App = () => <div sz={{ p: 4 }} />;',
-                '/repo/src/App.tsx',
-            );
+            const result = transformRust('const App = () => <div sz={{ p: 4 }} />;', {
+                filename: '/repo/src/App.tsx',
+            });
             expect(result.code).toContain('className="p-4"');
             expect(result.transformed).toBe(true);
         } catch (err) {
@@ -89,7 +88,7 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
     it('drops ALL classes (no silent partial safelist) when the default budget trips', () => {
         let result: ReturnType<typeof transformRust>;
         try {
-            result = transformRust(bigSource, '/repo/src/Big.tsx');
+            result = transformRust(bigSource, { filename: '/repo/src/Big.tsx' });
         } catch (err) {
             expect(err).toBeInstanceOf(RustTransformUnavailableError);
             return;
@@ -108,7 +107,10 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
     it('honours options.astBudget end to end (build.astBudgetLimit reaches the native parser)', () => {
         let result: ReturnType<typeof transformRust>;
         try {
-            result = transformRust(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
+            result = transformRust(bigSource, {
+                filename: '/repo/src/Big.tsx',
+                astBudget: 2_000_000,
+            });
         } catch (err) {
             expect(err).toBeInstanceOf(RustTransformUnavailableError);
             return;
@@ -119,13 +121,16 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
     });
 
     it('the wasm artifact obeys the same budget knob', () => {
-        const tripped = transformWasm(bigSource, '/repo/src/Big.tsx');
+        const tripped = transformWasm(bigSource, { filename: '/repo/src/Big.tsx' });
         expect(tripped.issues.map(issue => [issue.code, issue.args])).toEqual([
             ['ast-budget', { form: 'transform' }],
         ]);
         expect(tripped.diagnostics[0]).toMatch(/^\[csszyx\] ast-budget: \/repo\/src\/Big\.tsx\n/);
         expect(tripped.classes.size).toBe(0);
-        const raised = transformWasm(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
+        const raised = transformWasm(bigSource, {
+            filename: '/repo/src/Big.tsx',
+            astBudget: 2_000_000,
+        });
         expect(raised.classes.has('mx-0')).toBe(true);
     });
 });

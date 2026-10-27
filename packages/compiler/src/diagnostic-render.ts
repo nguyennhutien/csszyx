@@ -59,6 +59,7 @@ function specOf(code: SzDiagnosticId): SzDiagnosticRenderSpec {
  *
  * @param id - Any string, such as an id a user wrote.
  * @returns True for an id the registry lists as live.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function isSzDiagnosticId(id: string): id is SzDiagnosticId {
     return SPECS.has(id);
@@ -94,6 +95,7 @@ export interface IdentifiedDiagnostic {
  *
  * @param code - The code.
  * @returns Its position kind.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function szDiagnosticPositionOf(code: SzDiagnosticId): SzDiagnosticRenderSpec['position'] {
     return specOf(code).position;

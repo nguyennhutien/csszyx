@@ -39,7 +39,11 @@ function fallbackOf(args: Args): { reason: string; suggestion: string } {
     );
 }
 
-/** Every computed value, by the name a template uses. */
+/**
+ * Every computed value, by the name a template uses.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export const SZ_DIAGNOSTIC_COMPUTED_VALUES: Readonly<Record<string, SzDiagnosticComputed>> = {
     ...SZ_BROWSER_DIAGNOSTIC_COMPUTED_VALUES,
     fallbackReason: args => fallbackOf(args).reason,

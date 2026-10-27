@@ -124,13 +124,12 @@ function bothWays(
     provider: string,
 ): { local: string | undefined; imported: string | undefined } {
     const use = 'export const A = () => <div sz={card} />;';
-    const local = engine(`${asLocal(provider)}\n${use}`, '/p/Local.tsx').code;
+    const local = engine(`${asLocal(provider)}\n${use}`, { filename: '/p/Local.tsx' }).code;
     const registries = registriesFor(entriesOf(scanner, provider));
-    const imported = engine(
-        `import { card } from './styles';\n${use}`,
-        '/p/Card.tsx',
-        registries,
-    ).code;
+    const imported = engine(`import { card } from './styles';\n${use}`, {
+        filename: '/p/Card.tsx',
+        ...registries,
+    }).code;
     return { local: classNameOf(local), imported: classNameOf(imported) };
 }
 
@@ -194,16 +193,14 @@ describe('an exported szv factory qualifies iff the same config precompiles loca
     for (const [lane, engine, scanner] of lanes()) {
         it.each(SZV_SHAPES)(`${lane}: %s`, (_label, config, expected) => {
             const provider = `${SZV_PRELUDE}export const card = szv(${config});`;
-            const local = engine(
-                `${SZR_IMPORT}${asLocal(provider)}\n${SZR_USE}`,
-                '/p/Local.tsx',
-            ).code;
+            const local = engine(`${SZR_IMPORT}${asLocal(provider)}\n${SZR_USE}`, {
+                filename: '/p/Local.tsx',
+            }).code;
             const registries = registriesFor(entriesOf(scanner, provider));
-            const imported = engine(
-                `${SZR_IMPORT}import { card } from './styles';\n${SZR_USE}`,
-                '/p/Card.tsx',
-                registries,
-            ).code;
+            const imported = engine(`${SZR_IMPORT}import { card } from './styles';\n${SZR_USE}`, {
+                filename: '/p/Card.tsx',
+                ...registries,
+            }).code;
             expect(collapsedSzr(local)).toBe(expected);
             expect(collapsedSzr(imported)).toBe(collapsedSzr(local));
         });
@@ -215,7 +212,9 @@ describe('the bundler entry point', () => {
         // `extractCrossModuleRegistryEntries` reads through whichever artifact
         // the host runs; that answer must be the one each artifact gives.
         for (const [, provider] of OBJECT_SHAPES) {
-            const expected = extractCrossModuleRegistryEntries(provider, '/p/styles.ts');
+            const expected = extractCrossModuleRegistryEntries(provider, {
+                filename: '/p/styles.ts',
+            });
             expect(expected).toHaveLength(1);
             for (const [lane, , scanner] of lanes()) {
                 expect(entriesOf(scanner, provider), `${lane}: ${provider}`).toEqual(expected);

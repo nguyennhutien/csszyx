@@ -692,7 +692,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "options-object-required",
         "position": "none",
-        "args": "form options?",
+        "args": "form options? call?",
         "joiners": {
             "options": "`, `"
         }

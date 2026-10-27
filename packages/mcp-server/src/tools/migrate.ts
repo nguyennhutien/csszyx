@@ -42,7 +42,8 @@ export type MigrateInput = z.infer<typeof migrateSchema>;
 export function handleMigrate(input: MigrateInput): {
     content: Array<{ type: 'text'; text: string }>;
 } {
-    const result = migrateSource(input.code, 'snippet.tsx', {
+    const result = migrateSource(input.code, {
+        filename: 'snippet.tsx',
         injectTodos: input.injectTodos,
         customMap: input.customMap as CsszyxTodoMap | undefined,
     });

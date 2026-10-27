@@ -31,7 +31,10 @@ const TABLE: EngineMergeTable = {
 function transformElement(element: string, mergeTable?: EngineMergeTable) {
     const source = `export const A = ({ c, n, r }) => ${element};`;
     return ENGINES.map(([name, transform]) => {
-        const result = transform(source, 'a.tsx', mergeTable ? { mergeTable } : {});
+        const result = transform(source, {
+            filename: 'a.tsx',
+            ...(mergeTable ? { mergeTable } : {}),
+        });
         return {
             name,
             code: normalizeEmit(result.code ?? ''),

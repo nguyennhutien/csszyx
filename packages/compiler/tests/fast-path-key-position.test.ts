@@ -13,7 +13,7 @@ import { ENGINES } from './engine-parity-harness.js';
 describe.each(ENGINES)('fast-path key positions — %s', (_name, transform) => {
     it('reports a key on a later line of the object on that line', () => {
         const source = 'export const A = () => <div sz={{\n  p: 4,\n  xyzzy: 4,\n}} />;';
-        const result = transform(source, '/p/src/A.tsx');
+        const result = transform(source, { filename: '/p/src/A.tsx' });
 
         expect(
             result.issues?.map(issue => [issue.code, issue.args, issue.line, issue.column]),

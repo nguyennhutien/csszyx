@@ -197,7 +197,7 @@ function engineDiagnostics(sz: Record<string, unknown>): ToolDiagnostic[] {
     try {
         const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
         // Both engine artifacts always report the issue list.
-        const { issues } = transformSource(source, PREVIEW_FILE);
+        const { issues } = transformSource(source, { filename: PREVIEW_FILE });
         return (issues as SzDiagnosticIssue[]).map(toolDiagnostic);
     } catch {
         return [];

@@ -25,7 +25,7 @@ function parseErrors(
     engine: (typeof ENGINES)[number][1],
     source: string,
 ): Array<[unknown, unknown, number | undefined, number | undefined]> {
-    return (engine(source, 'src/Broken.tsx').issues ?? [])
+    return (engine(source, { filename: 'src/Broken.tsx' }).issues ?? [])
         .filter(issue => issue.code === 'parse-error')
         .map(issue => {
             const args = issue.args as { form?: unknown; message?: unknown };
@@ -50,6 +50,6 @@ describe('a syntax error', () => {
 
     it.each(ENGINES)('%s leaves the file unchanged', (_name, engine) => {
         const source = `${PARSED}const broken = ;`;
-        expect(engine(source, 'src/Broken.tsx').code).toBe(source);
+        expect(engine(source, { filename: 'src/Broken.tsx' }).code).toBe(source);
     });
 });

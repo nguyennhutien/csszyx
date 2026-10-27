@@ -42,6 +42,26 @@ test('unwraps a type-locked literal', () => {
     assert.deepEqual(open('t.ts', source).objectKeys('VOCAB'), ['border', 'ring']);
 });
 
+test('unwraps a frozen literal', () => {
+    const source =
+        'export const MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({ p: "p", m: "m" });';
+
+    assert.deepEqual(open('t.ts', source).objectKeys('MAP'), ['p', 'm']);
+});
+
+test('reads through no call that is not a freeze of one literal', () => {
+    for (const source of [
+        'export const T = other({ p: "p" });',
+        'export const T = Object.freeze({ p: "p" }, extra);',
+    ]) {
+        assert.throws(
+            () => open('t.ts', source).objectKeys('T'),
+            /must be an object literal/,
+            source,
+        );
+    }
+});
+
 test('reads the keys of an object table that hold one value', () => {
     const source = [
         'const CATEGORY = {',

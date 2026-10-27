@@ -39,7 +39,7 @@ interface Frozen {
  */
 function freeze(engine: (typeof ENGINES)[number][1]): Frozen[] {
     return FREEZE_SOURCES.map(({ code, variant, source, filename, options }) => {
-        const result = engine(source, filename ?? FILENAME, options);
+        const result = engine(source, { filename: filename ?? FILENAME, ...options });
         const issues = (result.issues ?? []).map((issue, index) => ({
             code: issue.code,
             line: issue.line,

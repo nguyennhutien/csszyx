@@ -78,6 +78,7 @@ const CONFIG_FILES = [
  *
  * @param {string} cwd - Current working directory
  * @returns {string | null} Path to config file or null if not found
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function findConfigFile(cwd: string): string | null {
     for (const fileName of CONFIG_FILES) {
@@ -161,6 +162,7 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
  * const colors = { red: { 500: '#f00', 600: '#c00' }, white: '#fff' };
  * flattenColors(colors); // ['red-500', 'red-600', 'white']
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function flattenColors(colors: Record<string, string | Record<string, string>>): string[] {
     const result: string[] = [];
@@ -196,6 +198,7 @@ export function flattenColors(colors: Record<string, string | Record<string, str
  *
  * @param {Record<string, string>} spacing - Tailwind spacing object
  * @returns {string[]} Array of spacing keys (e.g., '0', '1', '2', 'px')
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function extractSpacingKeys(spacing: Record<string, string>): string[] {
     return Object.keys(spacing).sort((a, b) => {
@@ -221,6 +224,7 @@ export function extractSpacingKeys(spacing: Record<string, string>): string[] {
  *
  * @param {Record<string, string>} screens - Tailwind screens object
  * @returns {string[]} Array of screen names (e.g., 'sm', 'md', 'lg')
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function extractScreenKeys(screens: Record<string, string>): string[] {
     return Object.keys(screens);

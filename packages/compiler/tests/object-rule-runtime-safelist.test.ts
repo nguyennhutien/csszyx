@@ -25,8 +25,9 @@ describe.each(ENGINES)('%s runtime candidates with the object rule', (_, transfo
                     for (const sz of [object, `[${object}]`]) {
                         it(`safelists runtime classes in ${sz}`, () => {
                             const source = `export const A=({c,width})=><><div sz={{pb:2,p:4}}/><div sz={${sz}}/><div sz={{pb:2,p:4}}/></>`;
-                            const plain = transform(source, 'a.tsx', { classPrefix });
-                            const merged = transform(source, 'a.tsx', {
+                            const plain = transform(source, { filename: 'a.tsx', classPrefix });
+                            const merged = transform(source, {
+                                filename: 'a.tsx',
                                 classPrefix,
                                 mergeTable: table,
                             });

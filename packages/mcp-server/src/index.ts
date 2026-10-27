@@ -80,6 +80,7 @@ export const server = new McpServer(
 // TOOL DEFINITIONS
 // ============================================================================
 
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const TOOLS = [
     {
         name: 'csszyx_expand',
@@ -333,6 +334,7 @@ server.server.setRequestHandler(GetPromptRequestSchema, request => {
  *
  * @param argv - process arguments (`process.argv.slice(2)`).
  * @returns whether a flag was handled.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function handleCliFlags(argv: string[]): boolean {
     if (argv.includes('--version') || argv.includes('-v')) {
@@ -381,6 +383,7 @@ async function main(): Promise<void> {
  * when a test imports it to exercise the handlers in-process. realpath so the
  * bin symlink (node_modules/.bin/csszyx-mcp) still resolves to this module.
  * @returns Whether this module was run directly.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function isEntrypoint(): boolean {
     const invoked = process.argv[1];
@@ -398,6 +401,7 @@ export function isEntrypoint(): boolean {
  *
  * @param entry - Whether this module is the entry point.
  * @param start - What starts the server; the stdio server by default.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export async function startWhenEntrypoint(
     entry: boolean,

@@ -12,7 +12,7 @@ import { transformWasm } from '../src/transform-wasm.js';
 import { ENGINES } from './engine-parity-harness.js';
 
 function warnsSpread(source: string): boolean {
-    return transformWasm(source, 'App.tsx').issues.some(
+    return transformWasm(source, { filename: 'App.tsx' }).issues.some(
         issue => issue.code === 'unresolvable-spread',
     );
 }
@@ -98,18 +98,18 @@ describe('a finite ternary in a value sub-property expands into both branches', 
         'const X = ({ c }) => <div sz={{ bg: { color: "black", op: c ? 30 : 100 } }} />;';
 
     it('never emits the dead bg:op-N modifier', () => {
-        const { code } = transformWasm(source, 'App.tsx');
+        const { code } = transformWasm(source, { filename: 'App.tsx' });
         expect(code).not.toContain('bg:op-');
     });
 
     it('expands statically — no runtime fallback', () => {
-        const { code } = transformWasm(source, 'App.tsx');
+        const { code } = transformWasm(source, { filename: 'App.tsx' });
         expect(code).not.toContain('_sz(');
         expect(code).toContain('c ? "bg-black/30" : "bg-black/100"');
     });
 
     it('matches the runtime lowering (parity)', () => {
-        const code = transformWasm(source, 'App.tsx').code;
+        const code = transformWasm(source, { filename: 'App.tsx' }).code;
         const runtime = transform({ bg: { color: 'black', op: 30 } }); // sanity: branch is real
         expect(runtime.className).toBe('bg-black/30');
         expect(code).toContain('bg-black/30');
@@ -147,10 +147,9 @@ describe('an unresolvable sz spread warns, other fallbacks stay quiet', () => {
     // The nudge would say the object cannot be read and to use a literal one;
     // the spread notice names the part that cannot be read and the fix.
     it.each(ENGINES)('%s reports the spread alone, with no fallback nudge', (_name, engine) => {
-        const result = engine(
-            'const X = ({ props }) => <div sz={{ ...props, p: 4 }} />;',
-            'App.tsx',
-        );
+        const result = engine('const X = ({ props }) => <div sz={{ ...props, p: 4 }} />;', {
+            filename: 'App.tsx',
+        });
 
         expect(result.issues?.map(issue => issue.code)).toEqual(['unresolvable-spread']);
     });

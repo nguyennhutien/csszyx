@@ -61,7 +61,10 @@ const STYLE_VALUES = ['solid', 'dashed', 'dotted', 'double', 'hidden', 'none'] a
  * @param szObject - The object source, without the surrounding braces.
  * @returns The captured run.
  */
-function compile(engine: (source: string, filename?: string) => unknown, szObject: string) {
+function compile(
+    engine: (source: string, options?: { filename?: string }) => unknown,
+    szObject: string,
+) {
     return captureWarnings(
         engine as never,
         `export const A = () => <div sz={${szObject}} />;`,

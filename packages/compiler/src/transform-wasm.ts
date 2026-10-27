@@ -19,6 +19,7 @@ import { createRequire } from 'node:module';
 // the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
 // where only these entries are needed.
 import { WASM_ENGINE_UNAVAILABLE } from './diagnostic-browser.generated.js';
+import { engineCallOptions } from './engine-call-options.js';
 import {
     diagnosticPath,
     type EngineDiagnosticFieldsOf,
@@ -36,7 +37,11 @@ import type {
 } from './global-var-diagnostics.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import { renderThrown } from './thrown-words.js';
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
+import type {
+    SourceTransformResult,
+    TransformSourceCodeOptions,
+    TransformSourceOptions,
+} from './transform-core.js';
 import {
     aggregateCssVariableMap,
     encodeCrossModuleStatics,
@@ -218,17 +223,22 @@ export function isWasmTransformAvailable(): boolean {
  * Transform source through the wasm build of the native engine.
  *
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
  */
 export function transformWasm(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): SourceTransformResult {
-    return transformWasmOne(source, filename, options, renderedDiagnosticFields);
+    return transformWasmOne(
+        source,
+        engineCallOptions('transformWasm', options, rest),
+        renderedDiagnosticFields,
+    );
 }
 
 /**
@@ -238,20 +248,20 @@ export function transformWasm(
  *
  * @internal The build lanes' transform; not a stable API.
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
  */
 export function transformWasmUnrendered(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): UnrenderedTransformResult {
     return transformWasmOne(
         source,
-        filename,
-        options,
+        engineCallOptions('transformWasmUnrendered', options, rest),
         unrenderedDiagnosticFields,
     ) as UnrenderedTransformResult;
 }
@@ -260,17 +270,16 @@ export function transformWasmUnrendered(
  * One file through the wasm engine.
  *
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param fileOptions Its filename for diagnostics, and the compiler options.
  * @param fields How to fill the diagnostic fields.
  * @returns Transform result.
  */
 function transformWasmOne(
     source: string,
-    filename: string | undefined,
-    options: TransformSourceCodeOptions | undefined,
+    fileOptions: TransformSourceOptions,
     fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
+    const { filename, ...options } = fileOptions;
     // Mirrors transformRust: an unnamed single file is `<anonymous>`.
     const [result] = runWasmBatch(
         [{ filename: filename ?? '<anonymous>', source }],

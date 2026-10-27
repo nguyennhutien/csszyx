@@ -312,6 +312,7 @@ function validateAliasPrefix(config: GlobalVarMangleConfig): string | null {
  *
  * @param config User-provided global variable alias config.
  * @returns Validation errors. Empty means the config shape is valid.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | undefined): string[] {
     if (!config) {
@@ -724,14 +725,15 @@ export type PartialCsszyxConfig = {
 /**
  * Default development configuration.
  */
-export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
-    debug: false,
-};
+export const DEFAULT_DEVELOPMENT_CONFIG: Readonly<DevelopmentConfig> =
+    /* @__PURE__ */ Object.freeze({
+        debug: false,
+    });
 
 /**
  * Default production configuration.
  */
-export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
+export const DEFAULT_PRODUCTION_CONFIG: Readonly<ProductionConfig> = /* @__PURE__ */ Object.freeze({
     // Off like the plugin's own default: mangling is obfuscation, not
     // compression (the map costs more than the class bytes it saves), so a
     // consumer merging these exported defaults must not get it implicitly.
@@ -739,7 +741,7 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
     minify: true,
-};
+});
 
 /**
  * Whether an imported static sz object is compiled, when nothing configures it.
@@ -748,13 +750,14 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
  * resolve an unset option through it, and reading it off the config object
  * makes it `boolean | undefined` — which forces each reader to invent a second
  * fallback for a case the config cannot produce.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const DEFAULT_IMPORTED_STATIC_SZ = true;
 
 /**
  * Default build configuration.
  */
-export const DEFAULT_BUILD_CONFIG: BuildConfig = {
+export const DEFAULT_BUILD_CONFIG: Readonly<BuildConfig> = /* @__PURE__ */ Object.freeze({
     emitManifest: false,
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
@@ -763,14 +766,14 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     parser: 'rust',
     importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
     mergeCoveredClasses: true,
-};
+});
 
 /**
  * Default hydration configuration.
  */
-export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
+export const DEFAULT_HYDRATION_CONFIG: Readonly<HydrationConfig> = /* @__PURE__ */ Object.freeze({
     strict: true,
-};
+});
 
 /**
  * Default csszyx configuration. Typed with the deprecated `CsszyxConfig` on
@@ -778,12 +781,12 @@ export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
  * consumers that read it keep that type until the deprecated one is removed.
  */
 // biome-ignore format: Sonar reads NOSONAR only on the line it flags.
-export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = { // NOSONAR: S1874, see above
+export const DEFAULT_CSSZYX_CONFIG: Readonly<CsszyxConfig> = /* @__PURE__ */ Object.freeze({ // NOSONAR: S1874, see above
     development: DEFAULT_DEVELOPMENT_CONFIG,
     production: DEFAULT_PRODUCTION_CONFIG,
     build: DEFAULT_BUILD_CONFIG,
     hydration: DEFAULT_HYDRATION_CONFIG,
-};
+});
 
 /**
  * Environment type.

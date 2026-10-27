@@ -28,6 +28,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SORTED_PREFIXES } from '../../compiler/src/migrate-tables/reverse-map.js';
 import { ENGINES, type ParityEngine } from '../../compiler/tests/engine-parity-harness.js';
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 
@@ -107,7 +108,12 @@ function normalise(css: string): string[] {
  * @returns Its `className`, empty when it wrote none.
  */
 function lowered(engine: ParityEngine, sz: unknown): string {
-    const result = engine(`export const A = () => <p sz={${JSON.stringify(sz)}} />;`, '/p/A.jsx');
+    const result = engine(
+        `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
+        {
+            filename: '/p/A.jsx',
+        },
+    );
     return /className="([^"]*)"/.exec(result.code ?? '')?.[1] ?? '';
 }
 

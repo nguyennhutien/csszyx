@@ -32,13 +32,15 @@ describe('the wasm engine identity', () => {
     it('passes the build this compiler expects', async () => {
         expected.current = built;
         const { transformWasm } = await import('../src/transform-wasm.js');
-        expect(transformWasm('<div sz={{ p: 4 }} />', 'a.tsx').code).toContain('p-4');
+        expect(transformWasm('<div sz={{ p: 4 }} />', { filename: 'a.tsx' }).code).toContain('p-4');
     });
 
     it('refuses a build of another source', async () => {
         expected.current = { ...built, digest: '0000000000000000' };
         const { transformWasm } = await import('../src/transform-wasm.js');
         const { EngineVersionSkewError } = await import('../src/engine-identity.js');
-        expect(() => transformWasm('<div />', 'a.tsx')).toThrow(EngineVersionSkewError);
+        expect(() => transformWasm('<div />', { filename: 'a.tsx' })).toThrow(
+            EngineVersionSkewError,
+        );
     });
 });

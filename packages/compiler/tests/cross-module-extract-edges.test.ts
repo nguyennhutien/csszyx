@@ -20,7 +20,7 @@ import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.j
  */
 function szObjects(source: string): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    for (const entry of extractCrossModuleRegistryEntries(source, '/p/styles.ts')) {
+    for (const entry of extractCrossModuleRegistryEntries(source, { filename: '/p/styles.ts' })) {
         if (entry.kind === 'sz-object') out[entry.exportName] = entry.value;
     }
     return out;
@@ -90,24 +90,24 @@ describe('negated values', () => {
 
 describe('declarators that are not factories or objects', () => {
     it('ignores an exported declaration without an initializer', () => {
-        expect(extractCrossModuleRegistryEntries('export let a;', '/p/styles.ts')).toEqual([]);
+        expect(
+            extractCrossModuleRegistryEntries('export let a;', { filename: '/p/styles.ts' }),
+        ).toEqual([]);
     });
 
     it('ignores a destructuring export', () => {
         expect(
-            extractCrossModuleRegistryEntries(
-                'export const { a } = szv({ tone: { red: {} } });',
-                '/p/styles.ts',
-            ),
+            extractCrossModuleRegistryEntries('export const { a } = szv({ tone: { red: {} } });', {
+                filename: '/p/styles.ts',
+            }),
         ).toEqual([]);
     });
 
     it('ignores a namespaced szv call — only a bare szv identifier qualifies', () => {
         expect(
-            extractCrossModuleRegistryEntries(
-                'export const f = ns.szv({ tone: { red: {} } });',
-                '/p/styles.ts',
-            ),
+            extractCrossModuleRegistryEntries('export const f = ns.szv({ tone: { red: {} } });', {
+                filename: '/p/styles.ts',
+            }),
         ).toEqual([]);
     });
 });

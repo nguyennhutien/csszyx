@@ -304,7 +304,8 @@ function profileSourceFiles(files: string[], iterations: number): TransformTimin
         let transformed = false;
         for (let i = 0; i < iterations; i++) {
             transformed =
-                withSilencedWarnings(() => transformSource(code, file).transformed) || transformed;
+                withSilencedWarnings(() => transformSource(code, { filename: file }).transformed) ||
+                transformed;
         }
         const ms = (performance.now() - start) / iterations;
         timings.push({
@@ -537,7 +538,9 @@ function profileCorpusFixtures(fixtures: CorpusFixture[], iterations: number): T
             for (let i = 0; i < iterations; i++) {
                 transformed =
                     withSilencedWarnings(
-                        () => transformSource(fixture.source, `${fixture.name}.tsx`).transformed,
+                        () =>
+                            transformSource(fixture.source, { filename: `${fixture.name}.tsx` })
+                                .transformed,
                     ) || transformed;
             }
             return {

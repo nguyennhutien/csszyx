@@ -203,7 +203,7 @@ async function runWorkload(workload) {
                 workload === 'clean'
                     ? cleanModule(index)
                     : noisyModule(index, `${index}p${number}`);
-            const result = transform(source, `/project/src/C${index}.tsx`);
+            const result = transform(source, { filename: `/project/src/C${index}.tsx` });
             const issues = result.issues ?? [];
             if (issues.length !== expected) {
                 throw new Error(

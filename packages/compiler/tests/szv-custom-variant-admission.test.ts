@@ -37,13 +37,13 @@ const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
  * @returns The diagnostics, empty when the config precompiled.
  */
 function refusals(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
+    engine: (source: string, options?: { filename?: string }) => { diagnostics?: string[] },
     config: string,
     selection = '{}',
 ): string[] {
     const source = `${IMPORT}const t = szv(${config});\nexport const a = szr(t(${selection}));`;
     return (
-        (engine(source, '/p/t.tsx').diagnostics ?? [])
+        (engine(source, { filename: '/p/t.tsx' }).diagnostics ?? [])
             .map(String)
             // Only the precompile verdict; an unknown key also draws the ordinary
             // unknown-property warning, which is a different question.
@@ -71,10 +71,12 @@ describe.each(ENGINES)('a custom breakpoint inside a branch (%s)', (_name, engin
         // responsive half while reporting success — worse than refusing.
         const source = `${IMPORT}const t = szv({ base: { px: 2, tablet: { px: 4 } } });\nexport const a = szr(t({}));`;
         const classes = [
-            ...((engine as (s: string, f?: string) => { classes?: Iterable<string> })(
-                source,
-                '/p/t.tsx',
-            ).classes ?? []),
+            ...((
+                engine as (
+                    s: string,
+                    options?: { filename?: string },
+                ) => { classes?: Iterable<string> }
+            )(source, { filename: '/p/t.tsx' }).classes ?? []),
         ];
 
         expect(classes).toContain('px-2');

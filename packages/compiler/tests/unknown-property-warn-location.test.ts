@@ -60,7 +60,8 @@ describe('unknown-property warning — source location', () => {
     const fixtureSrc = 'export const A = () => (\n  <div sz={{ xyzzy: 4, p: 2 }} />\n);';
 
     it('the wasm artifact attaches relativePath:line for the sz prop', () => {
-        const result = transformWasm(fixtureSrc, '/proj/src/components/Foo.tsx', {
+        const result = transformWasm(fixtureSrc, {
+            filename: '/proj/src/components/Foo.tsx',
             rootDir: '/proj',
         });
         const messages = result.diagnostics;
@@ -75,7 +76,8 @@ describe('unknown-property warning — source location', () => {
     });
 
     it('the selected engine attaches relativePath:line for the sz prop', () => {
-        const result = transformSource(fixtureSrc, '/proj/src/components/Bar.tsx', {
+        const result = transformSource(fixtureSrc, {
+            filename: '/proj/src/components/Bar.tsx',
             rootDir: '/proj',
         });
         expect(
@@ -86,7 +88,7 @@ describe('unknown-property warning — source location', () => {
     });
 
     it('falls back to the raw filename when no rootDir is given', () => {
-        const result = transformWasm(fixtureSrc, 'standalone/Baz.tsx');
+        const result = transformWasm(fixtureSrc, { filename: 'standalone/Baz.tsx' });
         expect(
             result.diagnostics.some(m =>
                 m.startsWith('[csszyx] unknown-key: standalone/Baz.tsx:2:14\n'),
@@ -112,7 +114,7 @@ describe('unknown-property warning — source location', () => {
     });
 
     it('does not leak a build location into a later runtime transform', () => {
-        transformWasm(fixtureSrc, '/proj/src/components/Foo.tsx', { rootDir: '/proj' });
+        transformWasm(fixtureSrc, { filename: '/proj/src/components/Foo.tsx', rootDir: '/proj' });
         warn.mockClear();
         transform({ qqq: 9 });
         const messages = warn.mock.calls.map(c => String(c[0]));
@@ -127,7 +129,7 @@ describe('unknown-property warning — source location', () => {
         // `op` is a removed/aliased key; whichever branch fires must carry
         // the location in the diagnostics.
         const opSrc = 'export const A = () => <div sz={{ op: 50 }} />;';
-        const result = transformWasm(opSrc, '/proj/src/X.tsx', { rootDir: '/proj' });
+        const result = transformWasm(opSrc, { filename: '/proj/src/X.tsx', rootDir: '/proj' });
         expect(result.issues).toMatchObject([
             { code: 'unknown-key', args: { key: 'op' }, line: 1 },
         ]);
@@ -141,7 +143,10 @@ describe('unknown-property warning — source location', () => {
         key => {
             const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
             for (const [name, transform] of ENGINES) {
-                const result = transform(source, '/proj/src/Text.tsx', { rootDir: '/proj' });
+                const result = transform(source, {
+                    filename: '/proj/src/Text.tsx',
+                    rootDir: '/proj',
+                });
                 expect(result.code, name).toContain(
                     key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
                 );
@@ -165,21 +170,22 @@ describe('unknown-property warning — native and wasm warn on the same keys', (
     const runOr = rustAvailable ? it : it.skip;
 
     const wasmWarns = (key: string, value: string): boolean =>
-        transformWasm(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, '/p/F.tsx', {
+        transformWasm(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, {
+            filename: '/p/F.tsx',
             rootDir: '/p',
         }).issues.some(issue => issue.code === 'unknown-key');
 
     const rustWarns = (key: string, value: string): boolean =>
-        transformRust(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, '/p/F.tsx', {
+        transformRust(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, {
+            filename: '/p/F.tsx',
             rootDir: '/p',
         }).issues.some(issue => issue.code === 'unknown-key');
 
     runOr('emits a located, root-relative diagnostic for a typo', () => {
-        const result = transformRust(
-            'export const A = () => (\n  <div sz={{ xyzzy: 4 }} />\n);',
-            '/proj/src/components/Foo.tsx',
-            { rootDir: '/proj' },
-        );
+        const result = transformRust('export const A = () => (\n  <div sz={{ xyzzy: 4 }} />\n);', {
+            filename: '/proj/src/components/Foo.tsx',
+            rootDir: '/proj',
+        });
         expect(result.issues).toMatchObject([
             { code: 'unknown-key', args: { key: 'xyzzy' }, line: 2, column: 14 },
         ]);
@@ -265,8 +271,7 @@ describe('unknown-property warning — native and wasm warn on the same keys', (
     runOr('accepts the css escape hatch without diagnosing its sub-properties', () => {
         const result = transformRust(
             'export const A = () => <div sz={{ css: { writingMode: "vertical-lr" } }} />;',
-            '/p/F.tsx',
-            { rootDir: '/p' },
+            { filename: '/p/F.tsx', rootDir: '/p' },
         );
         expect(result.classes).toContain('[writing-mode:vertical-lr]');
         expect(result.issues.some(issue => issue.code === 'unknown-key')).toBe(false);
@@ -275,11 +280,10 @@ describe('unknown-property warning — native and wasm warn on the same keys', (
     runOr.each(['textEllipsis', 'textClip'])(
         '%s emits its class without a native diagnostic',
         key => {
-            const result = transformRust(
-                `export const A = () => <div sz={{ ${key}: true }} />;`,
-                '/p/F.tsx',
-                { rootDir: '/p' },
-            );
+            const result = transformRust(`export const A = () => <div sz={{ ${key}: true }} />;`, {
+                filename: '/p/F.tsx',
+                rootDir: '/p',
+            });
             expect(result.classes).toContain(
                 key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
             );
@@ -368,13 +372,10 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it('the wasm artifact names the array/spread cause and keeps the location', () => {
-        const result = transformWasm(
-            'export const A = () => <div sz={{ 4: true }} />;',
-            '/p/F.tsx',
-            {
-                rootDir: '/p',
-            },
-        );
+        const result = transformWasm('export const A = () => <div sz={{ 4: true }} />;', {
+            filename: '/p/F.tsx',
+            rootDir: '/p',
+        });
         expect(result.issues).toMatchObject([
             { code: 'numeric-key', args: { key: '4' }, line: 1, column: 35 },
         ]);
@@ -395,13 +396,10 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it.skipIf(!RUST_LANE)('the rust engine emits the same numeric message', () => {
-        const result = transformRust(
-            'export const A = () => <div sz={{ 4: true }} />;',
-            '/p/F.tsx',
-            {
-                rootDir: '/p',
-            },
-        );
+        const result = transformRust('export const A = () => <div sz={{ 4: true }} />;', {
+            filename: '/p/F.tsx',
+            rootDir: '/p',
+        });
         expect(result.issues).toMatchObject([
             { code: 'numeric-key', args: { key: '4' }, line: 1, column: 35 },
         ]);
@@ -411,11 +409,10 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it('a real word typo still says to check the spelling', () => {
-        const result = transformWasm(
-            'export const A = () => <div sz={{ xyzzy: 4 }} />;',
-            '/p/F.tsx',
-            { rootDir: '/p' },
-        );
+        const result = transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', {
+            filename: '/p/F.tsx',
+            rootDir: '/p',
+        });
         expect(result.issues.map(issue => issue.code)).toEqual(['unknown-key']);
         const msg = result.diagnostics[0];
         expect(msg).toContain('`xyzzy` is not an sz property.');
@@ -436,8 +433,7 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { xyzzy: 5, p: 4 } } } });',
-            '/proj/src/F.tsx',
-            { rootDir: '/proj' },
+            { filename: '/proj/src/F.tsx', rootDir: '/proj' },
         );
         expect(result.issues).toMatchObject([
             { code: 'unknown-key', args: { key: 'xyzzy' }, line: 2 },
@@ -449,8 +445,7 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { 4: true, p: 4 } } } });',
-            '/proj/src/F.tsx',
-            { rootDir: '/proj' },
+            { filename: '/proj/src/F.tsx', rootDir: '/proj' },
         );
         expect(result.issues).toMatchObject([{ code: 'numeric-key', args: { key: '4' }, line: 2 }]);
         expect(result.diagnostics[0]).toContain('[csszyx] numeric-key: src/F.tsx:2:');
@@ -460,8 +455,7 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
     it('an unknown key in a static szr() argument is located at the szr() call', () => {
         const result = transformSource(
             'import { szr } from "@csszyx/runtime";\nconst c = szr({ nope: 1, m: 2 });',
-            '/proj/src/F.tsx',
-            { rootDir: '/proj' },
+            { filename: '/proj/src/F.tsx', rootDir: '/proj' },
         );
         expect(result.issues).toMatchObject([
             { code: 'unknown-key', args: { key: 'nope' }, line: 2 },
@@ -472,8 +466,7 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
     it('dynamic() contributes no build diagnostic (runtime, out of scope)', () => {
         const result = transformSource(
             'import { dynamic } from "csszyx";\nconst d = dynamic({ badkey: 1 });',
-            '/proj/src/F.tsx',
-            { rootDir: '/proj' },
+            { filename: '/proj/src/F.tsx', rootDir: '/proj' },
         );
         expect(result.issues.some(issue => JSON.stringify(issue.args).includes('badkey'))).toBe(
             false,
@@ -485,9 +478,9 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const src =
             'import { szv } from "@csszyx/runtime";\n' +
             'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });';
-        const wasm = transformWasm(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        const wasm = transformWasm(src, { filename: '/proj/src/F.tsx', rootDir: '/proj' });
         for (const [name, transform] of ENGINES) {
-            const result = transform(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+            const result = transform(src, { filename: '/proj/src/F.tsx', rootDir: '/proj' });
             expect(result.diagnostics, name).toEqual(wasm.diagnostics);
         }
     });
@@ -546,7 +539,8 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
 
     it('does NOT attach shape/frame to a located build diagnostic', () => {
         const msg =
-            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', {
+                filename: '/p/F.tsx',
                 rootDir: '/p',
             }).diagnostics.find(m => m.includes('xyzzy')) ?? '';
         expect(msg).toContain('[csszyx] unknown-key: F.tsx:1:');
@@ -582,7 +576,8 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
     it('is silent on the build path when set to 1', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
         const calls = captureWarnings(() =>
-            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', {
+                filename: '/p/F.tsx',
                 rootDir: '/p',
             }),
         );

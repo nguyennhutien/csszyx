@@ -49,7 +49,7 @@ const LOOKUPS: Record<string, LookupRow[]> = JSON.parse(
 ).lookups;
 
 /** One engine artifact's transform that leaves its diagnostics unrendered. */
-type Unrendered = (source: string, filename: string) => UnrenderedTransformResult;
+type Unrendered = (source: string, options: { filename: string }) => UnrenderedTransformResult;
 
 /**
  * The native addon, when it loads and answers for this engine version.
@@ -59,7 +59,9 @@ type Unrendered = (source: string, filename: string) => UnrenderedTransformResul
 function nativeLane(): Unrendered | undefined {
     if (!isRustTransformAvailable()) return undefined;
     try {
-        transformRustUnrendered('export const A = () => <p sz={{ p: 1 }} />;', '/p/probe.jsx');
+        transformRustUnrendered('export const A = () => <p sz={{ p: 1 }} />;', {
+            filename: '/p/probe.jsx',
+        });
         return transformRustUnrendered;
     } catch {
         return undefined;
@@ -182,7 +184,7 @@ describe('the docs lookup rows', () => {
                 it(`${label} is what the ${name} engine reports and says`, () => {
                     const result = engine(
                         `export const A = ({ runtimeValue }) => <p sz={${source}} />;`,
-                        '/p/src/A.jsx',
+                        { filename: '/p/src/A.jsx' },
                     );
                     const issue = (result.issues as SzDiagnosticIssue[]).find(
                         found => found.code === id,

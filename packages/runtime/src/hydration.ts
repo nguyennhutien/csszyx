@@ -314,6 +314,7 @@ export function readChecksumAttribute(element: HTMLElement): string | undefined 
  * one; neither is a mismatch, and neither should abort a hydration.
  *
  * @returns `false` only when both values are present and differ.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function verifyBundleMatchesDocument(): boolean {
     if (typeof document === 'undefined') return true;
@@ -709,6 +710,7 @@ export function clearHydrationErrors(): void {
  * how many aborts happened, not how many aborted elements are still alive.
  *
  * @returns {number} Number of aborted subtrees
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function getAbortedSubtreeCount(): number {
     return state.abortedSubtreeCount;

@@ -40,14 +40,15 @@ const IMPORTS = "import { szr } from '@csszyx/runtime';\nimport { cardSz } from 
 describe.each(LANES)('%s lane', (_lane, engine) => {
     it('collapses a static selection on an imported factory', () => {
         const source = `${IMPORTS}export const cls = szr(cardSz({ pad: 'lg' }));`;
-        const code = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? source;
+        const code =
+            engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? source;
         expect(code).toContain('"rounded-lg p-8 bg-blue-500 text-white"');
         expect(code).not.toContain('__szvPick');
     });
 
     it('turns a dynamic selection into a pick with the table after the import', () => {
         const source = `${IMPORTS}export const C = ({ s }) => szr(cardSz(s));`;
-        const result = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS });
+        const result = engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS });
         const code = result.code ?? source;
         expect(result.usesSzvPick).toBe(true);
         expect(code).toContain('__szvPick(__szvT_cardSz, s)');
@@ -56,7 +57,8 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
 
     it('composes with the szr import rewrite', () => {
         const source = `${IMPORTS}export const C = ({ s }) => szr(cardSz(s), cardSz({ pad: 'sm' }));`;
-        const code = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? source;
+        const code =
+            engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? source;
         expect(code).toContain('@csszyx/runtime/core');
     });
 
@@ -65,20 +67,22 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
             "import { szr } from '@csszyx/runtime';\n" +
             "import { cardSz as card } from './styles';\n" +
             "export const cls = szr(card({ pad: 'sm' }));";
-        const code = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? source;
+        const code =
+            engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? source;
         expect(code).toContain('"rounded-lg p-2 bg-blue-500 text-white"');
     });
 
     it('bails when the imported factory leaks outside szr', () => {
         const source = `${IMPORTS}export const cls = szr(cardSz({ pad: 'sm' }));\nexport const leak = cardSz;`;
-        const code = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? source;
+        const code =
+            engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? source;
         expect(code).not.toContain('__szvT_cardSz');
         expect(code).toContain('cardSz({');
     });
 
     it('changes nothing without registry entries', () => {
         const source = `${IMPORTS}export const cls = szr(cardSz({ pad: 'sm' }));`;
-        const code = engine(source, '/p/t.tsx').code ?? source;
+        const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
         expect(code).not.toContain('__szvT_cardSz');
         // The call survives (possibly reformatted); no build-time string did.
         expect(code).toContain('cardSz(');
@@ -93,7 +97,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
             "import { szr } from '@csszyx/runtime';\n" +
             "import * as styles from './styles';\n" +
             "export const cls = szr(styles.cardSz({ pad: 'lg' }));";
-        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? tsx;
+        const code = engine(tsx, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? tsx;
         expect(code).toContain('styles.cardSz(');
         expect(code).not.toContain('__szvT_');
     });
@@ -106,7 +110,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
             "export const cls = szr(cardSz({ pad: 'lg' }));";
         // The registry keys the DEFINING module, so a barrel that merely
         // forwards the export carries no entry — nothing resolves.
-        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? tsx;
+        const code = engine(tsx, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? tsx;
         expect(code).toContain('cardSz(');
         expect(code).not.toContain('__szvT_');
     });
@@ -131,7 +135,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
                 },
             },
         };
-        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: statics }).code ?? tsx;
+        const code = engine(tsx, { filename: '/p/t.tsx', crossModuleStatics: statics }).code ?? tsx;
         // Sliced rather than matched: a lazy `[\s\S]*?` up to the terminator
         // is the polynomial shape the ReDoS gate rejects, and indexOf answers
         // the same question in one pass.
@@ -155,7 +159,8 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
             "import { szr } from '@csszyx/runtime';\n" +
             "import { other } from './styles';\n" +
             'export const cls = szr(other());';
-        const code = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? source;
+        const code =
+            engine(source, { filename: '/p/t.tsx', crossModuleStatics: STATICS }).code ?? source;
         expect(code).not.toContain('__szvT_');
     });
 });
@@ -170,7 +175,10 @@ describe('cross-module parity across the lanes', () => {
         'identical decisions for: %s',
         (_name, source) => {
             const shapes = LANES.map(([, engine]) => {
-                const result = engine(source, '/p/t.tsx', { crossModuleStatics: STATICS });
+                const result = engine(source, {
+                    filename: '/p/t.tsx',
+                    crossModuleStatics: STATICS,
+                });
                 const code = result.code ?? source;
                 return JSON.stringify({
                     pick: result.usesSzvPick === true,
@@ -188,7 +196,7 @@ describe('extractCrossModuleRegistryEntries — the szv arm', () => {
         expect(
             extractCrossModuleRegistryEntries(
                 'export function szv() {}\nconst local = 1; export { local };',
-                '/p/styles.ts',
+                { filename: '/p/styles.ts' },
             ),
         ).toEqual([]);
     });
@@ -200,7 +208,7 @@ describe('extractCrossModuleRegistryEntries — the szv arm', () => {
             'const local = szv({ variants: { hidden: { y: { m: 1 } } } });\n' +
             'export const __szvPick = szv({ base: { m: 1 } });\n' +
             'export const b = szv({ base: { flex: true } });\n';
-        const entries = extractCrossModuleRegistryEntries(source, '/p/styles.ts');
+        const entries = extractCrossModuleRegistryEntries(source, { filename: '/p/styles.ts' });
         expect(entries.map(entry => entry.exportName)).toEqual(['a', 'b']);
         expect(entries[0].value).toEqual({ variants: { p1: { x: { p: 1 } } } });
     });
@@ -211,11 +219,15 @@ describe('extractCrossModuleRegistryEntries — the szv arm', () => {
             // overlap: base and leaf touch the same canonical key
             'export const bad = szv({ base: { p: 4 }, variants: { pad: { lg: { p: 8 } } } });\n' +
             'export const dynamic2 = szv(cfg);\n';
-        expect(extractCrossModuleRegistryEntries(source, '/p/styles.ts')).toEqual([]);
+        expect(extractCrossModuleRegistryEntries(source, { filename: '/p/styles.ts' })).toEqual([]);
     });
 
     it('returns nothing for unparseable sources or non-sz exports', () => {
-        expect(extractCrossModuleRegistryEntries('export const x = 1;', '/p/a.ts')).toEqual([]);
-        expect(extractCrossModuleRegistryEntries('const } broken szv(', '/p/b.ts')).toEqual([]);
+        expect(
+            extractCrossModuleRegistryEntries('export const x = 1;', { filename: '/p/a.ts' }),
+        ).toEqual([]);
+        expect(
+            extractCrossModuleRegistryEntries('const } broken szv(', { filename: '/p/b.ts' }),
+        ).toEqual([]);
     });
 });

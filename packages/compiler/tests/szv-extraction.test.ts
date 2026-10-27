@@ -22,7 +22,7 @@ const IMPORT = "import { szv } from 'csszyx';";
 function agreedClasses(source: string, filename?: string): string[] {
     const perEngine = ENGINES.map(
         ([name, transform]) =>
-            [name, [...(transform(source, filename).classes ?? [])].sort()] as const,
+            [name, [...(transform(source, { filename: filename }).classes ?? [])].sort()] as const,
     );
     const [[, expected]] = perEngine;
     for (const [name, classes] of perEngine) {

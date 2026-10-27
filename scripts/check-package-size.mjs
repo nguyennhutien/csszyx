@@ -348,13 +348,15 @@ export const SIZE_BUDGETS = [
     // under the usual headroom, so the module order is what fails: the first
     // two lose a chunk, the third lays the key tables first (it fails the
     // Node budgets below too). Measured 39,733 on 2026-10-21. Budget the
-    // usual ~300 above.
+    // usual ~300 above. 40,350 on 2026-10-27, measured 40,055 (40,029
+    // before the branch): the exported tables and the runtime's default config
+    // are frozen, so an importer's write cannot change what later code reads.
     {
         name: 'csszyx installed app bundle (runtime + dynamic, compiler bundled)',
         kind: 'installed-app',
         target: 'packages/csszyx',
         imports: ['@csszyx/runtime', '@csszyx/dynamic'],
-        maxGzipBytes: 40_050,
+        maxGzipBytes: 40_350,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -730,7 +732,11 @@ export const SIZE_BUDGETS = [
         subpath: './engine',
         // 29,050 on 2026-10-26, measured 28,974: the `opacity-value`
         // `fraction` form's words, which the engine's issues render with.
-        maxGzipBytes: 29_050,
+        // 29,550 on 2026-10-27, measured 29,470 (28,990 before): every
+        // single-file engine call refuses the positional shape, ~260 of it the
+        // words of that one form, from its own export so the other forms of
+        // `options-object-required` stay out (all of them cost +808).
+        maxGzipBytes: 29_550,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -739,8 +745,9 @@ export const SIZE_BUDGETS = [
         target: 'packages/compiler',
         subpath: './internal',
         // 32,100 on 2026-10-26, measured 32,007: the same words, and the
-        // migrate class-name options object.
-        maxGzipBytes: 32_100,
+        // migrate class-name options object. 32,500 on 2026-10-27, measured
+        // 32,427 (32,023 before): the same engine-call refusal.
+        maxGzipBytes: 32_500,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];
