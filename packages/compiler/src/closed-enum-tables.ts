@@ -120,6 +120,7 @@ const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> =
  * does. A replacement value of `'true'` is the boolean flag. The engine reads
  * a generated copy (`closed_enum_value_move`), and `csszyx migrate` rewrites
  * with it.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const CLOSED_ENUM_VALUE_MOVES: Readonly<
     Record<string, Readonly<Record<'key' | 'value', string>>>

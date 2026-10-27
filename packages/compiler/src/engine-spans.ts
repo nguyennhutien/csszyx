@@ -861,6 +861,7 @@ function storeGroup(group: SzMergeGroup): RawMergeGroup | SzMergeGroup {
  *
  * @param spans - The spans a result carries.
  * @returns The same entries, offsets in place of the positions this module made.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function storeEngineSpans(spans: PartialLocatedEngineSpans): StoredEngineSpans {
     const stored: StoredEngineSpans = {};
@@ -889,6 +890,7 @@ export function storeEngineSpans(spans: PartialLocatedEngineSpans): StoredEngine
  * @param source - The module the spans were reported for.
  * @param stored - What {@link storeEngineSpans} returned.
  * @returns The spans located again, lazily, as {@link locateEngineSpans} would.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function restoreEngineSpans(
     source: string,

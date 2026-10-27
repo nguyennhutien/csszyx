@@ -29,9 +29,10 @@ changes rename `sz` keys or change an API shape, and the type checker,
    npx @csszyx/cli migrate --keys-only             # apply
    ```
 
-4. Run `tsc --noEmit`. It flags `szv` rows that do not type-check, and calls to
-   `transform`, `csszyxTurbopack` and the `@csszyx/unplugin` entry that use the
-   0.17 shape.
+4. Run `tsc --noEmit`. It flags `szv` rows that do not type-check, calls in the
+   0.17 shape to `transform`, `classNameToSzObject`, `serializeManifest`,
+   `migrateSource`, the engine calls, `csszyxTurbopack` and the
+   `@csszyx/unplugin` entry, and writes to the exported tables and defaults.
 5. Run `npx @csszyx/cli check`. It lists the keys `--keys-only` could not reach,
    class names cut off by a spread, and Tailwind entries that set different
    prefixes, and it exits 1 while any remain. It no longer fails on
@@ -102,6 +103,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`migrateSource` options](#migratesource-takes-the-path-in-its-options) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Engine call options](#engine-calls-take-their-options-in-one-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Exported tables are read-only](#exported-tables-are-read-only) | `TypeError` on a write to `PROPERTY_MAP` or another record table in an ES module | `tsc`, runtime throw | you, if you change them |
+| [Public and internal entries](#which-entries-are-public) | nothing; an internal entry can change in any release | none | you, if you import one |
 | [Global variable map format](#the-global-variable-map-carries-its-format) | a tool reading `.csszyx/global-var-map.json` reads no aliases | your tool | you, if a tool reads it |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -1690,66 +1692,26 @@ the keys:
 
 **Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
 
-## The global variable map carries its format
+## serializeManifest takes an options object
 
-`.csszyx/global-var-map.json`, written for tools when global variables are
-aliased, held the aliases at its top level. It now carries the version of its
-shape beside them:
+`serializeManifest` from `@csszyx/compiler`, which `csszyx` re-exports, took its
+pretty-print flag as a second positional argument; it is now a key of one
+options object:
 
-```jsonc
+```ts
 // before
-{ "--brand-primary": "---gz" }
+serializeManifest(manifest, true);
 
 // after
-{ "format": 1, "aliases": { "--brand-primary": "---gz" } }
+serializeManifest(manifest, { pretty: true });
 ```
 
-**You are affected** when a tool of yours reads this file. `csszyx-manifest.json`
-and csszyx itself are not affected.
-
-**The edit.** Read the aliases from `aliases`, and refuse a `format` the tool
-does not know.
-
-## Exported tables are read-only
-
-The tables `@csszyx/compiler` exports, such as `PROPERTY_MAP`, `VARIANT_MAP`,
-`SUGGESTION_MAP` and `KNOWN_VARIANTS`, could be changed by the code that imported
-them, and a change applied to every class the process wrote afterwards. The
-record tables are now frozen, so in an ES module a write to one of their keys
-throws a `TypeError`; in a CommonJS file without `'use strict'` it is ignored.
-The records inside a table, such as each key's values in `CLOSED_ENUM_CLASSES`,
-and the `Set`s, such as `KNOWN_VARIANTS`, are typed read-only: `tsc` reports a
-write. A write to them is not supported and may throw in a later release.
-
-**You are affected** when your code adds to or changes one of these tables.
-
-**The edit.** A table is not a way to teach csszyx a class: a copy changes
-nothing the build writes. Define the class with Tailwind's `@utility` and write
-it as a string in an `sz` array, such as `sz={['my-utility', { p: 4 }]}`.
-
-## Engine calls take their options in one object
-
-The calls of `@csszyx/compiler/engine` that read one module or one list of
-modules took the file name or the parser in a second or third position, beside
-an optional options object, so passing options meant writing a file name the
-call did not need. The file name, the parser and the other options are now keys
-of one object. `csszyx` re-exports `transformSource`, so the change applies to
-it there too:
-
-| Call | 0.17 | 0.18 |
-| --- | --- | --- |
-| `transformSource`, `transformRust`, `transformWasm` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
-| `scanGlobalVarUsages` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
-| `scanModuleLinks` | `(files, { registryEntries }, "wasm")` | `(files, { registryEntries, parser: "wasm" })` |
-| `extractCrossModuleRegistryEntries`, `extractCrossModuleForwards` | `(source, "a.ts", "wasm")` | `(source, { filename: "a.ts", parser: "wasm" })` |
-
-A second argument that is not an object, or a third argument, throws and names
-the call:
+A second argument that is not an object, or a third argument, throws:
 
 ```text
 [csszyx] options-object-required:
-  `transformSource` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
-  help: move every argument after the first into one object, as in `transformSource(source, { filename: 'Card.tsx' })` or `scanModuleLinks(files, { registryEntries, parser })`.
+  `serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
+  help: pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.
   docs: https://csszyx.com/e/options-object-required
 ```
 
@@ -1779,30 +1741,86 @@ A second argument without `filename`, or a third argument, throws:
 
 **Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
 
-## serializeManifest takes an options object
+## Engine calls take their options in one object
 
-`serializeManifest` from `@csszyx/compiler`, which `csszyx` re-exports, took its
-pretty-print flag as a second positional argument; it is now a key of one
-options object:
+The calls of `@csszyx/compiler/engine` that read one module or one list of
+modules took the file name or the parser in a second or third position, beside
+an optional options object, so passing options meant writing a file name the
+call did not need. The file name, the parser and the other options are now keys
+of one object. `csszyx` re-exports `transformSource`, so the change applies to
+it there too:
 
-```ts
-// before
-serializeManifest(manifest, true);
+| Call | 0.17 | 0.18 |
+| --- | --- | --- |
+| `transformSource`, `transformRust`, `transformWasm` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
+| `scanGlobalVarUsages` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
+| `scanModuleLinks` | `(files, { registryEntries }, "wasm")` | `(files, { registryEntries, parser: "wasm" })` |
+| `extractCrossModuleRegistryEntries`, `extractCrossModuleForwards` | `(source, "a.ts", "wasm")` | `(source, { filename: "a.ts", parser: "wasm" })` |
 
-// after
-serializeManifest(manifest, { pretty: true });
-```
-
-A second argument that is not an object, or a third argument, throws:
+A second argument that is not an object, or a third argument, throws and names
+the call:
 
 ```text
 [csszyx] options-object-required:
-  `serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
-  help: pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.
+  `transformSource` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
+  help: move every argument after the first into one object, as in `transformSource(source, { filename: 'Card.tsx' })` or `scanModuleLinks(files, { registryEntries, parser })`.
   docs: https://csszyx.com/e/options-object-required
 ```
 
 **Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
+
+## Exported tables are read-only
+
+The tables `@csszyx/compiler` exports, such as `PROPERTY_MAP`, `VARIANT_MAP`,
+`SUGGESTION_MAP` and `KNOWN_VARIANTS`, could be changed by the code that imported
+them, and a change applied to every class the process wrote afterwards. The
+record tables are now frozen, so in an ES module a write to one of their keys
+throws a `TypeError`; in a CommonJS file without `'use strict'` it is ignored.
+The records inside a table, such as each key's values in `CLOSED_ENUM_CLASSES`,
+and the `Set`s, such as `KNOWN_VARIANTS`, are typed read-only: `tsc` reports a
+write. A write to them is not supported and may throw in a later release.
+
+**You are affected** when your code adds to or changes one of these tables.
+
+**The edit.** A table is not a way to teach csszyx a class: a copy changes
+nothing the build writes. Define the class with Tailwind's `@utility` and write
+it as a string in an `sz` array, such as `sz={['my-utility', { p: 4 }]}`.
+
+## Which entries are public
+
+Every package entry is now listed on the [Public API](/docs/reference/public-api/)
+page as public, generated or internal. Entries such as `@csszyx/compiler/report`,
+`@csszyx/compiler/errors` and `@csszyx/unplugin/diagnostics` connect csszyx's
+own packages, which pin one another to the same version; they are internal and
+can change in any release. On a public entry, a name its types mark
+`@internal`, such as `sortStrings` or `findCachedTransform`, is internal too.
+
+**You are affected** when your code imports an entry the page lists as internal
+or generated, or a name marked `@internal`.
+
+**The edit.** Import the public entry the page names for the same job, or open
+an issue for what you need from the internal one.
+
+## The global variable map carries its format
+
+`.csszyx/global-var-map.json`, written for tools when global variables are
+aliased, held the aliases at its top level. It now carries the version of its
+shape beside them:
+
+```jsonc
+// before
+{ "--brand-primary": "---gz" }
+
+// after
+{ "format": 1, "aliases": { "--brand-primary": "---gz" } }
+```
+
+**You are affected** when a tool of yours reads this file. `csszyx-manifest.json`
+and csszyx itself are not affected.
+
+**The edit.** Read the aliases from `aliases`, refuse a `format` the tool does
+not know, and ignore keys it does not know: they may be added without raising
+`format`.
 
 ## Logical block and inline keys need Tailwind 4.2
 

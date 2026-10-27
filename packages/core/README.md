@@ -17,48 +17,26 @@ bundler building for the browser fails to resolve it. In the browser,
 
 ## Installation
 
+Install it beside `@csszyx/compiler`, which loads it:
+
 ```bash
-pnpm add @csszyx/core
+pnpm add -D @csszyx/compiler @csszyx/core
 ```
 
-## Initialization
+Its exports are internal: they connect it to `@csszyx/compiler`, pinned to the
+same version, and can change in any release (see the
+[Public API](https://csszyx.com/docs/reference/public-api/) page). Call the
+engine through `@csszyx/compiler/engine` (`transformSource` and the scans), and
+check a mangle map in the browser with `verifyMangleChecksumAsync` from
+`@csszyx/runtime`.
 
-```typescript
-import { init } from "@csszyx/core";
+## What it contains
 
-await init();
-```
-
-## Modules
-
-### Mangle Map Integrity
-
-Deterministic SHA-256 checksums to synchronize server-side class names with client-side hydration.
-
-```typescript
-import { compute_mangle_checksum, verify_mangle_checksum } from "@csszyx/core";
-
-const mangleMap = { "p-4": "z", "m-2": "y" };
-const checksum = compute_mangle_checksum(mangleMap);
-// Returns a deterministic 16-char hex hash
-```
-
-### Transformer
-
-Converts object-based Tailwind syntax into class strings.
-
-```typescript
-import { transform_sz } from "@csszyx/core";
-
-// ❌ String slash opacity not supported: bg: 'blue-500/20'
-// ✅ Use @csszyx/compiler with object form: { bg: { color: 'blue-500', op: 20 } }
-transform_sz({
-  m: -4,
-  bg: "blue-500",
-  hover: { scale: 110 },
-});
-// "-m-4 bg-blue-500 hover:scale-110"
-```
+- **Mangle map integrity**: deterministic SHA-256 checksums that tie the
+  server's class names to the ones hydration expects.
+- **Transformer**: the lowering of an `sz` object to class strings, the one
+  `@csszyx/compiler` runs.
+- **Collision detector**: dual-hash names for CSS variables.
 
 ### Tiered Encoder
 
@@ -69,17 +47,6 @@ CSS-compliant class name generator using reversed tier encoding (z -> y -> x).
 | Tier 1 | 0 - 51     | \[z-aZ-A\]        | `z`, `y`, `x` |
 | Tier 2 | 52 - 571   | \[z-aZ-A\]\[9-0\] | `z9`, `y8`    |
 | Tier 3 | 572 - 3275 | \[z-aZ-A\]{2}     | `zz`, `zy`    |
-
-### Collision Detector
-
-Dual-hash resolution strategy for unique CSS variable names.
-
-```typescript
-import { WasmCollisionDetector } from "@csszyx/core";
-
-const detector = new WasmCollisionDetector();
-const varId = detector.add("#ff0000"); // "--v-a1b2c3"
-```
 
 ## Performance
 

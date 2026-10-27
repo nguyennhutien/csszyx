@@ -14,6 +14,7 @@ export type MergeSignatureTable = readonly [
  * can meet in one install, and a table the runtime would misread must be
  * refused rather than merged on. Change it only with the table's shape, and
  * the plugin's `MERGE_TABLE_FORMAT` with it.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const MERGE_TABLE_FORMAT = 1;
 

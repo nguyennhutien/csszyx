@@ -1,0 +1,83 @@
+---
+title: Public API
+description: Which package entries follow semver, which serve generated code, and which are internal.
+---
+
+Every csszyx package pins the others to its own version, so an entry one csszyx
+package imports from another changes with them. This page names the entries you
+may import, the entries the compiler writes imports to, and the entries that
+connect the packages. A change to a public entry follows semver; a change to an
+internal one ships in the same release as every package that reads it.
+
+| Kind | Meaning |
+| --- | --- |
+| public | Import it, or name it in a config file. Changes follow semver. |
+| generated | The compiler writes imports to it. Keep the version the build installed; do not import it yourself. Its exports change only by adding names. |
+| internal | Connects csszyx packages. Not for import; it can change in any release. |
+
+## Entries
+
+| Entry | Kind | What it is |
+| --- | --- | --- |
+| `csszyx` | public | The umbrella package: the runtime helpers, `transform`, `transformSource` and `serializeManifest`. The `@csszyx/core` functions it re-exports (`encode`, `transform_sz`, `compute_mangle_checksum`, `verify_mangle_checksum`) are internal. |
+| `csszyx/lite` | public | The string-only runtime helpers. |
+| `csszyx/vite` | public | The Vite plugin. |
+| `csszyx/webpack` | public | The webpack plugin. |
+| `csszyx/dynamic` | public | Runtime injection. |
+| `csszyx/dynamic/react` | public | Runtime injection for React. |
+| `csszyx/browser` | public | The CDN build. |
+| `csszyx/browser.dev` | public | The CDN build with development warnings. |
+| `csszyx/core` | generated | The concat helpers the compiler retargets imports to. |
+| `csszyx/lowering` | public | The import that loads the object lowering outside the plugin. |
+| `@csszyx/runtime` | public | The runtime helpers. |
+| `@csszyx/runtime/lite` | public | The string-only runtime helpers. |
+| `@csszyx/runtime/lowering` | public | The import that loads the object lowering outside the plugin. |
+| `@csszyx/runtime/split` | public | The className half of the class toolkit. |
+| `@csszyx/runtime/core` | generated | The concat helpers the compiler retargets imports to. |
+| `@csszyx/runtime/merge` | generated | The group-merge helpers the compiler injects. |
+| `@csszyx/dynamic` | public | Runtime injection. |
+| `@csszyx/dynamic/react` | public | Runtime injection for React. |
+| `@csszyx/vars` | public | CSS custom property helpers. |
+| `@csszyx/vars/react` | public | CSS custom property helpers for React. |
+| `@csszyx/types` | public | The `sz` prop and config types. |
+| `@csszyx/types/config` | public | The config types. |
+| `@csszyx/types/runtime` | public | The runtime types. |
+| `@csszyx/types/compiler` | public | The compiler types. |
+| `@csszyx/types/jsx` | public | The JSX `sz` prop augmentation. |
+| `@csszyx/types/jsx-react` | public | The JSX `sz` prop augmentation for React. |
+| `@csszyx/types/jsx-solid` | public | The JSX `sz` prop augmentation for Solid. |
+| `@csszyx/unplugin` | public | The bundler plugin and its factories. |
+| `@csszyx/unplugin/vite` | public | The Vite plugin. |
+| `@csszyx/unplugin/webpack` | public | The webpack plugin. |
+| `@csszyx/unplugin/next` | public | The Next.js wrapper. |
+| `@csszyx/unplugin/postcss` | public | The PostCSS plugin. |
+| `@csszyx/unplugin/jest` | public | The Jest transformer. |
+| `@csszyx/unplugin/css-mangler` | public | The CSS class mangler. |
+| `@csszyx/unplugin/next-prebuild` | public | The Next.js prebuild pass. |
+| `@csszyx/unplugin/next-watcher` | internal | The watcher `csszyx next watch` runs. |
+| `@csszyx/unplugin/next-turbo-loader` | internal | The Turbopack loader `csszyxTurbopack` registers. |
+| `@csszyx/unplugin/diagnostics` | internal | The diagnostic policy the CLI and the plugin share. |
+| `@csszyx/compiler` | public | The `sz` lowering and the recovery manifest. |
+| `@csszyx/compiler/engine` | public | The engine calls: `transformSource` and the scans. |
+| `@csszyx/compiler/browser` | public | The browser-safe lowering. |
+| `@csszyx/compiler/migrate` | internal | The migrate engine calls `@csszyx/cli` makes; use `migrateSource` or `classNameToSzObject` from `@csszyx/cli`. |
+| `@csszyx/compiler/internal` | internal | The build lanes' calls; use `@csszyx/compiler/engine`. |
+| `@csszyx/compiler/report` | internal | The diagnostic words every package renders with. |
+| `@csszyx/compiler/errors` | internal | The error class every package throws; use `isCsszyxError` from `@csszyx/runtime`. |
+| `@csszyx/compiler/sz-limits` | internal | The depth limits the runtime shares. |
+| `@csszyx/compiler/keyword-families` | internal | The keyword tables the runtime shares. |
+| `@csszyx/compiler/bool-class` | internal | A helper the runtime re-exports. |
+| `@csszyx/compiler/color-var` | internal | A helper the runtime re-exports. |
+| `@csszyx/compiler/spacing-var` | internal | A helper the runtime re-exports. |
+| `@csszyx/core` | internal | The engine. Install it beside the compiler; do not import it. Use `@csszyx/compiler/engine`. |
+| `@csszyx/core/native` | internal | The engine's native binding. |
+| `@csszyx/core/parser-wasm` | internal | The engine's WebAssembly build. |
+| `@csszyx/cli` | public | The `csszyx` command, `classNameToSzObject` and `migrateSource`. |
+| `@csszyx/mcp-server` | public | The `csszyx-mcp` command. |
+| `@csszyx/ts-plugin` | public | The TypeScript plugin, named in `tsconfig.json`. |
+| `@csszyx/svelte-adapter` | public | The Svelte preprocessor. |
+| `@csszyx/vue-adapter` | public | The Vue preprocessor. |
+
+A name an entry exports with a leading `_` or `__`, or one marked `@internal`
+in its types, is written by the compiler or used by csszyx's own packages, and
+follows the entry's kind above only for code the compiler wrote.

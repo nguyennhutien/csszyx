@@ -397,6 +397,7 @@ export const PROPERTY_MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Ob
  * their own sentence: rendering them through the SUGGESTION_MAP template would
  * print the prose as if it were a key ("Use the canonical key "maskLinear /
  * maskRadial / maskConic with { from }" …").
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const MIGRATION_NOTES: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     // Mask gradient stops moved onto the layer that owns them: Tailwind has no
@@ -417,6 +418,7 @@ export const MIGRATION_NOTES: Readonly<Record<string, string>> = /* @__PURE__ */
  * spelling: each names the `canonical-key` form whose help names both keys.
  * Like an alias, such a key emits nothing. Kept apart from `SUGGESTION_MAP`,
  * whose every value is a key to write.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const SPLIT_SHORTHAND_KEYS: Readonly<Record<string, 'font' | 'scrollbar-color'>> =
     /* @__PURE__ */ Object.freeze({
@@ -673,6 +675,7 @@ export const KNOWN_VARIANTS: ReadonlySet<string> = new Set([
 // Canonical keys lowered by dedicated branches rather than PROPERTY_MAP. This
 // table feeds native and editor-tooling generation so valid-key diagnostics and
 // completions cannot drift from the compiler.
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const KNOWN_SPECIAL_PROPERTIES: ReadonlySet<string> = new Set([
     'css',
     'maskLinear',

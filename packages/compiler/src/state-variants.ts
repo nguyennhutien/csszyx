@@ -25,6 +25,7 @@ export type { StateVariantForm } from './state-variants.generated.js';
  * @param name - A variant name, as the class writes it (`hidden`).
  * @returns The form, or null for a name csszyx does not know as an ARIA
  *          state.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function stateVariantForm(name: string): StateVariantForm | null {
     // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; this package's lib is ES2021.

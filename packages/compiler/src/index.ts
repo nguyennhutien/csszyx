@@ -229,6 +229,7 @@ export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
  * ```typescript
  * const options = mergeOptions({ development: true });
  * ```
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function mergeOptions(options: Partial<CompilerOptions> = {}): Required<CompilerOptions> {
     return {

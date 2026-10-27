@@ -93,6 +93,7 @@ function compilePattern(pattern: string): CompiledPattern[] {
  * itself and for any path outside it.
  * @throws {Error} When a pattern is negated. Each pattern is matched on its own,
  * so `!keep.css` would match every path but that one.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function createRootIgnoreMatcher(
     root: string,

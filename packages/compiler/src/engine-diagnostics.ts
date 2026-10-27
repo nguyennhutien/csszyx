@@ -58,6 +58,7 @@ function comparablePath(path: string, windows: boolean): string {
  * @param filename - The path the bundler passed.
  * @param rootDir - The project root, when known.
  * @returns The path to print.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function diagnosticPath(filename: string, rootDir?: string): string {
     if (rootDir === undefined || rootDir === '') return filename;
@@ -88,6 +89,7 @@ export function diagnosticPath(filename: string, rootDir?: string): string {
  *
  * @param issue - The diagnostic.
  * @returns The key.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function szDiagnosticKey(issue: Pick<SzDiagnosticIssue, 'code' | 'args'>): string {
     const args = issue.args as Readonly<Record<string, unknown>>;
@@ -137,6 +139,7 @@ export function renderEngineDiagnostic(issue: SzDiagnosticIssue, file: string): 
  * @param issues - The located issues of one file.
  * @param file - The file's path as a diagnostic names it.
  * @returns The messages.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function renderEngineDiagnostics(
     issues: readonly SzDiagnosticIssue[],
@@ -220,6 +223,7 @@ export function diagnosticFileOf(result: SourceTransformResult): string | undefi
  *
  * @param issue - The diagnostic.
  * @returns The message: header with the code alone, the sentence, the page.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function renderUnplacedDiagnostic(issue: Pick<SzDiagnosticIssue, 'code' | 'args'>): string {
     return renderSzDiagnostic({

@@ -312,6 +312,7 @@ function validateAliasPrefix(config: GlobalVarMangleConfig): string | null {
  *
  * @param config User-provided global variable alias config.
  * @returns Validation errors. Empty means the config shape is valid.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | undefined): string[] {
     if (!config) {
@@ -748,6 +749,7 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
  * resolve an unset option through it, and reading it off the config object
  * makes it `boolean | undefined` — which forces each reader to invent a second
  * fallback for a case the config cannot produce.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const DEFAULT_IMPORTED_STATIC_SZ = true;
 

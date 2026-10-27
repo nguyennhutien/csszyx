@@ -11,5 +11,6 @@
  * Maximum AST nodes processed per file. Files larger than this are
  * almost always machine-generated (e.g. embedded data tables, .json-as-ts
  * fixtures) and shouldn't be sent through the sz transform.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const AST_BUDGET = 50_000;

@@ -258,6 +258,7 @@ export function isRuntimeInitialized(): boolean {
 
 /**
  * Resets the runtime state (for testing).
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function resetRuntime(): void {
     runtimeState.config = { ...DEFAULT_RUNTIME_CONFIG };

@@ -13,6 +13,7 @@
  *
  * @param v - Color value: Tailwind name, hex, rgb/hsl/oklch, or CSS variable
  * @returns CSS-compatible color string, or undefined when there is no colour
+ * @internal Called by generated code, not written by hand.
  */
 export function __szColorVar(v: string | null | undefined): string | undefined {
     // A runtime-conditional colour can resolve to undefined/null

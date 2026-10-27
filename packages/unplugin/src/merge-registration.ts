@@ -44,6 +44,7 @@ import { createUnservedRuntimeModule } from './virtual-modules.js';
  * Not `unserved-runtime.mjs`: the webpack lane writes that one, with
  * placeholders its `processAssets` fills in over the emitted assets, and
  * `next dev --webpack` and `next dev --turbo` share one `.csszyx`.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const MERGE_REGISTRATION_FILE = 'merge-registration.mjs';
 
@@ -133,6 +134,7 @@ export interface MergeRegistrationInput {
  *
  * @param input - The project's classes and design system.
  * @returns Where the module lives, and whether this call rewrote it.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function writeMergeRegistration(input: MergeRegistrationInput): {
     path: string;

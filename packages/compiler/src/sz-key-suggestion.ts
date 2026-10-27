@@ -33,6 +33,7 @@ import {
  * @returns The target, or null when nothing is near enough or two targets tie.
  * @example
  * nearestName('dispaly', [['display', 'display']], 1); // 'display'
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function nearestName(
     key: string,
@@ -206,6 +207,7 @@ function patternDistance(length: number, text: string): number {
  * @returns The canonical key, or null when no single key is near enough.
  * @example
  * suggestSzKey('workBreak'); // 'break'
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function suggestSzKey(key: string): string | null {
     const { byLength, longest } = knownSzKeyNames();

@@ -28,7 +28,11 @@ export type MergeAuditKind =
     /** An `sz` class covered a static class-name class beside it. */
     | 'merge-covered-class';
 
-/** Every merge rule, in the order the audit and the build name them. */
+/**
+ * Every merge rule, in the order the audit and the build name them.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export const MERGE_AUDIT_KINDS: readonly MergeAuditKind[] = [
     'merge-covered-key',
     'merge-covered-class',

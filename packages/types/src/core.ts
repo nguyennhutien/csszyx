@@ -6,7 +6,9 @@
  */
 
 /**
+ * The functions the `@csszyx/core` WebAssembly build exports.
  *
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export interface CsszyxCoreWasm {
     /**
@@ -52,6 +54,8 @@ export interface CsszyxCoreWasm {
 
 /**
  * The expected structure of the WASM initialization output.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export interface CsszyxCorePkg {
     default: () => Promise<void>;

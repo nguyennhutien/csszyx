@@ -17,6 +17,7 @@
  * @template T - the (string) element type.
  * @param values - the strings to sort (any iterable; not mutated).
  * @returns a new array sorted ascending by UTF-16 code unit.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function sortStrings<T extends string>(values: Iterable<T>): T[] {
     return [...values].sort((a, b) => {

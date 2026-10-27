@@ -1,0 +1,28 @@
+{
+    "csszyx/core": [
+        "__szvPick",
+        "_sz",
+        "_sz2",
+        "_sz3",
+        "_szMerge",
+        "_szPart",
+        "_szcn",
+        "szr"
+    ],
+    "@csszyx/runtime/core": [
+        "__szvPick",
+        "__szvPick1",
+        "_sz",
+        "_sz2",
+        "_sz3",
+        "clearMangleRegistry",
+        "getMangleRegistry",
+        "installMangleRuntime",
+        "szr"
+    ],
+    "@csszyx/runtime/merge": [
+        "_szMerge",
+        "_szPart",
+        "_szcn"
+    ]
+}

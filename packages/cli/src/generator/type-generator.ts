@@ -578,6 +578,7 @@ function themeKeysOrFallback(
  * @param {ResolvedTheme} theme - Resolved Tailwind theme
  * @param {GeneratorOptions} options - Generation options
  * @returns {string} Generated TypeScript declaration content
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function generateTypeDeclarations(
     theme: ResolvedTheme,
@@ -849,6 +850,7 @@ export {};
  *
  * @param {string} content - Generated TypeScript content
  * @param {string} outputPath - Output file path
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export async function writeDeclarationFile(content: string, outputPath: string): Promise<void> {
     const absolutePath = resolve(outputPath);
@@ -866,6 +868,7 @@ export async function writeDeclarationFile(content: string, outputPath: string):
  * @param {ResolvedTheme} theme - Resolved Tailwind theme
  * @param {GeneratorOptions} options - Generation options
  * @returns {Promise<string>} Path to generated file
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export async function generateAndWriteTypes(
     theme: ResolvedTheme,

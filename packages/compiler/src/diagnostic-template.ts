@@ -59,7 +59,11 @@ export interface SzBrowserDiagnostic<Args extends object = Readonly<Record<strin
     readonly argsType?: Args;
 }
 
-/** Where every code's page lives; the code is appended. */
+/**
+ * Where every code's page lives; the code is appended.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export const SZ_DIAGNOSTIC_URL_BASE = 'https://csszyx.com/e/';
 
 /** One arg value, as the wire carries it. */

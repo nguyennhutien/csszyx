@@ -66,6 +66,7 @@ export interface PreprocessResult {
  *
  * @param {string} source - Vue SFC source code
  * @returns {{ content: string; start: number; end: number } | null} Template info or null
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function extractTemplate(source: string): {
     content: string;
@@ -97,6 +98,7 @@ const CLOSE = '</template>';
  * @param {string} template - Template string
  * @param {VueAdapterOptions} options - Options
  * @returns {PreprocessResult} Transformation result
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function transformTemplate(
     template: string,

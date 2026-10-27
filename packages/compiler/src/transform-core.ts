@@ -149,6 +149,7 @@ export interface SzObject {
  * @param target - Earlier element (lower precedence). Not mutated.
  * @param source - Later element (higher precedence). Not mutated.
  * @returns A new deep-merged sz object.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject {
     // Each layer settles its own stand-alone keywords first, as it would lowered
@@ -201,6 +202,7 @@ function withoutShadowedKeys(szProp: SzObject): SzObject {
  * second hand-written copy there would drift: a side present in one list and
  * absent from the other makes the completion and the compiler disagree about
  * what is legal.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const MASK_SIDES: readonly string[] = /* @__PURE__ */ Object.freeze([
     't',
@@ -415,6 +417,7 @@ export const VARIANT_MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Obj
 // has-[:checked], supports-[display:grid]). Kept separate from KNOWN_VARIANTS
 // because they are not standalone variant names.
 // ============================================================================
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const SPECIAL_VARIANTS: ReadonlySet<string> = new Set([
     'group',
     'peer',
@@ -428,6 +431,7 @@ export const SPECIAL_VARIANTS: ReadonlySet<string> = new Set([
 // ============================================================================
 // ARIA_STATES: Standard aria boolean states (vs arbitrary aria-[*] syntax)
 // ============================================================================
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const ARIA_STATES: ReadonlySet<string> = new Set([
     'checked',
     'disabled',
@@ -493,6 +497,7 @@ const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
 
 // Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
 // scripts/generate-rust-transform-tables.mjs — run pnpm gen:rust-tables.
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const BOOLEAN_ONLY_DYNAMIC_KEYS: ReadonlySet<string> = new Set(
     Object.keys(BOOLEAN_ONLY_DYNAMIC_VOCABULARY),
 );
@@ -502,6 +507,7 @@ export const BOOLEAN_ONLY_DYNAMIC_KEYS: ReadonlySet<string> = new Set(
 // Setting any of these at build/runtime now emits no class and warns; authors
 // write the canonical form, which is a single key per CSS property so the same
 // property cannot be set twice in one object.
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const REMOVED_BOOLEAN_SUGAR: Readonly<
     Record<string, Readonly<{ key: string; value: string }>>
 > = /* @__PURE__ */ Object.freeze({
@@ -563,6 +569,7 @@ export const REMOVED_BOOLEAN_SUGAR: Readonly<
  * They reach the same removal paths as boolean sugar and alias names, but
  * they were never sugar or a CSS property name, so every message says they
  * were replaced. Generated into the engine's tables (`is_replaced_key`).
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const REPLACED_KEYS: ReadonlySet<string> = new Set([
     'liningNums',
@@ -636,6 +643,7 @@ function warnAlignmentValue(rawKey: string, written: string): void {
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const BOOLEAN_TO_CLASS: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     textEllipsis: 'text-ellipsis',
     textClip: 'text-clip',
@@ -698,6 +706,7 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // an arbitrary value only (`-tracking-tight`) and `mask` on a linear angle
 // (`-mask-linear-45`), so the table's number column leaves both out; a test in
 // `@csszyx/tailwind-oracle` keeps the two consistent.
+/** @internal Used by csszyx's own packages; not a stable API. */
 export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'm',
     'mt',
@@ -1040,6 +1049,7 @@ function isArbitraryVariant(key: string): boolean {
  * Normalizes arbitrary variant selectors (removes extra whitespace)
  * @param key - the arbitrary variant key to normalize
  * @returns normalized variant string with whitespace removed
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function normalizeArbitraryVariant(key: string): string {
     // "[& > span]" → "[&>span]"
@@ -1050,6 +1060,7 @@ export function normalizeArbitraryVariant(key: string): string {
  * Normalizes arbitrary values for Tailwind
  * @param value - the arbitrary value to normalize
  * @returns normalized value with spaces replaced by underscores
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function normalizeArbitraryValue(value: string): string {
     // A value in the brackets csszyx writes itself never gets here: it is
@@ -1479,6 +1490,7 @@ function camelToKebab(prop: string): string {
  * Gets the variant prefix from a camelCase key
  * @param key - the camelCase variant key
  * @returns the mapped or kebab-cased variant prefix
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function getVariantPrefix(key: string): string {
     let prefix = variantPrefixes.get(key);
@@ -1626,6 +1638,7 @@ function isArbitraryGroupPeerKey(key: string): boolean {
  * @param key - the sz key holding a string value.
  * @returns the variant prefix to place before `:`, or null when the key is
  * not a variant.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function variantStringPrefix(key: string): string | null {
     if (KNOWN_VARIANTS.has(key)) return getVariantPrefix(key);
@@ -1973,6 +1986,7 @@ function runtimeSzWarnContext(szProp: SzObject): string | undefined {
  *
  * @param location - `relativePath:line` (or `relativePath`) to attribute the
  *   warning to, or `undefined` to clear.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function setSzWarnLocation(location: string | undefined): void {
     szWarnLocation = location;
@@ -1988,6 +2002,7 @@ export function setSzWarnLocation(location: string | undefined): void {
  * @param line - 1-based line of the sz prop, or undefined to omit it.
  * @param rootDir - project root to relativize against, or undefined to keep `file`.
  * @returns `relativePath:line`, `relativePath`, or the raw filename.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function formatSzWarnLocation(
     file: string,
@@ -3538,7 +3553,11 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
     }
 }
 
-/** Returns whether a key belongs to any supported property or variant family. */
+/**
+ * Returns whether a key belongs to any supported property or variant family.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export function isKnownSzPropertyKey(key: string): boolean {
     return Boolean(
         own(PROPERTY_MAP, key) ||
@@ -3580,6 +3599,7 @@ function buildGenericStringClass(
  * few as a named utility (`text-inherit`); for every other key the keyword
  * needs the arbitrary form (`p-[inherit]`), and the bare one is a class with
  * no CSS.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
     'inherit',
@@ -3594,6 +3614,7 @@ export const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
  * keyword. Measured against the design system of Tailwind 4.3: every other
  * prefix serves the keyword only bracketed, or not at all. The engine reads
  * this table through the generated Rust tables.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const CSS_WIDE_KEYWORD_UTILITIES: ReadonlySet<string> = new Set([
     'bg-inherit',
@@ -4006,6 +4027,7 @@ const _warnedPropertyObjects = new Set<string>();
  * Vitest's per-file isolation hides that today; a shared worker, a shuffled
  * order, or two lanes probing one key inside one file exposes it. Suites call
  * this in `beforeEach` so their assertions stand on their own.
+ * @internal For tests; not a stable API.
  */
 export function __resetSzWarnDedupForTests(): void {
     warnedAlignmentValues.clear();

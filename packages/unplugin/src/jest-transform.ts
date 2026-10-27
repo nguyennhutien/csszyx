@@ -292,6 +292,7 @@ class TransformCacheIndex {
  * @param source - Its current contents.
  * @param classPrefix - The Tailwind prefix the project sets, or null.
  * @returns The compiled code, or null when the build has no matching entry.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function findCachedTransform(
     cacheRoot: string,

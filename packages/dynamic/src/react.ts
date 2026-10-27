@@ -119,6 +119,7 @@ function cancelPendingCleanup(): void {
  * Reset the shared consumer counter and pending timer — test-only. Module
  * state persists across tests in one suite, so suites that simulate
  * mount/unmount cycles must start from a known-empty lifecycle.
+ * @internal For tests; not a stable API.
  */
 export function _resetUseSzLifecycle(): void {
     cancelPendingCleanup();

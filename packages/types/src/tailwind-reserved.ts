@@ -22,7 +22,11 @@ export const TAILWIND_RESERVED_PREFIXES = [
     '--animate-',
 ] as const;
 
-/** Namespace csszyx generates global-variable aliases into. */
+/**
+ * Namespace csszyx generates global-variable aliases into.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
 export const CSSZYX_GLOBAL_ALIAS_PREFIX = '---g';
 
 /**
@@ -42,6 +46,7 @@ export function isTailwindReservedCustomProperty(name: string): boolean {
  * @param name Custom-property name including the leading `--`.
  * @param aliasPrefix Active generated alias prefix.
  * @returns true when the name belongs to csszyx's reserved generated alias namespace.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function isCsszyxGlobalAliasCustomProperty(
     name: string,

@@ -19,6 +19,7 @@ import { SZ_OBJECT_DEPTH, szRender } from './report.js';
  * Maximum nesting depth for an sz object / array before processing aborts.
  * Far above real usage — authored sz nests only a few levels (a variant chain
  * like `dark:{ hover:{ md:{…} } }` is ~3-4), so legitimate input never hits it.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const MAX_SZ_DEPTH = 32;
 
@@ -55,6 +56,7 @@ export class SzDepthError extends CsszyxError {
  *
  * @param key - the property key about to be written.
  * @returns true when the key is unsafe to assign and should be skipped.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function isForbiddenSzKey(key: string): boolean {
     return key === '__proto__' || key === 'constructor' || key === 'prototype';

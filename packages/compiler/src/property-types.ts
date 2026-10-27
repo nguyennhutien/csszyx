@@ -34,6 +34,7 @@ export enum PropertyCategory {
 /**
  * Maps sz property names to their PropertyCategory.
  * Covers all ~200 properties from PROPERTY_MAP in transform.ts.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const PROPERTY_CATEGORY_MAP: Readonly<Record<string, PropertyCategory>> =
     /* @__PURE__ */ Object.freeze({
@@ -219,6 +220,7 @@ export const PROPERTY_CATEGORY_MAP: Readonly<Record<string, PropertyCategory>> =
  * Falls back to PASSTHROUGH for unknown properties.
  * @param property - the sz property name to look up
  * @returns the PropertyCategory for the property, or PASSTHROUGH if unknown
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function getPropertyCategory(property: string): PropertyCategory {
     return PROPERTY_CATEGORY_MAP[property] ?? PropertyCategory.PASSTHROUGH;
@@ -227,6 +229,7 @@ export function getPropertyCategory(property: string): PropertyCategory {
 /**
  * Set of all properties that are color-type.
  * Used for quick lookup to determine if __szColorVar import is needed.
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export const COLOR_PROPERTIES: ReadonlySet<string> = new Set(
     Object.entries(PROPERTY_CATEGORY_MAP)
@@ -239,6 +242,7 @@ export const COLOR_PROPERTIES: ReadonlySet<string> = new Set(
  * @param property - the sz property name
  * @param variantPrefix - variant chain (e.g., 'hover', 'md')
  * @returns CSS variable name like '--_sz-p' or '--_sz-hover-bg'
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function getCSSVariableName(property: string, variantPrefix?: string): string {
     const prop = property.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();

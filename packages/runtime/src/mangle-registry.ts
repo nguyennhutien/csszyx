@@ -183,6 +183,7 @@ export function getMangleRegistry(): MangleRegistry | null {
 
 /**
  * Forget the installed registry (test isolation).
+ * @internal Used by csszyx's own packages; not a stable API.
  */
 export function clearMangleRegistry(): void {
     current = null;
