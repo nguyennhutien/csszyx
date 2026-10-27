@@ -172,7 +172,7 @@ interface OwnPathRules {
 }
 
 /** The `ignore` version this package pins in its `dependencies`. */
-const IGNORE_PINNED = '7.0.6';
+const IGNORE_PINNED = '7.0.13';
 
 /**
  * Match one path against an `ignore` instance's patterns, its parent folders
