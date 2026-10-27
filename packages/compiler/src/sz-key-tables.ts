@@ -14,7 +14,7 @@
 // ============================================================================
 // PROPERTY_MAP: Maps sz prop names to Tailwind utility prefixes
 // ============================================================================
-export const PROPERTY_MAP: Record<string, string> = {
+export const PROPERTY_MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     // Background
     bg: 'bg',
     bgAttach: 'bg',
@@ -386,7 +386,7 @@ export const PROPERTY_MAP: Record<string, string> = {
 
     // Tab Size (v4.3)
     tabSize: 'tab',
-};
+});
 
 // ============================================================================
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
@@ -398,7 +398,7 @@ export const PROPERTY_MAP: Record<string, string> = {
  * print the prose as if it were a key ("Use the canonical key "maskLinear /
  * maskRadial / maskConic with { from }" …").
  */
-export const MIGRATION_NOTES: Record<string, string> = {
+export const MIGRATION_NOTES: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     // Mask gradient stops moved onto the layer that owns them: Tailwind has no
     // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
     maskFrom:
@@ -410,7 +410,7 @@ export const MIGRATION_NOTES: Record<string, string> = {
     // One key could hold one keyword, while CSS combines one per group.
     fontVariant:
         "write one key per group: `numFigure`, `numSpacing`, `numFraction`, `numOrdinal`, `numSlashedZero`, or `nums: 'normal'`",
-};
+});
 
 /**
  * CSS shorthands csszyx writes as two keys, so no one key is their canonical
@@ -418,12 +418,13 @@ export const MIGRATION_NOTES: Record<string, string> = {
  * Like an alias, such a key emits nothing. Kept apart from `SUGGESTION_MAP`,
  * whose every value is a key to write.
  */
-export const SPLIT_SHORTHAND_KEYS: Readonly<Record<string, 'font' | 'scrollbar-color'>> = {
-    font: 'font',
-    scrollbarColor: 'scrollbar-color',
-};
+export const SPLIT_SHORTHAND_KEYS: Readonly<Record<string, 'font' | 'scrollbar-color'>> =
+    /* @__PURE__ */ Object.freeze({
+        font: 'font',
+        scrollbarColor: 'scrollbar-color',
+    });
 
-export const SUGGESTION_MAP: Record<string, string> = {
+export const SUGGESTION_MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     // font-variant-numeric single-keyword groups joined the `num*` family (0.18.0)
     ordinal: 'numOrdinal',
     slashedZero: 'numSlashedZero',
@@ -534,12 +535,12 @@ export const SUGGESTION_MAP: Record<string, string> = {
     // Boolean remaps
     flexWrapReverse: "flexWrap: 'wrap-reverse'",
     flexNowrap: "flexWrap: 'nowrap'",
-};
+});
 
 // ============================================================================
 // KNOWN_VARIANTS: All known variant names for disambiguation
 // ============================================================================
-export const KNOWN_VARIANTS: Set<string> = new Set([
+export const KNOWN_VARIANTS: ReadonlySet<string> = new Set([
     // Responsive
     'sm',
     'md',
@@ -672,7 +673,7 @@ export const KNOWN_VARIANTS: Set<string> = new Set([
 // Canonical keys lowered by dedicated branches rather than PROPERTY_MAP. This
 // table feeds native and editor-tooling generation so valid-key diagnostics and
 // completions cannot drift from the compiler.
-export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
+export const KNOWN_SPECIAL_PROPERTIES: ReadonlySet<string> = new Set([
     'css',
     'maskLinear',
     'maskRadial',
@@ -706,7 +707,7 @@ export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
 // directional reverse flags. Value-alias sugar for display/position/visibility/
 // isolation/text-transform/font-style/text-decoration-line/font-smoothing was
 // removed — those are written with their canonical key (see REMOVED_BOOLEAN_SUGAR).
-export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
+export const BOOLEAN_SHORTHANDS: ReadonlySet<string> = new Set([
     // Typography (composite — no single-property canonical form)
     'truncate',
     // Public text-overflow boolean spellings retained alongside textOverflow.

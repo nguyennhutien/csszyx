@@ -101,6 +101,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`serializeManifest` options](#serializemanifest-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`migrateSource` options](#migratesource-takes-the-path-in-its-options) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Engine call options](#engine-calls-take-their-options-in-one-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
+| [Exported tables are read-only](#exported-tables-are-read-only) | `TypeError` on a write to `PROPERTY_MAP` or another record table in an ES module | `tsc`, runtime throw | you, if you change them |
 | [Global variable map format](#the-global-variable-map-carries-its-format) | a tool reading `.csszyx/global-var-map.json` reads no aliases | your tool | you, if a tool reads it |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -1708,6 +1709,23 @@ and csszyx itself are not affected.
 
 **The edit.** Read the aliases from `aliases`, and refuse a `format` the tool
 does not know.
+
+## Exported tables are read-only
+
+The tables `@csszyx/compiler` exports, such as `PROPERTY_MAP`, `VARIANT_MAP`,
+`SUGGESTION_MAP` and `KNOWN_VARIANTS`, could be changed by the code that imported
+them, and a change applied to every class the process wrote afterwards. The
+record tables are now frozen, so in an ES module a write to one of their keys
+throws a `TypeError`; in a CommonJS file without `'use strict'` it is ignored.
+The records inside a table, such as each key's values in `CLOSED_ENUM_CLASSES`,
+and the `Set`s, such as `KNOWN_VARIANTS`, are typed read-only: `tsc` reports a
+write. A write to them is not supported and may throw in a later release.
+
+**You are affected** when your code adds to or changes one of these tables.
+
+**The edit.** A table is not a way to teach csszyx a class: a copy changes
+nothing the build writes. Define the class with Tailwind's `@utility` and write
+it as a string in an `sz` array, such as `sz={['my-utility', { p: 4 }]}`.
 
 ## Engine calls take their options in one object
 

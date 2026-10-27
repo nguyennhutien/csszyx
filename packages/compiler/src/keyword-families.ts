@@ -22,7 +22,9 @@
  * ({@link settleGlobalKeywords}). The engine reads a generated copy
  * (`scripts/generate-rust-transform-tables.mjs`).
  */
-export const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups', string>> = {
+export const GLOBAL_KEYWORD_GROUPS: Readonly<
+    Record<string, Readonly<Record<'property' | 'groups', string>>>
+> = /* @__PURE__ */ Object.freeze({
     nums: {
         property: 'font-variant-numeric',
         groups: 'numFigure numSpacing numFraction numOrdinal numSlashedZero',
@@ -32,7 +34,7 @@ export const GLOBAL_KEYWORD_GROUPS: Record<string, Record<'property' | 'groups',
         property: 'contain',
         groups: 'containSize containLayout containPaint containStyle',
     },
-};
+});
 
 /** `GLOBAL_KEYWORD_GROUPS` as entries, built once. */
 const GLOBAL_KEYWORD_ENTRIES = Object.entries(GLOBAL_KEYWORD_GROUPS);

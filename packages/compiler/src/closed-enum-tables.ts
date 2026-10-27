@@ -29,65 +29,66 @@
  * values.
  */
 /** @internal Read by the diagnostic renderer; not a stable shape. */
-export const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
-    display: {
-        block: 'block',
-        'inline-block': 'inline-block',
-        inline: 'inline',
-        flex: 'flex',
-        'inline-flex': 'inline-flex',
-        grid: 'grid',
-        'inline-grid': 'inline-grid',
-        contents: 'contents',
-        table: 'table',
-        'inline-table': 'inline-table',
-        'table-caption': 'table-caption',
-        'table-cell': 'table-cell',
-        'table-column': 'table-column',
-        'table-column-group': 'table-column-group',
-        'table-footer-group': 'table-footer-group',
-        'table-header-group': 'table-header-group',
-        'table-row-group': 'table-row-group',
-        'table-row': 'table-row',
-        'flow-root': 'flow-root',
-        'list-item': 'list-item',
-        none: 'hidden',
-    },
-    position: {
-        static: 'static',
-        fixed: 'fixed',
-        absolute: 'absolute',
-        relative: 'relative',
-        sticky: 'sticky',
-    },
-    visibility: {
-        visible: 'visible',
-        hidden: 'invisible',
-        collapse: 'collapse',
-    },
-    isolation: {
-        isolate: 'isolate',
-        auto: 'isolation-auto',
-    },
-    // font-variant-numeric, one key per group of `normal | [ <figure> ||
-    // <spacing> || <fraction> || ordinal || slashed-zero ]`. Each group is one
-    // Tailwind variable, so two keywords of a group override and different
-    // groups combine. Source of truth: `docs/specs/snippets/typography.md`.
-    nums: { normal: 'normal-nums' },
-    numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
-    numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
-    numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
-    // touch-action: `auto | none | [ pan-x… || pan-y… || pinch-zoom ] |
-    // manipulation`. `touch` holds the keywords that stand alone. Source of
-    // truth: `docs/specs/snippets/interactivity.md`.
-    touch: { auto: 'touch-auto', none: 'touch-none', manipulation: 'touch-manipulation' },
-    touchPanX: { x: 'touch-pan-x', left: 'touch-pan-left', right: 'touch-pan-right' },
-    touchPanY: { y: 'touch-pan-y', up: 'touch-pan-up', down: 'touch-pan-down' },
-    // contain: `none | strict | content | [ size|inline-size || layout || style
-    // || paint ]`. Source of truth: `docs/specs/snippets/layout.md`.
-    contain: { none: 'contain-none', strict: 'contain-strict', content: 'contain-content' },
-    containSize: { size: 'contain-size', 'inline-size': 'contain-inline-size' },
-};
+export const CLOSED_ENUM_CLASSES: Readonly<Record<string, Readonly<Record<string, string>>>> =
+    /* @__PURE__ */ Object.freeze({
+        display: {
+            block: 'block',
+            'inline-block': 'inline-block',
+            inline: 'inline',
+            flex: 'flex',
+            'inline-flex': 'inline-flex',
+            grid: 'grid',
+            'inline-grid': 'inline-grid',
+            contents: 'contents',
+            table: 'table',
+            'inline-table': 'inline-table',
+            'table-caption': 'table-caption',
+            'table-cell': 'table-cell',
+            'table-column': 'table-column',
+            'table-column-group': 'table-column-group',
+            'table-footer-group': 'table-footer-group',
+            'table-header-group': 'table-header-group',
+            'table-row-group': 'table-row-group',
+            'table-row': 'table-row',
+            'flow-root': 'flow-root',
+            'list-item': 'list-item',
+            none: 'hidden',
+        },
+        position: {
+            static: 'static',
+            fixed: 'fixed',
+            absolute: 'absolute',
+            relative: 'relative',
+            sticky: 'sticky',
+        },
+        visibility: {
+            visible: 'visible',
+            hidden: 'invisible',
+            collapse: 'collapse',
+        },
+        isolation: {
+            isolate: 'isolate',
+            auto: 'isolation-auto',
+        },
+        // font-variant-numeric, one key per group of `normal | [ <figure> ||
+        // <spacing> || <fraction> || ordinal || slashed-zero ]`. Each group is one
+        // Tailwind variable, so two keywords of a group override and different
+        // groups combine. Source of truth: `docs/specs/snippets/typography.md`.
+        nums: { normal: 'normal-nums' },
+        numFigure: { lining: 'lining-nums', oldstyle: 'oldstyle-nums' },
+        numSpacing: { proportional: 'proportional-nums', tabular: 'tabular-nums' },
+        numFraction: { diagonal: 'diagonal-fractions', stacked: 'stacked-fractions' },
+        // touch-action: `auto | none | [ pan-x… || pan-y… || pinch-zoom ] |
+        // manipulation`. `touch` holds the keywords that stand alone. Source of
+        // truth: `docs/specs/snippets/interactivity.md`.
+        touch: { auto: 'touch-auto', none: 'touch-none', manipulation: 'touch-manipulation' },
+        touchPanX: { x: 'touch-pan-x', left: 'touch-pan-left', right: 'touch-pan-right' },
+        touchPanY: { y: 'touch-pan-y', up: 'touch-pan-up', down: 'touch-pan-down' },
+        // contain: `none | strict | content | [ size|inline-size || layout || style
+        // || paint ]`. Source of truth: `docs/specs/snippets/layout.md`.
+        contain: { none: 'contain-none', strict: 'contain-strict', content: 'contain-content' },
+        containSize: { size: 'contain-size', 'inline-size': 'contain-inline-size' },
+    });
 
 /**
  * What a closed-enum key wraps around a value outside its table.
@@ -120,7 +121,9 @@ const CLOSED_ENUM_AFFIXES: Record<string, Record<'prefix' | 'suffix', string>> =
  * a generated copy (`closed_enum_value_move`), and `csszyx migrate` rewrites
  * with it.
  */
-export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', string>> = {
+export const CLOSED_ENUM_VALUE_MOVES: Readonly<
+    Record<string, Readonly<Record<'key' | 'value', string>>>
+> = /* @__PURE__ */ Object.freeze({
     'touch:pan-x': { key: 'touchPanX', value: 'x' },
     'touch:pan-left': { key: 'touchPanX', value: 'left' },
     'touch:pan-right': { key: 'touchPanX', value: 'right' },
@@ -128,7 +131,7 @@ export const CLOSED_ENUM_VALUE_MOVES: Record<string, Record<'key' | 'value', str
     'touch:pan-up': { key: 'touchPanY', value: 'up' },
     'touch:pan-down': { key: 'touchPanY', value: 'down' },
     'touch:pinch-zoom': { key: 'touchPinchZoom', value: 'true' },
-};
+});
 
 /**
  * The class a closed-enum key emits for a value outside its table.

@@ -202,7 +202,14 @@ function withoutShadowedKeys(szProp: SzObject): SzObject {
  * absent from the other makes the completion and the compiler disagree about
  * what is legal.
  */
-export const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+export const MASK_SIDES: readonly string[] = /* @__PURE__ */ Object.freeze([
+    't',
+    'r',
+    'b',
+    'l',
+    'x',
+    'y',
+]);
 
 /**
  * Sub-keys of one property that write the SAME CSS custom property, so only one
@@ -338,7 +345,7 @@ function typedVariableValue(rawKey: string, value: string): string | null {
 // ============================================================================
 // VARIANT_MAP: Maps camelCase variant names to kebab-case
 // ============================================================================
-export const VARIANT_MAP: Record<string, string> = {
+export const VARIANT_MAP: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     // Focus variants
     focusWithin: 'focus-within',
     focusVisible: 'focus-visible',
@@ -400,7 +407,7 @@ export const VARIANT_MAP: Record<string, string> = {
     '@maxLg': '@max-lg',
     '@maxXl': '@max-xl',
     '@max2xl': '@max-2xl',
-};
+});
 
 // ============================================================================
 // SPECIAL_VARIANTS: Parametric/scope variants that take a nested target and
@@ -408,7 +415,7 @@ export const VARIANT_MAP: Record<string, string> = {
 // has-[:checked], supports-[display:grid]). Kept separate from KNOWN_VARIANTS
 // because they are not standalone variant names.
 // ============================================================================
-export const SPECIAL_VARIANTS: Set<string> = new Set([
+export const SPECIAL_VARIANTS: ReadonlySet<string> = new Set([
     'group',
     'peer',
     'has',
@@ -495,7 +502,9 @@ export const BOOLEAN_ONLY_DYNAMIC_KEYS: ReadonlySet<string> = new Set(
 // Setting any of these at build/runtime now emits no class and warns; authors
 // write the canonical form, which is a single key per CSS property so the same
 // property cannot be set twice in one object.
-export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string }> = {
+export const REMOVED_BOOLEAN_SUGAR: Readonly<
+    Record<string, Readonly<{ key: string; value: string }>>
+> = /* @__PURE__ */ Object.freeze({
     // display
     block: { key: 'display', value: 'block' },
     inline: { key: 'display', value: 'inline' },
@@ -546,7 +555,7 @@ export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string 
     tabularNums: { key: 'numSpacing', value: 'tabular' },
     diagonalFractions: { key: 'numFraction', value: 'diagonal' },
     stackedFractions: { key: 'numFraction', value: 'stacked' },
-};
+});
 
 /**
  * Keys that were canonical and got a new spelling (0.18.0 `num*` family).
@@ -627,7 +636,7 @@ function warnAlignmentValue(rawKey: string, written: string): void {
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
-export const BOOLEAN_TO_CLASS: Record<string, string> = {
+export const BOOLEAN_TO_CLASS: Readonly<Record<string, string>> = /* @__PURE__ */ Object.freeze({
     textEllipsis: 'text-ellipsis',
     textClip: 'text-clip',
     backdropBlur: 'backdrop-blur',
@@ -652,7 +661,7 @@ export const BOOLEAN_TO_CLASS: Record<string, string> = {
     transformCpu: 'transform-cpu',
     // Misc
     proseInvert: 'prose-invert',
-};
+});
 
 // ============================================================================
 // SNAP_DIRECT_MAP: Snap property direct mappings (no prefix-value pattern)
@@ -689,7 +698,7 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // an arbitrary value only (`-tracking-tight`) and `mask` on a linear angle
 // (`-mask-linear-45`), so the table's number column leaves both out; a test in
 // `@csszyx/tailwind-oracle` keeps the two consistent.
-export const NEGATIVE_ALLOWED: Set<string> = new Set([
+export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'm',
     'mt',
     'mr',
@@ -3572,7 +3581,7 @@ function buildGenericStringClass(
  * needs the arbitrary form (`p-[inherit]`), and the bare one is a class with
  * no CSS.
  */
-export const CSS_WIDE_KEYWORDS: Set<string> = new Set([
+export const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
     'inherit',
     'initial',
     'unset',
@@ -3586,7 +3595,7 @@ export const CSS_WIDE_KEYWORDS: Set<string> = new Set([
  * prefix serves the keyword only bracketed, or not at all. The engine reads
  * this table through the generated Rust tables.
  */
-export const CSS_WIDE_KEYWORD_UTILITIES: Set<string> = new Set([
+export const CSS_WIDE_KEYWORD_UTILITIES: ReadonlySet<string> = new Set([
     'bg-inherit',
     'from-inherit',
     'via-inherit',

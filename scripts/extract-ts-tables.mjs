@@ -24,6 +24,9 @@ import path from 'node:path';
 
 import ts from 'typescript';
 
+/** The calls a table's literal may sit inside, frozen; extraction reads through them. */
+const FREEZE_CALLS = new Set(['Object.freeze']);
+
 /**
  * Open a TypeScript or TSX source file for table extraction.
  *
@@ -65,10 +68,25 @@ export function readTableSource(filePath) {
     }
 
     /**
-     * The declaration's initializer with `as const` / `satisfies` peeled off.
+     * Whether a node is `Object.freeze(<one argument>)`.
      *
-     * A type-locked literal (`{…} as const satisfies SzProps`) must extract
-     * like a plain one.
+     * @param node - The expression.
+     * @returns True for a call to `Object.freeze` with one argument.
+     */
+    function isObjectFreeze(node) {
+        return (
+            ts.isCallExpression(node) &&
+            node.arguments.length === 1 &&
+            FREEZE_CALLS.has(node.expression.getText(sourceFile))
+        );
+    }
+
+    /**
+     * The declaration's initializer with `as const` / `satisfies` and a
+     * freeze call peeled off.
+     *
+     * A type-locked literal (`{…} as const satisfies SzProps`) or a frozen one
+     * (`Object.freeze({…})`) must extract like a plain one.
      *
      * @param name - The declared name.
      * @returns The unwrapped initializer expression.
@@ -77,9 +95,13 @@ export function readTableSource(filePath) {
         let initializer = declarationOf(name).initializer;
         while (
             initializer &&
-            (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer))
+            (ts.isAsExpression(initializer) ||
+                ts.isSatisfiesExpression(initializer) ||
+                isObjectFreeze(initializer))
         ) {
-            initializer = initializer.expression;
+            initializer = ts.isCallExpression(initializer)
+                ? initializer.arguments[0]
+                : initializer.expression;
         }
         if (!initializer) throw new Error(`${name} in ${label} has no initializer`);
         return initializer;
