@@ -214,10 +214,11 @@ export interface CompilerOptions {
 /**
  * Default compiler options.
  */
-export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
-    buildId: Date.now().toString(),
-    development: process.env.NODE_ENV !== 'production',
-};
+export const DEFAULT_COMPILER_OPTIONS: Readonly<Required<CompilerOptions>> =
+    /* @__PURE__ */ Object.freeze({
+        buildId: Date.now().toString(),
+        development: process.env.NODE_ENV !== 'production',
+    });
 
 /**
  * Merges user options with defaults.

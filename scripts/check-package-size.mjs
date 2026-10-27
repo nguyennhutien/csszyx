@@ -348,13 +348,15 @@ export const SIZE_BUDGETS = [
     // under the usual headroom, so the module order is what fails: the first
     // two lose a chunk, the third lays the key tables first (it fails the
     // Node budgets below too). Measured 39,733 on 2026-10-21. Budget the
-    // usual ~300 above.
+    // usual ~300 above. 40,350 on 2026-10-27, measured 40,055 (40,029
+    // before the branch): the exported tables and the runtime's default config
+    // are frozen, so an importer's write cannot change what later code reads.
     {
         name: 'csszyx installed app bundle (runtime + dynamic, compiler bundled)',
         kind: 'installed-app',
         target: 'packages/csszyx',
         imports: ['@csszyx/runtime', '@csszyx/dynamic'],
-        maxGzipBytes: 40_050,
+        maxGzipBytes: 40_350,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,

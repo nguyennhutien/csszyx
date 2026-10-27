@@ -1780,7 +1780,16 @@ The records inside a table, such as each key's values in `CLOSED_ENUM_CLASSES`,
 and the `Set`s, such as `KNOWN_VARIANTS`, are typed read-only: `tsc` reports a
 write. A write to them is not supported and may throw in a later release.
 
-**You are affected** when your code adds to or changes one of these tables.
+The default configs are frozen the same way: `DEFAULT_CSSZYX_CONFIG` and its
+parts in `@csszyx/types`, `DEFAULT_RUNTIME_CONFIG` in `@csszyx/runtime` and
+`DEFAULT_COMPILER_OPTIONS` in `@csszyx/compiler`. The plugin reads
+`DEFAULT_BUILD_CONFIG` for every option a config leaves out, so a write through
+`{ ...DEFAULT_CSSZYX_CONFIG }.build` changed the default of every plugin in the
+process; it now throws. Spread each level you change, as the `@csszyx/types`
+README shows.
+
+**You are affected** when your code adds to or changes one of these tables or
+defaults.
 
 **The edit.** A table is not a way to teach csszyx a class: a copy changes
 nothing the build writes. Define the class with Tailwind's `@utility` and write

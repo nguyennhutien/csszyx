@@ -165,12 +165,13 @@ export interface RuntimeConfig {
 /**
  * Default runtime configuration.
  */
-export const DEFAULT_RUNTIME_CONFIG: Required<RuntimeConfig> = {
-    development: false,
-    allowCSRRecovery: false,
-    strictHydration: true,
-    debug: false,
-};
+export const DEFAULT_RUNTIME_CONFIG: Readonly<Required<RuntimeConfig>> =
+    /* @__PURE__ */ Object.freeze({
+        development: false,
+        allowCSRRecovery: false,
+        strictHydration: true,
+        debug: false,
+    });
 
 /**
  * Global runtime state.
