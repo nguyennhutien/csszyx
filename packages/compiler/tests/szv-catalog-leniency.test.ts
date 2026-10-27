@@ -37,7 +37,7 @@ const IMPORT = "import { szv } from 'csszyx';";
 function expectCatalogParity(source: string, expected: string[]): void {
     const wanted = [...expected].sort();
     for (const [name, transform] of ENGINES) {
-        const classes = [...(transform(source, 'catalog.tsx').classes ?? [])].sort();
+        const classes = [...(transform(source, { filename: 'catalog.tsx' }).classes ?? [])].sort();
         expect(classes, `${name} classes`).toEqual(wanted);
     }
 }
@@ -238,11 +238,13 @@ const P = P;`,
         // bottom out empty — they are here to prove the walk TERMINATES, and
         // the parity assertion proves all engines cap identically.
         const source = `${IMPORT}\n${lines.join('\n')}`;
-        const wasm = [...transformWasm(source, 'catalog.tsx').classes].sort();
+        const wasm = [...transformWasm(source, { filename: 'catalog.tsx' }).classes].sort();
         expect(wasm).toContain('text-red-500');
         expect(wasm).toContain('text-blue-500');
         for (const [name, transform] of ENGINES) {
-            const classes = [...(transform(source, 'catalog.tsx').classes ?? [])].sort();
+            const classes = [
+                ...(transform(source, { filename: 'catalog.tsx' }).classes ?? []),
+            ].sort();
             expect(classes, name).toEqual(wasm);
         }
     });

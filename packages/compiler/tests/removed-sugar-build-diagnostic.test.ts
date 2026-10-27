@@ -27,7 +27,7 @@ import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
  */
 function diagnose(engine: ParityEngine, prop: string): string[] {
     const source = `export const A = () => <div sz={{ ${prop} }} />;`;
-    return (engine(source, '/p/App.tsx').diagnostics ?? []).map(String);
+    return (engine(source, { filename: '/p/App.tsx' }).diagnostics ?? []).map(String);
 }
 
 /**
@@ -39,7 +39,7 @@ function diagnose(engine: ParityEngine, prop: string): string[] {
  */
 function removedKeys(engine: ParityEngine, prop: string): object[] {
     const source = `export const A = () => <div sz={{ ${prop} }} />;`;
-    return (engine(source, '/p/App.tsx').issues ?? [])
+    return (engine(source, { filename: '/p/App.tsx' }).issues ?? [])
         .filter(issue => issue.code === 'removed-key')
         .map(issue => issue.args);
 }
@@ -107,7 +107,7 @@ describe.each(ENGINES)('removed boolean sugar at build time (%s)', (_name, engin
             '        <span sz={{ italic: true }} />\n' +
             '    </div>\n' +
             ');';
-        const result = engine(source, '/p/App.tsx');
+        const result = engine(source, { filename: '/p/App.tsx' });
         const messages = (result.diagnostics ?? []).map(String);
 
         expect(messages).toHaveLength(2);

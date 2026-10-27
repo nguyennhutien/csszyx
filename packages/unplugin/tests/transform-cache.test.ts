@@ -202,7 +202,7 @@ describe('transform cache', () => {
             '    <div className="pb-2" sz={{ pb: 2,',
             "        p: 4, xyzzy: 'é' }} />);",
         ].join('\n');
-        const engine = transformWasm(source, '/repo/src/App.tsx');
+        const engine = transformWasm(source, { filename: '/repo/src/App.tsx' });
         expect(engine.issues).toHaveLength(1);
         expect(engine.mergeGroups).toHaveLength(1);
         expect(engine.mergeOverrides).toHaveLength(1);
@@ -234,7 +234,7 @@ describe('transform cache', () => {
             "export const A = () => <div sz={{ break: 'bogus', p: 4 }} />;",
             "export const B = () => <div sz={{ justify: 'safe-center' }} />;",
         ].join('\n');
-        const engine = transformWasm(source, '/repo/src/App.tsx');
+        const engine = transformWasm(source, { filename: '/repo/src/App.tsx' });
         expect(engine.singleClassGroups).toHaveLength(1);
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         const spannedInput = input({ source });
@@ -337,7 +337,10 @@ describe('transform cache', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         const source = "export const A = () => <div sz={{ workBreak: 'all' }} />;\n";
         const keyInput = input({ source, filename: '/repo/src/A.tsx' });
-        const lazy = transformWasmUnrendered(source, '/repo/src/A.tsx', { rootDir: '/repo' });
+        const lazy = transformWasmUnrendered(source, {
+            filename: '/repo/src/A.tsx',
+            rootDir: '/repo',
+        });
         writeTransformCache(cacheRoot, keyInput, lazy);
 
         const { key } = createTransformCacheKey(keyInput);
@@ -351,7 +354,7 @@ describe('transform cache', () => {
         expect(cached?.diagnostics).toEqual([]);
         const file = diagnosticFileOf(cached as CacheableTransformResult) as string;
         expect(cached?.issues?.map(issue => renderEngineDiagnostic(issue, file))).toEqual(
-            transformWasm(source, '/repo/src/A.tsx', { rootDir: '/repo' }).diagnostics,
+            transformWasm(source, { filename: '/repo/src/A.tsx', rootDir: '/repo' }).diagnostics,
         );
     });
 

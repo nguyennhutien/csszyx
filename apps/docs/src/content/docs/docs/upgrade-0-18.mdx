@@ -100,6 +100,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`serializeManifest` options](#serializemanifest-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`migrateSource` options](#migratesource-takes-the-path-in-its-options) | `options-object-required` thrown | `tsc`, runtime throw | you |
+| [Engine call options](#engine-calls-take-their-options-in-one-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Global variable map format](#the-global-variable-map-carries-its-format) | a tool reading `.csszyx/global-var-map.json` reads no aliases | your tool | you, if a tool reads it |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
@@ -616,7 +617,9 @@ const object = parseStaticObjectLiteral("{ p: 4 }");
 
 // after
 import { transformSource } from "@csszyx/compiler/engine";
-const { code } = transformSource("export const A = () => <div sz={{ p: 4 }} />;", "a.tsx");
+const { code } = transformSource("export const A = () => <div sz={{ p: 4 }} />;", {
+  filename: "a.tsx",
+});
 // code holds className="p-4"
 ```
 
@@ -1706,6 +1709,34 @@ and csszyx itself are not affected.
 **The edit.** Read the aliases from `aliases`, and refuse a `format` the tool
 does not know.
 
+## Engine calls take their options in one object
+
+The calls of `@csszyx/compiler/engine` that read one module or one list of
+modules took the file name or the parser in a second or third position, beside
+an optional options object, so passing options meant writing a file name the
+call did not need. The file name, the parser and the other options are now keys
+of one object. `csszyx` re-exports `transformSource`, so the change applies to
+it there too:
+
+| Call | 0.17 | 0.18 |
+| --- | --- | --- |
+| `transformSource`, `transformRust`, `transformWasm` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
+| `scanGlobalVarUsages` | `(source, "a.tsx", options)` | `(source, { filename: "a.tsx", ...options })` |
+| `scanModuleLinks` | `(files, { registryEntries }, "wasm")` | `(files, { registryEntries, parser: "wasm" })` |
+| `extractCrossModuleRegistryEntries`, `extractCrossModuleForwards` | `(source, "a.ts", "wasm")` | `(source, { filename: "a.ts", parser: "wasm" })` |
+
+A second argument that is not an object, or a third argument, throws and names
+the call:
+
+```text
+[csszyx] options-object-required:
+  `transformSource` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
+  help: move every argument after the first into one object, as in `transformSource(source, { filename: 'Card.tsx' })` or `scanModuleLinks(files, { registryEntries, parser })`.
+  docs: https://csszyx.com/e/options-object-required
+```
+
+**Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
+
 ## migrateSource takes the path in its options
 
 `migrateSource` from `@csszyx/cli` took the file path as a second string
@@ -1732,8 +1763,9 @@ A second argument without `filename`, or a third argument, throws:
 
 ## serializeManifest takes an options object
 
-`serializeManifest` from `@csszyx/compiler` took its pretty-print flag as a
-second positional argument; it is now a key of one options object:
+`serializeManifest` from `@csszyx/compiler`, which `csszyx` re-exports, took its
+pretty-print flag as a second positional argument; it is now a key of one
+options object:
 
 ```ts
 // before

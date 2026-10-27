@@ -36,7 +36,7 @@ function emitAll(tsx: string): Array<readonly [string, string]> {
         // failure naming the engine rather than an unhandled rejection.
         let code: string;
         try {
-            code = transform(source, 'overlap.tsx').code ?? '';
+            code = transform(source, { filename: 'overlap.tsx' }).code ?? '';
         } catch (error) {
             throw new Error(`${name} threw: ${String(error)}`);
         }

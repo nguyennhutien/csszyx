@@ -27,7 +27,8 @@ describe('the global-var usage scan', () => {
             }),
         );
 
-        expect(scanGlobalVarUsages).toHaveBeenCalledWith('export {};', '/repo/a.tsx', {
+        expect(scanGlobalVarUsages).toHaveBeenCalledWith('export {};', {
+            filename: '/repo/a.tsx',
             tokens: ['--brand'],
             parser: 'wasm',
         });

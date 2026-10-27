@@ -102,7 +102,7 @@ interface EngineResult {
 }
 
 /** One engine artifact: source in, transformed module out. */
-export type CapabilityEngine = (source: string, filename?: string) => EngineResult;
+export type CapabilityEngine = (source: string, options?: { filename?: string }) => EngineResult;
 
 /**
  * The runtime lowering of one case, its console warnings counted.
@@ -139,7 +139,7 @@ export function engineCases(engine: CapabilityEngine, key: string): LaneOutput[]
         ([, sz], index) => `<p data-i="${index}" sz={${JSON.stringify(sz(key))}} />`,
     );
     const source = `export const A = () => (<>\n${lines.join('\n')}\n</>);`;
-    const result = engine(source, '/p/src/Capability.jsx');
+    const result = engine(source, { filename: '/p/src/Capability.jsx' });
     const code = result.code ?? '';
     const reportedLines = new Set((result.issues ?? []).map(issue => issue.line));
     const elements = new Map(

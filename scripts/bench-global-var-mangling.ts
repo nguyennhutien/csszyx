@@ -316,8 +316,9 @@ function runPipeline(fixture: Fixture): OutputMetrics {
         plan,
         filePath: '/bench/theme.css',
     });
-    const disabledSource = transformWasm(fixture.source, '/bench/App.tsx');
-    const aliasSource = transformWasm(fixture.source, '/bench/App.tsx', {
+    const disabledSource = transformWasm(fixture.source, { filename: '/bench/App.tsx' });
+    const aliasSource = transformWasm(fixture.source, {
+        filename: '/bench/App.tsx',
         globalVarAliases: plan.aliases,
     });
     const disabledOutput = `${disabledSource.code}\n${fixture.css}`;

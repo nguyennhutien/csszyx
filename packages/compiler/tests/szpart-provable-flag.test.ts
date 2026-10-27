@@ -104,7 +104,7 @@ const MATRIX: ReadonlyArray<readonly [string, string, boolean, boolean]> = [
 
 describe.each(LANES)('%s lane', (_lane, engine) => {
     it.each(MATRIX)('%s', (_name, source, provable, usesSzPart) => {
-        const result = engine(source, '/p/t.tsx');
+        const result = engine(source, { filename: '/p/t.tsx' });
         expect(result.szPartArgsProvable).toBe(provable);
         expect(result.usesSzPart).toBe(usesSzPart);
     });
@@ -113,7 +113,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
 describe('flag parity across the lanes', () => {
     it.each(MATRIX)('identical flags for: %s', (_name, source) => {
         const shapes = LANES.map(([, engine]) => {
-            const result = engine(source, '/p/t.tsx');
+            const result = engine(source, { filename: '/p/t.tsx' });
             return `${result.usesSzPart}/${result.szPartArgsProvable}`;
         });
         expect(new Set(shapes).size).toBe(1);

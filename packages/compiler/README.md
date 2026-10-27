@@ -101,7 +101,9 @@ whichever this host can run).
 ```typescript
 import { transformSource } from "@csszyx/compiler/engine";
 
-transformSource("export const A = () => <div sz={{ p: 4 }} />;", "a.tsx").code;
+transformSource("export const A = () => <div sz={{ p: 4 }} />;", {
+  filename: "a.tsx",
+}).code;
 // export const A = () => <div className="p-4" />;
 ```
 
@@ -123,21 +125,21 @@ transform({ p: 4 }, options).className; // "hover:p-4"
 transform({ p: 4 }, { mangleMap: { "p-4": "x" } }).className; // "x"
 ```
 
-#### `transformSource(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
+#### `transformSource(source: string, options?: TransformSourceOptions): SourceTransformResult`
 
 Runs the engine through whichever artifact this host can load: the
-native addon when present, the WebAssembly build otherwise. Same
-signature the removed Babel-era `transformSourceCode` had, so most
-callers migrate by renaming.
+native addon when present, the WebAssembly build otherwise. The file name
+goes in the options as `filename`, beside the compiler options; a file name
+passed as a second string throws `options-object-required`.
 
-#### `transformRust(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult` _(default since v0.9.0)_
+#### `transformRust(source: string, options?: TransformSourceOptions): SourceTransformResult` _(default since v0.9.0)_
 
 The native addon via napi-rs. Fastest path. Requires the matching
 optional `@csszyx/core-*` platform package; a missing package surfaces
 `RustTransformUnavailableError`. An engine from another release than the
 compiler throws `EngineVersionSkewError` (`engine-version-skew`).
 
-#### `transformWasm(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
+#### `transformWasm(source: string, options?: TransformSourceOptions): SourceTransformResult`
 
 The same engine compiled to WebAssembly, shipped inside `@csszyx/core`
 itself — identical output to the native addon, loaded lazily only when

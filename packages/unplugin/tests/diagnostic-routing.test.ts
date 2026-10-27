@@ -879,7 +879,7 @@ describe('where a file emits each class', () => {
             'export const A = () => <><i sz={{ p: 4 }} /><b sz={{ px: 2, p: 4 }} /></>;',
             'export const B = () => <><i sz={{ m: 1, p: 4 }} />é<b sz={{ m: 2, mt: 1 }} /></>;',
         ].join('\n');
-        const result = run(source, '/repo/src/App.tsx');
+        const result = run(source, { filename: '/repo/src/App.tsx' });
         const classes = [...result.classes];
         const sites = szClassSites('src/App.tsx', classes, result);
         const byPosition = emittedClassSites({

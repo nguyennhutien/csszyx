@@ -35,7 +35,7 @@ function element(code: string): string {
  * @returns the transformed `<div .../>` element.
  */
 function auto(code: string): string {
-    return element(transformSource(code, 'F.tsx').code);
+    return element(transformSource(code, { filename: 'F.tsx' }).code);
 }
 
 /**
@@ -44,7 +44,7 @@ function auto(code: string): string {
  * @returns the transformed `<div .../>` element.
  */
 function wasm(code: string): string {
-    const r = transformWasm(code, 'F.tsx');
+    const r = transformWasm(code, { filename: 'F.tsx' });
     return element(typeof r === 'string' ? r : r.code);
 }
 
@@ -54,7 +54,7 @@ function wasm(code: string): string {
  * @returns the transformed `<div .../>` element.
  */
 function rust(code: string): string {
-    const r = transformRust(code, 'F.tsx');
+    const r = transformRust(code, { filename: 'F.tsx' });
     return element(typeof r === 'string' ? r : r.code);
 }
 
@@ -180,12 +180,14 @@ describe('nested finite-conditional parity', () => {
                 expect(rust(fixture.src), 'rust must not fall back').not.toContain('_sz(');
                 expect(rust(fixture.src), 'native vs wasm code').toBe(wasm(fixture.src));
                 expect(rust(fixture.src), 'native vs auto-selected code').toBe(auto(fixture.src));
-                const rustClasses = orderedClassesOf(transformRust(fixture.src, 'F.tsx'));
+                const rustClasses = orderedClassesOf(
+                    transformRust(fixture.src, { filename: 'F.tsx' }),
+                );
                 expect(rustClasses, 'native vs wasm class ORDER').toEqual(
-                    orderedClassesOf(transformWasm(fixture.src, 'F.tsx')),
+                    orderedClassesOf(transformWasm(fixture.src, { filename: 'F.tsx' })),
                 );
                 expect(rustClasses, 'native vs auto-selected class ORDER').toEqual(
-                    orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
+                    orderedClassesOf(transformSource(fixture.src, { filename: 'F.tsx' })),
                 );
             },
         );
@@ -257,7 +259,7 @@ const rustHasMultiTernary = (): boolean => {
     try {
         const probe = transformRust(
             'const P = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
-            'probe.tsx',
+            { filename: 'probe.tsx' },
         );
         return (typeof probe === 'string' ? probe : probe.code).includes('${');
     } catch {
@@ -273,10 +275,11 @@ describe('multi-ternary parity (property conditionals append template segments)'
                 '_sz(',
             );
             expect(normalizeStyleBraces(wasm(fixture.src))).toBe(normalizeStyleBraces(b));
-            expect(orderedClassesOf(transformWasm(fixture.src, 'F.tsx')), 'class ORDER').toEqual(
-                orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
-            );
-            expect(orderedClassesOf(transformSource(fixture.src, 'F.tsx'))).toEqual(
+            expect(
+                orderedClassesOf(transformWasm(fixture.src, { filename: 'F.tsx' })),
+                'class ORDER',
+            ).toEqual(orderedClassesOf(transformSource(fixture.src, { filename: 'F.tsx' })));
+            expect(orderedClassesOf(transformSource(fixture.src, { filename: 'F.tsx' }))).toEqual(
                 fixture.ordered,
             );
         });
@@ -287,8 +290,8 @@ describe('multi-ternary parity (property conditionals append template segments)'
                 expect(normalizeStyleBraces(rust(fixture.src))).toBe(
                     normalizeStyleBraces(auto(fixture.src)),
                 );
-                expect(orderedClassesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
-                    orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
+                expect(orderedClassesOf(transformRust(fixture.src, { filename: 'F.tsx' }))).toEqual(
+                    orderedClassesOf(transformSource(fixture.src, { filename: 'F.tsx' })),
                 );
             },
         );
@@ -304,8 +307,8 @@ describe('punt-path candidate parity (path-aware collectors)', () => {
         'const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: "black", op: a ? 30 : 100 }, hover: { m: 2 } }} />;';
 
     it('the auto and wasm lanes collect identical, junk-free candidates', () => {
-        const b = orderedClassesOf(transformSource(punted, 'F.tsx'));
-        const o = orderedClassesOf(transformWasm(punted, 'F.tsx'));
+        const b = orderedClassesOf(transformSource(punted, { filename: 'F.tsx' }));
+        const o = orderedClassesOf(transformWasm(punted, { filename: 'F.tsx' }));
         expect(b).toEqual(['bg-black/30', 'bg-black/100', 'hover:m-2']);
         expect(o).toEqual(b);
     });

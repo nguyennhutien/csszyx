@@ -73,7 +73,7 @@ describe('spans text in a format this compiler does not read', () => {
     ] as const)('is a csszyx bug on the %s lane', (_lane, transform, ErrorClass) => {
         let error: unknown;
         try {
-            transform('export const a = 1;', 'a.tsx');
+            transform('export const a = 1;', { filename: 'a.tsx' });
         } catch (thrown) {
             error = thrown;
         }

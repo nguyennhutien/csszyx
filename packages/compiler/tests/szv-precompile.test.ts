@@ -18,7 +18,10 @@ import { describe, expect, it } from 'vitest';
 
 import { ENGINES } from './engine-parity-harness.js';
 
-type Engine = (source: string, filename?: string) => { code?: string; usesSzvPick?: boolean };
+type Engine = (
+    source: string,
+    options?: { filename?: string },
+) => { code?: string; usesSzvPick?: boolean };
 
 /**
  * Both artifacts of the one engine. The shared list drops the `auto`
@@ -42,7 +45,7 @@ const FACTORY =
  * @returns Static strings, pick presence, and normalized table content.
  */
 function outputShape(engine: Engine, source: string) {
-    const result = engine(source, '/p/t.tsx');
+    const result = engine(source, { filename: '/p/t.tsx' });
     const code = result.code ?? source;
     const statics = [...code.matchAll(/szr\(("[^"]*")/g)].map(match => match[1]);
     const tableMatch = /__szvT_cardSz\s*=\s*(\{[\s\S]*?\});/.exec(code);
@@ -322,8 +325,8 @@ describe('idempotency', () => {
         // replaced calls leave no factory references, and the catalog guard
         // refuses to stack a second copy.
         const source = `${IMPORTS}${FACTORY}export const C = ({ s }) => szr(cardSz({ pad: 'sm' }), cardSz(s));`;
-        const once = engine(source, '/p/t.tsx').code ?? source;
-        const twice = engine(once, '/p/t.tsx').code ?? once;
+        const once = engine(source, { filename: '/p/t.tsx' }).code ?? source;
+        const twice = engine(once, { filename: '/p/t.tsx' }).code ?? once;
         expect(twice).toBe(once);
     });
 });
@@ -334,7 +337,7 @@ describe('composition with the szr import rewrite', () => {
         // passes and the compiler leaves the bundle entirely.
         const source = `${IMPORTS}${FACTORY}export const C = ({ sel }) => szr(cardSz(sel), cardSz({ pad: 'sm' }));`;
         for (const [lane, engine] of LANES) {
-            const code = engine(source, '/p/t.tsx').code ?? source;
+            const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
             expect(code, lane).toContain('@csszyx/runtime/core');
         }
     });
@@ -346,7 +349,7 @@ describe('composition with the szr import rewrite', () => {
             `${IMPORTS}${FACTORY}export const C = ({ d, j }) =>\n` +
             '    szr(d && cardSz({ pad: d }), j && cardSz({ tone: j }));';
         for (const [lane, engine] of LANES) {
-            const code = engine(source, '/p/t.tsx').code ?? source;
+            const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
             expect(code, lane).toContain('@csszyx/runtime/core');
             expect(code, lane).toContain('__szvPick(');
             expect(code, lane).not.toContain('cardSz(');
@@ -358,7 +361,7 @@ describe('composition with the szr import rewrite', () => {
         // the argument stays unproven: no rewrite, one deferred fallback.
         const source = `${IMPORTS}export const C = () => szr(mk());`;
         for (const [lane, engine] of LANES) {
-            const result = engine(source, '/p/t.tsx') as {
+            const result = engine(source, { filename: '/p/t.tsx' }) as {
                 code?: string;
                 diagnostics?: string[];
             };
@@ -370,7 +373,7 @@ describe('composition with the szr import rewrite', () => {
     it('a proven string argument stays silent', () => {
         const source = `${IMPORTS}export const cls = szr('p-4');`;
         for (const [lane, engine] of LANES) {
-            const result = engine(source, '/p/t.tsx') as { diagnostics?: string[] };
+            const result = engine(source, { filename: '/p/t.tsx' }) as { diagnostics?: string[] };
             expect(result.diagnostics ?? [], lane).toEqual([]);
         }
     });
@@ -380,7 +383,7 @@ describe('composition with the szr import rewrite', () => {
             `${IMPORTS}const cardSz = szv({ base: { p: 4 }, variants: { pad: { lg: { p: 8 } } } });\n` +
             "export const cls = szr(cardSz({ pad: 'lg' }));";
         for (const [lane, engine] of LANES) {
-            const code = engine(source, '/p/t.tsx').code ?? source;
+            const code = engine(source, { filename: '/p/t.tsx' }).code ?? source;
             expect(code, lane).not.toContain('@csszyx/runtime/core');
         }
     });
@@ -410,7 +413,7 @@ describe('the single-dimension picker', () => {
      * @returns The emitted helper, its arguments, and the usage flags.
      */
     function pickShape(engine: Engine, source: string) {
-        const result = engine(source, '/p/t.tsx') as {
+        const result = engine(source, { filename: '/p/t.tsx' }) as {
             code?: string;
             usesSzvPick?: boolean;
             usesSzvPick1?: boolean;

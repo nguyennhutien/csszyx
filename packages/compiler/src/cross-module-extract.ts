@@ -15,8 +15,17 @@
  * identically; each engine then compiles what it is handed through the code
  * its local candidates use.
  */
+import { engineCallOptions } from './engine-call-options.js';
 import { type CrossModuleRegistryEntry, scanModuleLinks } from './module-links.js';
 import type { ParserMode } from './parser-mode.js';
+
+/** Options for reading one module's exports or forwards. */
+export interface ExtractCrossModuleOptions {
+    /** Module filename, for parser dialect detection. */
+    filename: string;
+    /** The engine artifact `build.parser` names, if any. */
+    parser?: ParserMode;
+}
 
 export type { CrossModuleExportKind, CrossModuleRegistryEntry } from './module-links.js';
 
@@ -48,16 +57,24 @@ export interface CrossModuleForward {
  * skipped.
  *
  * @param source - Module source text.
- * @param filename - Module filename, for parser dialect detection.
- * @param parser - The engine artifact `build.parser` names, if any.
+ * @param options - Its filename, for parser dialect detection, and the
+ *   engine artifact `build.parser` names, if any.
+ * @param rest - nothing; a third argument is refused.
  * @returns The exported values, declaration order preserved.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function extractCrossModuleRegistryEntries(
     source: string,
-    filename: string,
-    parser?: ParserMode,
+    options: ExtractCrossModuleOptions,
+    ...rest: never[]
 ): CrossModuleRegistryEntry[] {
-    return scanModuleLinks([{ filename, source }], { registryEntries: true }, parser).flatMap(
+    const { filename, parser } = engineCallOptions(
+        'extractCrossModuleRegistryEntries',
+        options,
+        rest,
+        'filename',
+    );
+    return scanModuleLinks([{ filename, source }], { registryEntries: true, parser }).flatMap(
         links => links.registryEntries,
     );
 }
@@ -76,16 +93,24 @@ export function extractCrossModuleRegistryEntries(
  * is a different question from following one link.
  *
  * @param source - Module source text.
- * @param filename - Module filename, for parser dialect detection.
- * @param parser - The engine artifact `build.parser` names, if any.
+ * @param options - Its filename, for parser dialect detection, and the
+ *   engine artifact `build.parser` names, if any.
+ * @param rest - nothing; a third argument is refused.
  * @returns The forwards, declaration order preserved.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function extractCrossModuleForwards(
     source: string,
-    filename: string,
-    parser?: ParserMode,
+    options: ExtractCrossModuleOptions,
+    ...rest: never[]
 ): CrossModuleForward[] {
+    const { filename, parser } = engineCallOptions(
+        'extractCrossModuleForwards',
+        options,
+        rest,
+        'filename',
+    );
     // The engine reads the module record, frees its parse before it returns,
     // and skips the parse for a module with no `export {` clause.
-    return scanModuleLinks([{ filename, source }], {}, parser).flatMap(links => links.forwards);
+    return scanModuleLinks([{ filename, source }], { parser }).flatMap(links => links.forwards);
 }

@@ -25,7 +25,8 @@ function everyArtifact(
     options: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
     return ENGINES.map(
-        ([, transform]) => transform(source, filename, options) as SourceTransformResult,
+        ([, transform]) =>
+            transform(source, { filename: filename, ...options }) as SourceTransformResult,
     );
 }
 
@@ -60,7 +61,7 @@ describe('CSS variable system config contract', () => {
 
     it('preserves existing dynamic CSS variable output when mangleVars is disabled', () => {
         const source = 'const App = ({ pad, gap }) => <div sz={{ p: pad, md: { gap } }} />;';
-        const result = transformWasm(source, 'mangle-vars-disabled.tsx');
+        const result = transformWasm(source, { filename: 'mangle-vars-disabled.tsx' });
 
         expect(result.code).toContain('p-(--_sz-p)');
         expect(result.code).toContain('md:gap-(--_sz-md-gap)');
@@ -71,7 +72,10 @@ describe('CSS variable system config contract', () => {
 
     it('maps scoped dynamic variables to per-element s-tier names when mangleVars is enabled', () => {
         const source = 'const App = ({ pad, gap }) => <div sz={{ p: pad, md: { gap } }} />;';
-        const result = transformWasm(source, 'mangle-vars-enabled.tsx', { mangleVars: true });
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-enabled.tsx',
+            mangleVars: true,
+        });
 
         expect(result.code).toContain('p-(--sz)');
         expect(result.code).toContain('md:gap-(--sy)');
@@ -101,7 +105,10 @@ describe('CSS variable system config contract', () => {
     it('hoists repeated component-tier variables to a bounded common ancestor', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
-        const result = transformWasm(source, 'mangle-vars-hoist.tsx', { mangleVars: true });
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-hoist.tsx',
+            mangleVars: true,
+        });
 
         expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
@@ -128,8 +135,11 @@ describe('CSS variable system config contract', () => {
     it('reduces repeated dynamic CSS variable output when mangleVars is enabled', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /><button sz={{ p: pad }} /></section>;';
-        const disabled = transformWasm(source, 'mangle-vars-size-disabled.tsx');
-        const enabled = transformWasm(source, 'mangle-vars-size-enabled.tsx', { mangleVars: true });
+        const disabled = transformWasm(source, { filename: 'mangle-vars-size-disabled.tsx' });
+        const enabled = transformWasm(source, {
+            filename: 'mangle-vars-size-enabled.tsx',
+            mangleVars: true,
+        });
 
         expect(disabled.code).toContain('--_sz-p');
         expect(enabled.code).toContain('--cz');
@@ -140,7 +150,8 @@ describe('CSS variable system config contract', () => {
     it('does not hoist repeated vars across component boundaries', () => {
         const source =
             'const App = ({ pad }) => <Card><div sz={{ p: pad }} /><span sz={{ p: pad }} /></Card>;';
-        const result = transformWasm(source, 'mangle-vars-component-boundary.tsx', {
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-component-boundary.tsx',
             mangleVars: true,
         });
 
@@ -172,7 +183,8 @@ describe('CSS variable system config contract', () => {
     it('merges hoisted vars into an existing ancestor style expression', () => {
         const source =
             'const App = ({ pad, rootStyle }) => <section style={rootStyle}><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
-        const result = transformWasm(source, 'mangle-vars-hoist-existing-style.tsx', {
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-hoist-existing-style.tsx',
             mangleVars: true,
         });
 
@@ -186,10 +198,12 @@ describe('CSS variable system config contract', () => {
     it('uses configured mangle var hoist max depth', () => {
         const source =
             'const App = ({ pad }) => <section><div><article><aside><div><div><span sz={{ p: pad }} /></div></div></aside></article></div><button sz={{ p: pad }} /></section>;';
-        const defaultDepth = transformWasm(source, 'mangle-vars-default-depth.tsx', {
+        const defaultDepth = transformWasm(source, {
+            filename: 'mangle-vars-default-depth.tsx',
             mangleVars: true,
         });
-        const deeper = transformWasm(source, 'mangle-vars-deeper-depth.tsx', {
+        const deeper = transformWasm(source, {
+            filename: 'mangle-vars-deeper-depth.tsx',
             mangleVars: true,
             mangleVarHoistMaxDepth: 6,
         });
@@ -221,7 +235,8 @@ describe('CSS variable system config contract', () => {
     it('does not reuse user-authored CSS custom property names', () => {
         const source =
             'const App = ({ pad, gap }) => <section style={{ "--cz": "user" }}><div style={{ "--sz": "local" }} sz={{ p: pad }} /><span sz={{ p: pad, gap }} /></section>;';
-        const result = transformWasm(source, 'mangle-vars-reserved-names.tsx', {
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-reserved-names.tsx',
             mangleVars: true,
         });
 
@@ -241,7 +256,8 @@ describe('CSS variable system config contract', () => {
     it('hoists dynamic values with redundant expression parentheses', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: (pad) }} /></section>;';
-        const result = transformWasm(source, 'mangle-vars-normalized-value-key.tsx', {
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-normalized-value-key.tsx',
             mangleVars: true,
         });
 
@@ -255,7 +271,8 @@ describe('CSS variable system config contract', () => {
     it('does not hoist repeated vars through fragments', () => {
         const source =
             'const App = ({ pad }) => <><div sz={{ p: pad }} /><span sz={{ p: pad }} /></>;';
-        const result = transformWasm(source, 'mangle-vars-fragment-boundary.tsx', {
+        const result = transformWasm(source, {
+            filename: 'mangle-vars-fragment-boundary.tsx',
             mangleVars: true,
         });
 
@@ -285,7 +302,7 @@ describe('CSS variable system config contract', () => {
     it('applies mangleVars on the Rust path when native support is available', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
-        const result = transformRust(source, 'rust-vars.tsx', { mangleVars: true });
+        const result = transformRust(source, { filename: 'rust-vars.tsx', mangleVars: true });
 
         expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
@@ -296,7 +313,7 @@ describe('CSS variable system config contract', () => {
 
     it('keeps CSS variable names out of metadata while mangleVars is disabled', () => {
         const source = 'const App = ({ pad }) => <div sz={{ p: pad }} />;';
-        const result = transformWasm(source, 'mangle-vars-disabled-metadata.tsx');
+        const result = transformWasm(source, { filename: 'mangle-vars-disabled-metadata.tsx' });
 
         expect(result.cssVariableMap).toEqual(new Map());
     });
@@ -330,7 +347,8 @@ describe('CSS variable system config contract', () => {
 
     it('preserves static sz output when the global variable alias table is empty', () => {
         const source = "const App = () => <div sz={{ bg: '--brand-primary' }} />;";
-        const result = transformWasm(source, 'global-var-aliases-empty.tsx', {
+        const result = transformWasm(source, {
+            filename: 'global-var-aliases-empty.tsx',
             globalVarAliases: new Map(),
         });
 

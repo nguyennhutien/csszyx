@@ -60,7 +60,10 @@ export class ExplainParseError extends CsszyxError {
 }
 
 /** One engine artifact, or the selection a build makes between them. */
-export type ExplainEngine = (source: string, filename?: string) => SourceTransformResult;
+export type ExplainEngine = (
+    source: string,
+    options: { filename: string },
+) => SourceTransformResult;
 
 /** What the build does with one sz object. */
 export interface SzExplanation {
@@ -96,7 +99,7 @@ function emittedClassName(code: string): string | null {
  *         expression, or is left to the runtime `_sz()` helper.
  */
 export function explainSz(input: string, engine: ExplainEngine = transformSource): SzExplanation {
-    const result = engine(`${PREFIX}${input}${SUFFIX}`, FILENAME);
+    const result = engine(`${PREFIX}${input}${SUFFIX}`, { filename: FILENAME });
     if (result.issues?.some(issue => issue.code === 'parse-error')) {
         throw new ExplainParseError({ code: 'parse-error', args: { form: 'expression' } });
     }

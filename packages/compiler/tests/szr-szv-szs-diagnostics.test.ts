@@ -136,7 +136,7 @@ const LANES = ENGINES;
  * @returns Reported diagnostics.
  */
 function diagnosticsFor(engine: Engine, source: string): string[] {
-    return (engine(source, '/p/t.tsx').diagnostics ?? [])
+    return (engine(source, { filename: '/p/t.tsx' }).diagnostics ?? [])
         .map(String)
         .filter(message => !message.includes('Tip: run'));
 }
@@ -150,7 +150,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
         expect(diagnostics[0]).toContain(
             `[csszyx] fallback-missing-css: /p/t.tsx:${expected.at}\n`,
         );
-        expect(engine(source, '/p/t.tsx').issues).toMatchObject([
+        expect(engine(source, { filename: '/p/t.tsx' }).issues).toMatchObject([
             {
                 code: 'fallback-missing-css',
                 args: {
@@ -185,7 +185,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
                 'note: the attribute is left unchanged.',
             ),
         ]);
-        expect(engine(VUI_IMPORT + body, '/p/t.tsx').issues).toMatchObject([
+        expect(engine(VUI_IMPORT + body, { filename: '/p/t.tsx' }).issues).toMatchObject([
             { code: 'szs-slot-map', args: { form: 'unreadable-slot' }, line: 2 },
         ]);
         // The pointer that was missing before: a genuinely runtime slot value

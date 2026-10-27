@@ -42,7 +42,8 @@ export function validateGlobalVarAliasInputs(
 
     const candidateTokens = plan.entries.map(entry => entry.original);
     const usageDiagnostics = (options.sourceFiles ?? []).flatMap(file =>
-        scanGlobalVarUsages(file.code, file.filePath, {
+        scanGlobalVarUsages(file.code, {
+            filename: file.filePath,
             tokens: candidateTokens,
             parser: options.parser,
         }),

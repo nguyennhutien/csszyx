@@ -68,8 +68,8 @@ function bothLanes(
 ): { wasm: unknown; native: unknown } {
     if (!lane) throw new Error(MISSING);
     return {
-        wasm: comparable(lane.transformWasm(source, '/p/t.tsx', options)),
-        native: comparable(transformRust(source, '/p/t.tsx', options)),
+        wasm: comparable(lane.transformWasm(source, { filename: '/p/t.tsx', ...options })),
+        native: comparable(transformRust(source, { filename: '/p/t.tsx', ...options })),
     };
 }
 

@@ -11,8 +11,10 @@
  * compile preview, and a large body of tests that used it as a driver)
  * migrate by renaming the import.
  */
+
+import { engineCallOptions } from './engine-call-options.js';
 import type { UnrenderedTransformResult } from './engine-diagnostics.js';
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
+import type { SourceTransformResult, TransformSourceOptions } from './transform-core.js';
 import {
     isRustTransformAvailable,
     transformRust,
@@ -24,19 +26,21 @@ import { transformWasm, transformWasmUnrendered } from './transform-wasm.js';
  * Transform one module through whichever engine artifact this host can run.
  *
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
  * @throws {WasmTransformUnavailableError} when neither artifact can load.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function transformSource(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): SourceTransformResult {
+    engineCallOptions('transformSource', options, rest);
     return isRustTransformAvailable()
-        ? transformRust(source, filename, options)
-        : transformWasm(source, filename, options);
+        ? transformRust(source, options)
+        : transformWasm(source, options);
 }
 
 /**
@@ -45,17 +49,19 @@ export function transformSource(
  *
  * @internal The build lanes' transform; not a stable API.
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
  * @throws {WasmTransformUnavailableError} when neither artifact can load.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function transformSourceUnrendered(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): UnrenderedTransformResult {
+    engineCallOptions('transformSourceUnrendered', options, rest);
     return isRustTransformAvailable()
-        ? transformRustUnrendered(source, filename, options)
-        : transformWasmUnrendered(source, filename, options);
+        ? transformRustUnrendered(source, options)
+        : transformWasmUnrendered(source, options);
 }

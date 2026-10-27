@@ -96,7 +96,7 @@ export function recordSzvRegistryFile(
     parser?: ParserMode,
 ): void {
     const entries = mayExportSzvFactories(content)
-        ? extractCrossModuleRegistryEntries(content, filePath, parser)
+        ? extractCrossModuleRegistryEntries(content, { filename: filePath, parser })
         : [];
     replaceEntriesOfKind(registry, filePath, 'szv-config', entries);
 }
@@ -124,7 +124,7 @@ export function recordSzObjectRegistryFile(
         registry,
         filePath,
         'sz-object',
-        extractCrossModuleRegistryEntries(content, filePath, parser),
+        extractCrossModuleRegistryEntries(content, { filename: filePath, parser }),
     );
 }
 
@@ -220,7 +220,7 @@ export function recordCrossModuleForwards(
     parser?: ParserMode,
 ): void {
     const key = normalizePathSeparators(filePath);
-    const forwards = extractCrossModuleForwards(content, filePath, parser);
+    const forwards = extractCrossModuleForwards(content, { filename: filePath, parser });
     if (forwards.length === 0) index.delete(key);
     else index.set(key, forwards);
 }

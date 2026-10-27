@@ -35,11 +35,11 @@ const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
  * @returns The backtick-quoted path from the diagnostic.
  */
 function disqualifiedAt(
-    engine: (source: string, filename?: string) => { diagnostics?: string[] },
+    engine: (source: string, options?: { filename?: string }) => { diagnostics?: string[] },
     config: string,
 ): string {
     const source = `${IMPORT}const t = szv(${config});\nexport const a = szr(t({}));`;
-    const [message = ''] = (engine(source, '/p/t.tsx').diagnostics ?? []).map(String);
+    const [message = ''] = (engine(source, { filename: '/p/t.tsx' }).diagnostics ?? []).map(String);
     return /config fails at `([^`]+)`/.exec(message)?.[1] ?? message;
 }
 
@@ -113,6 +113,6 @@ describe.each(ENGINES)('what the position must keep reporting (%s)', (_name, eng
             `${IMPORT}const t = szv({ base: { mt: 1 }, variants: { sev: { info: { color: 'sub' } } } });\n` +
             'export const a = szr(t({}));';
 
-        expect(engine(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
+        expect(engine(source, { filename: '/p/t.tsx' }).diagnostics ?? []).toEqual([]);
     });
 });

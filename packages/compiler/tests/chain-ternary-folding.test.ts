@@ -24,7 +24,10 @@ import { captureWarnings, ENGINES } from './engine-parity-harness.js';
  * @param expression - The sz attribute value, without the braces.
  * @returns The captured run.
  */
-function compile(engine: (source: string, filename?: string) => unknown, expression: string) {
+function compile(
+    engine: (source: string, options?: { filename?: string }) => unknown,
+    expression: string,
+) {
     return captureWarnings(
         engine as never,
         `export const A = ({ a, b, c }) => <div sz={${expression}} />;`,

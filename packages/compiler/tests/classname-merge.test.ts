@@ -35,7 +35,7 @@ function emit(
     const source = `export const A = ({ c, n }) => ${element};`;
     return ENGINES.map(([name, transform]) => [
         name,
-        normalizeEmit(transform(source, 'a.tsx', options).code ?? ''),
+        normalizeEmit(transform(source, { filename: 'a.tsx', ...options }).code ?? ''),
     ]);
 }
 
@@ -87,7 +87,7 @@ describe('a static class name beside a static sz', () => {
     it('reports the pair for the plugin to check, on a pass with no table', () => {
         for (const [name, transform] of ENGINES) {
             const source = 'export const A = () => <div className="card pb-2" sz={{ p: 4 }} />;';
-            const result = transform(source, 'a.tsx', {});
+            const result = transform(source, { filename: 'a.tsx' });
             // As plain data: the position is an accessor, which `toEqual` does not read.
             expect(JSON.parse(JSON.stringify(result.mergeOverrides)), name).toEqual([
                 {

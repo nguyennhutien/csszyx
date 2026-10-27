@@ -4343,7 +4343,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // host, so misconfigured environments fail loudly instead of
             // producing output from a lane users were not expecting.
             return {
-                result: transformRustUnrendered(source, effectiveFilename, compilerOptions),
+                result: transformRustUnrendered(source, {
+                    ...compilerOptions,
+                    filename: effectiveFilename,
+                }),
                 cacheable: true,
             };
         }
@@ -4351,7 +4354,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // wasm load failure mid-build is a broken installation, not a reason
         // to switch engines silently.
         return {
-            result: transformWasmUnrendered(source, effectiveFilename, compilerOptions),
+            result: transformWasmUnrendered(source, {
+                ...compilerOptions,
+                filename: effectiveFilename,
+            }),
             cacheable: true,
         };
     }

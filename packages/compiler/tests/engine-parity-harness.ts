@@ -31,7 +31,7 @@ import type {
     ModuleLinksFile,
     ModuleLinksQuery,
     SourceTransformResult,
-    TransformSourceCodeOptions,
+    TransformSourceOptions,
 } from '../src/index.js';
 import {
     transformRustUnrendered,
@@ -61,11 +61,7 @@ export interface EngineParityResult {
 }
 
 /** One engine entry, narrowed to the shared result surface. */
-export type ParityEngine = (
-    source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
-) => EngineParityResult;
+export type ParityEngine = (source: string, options?: TransformSourceOptions) => EngineParityResult;
 
 /** Set to `1` to run the parity suites on the wasm artifact alone, outside CI. */
 export const WASM_ONLY_ENV = 'CSSZYX_TEST_WASM_ONLY';
@@ -118,8 +114,7 @@ export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
 /** One artifact's transform that leaves its diagnostics for the caller to render. */
 export type UnrenderedEngine = (
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options?: TransformSourceOptions,
 ) => UnrenderedTransformResult;
 
 /**
@@ -246,7 +241,7 @@ export function expectSpansTextEqual(source: string, filename = '/p/t.tsx'): voi
 export function expectParity(sz: string, expected: string): void {
     const tsx = `export const A = () => <div sz={${sz}} />;`;
     for (const [name, transform] of ENGINES) {
-        const code = transform(tsx, 'engine-parity.tsx').code ?? '';
+        const code = transform(tsx, { filename: 'engine-parity.tsx' }).code ?? '';
         const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
         expect(emitted, `${name} — ${sz}`).toBe(expected);
     }
@@ -288,7 +283,7 @@ export function captureWarnings(
     };
     let result: EngineParityResult;
     try {
-        result = engine(source, filename);
+        result = engine(source, { filename });
     } finally {
         console.warn = original;
     }

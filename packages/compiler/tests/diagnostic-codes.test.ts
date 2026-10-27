@@ -45,7 +45,7 @@ describe('SZ_DIAGNOSTIC_CODES', () => {
 
 describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
     it.each(CODE_SOURCES)('codes %s beside the text it renders', (code, source, options) => {
-        const result = transform(source, '/p/src/A.tsx', options);
+        const result = transform(source, { filename: '/p/src/A.tsx', ...options });
         const diagnostics = result.diagnostics ?? [];
 
         expect(result.issues).toHaveLength(diagnostics.length);
@@ -61,7 +61,7 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
             'export const A = () => <div',
             "    sz={{ /* é😀 */ xyzzy: 4, display: 'bogus' }} />;",
         ].join('\n');
-        const result = transform(source, '/p/src/A.tsx');
+        const result = transform(source, { filename: '/p/src/A.tsx' });
 
         // As plain data: the position is an accessor, which `toEqual` does not read.
         expect(JSON.parse(JSON.stringify(result.issues))).toEqual([
@@ -81,7 +81,7 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
     it('places a diagnostic about the whole file at its start', () => {
         const result = transform(
             CODE_SOURCES.find(([code]) => code === 'nesting-depth')?.[1] ?? '',
-            '/p/src/A.tsx',
+            { filename: '/p/src/A.tsx' },
         );
 
         expect(JSON.parse(JSON.stringify(result.issues))).toEqual([
@@ -95,7 +95,7 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
         // an open variant to the engine, which a project may define.
         const result = transform(
             'export const A = () => <div sz={{ p: -2, hidden: { p: 4 } }} />;',
-            '/p/src/A.tsx',
+            { filename: '/p/src/A.tsx' },
         );
 
         expect(result.issues?.map(issue => issue.code)).not.toContain(code);
@@ -103,7 +103,9 @@ describe.each(ENGINES)('engine diagnostic codes — %s', (_name, transform) => {
     });
 
     it('reports no issue for a clean file', () => {
-        const result = transform('export const A = () => <div sz={{ p: 4 }} />;', '/p/src/A.tsx');
+        const result = transform('export const A = () => <div sz={{ p: 4 }} />;', {
+            filename: '/p/src/A.tsx',
+        });
 
         expect(result.issues).toEqual([]);
     });

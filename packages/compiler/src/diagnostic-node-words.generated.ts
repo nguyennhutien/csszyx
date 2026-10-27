@@ -120,7 +120,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "class-name-to-sz-object": "`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
             "class-name-to-sz-object-option": "`classNameToSzObject` has no option(s) `{options}`, so the call is refused.",
             "serialize-manifest": "`serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.",
-            "migrate-source": "`migrateSource` takes the path under `filename` in one options object, so a second argument without it, or a third argument, is refused."
+            "migrate-source": "`migrateSource` takes the path under `filename` in one options object, so a second argument without it, or a third argument, is refused.",
+            "engine-call": "`{call}` takes its options in one object, so a second argument that is not an object, or a third argument, is refused."
         },
         "help": {
             "transform": "pass the prefix and the mangle map as keys: `transform(sz, { prefix: 'hover:', mangleMap })`.",
@@ -129,7 +130,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "class-name-to-sz-object": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.",
             "class-name-to-sz-object-option": "pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.",
             "serialize-manifest": "pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.",
-            "migrate-source": "pass the path as a key beside the other options: `migrateSource(source, { filename: 'Card.tsx' })`."
+            "migrate-source": "pass the path as a key beside the other options: `migrateSource(source, { filename: 'Card.tsx' })`.",
+            "engine-call": "move every argument after the first into one object, as in `transformSource(source, { filename: 'Card.tsx' })` or `scanModuleLinks(files, { registryEntries, parser })`."
         }
     },
     "native-engine-unavailable": {

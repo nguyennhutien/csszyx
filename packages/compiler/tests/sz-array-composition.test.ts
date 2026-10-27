@@ -29,7 +29,7 @@ declare const things: object[];
 
 function run(transform: ParityEngine, attr: string) {
     const source = `${PRELUDE}export const A = () => <div ${attr} />;`;
-    const result = transform(source, 'array.tsx') as SourceTransformResult;
+    const result = transform(source, { filename: 'array.tsx' }) as SourceTransformResult;
     return {
         code: result.code,
         div: result.code.match(/<div[\s\S]*?\/>/)?.[0] ?? '',

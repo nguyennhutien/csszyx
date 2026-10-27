@@ -146,6 +146,7 @@ export {
     type SzValue,
     type TransformOptions,
     type TransformSourceCodeOptions,
+    type TransformSourceOptions,
     transform,
 } from './transform-core.js';
 

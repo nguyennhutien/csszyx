@@ -37,7 +37,7 @@ interface EngineOutput {
  * @returns code, ordered classes, and diagnostic count.
  */
 function run(transform: ParityEngine, tsx: string): EngineOutput {
-    const result = transform(tsx, 'F.tsx');
+    const result = transform(tsx, { filename: 'F.tsx' });
     return {
         code: result.code ?? '',
         classes: [...(result.classes ?? [])],

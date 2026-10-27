@@ -31,7 +31,7 @@ describe('a wasm artifact that cannot load', () => {
     it('throws the unavailable error under its code, with the load failure as its cause', () => {
         let error: unknown;
         try {
-            transformWasm('export const a = 1;', 'a.tsx');
+            transformWasm('export const a = 1;', { filename: 'a.tsx' });
         } catch (caught) {
             error = caught;
         }

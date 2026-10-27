@@ -21,7 +21,7 @@ function transformElement(element: string) {
     const source = `export const A = ({ a, f }) => ${element};`;
     return ENGINES.map(([name, transform]) => ({
         name,
-        code: normalizeEmit(transform(source, 'a.tsx', {}).code ?? ''),
+        code: normalizeEmit(transform(source, { filename: 'a.tsx' }).code ?? ''),
     }));
 }
 

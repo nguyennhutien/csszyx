@@ -120,7 +120,7 @@ describe('a lone surrogate before a diagnostic', () => {
         // declaration to both artifacts, and the wasm one would throw on it.
         const authored =
             'export const A = () => <div title="\uDC00\uDC00" sz={{ wrokBreak: 1 }} />;\n';
-        const issue = transformRust(authored, 'src/a.tsx').issues?.find(
+        const issue = transformRust(authored, { filename: 'src/a.tsx' }).issues?.find(
             entry => entry.code === 'unknown-key',
         );
 

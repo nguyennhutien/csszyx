@@ -11,6 +11,7 @@ import {
 // the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
 // where only these entries are needed.
 import { INTERNAL_ERROR } from './diagnostic-browser.generated.js';
+import { engineCallOptions } from './engine-call-options.js';
 import {
     diagnosticPath,
     type EngineDiagnosticFieldsOf,
@@ -38,6 +39,7 @@ import type {
     GlobalVarAliasTableInput,
     SourceTransformResult,
     TransformSourceCodeOptions,
+    TransformSourceOptions,
 } from './transform-core.js';
 
 /**
@@ -126,17 +128,22 @@ export function internalError(
  * Transform source through the Rust native engine.
  *
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function transformRust(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): SourceTransformResult {
-    return transformRustOne(source, filename, options, renderedDiagnosticFields);
+    return transformRustOne(
+        source,
+        engineCallOptions('transformRust', options, rest),
+        renderedDiagnosticFields,
+    );
 }
 
 /**
@@ -146,20 +153,20 @@ export function transformRust(
  *
  * @internal The build lanes' transform; not a stable API.
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param options Its filename for diagnostics, and the compiler options.
+ * @param rest nothing; a third argument is refused.
  * @returns Transform result.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  * @throws {RustTransformUnavailableError} when the native addon is unavailable.
  */
 export function transformRustUnrendered(
     source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
+    options: TransformSourceOptions = {},
+    ...rest: never[]
 ): UnrenderedTransformResult {
     return transformRustOne(
         source,
-        filename,
-        options,
+        engineCallOptions('transformRustUnrendered', options, rest),
         unrenderedDiagnosticFields,
     ) as UnrenderedTransformResult;
 }
@@ -168,17 +175,16 @@ export function transformRustUnrendered(
  * One file through the native engine.
  *
  * @param source Source module contents.
- * @param filename Source filename for diagnostics.
- * @param options Compiler options.
+ * @param fileOptions Its filename for diagnostics, and the compiler options.
  * @param fields How to fill the diagnostic fields.
  * @returns Transform result.
  */
 function transformRustOne(
     source: string,
-    filename: string | undefined,
-    options: TransformSourceCodeOptions | undefined,
+    fileOptions: TransformSourceOptions,
     fields: EngineDiagnosticFieldsOf,
 ): SourceTransformResult {
+    const { filename, ...options } = fileOptions;
     // The single-file path names an unnamed module `<anonymous>` — the same
     // answer the shared JS channel always gave — while the BATCH default stays
     // index-based so recovery tokens keep unique per-file inputs.

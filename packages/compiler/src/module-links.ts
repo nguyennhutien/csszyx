@@ -1,3 +1,4 @@
+import { engineCallOptions } from './engine-call-options.js';
 import { chooseEngine } from './engine-choice.js';
 import type { ParserMode } from './parser-mode.js';
 import { scanModuleLinksRust } from './transform-rust.js';
@@ -67,20 +68,30 @@ export interface ModuleLinksQuery {
     registryEntries?: boolean;
 }
 
+/** Options for {@link scanModuleLinks}: which answers to compute, and where. */
+export interface ScanModuleLinksOptions extends ModuleLinksQuery {
+    /**
+     * The artifact `build.parser` names, if any; `CSSZYX_PARSER` overrides it,
+     * as it does for the transform.
+     */
+    parser?: ParserMode;
+}
+
 /**
  * Read module links on the engine artifact the build runs on.
  *
  * @param files - Modules to read.
- * @param query - Which optional answers to compute.
- * @param parser - The artifact `build.parser` names, if any; `CSSZYX_PARSER`
- *   overrides it, as it does for the transform.
+ * @param options - Which optional answers to compute, and the artifact.
+ * @param rest - nothing; a third argument is refused.
  * @returns One answer per module, in input order.
+ * @throws {CsszyxError} `options-object-required`, for the positional shape.
  */
 export function scanModuleLinks(
     files: readonly ModuleLinksFile[],
-    query: ModuleLinksQuery = {},
-    parser?: ParserMode,
+    options: ScanModuleLinksOptions = {},
+    ...rest: never[]
 ): ModuleLinks[] {
+    const { parser, ...query } = engineCallOptions('scanModuleLinks', options, rest);
     return chooseEngine(parser) === 'rust'
         ? scanModuleLinksRust(files, query)
         : scanModuleLinksWasm(files, query);

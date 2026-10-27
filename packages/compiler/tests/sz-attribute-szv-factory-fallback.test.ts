@@ -31,7 +31,7 @@ const RUNTIME_IMPORT = "import { szv } from '@csszyx/runtime';\n";
  * @returns Reported diagnostics.
  */
 function diagnosticsFor(engine: ParityEngine, body: string): string[] {
-    return (engine(RUNTIME_IMPORT + body, '/p/t.tsx').diagnostics ?? [])
+    return (engine(RUNTIME_IMPORT + body, { filename: '/p/t.tsx' }).diagnostics ?? [])
         .map(String)
         .filter(message => !message.includes('Tip: run'));
 }
@@ -53,7 +53,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
         expect(diagnostics[0]).toContain('base.color');
         const { issues } = engine(
             `${RUNTIME_IMPORT}${DISQUALIFIED_FACTORY}export const A = () => <div sz={t({ c: 'blue' })} />;`,
-            '/p/t.tsx',
+            { filename: '/p/t.tsx' },
         );
         expect(issues?.map(issue => [issue.code, issue.args])).toEqual([
             [

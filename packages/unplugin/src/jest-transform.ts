@@ -632,7 +632,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     : mergedWithSettledTable(
                           first,
                           mergeTable =>
-                              transformSourceUnrendered(sourceText, sourcePath, {
+                              transformSourceUnrendered(sourceText, {
+                                  filename: sourcePath,
                                   classPrefix: prefix,
                                   mergeTable,
                               }),
@@ -649,7 +650,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     ),
                 };
             }
-            const first = transformSourceUnrendered(sourceText, sourcePath, {
+            const first = transformSourceUnrendered(sourceText, {
+                filename: sourcePath,
                 classPrefix: prefix,
             });
             const result = withTable(first) ?? first;

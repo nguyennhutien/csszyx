@@ -144,7 +144,7 @@ function compileWithDiagnostics(
     process.env.NODE_ENV = 'development';
     delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
     try {
-        return { result: transformSource(source, filename, { classPrefix }), warnings };
+        return { result: transformSource(source, { filename, classPrefix }), warnings };
     } finally {
         console.warn = originalWarn;
         restoreEnv('NODE_ENV', originalNodeEnv);

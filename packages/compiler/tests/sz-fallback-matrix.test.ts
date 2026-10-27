@@ -176,7 +176,8 @@ describe('szFallbackConsequenceOf', () => {
  */
 function diagnosticsPerEngine(source: string): Array<readonly [string, string[]]> {
     return ENGINES.map(
-        ([name, transform]) => [name, transform(source, '/p/t.tsx').diagnostics ?? []] as const,
+        ([name, transform]) =>
+            [name, transform(source, { filename: '/p/t.tsx' }).diagnostics ?? []] as const,
     );
 }
 
@@ -186,7 +187,7 @@ function diagnosticsPerEngine(source: string): Array<readonly [string, string[]]
 describe('engine parity for sz fallback diagnostics', () => {
     for (const [label, source] of FALLBACK_SOURCES) {
         it(`every artifact agrees on ${label}`, () => {
-            const wasm = transformWasm(source, '/p/t.tsx').diagnostics ?? [];
+            const wasm = transformWasm(source, { filename: '/p/t.tsx' }).diagnostics ?? [];
             expect(wasm.length).toBeGreaterThan(0);
 
             // Both artifacts must report the same thing, in the same words:

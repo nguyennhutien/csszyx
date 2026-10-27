@@ -210,7 +210,9 @@ function tryPreloadRustBinding(): boolean {
     const packageDir = resolve(REPO_ROOT, 'packages', `core-${triple}`);
     try {
         loadNativeBinding(packageDir);
-        transformRust('const App = () => <div sz={{ p: 4 }} />;', '/bench/preload.tsx');
+        transformRust('const App = () => <div sz={{ p: 4 }} />;', {
+            filename: '/bench/preload.tsx',
+        });
         return true;
     } catch {
         return false;
@@ -319,9 +321,13 @@ function transformFixtures(
     if (parser === 'rust-batch') {
         results = transformRustBatch(fixtures, { mangleVars });
     } else if (parser === 'rust') {
-        results = fixtures.map(file => transformRust(file.source, file.filename, { mangleVars }));
+        results = fixtures.map(file =>
+            transformRust(file.source, { filename: file.filename, mangleVars }),
+        );
     } else {
-        results = fixtures.map(file => transformWasm(file.source, file.filename, { mangleVars }));
+        results = fixtures.map(file =>
+            transformWasm(file.source, { filename: file.filename, mangleVars }),
+        );
     }
 
     for (const result of results) {

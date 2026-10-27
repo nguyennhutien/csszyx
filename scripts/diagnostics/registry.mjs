@@ -1752,8 +1752,10 @@ export const DIAGNOSTICS = [
             'class-name-to-sz-object-option',
             'serialize-manifest',
             'migrate-source',
+            'engine-call',
         ],
-        buildForms: ['serialize-manifest', 'migrate-source'],
+        buildForms: ['serialize-manifest', 'migrate-source', 'engine-call'],
+        formExports: ['engine-call'],
         args: {
             form: formArg([
                 'transform',
@@ -1763,8 +1765,10 @@ export const DIAGNOSTICS = [
                 'class-name-to-sz-object-option',
                 'serialize-manifest',
                 'migrate-source',
+                'engine-call',
             ]),
             options: { type: 'string[]', joiner: '`, `', optional: true },
+            call: { type: 'string', optional: true },
         },
         text: {
             transform:
@@ -1781,6 +1785,8 @@ export const DIAGNOSTICS = [
                 '`serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
             'migrate-source':
                 '`migrateSource` takes the path under `filename` in one options object, so a second argument without it, or a third argument, is refused.',
+            'engine-call':
+                '`{call}` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
         },
         help: {
             transform:
@@ -1797,12 +1803,15 @@ export const DIAGNOSTICS = [
                 'pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.',
             'migrate-source':
                 "pass the path as a key beside the other options: `migrateSource(source, { filename: 'Card.tsx' })`.",
+            'engine-call':
+                "move every argument after the first into one object, as in `transformSource(source, { filename: 'Card.tsx' })` or `scanModuleLinks(files, { registryEntries, parser })`.",
         },
         sources: [
             CORE_TS,
             'packages/unplugin/src/next-config.ts',
             'packages/cli/src/migrate.ts',
             'packages/compiler/src/manifest.ts',
+            'packages/compiler/src/engine-call-options.ts',
         ],
     },
     {

@@ -100,7 +100,8 @@ export function auditMerges(input: {
         })),
     );
     const firstPasses = input.files.map(file => {
-        const first = transformSourceUnrendered(file.source, file.path, {
+        const first = transformSourceUnrendered(file.source, {
+            filename: file.path,
             classPrefix: input.classPrefix,
         });
         sources.readLowered(file.path, first.classes);

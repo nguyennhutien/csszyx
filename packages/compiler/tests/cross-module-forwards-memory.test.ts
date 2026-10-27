@@ -29,11 +29,11 @@ const PROBE = `
 const { readFileSync } = await import('node:fs');
 const { extractCrossModuleForwards } = await import(${JSON.stringify(EXTRACTOR)});
 const source = readFileSync(${JSON.stringify(BARREL)}, 'utf8');
-for (let i = 0; i < 50; i++) extractCrossModuleForwards(source, 'barrel.ts');
+for (let i = 0; i < 50; i++) extractCrossModuleForwards(source, { filename: 'barrel.ts' });
 globalThis.gc();
 const before = process.memoryUsage().rss;
 let forwards = 0;
-for (let i = 0; i < 1500; i++) forwards = extractCrossModuleForwards(source, 'barrel.ts').length;
+for (let i = 0; i < 1500; i++) forwards = extractCrossModuleForwards(source, { filename: 'barrel.ts' }).length;
 globalThis.gc();
 process.stdout.write(JSON.stringify({ forwards, grownMb: (process.memoryUsage().rss - before) / 1048576 }));
 `;

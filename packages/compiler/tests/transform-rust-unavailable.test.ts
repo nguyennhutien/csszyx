@@ -89,7 +89,7 @@ describe('the native transform on an install without it', () => {
         const { transformRust, RustTransformUnavailableError } = await import(
             '../src/transform-rust.js'
         );
-        const error = thrown(() => transformRust('<div />', 'a.tsx'));
+        const error = thrown(() => transformRust('<div />', { filename: 'a.tsx' }));
         expect(error).toBeInstanceOf(RustTransformUnavailableError);
         expect(error).toMatchObject({
             name: 'RustTransformUnavailableError',
@@ -109,10 +109,10 @@ describe('the native transform on an install without it', () => {
         const { transformRust, RustTransformUnavailableError } = await import(
             '../src/transform-rust.js'
         );
-        expect(() => transformRust('<div />', 'a.tsx')).toThrow(
+        expect(() => transformRust('<div />', { filename: 'a.tsx' })).toThrow(
             new RustTransformUnavailableError('the native transform returned no result'),
         );
-        expect(() => transformRust('<div />', 'a.tsx')).toThrow(
+        expect(() => transformRust('<div />', { filename: 'a.tsx' })).toThrow(
             '[csszyx] internal-error:\n' +
                 '  An internal check failed in `transformRust`, so csszyx stops.\n' +
                 '  help: report this csszyx bug at https://github.com/nguyennhutien/csszyx/issues with this message, the csszyx version and the bundler or command you ran.\n' +
@@ -126,7 +126,7 @@ describe('the native transform on an install without it', () => {
         const { transformRust, RustTransformUnavailableError } = await import(
             '../src/transform-rust.js'
         );
-        const error = thrown(() => transformRust('<div />', 'a.tsx'));
+        const error = thrown(() => transformRust('<div />', { filename: 'a.tsx' }));
         expect(error).toBeInstanceOf(RustTransformUnavailableError);
         // The module graph is reset per test, so the class is this test's copy.
         expect(error).toBeInstanceOf((await import('../src/errors.js')).CsszyxError);
@@ -139,7 +139,7 @@ describe('the native transform on an install without it', () => {
     });
 
     it.each([
-        ['transformRust', (m: TransformRust) => m.transformRust('<div />', 'a.tsx')],
+        ['transformRust', (m: TransformRust) => m.transformRust('<div />', { filename: 'a.tsx' })],
         ['ensureRustTransformAvailable', (m: TransformRust) => m.ensureRustTransformAvailable()],
         [
             'scanModuleLinksRust',
@@ -175,7 +175,7 @@ describe('the native transform on an install without it', () => {
     });
 
     it.each([
-        ['transformRust', (m: TransformRust) => m.transformRust('<div />', 'a.tsx')],
+        ['transformRust', (m: TransformRust) => m.transformRust('<div />', { filename: 'a.tsx' })],
         [
             'scanModuleLinksRust',
             (m: TransformRust) => m.scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }]),

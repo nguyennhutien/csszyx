@@ -225,7 +225,7 @@ describe('szr import rewrite, end to end', () => {
         const source =
             "import { szr } from '@csszyx/runtime';\n" +
             "export const cls = szr('p-4', true && 'm-2');\n";
-        const compiled = transformSource(source, '/app/Button.tsx').code as string;
+        const compiled = transformSource(source, { filename: '/app/Button.tsx' }).code as string;
         expect(compiled).toContain('@csszyx/runtime/core');
         const probe = await bundleProbe(compiled);
         expect(probe.hasCompiler).toBe(false);
@@ -236,7 +236,7 @@ describe('szr import rewrite, end to end', () => {
         const { transformSource } = require('@csszyx/compiler/engine');
         const source =
             "import { szr } from '@csszyx/runtime';\n" + 'export const cls = (cfg) => szr(cfg);\n';
-        const compiled = transformSource(source, '/app/Card.tsx').code ?? source;
+        const compiled = transformSource(source, { filename: '/app/Card.tsx' }).code ?? source;
         expect(compiled).not.toContain('@csszyx/runtime/core');
         const probe = await bundleProbe(compiled);
         expect(probe.hasCompiler).toBe(true);
@@ -259,7 +259,7 @@ describe('szv precompile, end to end', () => {
             "import { szr, szv } from '@csszyx/runtime';\n" +
             "const cardSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });\n" +
             'export const C = (sel) => szr(cardSz(sel), cardSz({ pad: "sm" }));\n';
-        const result = transformSource(source, '/app/Card.tsx');
+        const result = transformSource(source, { filename: '/app/Card.tsx' });
         expect(result.usesSzvPick).toBe(true);
         const compiled = `import { __szvPick } from '@csszyx/runtime';\n${result.code as string}`;
         expect(compiled).toContain('@csszyx/runtime/core');

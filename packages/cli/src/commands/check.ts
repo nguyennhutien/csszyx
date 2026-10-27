@@ -1127,7 +1127,7 @@ function recordFileClasses(
     classPrefix: string | null,
 ): SzDiagnosticIssue[] {
     try {
-        const result = transformSource(source, file, { rootDir: cwd, classPrefix });
+        const result = transformSource(source, { filename: file, rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }

@@ -40,7 +40,10 @@ describe('scanGlobalVarUsages artifact dispatch', () => {
         vi.mocked(isRustTransformAvailable).mockReturnValue(true);
 
         expect(
-            scanGlobalVarUsages('source', '/p/a.tsx', { tokens: new Set(['--x', '--y']) }),
+            scanGlobalVarUsages('source', {
+                filename: '/p/a.tsx',
+                tokens: new Set(['--x', '--y']),
+            }),
         ).toEqual([usage('rust')]);
         expect(scanGlobalVarUsagesRust).toHaveBeenCalledWith(FILES, { tokens: ['--x', '--y'] });
         expect(scanGlobalVarUsagesWasm).not.toHaveBeenCalled();
@@ -60,7 +63,7 @@ describe('scanGlobalVarUsages artifact dispatch', () => {
     it('takes the wasm build a build pins, though the native addon loads', () => {
         vi.mocked(isRustTransformAvailable).mockReturnValue(true);
 
-        expect(scanGlobalVarUsages('source', '/p/a.tsx', { parser: 'wasm' })).toEqual([
+        expect(scanGlobalVarUsages('source', { filename: '/p/a.tsx', parser: 'wasm' })).toEqual([
             usage('wasm'),
         ]);
         expect(scanGlobalVarUsagesRust).not.toHaveBeenCalled();
@@ -69,7 +72,7 @@ describe('scanGlobalVarUsages artifact dispatch', () => {
     it('keeps a pinned native addon, so its failure names the platform package', () => {
         vi.mocked(isRustTransformAvailable).mockReturnValue(false);
 
-        expect(scanGlobalVarUsages('source', '/p/a.tsx', { parser: 'rust' })).toEqual([
+        expect(scanGlobalVarUsages('source', { filename: '/p/a.tsx', parser: 'rust' })).toEqual([
             usage('rust'),
         ]);
         expect(scanGlobalVarUsagesWasm).not.toHaveBeenCalled();

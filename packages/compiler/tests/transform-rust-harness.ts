@@ -74,7 +74,7 @@ export function compareNativeVsWasm(
     filename: string,
     options?: TransformSourceCodeOptions,
 ): RustParityComparison {
-    const wasmResult = transformWasm(source, filename, options);
+    const wasmResult = transformWasm(source, { filename: filename, ...options });
     const wasm = {
         code: wasmResult.code,
         classes: [...wasmResult.classes].sort(),
@@ -86,7 +86,7 @@ export function compareNativeVsWasm(
     let rustError: string | null = null;
     let rustIsUnavailable = false;
     try {
-        rust = transformRust(source, filename, options);
+        rust = transformRust(source, { filename: filename, ...options });
     } catch (err) {
         rustError = err instanceof Error ? err.message : String(err);
         rustIsUnavailable = err instanceof RustTransformUnavailableError;

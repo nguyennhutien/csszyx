@@ -730,7 +730,11 @@ export const SIZE_BUDGETS = [
         subpath: './engine',
         // 29,050 on 2026-10-26, measured 28,974: the `opacity-value`
         // `fraction` form's words, which the engine's issues render with.
-        maxGzipBytes: 29_050,
+        // 29,550 on 2026-10-27, measured 29,470 (28,990 before): every
+        // single-file engine call refuses the positional shape, ~260 of it the
+        // words of that one form, from its own export so the other forms of
+        // `options-object-required` stay out (all of them cost +808).
+        maxGzipBytes: 29_550,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -739,8 +743,9 @@ export const SIZE_BUDGETS = [
         target: 'packages/compiler',
         subpath: './internal',
         // 32,100 on 2026-10-26, measured 32,007: the same words, and the
-        // migrate class-name options object.
-        maxGzipBytes: 32_100,
+        // migrate class-name options object. 32,500 on 2026-10-27, measured
+        // 32,427 (32,023 before): the same engine-call refusal.
+        maxGzipBytes: 32_500,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

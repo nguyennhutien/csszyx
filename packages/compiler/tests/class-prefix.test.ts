@@ -14,7 +14,7 @@ const SOURCE =
 
 describe.each(ENGINES)('the %s artifact', (_name, transform) => {
     it('writes the prefix before every class it lowers', () => {
-        const result = transform(SOURCE, '/p/a.tsx', { classPrefix: 'tw' });
+        const result = transform(SOURCE, { filename: '/p/a.tsx', classPrefix: 'tw' });
 
         expect(result.code).toContain('tw:p-4');
         expect(result.code).toContain('tw:hover:bg-red-500');
@@ -23,14 +23,14 @@ describe.each(ENGINES)('the %s artifact', (_name, transform) => {
     });
 
     it('leaves the classes the author wrote as written', () => {
-        const result = transform(SOURCE, '/p/a.tsx', { classPrefix: 'tw' });
+        const result = transform(SOURCE, { filename: '/p/a.tsx', classPrefix: 'tw' });
 
         expect(result.code).toContain('_szMerge("card", `tw:p-4');
     });
 
     it('emits what it always emitted without a prefix', () => {
-        const bare = transform(SOURCE, '/p/a.tsx');
-        const none = transform(SOURCE, '/p/a.tsx', { classPrefix: null });
+        const bare = transform(SOURCE, { filename: '/p/a.tsx' });
+        const none = transform(SOURCE, { filename: '/p/a.tsx', classPrefix: null });
 
         expect(none.code).toBe(bare.code);
         expect(bare.code).toContain('_szMerge("card", `p-4');

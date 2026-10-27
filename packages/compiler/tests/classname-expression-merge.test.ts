@@ -95,7 +95,7 @@ describe('className expression + static sz merges (never overwritten)', () => {
     for (const fixture of FIXTURES) {
         it(`every artifact keeps the expression as a merge — ${fixture.name}`, () => {
             for (const [name, transform] of ENGINES) {
-                const code = transform(fixture.tsx, 'F.tsx').code ?? '';
+                const code = transform(fixture.tsx, { filename: 'F.tsx' }).code ?? '';
                 expect(element(code), `${name} keeps the expression`).toContain(
                     fixture.expectMerge,
                 );
@@ -103,8 +103,8 @@ describe('className expression + static sz merges (never overwritten)', () => {
         });
 
         it.skipIf(!RUST_LANE)(`native is byte-identical to wasm — ${fixture.name}`, () => {
-            const wasm = transformWasm(fixture.tsx, 'F.tsx');
-            const rust = transformRust(fixture.tsx, 'F.tsx');
+            const wasm = transformWasm(fixture.tsx, { filename: 'F.tsx' });
+            const rust = transformRust(fixture.tsx, { filename: 'F.tsx' });
             expect(rust.code).toBe(wasm.code);
             expect([...rust.classes]).toEqual([...wasm.classes]);
         });
@@ -113,7 +113,7 @@ describe('className expression + static sz merges (never overwritten)', () => {
     it('string-literal className still merges into one static string', () => {
         const tsx = 'export const A = () => <Row className="static-x" sz={{ p: 4 }} />;';
         for (const [, transform] of ENGINES) {
-            const out = element(transform(tsx, 'F.tsx').code ?? '');
+            const out = element(transform(tsx, { filename: 'F.tsx' }).code ?? '');
             expect(out).toContain('className="static-x p-4"');
             expect(out).not.toContain('_szMerge');
         }
@@ -126,14 +126,14 @@ describe('className expression + static sz merges (never overwritten)', () => {
         // resolves duplicate props last-wins, so the compiled value applies.
         // (The removed TS lanes folded it into the merge as `""`.)
         const tsx = 'export const A = ({ r }) => <Row className sz={{ ...r }} />;';
-        expect(element(transformWasm(tsx, 'F.tsx').code)).toContain(
+        expect(element(transformWasm(tsx, { filename: 'F.tsx' }).code)).toContain(
             'className className={_sz({ ...r })}',
         );
     });
 
     it('sets the runtime/merge flags so the import gets injected (wasm)', () => {
         const tsx = 'export const A = ({ c }) => <Row className={c} sz={{ p: 4 }} />;';
-        const result = transformWasm(tsx, 'F.tsx');
+        const result = transformWasm(tsx, { filename: 'F.tsx' });
         expect(result.metadata?.usesRuntime ?? result.usesRuntime).toBe(true);
         expect(result.metadata?.usesMerge ?? result.usesMerge).toBe(true);
     });

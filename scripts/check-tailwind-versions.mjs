@@ -362,15 +362,21 @@ function installVersion(root, version, integrity) {
  * @returns {Promise<Array<readonly [string, Function]>>} Name and transform.
  */
 async function loadEngines() {
-    const { isRustTransformAvailable, transformRust, transformWasm } = await import(
-        '../packages/compiler/src/engine.js'
-    );
+    const {
+        isRustTransformAvailable,
+        transformRust,
+        transformWasm,
+        WasmTransformUnavailableError,
+    } = await import('../packages/compiler/src/engine.js');
     const engines = [];
     const missing = [];
     try {
-        transformWasm('export const A = () => <p />;', '/p/src/Probe.jsx');
+        transformWasm('export const A = () => <p />;', { filename: '/p/src/Probe.jsx' });
         engines.push(['wasm', transformWasm]);
-    } catch {
+    } catch (error) {
+        // Only a missing artifact is a lane to skip; any other throw is the
+        // probe or the engine failing, and would read as a missing build.
+        if (!(error instanceof WasmTransformUnavailableError)) throw error;
         missing.push('wasm (`pnpm --filter @csszyx/core build`)');
     }
     if (isRustTransformAvailable()) engines.push(['rust', transformRust]);

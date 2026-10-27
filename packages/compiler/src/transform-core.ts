@@ -4422,7 +4422,7 @@ export function normalizeClassName(className: string): string {
 
 /**
  * Options for the engine entry points (`transformSource`, `transformRust`,
- * `transformWasm`).
+ * `transformWasm`) and their batches.
  */
 export interface TransformSourceCodeOptions {
     /**
@@ -4503,6 +4503,12 @@ export interface TransformSourceCodeOptions {
      * path). When omitted, diagnostics fall back to the filename as given.
      */
     rootDir?: string;
+}
+
+/** Options for one module through the engine: {@link TransformSourceCodeOptions} and its name. */
+export interface TransformSourceOptions extends TransformSourceCodeOptions {
+    /** Source filename for diagnostics; `<anonymous>` when absent. */
+    filename?: string;
 }
 
 /**

@@ -247,8 +247,8 @@ function readProviderModule(provider: string, cache: Map<string, ProviderModule>
     try {
         const text = readFileSync(provider, 'utf8');
         module = {
-            entries: extractCrossModuleRegistryEntries(text, provider),
-            forwards: extractCrossModuleForwards(text, provider),
+            entries: extractCrossModuleRegistryEntries(text, { filename: provider }),
+            forwards: extractCrossModuleForwards(text, { filename: provider }),
         };
     } catch (error) {
         // A provider that cannot be read costs the optimization for its

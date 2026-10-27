@@ -35,10 +35,25 @@ import { legacyFillSzDiagnosticTemplate } from './helpers/legacy-diagnostic-temp
 const SPECS = new Map((REGISTRY as SzDiagnosticSpec[]).map(spec => [spec.id, spec]));
 
 /** The browser module's diagnostics, each with its registry entry. */
-const DIAGNOSTICS = Object.values(BROWSER).map(diagnostic => {
-    const reportable = diagnostic as SzBrowserDiagnostic;
-    return [reportable, SPECS.get(reportable.id) as SzDiagnosticSpec] as const;
-});
+/** Each whole entry; an export named `<ID>__<FORM>` carries one form alone. */
+const DIAGNOSTICS = Object.entries(BROWSER)
+    .filter(([name]) => !name.includes('__'))
+    .map(([, diagnostic]) => {
+        const reportable = diagnostic as SzBrowserDiagnostic;
+        return [reportable, SPECS.get(reportable.id) as SzDiagnosticSpec] as const;
+    });
+
+/** Each one-form export, with the form it carries. */
+const FORM_EXPORTS = Object.entries(BROWSER)
+    .filter(([name]) => name.includes('__'))
+    .map(([name, diagnostic]) => {
+        const reportable = diagnostic as SzBrowserDiagnostic;
+        const spec = SPECS.get(reportable.id) as SzDiagnosticSpec;
+        const form = spec.forms?.find(candidate =>
+            name.endsWith(`__${candidate.toUpperCase().replaceAll('-', '_')}`),
+        );
+        return [reportable, spec, form as string] as const;
+    });
 
 let warn: MockInstance<typeof console.warn>;
 let error: MockInstance<typeof console.error>;
@@ -130,6 +145,38 @@ describe('szReport', () => {
                 szReport({ diagnostic, args });
                 // Filled from the registry's own arg objects, apart from the
                 // encoded args and joiners the browser entry carries.
+                const body = szDiagnosticBody(
+                    legacyFillSzDiagnosticTemplate(
+                        spec,
+                        { code: spec.id, args },
+                        SZ_DIAGNOSTIC_COMPUTED_VALUES,
+                    ),
+                );
+                expect(printed(), `${spec.id} ${JSON.stringify(args)}`).toBe(
+                    `[csszyx] ${spec.id}: ${body}\n  docs: https://csszyx.com/e/${spec.id}`,
+                );
+            }
+        }
+    });
+
+    it('fills a one-form export as the Node registry fills that form', () => {
+        expect(FORM_EXPORTS.length).toBeGreaterThan(0);
+        for (const [diagnostic, spec, form] of FORM_EXPORTS) {
+            expect(form, spec.id).toBeDefined();
+            // The slice exists to leave the other forms' words out.
+            for (const words of [diagnostic.text, diagnostic.help, diagnostic.note]) {
+                if (words !== undefined && typeof words === 'object') {
+                    expect(Object.keys(words), spec.id).toEqual([form]);
+                }
+            }
+            const sets = (argSets(spec) as Array<Record<string, ArgValue>>).filter(
+                args => args.form === form,
+            );
+            expect(sets.length, `${spec.id} ${form}`).toBeGreaterThan(0);
+            for (const args of sets) {
+                warn.mockClear();
+                error.mockClear();
+                szReport({ diagnostic, args });
                 const body = szDiagnosticBody(
                     legacyFillSzDiagnosticTemplate(
                         spec,

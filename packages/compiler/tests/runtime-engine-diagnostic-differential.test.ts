@@ -43,7 +43,7 @@ import { settleNativeLane } from './helpers/native-lane.js';
 import { szBodyOf, szCodeOf } from './helpers/sz-console-line.js';
 
 /** One engine artifact's transform that leaves its diagnostics unrendered. */
-type Unrendered = (source: string, filename: string) => UnrenderedTransformResult;
+type Unrendered = (source: string, options: { filename: string }) => UnrenderedTransformResult;
 
 /**
  * The native addon, when it loads and answers for this engine version. A
@@ -56,7 +56,9 @@ type Unrendered = (source: string, filename: string) => UnrenderedTransformResul
 function nativeLane(): Unrendered | string {
     if (!isRustTransformAvailable()) return 'the native addon is not built';
     try {
-        transformRustUnrendered('export const A = () => <p sz={{ p: 1 }} />;', '/p/probe.jsx');
+        transformRustUnrendered('export const A = () => <p sz={{ p: 1 }} />;', {
+            filename: '/p/probe.jsx',
+        });
         return transformRustUnrendered;
     } catch (error) {
         return `the native addon refused a call: ${String(error).slice(0, 160)}`;
@@ -219,7 +221,9 @@ function runtimeLines(sz: SzObject): string[] {
  * @returns The messages.
  */
 function engineLines(engine: Unrendered, sz: SzObject): string[] {
-    const result = engine(`export const A = () => <p sz={${jsLiteral(sz)}} />;`, '/p/src/A.jsx');
+    const result = engine(`export const A = () => <p sz={${jsLiteral(sz)}} />;`, {
+        filename: '/p/src/A.jsx',
+    });
     return (result.issues as SzDiagnosticIssue[]).map(issue => renderEngineDiagnostic(issue, ''));
 }
 
@@ -320,10 +324,9 @@ describe('runtime and engine diagnostics', () => {
                 expect(runtimeLines(sz)).toEqual([]);
                 expect(engineLines(engine, sz)).toEqual([]);
                 expect(transform(sz).className).toBe(className);
-                const built = engine(
-                    `export const A = () => <p sz={${jsLiteral(sz)}} />;`,
-                    '/p/src/A.jsx',
-                );
+                const built = engine(`export const A = () => <p sz={${jsLiteral(sz)}} />;`, {
+                    filename: '/p/src/A.jsx',
+                });
                 expect(built.code).toContain(`"${className}"`);
             });
         }

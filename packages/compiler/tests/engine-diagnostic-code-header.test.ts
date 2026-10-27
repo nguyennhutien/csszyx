@@ -48,7 +48,7 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
 
 describe.each(ENGINES)('diagnostic codes — %s', (_name, transform) => {
     it.each(Object.entries(ENGINE_SOURCES))('reports %s from its source', (code, source) => {
-        const result = transform(source, '/p/src/A.tsx');
+        const result = transform(source, { filename: '/p/src/A.tsx' });
 
         expect((result.issues ?? []).map(issue => issue.code)).toContain(code);
     });
@@ -68,14 +68,14 @@ describe.each(ENGINES)('diagnostic codes — %s', (_name, transform) => {
     it.each(Object.entries(ENGINE_SOURCES))(
         'heads every %s message with the code of its issue',
         (_code, source) => {
-            expectHeaded(transform(source, '/p/src/A.tsx'));
+            expectHeaded(transform(source, { filename: '/p/src/A.tsx' }));
         },
     );
 
     it.each(CODE_SOURCES)(
         'heads every %s message from its code source with the code of its issue',
         (_code, source, options) => {
-            expectHeaded(transform(source, '/p/src/A.tsx', options));
+            expectHeaded(transform(source, { filename: '/p/src/A.tsx', ...options }));
         },
     );
 });
@@ -85,7 +85,7 @@ describe.each(ENGINES)('removed keys, sugar or replaced — %s', (_name, transfo
         ['sugar', 'export const A = () => <div sz={{ absolute: true }} />;'],
         ['a replaced key', 'export const A = () => <div sz={{ tabularNums: true }} />;'],
     ])('reads removed-key from %s', (_label, source) => {
-        const issues = transform(source, '/p/src/A.tsx').issues ?? [];
+        const issues = transform(source, { filename: '/p/src/A.tsx' }).issues ?? [];
 
         expect(issues.map(issue => issue.code)).toEqual(['removed-key']);
     });

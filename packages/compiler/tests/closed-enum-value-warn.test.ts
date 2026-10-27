@@ -54,7 +54,9 @@ function run(
     engine: ParityEngine,
     sz: string,
 ): { emitted: string; diagnostics: string[]; issues: NonNullable<EngineParityResult['issues']> } {
-    const result = engine(`export const A = () => <div sz={${sz}} />;`, 'closed-enum.tsx');
+    const result = engine(`export const A = () => <div sz={${sz}} />;`, {
+        filename: 'closed-enum.tsx',
+    });
     return {
         emitted: /className="([^"]*)"/.exec(result.code ?? '')?.[1] ?? '',
         diagnostics: result.diagnostics ?? [],

@@ -35,7 +35,7 @@ function thrown(call: () => unknown): unknown {
     throw new Error('expected the call to throw');
 }
 
-type Engine = (source: string, filename?: string) => SourceTransformResult;
+type Engine = (source: string, options?: { filename?: string }) => SourceTransformResult;
 
 const ARTIFACTS: Array<[string, Engine]> = [
     ['native', transformRust],
@@ -53,7 +53,7 @@ const ARTIFACTS: Array<[string, Engine]> = [
 function buildClassName(engine: Engine, sz: string): string {
     const { code } = engine(
         `export function Card() {\n    return <section id="card" sz={${sz}}>hi</section>;\n}\n`,
-        'Card.tsx',
+        { filename: 'Card.tsx' },
     );
     const match = /className="([^"]*)"/.exec(code);
     if (!match) throw new Error(`build left ${sz} to the runtime: ${code}`);
@@ -167,7 +167,7 @@ describe.each(ARTIFACTS)('explainSz on the %s artifact', (_name, engine) => {
 describe('explainSz on a runtime fallback the engine gives no reason for', () => {
     it('still says the object is resolved at runtime', () => {
         const silent: Engine = source => ({
-            ...transformWasm(source, 'sz.tsx'),
+            ...transformWasm(source, { filename: 'sz.tsx' }),
             code: 'export const A = () => <div className={_sz(x)} />;\n',
             diagnostics: [],
             issues: undefined,

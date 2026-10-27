@@ -14,7 +14,7 @@ const SOURCE = 'export const A = () => <div sz={{ p: 4 }}><span sz /></div>;';
 
 describe.each(ENGINES)('a bare sz beside a static one — %s', (_name, transform) => {
     it('is reported at the attribute', () => {
-        const result = transform(SOURCE, '/p/src/A.tsx');
+        const result = transform(SOURCE, { filename: '/p/src/A.tsx' });
 
         expect(result.issues?.map(issue => [issue.code, issue.line, issue.column])).toEqual([
             ['unsupported-dynamic-sz', 1, 49],
@@ -22,7 +22,7 @@ describe.each(ENGINES)('a bare sz beside a static one — %s', (_name, transform
     });
 
     it('is left as written, while the static one is lowered', () => {
-        expect(transform(SOURCE, '/p/src/A.tsx').code).toBe(
+        expect(transform(SOURCE, { filename: '/p/src/A.tsx' }).code).toBe(
             'export const A = () => <div className="p-4"><span sz /></div>;',
         );
     });

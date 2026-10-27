@@ -24,7 +24,7 @@ import { VAR_HOSTILE_NO_VAR_FORM, VAR_HOSTILE_WRONG_PROPERTY } from '../src/var-
  * @returns The forwards, declaration order preserved.
  */
 function forwards(source: string) {
-    return extractCrossModuleForwards(source, '/p/index.ts');
+    return extractCrossModuleForwards(source, { filename: '/p/index.ts' });
 }
 
 describe('the re-export form', () => {
