@@ -2463,21 +2463,14 @@ pub(crate) fn format_font_stretch(value: &str) -> String {
 ///
 /// Tailwind infers no type from a custom property, so `bg-(--v)` and
 /// `bg-[var(--v)]` are background colours and `border-(--v)` a border colour.
-/// A bare `--v` and the shorthand `(--v)` become `(hint:--v)`, a `var(…)`
-/// becomes `[hint:var(…)]`; a key without a hint, or any other value, is left
+/// A bare `--v` becomes `(hint:--v)` and a `var(…)` becomes
+/// `[hint:var(…)]`; a key without a hint, or any other value, is left
 /// to the key's own lowering. The hints are the generated `CSS_VAR_TYPE_HINTS`.
 /// Mirrors `typedVariableValue` in the TypeScript core.
 fn typed_variable_value(key: &str, value: &str) -> Option<String> {
     let hint = css_var_type_hint(key)?;
     if value.starts_with("--") && !value.contains('(') {
         return Some(format!("({hint}:{value})"));
-    }
-    if let Some(name) = value
-        .strip_prefix('(')
-        .and_then(|inner| inner.strip_suffix(')'))
-        .filter(|name| name.starts_with("--") && !name.contains(['(', ')']))
-    {
-        return Some(format!("({hint}:{name})"));
     }
     value
         .starts_with("var(")
@@ -3334,19 +3327,31 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 
 /// The value inside the brackets `value` starts and ends with, its sign kept
 /// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
-/// `1px!`), or `None` when it is not wrapped. Grid line names at both ends
-/// (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`, where
-/// a value is never read so. Mirrors `bracketWrappedInner` in
-/// `transform-core.ts`.
+/// `1px!`), or the variable inside the parentheses csszyx writes for one
+/// (`(--brand)` is `--brand`), or `None` when it is not wrapped. Grid line
+/// names at both ends (`[a] 1fr [b]`) read as wrapped too; they are written in
+/// `css: {…}`, where a value is never read so. Mirrors `bracketWrappedInner`
+/// in `transform-core.ts`.
 pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
     let (body, bang) = value
         .strip_suffix('!')
         .map_or((value, ""), |unmarked| (unmarked, "!"));
+    if let Some(variable) = paren_variable(body) {
+        return Some(format!("{variable}{bang}"));
+    }
     let (sign, rest) = body
         .strip_prefix('-')
         .map_or(("", body), |unsigned| ("-", unsigned));
     let inner = rest.strip_prefix('[')?.strip_suffix(']')?;
     Some(format!("{sign}{inner}{bang}"))
+}
+
+/// The variable a value wraps in the parentheses csszyx writes for it
+/// (`(--brand)`), or `None`. A function's own parentheses (`--spacing(4)`) and
+/// two variables (`(--a) (--b)`) are no such wrapping.
+fn paren_variable(value: &str) -> Option<&str> {
+    let inner = value.strip_prefix('(')?.strip_suffix(')')?;
+    (inner.starts_with("--") && !inner.contains(['(', ')'])).then_some(inner)
 }
 
 /// [`bracket_wrapped_inner`] for a key's value. A custom property's value is a
@@ -3488,6 +3493,11 @@ mod tests {
                 property("hover", object(vec![property("h", text("[2px]"))])),
                 property("gridRows", text("[[a]_1fr]")),
                 property("mt", text("-[3px]!")),
+                property("animate", text("(--spin)")),
+                property("ease", text("(--snappy)!")),
+                property("w", text("--spacing(4)")),
+                property("bg", text("(--a) (--b)")),
+                property("p", text("(4)")),
             ],
         };
         let mut found = Vec::new();
@@ -3508,6 +3518,16 @@ mod tests {
                     "[a]_1fr".to_string()
                 ),
                 ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
+                (
+                    "animate".to_string(),
+                    "(--spin)".to_string(),
+                    "--spin".to_string()
+                ),
+                (
+                    "ease".to_string(),
+                    "(--snappy)!".to_string(),
+                    "--snappy!".to_string()
+                ),
             ]
         );
     }
@@ -5696,14 +5716,14 @@ mod tests {
         let object = StaticSzObject {
             properties: vec![
                 string("bgPos", "var(--x, 50% 50%)"),
-                string("bgSize", "(--x)"),
+                string("bgSize", "--x"),
                 string("bgImg", "var(--x)"),
                 string("border", "--x"),
-                string("borderT", "(--x)"),
+                string("borderT", "--x"),
                 string("fromPos", "--x"),
                 string("shadowColor", "var(--x)!"),
                 string("bg", "var(--x)"),
-                string("p", "(--x)"),
+                string("p", "--x"),
                 string("text", "(--x)y"),
                 string("text", "(--x(1))"),
                 string("text", "(a--x)"),

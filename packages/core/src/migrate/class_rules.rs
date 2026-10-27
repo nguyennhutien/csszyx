@@ -245,7 +245,7 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             // family it lowered to `font-(family-name:--v)` and changed what
             // the element set.
             rule!(StartsWith("(family-name:"), Key("fontFamily"), Unwrapped),
-            rule!(Paren, Key("weight"), Verbatim),
+            rule!(Paren, Key("weight"), ParenInner),
             rule!(StartsWith("[var("), Key("weight"), Unwrapped),
             // `font-condensed` is not a Tailwind class, so a bare keyword is
             // a family like any other word.

@@ -94,7 +94,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`; `{ '@md': { sidebar: … } }` writes `@md:sidebar:` | the build (`unserved-variant`), your snapshots | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [`op` is a percent](#a-colour-objects-op-is-a-percent) | `op: 0.05` is 0.05%, where 0.17 wrote 5%; `[csszyx] opacity-value:` | the build, dev runtime | you |
-| [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` | the build, dev runtime | you |
+| [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` or `{ animate: '(--spin)' }` | the build, dev runtime | you |
 | [A value with a space](#a-value-with-a-space-in-it-is-one-class) | `brightness-[calc(1px_+_2px)]` where 0.17 wrote two classes | your snapshots | nothing |
 | [One spelling on both lanes](#the-build-and-the-runtime-write-one-spelling) | `text-fade` where the runtime wrote `text-[fade]` | your snapshots | nothing |
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
@@ -1610,7 +1610,9 @@ decimal that is not a quarter step.
 
 csszyx brackets an arbitrary value itself, so a value written with the
 brackets is one spelling too many. 0.17 took the brackets off; 0.18 emits
-nothing for it and says so:
+nothing for it and says so. A custom property in Tailwind's parentheses,
+`(--spin)`, is the same: csszyx writes the parentheses for `--spin`, and on 19
+keys 0.17 wrote `animate-[(--spin)]`, a class Tailwind does not serve.
 
 ```text
 [csszyx] bracketed-value: src/Card.tsx:3:22
@@ -1620,7 +1622,9 @@ nothing for it and says so:
 
 A custom property (`{ '--x': '[a]' }`) is a declaration value and is not read.
 
-**The edit.** Drop the brackets.
+**The edit.** Drop the brackets or parentheses: `w: '[100px]'` → `w: '100px'`,
+`animate: '(--spin)'` → `animate: '--spin'`. `csszyx migrate` writes
+`font-(--v)` as `weight: '--v'`.
 
 ## A value with a space in it is one class
 

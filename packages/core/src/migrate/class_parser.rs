@@ -1308,7 +1308,7 @@ mod tests {
         );
         // `font-(--v)` is a font weight. Read as a family it lowered to
         // `font-(family-name:--v)` and changed what the element set.
-        assert_eq!(prop_value("font-(--v)"), r#"weight="(--v)""#);
+        assert_eq!(prop_value("font-(--v)"), r#"weight="--v""#);
         // The hint keeps its parens: `fontFamily: 'family-name:--v'` lowered
         // to `font-family-name:--v`, no class at all.
         assert_eq!(

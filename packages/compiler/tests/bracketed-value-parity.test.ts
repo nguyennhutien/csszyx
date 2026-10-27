@@ -10,6 +10,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
+import { PROPERTY_MAP } from '../src/sz-key-tables.js';
 import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 import { szReportedCodes } from './helpers/sz-console-line.js';
@@ -79,6 +80,11 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ top: '-[1px]!' }],
         // A closed-enum key names it once, as `bracketed-value`.
         [{ display: '[block]' }],
+        // A variable in the parentheses csszyx writes itself (`bg-(--brand)`).
+        [{ animate: '(--my-animation)' }],
+        [{ bg: '(--brand)' }],
+        [{ ease: '(--e)!' }],
+        [{ display: '(--d)' }],
     ])('%j writes nothing and names the key', sz => {
         expect(lower(sz)).toEqual({ className: '', kinds: ['bracketed-value'] });
     });
@@ -90,7 +96,21 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ '--cols': '[a]' }, '[--cols:[a]]'],
         // A bracket that never closes wraps nothing.
         [{ content: '[x' }, 'content-[[x]'],
+        // The variable as written, and parentheses that are a function's own.
+        [{ animate: '--my-animation' }, 'animate-(--my-animation)'],
+        [{ w: '--spacing(4)' }, 'w-[--spacing(4)]'],
+        [{ '--a': '(--b)' }, '[--a:(--b)]'],
     ])('%j is not wrapped, so it writes %s', (sz, className) => {
         expect(lower(sz)).toEqual({ className, kinds: [] });
+    });
+});
+
+describe.each(LANES)('a variable in parentheses on every key — %s', (_name, lower) => {
+    // `animate: '(--x)'` wrote `animate-[(--x)]`, which Tailwind compiles to
+    // `animation: (--x)`, a value no browser takes, while `bg` wrote
+    // `bg-(--x)`. A variable is written bare (`--x`) on every key, and csszyx
+    // writes the parentheses, as it writes the brackets of `[100px]`.
+    it.each(Object.keys(PROPERTY_MAP).map(key => [key]))('%s', key => {
+        expect(lower({ [key]: '(--x)' })).toEqual({ className: '', kinds: ['bracketed-value'] });
     });
 });

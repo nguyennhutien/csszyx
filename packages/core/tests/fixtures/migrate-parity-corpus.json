@@ -67630,17 +67630,17 @@
    "c": "font-(--v)",
    "p": {
     "prop": "weight",
-    "value": "(--v)"
+    "value": "--v"
    },
    "o": {
     "sz": {
-     "weight": "(--v)"
+     "weight": "--v"
     },
-    "szText": "{\"weight\":\"(--v)\"}",
+    "szText": "{\"weight\":\"--v\"}",
     "u": [],
     "k": [],
-    "g": "{ weight: '(--v)' }",
-    "h": "weight: '(--v)'"
+    "g": "{ weight: '--v' }",
+    "h": "weight: '--v'"
    }
   },
   {
