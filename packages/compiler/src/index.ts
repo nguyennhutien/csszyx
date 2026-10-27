@@ -77,6 +77,7 @@ export {
     ManifestBuilder,
     parseManifest,
     type RecoveryManifest,
+    type SerializeManifestOptions,
     serializeManifest,
     type TokenData,
     validateManifest,

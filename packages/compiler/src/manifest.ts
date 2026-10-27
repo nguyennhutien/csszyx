@@ -6,6 +6,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { szDiagnosticError } from './diagnostic-error.js';
 import { SZ_DIAGNOSTIC_COMPUTED_VALUES } from './diagnostic-render-helpers.js';
 import { renderSzDiagnostic } from './diagnostic-render-root.js';
 import { CsszyxError } from './errors.js';
@@ -199,20 +200,39 @@ export class ManifestBuilder {
     }
 }
 
+/** Options for {@link serializeManifest}. */
+export interface SerializeManifestOptions {
+    /** Indent the JSON by two spaces. */
+    readonly pretty?: boolean;
+}
+
 /**
  * Serializes a recovery manifest to JSON string.
  *
+ * The flag was a positional boolean, so a second option would have needed a
+ * third position; it is a key of one options object.
+ *
  * @param {RecoveryManifest} manifest - The manifest to serialize
- * @param {boolean} pretty - Whether to pretty-print the JSON
+ * @param {SerializeManifestOptions} options - Whether to pretty-print the JSON
+ * @param {never[]} rest - nothing; a third argument is refused
  * @returns {string} JSON string
+ * @throws {CsszyxError} `options-object-required`, when called the way the
+ * positional shape took.
  *
  * @example
  * ```typescript
- * const json = serializeManifest(manifest, true);
+ * const json = serializeManifest(manifest, { pretty: true });
  * ```
  */
-export function serializeManifest(manifest: RecoveryManifest, pretty = false): string {
-    return JSON.stringify(manifest, null, pretty ? 2 : 0);
+export function serializeManifest(
+    manifest: RecoveryManifest,
+    options: SerializeManifestOptions = {},
+    ...rest: never[]
+): string {
+    if (rest.length > 0 || typeof options !== 'object' || options === null) {
+        throw szDiagnosticError('options-object-required', { form: 'serialize-manifest' });
+    }
+    return JSON.stringify(manifest, null, options.pretty ? 2 : 0);
 }
 
 /**

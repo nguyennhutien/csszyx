@@ -98,6 +98,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [A value with a space](#a-value-with-a-space-in-it-is-one-class) | `brightness-[calc(1px_+_2px)]` where 0.17 wrote two classes | your snapshots | nothing |
 | [One spelling on both lanes](#the-build-and-the-runtime-write-one-spelling) | `text-fade` where the runtime wrote `text-[fade]` | your snapshots | nothing |
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
+| [`serializeManifest` options](#serializemanifest-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
 | [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
@@ -1678,6 +1679,30 @@ the keys:
 [csszyx] options-object-required:
   `classNameToSzObject` has no option(s) `btn`, `card`, so the call is refused.
   help: pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.
+  docs: https://csszyx.com/e/options-object-required
+```
+
+**Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
+
+## serializeManifest takes an options object
+
+`serializeManifest` from `@csszyx/compiler` took its pretty-print flag as a
+second positional argument; it is now a key of one options object:
+
+```ts
+// before
+serializeManifest(manifest, true);
+
+// after
+serializeManifest(manifest, { pretty: true });
+```
+
+A second argument that is not an object, or a third argument, throws:
+
+```text
+[csszyx] options-object-required:
+  `serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.
+  help: pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.
   docs: https://csszyx.com/e/options-object-required
 ```
 

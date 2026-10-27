@@ -190,9 +190,10 @@ Methods:
 - `hasToken(token: string): boolean`
 - `clear(): void`
 
-#### `serializeManifest(manifest, pretty?): string`
+#### `serializeManifest(manifest, options?): string`
 
-Serializes a recovery manifest to JSON string.
+Serializes a recovery manifest to JSON string. `options.pretty` indents it by
+two spaces.
 
 #### `parseManifest(json: string): RecoveryManifest`
 

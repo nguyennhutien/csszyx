@@ -203,9 +203,36 @@ describe('serializeManifest', () => {
             },
         };
 
-        const json = serializeManifest(manifest, true);
+        const json = serializeManifest(manifest, { pretty: true });
         expect(json).toContain('\n');
         expect(json).toContain('  ');
+    });
+
+    it.each([
+        ['a positional boolean, the shape it took before', true],
+        ['a value that is not an object', 'pretty'],
+        ['null', null],
+    ])('refuses %s as options-object-required', (_name, options) => {
+        const error = caught(() =>
+            serializeManifest({ buildId: 'b', checksum: 'c', tokens: {} }, options as never),
+        );
+        expect(isCsszyxError(error)).toBe(true);
+        expect(error).toMatchObject({
+            code: 'options-object-required',
+            args: { form: 'serialize-manifest' },
+        });
+        expect((error as Error).message).toContain('serializeManifest(manifest, { pretty: true })');
+    });
+
+    it('refuses a third argument', () => {
+        const error = caught(() =>
+            (serializeManifest as (...args: unknown[]) => string)(
+                { buildId: 'b', checksum: 'c', tokens: {} },
+                {},
+                true,
+            ),
+        );
+        expect(error).toMatchObject({ code: 'options-object-required' });
     });
 
     it('should serialize without formatting by default', () => {

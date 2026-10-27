@@ -2306,7 +2306,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "csszyx-turbopack",
             "csszyx-turbopack-option",
             "class-name-to-sz-object",
-            "class-name-to-sz-object-option"
+            "class-name-to-sz-object-option",
+            "serialize-manifest"
+        ],
+        "buildForms": [
+            "serialize-manifest"
         ],
         "args": {
             "form": {
@@ -2316,7 +2320,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "csszyx-turbopack",
                     "csszyx-turbopack-option",
                     "class-name-to-sz-object",
-                    "class-name-to-sz-object-option"
+                    "class-name-to-sz-object-option",
+                    "serialize-manifest"
                 ]
             },
             "options": {

@@ -1750,7 +1750,9 @@ export const DIAGNOSTICS = [
             'csszyx-turbopack-option',
             'class-name-to-sz-object',
             'class-name-to-sz-object-option',
+            'serialize-manifest',
         ],
+        buildForms: ['serialize-manifest'],
         args: {
             form: formArg([
                 'transform',
@@ -1758,6 +1760,7 @@ export const DIAGNOSTICS = [
                 'csszyx-turbopack-option',
                 'class-name-to-sz-object',
                 'class-name-to-sz-object-option',
+                'serialize-manifest',
             ]),
             options: { type: 'string[]', joiner: '`, `', optional: true },
         },
@@ -1772,6 +1775,8 @@ export const DIAGNOSTICS = [
                 '`classNameToSzObject` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
             'class-name-to-sz-object-option':
                 '`classNameToSzObject` has no option(s) `{options}`, so the call is refused.',
+            'serialize-manifest':
+                '`serializeManifest` takes its options in one object, so a second argument that is not an object, or a third argument, is refused.',
         },
         help: {
             transform:
@@ -1784,8 +1789,15 @@ export const DIAGNOSTICS = [
                 'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
             'class-name-to-sz-object-option':
                 'pass the migration map under `customMap`: `classNameToSzObject(className, { customMap })`.',
+            'serialize-manifest':
+                'pass the flag as a key: `serializeManifest(manifest, { pretty: true })`.',
         },
-        sources: [CORE_TS, 'packages/unplugin/src/next-config.ts', 'packages/cli/src/migrate.ts'],
+        sources: [
+            CORE_TS,
+            'packages/unplugin/src/next-config.ts',
+            'packages/cli/src/migrate.ts',
+            'packages/compiler/src/manifest.ts',
+        ],
     },
     {
         id: 'lowering-not-loaded',

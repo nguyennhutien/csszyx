@@ -124,7 +124,7 @@ export interface SzDiagnosticArgs {
     'dev-warnings-partial': Readonly<Record<string, never>>;
     'diagnostics-capped': { readonly form: 'per-id' | 'dev-warnings' | 'unknown-keys'; readonly id?: string; readonly count?: number };
     'sz-attribute-syntax': { readonly form: 'char' | 'end'; readonly input: string; readonly char?: string; readonly index: number };
-    'options-object-required': { readonly form: 'transform' | 'csszyx-turbopack' | 'csszyx-turbopack-option' | 'class-name-to-sz-object' | 'class-name-to-sz-object-option'; readonly options?: readonly string[] };
+    'options-object-required': { readonly form: 'transform' | 'csszyx-turbopack' | 'csszyx-turbopack-option' | 'class-name-to-sz-object' | 'class-name-to-sz-object-option' | 'serialize-manifest'; readonly options?: readonly string[] };
     'lowering-not-loaded': Readonly<Record<string, never>>;
     'lite-sz-object': { readonly fnName: string; readonly received: string };
     'split-box-sz-string': { readonly value: string };
