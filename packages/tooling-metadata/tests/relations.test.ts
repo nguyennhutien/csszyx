@@ -3,6 +3,8 @@
  * companion. They are exercised end-to-end through both providers elsewhere;
  * this suite pins each branch directly so a rule change is caught at the source.
  */
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -52,6 +54,33 @@ describe('THEME_VALUE_PROPERTIES', () => {
         );
         expect(THEME_VALUE_PROPERTIES.textSizes).toEqual(['text']);
         expect(THEME_VALUE_PROPERTIES.fontWeights).toEqual(['weight']);
+    });
+
+    it('has one category for each theme type the compiler declares', () => {
+        const props = readFileSync(
+            new URL('../../compiler/src/types/sz-props.ts', import.meta.url),
+            'utf8',
+        );
+        const declared = [...props.matchAll(/CustomTheme extends \{ (\w+): infer T \}/g)].map(
+            ([, category]) => category,
+        );
+        expect(Object.keys(THEME_VALUE_PROPERTIES).sort()).toEqual(declared.sort());
+    });
+
+    it('feeds a namespace to the keys Tailwind serves it on', () => {
+        const categories = THEME_VALUE_PROPERTIES as Readonly<Record<string, readonly string[]>>;
+        expect(categories.animations).toEqual(['animate']);
+        expect(categories.easings).toEqual(['ease']);
+        expect(categories.containers).toEqual([
+            'basis',
+            'columns',
+            'inlineSize',
+            'maxInlineSize',
+            'maxW',
+            'minInlineSize',
+            'minW',
+            'w',
+        ]);
     });
 });
 

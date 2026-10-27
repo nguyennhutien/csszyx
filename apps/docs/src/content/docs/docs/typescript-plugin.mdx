@@ -168,9 +168,10 @@ the preview:
 ```
 
 In VS Code with the CSSzyx extension, set `"csszyx.themeValues": true`
-instead. Custom colors, spacings, font families, text sizes, font weights,
-radii, shadows, and breakpoint keys become additive suggestions; built-in
-values are retained and duplicates are removed.
+instead. Every custom token the declaration holds (colors, spacings, fonts,
+animations, easings, container sizes and the rest) and the breakpoint keys
+become additive suggestions; built-in values are retained and duplicates are
+removed.
 
 The TypeScript service performs no CSS scan and creates no watcher. It only
 parses the bounded `.csszyx/theme.d.ts` source already in the current TypeScript

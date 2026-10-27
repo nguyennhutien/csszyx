@@ -56,8 +56,9 @@ hover, diagnostics, and syntax highlighting are not provided by this package.
 ### Generated theme values (preview)
 
 Set `themeValues: true` and include `.csszyx/theme.d.ts` in the leaf TypeScript
-project. The plugin adds its custom colors, spacings, fonts, text sizes, font
-weights, radii, shadows, and breakpoints to the existing curated suggestions.
+project. The plugin adds every custom token it declares (colors, spacings,
+fonts, animations, easings, container sizes and the rest) and its breakpoints to
+the existing curated suggestions.
 
 The plugin reads the declaration already present in TypeScript's current
 Program. It does not read CSS, access the filesystem directly, create a watcher,

@@ -19,15 +19,30 @@ const here = dirname(fileURLToPath(import.meta.url));
 const outputPath = resolve(here, '../src/tooling.generated.ts');
 const check = process.argv.includes('--check');
 
-const THEME_TYPE_CATEGORIES = Object.freeze({
-    CT_Colors: 'colors',
-    CT_Spacings: 'spacings',
-    CT_Fonts: 'fonts',
-    CT_TextSizes: 'textSizes',
-    CT_FontWeights: 'fontWeights',
-    CT_Radii: 'radii',
-    CT_Shadows: 'shadows',
-});
+/**
+ * The theme categories the compiler's types read, named as the generated
+ * declaration names them: `type CT_Animations = CustomTheme extends
+ * { animations: infer T } ? T : never` is the category `animations`. Read from
+ * the aliases so a namespace the types take reaches editors with no second list.
+ */
+const readThemeTypeCategories = (sourceFile, aliases) => {
+    const categories = new Map();
+    for (const [name, type] of aliases) {
+        if (
+            !ts.isConditionalTypeNode(type) ||
+            !ts.isTypeReferenceNode(type.checkType) ||
+            type.checkType.typeName.getText(sourceFile) !== 'CustomTheme' ||
+            !ts.isTypeLiteralNode(type.extendsType)
+        )
+            continue;
+        const [member] = type.extendsType.members;
+        if (member && ts.isPropertySignature(member) && ts.isIdentifier(member.name)) {
+            categories.set(name, member.name.text);
+        }
+    }
+    if (categories.size === 0) throw new Error('sz-props.ts declares no `CustomTheme` category');
+    return categories;
+};
 
 /** Derive theme-fed properties from the compiler's public type graph. */
 const readThemeValueProperties = async validPropertyKeys => {
@@ -37,13 +52,14 @@ const readThemeValueProperties = async validPropertyKeys => {
     for (const statement of sourceFile.statements) {
         if (ts.isTypeAliasDeclaration(statement)) aliases.set(statement.name.text, statement.type);
     }
+    const themeTypeCategories = readThemeTypeCategories(sourceFile, aliases);
 
     const categoriesFor = (node, seen = new Set()) => {
         const categories = new Set();
         const visit = child => {
             if (ts.isTypeReferenceNode(child) && ts.isIdentifier(child.typeName)) {
                 const name = child.typeName.text;
-                const category = THEME_TYPE_CATEGORIES[name];
+                const category = themeTypeCategories.get(name);
                 if (category) categories.add(category);
                 const alias = aliases.get(name);
                 if (alias && !seen.has(name)) {
@@ -58,7 +74,7 @@ const readThemeValueProperties = async validPropertyKeys => {
     };
 
     const properties = Object.fromEntries(
-        Object.values(THEME_TYPE_CATEGORIES).map(category => [category, new Set()]),
+        [...themeTypeCategories.values()].map(category => [category, new Set()]),
     );
     for (const statement of sourceFile.statements) {
         if (!ts.isInterfaceDeclaration(statement) || !statement.name.text.endsWith('Props'))
@@ -154,7 +170,7 @@ export const NEGATIVE_VALUE_KEYS = ${serialize(
         .sort(),
 )} as const;
 /** Generated-theme declaration categories understood by editor integrations. */
-export type ThemeValueCategory = ${Object.values(THEME_TYPE_CATEGORIES)
+export type ThemeValueCategory = ${Object.keys(themeValueProperties)
     .map(category => `'${category}'`)
     .join(' | ')};
 /** Canonical sz properties fed by each generated Tailwind theme namespace. */
