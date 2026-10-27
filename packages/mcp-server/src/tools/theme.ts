@@ -19,12 +19,9 @@ export type ThemeInput = z.infer<typeof themeSchema>;
  */
 export function handleTheme(input: ThemeInput): { content: Array<{ type: 'text'; text: string }> } {
     const theme = parseThemeBlocks(input.css);
-    const totalVars =
-        theme.colors.length +
-        theme.spacings.length +
-        theme.fonts.length +
-        theme.radii.length +
-        theme.shadows.length;
+    // Every category the scanner reads; a fixed list here left text sizes,
+    // weights and breakpoints out of the count.
+    const totalVars = Object.values(theme).reduce((sum, tokens) => sum + tokens.length, 0);
 
     return {
         content: [
@@ -35,7 +32,7 @@ export function handleTheme(input: ThemeInput): { content: Array<{ type: 'text';
                         theme,
                         totalVariables: totalVars,
                         usage: hasTokens(theme)
-                            ? "Use these custom values in sz props. Example: { bg: 'brand' } for --color-brand-500"
+                            ? "Use these custom values in sz props. Example: { bg: 'brand-500' } for --color-brand-500"
                             : 'No @theme block found in the CSS content. Make sure your CSS contains @theme { --color-*: ...; }',
                     },
                     null,

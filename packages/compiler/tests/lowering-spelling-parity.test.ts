@@ -624,7 +624,7 @@ describe.each(LANES)('a colour string the runtime does not judge — %s', (_name
         [{ bg: '4/2.5' }, 'bg-4/2.5'],
         [{ bg: 'calc(100/5)' }, 'bg-[calc(100/5)]'],
         [{ color: 'var(--x)' }, 'text-[var(--x)]'],
-        [{ borderColor: '(--x)' }, 'border-(--x)'],
+        [{ borderColor: '--x' }, 'border-(--x)'],
         [{ fill: 'white/50!' }, 'fill-white/50!'],
     ])('%j writes %s and reports nothing', (sz, className) => {
         const result = lower(sz);
@@ -735,35 +735,35 @@ describe.each(LANES)(
         // property on every one that has the utility.
         it.each([
             [{ bgPos: 'var(--x)' }, 'bg-[position:var(--x)]'],
-            [{ bgPos: '(--x)' }, 'bg-(position:--x)'],
+            [{ bgPos: '--x' }, 'bg-(position:--x)'],
             [{ bgPos: 'var(--x)!' }, 'bg-[position:var(--x)]!'],
             [{ decorationThickness: 'var(--x)!' }, 'decoration-[length:var(--x)]!'],
             [{ bgImg: 'var(--x)!' }, 'bg-[image:var(--x)]!'],
             [{ bgImg: 'url(/a.png)!' }, 'bg-[url(/a.png)]!'],
             [{ hover: { bgPos: 'var(--x, 50%)' } }, 'hover:bg-[position:var(--x,_50%)]'],
-            [{ bgSize: '(--x)' }, 'bg-(length:--x)'],
+            [{ bgSize: '--x' }, 'bg-(length:--x)'],
             [{ bgImg: 'var(--x)' }, 'bg-[image:var(--x)]'],
-            [{ bgImg: '(--x)' }, 'bg-(image:--x)'],
+            [{ bgImg: '--x' }, 'bg-(image:--x)'],
             [{ text: 'var(--x)' }, 'text-[length:var(--x)]'],
-            [{ text: '(--x)' }, 'text-(length:--x)'],
+            [{ text: '--x' }, 'text-(length:--x)'],
             [{ border: '--x' }, 'border-(length:--x)'],
             [{ border: 'var(--x)' }, 'border-[length:var(--x)]'],
-            [{ borderT: '(--x)' }, 'border-t-(length:--x)'],
+            [{ borderT: '--x' }, 'border-t-(length:--x)'],
             [{ borderX: 'var(--x)' }, 'border-x-[length:var(--x)]'],
             [{ outline: '--x' }, 'outline-(length:--x)'],
             [{ ring: 'var(--x)' }, 'ring-[length:var(--x)]'],
             [{ insetRing: '--x' }, 'inset-ring-(length:--x)'],
-            [{ ringOffset: '(--x)' }, 'ring-offset-(length:--x)'],
+            [{ ringOffset: '--x' }, 'ring-offset-(length:--x)'],
             [{ decorationThickness: 'var(--x)' }, 'decoration-[length:var(--x)]'],
             [{ strokeWidth: '--x' }, 'stroke-(length:--x)'],
-            [{ fontFamily: '(--x)' }, 'font-(family-name:--x)'],
+            [{ fontFamily: '--x' }, 'font-(family-name:--x)'],
             [{ shadowColor: 'var(--x)' }, 'shadow-[color:var(--x)]'],
-            [{ insetShadowColor: '(--x)' }, 'inset-shadow-(color:--x)'],
+            [{ insetShadowColor: '--x' }, 'inset-shadow-(color:--x)'],
             [{ textShadowColor: 'var(--x)' }, 'text-shadow-[color:var(--x)]'],
-            [{ dropShadowColor: '(--x)' }, 'drop-shadow-(color:--x)'],
+            [{ dropShadowColor: '--x' }, 'drop-shadow-(color:--x)'],
             [{ fromPos: '--x' }, 'from-(length:--x)'],
             [{ viaPos: 'var(--x)' }, 'via-[length:var(--x)]'],
-            [{ toPos: '(--x)' }, 'to-(length:--x)'],
+            [{ toPos: '--x' }, 'to-(length:--x)'],
         ])('%j writes %s', (sz, className) => {
             const result = lower(sz);
 
@@ -773,9 +773,9 @@ describe.each(LANES)(
 
         it.each([
             [{ bg: 'var(--x)' }, 'bg-[var(--x)]'],
-            [{ color: '(--x)' }, 'text-(--x)'],
+            [{ color: '--x' }, 'text-(--x)'],
             [{ shadow: 'var(--x)' }, 'shadow-[var(--x)]'],
-            [{ p: '(--x)' }, 'p-(--x)'],
+            [{ p: '--x' }, 'p-(--x)'],
             [{ borderColor: 'var(--x)' }, 'border-[var(--x)]'],
             [{ weight: 'var(--x)' }, 'font-[var(--x)]'],
             [{ weight: '--x' }, 'font-(--x)'],
@@ -811,5 +811,21 @@ describe.each(ENGINES)('a runtime value on a width key — %s', (_name, engine) 
         );
 
         expect(run.className).toBe(className);
+    });
+});
+
+describe.each(LANES)('a variable on `animationDelay` — %s', (_name, lower) => {
+    // Tailwind has no `animation-delay` utility, so the key writes the
+    // declaration; a variable in it is `var()`, as every other key reads `--x`.
+    // `animation-delay: --x` is no value a browser takes (Tailwind 4.3.3).
+    it.each([
+        [{ animationDelay: '--x' }, '[animation-delay:var(--x)]'],
+        [{ animationDelay: '--x!' }, '[animation-delay:var(--x)]!'],
+        [{ hover: { animationDelay: '--d' } }, 'hover:[animation-delay:var(--d)]'],
+        [{ animationDelay: '150ms' }, '[animation-delay:150ms]'],
+        [{ animationDelay: 200 }, '[animation-delay:200ms]'],
+        [{ animationDelay: 'var(--x)' }, '[animation-delay:var(--x)]'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz).className).toBe(className);
     });
 });

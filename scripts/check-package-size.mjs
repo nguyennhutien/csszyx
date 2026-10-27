@@ -523,7 +523,13 @@ export const SIZE_BUDGETS = [
         // key (+447) and a value with a space as one class (+295) are the
         // rest. The wasm loads in Node at build time and never reaches a
         // browser, so this is install size. ~300 bytes of headroom.
-        maxGzipBytes: 586_750,
+        //
+        // Raised from 586,750 on 2026-10-27: 586,486 after #401 to 586,776,
+        // same build and machine. Reading a variable in parentheses as a
+        // bracketed value, a variable `animationDelay` written as `var()` and
+        // a bracketed closed-enum value reported once cost the 290 bytes
+        // together; not measured apart. ~300 bytes of headroom.
+        maxGzipBytes: 587_100,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor

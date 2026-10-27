@@ -75,7 +75,7 @@ pub enum DiagnosticCode {
     MangleVarsHoistSkipped,
     /// A colour object with a slash opacity in `color`; the object takes it in `op`.
     ColorSlashOpacity,
-    /// A value wrapped in the brackets csszyx writes itself.
+    /// A value wrapped in the brackets or parentheses csszyx writes itself.
     BracketedValue,
     /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
     OpacityValue,
@@ -967,7 +967,7 @@ pub mod issue {
         )
     }
 
-    /// `bracketed-value`: A value wrapped in the brackets csszyx writes itself.
+    /// `bracketed-value`: A value wrapped in the brackets or parentheses csszyx writes itself.
     #[must_use]
     #[inline]
     pub fn bracketed_value(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {

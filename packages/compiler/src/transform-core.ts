@@ -118,6 +118,9 @@ import {
 } from './report.js';
 import { unservedStateVariantForm } from './state-variants.js';
 
+/** A value in the sz object that is not a nested object. */
+type SzLiteral = string | number | boolean;
+
 /**
  * Represents a value in the sz object.
  * Can be a string, number, boolean, or nested object for variants.
@@ -316,10 +319,9 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
 /**
  * A variable value on a key that takes a type hint, spelled with it.
  *
- * A bare `--v` and the shorthand `(--v)` become `(hint:--v)`; a `var(…)`
- * becomes `[hint:var(…)]`. A key without a hint, or any other value, is
- * left to the key's own lowering. Mirrors `typed_variable_value` in the
- * engine.
+ * A bare `--v` becomes `(hint:--v)`; a `var(…)` becomes `[hint:var(…)]`.
+ * A key without a hint, or any other value, is left to the key's own
+ * lowering. Mirrors `typed_variable_value` in the engine.
  *
  * @param rawKey - The sz key.
  * @param value - The value, without a trailing `!`.
@@ -329,7 +331,6 @@ function typedVariableValue(rawKey: string, value: string): string | null {
     const hint = own(CSS_VAR_TYPE_HINTS, rawKey);
     if (hint === undefined) return null;
     if (value.startsWith('--') && !value.includes('(')) return `(${hint}:${value})`;
-    if (/^\(--[^()]*\)$/.test(value)) return `(${hint}:${value.slice(1, -1)})`;
     if (value.startsWith('var(')) return `[${hint}:${normalizeArbitraryValue(value)}]`;
     return null;
 }
@@ -1048,11 +1049,19 @@ export function normalizeArbitraryValue(value: string): string {
 }
 
 /**
+ * A variable in the parentheses csszyx writes for it: `(--brand)`. A
+ * function's own parentheses (`--spacing(4)`) and two variables are not one.
+ */
+const PAREN_VARIABLE = /^\(--[^()]*\)$/;
+
+/**
  * The value inside the brackets `value` starts and ends with, its sign kept in
  * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
- * `1px!`), or `undefined` when it is not wrapped. Grid line names at both
- * ends (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`,
- * where a value is never read so. Mirrors `bracket_wrapped_inner`.
+ * `1px!`), or the variable inside the parentheses csszyx writes for one
+ * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. Grid
+ * line names at both ends (`[a] 1fr [b]`) read as wrapped too; they are
+ * written in `css: {…}`, where a value is never read so. Mirrors
+ * `bracket_wrapped_inner`.
  *
  * @param value - The value as written.
  * @returns What to write instead, or `undefined`.
@@ -1060,6 +1069,7 @@ export function normalizeArbitraryValue(value: string): string {
 function bracketWrappedInner(value: string): string | undefined {
     const bang = value.endsWith('!') ? '!' : '';
     const body = bang ? value.slice(0, -1) : value;
+    if (PAREN_VARIABLE.test(body)) return `${body.slice(1, -1)}${bang}`;
     const sign = body.startsWith('-') ? '-' : '';
     return body.startsWith('[', sign.length) && body.endsWith(']')
         ? `${sign}${body.slice(sign.length + 1, -1)}${bang}`
@@ -2648,7 +2658,7 @@ function warnGlobalBeforeGroup(global: string, value: unknown, group: string): v
             return;
         }
     }
-    const text = String(value as string | number | boolean);
+    const text = String(value as SzLiteral);
     // The type says how the line spells the value: `'7'` and `7` are two lines.
     const valueType = typeof value as 'string' | 'number' | 'boolean';
     const token = `${global}:${valueType}:${text}>${group}`;
@@ -3812,8 +3822,8 @@ function collectFallbackProperty(
         return;
     }
     if (rawKey === 'animationDelay') {
-        const delay = typeof value === 'number' ? `${value}ms` : String(value);
-        classes.push(`${prefix}[animation-delay:${delay}]`);
+        // An object took the object arm before reaching here.
+        classes.push(`${prefix}[animation-delay:${animationDelayValue(value as SzLiteral)}]`);
         return;
     }
     if ((rawKey === 'leading' || rawKey === 'lineHeight') && isUnitlessLeadingRatio(value)) {
@@ -3822,6 +3832,21 @@ function collectFallbackProperty(
     }
     if (typeof value === 'number') collectNumericProperty(rawKey, key, value, prefix, classes);
     else if (typeof value === 'string') collectStringProperty(rawKey, key, value, prefix, classes);
+}
+
+/**
+ * The declaration value `animationDelay` writes, which Tailwind has no utility
+ * for: a number is milliseconds, and a variable is `var()`, as `--x` reads on
+ * every key (`animation-delay: --x` is no value). Mirrors
+ * `animation_delay_value`.
+ *
+ * @param value - The value as written.
+ * @returns The `animation-delay` value.
+ */
+function animationDelayValue(value: SzLiteral): string {
+    if (typeof value === 'number') return `${value}ms`;
+    const text = String(value);
+    return text.startsWith('--') && !text.includes('(') ? `var(${text})` : text;
 }
 
 /**

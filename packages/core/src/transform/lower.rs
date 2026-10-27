@@ -866,7 +866,10 @@ pub(crate) fn collect_dead_enum_values(
                         .iter()
                         .any(|(replaced, _)| std::ptr::eq(*replaced, property))
                         && is_stray_group_value(&property.key, base));
+                // A value in the brackets csszyx writes is named once, by
+                // `bracketed-value`, as the runtime names it.
                 if named
+                    && bracketed_inner(&property.key, value).is_none()
                     && (is_dead_enum_value(&property.key, base)
                         || unclassed_value(&property.key, base).is_some())
                 {
@@ -1924,6 +1927,23 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
     format_static_class_value(key, value, prefix)
 }
 
+/// The declaration value `animationDelay` writes, which Tailwind has no utility
+/// for: a number is milliseconds, and a variable is `var()`, as `--x` reads on
+/// every key (`animation-delay: --x` is no value). Mirrors
+/// `animationDelayValue`.
+fn animation_delay_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        // A negative delay starts the animation part-way through: the sign is
+        // CSS, as the TypeScript core keeps it.
+        StaticSzValue::Number(num) => Some(format!("{}ms", format_number_literal(*num))),
+        StaticSzValue::String(text) if text.starts_with("--") && !text.contains('(') => {
+            Some(format!("var({text})"))
+        }
+        StaticSzValue::String(text) => Some(text.clone()),
+        _ => None,
+    }
+}
+
 /// Lower one key/value pair, with the important modifier already accounted for.
 ///
 /// Split from [`format_static_class`] so the bang is removed exactly once. The
@@ -1932,14 +1952,8 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
 #[allow(clippy::too_many_lines)]
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
-        let ms = match value {
-            // A negative delay starts the animation part-way through: the
-            // sign is CSS, as the TypeScript core keeps it.
-            StaticSzValue::Number(num) => format!("{}ms", format_number_literal(*num)),
-            StaticSzValue::String(s) => s.clone(),
-            _ => return None,
-        };
-        return Some(format!("{prefix}[animation-delay:{ms}]"));
+        return animation_delay_value(value)
+            .map(|delay| format!("{prefix}[animation-delay:{delay}]"));
     }
 
     // A purely numeric key can never be a CSS property or Tailwind utility —
@@ -2449,21 +2463,14 @@ pub(crate) fn format_font_stretch(value: &str) -> String {
 ///
 /// Tailwind infers no type from a custom property, so `bg-(--v)` and
 /// `bg-[var(--v)]` are background colours and `border-(--v)` a border colour.
-/// A bare `--v` and the shorthand `(--v)` become `(hint:--v)`, a `var(…)`
-/// becomes `[hint:var(…)]`; a key without a hint, or any other value, is left
+/// A bare `--v` becomes `(hint:--v)` and a `var(…)` becomes
+/// `[hint:var(…)]`; a key without a hint, or any other value, is left
 /// to the key's own lowering. The hints are the generated `CSS_VAR_TYPE_HINTS`.
 /// Mirrors `typedVariableValue` in the TypeScript core.
 fn typed_variable_value(key: &str, value: &str) -> Option<String> {
     let hint = css_var_type_hint(key)?;
     if value.starts_with("--") && !value.contains('(') {
         return Some(format!("({hint}:{value})"));
-    }
-    if let Some(name) = value
-        .strip_prefix('(')
-        .and_then(|inner| inner.strip_suffix(')'))
-        .filter(|name| name.starts_with("--") && !name.contains(['(', ')']))
-    {
-        return Some(format!("({hint}:{name})"));
     }
     value
         .starts_with("var(")
@@ -3320,19 +3327,31 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 
 /// The value inside the brackets `value` starts and ends with, its sign kept
 /// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
-/// `1px!`), or `None` when it is not wrapped. Grid line names at both ends
-/// (`[a] 1fr [b]`) read as wrapped too; they are written in `css: {…}`, where
-/// a value is never read so. Mirrors `bracketWrappedInner` in
-/// `transform-core.ts`.
+/// `1px!`), or the variable inside the parentheses csszyx writes for one
+/// (`(--brand)` is `--brand`), or `None` when it is not wrapped. Grid line
+/// names at both ends (`[a] 1fr [b]`) read as wrapped too; they are written in
+/// `css: {…}`, where a value is never read so. Mirrors `bracketWrappedInner`
+/// in `transform-core.ts`.
 pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
     let (body, bang) = value
         .strip_suffix('!')
         .map_or((value, ""), |unmarked| (unmarked, "!"));
+    if let Some(variable) = paren_variable(body) {
+        return Some(format!("{variable}{bang}"));
+    }
     let (sign, rest) = body
         .strip_prefix('-')
         .map_or(("", body), |unsigned| ("-", unsigned));
     let inner = rest.strip_prefix('[')?.strip_suffix(']')?;
     Some(format!("{sign}{inner}{bang}"))
+}
+
+/// The variable a value wraps in the parentheses csszyx writes for it
+/// (`(--brand)`), or `None`. A function's own parentheses (`--spacing(4)`) and
+/// two variables (`(--a) (--b)`) are no such wrapping.
+fn paren_variable(value: &str) -> Option<&str> {
+    let inner = value.strip_prefix('(')?.strip_suffix(')')?;
+    (inner.starts_with("--") && !inner.contains(['(', ')'])).then_some(inner)
 }
 
 /// [`bracket_wrapped_inner`] for a key's value. A custom property's value is a
@@ -3474,6 +3493,11 @@ mod tests {
                 property("hover", object(vec![property("h", text("[2px]"))])),
                 property("gridRows", text("[[a]_1fr]")),
                 property("mt", text("-[3px]!")),
+                property("animate", text("(--spin)")),
+                property("ease", text("(--snappy)!")),
+                property("w", text("--spacing(4)")),
+                property("bg", text("(--a) (--b)")),
+                property("p", text("(4)")),
             ],
         };
         let mut found = Vec::new();
@@ -3494,6 +3518,16 @@ mod tests {
                     "[a]_1fr".to_string()
                 ),
                 ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
+                (
+                    "animate".to_string(),
+                    "(--spin)".to_string(),
+                    "--spin".to_string()
+                ),
+                (
+                    "ease".to_string(),
+                    "(--snappy)!".to_string(),
+                    "--snappy!".to_string()
+                ),
             ]
         );
     }
@@ -3986,6 +4020,26 @@ mod tests {
         let mut out = Vec::new();
         collect_unknown_sz_keys(&object, &mut out);
         assert!(out.is_empty(), "slot members are not sz keys: {out:?}");
+    }
+
+    /// A value in the brackets csszyx writes is named once, by
+    /// `bracketed-value`, so a closed-enum key does not name it a second time.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_bracketed_closed_enum_value_is_left_to_bracketed_value() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("[block]".to_string())),
+                property("isolation", StaticSzValue::String("bogus".to_string())),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_dead_enum_values(&object, &mut found);
+        let named: Vec<_> = found
+            .into_iter()
+            .map(|(key, value, _)| (key, value))
+            .collect();
+        assert_eq!(named, [("isolation".to_string(), "bogus".to_string())]);
     }
 
     /// A dead enum value is reported wherever it sits, not only at the top.
@@ -4925,6 +4979,7 @@ mod tests {
                 property("animationDelay", StaticSzValue::Number(150.0)),
                 property("animationDelay", StaticSzValue::String("2s".into())),
                 property("animationDelay", StaticSzValue::Boolean(true)),
+                property("animationDelay", StaticSzValue::String("--delay".into())),
                 property("fromPos", StaticSzValue::String("--stop".into())),
                 property("viaPos", StaticSzValue::String("50%".into())),
                 property("toPos", StaticSzValue::String("12.5%".into())),
@@ -4971,6 +5026,7 @@ mod tests {
             [
                 "[animation-delay:150ms]",
                 "[animation-delay:2s]",
+                "[animation-delay:var(--delay)]",
                 "from-(length:--stop)",
                 "via-50%",
                 "to-[12.5%]",
@@ -5660,14 +5716,14 @@ mod tests {
         let object = StaticSzObject {
             properties: vec![
                 string("bgPos", "var(--x, 50% 50%)"),
-                string("bgSize", "(--x)"),
+                string("bgSize", "--x"),
                 string("bgImg", "var(--x)"),
                 string("border", "--x"),
-                string("borderT", "(--x)"),
+                string("borderT", "--x"),
                 string("fromPos", "--x"),
                 string("shadowColor", "var(--x)!"),
                 string("bg", "var(--x)"),
-                string("p", "(--x)"),
+                string("p", "--x"),
                 string("text", "(--x)y"),
                 string("text", "(--x(1))"),
                 string("text", "(a--x)"),

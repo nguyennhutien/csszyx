@@ -43,8 +43,8 @@ const VALUE_SHAPES: ReadonlyArray<readonly [shape: string, value: number | strin
     ['percent', '50%'],
     // A colour with its opacity after a slash, as Tailwind spells it.
     ['slash-opacity', 'red-500/50'],
-    // Tailwind's custom-property shorthand.
-    ['var', '(--v)'],
+    // A custom property, which lowers to Tailwind's `(--v)` shorthand.
+    ['var', '--v'],
     // A space inside a value: one class, the space as `_`, never several.
     ['space', 'calc(1px + 2px)'],
 ];

@@ -178,10 +178,11 @@ describe('arbitrary values — CSS function calls', () => {
     }
 
     it('leaves the Tailwind build-time call and the variable shorthand bare', () => {
-        // `--spacing(4)` is Tailwind's own call and `(--x)` is its CSS-variable
-        // shorthand; bracketing either would break the utility.
+        // `--spacing(4)` is Tailwind's own call and `--x` a variable, which
+        // csszyx writes in Tailwind's shorthand; bracketing either would break
+        // the utility.
         expect(t({ p: '--spacing(4)' })).toBe('p-[--spacing(4)]');
-        expect(t({ pt: '(--gap)' })).toBe('pt-(--gap)');
+        expect(t({ pt: '--gap' })).toBe('pt-(--gap)');
     });
 
     it('leaves a utility value that ENDS in the variable shorthand bare', () => {
@@ -217,7 +218,7 @@ describe('arbitrary values — CSS function calls agree across engines', () => {
         ["{ bg: 'oklch(0.7,0.1,200)' }", 'bg-[oklch(0.7,0.1,200)]'],
         ["{ w: 'fit-content(200px)' }", 'w-[fit-content(200px)]'],
         ["{ p: '--spacing(4)' }", 'p-[--spacing(4)]'],
-        ["{ pt: '(--gap)' }", 'pt-(--gap)'],
+        ["{ pt: '--gap' }", 'pt-(--gap)'],
         ["{ scrollbar: 'thumb-(--c)' }", 'scrollbar-thumb-(--c)'],
         ["{ pt: 'var(--x)' }", 'pt-[var(--x)]'],
     ])('%s', (sz, expected) => {

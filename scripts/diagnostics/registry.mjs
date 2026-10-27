@@ -887,11 +887,11 @@ export const DIAGNOSTICS = [
     },
     {
         id: 'bracketed-value',
-        summary: 'A value wrapped in the brackets csszyx writes itself.',
+        summary: 'A value wrapped in the brackets or parentheses csszyx writes itself.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         args: { key: STRING, value: STRING, inner: STRING },
-        text: "`{key}: '{value}'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.",
+        text: "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
         help: "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`.",
         sources: [ENGINE, CORE_TS],
     },
