@@ -9,29 +9,30 @@ const THEME_TOKEN = /^[a-z][a-z0-9-]*$/;
 const BREAKPOINT_TOKEN = /^[a-z0-9][a-z0-9-]*$/;
 const THEME_CATEGORIES = Object.freeze(Object.keys(THEME_VALUE_PROPERTIES) as ThemeValueCategory[]);
 
+/** A list the snapshot keeps: a theme category, or the breakpoint variant keys. */
+type ThemePart = ThemeValueCategory | 'breakpoints';
+
+/** Every list, in the generated category order with breakpoints last. */
+const THEME_PARTS: readonly ThemePart[] = Object.freeze([...THEME_CATEGORIES, 'breakpoints']);
+
+/** One value per theme list. */
+type ByPart<T> = { readonly [Part in ThemePart]: T };
+
 /** Immutable values extracted from one generated theme declaration. */
-export interface ThemeSnapshot {
-    readonly colors: readonly string[];
-    readonly spacings: readonly string[];
-    readonly fonts: readonly string[];
-    readonly textSizes: readonly string[];
-    readonly fontWeights: readonly string[];
-    readonly radii: readonly string[];
-    readonly shadows: readonly string[];
-    readonly breakpoints: readonly string[];
+export type ThemeSnapshot = ByPart<readonly string[]>;
+
+/** Build one value for every theme list.
+ * @param value - The value for one list.
+ * @returns An object keyed by every list.
+ */
+function byPart<T>(value: (part: ThemePart) => T): ByPart<T> {
+    return Object.fromEntries(THEME_PARTS.map(part => [part, value(part)])) as ByPart<T>;
 }
 
 /** Shared no-theme result used by all bounded failure paths. */
-export const EMPTY_THEME_SNAPSHOT: ThemeSnapshot = Object.freeze({
-    colors: Object.freeze([]),
-    spacings: Object.freeze([]),
-    fonts: Object.freeze([]),
-    textSizes: Object.freeze([]),
-    fontWeights: Object.freeze([]),
-    radii: Object.freeze([]),
-    shadows: Object.freeze([]),
-    breakpoints: Object.freeze([]),
-});
+export const EMPTY_THEME_SNAPSHOT: ThemeSnapshot = Object.freeze(
+    byPart<readonly string[]>(() => Object.freeze([])),
+);
 
 const snapshotCache = new WeakMap<object, WeakMap<object, ThemeSnapshot>>();
 
@@ -100,31 +101,13 @@ function stringLiteralUnion(tsMod: typeof ts, node: ts.TypeNode | undefined): st
 }
 
 /** Mutable bounded accumulator used only while parsing one declaration. */
-interface MutableTheme {
-    readonly colors: Set<string>;
-    readonly spacings: Set<string>;
-    readonly fonts: Set<string>;
-    readonly textSizes: Set<string>;
-    readonly fontWeights: Set<string>;
-    readonly radii: Set<string>;
-    readonly shadows: Set<string>;
-    readonly breakpoints: Set<string>;
-}
+type MutableTheme = ByPart<Set<string>>;
 
 /** Allocate the bounded parser accumulator.
  * @returns Empty category sets.
  */
 function mutableTheme(): MutableTheme {
-    return {
-        colors: new Set(),
-        spacings: new Set(),
-        fonts: new Set(),
-        textSizes: new Set(),
-        fontWeights: new Set(),
-        radii: new Set(),
-        shadows: new Set(),
-        breakpoints: new Set(),
-    };
+    return byPart(() => new Set<string>());
 }
 
 /** Count all accumulated tokens.
@@ -132,16 +115,9 @@ function mutableTheme(): MutableTheme {
  * @returns Total distinct tokens across categories.
  */
 function tokenCount(theme: MutableTheme): number {
-    return (
-        theme.colors.size +
-        theme.spacings.size +
-        theme.fonts.size +
-        theme.textSizes.size +
-        theme.fontWeights.size +
-        theme.radii.size +
-        theme.shadows.size +
-        theme.breakpoints.size
-    );
+    let count = 0;
+    for (const part of THEME_PARTS) count += theme[part].size;
+    return count;
 }
 
 /** Inputs for parsing one supported augmentation interface. */
@@ -304,16 +280,7 @@ function addModuleBlock(
 function freezeTheme(theme: MutableTheme): ThemeSnapshot {
     const freeze = (values: Set<string>): readonly string[] =>
         Object.freeze([...values].sort((left, right) => left.localeCompare(right)));
-    return Object.freeze({
-        colors: freeze(theme.colors),
-        spacings: freeze(theme.spacings),
-        fonts: freeze(theme.fonts),
-        textSizes: freeze(theme.textSizes),
-        fontWeights: freeze(theme.fontWeights),
-        radii: freeze(theme.radii),
-        shadows: freeze(theme.shadows),
-        breakpoints: freeze(theme.breakpoints),
-    });
+    return Object.freeze(byPart(part => freeze(theme[part])));
 }
 
 /** Inputs for locating and caching one project's theme snapshot. */

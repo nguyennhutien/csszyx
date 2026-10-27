@@ -67,6 +67,8 @@ type CT_Leadings = CustomTheme extends { leadings: infer T } ? T : never;
 type CT_Perspectives = CustomTheme extends { perspectives: infer T } ? T : never;
 /** Extracts custom aspect-ratio tokens (--aspect-*), or never if not defined. */
 type CT_Aspects = CustomTheme extends { aspects: infer T } ? T : never;
+/** Extracts custom container sizes (--container-*), or never if not defined. */
+type CT_Containers = CustomTheme extends { containers: infer T } ? T : never;
 
 // ============================================================================
 // Helper Types
@@ -244,8 +246,9 @@ export interface ColorObjectValue {
 /** Union type for all color properties */
 export type ColorPropValue = ColorValue | ColorObjectValue;
 
-/** Container size names */
+/** Container size names, Tailwind's and the project's `--container-*` */
 export type ContainerSize =
+    | CT_Containers
     | '3xs'
     | '2xs'
     | 'xs'
@@ -732,11 +735,21 @@ export interface SizingProps {
         | 'min'
         | 'max'
         | 'fit'
+        | ContainerSize
         | FractionValue
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/min-width */
-    minW?: SpacingScale | 'px' | 'full' | 'min' | 'max' | 'fit' | FractionValue | (string & {});
+    minW?:
+        | SpacingScale
+        | 'px'
+        | 'full'
+        | 'min'
+        | 'max'
+        | 'fit'
+        | ContainerSize
+        | FractionValue
+        | (string & {});
 
     /** @see https://tailwindcss.com/docs/max-width */
     maxW?:
@@ -839,6 +852,7 @@ export interface SizingProps {
         | 'min'
         | 'max'
         | 'fit'
+        | ContainerSize
         | FractionValue
         | (string & {});
 
@@ -850,6 +864,7 @@ export interface SizingProps {
         | 'min'
         | 'max'
         | 'fit'
+        | ContainerSize
         | FractionValue
         | (string & {});
 

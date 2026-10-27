@@ -676,7 +676,7 @@ export const NEGATIVE_VALUE_KEYS = [
     "z"
 ] as const;
 /** Generated-theme declaration categories understood by editor integrations. */
-export type ThemeValueCategory = 'colors' | 'spacings' | 'fonts' | 'textSizes' | 'fontWeights' | 'radii' | 'shadows';
+export type ThemeValueCategory = 'colors' | 'spacings' | 'fonts' | 'textSizes' | 'fontWeights' | 'radii' | 'shadows' | 'animations' | 'easings' | 'blurs' | 'dropShadows' | 'insetShadows' | 'textShadows' | 'trackings' | 'leadings' | 'perspectives' | 'aspects' | 'containers';
 /** Canonical sz properties fed by each generated Tailwind theme namespace. */
 export const THEME_VALUE_PROPERTIES: Readonly<Record<ThemeValueCategory, readonly string[]>> =
     Object.freeze({
@@ -810,6 +810,47 @@ export const THEME_VALUE_PROPERTIES: Readonly<Record<ThemeValueCategory, readonl
         ]),
         shadows: Object.freeze([
             "shadow"
+        ]),
+        animations: Object.freeze([
+            "animate"
+        ]),
+        easings: Object.freeze([
+            "ease"
+        ]),
+        blurs: Object.freeze([
+            "backdropBlur",
+            "blur"
+        ]),
+        dropShadows: Object.freeze([
+            "dropShadow"
+        ]),
+        insetShadows: Object.freeze([
+            "insetShadow"
+        ]),
+        textShadows: Object.freeze([
+            "textShadow"
+        ]),
+        trackings: Object.freeze([
+            "tracking"
+        ]),
+        leadings: Object.freeze([
+            "leading"
+        ]),
+        perspectives: Object.freeze([
+            "perspective"
+        ]),
+        aspects: Object.freeze([
+            "aspect"
+        ]),
+        containers: Object.freeze([
+            "basis",
+            "columns",
+            "inlineSize",
+            "maxInlineSize",
+            "maxW",
+            "minInlineSize",
+            "minW",
+            "w"
         ]),
     });
 export { VALUE_SUGGESTIONS } from './value-suggestions';

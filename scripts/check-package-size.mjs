@@ -555,11 +555,15 @@ export const SIZE_BUDGETS = [
     // (+468 raw) and the canonical key forms with their value types (+438
     // raw). A module order that measured smaller was a compression accident
     // nothing would hold, so it was not taken. Budget the usual ~300 above.
+    //
+    // Raised from 49,950 on 2026-10-27, measured 49,989 (49,856 before): the
+    // theme categories editors read went from 7 to 18 with the namespaces the
+    // types take, +129 gzip in the tooling metadata. Budget the usual ~300 above.
     {
         name: '@csszyx/vscode extension bundle',
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
-        maxGzipBytes: 49_950,
+        maxGzipBytes: 50_300,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).

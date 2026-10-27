@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
-import { parseThemeBlocks } from '../src/theme-scanner.js';
+import { parseThemeBlocks, THEME_CATEGORIES } from '../src/theme-scanner.js';
 import { generateThemeDts } from '../src/theme-type-writer.js';
 
 const EMPTY_THEME = parseThemeBlocks('');
@@ -153,5 +155,27 @@ describe('generateThemeDts', () => {
         });
 
         expect(output).not.toContain('VariantModifiers');
+    });
+});
+
+describe('the categories the declaration writes', () => {
+    // A category the declaration writes and no sz key's type reads reaches no
+    // editor: `--container-sidebar` was written and `w: 'sidebar'` was not offered.
+    it('each have a theme type in the compiler that a key reads', () => {
+        const props = readFileSync(
+            new URL('../../compiler/src/types/sz-props.ts', import.meta.url),
+            'utf8',
+        );
+        const typed = [
+            ...props.matchAll(/type (CT_\w+) = CustomTheme extends \{ (\w+): infer T \}/g),
+        ];
+        const read = typed
+            .filter(([, alias]) =>
+                new RegExp(`\\b${alias}\\b`).test(props.replace(/^type CT_.*$/gm, '')),
+            )
+            .map(([, , category]) => category);
+        expect([...read].sort()).toEqual(
+            THEME_CATEGORIES.filter(category => category !== 'breakpoints').sort(),
+        );
     });
 });

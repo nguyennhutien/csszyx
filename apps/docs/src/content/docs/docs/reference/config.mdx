@@ -774,8 +774,9 @@ missing output is acceptable.
 
 When set, the plugin parses `@theme` blocks in your CSS entry point and generates
 `.csszyx/theme.d.ts` — a declaration file that augments the `CustomTheme` interface
-in `@csszyx/compiler`. This surfaces custom design tokens (colors, spacing, fonts,
-radii, shadows) in `sz` prop IntelliSense without any manual type declarations.
+in `@csszyx/compiler`. This surfaces every custom design token Tailwind serves on
+an `sz` key (colors, spacing, fonts, animations, easings, container sizes and the
+rest) in `sz` prop IntelliSense without any manual type declarations.
 
 This option scopes **types only**. What `szcn` merges comes from the CSS your
 Tailwind compiles, and the theme groups `classify` reads are discovered from

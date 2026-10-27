@@ -63,6 +63,26 @@ test('reads only the nearest generated theme declaration and maps every category
     assert.deepStrictEqual(themeValuesForProperty(snapshot, 'display'), []);
 });
 
+test('reads every category the generated declaration writes', () => {
+    const file = source(
+        '/repo/.csszyx/theme.d.ts',
+        `declare module '@csszyx/compiler' {
+    interface CustomTheme {
+        animations: 'wiggle';
+        easings: 'snappy';
+        containers: 'sidebar';
+    }
+}
+export {};
+`,
+    );
+    const snapshot = themeSnapshotForProgram({ tsMod: ts, program: program(file), projectRoot: '/repo' });
+
+    assert.deepStrictEqual(themeValuesForProperty(snapshot, 'animate'), ['wiggle']);
+    assert.deepStrictEqual(themeValuesForProperty(snapshot, 'ease'), ['snappy']);
+    assert.deepStrictEqual(themeValuesForProperty(snapshot, 'maxW'), ['sidebar']);
+});
+
 test('fails open for malformed, foreign, oversized, cancelled, and unsafe tokens', () => {
     const foreign = source(
         '/repo/.csszyx/theme.d.ts',
