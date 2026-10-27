@@ -100,6 +100,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`serializeManifest` options](#serializemanifest-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
 | [`migrateSource` options](#migratesource-takes-the-path-in-its-options) | `options-object-required` thrown | `tsc`, runtime throw | you |
+| [Global variable map format](#the-global-variable-map-carries-its-format) | a tool reading `.csszyx/global-var-map.json` reads no aliases | your tool | you, if a tool reads it |
 | [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
 | [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
@@ -1684,6 +1685,26 @@ the keys:
 ```
 
 **Tooling.** `tsc --noEmit`, then the throw for a call `tsc` let through.
+
+## The global variable map carries its format
+
+`.csszyx/global-var-map.json`, written for tools when global variables are
+aliased, held the aliases at its top level. It now carries the version of its
+shape beside them:
+
+```jsonc
+// before
+{ "--brand-primary": "---gz" }
+
+// after
+{ "format": 1, "aliases": { "--brand-primary": "---gz" } }
+```
+
+**You are affected** when a tool of yours reads this file. `csszyx-manifest.json`
+and csszyx itself are not affected.
+
+**The edit.** Read the aliases from `aliases`, and refuse a `format` the tool
+does not know.
 
 ## migrateSource takes the path in its options
 

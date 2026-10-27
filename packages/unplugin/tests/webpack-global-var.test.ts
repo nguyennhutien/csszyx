@@ -41,7 +41,7 @@ describe('webpack global variable aliases', () => {
         expect(css).toContain('---gz:var(--brand-primary)');
         expect(css).toContain('color:var(---gz)');
         expect(manifest.globalVarAliases).toEqual({ '--brand-primary': '---gz' });
-        expect(globalVarMap).toEqual({ '--brand-primary': '---gz' });
+        expect(globalVarMap).toEqual({ format: 1, aliases: { '--brand-primary': '---gz' } });
     });
 
     it('fails closed when explicit global variable aliases are missing CSS definitions', {

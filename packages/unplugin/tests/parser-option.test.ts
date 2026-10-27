@@ -279,7 +279,7 @@ describe('csszyx parser selection', () => {
         expect(emitFile).toHaveBeenCalledWith(
             expect.objectContaining({
                 fileName: '.csszyx/global-var-map.json',
-                source: '{"--brand-primary":"---gz"}',
+                source: '{"format":1,"aliases":{"--brand-primary":"---gz"}}',
             }),
         );
     });
@@ -321,7 +321,7 @@ describe('csszyx parser selection', () => {
         expect(emitFile).toHaveBeenCalledWith(
             expect.objectContaining({
                 fileName: '.csszyx/global-var-map.json',
-                source: '{"--brand-primary":"---gz"}',
+                source: '{"format":1,"aliases":{"--brand-primary":"---gz"}}',
             }),
         );
     });

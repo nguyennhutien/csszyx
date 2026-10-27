@@ -1929,7 +1929,15 @@ export function extractGlobalVarAliasesForManifest(
 }
 
 /**
- * Serializes the standalone global-var map asset when g-tier aliases exist.
+ * Version of `.csszyx/global-var-map.json`'s shape, written beside the
+ * aliases. Tools outside csszyx read the file, so a key may be added without
+ * raising it, and it rises only when an existing key changes what it means.
+ */
+export const GLOBAL_VAR_MAP_FORMAT = 1;
+
+/**
+ * Serializes the standalone global-var map asset when g-tier aliases exist,
+ * as `{ format, aliases }`.
  *
  * @param varMangleMap CSS variable mangle metadata.
  * @param aliasPrefix Active generated alias prefix.
@@ -1942,7 +1950,9 @@ export function createGlobalVarMapAssetSource(
     validationResult: GlobalVarAliasValidationResult | null = null,
 ): string | null {
     const aliases = extractGlobalVarAliasesForManifest(varMangleMap, aliasPrefix, validationResult);
-    return Object.keys(aliases).length > 0 ? JSON.stringify(aliases) : null;
+    return Object.keys(aliases).length > 0
+        ? JSON.stringify({ format: GLOBAL_VAR_MAP_FORMAT, aliases })
+        : null;
 }
 
 /**

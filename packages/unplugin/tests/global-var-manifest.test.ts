@@ -53,7 +53,7 @@ describe('extractGlobalVarAliasesForManifest', () => {
                 '--brand-primary': '---gz',
                 '--_sz-p': '--sz',
             }),
-        ).toBe('{"--brand-primary":"---gz"}');
+        ).toBe('{"format":1,"aliases":{"--brand-primary":"---gz"}}');
         expect(createGlobalVarMapAssetSource({ '--_sz-p': '--sz' })).toBeNull();
     });
 
@@ -68,7 +68,7 @@ describe('extractGlobalVarAliasesForManifest', () => {
             '--brand-primary': '---gz',
         });
         expect(createGlobalVarMapAssetSource({}, '---g', validation)).toBe(
-            '{"--brand-primary":"---gz"}',
+            '{"format":1,"aliases":{"--brand-primary":"---gz"}}',
         );
     });
 
@@ -80,7 +80,7 @@ describe('extractGlobalVarAliasesForManifest', () => {
         } as never;
 
         expect(createGlobalVarMapAssetSource({ '--z-token': '---gy' }, '---g', validation)).toBe(
-            '{"--brand-primary":"---gz","--z-token":"---gy"}',
+            '{"format":1,"aliases":{"--brand-primary":"---gz","--z-token":"---gy"}}',
         );
     });
 
