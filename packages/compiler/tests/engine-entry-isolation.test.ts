@@ -59,7 +59,7 @@ const constName = (id: string): string => id.toUpperCase().replaceAll('-', '_');
  * The words each Node entry (`./engine`, `./internal`, `./migrate`) throws:
  * the ids of errors Node raises from the engine's own lane, the template
  * lowering and the peer-module loader. The bundle keeps exactly these
- * literals of the module (`//#region src/diagnostic-browser.generated.ts`).
+ * literals of that module (`src/diagnostic-browser.generated.ts`).
  */
 const THROWN_BY_ENTRY = {
     'engine.ts': [
