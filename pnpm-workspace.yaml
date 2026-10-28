@@ -38,16 +38,21 @@ overrides:
   # reported them on the pull request. `scripts/check-changed-sonar.test.mjs`
   # fails when the two load different copies again.
   "eslint-plugin-sonarjs>typescript": "$typescript"
-  "@azure/msal-node@>=5.1.0 <5.4.1": "^5.4.1"
+  # A major past what its dependents ask for: @azure/identity (via vsce and
+  # astro's unstorage, both dev only) asks for ^5, and the advisory's only fix
+  # is 7.1.0. Neither caller uses the auth-code flow the advisory is about;
+  # `pnpm --filter @csszyx/vscode vsix` is the check that vsce still loads.
+  "@azure/msal-node@>=5.0.0-beta.0 <7.1.0": "^7.1.0"
   "@hono/node-server@<2.0.5": "^2.0.5"
   "brace-expansion@^1": "^1.1.21"
+  "body-parser@^2": "^2.4.0"
   "browserslist@<4.28.7": "^4.28.7"
   "baseline-browser-mapping@>=2.0.0 <2.11.0": "^2.11.0"
   "brace-expansion@>=4.0.0 <6.0.0": "^5.0.12"
   "compression@^1": "^1.8.2"
   "devalue@^5": "^5.9.3"
   "esbuild@>=0.17.0 <0.28.1": "^0.28.1"
-  "fast-uri@>=3.0.0 <3.1.7": "^3.1.7"
+  "fast-uri@>=3.0.0 <3.1.9": "^3.1.9"
   "form-data@>=4.0.0 <4.0.6": "^4.0.6"
   "http-proxy-middleware@>=2.0.0 <3.0.6": "^3.0.6"
   # Past what markdownlint asks for (^0.16, dev only): it parses math syntax
@@ -56,20 +61,21 @@ overrides:
   "katex@<0.18.2": "^0.19.0"
   "js-yaml@>=4.0.0 <4.3.2": "^4.3.2"
   "js-yaml@^5": "^5.4.1"
+  "launch-editor@^2": "^2.14.2"
   "lodash@>=4.0.0 <4.18.0": "^4.18.1"
-  "markdown-it@>=14.0.0 <14.2.0": "^14.2.0"
+  "markdown-it@>=14.0.0 <14.3.3": "^14.3.3"
   "minimatch@>=10.0.0 <10.2.3": "^10.2.5"
   "nanoid@<3.3.17": "^3.3.17"
-  "hono@^4": "^4.13.5"
+  "hono@^4": "^4.13.11"
   "http-cache-semantics@^4": "^4.3.0"
-  "ip-address@^10": "^10.5.1"
+  "ip-address@^10": "^10.7.4"
   "postcss@>=8.0.0 <8.5.23": "^8.5.23"
   # A major past what its dependents ask for: postcss-nested 6 (via
   # expressive-code, docs only) asks for ^6, and the fix is 7.1.6 only. 7.0.0
   # changed only insertion during iteration; postcss-nested 7 moved to it
   # without other changes.
   "postcss-selector-parser@<7.1.6": "^7.1.6"
-  "qs@>=6.0.0 <6.16.0": "^6.16.0"
+  "qs@>=6.0.0 <6.16.1": "^6.16.1"
   "seroval@^1": "^1.6.3"
   "sharp@<0.35.5": "^0.35.5"
   "smol-toml@^1": "^1.7.1"
@@ -77,13 +83,14 @@ overrides:
   "source-map-js@^1": "^1.2.2"
   "svgo@>=4.0.0 <4.1.0": "^4.1.0"
   "tmp@>=0.2.0 <0.2.6": "^0.2.7"
-  "undici@>=7.0.0 <7.29.1": "^7.29.1"
-  "undici@>=8.0.0 <8.10.2": "^8.10.2"
+  "undici@>=7.0.0 <7.30.1": "^7.30.1"
+  "undici@>=8.0.0 <8.12.2": "^8.12.2"
   "vite@>=6.0.0 <6.4.3": "^6.4.3"
   "vite@>=7.0.0 <7.3.2": "^7.3.5"
-  "vite@>=8.0.0 <8.0.16": "^8.0.16"
+  "vite@>=8.0.0 <8.3.3": "^8.3.3"
   "webpack-dev-middleware@^8": "^8.3.0"
   "ws@>=8.0.0 <8.20.1": "^8.21.0"
+  "zod@^4": "^4.6.6"
 
 supportedArchitectures:
   os:

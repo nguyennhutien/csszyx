@@ -4,8 +4,10 @@ import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registr
 import { __resetMergeSignaturesForTests } from '../src/merge-signatures.js';
 
 describe('szcn — build-generated merge signatures', () => {
-    afterEach(__resetMergeSignaturesForTests);
-    afterEach(clearMangleRegistry);
+    afterEach(() => {
+        __resetMergeSignaturesForTests();
+        clearMangleRegistry();
+    });
 
     it('uses full-set coverage instead of a shared utility prefix', () => {
         registerMergeSignatures([

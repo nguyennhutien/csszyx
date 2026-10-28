@@ -40,9 +40,9 @@ describe('loadMangleMapFromDOM with an empty script tag', () => {
 });
 
 describe('attemptCSRRecovery — dev-only mode in production', () => {
-    afterEach(() => disableCSRRecovery());
     const prevEnv = process.env.NODE_ENV;
     afterEach(() => {
+        disableCSRRecovery();
         process.env.NODE_ENV = prevEnv;
     });
 
