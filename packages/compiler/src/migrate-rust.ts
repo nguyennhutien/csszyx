@@ -72,6 +72,12 @@ export interface MigrateRustOptions {
      * reported in `stats.tableVerdicts`.
      */
     served?: ReadonlyMap<string, boolean>;
+    /**
+     * The project's Tailwind prefix (`prefix(tw)`), or null for none: each
+     * class is read with `<prefix>:` taken off its front, and one without it
+     * stays in `className`, since that Tailwind serves no unprefixed utility.
+     */
+    prefix?: string | null;
 }
 
 /** Options for migrating an HTML source. */
@@ -88,6 +94,8 @@ export interface MigrateRustHtmlOptions {
     localPath?: string;
     /** The project's answers, as for {@link MigrateRustOptions.served}. */
     served?: ReadonlyMap<string, boolean>;
+    /** The project's Tailwind prefix, as for {@link MigrateRustOptions.prefix}. */
+    prefix?: string | null;
 }
 
 /** A class a migrate table decided because the project's Tailwind was not asked. */
@@ -218,6 +226,7 @@ export function migrateRustBatch(
                     options.customMapJson ??
                     (options.customMap ? JSON.stringify(options.customMap) : undefined),
                 ...servedLists(options.served),
+                prefix: options.prefix ?? undefined,
             },
         ).map(readResult),
     );
@@ -244,6 +253,7 @@ export function migrateRustHtml(
                 cdnUrl: options.cdnUrl,
                 localPath: options.localPath,
                 ...servedLists(options.served),
+                prefix: options.prefix ?? undefined,
             }),
         ),
     );
@@ -318,6 +328,8 @@ export interface MigrateRustClassNameOptions {
     customMap?: Record<string, unknown>;
     /** The project's answers, as for {@link MigrateRustOptions.served}. */
     served?: ReadonlyMap<string, boolean>;
+    /** The project's Tailwind prefix, as for {@link MigrateRustOptions.prefix}. */
+    prefix?: string | null;
 }
 
 /**
@@ -338,13 +350,14 @@ export function migrateRustClassName(
     className: string,
     options: MigrateRustClassNameOptions = {},
 ): MigrateRustConversion {
-    const { customMap, served } = options;
+    const { customMap, served, prefix } = options;
     return guarded(
         () =>
             JSON.parse(
                 migrateClassName(className, {
                     customMapJson: customMap ? JSON.stringify(customMap) : undefined,
                     ...servedLists(served),
+                    prefix: prefix ?? undefined,
                 }),
             ) as MigrateRustConversion,
     );

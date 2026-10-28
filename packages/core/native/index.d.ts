@@ -269,6 +269,8 @@ export interface NativeMigrateOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, asked the same way. */
     unservedClasses?: string[];
+    /** The project's Tailwind prefix (`prefix(tw)`), read off each class. */
+    prefix?: string;
 }
 
 /** Options for the native `className` conversion. */
@@ -279,6 +281,8 @@ export interface NativeMigrateClassNameOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, as for JSX. */
     unservedClasses?: string[];
+    /** The project's Tailwind prefix, as for JSX. */
+    prefix?: string;
 }
 
 /** Options for the native migrate of an HTML source. */
@@ -297,6 +301,8 @@ export interface NativeMigrateHtmlOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, as for JSX. */
     unservedClasses?: string[];
+    /** The project's Tailwind prefix, as for JSX. */
+    prefix?: string;
 }
 
 /** The counts of one migrated file. */

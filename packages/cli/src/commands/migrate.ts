@@ -17,7 +17,12 @@ import {
 } from '@csszyx/compiler/migrate';
 import fg from 'fast-glob';
 
-import { createMigrateVerdicts, type MigrateVerdicts } from '../scanner/migrate-verdicts.js';
+import {
+    createMigrateVerdicts,
+    type MigrateVerdicts,
+    openCheckOracles,
+} from '../scanner/migrate-verdicts.js';
+import { projectPrefix } from '../scanner/project-answers.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import {
     printError,
@@ -217,6 +222,8 @@ interface MigrationContext {
     customMapJson?: string;
     /** The project's Tailwind, answering where a migrate table would decide. */
     verdicts: MigrateVerdicts;
+    /** The project's Tailwind prefix, read off each class; null for none. */
+    prefix: string | null;
 }
 
 interface MigrationSummary {
@@ -256,6 +263,14 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
     if (resolveTodosPath && !customMap) return null;
     if (audit) reportAuditMode();
     else if (dryRun) reportDryRunMode();
+    // One compile of the project's stylesheets serves both questions: the
+    // prefix, needed before the first class is read, and the answers the
+    // tables leave open.
+    let opened: ReturnType<typeof openCheckOracles> | undefined;
+    const open = (root: string): ReturnType<typeof openCheckOracles> =>
+        (opened ??= openCheckOracles(root));
+    const { prefix, unread } = await projectPrefix(cwd, open);
+    if (unread !== null) printWarn(`Reading classes without a Tailwind prefix: ${unread}.`);
     return {
         options,
         cwd,
@@ -265,7 +280,8 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
         injectTodos,
         customMap,
         customMapJson: customMap ? JSON.stringify(customMap) : undefined,
-        verdicts: createMigrateVerdicts(cwd),
+        verdicts: createMigrateVerdicts(cwd, open),
+        prefix,
     };
 }
 
@@ -405,6 +421,7 @@ function htmlOptions(context: MigrationContext) {
         cdnUrl: context.options.cdnUrl,
         localPath: context.options.localPath,
         served: context.verdicts.answers,
+        prefix: context.prefix,
     };
 }
 
@@ -416,6 +433,7 @@ function sourceOptions(context: MigrationContext) {
         customMapJson: context.customMapJson,
         keysOnly: context.options.keysOnly,
         served: context.verdicts.answers,
+        prefix: context.prefix,
     };
 }
 

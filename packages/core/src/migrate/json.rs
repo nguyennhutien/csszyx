@@ -40,6 +40,17 @@ struct JudgedConversion {
     table_verdicts: Vec<TableVerdict>,
 }
 
+/// What [`migrate_class_name`] reads besides the classes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ClassNameOptions<'a> {
+    /// The migration-resolution map, as JSON text.
+    pub custom_map_json: Option<&'a str>,
+    /// The project's Tailwind answers, as `migrate` asks them.
+    pub served: Option<&'a ServedAnswers>,
+    /// The project's Tailwind prefix, read off the front of each class.
+    pub prefix: Option<&'a str>,
+}
+
 /// Convert one whole `className` attribute to an sz object.
 ///
 /// The class-level question the file-level entry points cannot answer: the
@@ -57,10 +68,10 @@ struct JudgedConversion {
 /// Returns the decode message when the resolution map is not a JSON object.
 pub fn migrate_class_name(
     class_name: &str,
-    custom_map_json: Option<&str>,
-    served: Option<&ServedAnswers>,
+    options: &ClassNameOptions<'_>,
 ) -> Result<String, String> {
-    let custom_map: Option<SzObject> = custom_map_json
+    let custom_map: Option<SzObject> = options
+        .custom_map_json
         .map(|text| decode("the resolution map", text))
         .transpose()?;
     let asked = TableVerdicts::default();
@@ -68,7 +79,8 @@ pub fn migrate_class_name(
         class_name,
         Lookup {
             custom_map: custom_map.as_ref(),
-            judge: Judge::new(served, Some(&asked)),
+            judge: Judge::new(options.served, Some(&asked)),
+            prefix: options.prefix,
         },
     );
     encode(&JudgedConversion {
@@ -99,7 +111,8 @@ mod tests {
     #[test]
     fn migrate_class_name_answers_the_whole_attribute() {
         let value = json(
-            &migrate_class_name("p-4 not-a-tailwind-class", None, None).expect("the class parses"),
+            &migrate_class_name("p-4 not-a-tailwind-class", &ClassNameOptions::default())
+                .expect("the class parses"),
         );
 
         assert_eq!(value["szObject"]["p"], 4);
@@ -110,21 +123,36 @@ mod tests {
     #[test]
     fn migrate_class_name_reads_a_resolution_map_and_names_a_bad_one() {
         let value = json(
-            &migrate_class_name("btn", Some(r#"{"btn":{"p":4}}"#), None).expect("the map answers"),
+            &migrate_class_name(
+                "btn",
+                &ClassNameOptions {
+                    custom_map_json: Some(r#"{"btn":{"p":4}}"#),
+                    ..ClassNameOptions::default()
+                },
+            )
+            .expect("the map answers"),
         );
         assert_eq!(value["szObject"]["p"], 4);
         assert!(value["unrecognized"].as_array().unwrap().is_empty());
 
-        assert!(migrate_class_name("btn", Some("not json"), None)
-            .unwrap_err()
-            .starts_with("the resolution map is not the JSON migrate expects"));
+        assert!(migrate_class_name(
+            "btn",
+            &ClassNameOptions {
+                custom_map_json: Some("not json"),
+                ..ClassNameOptions::default()
+            },
+        )
+        .unwrap_err()
+        .starts_with("the resolution map is not the JSON migrate expects"));
     }
 
     #[test]
     fn migrate_class_name_names_the_classes_a_table_decided_and_takes_the_projects_answer() {
         // Unasked: the table refuses `-z-auto`, and says it decided.
-        let value =
-            json(&migrate_class_name("p-4 -z-auto", None, None).expect("the classes parse"));
+        let value = json(
+            &migrate_class_name("p-4 -z-auto", &ClassNameOptions::default())
+                .expect("the classes parse"),
+        );
         assert_eq!(value["szObject"], serde_json::json!({ "p": 4 }));
         assert_eq!(value["unrecognized"], serde_json::json!(["-z-auto"]));
         assert_eq!(
@@ -133,9 +161,16 @@ mod tests {
         );
 
         // The project serves it: it migrates, and nothing is left to ask.
-        let served: ServedAnswers = [("-z-auto".to_string(), true)].into_iter().collect();
+        let served: ServedAnswers = std::iter::once(("-z-auto".to_string(), true)).collect();
         let value = json(
-            &migrate_class_name("p-4 -z-auto", None, Some(&served)).expect("the classes parse"),
+            &migrate_class_name(
+                "p-4 -z-auto",
+                &ClassNameOptions {
+                    served: Some(&served),
+                    ..ClassNameOptions::default()
+                },
+            )
+            .expect("the classes parse"),
         );
         assert_eq!(
             value["szObject"],

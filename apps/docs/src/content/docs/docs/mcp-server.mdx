@@ -109,7 +109,9 @@ fraction on a spacing key (`-m-1/2`) is served only when the project's
 Tailwind says so, for example through a `--spacing-1\/2` theme step. For
 those, the tool asks the project's Tailwind, from the directory the server
 runs in, as `csszyx migrate` does; with no Tailwind v4 there, the class stays
-in the `unrecognized` list.
+in the `unrecognized` list. A prefix the project's stylesheet sets
+(`prefix(tw)`) is read off each class the same way, and the round trip compiles
+the answer back with it.
 
 ### `csszyx_validate`
 

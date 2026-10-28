@@ -91,10 +91,16 @@ export interface ClassNameToSzObjectOptions {
      * `csszyx migrate` does.
      */
     served?: ReadonlyMap<string, boolean>;
+    /**
+     * The project's Tailwind prefix (`prefix(tw)`), or null for none: each
+     * class is read with `<prefix>:` taken off its front, and one without it
+     * stays in `className`, since that Tailwind serves no unprefixed utility.
+     */
+    prefix?: string | null;
 }
 
 /** The keys {@link ClassNameToSzObjectOptions} has. */
-const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap', 'served']);
+const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap', 'served', 'prefix']);
 
 /**
  * Convert one whole `className` attribute to an sz object.

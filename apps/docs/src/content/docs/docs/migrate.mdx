@@ -338,6 +338,27 @@ npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 npx @csszyx/cli migrate --audit
 ```
 
+## A Tailwind prefix
+
+When the project's stylesheet sets a prefix, migrate reads it off each class.
+With `@import "tailwindcss" prefix(tw)`:
+
+```tsx
+// before
+<div className="tw:p-4 tw:hover:flex p-2" />
+
+// after
+<div className="p-2" sz={{ p: 4, hover: { display: 'flex' } }} />
+```
+
+The build writes the prefix back (`tw:p-4 tw:hover:flex`). A class without it,
+`p-2` here, stays in `className` as written: that Tailwind serves no unprefixed
+utility, so it styled nothing before and still does not. A Tailwind class string
+in the resolution map is read the same way. Stylesheets that set different
+prefixes give no prefix to read, as in `csszyx check`, and migrate says so before
+it starts; with `prefix-disagreement` set to `off` in `csszyx.config`, the first
+entry's prefix is read.
+
 ## What migrate needs
 
 `migrate` runs on the native engine and needs the `@csszyx/core-<platform>`

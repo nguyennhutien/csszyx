@@ -123,3 +123,18 @@ describe("the project's Tailwind answers where migrate's table would", () => {
         }
     });
 });
+
+describe("the project's Tailwind prefix", () => {
+    it('reads it off each class, and compiles the answer back with it', async () => {
+        const root = project('');
+        writeFileSync(join(root, 'app.css'), '@import "tailwindcss" prefix(tw);\n');
+        try {
+            const data = await reverse('tw:p-4 tw:hover:flex p-2', root);
+            expect(data.szObject).toEqual({ p: 4, hover: { display: 'flex' } });
+            expect(data.unrecognized).toEqual(['p-2']);
+            expect(data.roundTrip).toEqual({ ok: true, emitted: 'tw:p-4 tw:hover:flex' });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+});

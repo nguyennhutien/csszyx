@@ -29,7 +29,7 @@ mod verdict;
 pub use class_parser::{parse_class, parse_class_judged};
 pub use dynamic::{is_clsx_like_name, PatternResult, CLSX_LIKE_NAMES};
 pub use html::{transform_html_source, HtmlTransformOptions, InjectRuntime};
-pub use json::{migrate_class_name, migrate_parse_class};
+pub use json::{migrate_class_name, migrate_parse_class, ClassNameOptions};
 pub use line_endings::{detect_line_ending, with_line_ending};
 pub use source::{transform_source, TransformOptions, TransformResult, TransformStats};
 pub use sz_codegen::{sz_expression, sz_html_value, sz_object_literal};

@@ -267,6 +267,10 @@ pub struct Lookup<'a> {
     pub custom_map: Option<&'a SzObject>,
     /// The project's Tailwind, where it was asked.
     pub judge: Judge<'a>,
+    /// The project's Tailwind prefix (`prefix(tw)`), when it sets one: a class
+    /// is read with `<prefix>:` taken off its front, and one without it stays
+    /// in `className`, since that Tailwind serves no unprefixed utility.
+    pub prefix: Option<&'a str>,
 }
 
 impl<'a> Lookup<'a> {
@@ -275,7 +279,7 @@ impl<'a> Lookup<'a> {
     pub fn map(custom_map: Option<&'a SzObject>) -> Self {
         Self {
             custom_map,
-            judge: Judge::default(),
+            ..Self::default()
         }
     }
 }
@@ -288,15 +292,23 @@ pub fn class_name_to_sz_object(class_name: &str, custom_map: Option<&SzObject>) 
 }
 
 /// [`class_name_to_sz_object`], with the project's Tailwind answering where a
-/// table would.
+/// table would, and its prefix read off each class.
+///
+/// Cost: linear in the bytes of `class_name`; the prefix is one comparison
+/// per token.
 #[must_use]
 pub fn class_name_to_sz_object_with(class_name: &str, lookup: Lookup<'_>) -> Conversion {
     let mut state = State::default();
     for token in tokenize(class_name) {
+        // The resolution map names the project's own classes, which carry no
+        // Tailwind prefix, so it reads the token as written.
         if apply_custom_map_token(token, lookup, &mut state) {
             continue;
         }
-        apply_parsed_token(token, lookup.judge, &mut state);
+        match unprefixed(token, lookup.prefix) {
+            Some(utility) => apply_parsed_token(token, utility, lookup.judge, &mut state),
+            None => state.conversion.unrecognized.push(token.to_string()),
+        }
     }
     keep_standalone_conflicts_as_written(&mut state);
     state.conversion
@@ -364,7 +376,7 @@ const OBJECT_PROTOTYPE_KEYS: &[&str] = &[
 fn resolve_custom_map_entry(
     token: &str,
     custom_map: &SzObject,
-    judge: Judge<'_>,
+    lookup: Lookup<'_>,
 ) -> Option<Action> {
     let Some(value) = custom_map.get(token) else {
         // `__proto__` is an object — `Object.prototype` — with nothing
@@ -382,20 +394,22 @@ fn resolve_custom_map_entry(
             TODO_KEEP => Action::Keep,
             TODO_REMOVE => Action::Remove,
             TODO_PENDING => Action::Unresolved,
-            tailwind => resolve_custom_map_string(tailwind, judge),
+            tailwind => resolve_custom_map_string(tailwind, lookup),
         },
         _ => Action::Unresolved,
     })
 }
 
 /// A Tailwind class string in the map converts on its own, without the map,
-/// and counts only if something in it converted.
-fn resolve_custom_map_string(tailwind: &str, judge: Judge<'_>) -> Action {
+/// and counts only if something in it converted. It is read under the
+/// project's prefix, as the classes in the source are: it names classes that
+/// Tailwind serves.
+fn resolve_custom_map_string(tailwind: &str, lookup: Lookup<'_>) -> Action {
     let inner = class_name_to_sz_object_with(
         tailwind,
         Lookup {
             custom_map: None,
-            judge,
+            ..lookup
         },
     );
     if inner.sz_object.is_empty() {
@@ -408,7 +422,7 @@ fn resolve_custom_map_string(tailwind: &str, judge: Judge<'_>) -> Action {
 fn apply_custom_map_token(token: &str, lookup: Lookup<'_>, state: &mut State) -> bool {
     let Some(action) = lookup
         .custom_map
-        .and_then(|map| resolve_custom_map_entry(token, map, lookup.judge))
+        .and_then(|map| resolve_custom_map_entry(token, map, lookup))
     else {
         return false;
     };
@@ -431,10 +445,24 @@ fn apply_custom_map_token(token: &str, lookup: Lookup<'_>, state: &mut State) ->
     true
 }
 
-/// Parse one token and place it, unless it fights an earlier token over a
-/// CSS property in the same scope, in which case both stay in `className`.
-fn apply_parsed_token(token: &str, judge: Judge<'_>, state: &mut State) {
-    let Some(parsed) = parse_class_token(token, judge) else {
+/// The class a token names under the project's prefix: the token without
+/// `<prefix>:` when the project sets one, `None` when the token lacks it. An
+/// empty prefix is none.
+fn unprefixed<'t>(token: &'t str, prefix: Option<&str>) -> Option<&'t str> {
+    prefix
+        .filter(|prefix| !prefix.is_empty())
+        .map_or(Some(token), |prefix| {
+            token
+                .strip_prefix(prefix)
+                .and_then(|rest| rest.strip_prefix(':'))
+        })
+}
+
+/// Place one class, unless it fights an earlier class over a CSS property in
+/// the same scope, in which case both stay in `className`: `utility` is what
+/// is read, `token` what the element keeps there.
+fn apply_parsed_token(token: &str, utility: &str, judge: Judge<'_>, state: &mut State) {
+    let Some(parsed) = parse_class_token(utility, judge) else {
         state.conversion.unrecognized.push(token.to_string());
         return;
     };
@@ -574,7 +602,73 @@ fn remove_nested(object: &mut SzObject, key_path: &[String], prop: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_variants, map_variant, tokenize};
+    use super::{class_name_to_sz_object_with, extract_variants, map_variant, tokenize, Lookup};
+
+    /// A class string read under the project's Tailwind prefix: the sz
+    /// object as JSON, and the tokens left in `className`.
+    fn prefixed(prefix: &str, class_name: &str) -> (String, Vec<String>) {
+        let conversion = class_name_to_sz_object_with(
+            class_name,
+            Lookup {
+                prefix: Some(prefix),
+                ..Lookup::default()
+            },
+        );
+        (
+            serde_json::to_string(&conversion.sz_object).expect("an sz object serialises"),
+            conversion.unrecognized,
+        )
+    }
+
+    #[test]
+    fn a_prefixed_project_reads_its_prefix_off_the_front_of_each_class() {
+        // Tailwind v4 writes the prefix first, before every variant, the sign
+        // and the important mark.
+        assert_eq!(
+            prefixed(
+                "tw",
+                "tw:p-4 tw:hover:bg-red-500 tw:-m-1 tw:md:flex tw:mt-2!"
+            ),
+            (
+                r#"{"p":4,"hover":{"bg":"red-500"},"m":-1,"md":{"display":"flex"},"mt":"2!"}"#
+                    .to_string(),
+                Vec::<String>::new()
+            )
+        );
+    }
+
+    #[test]
+    fn a_prefix_is_a_whole_segment_and_an_empty_one_is_none() {
+        // `tw` alone and `twx:` are not `tw:`; an empty prefix sets nothing,
+        // rather than leaving every class unread.
+        assert_eq!(
+            prefixed("tw", "tw twx:p-4 tw:p-4"),
+            (
+                r#"{"p":4}"#.to_string(),
+                vec!["tw".to_string(), "twx:p-4".to_string()]
+            )
+        );
+        assert_eq!(
+            prefixed("", "p-4 hover:flex"),
+            (
+                r#"{"p":4,"hover":{"display":"flex"}}"#.to_string(),
+                Vec::<String>::new()
+            )
+        );
+    }
+
+    #[test]
+    fn a_prefixed_project_leaves_an_unprefixed_class_as_written() {
+        // The project's Tailwind serves no `p-2`, so the element keeps it
+        // exactly as it was; a variant named like the prefix is no prefix.
+        assert_eq!(
+            prefixed("tw", "tw:p-4 p-2 hover:tw:flex"),
+            (
+                r#"{"p":4}"#.to_string(),
+                vec!["p-2".to_string(), "hover:tw:flex".to_string()]
+            )
+        );
+    }
 
     /// `map_variant` answers owned strings; compare against literals.
     fn mapped(variant: &str) -> Vec<String> {

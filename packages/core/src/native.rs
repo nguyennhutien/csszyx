@@ -505,6 +505,8 @@ pub struct NativeMigrateOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, asked the same way.
     pub unserved_classes: Option<Vec<String>>,
+    /// The project's Tailwind prefix (`prefix(tw)`), read off each class.
+    pub prefix: Option<String>,
 }
 
 /// Options passed from JavaScript to the native HTML migrate.
@@ -525,6 +527,8 @@ pub struct NativeMigrateHtmlOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, as for JSX.
     pub unserved_classes: Option<Vec<String>>,
+    /// The project's Tailwind prefix, as for JSX.
+    pub prefix: Option<String>,
 }
 
 /// The counts of one migrated file.
@@ -643,6 +647,7 @@ pub fn migrate_batch_native(
         keys_only: options.keys_only.unwrap_or(false),
         custom_map: custom_map.as_ref(),
         served: served.as_ref(),
+        prefix: options.prefix.as_deref(),
     };
     Ok(files
         .into_iter()
@@ -662,6 +667,8 @@ pub struct NativeMigrateClassNameOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, as for a file.
     pub unserved_classes: Option<Vec<String>>,
+    /// The project's Tailwind prefix, as for a file.
+    pub prefix: Option<String>,
 }
 
 /// Converts one whole `className` attribute to an sz object, as JSON, with
@@ -685,8 +692,11 @@ pub fn migrate_class_name_native(
     let served = served_answers(options.served_classes, options.unserved_classes);
     migrate::migrate_class_name(
         &class_name,
-        options.custom_map_json.as_deref(),
-        served.as_ref(),
+        &migrate::ClassNameOptions {
+            custom_map_json: options.custom_map_json.as_deref(),
+            served: served.as_ref(),
+            prefix: options.prefix.as_deref(),
+        },
     )
     .map_err(napi::Error::from_reason)
 }
@@ -735,6 +745,7 @@ pub fn migrate_html_native(
         cdn_url: options.cdn_url,
         local_path: options.local_path,
         served: served_answers(options.served_classes, options.unserved_classes),
+        prefix: options.prefix,
     };
     Ok(migrate::transform_html_source(&source, &html_options).into())
 }

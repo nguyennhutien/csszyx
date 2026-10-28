@@ -145,7 +145,53 @@ describe('csszyx migrate — the project answers where a table would', () => {
 
         const after = await migrated(cwd, 'src/App.tsx');
 
-        expect(after).toContain("w: '1/2'");
+        // The prefix is read off the class, not taken for a variant: the
+        // object is `{ w: '1/2' }`, which lowers back to `tw:w-1/2`.
+        expect(after).toContain("sz={{ w: '1/2' }}");
+    });
+
+    it('reads the prefix off every class, and keeps a class it is missing from', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss" prefix(tw);\n',
+            'src/App.tsx':
+                'export const App = () => <div className="tw:p-4 tw:hover:flex tw:-m-1 p-2" />;\n',
+        });
+
+        const after = await migrated(cwd, 'src/App.tsx');
+
+        expect(after.replaceAll(/\s+/g, ' ')).toContain(
+            "sz={{ p: 4, hover: { display: 'flex' }, m: -1, }}",
+        );
+        expect(after).toContain('className="p-2"');
+    });
+
+    it('says so when the stylesheets set different prefixes, and reads none', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss" prefix(tw);\n',
+            'admin/admin.css': '@import "tailwindcss";\n',
+            'src/App.tsx': 'export const App = () => <div className="p-4" />;\n',
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await migrate({ cwd, injectTodos: false });
+
+        expect(log.mock.calls.join('\n')).toMatch(
+            /Reading classes without a Tailwind prefix: the Tailwind stylesheets set different prefixes: .*`src\/app\.css` with `prefix\(tw\)`/,
+        );
+        expect(readFileSync(path.join(cwd, 'src/App.tsx'), 'utf8')).toContain('sz={{ p: 4 }}');
+    });
+
+    it('reads a prefixed class in markup too', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss" prefix(tw);\n',
+            'index.html': '<html><body><div class="tw:p-4"></div></body></html>\n',
+        });
+
+        const after = await migrated(cwd, 'index.html');
+
+        expect(after).not.toContain('class=');
+        expect(after).toMatch(/sz="\{? ?p: 4 ?\}?"/);
     });
 
     it('answers for markup too', async () => {

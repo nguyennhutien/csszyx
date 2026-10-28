@@ -45,6 +45,8 @@ pub struct TransformOptions<'a> {
     /// What the project's Tailwind answered for classes one of migrate's
     /// tables would otherwise decide.
     pub served: Option<&'a ServedAnswers>,
+    /// The project's Tailwind prefix, read off the front of each class.
+    pub prefix: Option<&'a str>,
 }
 
 /// What the transformation did to one file.
@@ -131,6 +133,7 @@ pub fn transform_source(
         lookup: Lookup {
             custom_map: options.custom_map,
             judge: Judge::new(options.served, Some(&asked)),
+            prefix: options.prefix,
         },
         replacements: Vec::new(),
         warnings: Vec::new(),

@@ -50,6 +50,7 @@ import {
     cssWideKeywordOf,
     type DiagnosticPolicy,
     diagnosticConfigProblemsMessage,
+    findCsszyxConfigFile,
     hoistedSignUtility,
     inertUnderEveryRoot,
     isAtLeastLevel,
@@ -308,6 +309,32 @@ function siblingFirst(specifier: string, fromDir: string): string[] {
 }
 
 /**
+ * A stamp of what the project's prefix is read from: each Tailwind entry and
+ * `csszyx.config`, which can turn a disagreement off, with its change time.
+ * Two equal stamps mean nothing a compile reads the prefix from has changed,
+ * so a long-lived caller can keep what it read.
+ *
+ * @param cwd - Project root.
+ * @returns One line per file, `path NUL mtime`.
+ */
+export async function projectPrefixStamp(cwd: string): Promise<string> {
+    const config = findCsszyxConfigFile(cwd)?.file;
+    const files = [...(await findTailwindCssEntries(cwd)), ...(config ? [config] : [])];
+    return files.map(file => `${file}\0${changeTime(file)}`).join('\n');
+}
+
+/**
+ * When a file last changed, for {@link projectPrefixStamp}. A file removed
+ * since the walk stamps as gone rather than failing the call.
+ *
+ * @param file - Absolute path.
+ * @returns The change time, or `gone`.
+ */
+function changeTime(file: string): number | 'gone' {
+    return statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 'gone';
+}
+
+/**
  * Compile every Tailwind entry the project has, once.
  *
  * Several passes need the project's own design system, and compiling it per
@@ -368,11 +395,12 @@ function prefixEntry(entry: OpenedOracles['prefixes'][number]): string {
  * is still reported only when no entry serves it.
  *
  * @param opened - The project's compiled design systems.
+ * @param opened.prefixes - Each compiled entry and the prefix it sets.
  * @param disagreementOff - Whether the config sets `prefix-disagreement` to `off`.
  * @returns The prefix to lower with, or null with each entry and the prefix it sets.
  */
 function agreedPrefix(
-    opened: OpenedOracles,
+    opened: { prefixes: ReadonlyArray<OpenedOracles['prefixes'][number]> },
     disagreementOff: boolean,
 ): {
     prefix: string | null;
@@ -383,6 +411,50 @@ function agreedPrefix(
         return { prefix: first?.prefix ?? null, disagreement: null };
     }
     return { prefix: null, disagreement: opened.prefixes.map(prefixEntry) };
+}
+
+/** The prefix a project's classes carry, as `csszyx check` settles it. */
+export interface SettledPrefix {
+    /** The prefix to read classes with, or null for none. */
+    prefix: string | null;
+    /** Why the stylesheets gave no prefix to read with, or null when they did. */
+    unread: string | null;
+}
+
+/**
+ * The prefix this pass would lower with, for a reader outside it: the one the
+ * compiled entries agree on, or the first entry's when the config turns
+ * `prefix-disagreement` off.
+ *
+ * @param cwd - Project root, where `csszyx.config` is read.
+ * @param opened - The project's compiled design systems.
+ * @param opened.prefixes - Each compiled entry and the prefix it sets.
+ * @param opened.skipped - Why each entry that did not compile was skipped.
+ * @param opened.hadEntries - Whether the project has any Tailwind entry.
+ * @returns The prefix, and why there is none to trust when the entries
+ *   disagree or none compiled.
+ */
+export async function settledPrefix(
+    cwd: string,
+    opened: {
+        prefixes: ReadonlyArray<OpenedOracles['prefixes'][number]>;
+        skipped: readonly string[];
+        hadEntries: boolean;
+    },
+): Promise<SettledPrefix> {
+    if (opened.prefixes.length === 0) {
+        const unread = opened.hadEntries
+            ? `no Tailwind stylesheet compiled: ${opened.skipped.join('; ')}`
+            : null;
+        return { prefix: null, unread };
+    }
+    const { policy } = await loadDiagnosticPolicy(cwd);
+    const off = policy.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off';
+    const { prefix, disagreement } = agreedPrefix(opened, off);
+    const unread = disagreement
+        ? `the Tailwind stylesheets set different prefixes: ${disagreement.join(', ')}`
+        : null;
+    return { prefix, unread };
 }
 
 /**
