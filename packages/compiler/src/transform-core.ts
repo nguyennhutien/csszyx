@@ -21,6 +21,7 @@ import {
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
 import { own } from './own.js';
+import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
@@ -4540,6 +4541,15 @@ export interface TransformSourceCodeOptions {
 export interface TransformSourceOptions extends TransformSourceCodeOptions {
     /** Source filename for diagnostics; `<anonymous>` when absent. */
     filename?: string;
+
+    /**
+     * The artifact `transformSource` runs on, as `build.parser` names it;
+     * `CSSZYX_PARSER` overrides it. Without either it takes the native addon
+     * and falls back to wasm when no native binary is installed. An explicit
+     * `rust` does not fall back. `transformRust` and `transformWasm` name
+     * their artifact and ignore it.
+     */
+    parser?: ParserMode;
 }
 
 /**
