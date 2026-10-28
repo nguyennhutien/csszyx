@@ -70,11 +70,11 @@ overrides:
   "http-cache-semantics@^4": "^4.3.0"
   "ip-address@^10": "^10.7.4"
   "postcss@>=8.0.0 <8.5.23": "^8.5.23"
-  # A major past what its dependents ask for: postcss-nested 6 (via
-  # expressive-code, docs only) asks for ^6, and the fix is 7.1.6 only. 7.0.0
-  # changed only insertion during iteration; postcss-nested 7 moved to it
-  # without other changes.
-  "postcss-selector-parser@<7.1.6": "^7.1.6"
+  # One entry per major: the advisory's fix reached the 6.x line too (6.1.5),
+  # so postcss-nested 6 (via expressive-code, docs only) keeps the ^6 it asks
+  # for instead of being moved a major ahead.
+  "postcss-selector-parser@>=6.0.0 <6.1.5": "^6.1.5"
+  "postcss-selector-parser@>=7.0.0 <7.1.6": "^7.1.6"
   "qs@>=6.0.0 <6.16.1": "^6.16.1"
   "seroval@^1": "^1.6.3"
   "sharp@<0.35.5": "^0.35.5"
@@ -88,7 +88,10 @@ overrides:
   "vite@>=6.0.0 <6.4.3": "^6.4.3"
   "vite@>=7.0.0 <7.3.2": "^7.3.5"
   "vite@>=8.0.0 <8.3.3": "^8.3.3"
-  "webpack-dev-middleware@^8": "^8.3.0"
+  # A floor that also replaces the range a dependent asks for, so it rises with
+  # the newest dependent: webpack-dev-server 6.1 loads its client from
+  # `webpack-dev-middleware/client/*`, which only 8.4.0 exports.
+  "webpack-dev-middleware@^8": "^8.4.0"
   "ws@>=8.0.0 <8.20.1": "^8.21.0"
   "zod@^4": "^4.6.6"
 
