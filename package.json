@@ -126,7 +126,7 @@
     "pages:build": "bash scripts/build-cf-pages.sh"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.2",
     "@csszyx/tailwind-oracle": "workspace:*",
     "@playwright/test": "^1.64.1",
     "@rollup/rollup-linux-arm64-gnu": "^4.64.12",
