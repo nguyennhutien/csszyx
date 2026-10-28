@@ -100,17 +100,31 @@ describe('placing recovered elements', () => {
             return (user + system) / 1000;
         };
         timed(small, 200);
-        let smallBest = Number.POSITIVE_INFINITY;
-        let largeBest = Number.POSITIVE_INFINITY;
-        // Interleaved, the fastest of three: a slow stretch falls on both sizes.
-        for (let run = 0; run < 3; run++) {
-            smallBest = Math.min(smallBest, timed(small, 200));
-            largeBest = Math.min(largeBest, timed(large, 2000));
+        timed(large, 2000);
+        // Each pair times ten small runs beside one large one, so both sides do
+        // about the same work in about the same stretch of time, and the bound
+        // reads the median of seven pairs.
+        const ratios: number[] = [];
+        let smallMs = 0;
+        let largeMs = 0;
+        for (let pair = 0; pair < 7; pair++) {
+            let tenSmall = 0;
+            for (let run = 0; run < 10; run++) tenSmall += timed(small, 200);
+            const one = timed(large, 2000);
+            ratios.push(one / (tenSmall / 10));
+            smallMs += tenSmall / 10;
+            largeMs += one;
         }
-        const ratio = largeBest / smallBest;
+        ratios.sort((left, right) => left - right);
+        const ratio = ratios[3] ?? Number.POSITIVE_INFINITY;
         expect(
             ratio,
-            `10x the elements cost ${ratio.toFixed(1)}x (${smallBest.toFixed(2)} -> ${largeBest.toFixed(2)} ms); linear is about 10x`,
-        ).toBeLessThan(30);
+            `10x the elements cost ${ratio.toFixed(1)}x (mean ${(smallMs / 7).toFixed(2)} -> ${(largeMs / 7).toFixed(2)} ms); linear is about 10x`,
+            // Placing by a lookup measures 12x; placing by a scan of the source
+            // before each element measures about 100x. 30 sat too close to the
+            // first: a full `verify:ci` on a macOS host read 30.9x (1.02 ->
+            // 31.44 ms) for linear work, and 30 rounds under 16 busy processes
+            // on that host peaked at 17.5x. 50 stays twice under the scan.
+        ).toBeLessThan(50);
     });
 });
