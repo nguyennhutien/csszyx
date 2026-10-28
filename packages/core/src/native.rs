@@ -652,7 +652,20 @@ pub fn migrate_batch_native(
         .collect())
 }
 
-/// Converts one whole `className` attribute to an sz object, as JSON.
+/// Options passed from JavaScript to the native `className` conversion.
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeMigrateClassNameOptions {
+    /// The migration-resolution map, as JSON text.
+    pub custom_map_json: Option<String>,
+    /// Utilities the project's Tailwind serves, as for a file.
+    pub served_classes: Option<Vec<String>>,
+    /// Utilities the project's Tailwind does not serve, as for a file.
+    pub unserved_classes: Option<Vec<String>>,
+}
+
+/// Converts one whole `className` attribute to an sz object, as JSON, with
+/// the classes a table decided unasked in `tableVerdicts`.
 ///
 /// The class-level question the file entry points cannot answer. The answer
 /// crosses as JSON because an sz value is recursive and order-sensitive, and
@@ -666,10 +679,16 @@ pub fn migrate_batch_native(
 #[napi(js_name = "migrateClassName")]
 pub fn migrate_class_name_native(
     class_name: String,
-    custom_map_json: Option<String>,
+    options: Option<NativeMigrateClassNameOptions>,
 ) -> napi::Result<String> {
-    migrate::migrate_class_name(&class_name, custom_map_json.as_deref())
-        .map_err(napi::Error::from_reason)
+    let options = options.unwrap_or_default();
+    let served = served_answers(options.served_classes, options.unserved_classes);
+    migrate::migrate_class_name(
+        &class_name,
+        options.custom_map_json.as_deref(),
+        served.as_ref(),
+    )
+    .map_err(napi::Error::from_reason)
 }
 
 /// Reads one Tailwind utility as an sz prop and value, as JSON, answering

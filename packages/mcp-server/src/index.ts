@@ -236,10 +236,10 @@ export const TOOLS = [
 // TOOL HANDLER ROUTING
 // ============================================================================
 
-/**
- *
- */
-type ToolHandler = (args: Record<string, unknown>) => ReturnType<typeof handleExpand>;
+/** A tool's handler; `csszyx_reverse` answers asynchronously, as it may compile the project's stylesheets. */
+type ToolHandler = (
+    args: Record<string, unknown>,
+) => ReturnType<typeof handleExpand> | Promise<ReturnType<typeof handleExpand>>;
 
 const TOOL_HANDLERS: Record<
     string,
@@ -264,7 +264,7 @@ server.server.setRequestHandler(ListToolsRequestSchema, () => {
     return { tools: TOOLS };
 });
 
-server.server.setRequestHandler(CallToolRequestSchema, request => {
+server.server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params;
     const entry = TOOL_HANDLERS[name];
 
@@ -277,7 +277,7 @@ server.server.setRequestHandler(CallToolRequestSchema, request => {
     try {
         const validated = entry.schema.parse(args);
         return withCompilerVersions(
-            entry.handler(validated as Record<string, unknown>),
+            await entry.handler(validated as Record<string, unknown>),
             COMPILER_VERSIONS,
         );
     } catch (error: unknown) {

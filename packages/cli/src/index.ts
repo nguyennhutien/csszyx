@@ -34,6 +34,7 @@ export {
     type MigrateSourceOptions,
     migrateSource,
 } from './migrate.js';
+export { askProjectTailwind } from './scanner/project-answers.js';
 export type { ResolvedTheme, ScanResult } from './scanner/tailwind-scanner.js';
 export {
     extractScreenKeys,

@@ -83,10 +83,18 @@ export function migrateSource(
 export interface ClassNameToSzObjectOptions {
     /** The migration-resolution map. */
     customMap?: CsszyxTodoMap;
+    /**
+     * What the project's Tailwind answered for the classes a migrate table
+     * would otherwise decide (`true` when it serves the class), keyed as the
+     * result's `tableVerdicts` name them. Convert once without it, ask the
+     * project about `tableVerdicts`, and convert again with the answers, as
+     * `csszyx migrate` does.
+     */
+    served?: ReadonlyMap<string, boolean>;
 }
 
 /** The keys {@link ClassNameToSzObjectOptions} has. */
-const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap']);
+const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap', 'served']);
 
 /**
  * Convert one whole `className` attribute to an sz object.

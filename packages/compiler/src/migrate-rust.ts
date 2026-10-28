@@ -127,6 +127,12 @@ export interface MigrateRustConversion {
     unrecognized: string[];
     /** Tokens the resolution map said to keep in `className`. */
     keepInClassName: string[];
+    /**
+     * Classes a migrate table decided because the project's Tailwind was not
+     * asked, with the table's verdict; absent when there were none. Ask the
+     * project about them and convert again with `served`.
+     */
+    tableVerdicts?: MigrateRustTableVerdict[];
 }
 
 /** One Tailwind utility read as an sz prop and value. */
@@ -310,6 +316,8 @@ function readResult(result: NativeMigrateResult): MigrateRustResult {
 export interface MigrateRustClassNameOptions {
     /** The migration-resolution map. */
     customMap?: Record<string, unknown>;
+    /** The project's answers, as for {@link MigrateRustOptions.served}. */
+    served?: ReadonlyMap<string, boolean>;
 }
 
 /**
@@ -330,11 +338,14 @@ export function migrateRustClassName(
     className: string,
     options: MigrateRustClassNameOptions = {},
 ): MigrateRustConversion {
-    const { customMap } = options;
+    const { customMap, served } = options;
     return guarded(
         () =>
             JSON.parse(
-                migrateClassName(className, customMap ? JSON.stringify(customMap) : undefined),
+                migrateClassName(className, {
+                    customMapJson: customMap ? JSON.stringify(customMap) : undefined,
+                    ...servedLists(served),
+                }),
             ) as MigrateRustConversion,
     );
 }

@@ -104,6 +104,13 @@ Input:  "p-4 bg-blue-500 hover:text-white"
 Output: { p: 4, bg: 'blue-500', hover: { color: 'white' } }
 ```
 
+A few classes depend on the project: a sign on a keyword (`-z-auto`) or a
+fraction on a spacing key (`-m-1/2`) is served only when the project's
+Tailwind says so, for example through a `--spacing-1\/2` theme step. For
+those, the tool asks the project's Tailwind, from the directory the server
+runs in, as `csszyx migrate` does; with no Tailwind v4 there, the class stays
+in the `unrecognized` list.
+
 ### `csszyx_validate`
 
 Validate a sz object before using it. Reports unknown props, CSS property name

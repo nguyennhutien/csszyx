@@ -271,6 +271,16 @@ export interface NativeMigrateOptions {
     unservedClasses?: string[];
 }
 
+/** Options for the native `className` conversion. */
+export interface NativeMigrateClassNameOptions {
+    /** The migration-resolution map, as JSON text. */
+    customMapJson?: string;
+    /** Utilities the project's Tailwind serves, as for JSX. */
+    servedClasses?: string[];
+    /** Utilities the project's Tailwind does not serve, as for JSX. */
+    unservedClasses?: string[];
+}
+
 /** Options for the native migrate of an HTML source. */
 export interface NativeMigrateHtmlOptions {
     /** Wrap the sz attribute value in outer braces. */
@@ -345,10 +355,11 @@ export interface NativeBinding {
     /** Migrates one HTML source with the native Rust core. */
     migrateHtml?(source: string, options?: NativeMigrateHtmlOptions): NativeMigrateResult;
     /**
-     * Converts one whole `className` attribute to an sz object, as JSON.
+     * Converts one whole `className` attribute to an sz object, as JSON, with
+     * the classes a table decided unasked in `tableVerdicts`.
      * Absent on platform packages that predate migrate.
      */
-    migrateClassName?(className: string, customMapJson?: string): string;
+    migrateClassName?(className: string, options?: NativeMigrateClassNameOptions): string;
     /**
      * Reads one Tailwind utility as an sz prop and value, as JSON, answering
      * `null` when the parser does not know the class.
@@ -449,11 +460,14 @@ export function migrateHtml(
  * order-sensitive, and the JSON is the shape the generators compare against.
  *
  * @param className The whole class attribute value.
- * @param customMapJson The migration-resolution map, as JSON.
+ * @param options The migration-resolution map and the project's answers.
  * @returns The conversion, as JSON.
  * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
  */
-export function migrateClassName(className: string, customMapJson?: string): string;
+export function migrateClassName(
+    className: string,
+    options?: NativeMigrateClassNameOptions,
+): string;
 
 /**
  * Reads one Tailwind utility as an sz prop and value, as JSON.

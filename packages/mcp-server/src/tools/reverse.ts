@@ -7,9 +7,18 @@
  * this tool says into code, so an sz object that compiles to different classes
  * than the ones asked about is a wrong answer delivered with confidence — and
  * the compiler is already here to check. `roundTrip.ok` is that check.
+ *
+ * Where one of migrate's tables would decide a class (a sign on a keyword, a
+ * fraction on a key), the project's own Tailwind answers instead, as
+ * `csszyx migrate` asks it. Its stylesheets are compiled only for a class
+ * string a table decided something in, and again on each such call: measured
+ * 2026-10-28, opening them costs 71–168 ms the first time and 6–89 ms after,
+ * with 14–61 MB of heap, so a process-long cache would hold that memory for
+ * the rare call that needs it and answer from a stylesheet the user may have
+ * edited since.
  */
 
-import { classNameToSzObject } from '@csszyx/cli';
+import { askProjectTailwind, classNameToSzObject } from '@csszyx/cli';
 import { sortStrings, transform } from '@csszyx/compiler';
 import { z } from 'zod';
 
@@ -67,16 +76,39 @@ export function roundTrip(
 }
 
 /**
+ * Convert a class string, asking the project's Tailwind about what a migrate
+ * table decided, and converting again when an answer differs.
+ *
+ * @param classes - The class string.
+ * @param cwd - The project root, where its Tailwind and stylesheets resolve.
+ * @returns The conversion the project's answers give.
+ */
+async function convert(
+    classes: string,
+    cwd: string,
+): Promise<ReturnType<typeof classNameToSzObject>> {
+    const first = classNameToSzObject(classes);
+    if (!first.tableVerdicts?.length) return first;
+    const served = await askProjectTailwind(cwd, first.tableVerdicts);
+    return served === null ? first : classNameToSzObject(classes, { served });
+}
+
+/**
  * Convert a Tailwind class string into a structured sz object.
  * @param input - The validated input object.
+ * @param context - Where the project is; the server's working directory by default.
+ * @param context.cwd - The project root.
  * @returns MCP tool response with the sz object, any unrecognized classes, and
  *   whether the object compiles back to the classes it was made from.
  */
-export function handleReverse(input: ReverseInput): {
+export async function handleReverse(
+    input: ReverseInput,
+    context: { cwd?: string } = {},
+): Promise<{
     content: Array<{ type: 'text'; text: string }>;
-} {
+}> {
     const classes = input.classes.trim();
-    const { szObject, unrecognized } = classNameToSzObject(classes);
+    const { szObject, unrecognized } = await convert(classes, context.cwd ?? process.cwd());
     const unrecognizedSet = new Set(unrecognized);
     const recognized = classes.split(/\s+/).filter(cls => cls && !unrecognizedSet.has(cls));
 
