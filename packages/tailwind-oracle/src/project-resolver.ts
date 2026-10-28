@@ -96,7 +96,9 @@ async function createProjectResolver(resolveFrom: string): Promise<ProjectResolv
     const nodePath = findTailwindNode(resolveFrom);
     if (nodePath === null) return null;
     try {
-        const node = (await import(pathToFileURL(nodePath).href)) as TailwindNode & {
+        const node = (await import(
+            /* turbopackIgnore: true */ pathToFileURL(nodePath).href
+        )) as TailwindNode & {
             default?: TailwindNode;
         };
         const loadModule = node.loadModule ?? node.default?.loadModule;

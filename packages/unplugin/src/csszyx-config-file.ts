@@ -151,7 +151,7 @@ export type ModuleImporter = (url: string) => Promise<unknown>;
  * @param url - A `file:` URL.
  * @returns The module namespace.
  */
-const nativeImport: ModuleImporter = url => import(url);
+const nativeImport: ModuleImporter = url => import(/* turbopackIgnore: true */ url);
 
 /** The ES-module twin of each name that Node may read as CommonJS. */
 const ESM_TWIN: Readonly<Record<string, string>> = { '.ts': '.mts', '.js': '.mjs' };
