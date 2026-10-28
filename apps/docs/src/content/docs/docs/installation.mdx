@@ -228,6 +228,11 @@ Without `@csszyx/core`, the import fails with `Cannot find package '@csszyx/core
 At another version, the first call stops with
 [`engine-version-skew`](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases).
 
+The calls run on the native addon when its platform package is installed and on
+the WebAssembly build when it is not. Pass `parser: 'wasm'` to pin the
+WebAssembly build, as `build.parser` does for the plugin; `CSSZYX_PARSER=wasm`
+does the same for every call in the process, `csszyx check` included.
+
 ## Setup by Platform
 
 <Tabs>
