@@ -193,7 +193,9 @@ function ownPathVerdict(
     matcher: ReturnType<typeof ignore>,
 ): (relative: string) => GitignoreVerdict {
     const rules = (matcher as unknown as { _rules?: Partial<OwnPathRules> })._rules;
-    if (typeof rules?.test !== 'function') {
+    // The arity too: 7.0.14 kept the name and dropped `checkUnignored`, so a
+    // name check alone lets the call below throw inside `ignore`.
+    if (typeof rules?.test !== 'function' || rules.test.length !== 3) {
         throw szDiagnosticError('ignore-package-incompatible', { pinned: IGNORE_PINNED });
     }
     const own = rules as OwnPathRules;
