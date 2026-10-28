@@ -11,6 +11,7 @@
  * runtime helpers survived, so the shape can be checked before it ships.
  */
 
+import { projectAnswers } from '@csszyx/cli';
 import { transformSource } from '@csszyx/compiler/engine';
 import { z } from 'zod';
 
@@ -30,7 +31,7 @@ export const compilePreviewSchema = z.object({
         .string()
         .optional()
         .describe(
-            'The Tailwind prefix the project sets, e.g. "tw" for `@import "tailwindcss" prefix(tw)`. csszyx writes it before every class, so a preview without it shows classes that project does not serve.',
+            'The Tailwind prefix to compile with, e.g. "tw" for `@import "tailwindcss" prefix(tw)`. Leave it out to use the prefix the stylesheets of the project the server runs in set; pass it when the project is elsewhere or to override that.',
         ),
 });
 
@@ -153,15 +154,47 @@ function compileWithDiagnostics(
 }
 
 /**
+ * Why a preview made with no `classPrefix` given carries none.
+ *
+ * @param cwd - Where the project was looked for.
+ * @param unread - Why its prefix could not be read, or null when it sets none.
+ * @returns The note.
+ */
+function noPrefixNote(cwd: string, unread: string | null): string {
+    if (unread !== null) {
+        return `No classPrefix was given and the project's prefix could not be read (${unread}), so the classes carry none. Pass classPrefix to see the classes the project serves.`;
+    }
+    return `No classPrefix was given and no stylesheet under ${cwd} sets one, so the classes carry none. If the project is elsewhere and sets one, such as \`@import "tailwindcss" prefix(tw)\`, pass it as classPrefix to see the classes that project serves.`;
+}
+
+/**
  * Compile a source module and report what csszyx made of it.
  *
+ * The prefix is the one given, else the one the project's stylesheets set
+ * (`projectAnswers`, as `csszyx_reverse` reads it): an assistant rarely knows
+ * the project sets `prefix(tw)`, and a preview without it shows classes that
+ * project does not serve. Only the prefix is kept between calls, so a call
+ * costs a find and a stat of the stylesheets (1.5-30 ms measured) and a
+ * compile only after one changes.
+ *
  * @param input - The validated input object.
+ * @param context - Where the project is; the server's working directory by default.
+ * @param context.cwd - The project root.
  * @returns MCP tool response carrying the compiled preview.
  */
-export function handleCompilePreview(input: CompilePreviewInput): {
+export async function handleCompilePreview(
+    input: CompilePreviewInput,
+    context: { cwd?: string } = {},
+): Promise<{
     content: Array<{ type: 'text'; text: string }>;
-} {
-    const classPrefix = input.classPrefix ?? null;
+}> {
+    const cwd = context.cwd ?? process.cwd();
+    const classPrefixFrom = input.classPrefix === undefined ? 'project' : 'input';
+    const read =
+        input.classPrefix === undefined
+            ? await projectAnswers(cwd).prefix()
+            : { prefix: input.classPrefix, unread: null };
+    const classPrefix = read.prefix;
     const { result, warnings } = compileWithDiagnostics(
         input.source,
         input.filename ?? 'preview.tsx',
@@ -185,15 +218,12 @@ export function handleCompilePreview(input: CompilePreviewInput): {
                         ).map(([name]) => name),
                         // Echoed so the reader knows which vocabulary the classes are in.
                         classPrefix,
+                        classPrefixFrom,
                         // The build merges from the project's stylesheet, which
                         // the preview does not read; only an object whose list
                         // holds two or more classes can lose one to it.
                         ...(mergesSomewhere(result) ? { mergeNote: MERGE_NOTE } : {}),
-                        ...(classPrefix === null
-                            ? {
-                                  note: 'No classPrefix was given, so the classes carry none. If the project stylesheet sets one, such as `@import "tailwindcss" prefix(tw)`, pass it as classPrefix to see the classes that project serves.',
-                              }
-                            : {}),
+                        ...(classPrefix === null ? { note: noPrefixNote(cwd, read.unread) } : {}),
                     },
                     null,
                     2,

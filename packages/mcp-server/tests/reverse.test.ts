@@ -6,34 +6,20 @@
  * compiles to something else is a wrong answer delivered with confidence,
  * which is how `min-[330px]:grid` reached a user as `min:330px:grid`.
  */
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { handleReverse, roundTrip } from '../src/tools/reverse';
+import { project, removeProjects } from './helpers/project';
+
+afterEach(() => {
+    removeProjects();
+});
 
 async function reverse(classes: string, cwd?: string) {
     return JSON.parse((await handleReverse({ classes }, { cwd })).content[0].text);
-}
-
-/**
- * A project whose Tailwind serves `-m-1/2`, which migrate's table refuses:
- * its theme adds a `1/2` spacing step.
- *
- * @param body - Extra stylesheet text.
- * @returns The project root; the caller removes it.
- */
-function project(body: string): string {
-    const root = mkdtempSync(join(tmpdir(), 'csszyx-mcp-reverse-'));
-    const tailwind = dirname(createRequire(import.meta.url).resolve('tailwindcss/package.json'));
-    mkdirSync(join(root, 'node_modules'));
-    symlinkSync(tailwind, join(root, 'node_modules', 'tailwindcss'), 'dir');
-    writeFileSync(join(root, 'package.json'), '{ "name": "p", "private": true }');
-    writeFileSync(join(root, 'app.css'), `@import "tailwindcss";\n${body}\n`);
-    return root;
 }
 
 describe('csszyx_reverse tool', () => {
@@ -101,40 +87,61 @@ describe('the answer proves itself by compiling back to the input', () => {
 
 describe("the project's Tailwind answers where migrate's table would", () => {
     it('migrates a class the project serves and the table refuses', async () => {
-        const root = project('@theme { --spacing-1\\/2: 0.5rem; }');
-        try {
-            const data = await reverse('p-4 -m-1/2', root);
-            expect(data.szObject).toEqual({ p: 4, m: '-1/2' });
-            expect(data.unrecognized).toBeUndefined();
-            expect(data.roundTrip.ok).toBe(true);
-        } finally {
-            rmSync(root, { recursive: true, force: true });
-        }
+        // The theme adds a `1/2` spacing step, so `-m-1/2` is served.
+        const root = project({
+            'app.css': '@import "tailwindcss";\n@theme { --spacing-1\\/2: 0.5rem; }\n',
+        });
+        const data = await reverse('p-4 -m-1/2', root);
+        expect(data.szObject).toEqual({ p: 4, m: '-1/2' });
+        expect(data.unrecognized).toBeUndefined();
+        expect(data.roundTrip.ok).toBe(true);
     });
 
     it('keeps the table verdict where no Tailwind v4 can be asked', async () => {
-        const root = mkdtempSync(join(tmpdir(), 'csszyx-mcp-reverse-'));
-        try {
-            const data = await reverse('p-4 -m-1/2', root);
-            expect(data.szObject).toEqual({ p: 4 });
-            expect(data.unrecognized).toEqual(['-m-1/2']);
-        } finally {
-            rmSync(root, { recursive: true, force: true });
-        }
+        const data = await reverse('p-4 -m-1/2', project({}, { tailwind: false }));
+        expect(data.szObject).toEqual({ p: 4 });
+        expect(data.unrecognized).toEqual(['-m-1/2']);
+        expect(data.note).toContain("csszyx's own tables decided `-m-1/2`");
+        expect(data.note).toContain('no stylesheet imports Tailwind');
+    });
+
+    it('notes nothing when the project answered', async () => {
+        const root = project({ 'app.css': '@import "tailwindcss";\n' });
+        expect((await reverse('p-4 -m-1/2', root)).note).toBeUndefined();
+    });
+});
+
+describe('a server started outside a project', () => {
+    it('reads no stylesheet, and says why once', async () => {
+        const root = project({ 'app.css': '@import "tailwindcss" prefix(tw);\n' });
+        rmSync(join(root, 'package.json'));
+        const data = await reverse('p-4 -m-1/2', root);
+        expect(data.szObject).toEqual({ p: 4 });
+        expect(data.note).toBe(
+            `The classes were read without a Tailwind prefix: ${root} has no package.json, so no stylesheet was read. csszyx's own tables decided \`-m-1/2\`, for the same reason.`,
+        );
     });
 });
 
 describe("the project's Tailwind prefix", () => {
     it('reads it off each class, and compiles the answer back with it', async () => {
-        const root = project('');
-        writeFileSync(join(root, 'app.css'), '@import "tailwindcss" prefix(tw);\n');
-        try {
-            const data = await reverse('tw:p-4 tw:hover:flex p-2', root);
-            expect(data.szObject).toEqual({ p: 4, hover: { display: 'flex' } });
-            expect(data.unrecognized).toEqual(['p-2']);
-            expect(data.roundTrip).toEqual({ ok: true, emitted: 'tw:p-4 tw:hover:flex' });
-        } finally {
-            rmSync(root, { recursive: true, force: true });
-        }
+        const root = project({ 'app.css': '@import "tailwindcss" prefix(tw);\n' });
+        const data = await reverse('tw:p-4 tw:hover:flex p-2', root);
+        expect(data.szObject).toEqual({ p: 4, hover: { display: 'flex' } });
+        expect(data.unrecognized).toEqual(['p-2']);
+        expect(data.roundTrip).toEqual({ ok: true, emitted: 'tw:p-4 tw:hover:flex' });
+        expect(data.note).toBeUndefined();
+    });
+
+    it('says why it read none when the stylesheets set different ones', async () => {
+        const root = project({
+            'app.css': '@import "tailwindcss" prefix(tw);\n',
+            'admin/admin.css': '@import "tailwindcss";\n',
+        });
+        const data = await reverse('p-4', root);
+        expect(data.szObject).toEqual({ p: 4 });
+        expect(data.note).toMatch(
+            /without a Tailwind prefix: the Tailwind stylesheets set different prefixes/,
+        );
     });
 });

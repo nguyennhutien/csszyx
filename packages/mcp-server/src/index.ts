@@ -224,7 +224,7 @@ export const TOOLS = [
                 classPrefix: {
                     type: 'string' as const,
                     description:
-                        'The Tailwind prefix the project sets, e.g. "tw" for @import "tailwindcss" prefix(tw). csszyx writes it before every class, so a preview without it shows classes that project does not serve.',
+                        'The Tailwind prefix to compile with, e.g. "tw" for @import "tailwindcss" prefix(tw). Leave it out to use the prefix the stylesheets of the project the server runs in set; pass it when the project is elsewhere or to override that.',
                 },
             },
             required: ['source'],

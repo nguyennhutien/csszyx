@@ -25,11 +25,13 @@ vi.mock('@csszyx/compiler/engine', async importOriginal => {
 });
 
 describe('csszyx_compile_preview with an engine that reports no object lists', () => {
-    it('notes the merge whenever the module holds two classes', () => {
+    it('notes the merge whenever the module holds two classes', async () => {
         const data = JSON.parse(
-            handleCompilePreview({
-                source: 'export const A = () => <><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>;',
-            }).content[0].text,
+            (
+                await handleCompilePreview({
+                    source: 'export const A = () => <><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>;',
+                })
+            ).content[0].text,
         );
         expect(data.classes).toEqual(['p-4', 'pb-2']);
         expect(String(data.mergeNote)).toContain('`p-4`');
@@ -37,12 +39,14 @@ describe('csszyx_compile_preview with an engine that reports no object lists', (
 
     // An engine that reported object lists before it reported class-name
     // pairs: a class name beside `sz` is then no reason for the note.
-    it('notes nothing for a class name when the engine reports no pairs', () => {
+    it('notes nothing for a class name when the engine reports no pairs', async () => {
         engine.omits = ['mergeOverrides'];
         const data = JSON.parse(
-            handleCompilePreview({
-                source: 'export const A = () => <div className="pb-2" sz={{ p: 4 }} />;',
-            }).content[0].text,
+            (
+                await handleCompilePreview({
+                    source: 'export const A = () => <div className="pb-2" sz={{ p: 4 }} />;',
+                })
+            ).content[0].text,
         );
         expect(data.mergeNote).toBeUndefined();
     });

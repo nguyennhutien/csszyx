@@ -113,6 +113,11 @@ in the `unrecognized` list. A prefix the project's stylesheet sets
 (`prefix(tw)`) is read off each class the same way, and the round trip compiles
 the answer back with it.
 
+When the project cannot answer in full, a `note` says so: its stylesheets set
+different prefixes, none compiled, or Tailwind could not be asked. A server
+started in a directory without a `package.json` reads no stylesheet, so start
+it from the project root.
+
 ### `csszyx_validate`
 
 Validate a sz object before using it. Reports unknown props, CSS property name
@@ -185,16 +190,20 @@ that styles nothing.
 Pass `filename` when the parser matters — the extension selects it, so JSX needs
 a `.tsx` name. It defaults to `preview.tsx`.
 
-Pass `classPrefix` when the project's stylesheet sets one. With
+The classes carry the prefix the project's stylesheet sets. With
 `@import "tailwindcss" prefix(tw)` the project serves `tw:p-4` and nothing for
-`p-4`, so a preview without the prefix shows classes that style nothing there:
+`p-4`, so the tool reads the prefix from the stylesheets of the project the
+server runs in, and `classPrefixFrom` says it did. Pass `classPrefix` when the
+project is elsewhere, or to compile under another prefix:
 
 ```json
 { "source": "export const A = () => <div sz={{ p: 4 }} />;", "classPrefix": "tw" }
 ```
 
-The result echoes the `classPrefix` it used. When none was given it says so in a
-`note`, since the classes are then in the unprefixed vocabulary.
+The result echoes the `classPrefix` it used. When none was given and none was
+read, a `note` says why, since the classes are then in the unprefixed
+vocabulary: no stylesheet sets one, or the project's stylesheets set different
+prefixes or did not compile.
 
 The preview does not read the project's stylesheet, so it cannot tell which
 class covers which. A build can: it drops a Tailwind class that a later one on
