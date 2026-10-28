@@ -347,7 +347,7 @@ export const defaultTailwindLoader: TailwindLoader = async resolveFrom => {
         // Import the resolved file rather than the bare specifier: the bare
         // one would resolve against THIS package, which pins v3.
         const entry = (await import(
-            pathToFileURL(require.resolve('tailwindcss')).href
+            /* turbopackIgnore: true */ pathToFileURL(require.resolve('tailwindcss')).href
         )) as ImportedTailwind;
         return {
             version,
@@ -482,7 +482,9 @@ async function loadModule(
     const file = id.startsWith('.')
         ? path.resolve(base, id)
         : createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
-    const loaded = (await import(pathToFileURL(file).href)) as { default?: unknown };
+    const loaded = (await import(/* turbopackIgnore: true */ pathToFileURL(file).href)) as {
+        default?: unknown;
+    };
     return { path: file, base: path.dirname(file), module: loaded.default ?? loaded };
 }
 

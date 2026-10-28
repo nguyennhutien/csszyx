@@ -1209,13 +1209,21 @@ test('an installed app bundles the csszyx packages from their dist, as npm resol
     }
 });
 
-/** A package whose `./engine` loads two files, each with the source regions
+/** How a Rolldown build marks where each module starts: a `//#region` pair up
+ * to 1.2.14, one `// <id>` line from 1.2.15 (rolldown#11235). */
+const MODULE_MARKERS = {
+    region: (name, body) => `//#region ${name}\n${body}\n//#endregion\n`,
+    start: (name, body) => `// ${name}\n${body}\n`,
+};
+
+/** A package whose `./engine` loads two files, each with the source modules
  * a Rolldown build marks, and keeps `src/table.ts` in a file it never loads.
  * @param {boolean} leak whether the loaded chunk holds `src/table.ts`
+ * @param {keyof typeof MODULE_MARKERS} [marker] how the build marks a module
  * @returns {Record<string, string>} fixture files
  */
-function regionPackage(leak) {
-    const region = (name, body) => `//#region ${name}\n${body}\n//#endregion\n`;
+function regionPackage(leak, marker = 'region') {
+    const region = MODULE_MARKERS[marker];
     return {
         'packages/thing/package.json': JSON.stringify({
             name: 'thing',
@@ -1232,26 +1240,28 @@ function regionPackage(leak) {
     };
 }
 
-test('a node-entry budget fails when a file it loads holds a module kept out of it', () => {
-    const kept = makeFixture(regionPackage(false));
-    const leaked = makeFixture(regionPackage(true));
-    try {
-        const budget = extra => engineBudget({ excludedModules: ['src/table.ts'], ...extra });
-        assert.deepEqual(checkBudgets(budget(), kept).failures, []);
+for (const marker of Object.keys(MODULE_MARKERS)) {
+    test(`a node-entry budget fails when a file it loads holds a module kept out of it (${marker} markers)`, () => {
+        const kept = makeFixture(regionPackage(false, marker));
+        const leaked = makeFixture(regionPackage(true, marker));
+        try {
+            const budget = extra => engineBudget({ excludedModules: ['src/table.ts'], ...extra });
+            assert.deepEqual(checkBudgets(budget(), kept).failures, []);
 
-        const failures = checkBudgets(budget(), leaked).failures;
-        assert.equal(failures.length, 1);
-        assert.match(failures[0], /thing engine: loads `src\/table\.ts` \(dist\/keys\.mjs\)/);
+            const failures = checkBudgets(budget(), leaked).failures;
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /thing engine: loads `src\/table\.ts` \(dist\/keys\.mjs\)/);
 
-        // A name no source file has is a stale entry, which would pass forever.
-        const stale = checkBudgets(budget({ excludedModules: ['src/gone.ts'] }), kept).failures;
-        assert.equal(stale.length, 1);
-        assert.match(stale[0], /thing engine: `src\/gone\.ts` names no source file/);
-    } finally {
-        rmSync(kept, { recursive: true, force: true });
-        rmSync(leaked, { recursive: true, force: true });
-    }
-});
+            // A name no source file has is a stale entry, which would pass forever.
+            const stale = checkBudgets(budget({ excludedModules: ['src/gone.ts'] }), kept).failures;
+            assert.equal(stale.length, 1);
+            assert.match(stale[0], /thing engine: `src\/gone\.ts` names no source file/);
+        } finally {
+            rmSync(kept, { recursive: true, force: true });
+            rmSync(leaked, { recursive: true, force: true });
+        }
+    });
+}
 
 test('a node-entry budget whose files carry no region marker cannot read its layout', () => {
     const root = makeFixture({ ...enginePackage(), 'packages/thing/src/table.ts': '' });
@@ -1261,7 +1271,7 @@ test('a node-entry budget whose files carry no region marker cannot read its lay
             root,
         ).failures;
         assert.equal(failures.length, 1);
-        assert.match(failures[0], /thing engine: no file it loads carries a `\/\/#region` marker/);
+        assert.match(failures[0], /thing engine: no file it loads carries a module-start marker/);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

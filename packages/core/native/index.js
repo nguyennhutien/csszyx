@@ -90,7 +90,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
 
     let loaded;
     try {
-        loaded = require(packageName);
+        loaded = require(/* turbopackIgnore: true */ packageName);
     } catch (err) {
         if (isModuleNotFoundForPackage(err, packageName)) {
             throw new CsszyxNativeUnavailableError(missingArgs(packageName));
@@ -120,7 +120,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
  */
 function manifestVersion(specifier) {
     try {
-        return require(specifier).version;
+        return require(/* turbopackIgnore: true */ specifier).version;
     } catch {
         return undefined;
     }

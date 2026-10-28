@@ -35,7 +35,15 @@ if grep -Eq "tsx\.tsx|[Cc]an.?t resolve '@csszyx/runtime'|Cannot resolve '@csszy
     fail "main build hit .tsx.tsx or @csszyx/runtime resolution failure"
 fi
 [ "$code" -eq 0 ] || { tail -40 /tmp/turbo-broad.log; fail "main build exited $code"; }
-echo "✅ main build clean (exit 0, no .tsx.tsx, runtime resolved)"
+# Next 16.4 started reading the csszyx loader's own code, and every dynamic
+# `require`/`import` in it printed a `Can't resolve <dynamic>` warning into the
+# user's build while the build still passed. The log goes to a file, so only
+# this check makes such a warning visible here.
+if grep -Eq "Turbopack build encountered [0-9]+ warnings?" /tmp/turbo-broad.log; then
+    sed -n '/Turbopack build encountered/,$p' /tmp/turbo-broad.log | head -60
+    fail "main build printed Turbopack warnings"
+fi
+echo "✅ main build clean (exit 0, no warnings, no .tsx.tsx, runtime resolved)"
 
 # Guard is informational only: the no-`as` build above is the real regression
 # guard. This re-adds `as` (equal to the rule key) and reports whether Turbopack

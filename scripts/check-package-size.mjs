@@ -681,7 +681,7 @@ export const SIZE_BUDGETS = [
     // neither entry does. Grouped into the key tables' chunk, which both
     // load, it cost `./engine` +166 and `./internal` +165 gzip bytes on
     // 2026-10-21, under the ~300 headroom of each. `excludedModules` reads the
-    // `//#region` markers of the files each entry loads, so the drift fails
+    // module-start markers of the files each entry loads, so the drift fails
     // at any size.
     //
     // Raised 2026-10-21 from 25,950 / 29,000, measured 26,936 / 29,974
@@ -1044,8 +1044,13 @@ function installedAppBuild(budget, rootDir) {
     };
 }
 
-/** The modules a build marks in its output, one `//#region <source>` line
- * each (Rolldown, and so tsdown, writes them), by the file that holds them.
+/** Where Rolldown, and so tsdown, marks a module's start: a `//#region <id>`
+ * line up to 1.2.14, a bare `// <id>` line from 1.2.15 (rolldown#11235). The
+ * bare form is told from an ordinary comment by being one path with a file
+ * extension and nothing else on the line. */
+const MODULE_START = /^\/\/(?:#region | )([\w@.-]+(?:\/[\w@.-]+)*\.[A-Za-z]+)$/gm;
+
+/** The modules a build marks in its output, by the file that holds them.
  *
  * @param {string[]} files absolute file paths
  * @returns {Map<string, string[]>} file → the sources it holds
@@ -1054,7 +1059,7 @@ function regionsOf(files) {
     return new Map(
         files.map(file => [
             file,
-            [...readFileSync(file, 'utf8').matchAll(/^\/\/#region (\S+)$/gm)].map(m => m[1]),
+            [...readFileSync(file, 'utf8').matchAll(MODULE_START)].map(m => m[1]),
         ]),
     );
 }
@@ -1075,7 +1080,7 @@ export function excludedModuleProblems(files, excluded, packageDir) {
     const problems = [];
     if (![...regions.values()].some(sources => sources.length > 0)) {
         problems.push(
-            'no file it loads carries a `//#region` marker, so which modules it holds cannot be read',
+            'no file it loads carries a module-start marker (`//#region <id>` or `// <id>`), so which modules it holds cannot be read',
         );
     }
     for (const source of excluded) {
