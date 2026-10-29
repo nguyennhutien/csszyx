@@ -167,6 +167,11 @@ Optional parameters:
 - `customMap` — pass a parsed `.csszyx-todo.json` map to resolve custom classes
 - `injectTodos` — insert `{/* @sz-todo: ... */}` comments above unresolved elements
 
+The snippet is read as `csszyx migrate` reads a file of the project the server
+runs in: with the prefix its stylesheets set, and with its Tailwind answering
+for the classes that depend on the project, as for `csszyx_reverse`. A `note`
+says when it could not.
+
 ### `csszyx_theme`
 
 Parse `@theme` CSS blocks and categorize custom design tokens (colors, spacings,
