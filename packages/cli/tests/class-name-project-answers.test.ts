@@ -191,6 +191,71 @@ describe('projectPrefix', () => {
         expect(open).toHaveBeenCalledTimes(2);
     });
 
+    // The prefix can live in a stylesheet the entry imports; editing that one
+    // changes no entry, yet the compile reads it.
+    it('compiles again when a stylesheet the entry imports changes', async () => {
+        const root = tailwindProject({
+            'app.css': '@import "tailwindcss";\n@import "./theme.css";\n',
+            'theme.css': '@theme prefix(tw) { --color-brand: red; }\n',
+        });
+        expect((await projectPrefix(root)).prefix).toBe('tw');
+        const theme = path.join(root, 'theme.css');
+        writeFileSync(theme, '@theme prefix(ui) { --color-brand: red; }\n');
+        const later = new Date(Date.now() + 5_000);
+        utimesSync(theme, later, later);
+        expect(await projectPrefix(root)).toEqual({ prefix: 'ui', unread: null });
+    });
+
+    // A save that lands while the stylesheets compile: the answer came from
+    // the text before it, so the next call must not take it as current.
+    it('keeps no answer read from a stylesheet edited during the compile', async () => {
+        const root = tailwindProject({
+            'app.css': '@import "tailwindcss";\n@import "./theme.css";\n',
+            'theme.css': '@theme prefix(tw) { --color-brand: red; }\n',
+        });
+        const theme = path.join(root, 'theme.css');
+        const editedMidway = async (cwd: string) => {
+            const opened = await openOracles(cwd);
+            writeFileSync(theme, '@theme prefix(ui) { --color-brand: red; }\n');
+            return opened;
+        };
+        expect((await projectPrefix(root, editedMidway)).prefix).toBe('tw');
+        expect(await projectPrefix(root)).toEqual({ prefix: 'ui', unread: null });
+    });
+
+    it('compiles again when a stylesheet the entry imports is deleted', async () => {
+        const root = tailwindProject({
+            'app.css': '@import "tailwindcss";\n@import "./theme.css";\n',
+            'theme.css': '@theme prefix(tw) { --color-brand: red; }\n',
+        });
+        const open = vi.fn(openOracles);
+        expect((await projectPrefix(root, open)).prefix).toBe('tw');
+        rmSync(path.join(root, 'theme.css'));
+        await projectPrefix(root, open);
+        expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    // Node keeps a module it imported for the life of the process, so the
+    // rule a config module sets is read again where the edit can be seen.
+    it('reads the disagreement rule again when a module the config imports changes', async () => {
+        const root = tailwindProject({
+            'app.css': '@import "tailwindcss" prefix(tw);\n',
+            'admin/admin.css': '@import "tailwindcss" prefix(ad);\n',
+            'csszyx.config.mjs':
+                'import rules from "./rules.mjs";\nexport default { diagnostics: { rules } };\n',
+            'rules.mjs': "export default { 'prefix-disagreement': 'off' };\n",
+        });
+        expect((await projectPrefix(root)).prefix).toBe('tw');
+        const rules = path.join(root, 'rules.mjs');
+        writeFileSync(rules, "export default { 'prefix-disagreement': 'error' };\n");
+        const later = new Date(Date.now() + 5_000);
+        utimesSync(rules, later, later);
+        expect(await projectPrefix(root)).toEqual({
+            prefix: null,
+            unread: expect.stringContaining('different prefixes'),
+        });
+    });
+
     // Fixing an imported partial, or installing Tailwind, changes no entry.
     it('keeps nothing from a stylesheet that did not compile', async () => {
         const root = tailwindProject({
