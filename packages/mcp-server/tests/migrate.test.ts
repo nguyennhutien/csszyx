@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { handleMigrate } from '../src/tools/migrate';
+import { project, removeProjects } from './helpers/project';
 
 describe('csszyx_migrate tool', () => {
     it('should transform JSX snippet from className to sz prop', async () => {
         const code = '<div className="p-4 bg-red-500" />';
-        const result = handleMigrate({ code });
+        const result = await handleMigrate({ code });
         const data = JSON.parse(result.content[0].text);
 
         expect(data.code).toContain('sz={{');
@@ -17,7 +18,7 @@ describe('csszyx_migrate tool', () => {
 
     it('should handle complex snippets with clsx', async () => {
         const code = '<div className={clsx("p-4", condition && "bg-red-500")} />';
-        const result = handleMigrate({ code });
+        const result = await handleMigrate({ code });
         const data = JSON.parse(result.content[0].text);
 
         expect(data.code).toContain("sz={[{ p: 4 }, condition && { bg: 'red-500' }]}");
@@ -26,7 +27,7 @@ describe('csszyx_migrate tool', () => {
 
     it('should apply customMap to resolve custom classes', async () => {
         const code = '<div className="p-4 btn" />';
-        const result = handleMigrate({
+        const result = await handleMigrate({
             code,
             customMap: { btn: { px: 4, py: 2, rounded: 'md', bg: 'blue-500' } },
         });
@@ -39,7 +40,7 @@ describe('csszyx_migrate tool', () => {
 
     it('should report unrecognized classes when customMap entry is sz:todo', async () => {
         const code = '<div className="p-4 btn" />';
-        const result = handleMigrate({
+        const result = await handleMigrate({
             code,
             customMap: { btn: 'sz:todo' },
         });
@@ -50,7 +51,7 @@ describe('csszyx_migrate tool', () => {
 
     it('should inject @sz-todo comments when injectTodos is true', async () => {
         const code = '<div className="p-4 unknown-class" />';
-        const result = handleMigrate({ code, injectTodos: true });
+        const result = await handleMigrate({ code, injectTodos: true });
         const data = JSON.parse(result.content[0].text);
 
         expect(data.code).toContain('@sz-todo');
@@ -59,7 +60,7 @@ describe('csszyx_migrate tool', () => {
 
     it('should surface a warning when a clsx() call cannot be migrated (spread argument)', async () => {
         const code = '<div className={clsx(...classes)} />';
-        const result = handleMigrate({ code });
+        const result = await handleMigrate({ code });
         const data = JSON.parse(result.content[0].text);
 
         expect(data.warnings).toBeDefined();
@@ -73,10 +74,50 @@ describe('csszyx_migrate tool', () => {
             '  return <div className={clsx("p-4", isActive && "bg-blue-500")} />;',
             '}',
         ].join('\n');
-        const result = handleMigrate({ code });
+        const result = await handleMigrate({ code });
         const data = JSON.parse(result.content[0].text);
 
         expect(data.changed).toBe(true);
         expect(data.potentiallyUnusedImports).toContain('clsx');
+    });
+});
+
+describe('csszyx_migrate reads the project it runs in, as `reverse` does', () => {
+    afterEach(() => {
+        removeProjects();
+    });
+
+    it("reads the project's prefix off each class", async () => {
+        const root = project({ 'app.css': '@import "tailwindcss" prefix(tw);\n' });
+        const result = await handleMigrate(
+            { code: '<div className="tw:p-4 p-2" />' },
+            { cwd: root },
+        );
+        const data = JSON.parse(result.content[0].text);
+        expect(data.code).toContain('sz={{ p: 4 }}');
+        expect(data.code).toContain('className="p-2"');
+        expect(data.note).toBeUndefined();
+    });
+
+    it("takes the project's answer over a table's", async () => {
+        const root = project({
+            'app.css': '@import "tailwindcss";\n@theme { --spacing-1\\/2: 0.5rem; }\n',
+        });
+        const result = await handleMigrate(
+            { code: '<div className="p-4 -m-1/2" />' },
+            { cwd: root },
+        );
+        expect(JSON.parse(result.content[0].text).code).toContain("m: '-1/2'");
+    });
+
+    it('says when the tables decided because no Tailwind v4 could be asked', async () => {
+        const root = project({}, { tailwind: false });
+        const result = await handleMigrate(
+            { code: '<div className="p-4 -m-1/2" />' },
+            { cwd: root },
+        );
+        const data = JSON.parse(result.content[0].text);
+        expect(data.stats.unrecognized).toEqual(['-m-1/2']);
+        expect(data.note).toContain("csszyx's own tables decided `-m-1/2`");
     });
 });

@@ -7,11 +7,23 @@
  * this tool says into code, so an sz object that compiles to different classes
  * than the ones asked about is a wrong answer delivered with confidence — and
  * the compiler is already here to check. `roundTrip.ok` is that check.
+ *
+ * Where one of migrate's tables would decide a class (a sign on a keyword, a
+ * fraction on a key), the project's own Tailwind answers instead, as
+ * `csszyx migrate` asks it, and the classes are read with the prefix its
+ * stylesheets set. Only that prefix is kept between calls, keyed by each
+ * stylesheet's change time; the stylesheets compile at most once a call, and
+ * only when the prefix has changed or a table decided something: measured
+ * 2026-10-28, a compile costs 71–168 ms the first time and 6–89 ms after,
+ * with 14–61 MB of heap, so keeping the compiled design system would hold
+ * that memory for the rare call that needs it.
  */
 
-import { classNameToSzObject } from '@csszyx/cli';
+import { classNameToSzObject, type ProjectAnswers, projectAnswers } from '@csszyx/cli';
 import { sortStrings, transform } from '@csszyx/compiler';
 import { z } from 'zod';
+
+import { projectNote } from './project-note.js';
 
 export const reverseSchema = z.object({
     classes: z
@@ -43,11 +55,13 @@ export interface RoundTrip {
  *
  * @param szObject - The parser's answer.
  * @param recognized - Input classes the parser did recognize.
+ * @param prefix - The project's Tailwind prefix the answer compiles with, or null.
  * @returns Whether the answer compiles back to its input, and what it emitted.
  */
 export function roundTrip(
     szObject: Record<string, unknown>,
     recognized: readonly string[],
+    prefix: string | null = null,
 ): RoundTrip {
     // The compiler reports value-level problems through console.warn; they
     // are not this tool's output, and a warning here would mean the parser
@@ -56,7 +70,9 @@ export function roundTrip(
     console.warn = () => {};
     let emitted: string;
     try {
-        emitted = transform(szObject as Parameters<typeof transform>[0]).className;
+        emitted = transform(szObject as Parameters<typeof transform>[0], {
+            prefix: prefix === null ? undefined : `${prefix}:`,
+        }).className;
     } finally {
         console.warn = originalWarn;
     }
@@ -67,16 +83,48 @@ export function roundTrip(
 }
 
 /**
+ * Convert a class string, asking the project's Tailwind about what a migrate
+ * table decided, and converting again when an answer differs.
+ *
+ * @param classes - The class string.
+ * @param prefix - The project's Tailwind prefix, or null.
+ * @param project - The project's Tailwind.
+ * @returns The conversion the project's answers give, and the note it needs.
+ */
+async function convert(
+    classes: string,
+    prefix: string | null,
+    project: ProjectAnswers,
+): Promise<ReturnType<typeof classNameToSzObject> & { skipped: string | null }> {
+    const first = classNameToSzObject(classes, { prefix });
+    const { served, skipped } = await project.ask(first.tableVerdicts);
+    if (served === null) return { ...first, skipped };
+    return { ...classNameToSzObject(classes, { served, prefix }), skipped };
+}
+
+/**
  * Convert a Tailwind class string into a structured sz object.
  * @param input - The validated input object.
+ * @param context - Where the project is; the server's working directory by default.
+ * @param context.cwd - The project root.
  * @returns MCP tool response with the sz object, any unrecognized classes, and
  *   whether the object compiles back to the classes it was made from.
  */
-export function handleReverse(input: ReverseInput): {
+export async function handleReverse(
+    input: ReverseInput,
+    context: { cwd?: string } = {},
+): Promise<{
     content: Array<{ type: 'text'; text: string }>;
-} {
+}> {
     const classes = input.classes.trim();
-    const { szObject, unrecognized } = classNameToSzObject(classes);
+    const cwd = context.cwd ?? process.cwd();
+    const project = projectAnswers(cwd);
+    const { prefix, unread } = await project.prefix();
+    const { szObject, unrecognized, tableVerdicts, skipped } = await convert(
+        classes,
+        prefix,
+        project,
+    );
     const unrecognizedSet = new Set(unrecognized);
     const recognized = classes.split(/\s+/).filter(cls => cls && !unrecognizedSet.has(cls));
 
@@ -90,7 +138,8 @@ export function handleReverse(input: ReverseInput): {
                         unrecognized: unrecognized.length > 0 ? unrecognized : undefined,
                         totalRecognized: Object.keys(szObject).length,
                         totalUnrecognized: unrecognized.length,
-                        roundTrip: roundTrip(szObject, recognized),
+                        roundTrip: roundTrip(szObject, recognized, prefix),
+                        note: projectNote(unread, skipped, tableVerdicts),
                     },
                     null,
                     2,

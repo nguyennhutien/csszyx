@@ -47,10 +47,15 @@ describe('@csszyx/core/native migrate entry points', () => {
         });
         // The class-level entry points answer as JSON because an sz value is
         // recursive and order-sensitive.
-        expect(JSON.parse(migrateClassName('p-4', '{"btn":{}}'))).toEqual({
+        const options = {
+            customMapJson: '{"btn":{}}',
+            servedClasses: ['-z-auto'],
+            prefix: 'tw',
+        };
+        expect(JSON.parse(migrateClassName('p-4', options))).toEqual({
             called: 'migrateClassName',
             className: 'p-4',
-            customMapJson: '{"btn":{}}',
+            options,
         });
         expect(JSON.parse(migrateParseClass('p-4'))).toEqual({
             called: 'migrateParseClass',

@@ -1680,8 +1680,8 @@ classNameToSzObject("p-4 card", { customMap });
 
 `tsc` flags the old call when the map is an object literal. A map typed
 `CsszyxTodoMap` or read from JSON passes the type check, so the call checks
-too: an options argument with any key besides `customMap` throws, and names
-the keys:
+too: an options argument with any key besides `customMap`, `served` and
+`prefix` throws, and names the keys:
 
 ```text
 [csszyx] options-object-required:

@@ -7,7 +7,7 @@
  * protocol stream for every npx consumer.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -33,6 +33,23 @@ describe('library entry (dist/index.mjs)', () => {
             stdio: ['ignore', 'pipe', 'pipe'],
         });
         expect(stdout).toBe('');
+    });
+
+    // The MCP tools load the check pass on use, after the import; a chunk that
+    // shares a helper with the bin can import it and run `cli.parse()` then.
+    it('reaches no chunk that loads the bin, however late it is loaded', () => {
+        const reached = new Set<string>();
+        const pending = ['index.mjs'];
+        while (pending.length > 0) {
+            const chunk = pending.pop() as string;
+            if (reached.has(chunk)) continue;
+            reached.add(chunk);
+            const code = readFileSync(path.join(pkgRoot, 'dist', chunk), 'utf8');
+            for (const [, imported] of code.matchAll(/(?:from|import\()\s*["']\.\/([^"']+)["']/g)) {
+                pending.push(imported as string);
+            }
+        }
+        expect([...reached]).not.toContain('bin.mjs');
     });
 
     it('exposes the programmatic surface used by @csszyx/mcp-server', async () => {

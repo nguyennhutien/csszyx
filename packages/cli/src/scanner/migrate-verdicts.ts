@@ -49,7 +49,7 @@ export interface MigrateVerdicts {
  * @param cwd - Project root.
  * @returns The compiled design systems.
  */
-const openCheckOracles: OpenProjectOracles = async cwd => {
+export const openCheckOracles: OpenProjectOracles = async cwd => {
     const { openOracles } = await import('../commands/check.js');
     return openOracles(cwd);
 };

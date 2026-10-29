@@ -60,6 +60,10 @@ pub struct HtmlTransformOptions {
     /// from the options JSON.
     #[serde(skip)]
     pub served: Option<ServedAnswers>,
+    /// The project's Tailwind prefix, read off the front of each class.
+    /// Handed in by the caller, as `served` is.
+    #[serde(skip)]
+    pub prefix: Option<String>,
 }
 
 impl Default for HtmlTransformOptions {
@@ -71,6 +75,7 @@ impl Default for HtmlTransformOptions {
             cdn_url: None,
             local_path: None,
             served: None,
+            prefix: None,
         }
     }
 }
@@ -105,6 +110,7 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
         lookup: Lookup {
             custom_map: None,
             judge: Judge::new(options.served.as_ref(), Some(&asked)),
+            prefix: options.prefix.as_deref(),
         },
         braces: options.braces,
         transformed: 0,

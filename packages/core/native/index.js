@@ -241,8 +241,8 @@ export function migrateHtml(source, options) {
     return laterExport('migrateHtml')(source, options);
 }
 
-export function migrateClassName(className, customMapJson) {
-    return laterExport('migrateClassName')(className, customMapJson);
+export function migrateClassName(className, options) {
+    return laterExport('migrateClassName')(className, options);
 }
 
 export function migrateParseClass(className) {

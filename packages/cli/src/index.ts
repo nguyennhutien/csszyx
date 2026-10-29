@@ -34,6 +34,8 @@ export {
     type MigrateSourceOptions,
     migrateSource,
 } from './migrate.js';
+export type { ProjectAnswers, ProjectPrefix } from './scanner/project-answers.js';
+export { projectAnswers } from './scanner/project-answers.js';
 export type { ResolvedTheme, ScanResult } from './scanner/tailwind-scanner.js';
 export {
     extractScreenKeys,

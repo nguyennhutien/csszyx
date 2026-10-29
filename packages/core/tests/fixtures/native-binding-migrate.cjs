@@ -5,8 +5,8 @@ exports.transformBatch = files =>
     files.map(() => ({ code: '', classes: [], spans: '1,0,0,0,0,' }));
 exports.migrateBatch = (files, options) => ({ called: 'migrateBatch', files, options });
 exports.migrateHtml = (source, options) => ({ called: 'migrateHtml', source, options });
-exports.migrateClassName = (className, customMapJson) =>
-    JSON.stringify({ called: 'migrateClassName', className, customMapJson });
+exports.migrateClassName = (className, options) =>
+    JSON.stringify({ called: 'migrateClassName', className, options });
 exports.migrateParseClass = className =>
     JSON.stringify({ called: 'migrateParseClass', className });
 exports.scanModuleLinks = files => files.map(file => ({ called: 'scanModuleLinks', filename: file.filename }));

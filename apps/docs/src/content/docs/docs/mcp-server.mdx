@@ -104,6 +104,20 @@ Input:  "p-4 bg-blue-500 hover:text-white"
 Output: { p: 4, bg: 'blue-500', hover: { color: 'white' } }
 ```
 
+A few classes depend on the project: a sign on a keyword (`-z-auto`) or a
+fraction on a spacing key (`-m-1/2`) is served only when the project's
+Tailwind says so, for example through a `--spacing-1\/2` theme step. For
+those, the tool asks the project's Tailwind, from the directory the server
+runs in, as `csszyx migrate` does; with no Tailwind v4 there, the class stays
+in the `unrecognized` list. A prefix the project's stylesheet sets
+(`prefix(tw)`) is read off each class the same way, and the round trip compiles
+the answer back with it.
+
+When the project cannot answer in full, a `note` says so: its stylesheets set
+different prefixes, none compiled, or Tailwind could not be asked. A server
+started in a directory without a `package.json` reads no stylesheet, so start
+it from the project root.
+
 ### `csszyx_validate`
 
 Validate a sz object before using it. Reports unknown props, CSS property name
@@ -153,6 +167,11 @@ Optional parameters:
 - `customMap` — pass a parsed `.csszyx-todo.json` map to resolve custom classes
 - `injectTodos` — insert `{/* @sz-todo: ... */}` comments above unresolved elements
 
+The snippet is read as `csszyx migrate` reads a file of the project the server
+runs in: with the prefix its stylesheets set, and with its Tailwind answering
+for the classes that depend on the project, as for `csszyx_reverse`. A `note`
+says when it could not.
+
 ### `csszyx_theme`
 
 Parse `@theme` CSS blocks and categorize custom design tokens (colors, spacings,
@@ -176,16 +195,20 @@ that styles nothing.
 Pass `filename` when the parser matters — the extension selects it, so JSX needs
 a `.tsx` name. It defaults to `preview.tsx`.
 
-Pass `classPrefix` when the project's stylesheet sets one. With
+The classes carry the prefix the project's stylesheet sets. With
 `@import "tailwindcss" prefix(tw)` the project serves `tw:p-4` and nothing for
-`p-4`, so a preview without the prefix shows classes that style nothing there:
+`p-4`, so the tool reads the prefix from the stylesheets of the project the
+server runs in, and `classPrefixFrom` says it did. Pass `classPrefix` when the
+project is elsewhere, or to compile under another prefix:
 
 ```json
 { "source": "export const A = () => <div sz={{ p: 4 }} />;", "classPrefix": "tw" }
 ```
 
-The result echoes the `classPrefix` it used. When none was given it says so in a
-`note`, since the classes are then in the unprefixed vocabulary.
+The result echoes the `classPrefix` it used. When none was given and none was
+read, a `note` says why, since the classes are then in the unprefixed
+vocabulary: no stylesheet sets one, or the project's stylesheets set different
+prefixes or did not compile.
 
 The preview does not read the project's stylesheet, so it cannot tell which
 class covers which. A build can: it drops a Tailwind class that a later one on
