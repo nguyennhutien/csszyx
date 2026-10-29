@@ -7079,17 +7079,30 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param code Transformed source module.
      * @param output Pre-transform helper usage.
+     * @param id The module id, whose path settles the format a registration
+     *        is written in.
      * @returns Rewritten source when imports were added, otherwise null.
      */
-    function injectRuntimeHelpers(code: string, output: PreTransformOutput): string | null {
+    function injectRuntimeHelpers(
+        code: string,
+        output: PreTransformOutput,
+        id: string,
+    ): string | null {
         const injected = injectRuntimeHelperImports(code, output);
         const current = injected ?? code;
         // A module no stylesheet was read for lowers nothing through the engine,
-        // so it has no prefix to register.
+        // so it has no prefix to register. Vite serves and builds every source
+        // as an ES module, whatever its extension or package type; the id still
+        // names the dialect the engine parses, such as TypeScript.
         const registered = registerRuntimeClassPrefix(
             current,
             requiredRuntimeHelpers(output),
             styleModel === undefined ? null : prefixOf(styleModel),
+            {
+                file: id,
+                format: activeFramework === 'vite' ? 'esm' : undefined,
+                parser: options.build?.parser,
+            },
         );
         return registered === current ? injected : registered;
     }
@@ -7558,7 +7571,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Sequential, and order matters: each injector reads the source
                 // the previous one produced.
                 applyInjection(output, injectLayoutHydration(output.code, id));
-                applyInjection(output, injectRuntimeHelpers(output.code, output));
+                applyInjection(output, injectRuntimeHelpers(output.code, output, id));
                 applyInjection(output, injectThemeGroups(code, output.code, id, output.usesSzcn));
                 applyInjection(output, injectMangleRuntime(output.code, id));
                 applyInjection(output, injectUnservedRuntime(output.code, id));

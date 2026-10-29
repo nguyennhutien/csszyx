@@ -67,6 +67,40 @@ export function importsRuntimeHelper(code: string, helper: string): boolean {
 }
 
 /**
+ * The entries an author reaches the runtime's calls through, each of which
+ * exports `szr`; `/merge` and `/lite` only join strings.
+ */
+const AUTHOR_RUNTIME_ENTRIES: ReadonlySet<string> = new Set([
+    '@csszyx/runtime',
+    '@csszyx/runtime/core',
+    'csszyx',
+    'csszyx/core',
+    'csszyx/browser',
+    'csszyx/browser.dev',
+]);
+
+/**
+ * Whether a module loads one of `names` from an entry an author writes the
+ * runtime's calls against, as the engine's parse lists what it loads: a
+ * load with no name (a namespace, an `export *`, an `import()` or a
+ * `require()`) reaches every one.
+ *
+ * @param loads - What the module loads, from `scanModuleLinks`.
+ * @param names - Exported names to look for.
+ * @returns True when one of them is reached.
+ */
+export function reachesAuthorRuntimeCall(
+    loads: ReadonlyArray<{ specifier: string; name?: string | null }>,
+    names: ReadonlySet<string>,
+): boolean {
+    return loads.some(
+        load =>
+            AUTHOR_RUNTIME_ENTRIES.has(load.specifier) &&
+            (load.name == null || names.has(load.name)),
+    );
+}
+
+/**
  * Import-only clause (no re-export), capturing the prefix-plus-body so the
  * append site can reconstruct byte-identically. `[^{}]*` here is the same safe
  * single-run shape; import-only because you cannot append named imports onto an

@@ -488,10 +488,16 @@ const DEFAULT_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'] as con
  * @param code - The compiled module.
  * @param usage - Which runtime helpers it calls.
  * @param classPrefix - The Tailwind prefix to register for runtime lowering, or null.
+ * @param file - The module's path, which settles the format a registration is written in.
  * @returns The module with those helpers imported.
  */
-function finish(code: string, usage: NextRuntimeImportUsage, classPrefix: string | null): string {
-    return injectNextRuntimeImports(code, usage, classPrefix).code;
+function finish(
+    code: string,
+    usage: NextRuntimeImportUsage,
+    classPrefix: string | null,
+    file: string,
+): string {
+    return injectNextRuntimeImports(code, usage, classPrefix, { file }).code;
 }
 
 /**
@@ -646,8 +652,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                 return {
                     code: merges(
                         merged === null
-                            ? finish(built.code, built, prefix)
-                            : finish(merged.code, merged, prefix),
+                            ? finish(built.code, built, prefix, sourcePath)
+                            : finish(merged.code, merged, prefix, sourcePath),
                     ),
                 };
             }
@@ -657,8 +663,17 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
             });
             const result = withTable(first) ?? first;
             report(sourcePath, sourceText, result);
+            // A module the compiler left alone can still lower an object
+            // through its own `szr` import, and so needs the prefix too.
             return {
-                code: merges(result.transformed ? finish(result.code, result, prefix) : sourceText),
+                code: merges(
+                    finish(
+                        result.transformed ? result.code : sourceText,
+                        result,
+                        prefix,
+                        sourcePath,
+                    ),
+                ),
             };
         },
         getCacheKey(sourceText, sourcePath, cacheKeyOptions) {
