@@ -140,6 +140,10 @@ Output: warnings: [{ code: "off-scale-value",
                      url: "https://csszyx.com/e/off-scale-value" }]
 ```
 
+The checks run on the csszyx engine. When it cannot run, for example a native
+engine from another release (`engine-version-skew`), the call fails with that
+error rather than reporting the object valid.
+
 ### `csszyx_lookup`
 
 Look up how a CSS property or keyword maps to an sz key. Accepts CSS property
