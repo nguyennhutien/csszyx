@@ -3177,7 +3177,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * What sources select on outside stylesheets: arbitrary variants and
      * `<style>` blocks. `styleModel` always carries their union.
      */
-    const sourceHooks = new SourceHookRegistry(() => loadContentScanner(state.rootDir));
+    const sourceHooks = new SourceHookRegistry(
+        () => loadContentScanner(state.rootDir),
+        () => activeParser().parser,
+    );
     /** The registry key of Tailwind's own scan; no file path starts with a NUL. */
     const TAILWIND_SCAN_HOOKS = '\0tailwind-scan';
     /**
@@ -7101,7 +7104,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             {
                 file: id,
                 format: activeFramework === 'vite' ? 'esm' : undefined,
-                parser: options.build?.parser,
+                parser: activeParser().parser,
             },
         );
         return registered === current ? injected : registered;

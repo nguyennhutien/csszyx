@@ -21,7 +21,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { EngineMergeTable } from '@csszyx/compiler';
-import { styleBlockHooks } from '@csszyx/tailwind-oracle';
 import { type DeadClassFinding, type DeadClassSite, findDeadSzClasses } from './dead-class.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
@@ -34,6 +33,7 @@ import {
 } from './merge-signature.js';
 import type { NextClassOrigin } from './next-safelist-state.js';
 import type { ProjectStyleModel } from './project-style-model.js';
+import { readStyleHooks } from './source-hooks.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import { createUnservedRuntimeModule } from './virtual-modules.js';
@@ -385,7 +385,7 @@ function settle(input: MergeRegistrationInput): {
     const hooks = model.variantHooks(candidates);
     for (const file of input.sources ?? []) {
         const text = readText(file);
-        if (text !== null) styleBlockHooks(text, hooks);
+        if (text !== null) readStyleHooks(text, path.extname(file).slice(1), hooks);
     }
     const hooked = model.withSourceHooks(hooks);
     const table = createMergeSignatureTable(candidates, candidate =>
