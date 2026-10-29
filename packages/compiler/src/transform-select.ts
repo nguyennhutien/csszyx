@@ -13,17 +13,16 @@
  */
 
 import { engineCallOptions } from './engine-call-options.js';
+import { chooseEngine } from './engine-choice.js';
 import type { UnrenderedTransformResult } from './engine-diagnostics.js';
 import type { SourceTransformResult, TransformSourceOptions } from './transform-core.js';
-import {
-    isRustTransformAvailable,
-    transformRust,
-    transformRustUnrendered,
-} from './transform-rust.js';
+import { transformRust, transformRustUnrendered } from './transform-rust.js';
 import { transformWasm, transformWasmUnrendered } from './transform-wasm.js';
 
 /**
- * Transform one module through whichever engine artifact this host can run.
+ * Transform one module on the artifact `options.parser` (or `CSSZYX_PARSER`)
+ * names, else on the native addon, falling back to wasm when it is not
+ * installed.
  *
  * @param source Source module contents.
  * @param options Its filename for diagnostics, and the compiler options.
@@ -38,7 +37,7 @@ export function transformSource(
     ...rest: never[]
 ): SourceTransformResult {
     engineCallOptions('transformSource', options, rest);
-    return isRustTransformAvailable()
+    return chooseEngine(options.parser) === 'rust'
         ? transformRust(source, options)
         : transformWasm(source, options);
 }
@@ -61,7 +60,7 @@ export function transformSourceUnrendered(
     ...rest: never[]
 ): UnrenderedTransformResult {
     engineCallOptions('transformSourceUnrendered', options, rest);
-    return isRustTransformAvailable()
+    return chooseEngine(options.parser) === 'rust'
         ? transformRustUnrendered(source, options)
         : transformWasmUnrendered(source, options);
 }
