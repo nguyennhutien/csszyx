@@ -1,21 +1,28 @@
-//! What a module links to: the stylesheets it imports, the names it
-//! re-exports from other modules, and, when asked, the values it exports for
-//! the cross-module registry. One parse answers all three.
+//! What a module links to: its stylesheets and the names it re-exports.
+//!
+//! When asked, also the values it exports for the cross-module registry, the
+//! module format and every module it loads, and the CSS its `<style>`
+//! elements hold. One parse answers them all.
 
 use std::collections::{HashMap, HashSet};
 
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{Expression, ImportExpression, Program};
+use oxc_ast::ast::{
+    Argument, CallExpression, Expression, ImportExpression, ImportOrExportKind, JSXElement,
+    JSXElementName, TSImportEqualsDeclaration, TSModuleReference, TemplateLiteral,
+};
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
-use oxc_span::{SourceType, Span};
+use oxc_span::Span;
 use oxc_syntax::identifier::is_identifier_name;
 use oxc_syntax::module_record::{
     ExportEntry, ExportExportName, ExportImportName, ImportImportName, ModuleRecord,
 };
 use rayon::prelude::*;
 
+use super::parser::source_type_for_path;
 use super::registry_entries::{registry_entries, RegistryEntry};
+use super::source_walk::SourceWalk;
 use super::TransformFile;
 
 /// One name a module exports without declaring it.
@@ -40,6 +47,22 @@ pub struct ModuleLinks {
     pub forwards: Vec<ModuleForward>,
     /// Exported values for the cross-module registry; empty unless asked for.
     pub registry_entries: Vec<RegistryEntry>,
+    /// Whether the source is an ES module: an `import` or `export` statement,
+    /// or `import.meta`. False unless module facts were asked for.
+    pub module_syntax: bool,
+    /// Every module the source loads: its imports and re-exports, then each
+    /// `import()`, `require()` or TypeScript `import … = require()` with a
+    /// literal specifier, in source order; type-only ones are left out. Empty
+    /// unless module facts were asked for.
+    pub loads: Vec<ModuleLoad>,
+    /// The text of every string, template part and JSX text inside a
+    /// `<style>` element, escapes decoded; empty unless asked for.
+    pub style_css: Vec<String>,
+    /// Every other string holding `<style`, as markup a script builds.
+    pub style_markup: Vec<String>,
+    /// Whether the parse this scan ran stopped on a syntax error, so the facts
+    /// above come from a partial tree; false when the scan did not parse.
+    pub parse_failed: bool,
 }
 
 /// Which optional answers a scan computes.
@@ -52,6 +75,23 @@ pub struct ModuleLinks {
 pub struct ModuleLinksQuery {
     /// Read the exported values the cross-module registry carries.
     pub registry_entries: bool,
+    /// Read the module format and every module the source loads.
+    pub module_facts: bool,
+    /// Read the CSS `<style>` elements hold, and the strings that build one.
+    pub style_texts: bool,
+}
+
+/// One module a source loads, and one name it reads from it.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleLoad {
+    /// The specifier, exactly as the source spelled it.
+    pub specifier: String,
+    /// The name read, or none when every name is reachable: a namespace, an
+    /// `export *`, an `import()` or a `require()`. Left out of the JSON when
+    /// none, as the napi object leaves it out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// The provider name standing for a module's default slot.
@@ -84,18 +124,34 @@ fn links_of(file: &TransformFile, query: ModuleLinksQuery) -> ModuleLinks {
     let wants_css = may_request_stylesheet(source);
     let wants_forwards = has_export_clause(source);
     let wants_entries = query.registry_entries && source.contains("export");
-    if !wants_css && !wants_forwards && !wants_entries {
+    let wants_facts = query.module_facts;
+    let wants_styles = query.style_texts && contains_ignoring_case(source, "<style");
+    if !wants_css && !wants_forwards && !wants_entries && !wants_facts && !wants_styles {
         return ModuleLinks::default();
     }
     // The arena lives for this call only, so every file's parse is freed
-    // before the next one starts.
+    // before the next one starts. The dialect is the one the transform reads
+    // the file in: JSX in a plain `.js` file parses.
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(&file.filename).unwrap_or_else(|_| SourceType::tsx());
-    let parsed = Parser::new(&allocator, source, source_type).parse();
+    let parsed = Parser::new(&allocator, source, source_type_for_path(&file.filename)).parse();
     let record = &parsed.module_record;
+    let mut walk = SourceWalk {
+        usages: None,
+        links: Some(LinkScan {
+            wants_loads: wants_facts,
+            wants_styles,
+            ..LinkScan::default()
+        }),
+    };
+    if wants_css || wants_facts || wants_styles {
+        walk.visit_program(&parsed.program);
+    }
+    let mut walk = walk.links.unwrap_or_default();
+    let dynamic = std::mem::take(&mut walk.stylesheet_imports);
     ModuleLinks {
+        parse_failed: parsed.diagnostics.has_errors(),
         css_imports: if wants_css {
-            css_imports(record, &parsed.program)
+            css_imports(record, dynamic)
         } else {
             Vec::new()
         },
@@ -109,6 +165,178 @@ fn links_of(file: &TransformFile, query: ModuleLinksQuery) -> ModuleLinks {
         } else {
             Vec::new()
         },
+        ..script_facts(record, walk, wants_facts)
+    }
+}
+
+/// Whether `text` holds `needle`, ASCII case ignored.
+fn contains_ignoring_case(text: &str, needle: &str) -> bool {
+    text.as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
+/// The module facts and style texts of one parsed source.
+fn script_facts(record: &ModuleRecord<'_>, mut facts: LinkScan, wants_facts: bool) -> ModuleLinks {
+    if !wants_facts {
+        return ModuleLinks {
+            style_css: facts.style_css,
+            style_markup: facts.style_markup,
+            ..ModuleLinks::default()
+        };
+    }
+    let mut loads = static_loads(record);
+    loads.append(&mut facts.loads);
+    ModuleLinks {
+        module_syntax: record.has_module_syntax || !record.import_metas.is_empty(),
+        loads,
+        style_css: facts.style_css,
+        style_markup: facts.style_markup,
+        ..ModuleLinks::default()
+    }
+}
+
+/// The imports and re-exports of a module record, one per name read; a
+/// type-only one loads nothing at runtime.
+fn static_loads(record: &ModuleRecord<'_>) -> Vec<ModuleLoad> {
+    let imports = record
+        .import_entries
+        .iter()
+        .filter(|entry| !entry.is_type)
+        .map(|entry| ModuleLoad {
+            specifier: entry.module_request.name.to_string(),
+            name: match &entry.import_name {
+                ImportImportName::Name(name) => Some(name.name.to_string()),
+                ImportImportName::Default(_) => Some(DEFAULT_IMPORT_NAME.to_owned()),
+                ImportImportName::NamespaceObject => None,
+            },
+        });
+    let exports = record
+        .indirect_export_entries
+        .iter()
+        .chain(&record.star_export_entries)
+        .filter(|entry| !entry.is_type)
+        .filter_map(|entry| {
+            let specifier = entry.module_request.as_ref()?.name.to_string();
+            let name = match &entry.import_name {
+                ExportImportName::Name(name) => Some(name.name.to_string()),
+                _ => None,
+            };
+            Some(ModuleLoad { specifier, name })
+        });
+    imports.chain(exports).collect()
+}
+
+/// The value of a string literal or of a template with no substitution,
+/// escapes decoded; none for any other expression.
+fn static_text<'a>(expression: &'a Expression<'_>) -> Option<&'a str> {
+    match expression {
+        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map(oxc_ast::ast::Str::as_str),
+        _ => None,
+    }
+}
+
+/// What one walk of a program collects beyond its module record; the walk
+/// is [`SourceWalk`], shared with the global-variable scan so the wasm
+/// artifact carries one copy of oxc's.
+#[derive(Default)]
+pub(crate) struct LinkScan {
+    /// Static string values requested through `import()` that name a
+    /// stylesheet, with source positions.
+    stylesheet_imports: Vec<(u32, String)>,
+    wants_loads: bool,
+    wants_styles: bool,
+    /// How many `<style>` elements the walk is inside.
+    pub(crate) in_style: usize,
+    /// The modules loaded by a call or a TypeScript `import … = require()`,
+    /// in source order.
+    loads: Vec<ModuleLoad>,
+    style_css: Vec<String>,
+    style_markup: Vec<String>,
+}
+
+impl LinkScan {
+    /// File one piece of string text: CSS inside a `<style>` element, markup
+    /// elsewhere when it holds `<style`.
+    pub(crate) fn text(&mut self, text: &str) {
+        if !self.wants_styles {
+            return;
+        }
+        if self.in_style > 0 {
+            self.style_css.push(text.to_owned());
+        } else if contains_ignoring_case(text, "<style") {
+            self.style_markup.push(text.to_owned());
+        }
+    }
+}
+
+impl LinkScan {
+    /// An `import()` whose specifier names a stylesheet.
+    pub(crate) fn import_expression(&mut self, import: &ImportExpression<'_>) {
+        let Some(specifier) = static_text(&import.source) else {
+            return;
+        };
+        if names_stylesheet(specifier) {
+            self.stylesheet_imports
+                .push((import.span.start, specifier.to_owned()));
+        }
+        self.load(specifier);
+    }
+
+    /// A `require()` with a literal specifier.
+    pub(crate) fn call(&mut self, call: &CallExpression<'_>) {
+        if !matches!(&call.callee, Expression::Identifier(name) if name.name == "require") {
+            return;
+        }
+        if let Some(specifier) = call
+            .arguments
+            .first()
+            .and_then(Argument::as_expression)
+            .and_then(static_text)
+        {
+            self.load(specifier);
+        }
+    }
+
+    /// A TypeScript `import name = require('…')`, which compiles to a
+    /// `require()`; a type-only one loads nothing.
+    pub(crate) fn import_equals(&mut self, declaration: &TSImportEqualsDeclaration<'_>) {
+        if let (ImportOrExportKind::Value, TSModuleReference::ExternalModuleReference(reference)) =
+            (declaration.import_kind, &declaration.module_reference)
+        {
+            self.load(&reference.expression.value);
+        }
+    }
+
+    /// Record a module the source loads with every name reachable.
+    fn load(&mut self, specifier: &str) {
+        if self.wants_loads {
+            self.loads.push(ModuleLoad {
+                specifier: specifier.to_owned(),
+                name: None,
+            });
+        }
+    }
+
+    /// The text of a template's static parts.
+    pub(crate) fn template(&mut self, template: &TemplateLiteral<'_>) {
+        for quasi in &template.quasis {
+            let text = quasi.value.cooked.as_ref().unwrap_or(&quasi.value.raw);
+            self.text(text);
+        }
+    }
+
+    /// Whether an element is a `<style>` element.
+    pub(crate) fn is_style(element: &JSXElement<'_>) -> bool {
+        matches!(
+            &element.opening_element.name,
+            JSXElementName::Identifier(name) if name.name == "style"
+        )
     }
 }
 
@@ -126,7 +354,7 @@ fn names_stylesheet(specifier: &str) -> bool {
 }
 
 /// Stylesheet specifiers a module requests, statically or through `import()`.
-fn css_imports(record: &ModuleRecord<'_>, program: &Program<'_>) -> Vec<String> {
+fn css_imports(record: &ModuleRecord<'_>, dynamic: Vec<(u32, String)>) -> Vec<String> {
     let mut found: Vec<(u32, String)> = Vec::new();
     for (specifier, requests) in &record.requested_modules {
         if !names_stylesheet(specifier.as_str()) {
@@ -136,9 +364,7 @@ fn css_imports(record: &ModuleRecord<'_>, program: &Program<'_>) -> Vec<String> 
             found.push((request.span.start, specifier.as_str().to_owned()));
         }
     }
-    let mut dynamic = DynamicStylesheetImports { found: Vec::new() };
-    dynamic.visit_program(program);
-    found.extend(dynamic.found);
+    found.extend(dynamic);
     // The record keys requests by specifier, so source order is restored
     // from the spans before duplicates are dropped.
     found.sort_unstable_by_key(|(start, _)| *start);
@@ -149,28 +375,6 @@ fn css_imports(record: &ModuleRecord<'_>, program: &Program<'_>) -> Vec<String> 
         }
     }
     unique
-}
-
-/** Static string values requested through `import()`, with source positions. */
-struct DynamicStylesheetImports {
-    found: Vec<(u32, String)>,
-}
-
-impl<'a> Visit<'a> for DynamicStylesheetImports {
-    fn visit_import_expression(&mut self, import: &ImportExpression<'a>) {
-        let value = match &import.source {
-            Expression::StringLiteral(literal) => Some(literal.value.as_str()),
-            Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
-                .quasis
-                .first()
-                .and_then(|quasi| quasi.value.cooked.as_ref())
-                .map(oxc_ast::ast::Str::as_str),
-            _ => None,
-        };
-        if let Some(specifier) = value.filter(|specifier| names_stylesheet(specifier)) {
-            self.found.push((import.span.start, specifier.to_owned()));
-        }
-    }
 }
 
 /// Every re-exported name in one module, with the module it points at.
@@ -413,6 +617,7 @@ fn skip_trivia(source: &str, start: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxc_span::SourceType;
 
     #[test]
     fn export_type_suffix_needs_a_word_break_before_type() {
@@ -832,6 +1037,226 @@ mod tests {
         assert_eq!(result[2].css_imports, ["./c.css"]);
     }
 
+    fn facts(source: &str, filename: &str) -> ModuleLinks {
+        let files = [TransformFile {
+            filename: filename.to_owned(),
+            source: source.to_owned(),
+        }];
+        let query = ModuleLinksQuery {
+            module_facts: true,
+            style_texts: true,
+            ..ModuleLinksQuery::default()
+        };
+        scan_module_links(&files, query).remove(0)
+    }
+
+    fn loads(source: &str) -> Vec<(String, Option<String>)> {
+        facts(source, "/p/x.js")
+            .loads
+            .into_iter()
+            .map(|load| (load.specifier, load.name))
+            .collect()
+    }
+
+    #[test]
+    fn module_syntax_reads_code_only() {
+        // A statement in a comment, a string or a template is text; an
+        // `import.meta` in a template substitution is code.
+        let cases = [
+            ("/*\nexport * from 'a';\n*/\nrequire('a');", false),
+            ("const s = `\nexport const a = 1;\n`;", false),
+            ("// import.meta.url\nmodule.exports = 1;", false),
+            ("import('a').then(() => `${import.meta.url}`);", true),
+            ("const r = /'/;\nexport const a = r;", true),
+            ("export {};", true),
+        ];
+        for (source, esm) in cases {
+            assert_eq!(facts(source, "/p/x.js").module_syntax, esm, "{source}");
+        }
+    }
+
+    #[test]
+    fn loads_name_what_each_form_reads() {
+        assert_eq!(
+            loads("import { szr as x, y } from 'r';\nimport d from 'r';\nimport * as ns from 'r';"),
+            [
+                ("r".to_owned(), Some("szr".to_owned())),
+                ("r".to_owned(), Some("y".to_owned())),
+                ("r".to_owned(), Some("default".to_owned())),
+                ("r".to_owned(), None),
+            ]
+        );
+        assert_eq!(
+            loads("export { szr } from 'r';\nexport * from 'q';"),
+            [
+                ("r".to_owned(), Some("szr".to_owned())),
+                ("q".to_owned(), None)
+            ]
+        );
+        assert_eq!(
+            loads("const a = require('r');\nimport('q');\nimport(name);\nrequire(name);"),
+            [("r".to_owned(), None), ("q".to_owned(), None)]
+        );
+    }
+
+    #[test]
+    fn a_comment_or_string_loads_nothing() {
+        assert!(
+            loads("/* export * from 'r'; */\n// require('r')\nconst s = \"import('r')\";")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn style_css_is_every_string_inside_a_style_element() {
+        let source = r#"export const A = () => <>
+  <style>{/'/.test("'") && '[class~="pb-[2px]"] {}'}</style>
+  <style>{/* author's */ '[class~="\x70b-2"] {}'}</style>
+  <style dangerouslySetInnerHTML={{ __html: `.a { }` }} />
+  <div title="[class~=x]" />
+</>;"#;
+        let links = facts(source, "/p/a.tsx");
+        assert!(
+            links
+                .style_css
+                .contains(&r#"[class~="pb-[2px]"] {}"#.to_owned()),
+            "{:?}",
+            links.style_css
+        );
+        assert!(
+            links
+                .style_css
+                .contains(&r#"[class~="pb-2"] {}"#.to_owned()),
+            "{:?}",
+            links.style_css
+        );
+        assert!(
+            links.style_css.contains(&".a { }".to_owned()),
+            "{:?}",
+            links.style_css
+        );
+        assert!(
+            !links.style_css.iter().any(|css| css == "[class~=x]"),
+            "{:?}",
+            links.style_css
+        );
+        assert!(links.style_markup.is_empty());
+    }
+
+    #[test]
+    fn style_css_includes_text_written_straight_inside_a_style_element() {
+        let links = facts(
+            "export const A = () => <><style>.pb-2 {'{}'}</style><b>.pb-3 </b></>;",
+            "/p/a.tsx",
+        );
+        assert!(
+            links.style_css.contains(&".pb-2 ".to_owned()),
+            "{:?}",
+            links.style_css
+        );
+        assert!(
+            !links.style_css.iter().any(|css| css.contains("pb-3")),
+            "{:?}",
+            links.style_css
+        );
+    }
+
+    #[test]
+    fn a_template_with_no_substitution_names_a_load() {
+        assert_eq!(
+            loads("import(`q`);\nrequire(`r`);\nimport(`${q}`);\nrequire(`${r}`);"),
+            [("q".to_owned(), None), ("r".to_owned(), None)]
+        );
+    }
+
+    #[test]
+    fn a_typescript_import_equals_require_is_a_load() {
+        let links = facts(
+            "import r = require('r');\nimport type t = require('t');\nimport n = N.m;",
+            "/p/a.ts",
+        );
+        assert_eq!(
+            links.loads,
+            [ModuleLoad {
+                specifier: "r".to_owned(),
+                name: None,
+            }]
+        );
+        assert!(!links.module_syntax);
+    }
+
+    #[test]
+    fn a_source_the_parser_cannot_read_says_so() {
+        assert!(facts("import type { A } from './a';", "/p/a.js").parse_failed);
+        assert!(!facts("import type { A } from './a';", "/p/a.ts").parse_failed);
+        assert!(!links("import type { A } from './a';", "/p/a.js").parse_failed);
+    }
+
+    #[test]
+    fn a_type_only_import_or_export_loads_nothing() {
+        let links = facts(
+            "import type { szr } from 'r';\nimport { type szv } from 'v';\nexport type { szr } from 'r';\nexport type * from 'q';",
+            "/p/a.ts",
+        );
+        assert!(links.loads.is_empty(), "{:?}", links.loads);
+    }
+
+    #[test]
+    fn a_javascript_file_is_read_with_jsx_as_the_transform_reads_it() {
+        let source = "import { szr } from '@csszyx/runtime';\nexport const A = () => <style>{'.a {}'}</style>;";
+        for filename in ["/p/a.js", "/p/a.mjs", "/p/a.cjs"] {
+            let links = facts(source, filename);
+            assert_eq!(links.style_css, [".a {}"], "{filename}");
+            assert_eq!(
+                links.loads,
+                [ModuleLoad {
+                    specifier: "@csszyx/runtime".to_owned(),
+                    name: Some("szr".to_owned()),
+                }],
+                "{filename}"
+            );
+        }
+    }
+
+    #[test]
+    fn style_markup_is_a_string_outside_one_that_builds_a_style() {
+        let links = facts("const page = '<STYLE>.a {}</STYLE>';", "/p/page.js");
+        assert_eq!(links.style_markup, ["<STYLE>.a {}</STYLE>"]);
+        assert!(links.style_css.is_empty());
+    }
+
+    #[test]
+    fn style_texts_come_back_without_the_module_facts() {
+        let files = [TransformFile {
+            filename: "/p/a.tsx".to_owned(),
+            source: "export const A = () => <style>{'.a {}'}</style>;\nconst page = '<style>.b {}</style>';"
+                .to_owned(),
+        }];
+        let query = ModuleLinksQuery {
+            style_texts: true,
+            ..ModuleLinksQuery::default()
+        };
+        let links = scan_module_links(&files, query).remove(0);
+        assert_eq!(links.style_css, [".a {}"]);
+        assert_eq!(links.style_markup, ["<style>.b {}</style>"]);
+        assert!(links.loads.is_empty());
+    }
+
+    #[test]
+    fn style_texts_are_not_read_unless_asked_or_present() {
+        let files = [TransformFile {
+            filename: "/p/a.tsx".to_owned(),
+            source: "export const A = () => <style>{'.a {}'}</style>;".to_owned(),
+        }];
+        let unasked = scan_module_links(&files, ModuleLinksQuery::default()).remove(0);
+        assert!(unasked.style_css.is_empty());
+        assert!(
+            facts("export const A = () => <b>{'.a {}'}</b>;", "/p/a.tsx")
+                .style_css
+                .is_empty()
+        );
+    }
+
     fn entry_names(source: &str, query: ModuleLinksQuery) -> Vec<String> {
         let files = [TransformFile {
             filename: "/p/styles.ts".to_owned(),
@@ -847,6 +1272,8 @@ mod tests {
 
     const ASK_ENTRIES: ModuleLinksQuery = ModuleLinksQuery {
         registry_entries: true,
+        module_facts: false,
+        style_texts: false,
     };
 
     #[test]

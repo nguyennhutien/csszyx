@@ -87,6 +87,7 @@ export type {
     ModuleLinks,
     ModuleLinksFile,
     ModuleLinksQuery,
+    ModuleLoad,
 } from './module-links.js';
 // Export property type system (for CSS Variable Auto-Compile)
 export {

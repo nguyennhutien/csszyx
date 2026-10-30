@@ -38,6 +38,24 @@ export interface NativeModuleLinks {
      * asked for them: nested sz objects whose key order the importer reads.
      */
     registryEntriesJson: string;
+    /** Whether the module is an ES module; false unless module facts were asked for. */
+    moduleSyntax: boolean;
+    /** Every module the source loads; empty unless module facts were asked for. */
+    loads: NativeModuleLoad[];
+    /** The text inside `<style>` elements; empty unless asked for. */
+    styleCss: string[];
+    /** Other strings that build a `<style>`; empty unless asked for. */
+    styleMarkup: string[];
+    /** Whether the parse stopped on a syntax error, so the facts above are partial. */
+    parseFailed: boolean;
+}
+
+/** One module a source loads, and one name it reads from it. */
+export interface NativeModuleLoad {
+    /** The specifier, exactly as the source spelled it. */
+    specifier: string;
+    /** The name read, or none when every name is reachable. */
+    name?: string | null;
 }
 
 /** Where one global custom-property usage is. */
@@ -72,6 +90,10 @@ export interface NativeGlobalVarUsageQuery {
 export interface NativeModuleLinksQuery {
     /** Read the values each module exports for the cross-module registry. */
     registryEntries?: boolean;
+    /** Read the module format and every module the source loads. */
+    moduleFacts?: boolean;
+    /** Read the CSS `<style>` elements hold, and the strings that build one. */
+    styleTexts?: boolean;
 }
 
 /** Options passed to the native transform. */

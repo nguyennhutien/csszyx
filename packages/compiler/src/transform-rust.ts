@@ -422,9 +422,8 @@ export function scanModuleLinksRust(
     } catch (err) {
         throw asRustUnavailable(err);
     }
-    return links.map(({ cssImports, forwards, registryEntriesJson }) => ({
-        cssImports,
-        forwards,
+    return links.map(({ registryEntriesJson, ...rest }) => ({
+        ...rest,
         registryEntries: query.registryEntries === true ? JSON.parse(registryEntriesJson) : [],
     }));
 }

@@ -48,6 +48,38 @@ export interface ModuleLinks {
     forwards: ModuleForward[];
     /** Exported registry values, declaration order kept; empty unless asked for. */
     registryEntries: CrossModuleRegistryEntry[];
+    /**
+     * Whether the source is an ES module: an `import` or `export` statement,
+     * or `import.meta`. False unless module facts were asked for.
+     */
+    moduleSyntax: boolean;
+    /**
+     * Every module the source loads: its imports and re-exports, then each
+     * `import()`, `require()` or TypeScript `import … = require()` with a
+     * literal specifier, in source order; type-only ones are left out. Empty
+     * unless asked for.
+     */
+    loads: ModuleLoad[];
+    /** The text of every string inside a `<style>` element, escapes decoded. */
+    styleCss: string[];
+    /** Every other string holding `<style`, as markup a script builds. */
+    styleMarkup: string[];
+    /**
+     * Whether the parse stopped on a syntax error, so the facts above come
+     * from a partial tree; false when the scan did not parse the module.
+     */
+    parseFailed: boolean;
+}
+
+/** One module a source loads, and one name it reads from it. */
+export interface ModuleLoad {
+    /** The specifier, exactly as the source spelled it. */
+    specifier: string;
+    /**
+     * The name read, or none when every name is reachable: a namespace, an
+     * `export *`, an `import()` or a `require()`.
+     */
+    name?: string | null;
 }
 
 /** One module handed to the scan. */
@@ -66,6 +98,13 @@ export interface ModuleLinksQuery {
      * pass reads the answer.
      */
     registryEntries?: boolean;
+    /**
+     * Read the module format and every module the source loads, from the
+     * parse: a statement in a comment, a string or a template is not one.
+     */
+    moduleFacts?: boolean;
+    /** Read the CSS `<style>` elements hold, and the strings that build one. */
+    styleTexts?: boolean;
 }
 
 /** Options for {@link scanModuleLinks}: which answers to compute, and where. */

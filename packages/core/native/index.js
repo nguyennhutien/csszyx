@@ -197,15 +197,19 @@ function laterExport(name) {
  * when asked, the values it exports for the cross-module registry.
  *
  * @param {Array<{filename: string, source: string}>} files - Modules to read.
- * @param {{registryEntries?: boolean}} [query] - Which optional answers to compute.
- * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>, registryEntriesJson: string}>} One answer per module.
+ * @param {{registryEntries?: boolean, moduleFacts?: boolean, styleTexts?: boolean}} [query] - Which optional answers to compute.
+ * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>, registryEntriesJson: string, moduleSyntax: boolean, loads: Array<{specifier: string, name?: string | null}>, styleCss: string[], styleMarkup: string[], parseFailed: boolean}>} One answer per module.
  */
 export function scanModuleLinks(files, query) {
     const scan = laterExport('scanModuleLinks');
-    // The 0.17 scan takes no query and answers without the registry entries.
+    // The 0.17 scan takes no query and answers without the registry entries,
+    // and a binding from before the module facts answers without them.
     return currentResults(
         scan(files, query),
-        result => query?.registryEntries !== true || typeof result.registryEntriesJson === 'string',
+        result =>
+            (query?.registryEntries !== true || typeof result.registryEntriesJson === 'string') &&
+            (query?.moduleFacts !== true || Array.isArray(result.loads)) &&
+            (query?.styleTexts !== true || Array.isArray(result.styleCss)),
     );
 }
 

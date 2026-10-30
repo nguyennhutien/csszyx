@@ -37,6 +37,8 @@ pub(crate) mod rewrite;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod scope;
+#[cfg(feature = "native-engine")]
+mod source_walk;
 pub mod spans;
 #[cfg(feature = "native-engine")]
 pub(crate) mod szv_precompile;

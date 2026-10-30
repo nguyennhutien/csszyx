@@ -37,6 +37,7 @@ export {
     type ModuleLinks,
     type ModuleLinksFile,
     type ModuleLinksQuery,
+    type ModuleLoad,
     type ScanModuleLinksOptions,
     scanModuleLinks,
 } from './module-links.js';
