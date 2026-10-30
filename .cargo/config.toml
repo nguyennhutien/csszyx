@@ -1,0 +1,5 @@
+# The parser wasm artifact runs in Node, which has shipped WebAssembly SIMD
+# since 16.4; the lexer and parser use it where LLVM can vectorise. The native
+# targets are left to their defaults.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

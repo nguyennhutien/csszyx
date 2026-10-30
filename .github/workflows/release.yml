@@ -253,3 +253,56 @@ jobs:
           # (npm + pnpm both honour this config). Pairs with id-token: write
           # above; the publish fails closed if the OIDC token is unavailable.
           NPM_CONFIG_PROVENANCE: "true"
+
+      # A resumed run skips a package npm already has, so the wasm this run
+      # built may not be the one npm serves. The debug wasm goes up only when,
+      # stripped as run-wasm-opt.mjs strips it, it is that wasm byte for byte;
+      # otherwise the release keeps the asset it has.
+      - name: Check the debug wasm against the published one
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/core/package.json').version")"
+          work="$(mktemp -d)"
+          npm pack "@csszyx/core@${version}" --pack-destination "$work" --silent > /dev/null
+          tar -xzf "$work"/csszyx-core-*.tgz -C "$work" package/pkg-parser/csszyx_core_bg.wasm
+          wasm-opt --strip-debug --strip-producers \
+            packages/core/pkg-parser-debug/csszyx_core_bg.debug.wasm -o "$work/stripped.wasm"
+          if ! cmp -s "$work/stripped.wasm" "$work/package/pkg-parser/csszyx_core_bg.wasm"; then
+            echo "::error::The debug wasm this run built is not the one behind @csszyx/core@${version} on npm, so it is not attached."
+            exit 1
+          fi
+
+      # The engine's wasm with its name section, from the same wasm-opt run as
+      # the published bytes, so a `wasm-function[N]` in a reported stack trace
+      # names its function (packages/core/README.md). npm does not ship it.
+      - name: Keep the debug wasm
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: csszyx-core-debug-wasm
+          path: packages/core/pkg-parser-debug/csszyx_core_bg.debug.wasm
+          if-no-files-found: error
+
+  # Attach the debug wasm to the GitHub release, in a job of its own: the
+  # publish job holds the npm OIDC token and reads the repository only, and
+  # this one writes release assets and nothing else.
+  attach-debug-wasm:
+    name: Attach the debug wasm to the release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: packages/csszyx/package.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: csszyx-core-debug-wasm
+      - name: Upload it as a release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="$(node -p "require('./packages/csszyx/package.json').version")"
+          gh release upload "v${version}" csszyx_core_bg.debug.wasm --clobber

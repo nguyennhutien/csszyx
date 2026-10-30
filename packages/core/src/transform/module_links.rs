@@ -18,7 +18,6 @@ use oxc_syntax::identifier::is_identifier_name;
 use oxc_syntax::module_record::{
     ExportEntry, ExportExportName, ExportImportName, ImportImportName, ModuleRecord,
 };
-use rayon::prelude::*;
 
 use super::parser::source_type_for_path;
 use super::registry_entries::{registry_entries, RegistryEntry};
@@ -115,7 +114,7 @@ const TYPE_WINDOW: usize = 48;
 /// Registry entries, when the query asks for them, come from the same parse,
 /// and only from a module whose text contains `export`.
 pub fn scan_module_links(files: &[TransformFile], query: ModuleLinksQuery) -> Vec<ModuleLinks> {
-    files.par_iter().map(|file| links_of(file, query)).collect()
+    super::map_files(files, |file| links_of(file, query))
 }
 
 /// Read the links of one file.
