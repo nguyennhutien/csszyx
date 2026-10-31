@@ -66,6 +66,26 @@ pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
 }
 // coverage:wasm-only:end
 
+/// The checksum of a map given as its own entries: the originals and their
+/// mangled names, in the same order.
+///
+/// The native binding takes two lists rather than an object, because reading
+/// an object's keys across N-API walks inherited enumerable properties too,
+/// where the wasm artifact and the browser verifier read own keys only; a
+/// polluted prototype would then make the build's checksum disagree with the
+/// page's. A caller passes `Object.entries` of the map.
+///
+/// # Returns
+///
+/// The checksum, or `None` when the lists differ in length.
+pub fn checksum_of_entries(originals: Vec<String>, mangled: Vec<String>) -> Option<String> {
+    if originals.len() != mangled.len() {
+        return None;
+    }
+    let map: MangleMap = originals.into_iter().zip(mangled).collect();
+    Some(compute_checksum_internal(&map))
+}
+
 /// Internal checksum computation (native Rust, no WASM overhead).
 ///
 /// # Arguments
@@ -170,6 +190,27 @@ pub fn verify_mangle_checksum(map: JsValue, expected_checksum: &str) -> Result<b
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checksum_of_entries_matches_the_map_it_spells() {
+        let mut map = HashMap::new();
+        map.insert("p-4".to_owned(), "z".to_owned());
+        map.insert("hover:m-2".to_owned(), "y".to_owned());
+        let originals = vec!["hover:m-2".to_owned(), "p-4".to_owned()];
+        let mangled = vec!["y".to_owned(), "z".to_owned()];
+        assert_eq!(
+            checksum_of_entries(originals, mangled),
+            Some(compute_checksum_internal(&map))
+        );
+    }
+
+    #[test]
+    fn checksum_of_entries_refuses_lists_of_different_lengths() {
+        assert_eq!(
+            checksum_of_entries(vec!["p-4".to_owned()], Vec::new()),
+            None
+        );
+    }
 
     #[test]
     fn test_empty_map() {

@@ -35,7 +35,7 @@ const babel = require('babel-jest').default.createTransformer();
 
 module.exports = {
     process(sourceText, sourcePath, options) {
-        const { code } = csszyx.process(sourceText, sourcePath);
+        const { code } = csszyx.process(sourceText, sourcePath, options);
         return babel.process(code, sourcePath, options);
     },
     getCacheKey(sourceText, sourcePath, options) {
@@ -57,7 +57,7 @@ const ts = require('ts-jest').default.createTransformer();
 
 module.exports = {
     process(sourceText, sourcePath, options) {
-        const { code } = csszyx.process(sourceText, sourcePath);
+        const { code } = csszyx.process(sourceText, sourcePath, options);
         return ts.process(code, sourcePath, options);
     },
     getCacheKey(sourceText, sourcePath, options) {
@@ -79,7 +79,7 @@ const swc = require('@swc/jest').createTransformer();
 
 module.exports = {
     process(sourceText, sourcePath, options) {
-        const { code } = csszyx.process(sourceText, sourcePath);
+        const { code } = csszyx.process(sourceText, sourcePath, options);
         return swc.process(code, sourcePath, options);
     },
     getCacheKey(sourceText, sourcePath, options) {

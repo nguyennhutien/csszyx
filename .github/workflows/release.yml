@@ -203,6 +203,8 @@ jobs:
     # @nguyennhutien approves via the GitHub Actions deployment-review prompt.
     environment: npm-publish
     runs-on: ubuntu-latest
+    outputs:
+      debug-wasm: ${{ steps.debug-wasm.outputs.matches }}
     permissions:
       contents: read
       # Mint the short-lived OIDC token Sigstore uses to sign the npm
@@ -257,8 +259,11 @@ jobs:
       # A resumed run skips a package npm already has, so the wasm this run
       # built may not be the one npm serves. The debug wasm goes up only when,
       # stripped as run-wasm-opt.mjs strips it, it is that wasm byte for byte;
-      # otherwise the release keeps the asset it has.
+      # otherwise the release keeps the asset it has. npm already holds every
+      # package here, so a mismatch warns and skips the upload rather than
+      # failing a job no re-run could make pass.
       - name: Check the debug wasm against the published one
+        id: debug-wasm
         run: |
           set -euo pipefail
           version="$(node -p "require('./packages/core/package.json').version")"
@@ -267,15 +272,18 @@ jobs:
           tar -xzf "$work"/csszyx-core-*.tgz -C "$work" package/pkg-parser/csszyx_core_bg.wasm
           wasm-opt --strip-debug --strip-producers \
             packages/core/pkg-parser-debug/csszyx_core_bg.debug.wasm -o "$work/stripped.wasm"
-          if ! cmp -s "$work/stripped.wasm" "$work/package/pkg-parser/csszyx_core_bg.wasm"; then
-            echo "::error::The debug wasm this run built is not the one behind @csszyx/core@${version} on npm, so it is not attached."
-            exit 1
+          if cmp -s "$work/stripped.wasm" "$work/package/pkg-parser/csszyx_core_bg.wasm"; then
+            echo "matches=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The debug wasm this run built is not the one behind @csszyx/core@${version} on npm, so it is not attached."
+            echo "matches=false" >> "$GITHUB_OUTPUT"
           fi
 
       # The engine's wasm with its name section, from the same wasm-opt run as
       # the published bytes, so a `wasm-function[N]` in a reported stack trace
       # names its function (packages/core/README.md). npm does not ship it.
       - name: Keep the debug wasm
+        if: steps.debug-wasm.outputs.matches == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: csszyx-core-debug-wasm
@@ -288,6 +296,7 @@ jobs:
   attach-debug-wasm:
     name: Attach the debug wasm to the release
     needs: publish
+    if: needs.publish.outputs.debug-wasm == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

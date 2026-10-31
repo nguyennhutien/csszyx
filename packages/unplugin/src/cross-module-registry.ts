@@ -22,6 +22,8 @@ import {
     type CrossModuleRegistryEntry,
     extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
+    type ModuleLinks,
+    scanModuleLinks,
 } from '@csszyx/compiler/engine';
 import type { ParserMode } from '@csszyx/compiler/internal';
 import { normalizePathSeparators } from './path-normalization.js';
@@ -219,10 +221,11 @@ export function recordCrossModuleForwards(
     content: string,
     parser?: ParserMode,
 ): void {
-    const key = normalizePathSeparators(filePath);
-    const forwards = extractCrossModuleForwards(content, { filename: filePath, parser });
-    if (forwards.length === 0) index.delete(key);
-    else index.set(key, forwards);
+    setForwards(
+        index,
+        filePath,
+        extractCrossModuleForwards(content, { filename: filePath, parser }),
+    );
 }
 
 /**
@@ -614,4 +617,141 @@ function probeSpecifier<T>(
         break;
     }
     return undefined;
+}
+
+/**
+ * Record many files' szv factories and forwards, as
+ * {@link recordSzvRegistryFile} and {@link recordCrossModuleForwards} would one
+ * file at a time, with one engine call per question: the files that may export
+ * a factory are read once for both answers, the rest for their forwards only.
+ * Files are recorded in the order given, so the registry and the index hold
+ * them in walk order whatever the split.
+ *
+ * @param registry - The registry to fill.
+ * @param index - The forward index to update.
+ * @param files - The walked files, in walk order.
+ * @param parser - The engine artifact the build runs on, if configured.
+ */
+export function recordModuleLinksOf(
+    registry: SzvCrossModuleRegistry,
+    index: CrossModuleForwardIndex,
+    files: readonly { filePath: string; content: string }[],
+    parser?: ParserMode,
+): void {
+    const factories: Array<(typeof files)[number]> = [];
+    const rest: Array<(typeof files)[number]> = [];
+    for (const file of files) (mayExportSzvFactories(file.content) ? factories : rest).push(file);
+    const ask = (group: typeof files, registryEntries: boolean): ModuleLinks[] =>
+        group.length === 0
+            ? []
+            : scanModuleLinks(
+                  group.map(file => ({ filename: file.filePath, source: file.content })),
+                  { registryEntries, parser },
+              );
+    // One answer per file, in input order: the engine's contract.
+    const answers = new Map<(typeof files)[number], ModuleLinks>();
+    for (const [group, links] of [
+        [factories, ask(factories, true)],
+        [rest, ask(rest, false)],
+    ] as const) {
+        group.forEach((file, at) => {
+            answers.set(file, links[at] as ModuleLinks);
+        });
+    }
+    for (const file of files) {
+        const answer = answers.get(file) as ModuleLinks;
+        replaceEntriesOfKind(registry, file.filePath, 'szv-config', answer.registryEntries);
+        setForwards(index, file.filePath, answer.forwards);
+    }
+}
+
+/**
+ * Re-read one changed file for everything the walk and the demand pass
+ * recorded of it, from one parse: its szv factories, its forwards and, when
+ * imported sz objects are on, its sz objects.
+ *
+ * @param registry - The registry to fill.
+ * @param index - The forward index to update.
+ * @param file - The file, and what to read.
+ * @param file.filePath - Absolute source path (any separator style).
+ * @param file.content - Source text.
+ * @param file.szObjects - Whether imported sz objects are recorded.
+ * @param file.parser - The engine artifact the build runs on, if configured.
+ */
+export function refreshModuleLinksOf(
+    registry: SzvCrossModuleRegistry,
+    index: CrossModuleForwardIndex,
+    file: { filePath: string; content: string; szObjects: boolean; parser?: ParserMode },
+): void {
+    const factories = mayExportSzvFactories(file.content);
+    const links = linksOf(file.filePath, file.content, {
+        registryEntries: factories || file.szObjects,
+        parser: file.parser,
+    });
+    replaceEntriesOfKind(
+        registry,
+        file.filePath,
+        'szv-config',
+        factories ? links.registryEntries : [],
+    );
+    setForwards(index, file.filePath, links.forwards);
+    if (file.szObjects) {
+        replaceEntriesOfKind(registry, file.filePath, 'sz-object', links.registryEntries);
+    }
+}
+
+/**
+ * Set or clear one file's forwards in the index.
+ *
+ * @param index - The forward index to update.
+ * @param filePath - Absolute source path (any separator style).
+ * @param forwards - What the file re-exports.
+ */
+function setForwards(
+    index: CrossModuleForwardIndex,
+    filePath: string,
+    forwards: readonly CrossModuleForward[],
+): void {
+    const key = normalizePathSeparators(filePath);
+    if (forwards.length === 0) index.delete(key);
+    else index.set(key, forwards);
+}
+
+/**
+ * Record one demanded provider's sz objects and forwards from one parse.
+ *
+ * @param registry - The registry to fill.
+ * @param index - The forward index to update.
+ * @param filePath - Absolute source path (any separator style).
+ * @param content - Source text.
+ * @param parser - The engine artifact the build runs on, if configured.
+ */
+export function recordSzObjectProvider(
+    registry: SzvCrossModuleRegistry,
+    index: CrossModuleForwardIndex,
+    filePath: string,
+    content: string,
+    parser?: ParserMode,
+): void {
+    const links = linksOf(filePath, content, { registryEntries: true, parser });
+    replaceEntriesOfKind(registry, filePath, 'sz-object', links.registryEntries);
+    setForwards(index, filePath, links.forwards);
+}
+
+/**
+ * One file's module links.
+ *
+ * @param filePath - Absolute source path (any separator style).
+ * @param content - Source text.
+ * @param options - What to read, and where.
+ * @param options.registryEntries - Whether to read the exported values.
+ * @param options.parser - The engine artifact the build runs on, if configured.
+ * @returns The links; the engine answers one per file.
+ */
+function linksOf(
+    filePath: string,
+    content: string,
+    options: { registryEntries: boolean; parser?: ParserMode },
+): ModuleLinks {
+    return scanModuleLinks([{ filename: filePath, source: content }], options)[0] as ModuleLinks;
 }

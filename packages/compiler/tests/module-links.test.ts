@@ -203,4 +203,19 @@ const page = '<style>.c {}</style>';`,
 
         expect(links?.styleCss).toEqual(['.a {}']);
     });
+
+    // A batch past one run's length goes in several calls on wasm; every file
+    // is still answered once, in order.
+    it('answers a batch longer than one run, in order', () => {
+        const padding = `// ${'x'.repeat(5 << 20)}\n`;
+        const files = ['a', 'b', 'c'].map(name => ({
+            filename: `/p/${name}.ts`,
+            source: `${padding}import './${name}.css';\n`,
+        }));
+        expect(scan(files).map(links => links.cssImports)).toEqual([
+            ['./a.css'],
+            ['./b.css'],
+            ['./c.css'],
+        ]);
+    });
 });

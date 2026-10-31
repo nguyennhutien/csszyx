@@ -19,11 +19,9 @@ vi.mock('@csszyx/compiler/engine', async importOriginal => {
     const actual = await importOriginal<typeof import('@csszyx/compiler/engine')>();
     return {
         ...actual,
-        extractCrossModuleRegistryEntries: (
-            ...args: Parameters<typeof actual.extractCrossModuleRegistryEntries>
-        ) => {
+        scanModuleLinks: (...args: Parameters<typeof actual.scanModuleLinks>) => {
             if (failure.current) throw failure.current();
-            return actual.extractCrossModuleRegistryEntries(...args);
+            return actual.scanModuleLinks(...args);
         },
     };
 });

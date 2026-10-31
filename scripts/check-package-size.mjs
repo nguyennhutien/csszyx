@@ -736,7 +736,13 @@ export const SIZE_BUDGETS = [
         // single-file engine call refuses the positional shape, ~260 of it the
         // words of that one form, from its own export so the other forms of
         // `options-object-required` stay out (all of them cost +808).
-        maxGzipBytes: 29_550,
+        // 30,250 on 2026-10-31, measured 29,932: the class-name encoder and
+        // the mangle checksum moved here from the wasm entry the plugin
+        // imported, on both artifacts behind `chooseEngine` and the version
+        // check, so a native build no longer loads the wasm to mangle (about
+        // 5 MB of resident memory a process); and the wasm module-link scan
+        // goes in runs of 8 MB of source. Raised on the user's call.
+        maxGzipBytes: 30_250,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     {
@@ -746,8 +752,9 @@ export const SIZE_BUDGETS = [
         subpath: './internal',
         // 32,100 on 2026-10-26, measured 32,007: the same words, and the
         // migrate class-name options object. 32,500 on 2026-10-27, measured
-        // 32,427 (32,023 before): the same engine-call refusal.
-        maxGzipBytes: 32_500,
+        // 32,427 (32,023 before): the same engine-call refusal. 33,050 on
+        // 2026-10-31, measured 32,759: the same encoder, checksum and runs.
+        maxGzipBytes: 33_050,
         excludedModules: ['src/state-variants.generated.ts'],
     },
 ];

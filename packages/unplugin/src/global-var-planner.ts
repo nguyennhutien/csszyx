@@ -1,4 +1,4 @@
-import { encode } from '@csszyx/core';
+import { classNameEncoder } from '@csszyx/compiler/engine';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     isCsszyxGlobalAliasCustomProperty,
@@ -35,6 +35,7 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
     }
 
     const definitionNames = new Set(definitions.keys());
+    const encode = classNameEncoder({ parser: input.parser });
     const entries: GlobalVarAliasEntry[] = [];
     for (const [index, original] of candidates.entries()) {
         const alias = `${aliasPrefix}${encode(index)}`;

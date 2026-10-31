@@ -17,8 +17,6 @@
  *
  * @module
  */
-import { createHash } from 'node:crypto';
-
 import { scanModuleLinks } from '@csszyx/compiler/engine';
 import {
     addClassHooks,
@@ -30,6 +28,7 @@ import {
     styleBlockHooks,
 } from '@csszyx/tailwind-oracle';
 
+import { sha256Of } from './content-digest.js';
 import type { EngineArtifact } from './next-runtime-injection.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { sortStrings } from './sort.js';
@@ -123,7 +122,7 @@ function styleKey(hooks: ClassHooks): string {
  * @returns Its SHA-256, base64.
  */
 function digestOf(text: string): string {
-    return createHash('sha256').update(text).digest('base64');
+    return sha256Of(text).base64;
 }
 
 /**

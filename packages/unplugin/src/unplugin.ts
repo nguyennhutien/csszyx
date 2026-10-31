@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
@@ -15,6 +14,8 @@ import {
     transform,
 } from '@csszyx/compiler';
 import {
+    classNameEncoder,
+    computeMangleChecksum,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     isWasmTransformAvailable,
@@ -22,13 +23,13 @@ import {
 import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
     diagnosticFileOf,
+    type ParserMode,
     reportTemplateSzDiagnostics,
     resolveParserMode,
     transformRustBatchUnrendered,
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
-import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
@@ -66,13 +67,14 @@ import {
     findClassNameAuthorConflicts,
 } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
+import { sha256Of } from './content-digest.js';
 import {
     type CrossModuleForwardIndex,
     importedSpecifiersIn,
     mayExportSzvFactories,
-    recordCrossModuleForwards,
-    recordSzObjectRegistryFile,
-    recordSzvRegistryFile,
+    recordModuleLinksOf,
+    recordSzObjectProvider,
+    refreshModuleLinksOf,
     resolveCrossModuleStaticsFor,
     resolveProviderPath,
     resolveProviderPathWith,
@@ -1353,13 +1355,15 @@ export function mangleEligibleClasses(
 const tokenByIndex: string[] = [];
 
 /**
- * Deterministic token for one encoder index, crossing the WASM boundary at
+ * Deterministic token for one encoder index, crossing the engine boundary at
  * most once per index per process.
  *
  * @param index Encoder sequence index.
+ * @param encode The encoder on the build's engine artifact; every artifact
+ *        gives the same token for an index, so one cache serves them all.
  * @returns The Base62 token.
  */
-function tokenAt(index: number): string {
+function tokenAt(index: number, encode: (index: number) => string): string {
     const cached = tokenByIndex[index];
     if (cached !== undefined) {
         return cached;
@@ -1380,22 +1384,25 @@ function tokenAt(index: number): string {
  *
  * @param eligibleClasses Classes to mangle, in stable sorted order.
  * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @param parser The engine artifact the build names, if any.
  * @returns The class → token map.
  */
 export function allocateMangleTokens(
     eligibleClasses: readonly string[],
     forbiddenTokens: ReadonlySet<string>,
+    parser?: ParserMode,
 ): Record<string, string> {
+    const encode = classNameEncoder({ parser });
     const map: Record<string, string> = {};
     // `tokenIndex` advances independently of the class index whenever a token
     // is skipped, and never rewinds — total encoder calls stay linear in
     // census + skips even when the forbidden set blocks long runs.
     let tokenIndex = 0;
     for (const className of eligibleClasses) {
-        let token = tokenAt(tokenIndex);
+        let token = tokenAt(tokenIndex, encode);
         while (forbiddenTokens.has(token)) {
             tokenIndex++;
-            token = tokenAt(tokenIndex);
+            token = tokenAt(tokenIndex, encode);
         }
         map[className] = token;
         tokenIndex++;
@@ -1987,16 +1994,19 @@ export function normalizeGlobalVarAliasesForCache(
  *
  * @param config User global-var mangle config.
  * @param aliasPrefix Active generated alias prefix.
+ * @param parser The engine artifact the build names, if any.
  * @returns Deterministic original-to-alias entries.
  */
 function createEarlyGlobalVarAliasEntries(
     config: GlobalVarMangleConfig | undefined,
     aliasPrefix: string,
+    parser: ParserMode | undefined,
 ): Array<[string, string]> {
     if (config?.enabled !== true || !config.tokens || config.tokens.length === 0) {
         return [];
     }
     const tokens = sortStrings(new Set(config.tokens));
+    const encode = classNameEncoder({ parser });
     return tokens.map((original, index) => [original, `${aliasPrefix}${encode(index)}`]);
 }
 
@@ -3260,6 +3270,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
         globalVarMangleConfig,
         globalVarAliasPrefix,
+        options.build?.parser,
     );
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
@@ -4859,7 +4870,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Read by code: the engine's wording is not a contract.
         const codes = new Set(result.issues?.map(issue => issue.code));
         const budgetExceeded = codes.has('ast-budget');
-        const inputSha256 = createHash('sha256').update(content).digest('hex');
+        const inputSha256 = sha256Of(content).hex;
         // The version the transform hook will see again, so a table settled
         // between the prescan and that transform is not said twice.
         diagnosticLimiter.version(projectRelative(filePath), inputSha256);
@@ -4906,23 +4917,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             szvCrossModuleForwards.delete(normalizePathSeparators(filePath));
             return;
         }
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
         // A re-export edited during a watch has to lose its stale link the same
         // way an edited value does: a barrel that starts pointing at a different
-        // module would otherwise keep answering with the old one's value.
-        recordCrossModuleForwards(szvCrossModuleForwards, filePath, content, activeParser().parser);
-        // A provider edited during a watch has to lose its stale value the same
-        // way an edited factory does. Re-reading the changed file for both kinds
-        // costs one parse of one file; deciding whether it is still demanded
-        // would cost the import graph, and a recorded export nothing imports
-        // resolves for nobody anyway.
+        // module would otherwise keep answering with the old one's value. A
+        // provider edited during a watch has to lose its stale value the same
+        // way an edited factory does. Re-reading the changed file for every
+        // kind costs one parse of one file; deciding whether it is still
+        // demanded would cost the import graph, and a recorded export nothing
+        // imports resolves for nobody anyway.
+        refreshModuleLinksOf(szvCrossModuleRegistry, szvCrossModuleForwards, {
+            filePath,
+            content,
+            szObjects: importedStaticSzEnabled,
+            parser: activeParser().parser,
+        });
         if (importedStaticSzEnabled) {
-            recordSzObjectRegistryFile(
-                szvCrossModuleRegistry,
-                filePath,
-                content,
-                activeParser().parser,
-            );
             szObjectProvidersExamined.add(normalizePathSeparators(filePath));
             recordProvidersDemandedBy(filePath, content);
         }
@@ -4984,30 +4993,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
     }
 
+    // The text the walk already read, by path with forward slashes, while the
+    // demand pass runs right after it: a provider inside the walked roots is
+    // not read twice, however the resolver spelled its path.
+    let walkedContent: Map<string, string> | undefined;
     /**
-     * Record one provider's exported sz objects, ignoring a file that cannot
-     * be read.
+     * Record one provider's exported sz objects and forwards, from one parse,
+     * ignoring a file that cannot be read.
+     *
+     * A provider reached only through demand may itself be a barrel, and it is
+     * not necessarily inside the walked roots — an opted-in package's entry
+     * point is the common case. Recording its links here means every module
+     * the build reads at all contributes them.
      *
      * @param providerPath - Absolute provider path.
      */
     function readAndRecordSzObjectProvider(providerPath: string): void {
-        let content: string;
-        try {
-            content = fs.readFileSync(providerPath, 'utf-8');
-        } catch {
-            return;
+        let content = walkedContent?.get(normalizePathSeparators(providerPath));
+        if (content === undefined) {
+            try {
+                content = fs.readFileSync(providerPath, 'utf-8');
+            } catch {
+                return;
+            }
         }
-        recordSzObjectRegistryFile(
+        recordSzObjectProvider(
             szvCrossModuleRegistry,
-            providerPath,
-            content,
-            activeParser().parser,
-        );
-        // A provider reached only through demand may itself be a barrel, and it
-        // is not necessarily inside the walked roots — an opted-in package's
-        // entry point is the common case. Recording its links here means every
-        // module the build reads at all contributes them.
-        recordCrossModuleForwards(
             szvCrossModuleForwards,
             providerPath,
             content,
@@ -5101,23 +5112,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         refreshSzvRegistryEntry(filePath, content);
-    }
-
-    /**
-     * Record one file's exported szv factories into the cross-module
-     * registry, so importing files can precompile them.
-     *
-     * @param filePath Absolute source path.
-     * @param content Source text.
-     */
-    function recordSzvRegistryEntries(filePath: string, content: string): void {
-        // Recorded even when the registry is disabled for rewriting. Only
-        // `transformConfiguredSource` gates on that flag; here the entries
-        // are what lets the diagnostics tell "this factory would have been
-        // precompiled, csszyx just turned the feature off for this build"
-        // apart from a genuine authoring problem. A stale entry cannot
-        // affect emitted code through that path.
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
     }
 
     /**
@@ -5267,6 +5261,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const cssImportingSources: ScannedSource[] = [];
         // What the walk reads for merge hooks, read in one scan once it finishes.
         const hookTexts: SourceText[] = [];
+        const linkSources: { filePath: string; content: string }[] = [];
 
         /**
          * Read one processable source into the prescan queue.
@@ -5295,16 +5290,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
                 prescanSawServerModule = true;
             }
-            recordSzvRegistryEntries(filePath, content);
             // Recorded for every walked file, not only sz-authoring ones: a
             // barrel styles nothing itself, and it is exactly the module an
-            // importer names.
-            recordCrossModuleForwards(
-                szvCrossModuleForwards,
-                filePath,
-                content,
-                activeParser().parser,
-            );
+            // importer names. Read in one engine call once the walk ends.
+            linkSources.push({ filePath, content });
             seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
@@ -5346,6 +5335,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         });
         readSourceHooksOf(hookTexts);
+        // Every walked file's szv factories and forwards, read in one engine
+        // call per question. The factories are recorded even when the registry
+        // is disabled for rewriting: only `transformConfiguredSource` gates on
+        // that flag, and here the entries are what lets the diagnostics tell
+        // "this factory would have been precompiled, csszyx just turned the
+        // feature off for this build" apart from a genuine authoring problem.
+        recordModuleLinksOf(
+            szvCrossModuleRegistry,
+            szvCrossModuleForwards,
+            linkSources,
+            activeParser().parser,
+        );
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
             state.rootDir,
@@ -5362,7 +5363,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         await openStyleModel();
 
         const demandStarted = performance.now();
-        recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        walkedContent = new Map(
+            linkSources.map(file => [normalizePathSeparators(file.filePath), file.content]),
+        );
+        try {
+            recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        } finally {
+            walkedContent = undefined;
+        }
         traceBenchTiming(
             `prescan:demand providers=${szObjectProvidersExamined.size}`,
             state.rootDir,
@@ -5649,7 +5657,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function recordAuthoredClassesOf(file: string, code: string): void {
         const key = normalizeSourceFilename(file);
-        const digest = createHash('sha256').update(code).digest('base64');
+        const digest = sha256Of(code).base64;
         if (authoredRead.get(key) === digest) return;
         authoredRead.set(key, digest);
         recordAuthoredClasses(code);
@@ -5923,7 +5931,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // hash of this map: allocating one with mangling off spent an encoder
         // call per class to attest a census the page never carried.
         if (!manglingEnabled) return {};
-        return allocateMangleTokens(eligible, forbiddenTokens);
+        return allocateMangleTokens(eligible, forbiddenTokens, activeParser().parser);
     }
 
     /**
@@ -5982,8 +5990,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             state.mangleMap = computeMangleMap();
         }
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
-        state.checksum = compute_mangle_checksum(
+        state.checksum = computeMangleChecksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
+            { parser: activeParser().parser },
         );
         state.finalized = true;
     }
@@ -6907,7 +6916,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const relative = projectRelative(file);
         // Every version, clean ones too: an undo back to a version that had
         // findings must read as an edit, not as the version already said.
-        diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
+        diagnosticLimiter.version(relative, sha256Of(source).hex);
         if (!hasFindings(result.diagnostics, result.issues)) return;
         // A watch rebuild keeps this module, and with it the levels it was
         // reported at, unless it depends on the files the levels come from:

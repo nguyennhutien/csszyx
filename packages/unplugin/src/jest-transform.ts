@@ -347,6 +347,12 @@ export interface JestProcessOptions {
     config?: { rootDir?: string };
     /** True when jest runs native ES modules rather than CommonJS. */
     supportsStaticESM?: boolean;
+    /**
+     * The file contents jest read for one test file. jest builds one per test
+     * file and hands the same map to every call made for it, which makes it
+     * the identity of that test file's run.
+     */
+    cacheFS?: ReadonlyMap<string, string>;
 }
 
 /** The options jest hands `getCacheKey`; only the fields this lane folds in. */
@@ -608,6 +614,16 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
     // One per project root: jest started at a monorepo root runs each app
     // under `projects` with its own rootDir, in the same worker.
     const projects = new Map<string, JestProject>();
+    // What jest said when it last asked for a key. A wrapper that hands
+    // `process` no options, as the testing guide's does, still runs it right
+    // after `getCacheKey` for the same file, so that call is lowered under the
+    // root, format and test file the key was computed for.
+    let lastKey: { sourcePath: string; options: JestProcessOptions } | undefined;
+    const optionsFor = (
+        sourcePath: string,
+        jestOptions?: JestProcessOptions,
+    ): JestProcessOptions | undefined =>
+        jestOptions ?? (lastKey?.sourcePath === sourcePath ? lastKey.options : undefined);
     const projectOf = (jestOptions?: JestProcessOptions): JestProject => {
         const root = options.root ?? jestOptions?.config?.rootDir ?? process.cwd();
         let project = projects.get(root);
@@ -620,10 +636,11 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
     const compiles = (sourcePath: string): boolean =>
         extensions.some(extension => sourcePath.endsWith(extension));
     return {
-        process(sourceText, sourcePath, jestOptions) {
+        process(sourceText, sourcePath, processOptions) {
             if (!compiles(sourcePath)) return { code: sourceText };
+            const jestOptions = optionsFor(sourcePath, processOptions);
             const { cached, classPrefix, root, report } = projectOf(jestOptions);
-            const prefix = classPrefix();
+            const prefix = classPrefix(jestOptions?.cacheFS);
             // jest in its default mode cannot load an ES module, and one that
             // runs native ESM imports the runtime's ES build, which a CommonJS
             // twin would not register into.
@@ -677,9 +694,13 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
             };
         },
         getCacheKey(sourceText, sourcePath, cacheKeyOptions) {
+            lastKey =
+                cacheKeyOptions === undefined
+                    ? undefined
+                    : { sourcePath, options: cacheKeyOptions };
             const compiled = compiles(sourcePath);
             const project = compiled ? projectOf(cacheKeyOptions) : null;
-            const prefix = project?.classPrefix() ?? null;
+            const prefix = project?.classPrefix(cacheKeyOptions?.cacheFS) ?? null;
             const built = project === null ? null : project.cached(sourceText, sourcePath, prefix);
             return (
                 createHash('sha256')
@@ -729,9 +750,11 @@ interface JestProject {
     /**
      * The Tailwind prefix the project's stylesheets set.
      *
+     * @param run - The test file being run, as jest's `cacheFS` names it; one
+     *        answer per run, and a fresh one on every call without it.
      * @returns The prefix, or null for none.
      */
-    classPrefix(): string | null;
+    classPrefix(run?: object): string | null;
     /**
      * Print a result's diagnostics at the level the project's policy gives
      * them.
@@ -772,7 +795,12 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
     // every file would otherwise pay for the same child process. Successful
     // answers are cheap to validate and must observe edits during watch mode.
     let failedPrefix: { stamp: string; error: Error } | undefined;
-    const classPrefix = (): string | null => {
+    // One answer per test file: a stylesheet edited between two test files is
+    // read by the second, and one test file never sees two prefixes. Without
+    // a run, every call resolves, as watch mode needs.
+    const prefixByRun = new WeakMap<object, string | null>();
+    const classPrefix = (run?: object): string | null => {
+        if (run !== undefined && prefixByRun.has(run)) return prefixByRun.get(run) as string | null;
         const inputs = { root, cacheDir: factsDir, tailwindStylesheet, ignore };
         // Stamping walks with the same patterns, so a pattern that cannot be
         // honoured fails here too. The options never change within a worker,
@@ -790,7 +818,9 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
         }
         try {
             const recorded = resolveNextClassPrefix(inputs);
-            return recorded.ok ? recorded.prefix : readStylesheetsInChild(inputs);
+            const prefix = recorded.ok ? recorded.prefix : readStylesheetsInChild(inputs);
+            if (run !== undefined) prefixByRun.set(run, prefix);
+            return prefix;
         } catch (error) {
             const settled = error as Error;
             failedPrefix = { stamp: stampOf(), error: settled };
