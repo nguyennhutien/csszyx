@@ -37,6 +37,8 @@ pub(crate) mod rewrite;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod scope;
+#[cfg(feature = "native-engine")]
+mod source_walk;
 pub mod spans;
 #[cfg(feature = "native-engine")]
 pub(crate) mod szv_precompile;
@@ -48,6 +50,7 @@ pub(crate) mod var_hostile;
 #[cfg(not(feature = "native-engine"))]
 use fast_path::{triage_source, FastPathTriage};
 #[cfg(feature = "native-engine")]
+#[cfg(all(feature = "native-engine", not(target_arch = "wasm32")))]
 use rayon::prelude::*;
 
 pub use contract::{
@@ -113,10 +116,9 @@ pub fn transform_batch_with_options(
     {
         let mut options = options;
         let table = engine::BatchMergeTable::read(options.merge_table_json.take().as_deref());
-        Ok(files
-            .par_iter()
-            .map(|file| engine::transform_file_with_table(file, options.clone(), &table))
-            .collect())
+        Ok(map_files(files, |file| {
+            engine::transform_file_with_table(file, options.clone(), &table)
+        }))
     }
 
     #[cfg(not(feature = "native-engine"))]
@@ -127,6 +129,19 @@ pub fn transform_batch_with_options(
             .any(|file| matches!(triage_source(file), FastPathTriage::NeedsParser(_)));
         Err(TransformError::NotImplemented)
     }
+}
+
+/// Run `read` on every file, results in input order: on the rayon pool
+/// natively, one after another on wasm, which has no threads to run a pool on.
+#[cfg(feature = "native-engine")]
+pub(crate) fn map_files<R: Send>(
+    files: &[TransformFile],
+    read: impl Fn(&TransformFile) -> R + Sync + Send,
+) -> Vec<R> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return files.par_iter().map(read).collect();
+    #[cfg(target_arch = "wasm32")]
+    return files.iter().map(read).collect();
 }
 
 #[cfg(test)]

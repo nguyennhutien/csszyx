@@ -466,6 +466,14 @@ those builds. The Vue and Svelte adapters used on their own, without the csszyx
 bundler plugin, read no stylesheet: pass the prefix as their `classPrefix`
 option. The CDN build (`csszyx/browser`) does not read a prefix yet.
 
+An object you lower yourself with `szr` gets the prefix too: the build gives it
+to the runtime in each module that reaches `szr` from `csszyx`,
+`@csszyx/runtime` or their `/core` entries through `import { szr }`,
+`import * as`, `export { szr }`, `export *`, `require()` or `import()`. A module
+that only receives `szr` from somewhere else, as a function argument or from a
+package that bundles the runtime, is not one of them; import `szr` there
+directly, or import it in a module that loads first.
+
 The build stops when the stylesheets it finds set different prefixes, or when a
 stylesheet that imports Tailwind does not compile, because either way some of
 the classes it emits would style nothing. When the project also holds

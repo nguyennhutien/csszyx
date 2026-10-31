@@ -15,14 +15,25 @@
 //     the published npm artifact.
 //   - `CSSZYX_REQUIRE_WASM_OPT=1` (the release workflow) turns the skip into a
 //     failure, so the bytes the release tests are the bytes it publishes.
+//
+// The optimized module is written once with its name section (`-g`) to
+// `pkg-parser-debug/`, which npm does not ship and the release attaches to the
+// GitHub release, then stripped of it without optimizing again, so every
+// function index in a published stack trace (`wasm-function[N]`) names the
+// same function in the debug file.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
+const debugDir = path.join(pkgDir, 'pkg-parser-debug');
+
+// A debug wasm left by an earlier build would sit beside this build's wasm,
+// and be cached with it, without naming its functions.
+rmSync(debugDir, { recursive: true, force: true });
 
 const probe = spawnSync('wasm-opt', ['--version'], { stdio: 'ignore' });
 if (probe.status !== 0 && process.env.CSSZYX_REQUIRE_WASM_OPT === '1') {
@@ -47,8 +58,13 @@ for (const wasm of targets) {
     // Write to a sibling .tmp then atomically rename, so a crash mid-run
     // cannot leave a partially-written WASM in place.
     const tmp = `${wasm}.tmp`;
+    const debug = path.join(debugDir, path.basename(wasm).replace(/\.wasm$/, '.debug.wasm'));
+    mkdirSync(debugDir, { recursive: true });
     console.log(`[wasm-opt] optimizing ${path.relative(pkgDir, wasm)}`);
-    execFileSync('wasm-opt', ['-O', wasm, '-o', tmp], { stdio: 'inherit' });
+    execFileSync('wasm-opt', ['-O', '-g', wasm, '-o', debug], { stdio: 'inherit' });
+    execFileSync('wasm-opt', ['--strip-debug', '--strip-producers', debug, '-o', tmp], {
+        stdio: 'inherit',
+    });
     renameSync(tmp, wasm);
 }
 

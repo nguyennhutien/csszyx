@@ -58,6 +58,27 @@ pub struct NativeModuleLinks {
     /// objects whose key order the importer reads, and the wasm build encodes
     /// them with the same serializer.
     pub registry_entries_json: String,
+    /// Whether the module is an ES module; false unless module facts were asked for.
+    pub module_syntax: bool,
+    /// Every module the source loads; empty unless module facts were asked for.
+    pub loads: Vec<NativeModuleLoad>,
+    /// The text inside `<style>` elements; empty unless asked for.
+    pub style_css: Vec<String>,
+    /// Other strings that build a `<style>`; empty unless asked for.
+    pub style_markup: Vec<String>,
+    /// Whether the parse stopped on a syntax error, so the facts above are partial.
+    pub parse_failed: bool,
+}
+
+/// One module a source loads, and one name it reads from it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeModuleLoad {
+    /// The specifier, exactly as the source spelled it.
+    pub specifier: String,
+    /// The name read, or none when every name is reachable.
+    pub name: Option<String>,
 }
 
 /// Which optional answers a scan computes, as JavaScript passes them.
@@ -67,6 +88,10 @@ pub struct NativeModuleLinks {
 pub struct NativeModuleLinksQuery {
     /// Read the exported values the cross-module registry carries.
     pub registry_entries: Option<bool>,
+    /// Read the module format and every module the source loads.
+    pub module_facts: Option<bool>,
+    /// Read the CSS `<style>` elements hold, and the strings that build one.
+    pub style_texts: Option<bool>,
 }
 
 /// Reads the stylesheets each module imports, the names it re-exports and,
@@ -80,10 +105,11 @@ pub fn scan_module_links_native(
     query: Option<NativeModuleLinksQuery>,
 ) -> Vec<NativeModuleLinks> {
     let files: Vec<TransformFile> = files.into_iter().map(TransformFile::from).collect();
+    let query = query.unwrap_or_default();
     let query = crate::transform::module_links::ModuleLinksQuery {
-        registry_entries: query
-            .and_then(|query| query.registry_entries)
-            .unwrap_or_default(),
+        registry_entries: query.registry_entries.unwrap_or_default(),
+        module_facts: query.module_facts.unwrap_or_default(),
+        style_texts: query.style_texts.unwrap_or_default(),
     };
     crate::transform::module_links::scan_module_links(&files, query)
         .into_iter()
@@ -102,6 +128,18 @@ pub fn scan_module_links_native(
                     specifier: forward.specifier,
                 })
                 .collect(),
+            module_syntax: links.module_syntax,
+            loads: links
+                .loads
+                .into_iter()
+                .map(|load| NativeModuleLoad {
+                    specifier: load.specifier,
+                    name: load.name,
+                })
+                .collect(),
+            style_css: links.style_css,
+            style_markup: links.style_markup,
+            parse_failed: links.parse_failed,
         })
         .collect()
 }

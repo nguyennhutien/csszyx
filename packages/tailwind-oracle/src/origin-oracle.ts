@@ -517,6 +517,28 @@ export function collectVariantHooks(
     }
 }
 
+/** An opening `<style` tag, any case. */
+const STYLE_OPEN = /<style/gi;
+
+/** A closing `</style` tag, any case. */
+const STYLE_CLOSE = /<\/style/gi;
+
+/**
+ * Where a tag next starts in the text itself. Searched case-insensitively
+ * there rather than in a lowercased copy: a character such as `İ` lowercases
+ * to two code units, and an offset found in the copy would land later in the
+ * text, cutting the first class off the block.
+ *
+ * @param text - The source text.
+ * @param tag - The tag, a global case-insensitive pattern.
+ * @param from - Where to start looking.
+ * @returns The offset, or -1.
+ */
+function tagIndex(text: string, tag: RegExp, from: number): number {
+    tag.lastIndex = from;
+    return tag.exec(text)?.index ?? -1;
+}
+
 /** A `lang` whose blocks are indented rather than braced. */
 const INDENTED_LANG = /\blang\s*=\s*["']?(?:sass|stylus|styl)\b/i;
 
@@ -531,30 +553,58 @@ const INDENTED_LANG = /\blang\s*=\s*["']?(?:sass|stylus|styl)\b/i;
  *
  * @param text - The component's source text.
  * @param into - Where the hooks go.
+ * @param options - How to read each block.
+ * @param options.everyName - Count every class name in a block as well, for
+ *        text whose blocks may hold script around the CSS, such as a JSX
+ *        `<style>{'…'}</style>` the engine could not parse.
  */
-export function styleBlockHooks(text: string, into: ClassHooks): void {
-    // Found with `indexOf`, once over the text: a tag regex searched from
-    // every `<style` would read to the end each time one never closes.
-    const lower = text.toLowerCase();
-    let tag = lower.indexOf('<style');
+export function styleBlockHooks(
+    text: string,
+    into: ClassHooks,
+    { everyName = false }: { readonly everyName?: boolean } = {},
+): void {
+    // Found once over the text: a tag regex searched from every `<style`
+    // would read to the end each time one never closes.
+    let tag = tagIndex(text, STYLE_OPEN, 0);
     while (tag !== -1) {
         const attributesStart = tag + '<style'.length;
-        if (NAME_CHAR.test(lower.charAt(attributesStart))) {
-            tag = lower.indexOf('<style', attributesStart);
+        if (NAME_CHAR.test(text.charAt(attributesStart))) {
+            tag = tagIndex(text, STYLE_OPEN, attributesStart);
             continue;
         }
-        const tagEnd = lower.indexOf('>', attributesStart);
+        const tagEnd = text.indexOf('>', attributesStart);
         if (tagEnd === -1) return;
-        const close = lower.indexOf('</style', tagEnd + 1);
+        const close = tagIndex(text, STYLE_CLOSE, tagEnd + 1);
         const end = close === -1 ? text.length : close;
         const body = text.slice(tagEnd + 1, end);
-        if (INDENTED_LANG.test(text.slice(attributesStart, tagEnd))) {
+        const indented = INDENTED_LANG.test(text.slice(attributesStart, tagEnd));
+        if (indented || everyName) {
             for (const name of classSelectorsIn(body)) into.names.add(name);
-        } else {
-            collectClassHooks(body, into);
         }
-        tag = lower.indexOf('<style', end);
+        if (!indented) collectClassHooks(body, into);
+        tag = tagIndex(text, STYLE_OPEN, end);
     }
+}
+
+/**
+ * Record every class the `<style>` elements of a script select on, from what
+ * the engine's parse read out of them (`scanModuleLinks` with `styleTexts`):
+ * the text of each string, template part and JSX text inside a `<style>`
+ * element, escapes decoded, read as a stylesheet, and each string elsewhere
+ * that builds one, read as markup. The parse tells a string from a comment
+ * or a regex, so nothing here reads JavaScript.
+ *
+ * @param styles - What the parse read.
+ * @param styles.styleCss - Text inside `<style>` elements.
+ * @param styles.styleMarkup - Strings that build a `<style>` element.
+ * @param into - Where the hooks go.
+ */
+export function scriptStyleHooks(
+    styles: { readonly styleCss: readonly string[]; readonly styleMarkup: readonly string[] },
+    into: ClassHooks,
+): void {
+    for (const css of styles.styleCss) collectClassHooks(css, into);
+    for (const markup of styles.styleMarkup) styleBlockHooks(markup, into);
 }
 
 /**

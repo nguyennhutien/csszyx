@@ -4,8 +4,9 @@
  * A merge may remove a class only when no rule selects on it. The style model
  * reads the rules in stylesheets; two more reach the page from sources: an
  * arbitrary variant (`group-[.shadow-md]:p-2`, written in markup or lowered
- * from an `sz` key) and a `<style>` block in a Vue, Svelte or Astro component
- * or an HTML page. This registry keeps what each file contributes, so an edit
+ * from an `sz` key) and a `<style>` element: a block in a Vue, Svelte or Astro
+ * component or an HTML page, or one a script writes, such as a React
+ * `<style>` child. This registry keeps what each file contributes, so an edit
  * that removes a hook takes it away again, and hands the model the union. The
  * candidates of files read together in one scan are the exception, kept
  * together (`readTexts`).
@@ -18,15 +19,18 @@
  */
 import { createHash } from 'node:crypto';
 
+import { scanModuleLinks } from '@csszyx/compiler/engine';
 import {
     addClassHooks,
     type ClassHooks,
     type ContentFile,
     type ContentScanner,
     noClassHooks,
+    scriptStyleHooks,
     styleBlockHooks,
 } from '@csszyx/tailwind-oracle';
 
+import type { EngineArtifact } from './next-runtime-injection.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { sortStrings } from './sort.js';
 
@@ -36,6 +40,18 @@ export const MARKUP_EXTENSIONS: ReadonlySet<string> = new Set([
     '.svelte',
     '.astro',
     '.html',
+]);
+
+/** Scripts whose `<style>` elements the engine's parse reads. */
+const SCRIPT_EXTENSIONS: ReadonlySet<string> = new Set([
+    '.js',
+    '.jsx',
+    '.mjs',
+    '.cjs',
+    '.ts',
+    '.tsx',
+    '.mts',
+    '.cts',
 ]);
 
 /** One file's text, as `SourceHookRegistry.readTexts` reads it. */
@@ -111,15 +127,52 @@ function digestOf(text: string): string {
 }
 
 /**
- * What a file's `<style>` blocks select on, when it is markup.
+ * Record what a file's `<style>` elements select on: the blocks of a
+ * component or page, or the elements a script writes, such as a React
+ * `<style>{`…`}</style>` or a string handed to `dangerouslySetInnerHTML`.
  *
  * @param text - Its text.
  * @param extension - Its extension without the dot.
- * @returns The hooks; none for a file that is not markup.
+ * @param into - Where the hooks go.
+ * @param parser - The engine artifact the build names, for the parse of a
+ *        script; none lets the engine choose as the transform does.
  */
-function styleOf(text: string, extension: string): ClassHooks {
+export function readStyleHooks(
+    text: string,
+    extension: string,
+    into: ClassHooks,
+    parser?: EngineArtifact,
+): void {
+    if (MARKUP_EXTENSIONS.has(`.${extension}`)) {
+        styleBlockHooks(text, into);
+        return;
+    }
+    // Only a script that spells `<style` is parsed for it, by the engine,
+    // which tells a string from a comment, a regex or a template's code.
+    if (!SCRIPT_EXTENSIONS.has(`.${extension}`) || !text.toLowerCase().includes('<style')) {
+        return;
+    }
+    const files = [{ filename: `source.${extension}`, source: text }];
+    for (const styles of scanModuleLinks(files, { styleTexts: true, parser })) {
+        scriptStyleHooks(styles, into);
+        // A parse that stopped early has not seen every element, so every
+        // class name inside a `<style>` element counts: a class kept that
+        // nothing selects on costs a merge, one dropped costs its style.
+        if (styles.parseFailed) styleBlockHooks(text, into, { everyName: true });
+    }
+}
+
+/**
+ * What a file's `<style>` elements select on.
+ *
+ * @param text - Its text.
+ * @param extension - Its extension without the dot.
+ * @param parser - The engine artifact the build names, if any.
+ * @returns The hooks.
+ */
+function styleOf(text: string, extension: string, parser?: EngineArtifact): ClassHooks {
     const style = noClassHooks();
-    if (MARKUP_EXTENSIONS.has(`.${extension}`)) styleBlockHooks(text, style);
+    readStyleHooks(text, extension, style, parser);
     return style;
 }
 
@@ -135,8 +188,13 @@ export class SourceHookRegistry {
 
     /**
      * @param loadScanner - Loads Tailwind's extractor, once, on first use.
+     * @param parser - The engine artifact the build names, asked when a
+     *        script is read; none lets the engine choose as the transform does.
      */
-    constructor(private readonly loadScanner: () => ContentScanner | null) {}
+    constructor(
+        private readonly loadScanner: () => ContentScanner | null,
+        private readonly parser: () => EngineArtifact | undefined = () => undefined,
+    ) {}
 
     /**
      * Read one file's text: the candidates Tailwind finds in it, and its
@@ -155,7 +213,7 @@ export class SourceHookRegistry {
         if (this.files.get(file)?.digest === digest) return false;
         return this.update(file, {
             written: withColon(this.scan([{ content: text, extension }])),
-            style: styleOf(text, extension),
+            style: styleOf(text, extension, this.parser()),
             digest,
         });
     }
@@ -184,8 +242,11 @@ export class SourceHookRegistry {
         let changed = false;
         for (const { file, text, extension, digest } of unread) {
             changed =
-                this.update(file, { written: [], style: styleOf(text, extension), digest }) ||
-                changed;
+                this.update(file, {
+                    written: [],
+                    style: styleOf(text, extension, this.parser()),
+                    digest,
+                }) || changed;
         }
         const found = this.scan(
             unread.map(({ text, extension }) => ({ content: text, extension })),

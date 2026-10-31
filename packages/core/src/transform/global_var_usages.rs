@@ -15,12 +15,13 @@ use oxc_ast::ast::{
     JSXAttributeValue, JSXExpression, MemberExpression, ObjectPropertyKind, PropertyKey,
     VariableDeclarator,
 };
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use serde::{Serialize, Serializer};
 
 use super::parser::{parse_errors, source_type_for_path};
 use super::recovery::SourceLines;
+use super::source_walk::SourceWalk;
 use super::TransformFile;
 
 /// What one record reports.
@@ -145,8 +146,12 @@ fn usages_of(file: &TransformFile, tokens: Option<&HashSet<&str>>) -> Vec<Global
         );
         return records.found;
     }
-    let mut scan = UsageScan::default();
-    scan.visit_program(&parsed.program);
+    let mut walk = SourceWalk {
+        usages: Some(UsageScan::default()),
+        links: None,
+    };
+    walk.visit_program(&parsed.program);
+    let scan = walk.usages.unwrap_or_default();
     for candidate in &scan.candidates {
         if let Some(name) = candidate.name.resolve(&scan.constants) {
             records.push(candidate.kind, name, candidate.start);
@@ -222,35 +227,32 @@ struct Candidate {
     start: u32,
 }
 
-/// One walk over the file, outer node before the nodes inside it.
+/// What one walk over the file collects for this scan, outer node before the
+/// nodes inside it; the walk is [`SourceWalk`], shared with the module-link
+/// scan so the wasm artifact carries one copy of oxc's.
 ///
 /// Constants are collected in the same walk and read only after it, so a use
 /// resolves to the last `name = '<string>'` declarator of its name in source
-/// order, wherever that declarator sits: scope is not read. One walker rather
-/// than two keeps the wasm artifact from carrying a second copy of oxc's.
+/// order, wherever that declarator sits: scope is not read.
 #[derive(Default)]
-struct UsageScan {
+pub(crate) struct UsageScan {
     constants: HashMap<String, String>,
     candidates: Vec<Candidate>,
 }
 
-impl<'a> Visit<'a> for UsageScan {
-    fn visit_variable_declarator(&mut self, declarator: &VariableDeclarator<'a>) {
+impl UsageScan {
+    /// A `name = '<string>'` declarator, which a later use may read.
+    pub(crate) fn declarator(&mut self, declarator: &VariableDeclarator<'_>) {
         if let (BindingPattern::BindingIdentifier(id), Some(Expression::StringLiteral(value))) =
             (&declarator.id, &declarator.init)
         {
             self.constants
                 .insert(id.name.as_str().to_owned(), value.value.as_str().to_owned());
         }
-        walk::walk_variable_declarator(self, declarator);
     }
 
-    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
-        self.style_method(call);
-        walk::walk_call_expression(self, call);
-    }
-
-    fn visit_jsx_attribute(&mut self, attribute: &JSXAttribute<'a>) {
+    /// A `style` or `className` attribute.
+    pub(crate) fn jsx_attribute(&mut self, attribute: &JSXAttribute<'_>) {
         if let JSXAttributeName::Identifier(name) = &attribute.name {
             match name.name.as_str() {
                 "style" => self.style_keys(attribute),
@@ -258,17 +260,14 @@ impl<'a> Visit<'a> for UsageScan {
                 _ => {}
             }
         }
-        walk::walk_jsx_attribute(self, attribute);
     }
-}
 
-impl UsageScan {
     fn candidate(&mut self, kind: GlobalVarUsageKind, name: Spelled, start: u32) {
         self.candidates.push(Candidate { kind, name, start });
     }
 
     /// `<member>.setProperty(first, …)` and its two siblings.
-    fn style_method(&mut self, call: &CallExpression<'_>) {
+    pub(crate) fn style_method(&mut self, call: &CallExpression<'_>) {
         let kind = call
             .callee
             .as_member_expression()

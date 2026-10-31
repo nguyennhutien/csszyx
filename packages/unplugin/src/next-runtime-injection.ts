@@ -1,7 +1,14 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 
+import {
+    type ModuleLinks,
+    type ScanModuleLinksOptions,
+    scanModuleLinks,
+} from '@csszyx/compiler/engine';
+
 import { insertAfterUseDirective } from './directive-prologue.js';
-import { importsRuntimeHelper } from './runtime-import-scan.js';
+import { moduleFormatOf } from './module-syntax.js';
+import { importsRuntimeHelper, reachesAuthorRuntimeCall } from './runtime-import-scan.js';
 
 /** Runtime helpers emitted by csszyx compiler transforms. */
 export type NextRuntimeHelper =
@@ -82,6 +89,25 @@ const OBJECT_LOWERING_HELPERS: ReadonlySet<string> = new Set<NextRuntimeHelper>(
     '_szPart',
 ]);
 
+/**
+ * The calls an author imports that lower an sz object in the browser: `szr`
+ * is the public name of `_sz`, and the compiler leaves such a call as written.
+ */
+const AUTHOR_LOWERING_CALLS: ReadonlySet<string> = new Set(['szr', ...OBJECT_LOWERING_HELPERS]);
+
+/** What a lane knows of the module it writes a registration into. */
+export interface RuntimeModuleContext {
+    /** The module's path; its extension and package type settle the format. */
+    readonly file?: string;
+    /** The format, when the lane loads every module one way (Vite: `esm`). */
+    readonly format?: 'esm' | 'cjs';
+    /** The engine artifact the build names, for the parse that reads the module. */
+    readonly parser?: EngineArtifact;
+}
+
+/** The engine artifact a build names, as `build.parser` names it. */
+export type EngineArtifact = NonNullable<ScanModuleLinksOptions['parser']>;
+
 /** The local name the registration is imported under, clear of any author binding. */
 const CLASS_PREFIX_REGISTRATION = '__szRegisterClassPrefix';
 
@@ -89,31 +115,57 @@ const CLASS_PREFIX_REGISTRATION = '__szRegisterClassPrefix';
  * Register the Tailwind prefix in a module that lowers an sz object at runtime.
  *
  * The browser cannot read the project's stylesheet, so the build writes the
- * prefix into the module beside the runtime import every lane already adds. A
- * module whose helpers only join class strings lowers nothing and registers
- * nothing, and a project with no prefix gets exactly the code it got before.
+ * prefix into the module beside the runtime import every lane already adds,
+ * or beside the author's own import, `require()` or `import()` of `szr`. A module whose helpers only join
+ * class strings lowers nothing and registers nothing, and a project with no
+ * prefix gets exactly the code it got before.
  *
  * @param code Module code with its runtime imports in place.
  * @param groups The runtime helpers the module imports from the barrel entry.
  * @param groups.barrel Helper names imported from `@csszyx/runtime` itself.
  * @param classPrefix The prefix the project's stylesheet sets, or null.
+ * @param module Where the module comes from, so the registration is written
+ *        in the format it is loaded in.
  * @returns The code, with the registration when one is needed.
  */
 export function registerRuntimeClassPrefix(
     code: string,
     groups: { readonly barrel: readonly string[] },
     classPrefix: string | null,
+    module: RuntimeModuleContext = {},
 ): string {
-    if (
-        !groups.barrel.some(helper => OBJECT_LOWERING_HELPERS.has(helper)) ||
-        code.includes(`${CLASS_PREFIX_REGISTRATION}(`)
-    ) {
+    const statically = groups.barrel.some(helper => OBJECT_LOWERING_HELPERS.has(helper));
+    // The engine's own parse, at most once and only when needed: it tells a
+    // statement from text that spells one in a comment, string or template.
+    let facts: ModuleLinks | undefined;
+    const parsed = (): ModuleLinks =>
+        (facts ??= scanModuleLinks(
+            [{ filename: module.file?.split('?')[0] ?? 'module.js', source: code }],
+            { moduleFacts: true, parser: module.parser },
+        )[0] as ModuleLinks);
+    // A parse that stopped early may have missed the call, and a registration
+    // the module does not need costs one import, where a missing one costs
+    // every class the runtime lowers.
+    const lowers =
+        statically ||
+        (code.includes('csszyx') &&
+            (parsed().parseFailed ||
+                reachesAuthorRuntimeCall(parsed().loads, AUTHOR_LOWERING_CALLS)));
+    if (!lowers || code.includes(`${CLASS_PREFIX_REGISTRATION}(`)) {
         return code;
     }
+    // In the module's own format, whatever reached the runtime: a CommonJS
+    // file may load it with `import()`, where an `import` statement is a syntax
+    // error, and an ES module may `require` it through `createRequire`.
+    const format = module.format ?? moduleFormatOf(module.file, () => parsed().moduleSyntax);
+    const binding =
+        format === 'cjs'
+            ? `const { registerSzClassPrefix: ${CLASS_PREFIX_REGISTRATION} } = require('@csszyx/runtime');`
+            : `import { registerSzClassPrefix as ${CLASS_PREFIX_REGISTRATION} } from '@csszyx/runtime';`;
     // Imports hoist, so a call placed with them still runs after every one.
     return insertRuntimeImport(
         code,
-        `import { registerSzClassPrefix as ${CLASS_PREFIX_REGISTRATION} } from '@csszyx/runtime';\n${CLASS_PREFIX_REGISTRATION}(${JSON.stringify(classPrefix)});\n`,
+        `${binding}\n${CLASS_PREFIX_REGISTRATION}(${JSON.stringify(classPrefix)});\n`,
     );
 }
 
@@ -123,18 +175,24 @@ export function registerRuntimeClassPrefix(
  * @param code Transformed source code.
  * @param usage Runtime helper usage flags.
  * @param classPrefix The Tailwind prefix to register for runtime lowering, or null.
+ * @param module Where the module comes from, which settles the format a
+ *        registration is written in, and the engine artifact the build names.
  * @returns Code plus the helper names injected by this pass.
  */
 export function injectNextRuntimeImports(
     code: string,
     usage: NextRuntimeImportUsage,
     classPrefix: string | null = null,
+    module: RuntimeModuleContext = {},
 ): NextRuntimeImportInjectionResult {
     // Same slim rule as the vite/webpack hook: provably string-only _szPart
     // arguments route the merge helpers through the compiler-free entry.
     const groups = runtimeHelperGroupsFromUsage(usage);
     const injected = injectHelperImports(code, groups);
-    return { ...injected, code: registerRuntimeClassPrefix(injected.code, groups, classPrefix) };
+    return {
+        ...injected,
+        code: registerRuntimeClassPrefix(injected.code, groups, classPrefix, module),
+    };
 }
 
 /**

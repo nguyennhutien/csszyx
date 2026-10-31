@@ -48,6 +48,23 @@ CSS-compliant class name generator using reversed tier encoding (z -> y -> x).
 | Tier 2 | 52 - 571   | \[z-aZ-A\]\[9-0\] | `z9`, `y8`    |
 | Tier 3 | 572 - 3275 | \[z-aZ-A\]{2}     | `zz`, `zy`    |
 
+## When the WebAssembly engine stops
+
+The WebAssembly engine runs where the native addon cannot load. If it stops
+on a csszyx bug, the build prints the line that failed first:
+
+```text
+WASM PANIC: panicked at src/transform/module_links.rs:241:17: …
+```
+
+The stack trace after it names engine functions by number, such as
+`wasm-function[1234]`, because the published module carries no function
+names. Report the bug with the panic line and the stack trace at
+<https://github.com/nguyennhutien/csszyx/issues>. Each GitHub release has
+`csszyx_core_bg.debug.wasm`, the same module with its names kept, and
+`node packages/core/scripts/wasm-function-name.mjs csszyx_core_bg.debug.wasm 1234`
+in a checkout of the repository reads a number back as its Rust function.
+
 ## Performance
 
 Benchmarks on Apple M2 (WASM, Node v20):

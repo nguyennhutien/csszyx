@@ -22,6 +22,7 @@ import {
     collectVariantHooks,
     isHook,
     noClassHooks,
+    scriptStyleHooks,
     styleBlockHooks,
 } from '../src/origin-oracle.js';
 
@@ -154,6 +155,36 @@ describe('a <style> block in a component', () => {
         const hooks = noClassHooks();
         styleBlockHooks('<style>.a{}', hooks);
         expect([...hooks.names]).toEqual(['a']);
+    });
+});
+
+// `İ` lowercases to two UTF-16 units, so an offset found in a lowercased copy
+// lands later in the text itself.
+describe('a <style> element after text that changes length when lowercased', () => {
+    it('still reads its first class', () => {
+        const hooks = noClassHooks();
+        styleBlockHooks(`${'İ'.repeat(12)} <style>.card.shadow-md {}</style>`, hooks);
+        expect(isHook(hooks, 'card')).toBe(true);
+    });
+});
+
+// What the engine's parse read out of a script's `<style>` elements: the
+// strings are read as a stylesheet, the markup a string builds as markup.
+describe('the style text of a script', () => {
+    it('reads each text as a stylesheet, brackets in a value included', () => {
+        const hooks = noClassHooks();
+        scriptStyleHooks(
+            { styleCss: ["'", '[class~="pb-[2px]"] {}', '.card.shadow-md {}'], styleMarkup: [] },
+            hooks,
+        );
+        expect(isHook(hooks, 'pb-[2px]')).toBe(true);
+        expect(isHook(hooks, 'shadow-md')).toBe(true);
+    });
+
+    it('reads a string that builds a <style> element as markup', () => {
+        const hooks = noClassHooks();
+        scriptStyleHooks({ styleCss: [], styleMarkup: ['<STYLE>.shadow-md {}</STYLE>'] }, hooks);
+        expect(isHook(hooks, 'shadow-md')).toBe(true);
     });
 });
 

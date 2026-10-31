@@ -284,7 +284,10 @@ export function runNextTurboLoader(
         emitWarning: loaderContext.emitWarning?.bind(loaderContext),
         addDependency: loaderContext.addDependency?.bind(loaderContext),
     });
-    const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
+    const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix, {
+        file: loaderContext.resourcePath,
+        parser: options.parserMode ?? 'rust',
+    });
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the

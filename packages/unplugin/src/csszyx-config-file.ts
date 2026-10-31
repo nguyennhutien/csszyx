@@ -38,6 +38,7 @@ import {
     readCsszyxFileConfig,
 } from './diagnostic-policy.js';
 import type { DiagnosticPolicyInput } from './diagnostic-policy-inputs.js';
+import { hasModuleSyntax, isModulePackage } from './module-syntax.js';
 import { samePath } from './path-case.js';
 
 /** Every name the config file can have, in the order they are looked for. */
@@ -157,28 +158,6 @@ const nativeImport: ModuleImporter = url => import(/* turbopackIgnore: true */ u
 const ESM_TWIN: Readonly<Record<string, string>> = { '.ts': '.mts', '.js': '.mjs' };
 
 /**
- * Whether the nearest package.json at or above a directory says
- * `"type": "module"`, which is when Node reads a `.ts` or `.js` file as an
- * ES module. One that cannot be parsed counts as not saying so.
- *
- * @param dir - Absolute directory.
- * @returns True for an ES-module package.
- */
-function isModulePackage(dir: string): boolean {
-    for (let current = dir; ; current = path.dirname(current)) {
-        const manifest = path.join(current, 'package.json');
-        if (existsSync(manifest)) {
-            try {
-                return JSON.parse(readFileSync(manifest, 'utf8')).type === 'module';
-            } catch {
-                return false;
-            }
-        }
-        if (path.dirname(current) === current) return false;
-    }
-}
-
-/**
  * The name a new config file gets in a project: one Node reads as an ES
  * module whatever the package type, so `export default` loads without Node
  * advising `"type": "module"` — `.ts`/`.js` in an ES-module package,
@@ -193,17 +172,6 @@ export function csszyxConfigFileNameFor(root: string, options: { typescript: boo
     const esm = isModulePackage(root);
     if (options.typescript) return esm ? 'csszyx.config.ts' : 'csszyx.config.mts';
     return esm ? 'csszyx.config.js' : 'csszyx.config.mjs';
-}
-
-/**
- * Whether a file is written as an ES module: a line that starts with `import`
- * or `export` as a statement. A CommonJS file (`module.exports = …`) has none.
- *
- * @param text - The file's text.
- * @returns True for ES-module syntax.
- */
-function hasModuleSyntax(text: string): boolean {
-    return /^[ \t]*(?:import|export)[\s{*]/m.test(text);
 }
 
 /**

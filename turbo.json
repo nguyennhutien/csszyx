@@ -5,7 +5,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "lib/**", "pkg-parser/**"],
+      "outputs": ["dist/**", "lib/**", "pkg-parser/**", "pkg-parser-debug/**"],
       "env": ["NODE_ENV", "CSSZYX_REQUIRE_WASM_OPT"]
     },
     "dev": {
@@ -28,13 +28,14 @@
     // never replays a wasm build that skipped the optimizer.
     "@csszyx/core#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "lib/**", "pkg-parser/**"],
+      "outputs": ["dist/**", "lib/**", "pkg-parser/**", "pkg-parser-debug/**"],
       "env": ["NODE_ENV", "CSSZYX_REQUIRE_WASM_OPT"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
-        "$TURBO_ROOT$/rust-toolchain.toml"
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/.cargo/config.toml"
       ]
     },
     // Tests that read files OUTSIDE their own package need those paths declared

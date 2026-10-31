@@ -19,7 +19,7 @@ import { auditMerges } from '../src/merge-audit.js';
 import { MERGE_TABLE_FILE, writeMergeRegistration } from '../src/merge-registration.js';
 import { prepareNextStylesheetFacts } from '../src/next-stylesheet-facts.js';
 import { openProjectStyleModel, type ProjectStyleModel } from '../src/project-style-model.js';
-import { SourceHookRegistry } from '../src/source-hooks.js';
+import { readStyleHooks, SourceHookRegistry } from '../src/source-hooks.js';
 import { rollupPlugin, vitePlugin } from '../src/unplugin.js';
 import { RESOLVED_UNSERVED_VIRTUAL_ID } from '../src/virtual-modules.js';
 import {
@@ -45,6 +45,24 @@ const REPORT_PAGE = '<html><head><style>.card.shadow-md { outline: 0; }</style><
 const SCOPED_STYLE = '<style scoped>.card.shadow-md { outline: 0; }</style>\n';
 const COVERED =
     'export const A = () => <div className="card shadow-md" sz={{ shadow: "lg" }} />;\n';
+/** A React style element beside the merge it keeps a class in. */
+const SAME_FILE_STYLE =
+    'export const S = () => <style>{`.card.shadow-md { color: red; }`}</style>;\n';
+
+// The engine reads a script's `<style>` elements off its parse. A source it
+// cannot parse is read as markup instead, which keeps what any of its style
+// elements might select on.
+describe('a script the engine could not parse', () => {
+    it('keeps what its style element selects on', () => {
+        const hooks = noClassHooks();
+        const source =
+            "import type { A } from 'a';\n" +
+            "export const C = () => <style>{'.card {}'}</style>;\n";
+        readStyleHooks(source, 'js', hooks);
+
+        expect([...hooks.names]).toContain('card');
+    });
+});
 
 describe('the style model', () => {
     it('reads a variant an unimported stylesheet applies', async () => {
@@ -148,6 +166,61 @@ describe.each(['rust', 'wasm'] as const)('a Vite build (%s)', parser => {
             'a Vue template',
             { 'src/Card.vue': '<template><div class="in-[.shadow-md]:p-2" /></template>\n' },
         ],
+        [
+            'a React style element in another file',
+            {
+                'src/B.tsx':
+                    'export const B = () => <style>{`.card.shadow-md { outline: 0; }`}</style>;\n',
+            },
+        ],
+        [
+            'a React style element in the same file',
+            {
+                'src/A.tsx': `${COVERED}${SAME_FILE_STYLE}`,
+            },
+        ],
+        [
+            'a string a React style element holds',
+            {
+                'src/B.tsx':
+                    'export const B = () => <style>{".card.shadow-md { outline: 0; }"}</style>;\n',
+            },
+        ],
+        [
+            'a string after a regex holding a quote',
+            {
+                'src/B.tsx':
+                    "export const B = () => <style>{/'/.test(\"'\") && '[class~=shadow-md] {color:red}'}</style>;\n",
+            },
+        ],
+        [
+            'a string after a comment with an apostrophe',
+            {
+                'src/B.tsx':
+                    "export const B = () => <style>{/* author's CSS */ '[class~=\"shadow-md\"] {}'}</style>;\n",
+            },
+        ],
+        [
+            'a string with a hex escape',
+            {
+                'src/B.tsx':
+                    'export const B = () => <style>{\'[class~="\\x73hadow-md"] {}\'}</style>;\n',
+            },
+        ],
+        [
+            'an attribute selector in a string a React style element holds',
+            {
+                'src/B.tsx':
+                    'export const B = () => <style>{\'[class~="shadow-md"] { outline: 0; }\'}</style>;\n',
+            },
+        ],
+        [
+            'dangerouslySetInnerHTML',
+            {
+                'src/B.tsx':
+                    'export const B = () => <style dangerouslySetInnerHTML={{ __html: ".card .shadow-md {}" }} />;\n',
+            },
+        ],
     ])(
         'keeps it when %s selects on it',
         async (_name, files) => {
@@ -156,6 +229,25 @@ describe.each(['rust', 'wasm'] as const)('a Vite build (%s)', parser => {
         },
         60_000,
     );
+
+    // A Tailwind arbitrary value puts brackets inside the selector's quoted
+    // value, which the stylesheet reader reads as one string.
+    it('keeps an arbitrary-value class a React style element selects on', async () => {
+        const source =
+            'export const A = () => <><div className="pb-[2px]" sz={{ p: 4 }} />\n' +
+            '<style>{\'[class~="pb-[2px]"] {color:red}\'}</style></>;\n';
+        const [kept] = await build({ 'src/A.tsx': source });
+        expect(kept?.split(' ')).toContain('pb-[2px]');
+    }, 60_000);
+
+    // React keeps JSX in plain `.js` files, and the transform reads them so.
+    it('keeps a class a React style element in a .js file selects on', async () => {
+        const source =
+            'export const A = () => <><div className="pb-2" sz={{ p: 4 }} />\n' +
+            '<style>{\'[class~="pb-2"] {color:red}\'}</style></>;\n';
+        const [kept] = await build({ 'src/A.js': source }, 'src/A.js');
+        expect(kept?.split(' ')).toContain('pb-2');
+    }, 60_000);
 
     it('keeps it when a later file lowers a hook, on a build that reads its cache', async () => {
         // The prescan hands its result to the transform that follows; merged
@@ -642,6 +734,15 @@ describe('the table a Next command writes', () => {
         const table = await tableOf(['pb-2', 'px-2', 'p-4'], {
             'app/card.tsx':
                 'export const C = () => <><style jsx>{`.card.pb-2 { outline: 0; }`}</style></>;\n',
+        });
+        expect(table).toContain('"px-2"');
+        expect(table).not.toContain('"pb-2"');
+    }, 60_000);
+
+    it('gives none to a class a string in a `<style>` element selects on', async () => {
+        const table = await tableOf(['pb-2', 'px-2', 'p-4'], {
+            'app/card.tsx':
+                'export const C = () => <style>{".card.pb-2 { outline: 0; }"}</style>;\n',
         });
         expect(table).toContain('"px-2"');
         expect(table).not.toContain('"pb-2"');

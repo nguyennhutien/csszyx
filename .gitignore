@@ -33,6 +33,9 @@ lib/
 pkg/
 pkg-node/
 pkg-parser/
+# The same module with its name section, which the release attaches to the
+# GitHub release (packages/core/scripts/run-wasm-opt.mjs).
+pkg-parser-debug/
 target/
 *.wasm
 # Native platform packages are built from @csszyx/core and published as npm

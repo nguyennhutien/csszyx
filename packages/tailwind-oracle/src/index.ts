@@ -53,6 +53,7 @@ export {
     isHook,
     noClassHooks,
     type OriginOracle,
+    scriptStyleHooks,
     styleBlockHooks,
 } from './origin-oracle.js';
 export {

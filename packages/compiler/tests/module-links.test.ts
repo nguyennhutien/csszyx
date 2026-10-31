@@ -82,13 +82,22 @@ describe.each(LINK_SCANNERS)('the %s artifact', (_name, scan) => {
             { filename: '/p/c.ts', source: "export { c } from './c';" },
         ]);
 
+        // The answers a query did not ask for come back empty.
+        const unasked = {
+            moduleSyntax: false,
+            loads: [],
+            styleCss: [],
+            styleMarkup: [],
+            parseFailed: false,
+        };
         expect(result).toEqual([
-            { cssImports: ['./a.css'], forwards: [], registryEntries: [] },
-            { cssImports: [], forwards: [], registryEntries: [] },
+            { cssImports: ['./a.css'], forwards: [], registryEntries: [], ...unasked },
+            { cssImports: [], forwards: [], registryEntries: [], ...unasked },
             {
                 cssImports: [],
                 forwards: [{ exportName: 'c', importedName: 'c', specifier: './c' }],
                 registryEntries: [],
+                ...unasked,
             },
         ]);
     });
@@ -100,5 +109,98 @@ describe.each(LINK_SCANNERS)('the %s artifact', (_name, scan) => {
         expect(scan(files, { registryEntries: true })[0]?.registryEntries).toEqual([
             { kind: 'sz-object', exportName: 'card', value: { p: 4 } },
         ]);
+    });
+
+    // The module facts and style texts come from the parse, so text that only
+    // looks like a statement or a selector boundary decides nothing.
+    it('reads the module format from code alone', () => {
+        const formats = scan(
+            [
+                "/*\nexport * from 'a';\n*/\nrequire('a');",
+                'import(`a`).then(() => `${import.meta.url}`);',
+                "const r = /'/;\nexport const a = r;",
+            ].map((source, index) => ({ filename: `/p/m${index}.js`, source })),
+            { moduleFacts: true },
+        ).map(links => links.moduleSyntax);
+
+        expect(formats).toEqual([false, true, true]);
+    });
+
+    it('lists every module a source loads, with the name it reads', () => {
+        const [links] = scan(
+            [
+                {
+                    filename: '/p/m.js',
+                    source: "import { szr } from '@csszyx/runtime';\nexport * from 'csszyx';\nrequire('r');\nimport('q');\n// require('no');",
+                },
+            ],
+            { moduleFacts: true },
+        );
+
+        expect(links?.loads).toEqual([
+            { specifier: '@csszyx/runtime', name: 'szr' },
+            { specifier: 'csszyx' },
+            { specifier: 'r' },
+            { specifier: 'q' },
+        ]);
+    });
+
+    it('reads every string inside a style element, escapes decoded', () => {
+        const [links] = scan(
+            [
+                {
+                    filename: '/p/a.tsx',
+                    source: String.raw`export const A = () => <><style>{/'/.test("'") && '[class~="pb-[2px]"] {}'}</style>
+<style>{'.pb-2 {}'}</style></>;
+const page = '<style>.c {}</style>';`,
+                },
+            ],
+            { styleTexts: true },
+        );
+
+        expect(links?.styleCss).toEqual(["'", '[class~="pb-[2px]"] {}', '.pb-2 {}']);
+        expect(links?.styleMarkup).toEqual(['<style>.c {}</style>']);
+    });
+
+    it('reads the loads a call, a template or an import-equals spells, and none a type spells', () => {
+        const [typed, called, escaped] = scan(
+            [
+                {
+                    filename: '/p/a.ts',
+                    source: "import type { szr } from 'r';\nexport type * from 'q';\nimport t = require('t');\n",
+                },
+                { filename: '/p/b.js', source: 'require(`r`);\nimport(`q`);\n' },
+                { filename: '/p/c.js', source: "import('@csszyx\\/runtime');\n" },
+            ],
+            { moduleFacts: true },
+        );
+
+        expect(typed?.loads).toEqual([{ specifier: 't' }]);
+        expect(called?.loads).toEqual([{ specifier: 'r' }, { specifier: 'q' }]);
+        // The specifier a module resolves, its escapes decoded.
+        expect(escaped?.loads).toEqual([{ specifier: '@csszyx/runtime' }]);
+    });
+
+    it('says when the parse stopped on a syntax error', () => {
+        const source = "import type { A } from './a';\n";
+        const [js, ts] = scan(
+            [
+                { filename: '/p/a.js', source },
+                { filename: '/p/a.ts', source },
+            ],
+            { moduleFacts: true },
+        );
+
+        expect(js?.parseFailed).toBe(true);
+        expect(ts?.parseFailed).toBe(false);
+    });
+
+    it('reads JSX in a plain JavaScript file, as the transform does', () => {
+        const [links] = scan(
+            [{ filename: '/p/a.js', source: "export const A = () => <style>{'.a {}'}</style>;" }],
+            { styleTexts: true },
+        );
+
+        expect(links?.styleCss).toEqual(['.a {}']);
     });
 });

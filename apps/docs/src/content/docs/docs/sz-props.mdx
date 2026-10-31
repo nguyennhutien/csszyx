@@ -160,8 +160,9 @@ key replaces another only when it sets every property the other sets:
   (`@utility container`), and neither is a Tailwind class that a rule of your
   own CSS selects on (`.card.shadow-md { … }`, `[class~="shadow-md"]`). The
   build reads every stylesheet it walks, the `<style>` blocks of your Vue,
-  Svelte and Astro components, HTML pages and JSX, and every arbitrary variant
-  in your markup or your `sz` (`group-[.shadow-md]:p-2`,
+  Svelte and Astro components, HTML pages and JSX (the CSS written inside the
+  element, not a variable it is handed), and every arbitrary variant in your
+  markup or your `sz` (`group-[.shadow-md]:p-2`,
   `group: { '.shadow-md': { p: 2 } }`).
 
 It applies where the build compiles the object. In this release the build
