@@ -15,6 +15,7 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+import { chunksByLength } from './batch-chunks.js';
 // Imported directly, not through `./report.js`: Node loads this module, and
 // the build makes `./report.js` the whole `@csszyx/compiler/report` subpath,
 // where only these entries are needed.
@@ -188,11 +189,25 @@ export function scanModuleLinksWasm(
     files: readonly ModuleLinksFile[],
     query: ModuleLinksQuery = {},
 ): ModuleLinks[] {
-    const filesJson = JSON.stringify(files.map(({ filename, source }) => ({ filename, source })));
-    return JSON.parse(
-        requireParserWasm().scan_module_links_json(filesJson, JSON.stringify(query)),
-    ) as ModuleLinks[];
+    const wasm = requireParserWasm();
+    const queryJson = JSON.stringify(query);
+    return chunksByLength(files, WASM_BATCH_CHARACTERS).flatMap(
+        chunk =>
+            JSON.parse(
+                wasm.scan_module_links_json(
+                    JSON.stringify(chunk.map(({ filename, source }) => ({ filename, source }))),
+                    queryJson,
+                ),
+            ) as ModuleLinks[],
+    );
 }
+
+/**
+ * Source characters one wasm call carries. A batch crosses as one JSON
+ * string, and an engine's strings stop near 2^29 characters, so a walk over a
+ * large repository goes in runs of this size.
+ */
+const WASM_BATCH_CHARACTERS = 8 * 1024 * 1024;
 
 /**
  * Read global custom-property usages through the wasm build of the engine.

@@ -72,9 +72,9 @@ import {
     type CrossModuleForwardIndex,
     importedSpecifiersIn,
     mayExportSzvFactories,
-    recordCrossModuleForwards,
-    recordSzObjectRegistryFile,
-    recordSzvRegistryFile,
+    recordModuleLinksOf,
+    recordSzObjectProvider,
+    refreshModuleLinksOf,
     resolveCrossModuleStaticsFor,
     resolveProviderPath,
     resolveProviderPathWith,
@@ -4917,23 +4917,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             szvCrossModuleForwards.delete(normalizePathSeparators(filePath));
             return;
         }
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
         // A re-export edited during a watch has to lose its stale link the same
         // way an edited value does: a barrel that starts pointing at a different
-        // module would otherwise keep answering with the old one's value.
-        recordCrossModuleForwards(szvCrossModuleForwards, filePath, content, activeParser().parser);
-        // A provider edited during a watch has to lose its stale value the same
-        // way an edited factory does. Re-reading the changed file for both kinds
-        // costs one parse of one file; deciding whether it is still demanded
-        // would cost the import graph, and a recorded export nothing imports
-        // resolves for nobody anyway.
+        // module would otherwise keep answering with the old one's value. A
+        // provider edited during a watch has to lose its stale value the same
+        // way an edited factory does. Re-reading the changed file for every
+        // kind costs one parse of one file; deciding whether it is still
+        // demanded would cost the import graph, and a recorded export nothing
+        // imports resolves for nobody anyway.
+        refreshModuleLinksOf(szvCrossModuleRegistry, szvCrossModuleForwards, {
+            filePath,
+            content,
+            szObjects: importedStaticSzEnabled,
+            parser: activeParser().parser,
+        });
         if (importedStaticSzEnabled) {
-            recordSzObjectRegistryFile(
-                szvCrossModuleRegistry,
-                filePath,
-                content,
-                activeParser().parser,
-            );
             szObjectProvidersExamined.add(normalizePathSeparators(filePath));
             recordProvidersDemandedBy(filePath, content);
         }
@@ -4995,30 +4993,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
     }
 
+    // The text the walk already read, by path with forward slashes, while the
+    // demand pass runs right after it: a provider inside the walked roots is
+    // not read twice, however the resolver spelled its path.
+    let walkedContent: Map<string, string> | undefined;
     /**
-     * Record one provider's exported sz objects, ignoring a file that cannot
-     * be read.
+     * Record one provider's exported sz objects and forwards, from one parse,
+     * ignoring a file that cannot be read.
+     *
+     * A provider reached only through demand may itself be a barrel, and it is
+     * not necessarily inside the walked roots — an opted-in package's entry
+     * point is the common case. Recording its links here means every module
+     * the build reads at all contributes them.
      *
      * @param providerPath - Absolute provider path.
      */
     function readAndRecordSzObjectProvider(providerPath: string): void {
-        let content: string;
-        try {
-            content = fs.readFileSync(providerPath, 'utf-8');
-        } catch {
-            return;
+        let content = walkedContent?.get(normalizePathSeparators(providerPath));
+        if (content === undefined) {
+            try {
+                content = fs.readFileSync(providerPath, 'utf-8');
+            } catch {
+                return;
+            }
         }
-        recordSzObjectRegistryFile(
+        recordSzObjectProvider(
             szvCrossModuleRegistry,
-            providerPath,
-            content,
-            activeParser().parser,
-        );
-        // A provider reached only through demand may itself be a barrel, and it
-        // is not necessarily inside the walked roots — an opted-in package's
-        // entry point is the common case. Recording its links here means every
-        // module the build reads at all contributes them.
-        recordCrossModuleForwards(
             szvCrossModuleForwards,
             providerPath,
             content,
@@ -5112,23 +5112,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         refreshSzvRegistryEntry(filePath, content);
-    }
-
-    /**
-     * Record one file's exported szv factories into the cross-module
-     * registry, so importing files can precompile them.
-     *
-     * @param filePath Absolute source path.
-     * @param content Source text.
-     */
-    function recordSzvRegistryEntries(filePath: string, content: string): void {
-        // Recorded even when the registry is disabled for rewriting. Only
-        // `transformConfiguredSource` gates on that flag; here the entries
-        // are what lets the diagnostics tell "this factory would have been
-        // precompiled, csszyx just turned the feature off for this build"
-        // apart from a genuine authoring problem. A stale entry cannot
-        // affect emitted code through that path.
-        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content, activeParser().parser);
     }
 
     /**
@@ -5278,6 +5261,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const cssImportingSources: ScannedSource[] = [];
         // What the walk reads for merge hooks, read in one scan once it finishes.
         const hookTexts: SourceText[] = [];
+        const linkSources: { filePath: string; content: string }[] = [];
 
         /**
          * Read one processable source into the prescan queue.
@@ -5306,16 +5290,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
                 prescanSawServerModule = true;
             }
-            recordSzvRegistryEntries(filePath, content);
             // Recorded for every walked file, not only sz-authoring ones: a
             // barrel styles nothing itself, and it is exactly the module an
-            // importer names.
-            recordCrossModuleForwards(
-                szvCrossModuleForwards,
-                filePath,
-                content,
-                activeParser().parser,
-            );
+            // importer names. Read in one engine call once the walk ends.
+            linkSources.push({ filePath, content });
             seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
@@ -5357,6 +5335,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         });
         readSourceHooksOf(hookTexts);
+        // Every walked file's szv factories and forwards, read in one engine
+        // call per question. The factories are recorded even when the registry
+        // is disabled for rewriting: only `transformConfiguredSource` gates on
+        // that flag, and here the entries are what lets the diagnostics tell
+        // "this factory would have been precompiled, csszyx just turned the
+        // feature off for this build" apart from a genuine authoring problem.
+        recordModuleLinksOf(
+            szvCrossModuleRegistry,
+            szvCrossModuleForwards,
+            linkSources,
+            activeParser().parser,
+        );
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
             state.rootDir,
@@ -5373,7 +5363,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         await openStyleModel();
 
         const demandStarted = performance.now();
-        recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        walkedContent = new Map(
+            linkSources.map(file => [normalizePathSeparators(file.filePath), file.content]),
+        );
+        try {
+            recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        } finally {
+            walkedContent = undefined;
+        }
         traceBenchTiming(
             `prescan:demand providers=${szObjectProvidersExamined.size}`,
             state.rootDir,

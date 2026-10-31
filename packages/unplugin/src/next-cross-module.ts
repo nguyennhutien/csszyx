@@ -24,9 +24,9 @@ import {
     type CrossModuleForward,
     type CrossModuleRegistryEntry,
     EngineVersionSkewError,
-    extractCrossModuleForwards,
-    extractCrossModuleRegistryEntries,
+    type ModuleLinks,
     RustTransformUnavailableError,
+    scanModuleLinks,
     WasmTransformUnavailableError,
 } from '@csszyx/compiler/engine';
 import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
@@ -246,10 +246,12 @@ function readProviderModule(provider: string, cache: Map<string, ProviderModule>
     let module: ProviderModule = { entries: [], forwards: [] };
     try {
         const text = readFileSync(provider, 'utf8');
-        module = {
-            entries: extractCrossModuleRegistryEntries(text, { filename: provider }),
-            forwards: extractCrossModuleForwards(text, { filename: provider }),
-        };
+        // One parse answers both: the exports and the links.
+        // The engine answers one per file.
+        const links = scanModuleLinks([{ filename: provider, source: text }], {
+            registryEntries: true,
+        })[0] as ModuleLinks;
+        module = { entries: links.registryEntries, forwards: links.forwards };
     } catch (error) {
         // A provider that cannot be read costs the optimization for its
         // importers. Letting it throw would fail the build of a file whose own
