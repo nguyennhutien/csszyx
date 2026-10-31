@@ -202,6 +202,15 @@ export type EmittedClassOracle =
           loadOriginOracle(): Promise<OriginOracle>;
           /** What the project's Tailwind import settled for every class. */
           facts: StylesheetFacts;
+          /**
+           * The project's stylesheets the compile read beyond the entry, each
+           * absolute path with the text it read: what a caller keeping the
+           * facts goes stale with, compared by content so a save that lands
+           * during the compile still reads as a change. Modules an `@plugin`
+           * or `@config` loads are not listed: Node keeps them for the life
+           * of the process, so a long-lived caller could not read them again.
+           */
+          stylesheets: ReadonlyArray<{ readonly path: string; readonly text: string }>;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
 
@@ -885,6 +894,7 @@ export async function createEmittedClassOracle(
         ok: true,
         keywords: keywordOracleFrom(design),
         facts,
+        stylesheets: [...projectStylesheets].map(([file, text]) => ({ path: file, text })),
         async loadCollisionOracle() {
             if (collisions !== undefined) return collisions;
             try {

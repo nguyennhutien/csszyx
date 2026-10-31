@@ -31,7 +31,14 @@ function stylesheet(served: readonly string[], prefix: string | null = null) {
  * @returns The opened project.
  */
 function project(oracles: OpenedOracles['oracles'], skipped: string[] = []): OpenedOracles {
-    return { oracles, skipped, stylesheetFailed: false, hadEntries: true, prefixes: [] };
+    return {
+        oracles,
+        skipped,
+        stylesheetFailed: false,
+        hadEntries: true,
+        prefixes: [],
+        stylesheets: [],
+    };
 }
 
 describe('the project answering for a migrate run', () => {

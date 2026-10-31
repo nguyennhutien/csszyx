@@ -10,6 +10,7 @@
  * @module
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -50,11 +51,12 @@ import {
     cssWideKeywordOf,
     type DiagnosticPolicy,
     diagnosticConfigProblemsMessage,
-    findCsszyxConfigFile,
+    diagnosticPolicyInputs,
     hoistedSignUtility,
     inertUnderEveryRoot,
     isAtLeastLevel,
     isRemovedRuleId,
+    loadCurrentDiagnosticPolicy,
     loadDiagnosticPolicy,
     removedRuleIdDiagnostic,
     type UnservedVariant,
@@ -291,6 +293,8 @@ export interface OpenedOracles {
     hadEntries: boolean;
     /** The prefix each compiled entry's `@import "tailwindcss"` line set, by entry. */
     prefixes: Array<{ entry: string; prefix: string | null }>;
+    /** The project's stylesheets the compiles read beyond the entries, with the text read. */
+    stylesheets: Array<{ path: string; text: string }>;
 }
 
 /**
@@ -309,29 +313,54 @@ function siblingFirst(specifier: string, fromDir: string): string[] {
 }
 
 /**
- * A stamp of what the project's prefix is read from: each Tailwind entry and
- * `csszyx.config`, which can turn a disagreement off, with its change time.
- * Two equal stamps mean nothing a compile reads the prefix from has changed,
- * so a long-lived caller can keep what it read.
+ * A stamp of what the project's prefix is read from before anything compiles:
+ * each Tailwind entry, and `csszyx.config` with every module it imports,
+ * which can turn a disagreement off. Taken before the compile, so a save made
+ * while it runs reads as a change. Two equal stamps, with
+ * {@link stylesheetsDigest} equal for what the compile read beyond the
+ * entries, mean nothing the prefix is read from has changed, so a long-lived
+ * caller can keep what it read.
  *
  * @param cwd - Project root.
  * @returns One line per file, `path NUL mtime`.
  */
 export async function projectPrefixStamp(cwd: string): Promise<string> {
-    const config = findCsszyxConfigFile(cwd)?.file;
-    const files = [...(await findTailwindCssEntries(cwd)), ...(config ? [config] : [])];
-    return files.map(file => `${file}\0${changeTime(file)}`).join('\n');
+    const config = diagnosticPolicyInputs(cwd).map(input => {
+        const state = input.missing === true ? 'missing' : `${input.mtimeMs}:${input.size}`;
+        return `${input.file}\0${state}`;
+    });
+    const entries = (await findTailwindCssEntries(cwd)).map(file => `${file}\0${changeTime(file)}`);
+    return [...entries, ...config].join('\n');
 }
 
 /**
- * When a file last changed, for {@link projectPrefixStamp}. A file removed
- * since the walk stamps as gone rather than failing the call.
+ * A digest of stylesheets by path and text, so a file read since compares by
+ * what it holds rather than by when it was saved.
+ *
+ * @param stylesheets - Each path with its text; null for a file that is gone.
+ * @returns One line per file, `path NUL sha256`.
+ */
+export function stylesheetsDigest(
+    stylesheets: ReadonlyArray<{ path: string; text: string | null }>,
+): string {
+    return stylesheets
+        .map(({ path: file, text }) => {
+            const digest = text === null ? 'gone' : createHash('sha256').update(text).digest('hex');
+            return `${file}\0${digest}`;
+        })
+        .join('\n');
+}
+
+/**
+ * When a file last changed and its size, for {@link projectPrefixStamp}. A
+ * file removed since the walk stamps as gone rather than failing the call.
  *
  * @param file - Absolute path.
- * @returns The change time, or `gone`.
+ * @returns `mtime:size`, or `gone`.
  */
-function changeTime(file: string): number | 'gone' {
-    return statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 'gone';
+function changeTime(file: string): string {
+    const stat = statSync(file, { throwIfNoEntry: false });
+    return stat === undefined ? 'gone' : `${stat.mtimeMs}:${stat.size}`;
 }
 
 /**
@@ -349,6 +378,7 @@ export async function openOracles(cwd: string): Promise<OpenedOracles> {
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
     const skipped: string[] = [];
     const prefixes: OpenedOracles['prefixes'] = [];
+    const stylesheets = new Map<string, string>();
     let stylesheetFailed = false;
     // Two compiles at a time, as the build's own style model does; read in
     // entry order, so the skip reasons and prefixes keep that order.
@@ -365,12 +395,22 @@ export async function openOracles(cwd: string): Promise<OpenedOracles> {
         if (oracle.ok) {
             oracles.push(oracle);
             prefixes.push({ entry: relativePosix(cwd, entry), prefix: oracle.facts.prefix });
+            for (const stylesheet of oracle.stylesheets) {
+                stylesheets.set(stylesheet.path, stylesheet.text);
+            }
         } else {
             skipped.push(oracle.reason);
             stylesheetFailed ||= oracle.kind === 'stylesheet';
         }
     }
-    return { oracles, skipped, stylesheetFailed, hadEntries: entries.length > 0, prefixes };
+    return {
+        oracles,
+        skipped,
+        stylesheetFailed,
+        hadEntries: entries.length > 0,
+        prefixes,
+        stylesheets: [...stylesheets].map(([file, text]) => ({ path: file, text })),
+    };
 }
 
 /**
@@ -448,7 +488,9 @@ export async function settledPrefix(
             : null;
         return { prefix: null, unread };
     }
-    const { policy } = await loadDiagnosticPolicy(cwd);
+    // Read as it is now: a module the config imports is one Node keeps for
+    // the life of the process, and this one may be long-lived.
+    const { policy } = await loadCurrentDiagnosticPolicy(cwd, diagnosticPolicyInputs(cwd));
     const off = policy.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off';
     const { prefix, disagreement } = agreedPrefix(opened, off);
     const unread = disagreement
@@ -1676,6 +1718,7 @@ function openOraclesWhenAsked(cwd: string, scanned: SzDiagnostics): Promise<Open
         stylesheetFailed: false,
         hadEntries: false,
         prefixes: [],
+        stylesheets: [],
     });
 }
 

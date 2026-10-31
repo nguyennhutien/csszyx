@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { MigrateRustTableVerdict } from '@csszyx/compiler/migrate';
@@ -22,6 +22,7 @@ export type OpenPrefixOracles = (cwd: string) => Promise<{
     prefixes: ReadonlyArray<{ entry: string; prefix: string | null }>;
     skipped: readonly string[];
     hadEntries: boolean;
+    stylesheets: ReadonlyArray<{ path: string; text: string }>;
 }>;
 
 /** The prefix a project's classes carry. */
@@ -32,17 +33,41 @@ export interface ProjectPrefix {
     unread: string | null;
 }
 
-/** Per project root: what the prefix was read from, and what it read. */
-const prefixes = new Map<string, { key: string; read: ProjectPrefix }>();
+/**
+ * Per project root: the entries and config the prefix was read from, the
+ * stylesheets the compile read beyond them with a digest of the text it read,
+ * and what it read.
+ */
+const prefixes = new Map<
+    string,
+    { key: string; stylesheets: readonly string[]; digest: string; read: ProjectPrefix }
+>();
+
+/**
+ * Each file's text as it is now, null for one that is gone.
+ *
+ * @param files - Absolute paths.
+ * @returns Each path with its text.
+ */
+function currentTexts(files: readonly string[]): Array<{ path: string; text: string | null }> {
+    return files.map(file => {
+        try {
+            return { path: file, text: readFileSync(file, 'utf8') };
+        } catch {
+            return { path: file, text: null };
+        }
+    });
+}
 
 /**
  * The Tailwind prefix a project's stylesheets set (`prefix(tw)`), as
  * `csszyx check` settles it. Under it, `tw:p-4` is the class and `p-4` is not
  * one.
  *
- * Only the answer is kept between calls, keyed by each stylesheet's and the
- * config's path and change time, so a long-lived caller compiles again when
- * one changes and holds no compiled design system meanwhile. Measured
+ * Only the answer is kept between calls, keyed by the path and change time
+ * of each entry, each stylesheet the compile read beyond them, and the config
+ * with each module it imports, so a long-lived caller compiles again when one
+ * changes and holds no compiled design system meanwhile. Measured
  * 2026-10-28 on three project roots: finding and stat-ing the stylesheets
  * costs 1.5-30 ms a call, compiling them 71-168 ms and 14-61 MB. An answer
  * with a stylesheet that did not compile is not kept: installing Tailwind or
@@ -60,14 +85,29 @@ export async function projectPrefix(
 ): Promise<ProjectPrefix> {
     // The check pass is the one place that finds the entries; loaded on use,
     // as `openCheckOracles` loads it.
-    const { projectPrefixStamp, settledPrefix } = await import('../commands/check.js');
+    const { projectPrefixStamp, settledPrefix, stylesheetsDigest } = await import(
+        '../commands/check.js'
+    );
     const key = await projectPrefixStamp(cwd);
     const known = prefixes.get(cwd);
-    if (known?.key === key) return known.read;
+    if (known?.key === key && stylesheetsDigest(currentTexts(known.stylesheets)) === known.digest) {
+        return known.read;
+    }
     const opened = await open(cwd);
     const read = await settledPrefix(cwd, opened);
-    if (opened.skipped.length === 0) prefixes.set(cwd, { key, read });
-    else prefixes.delete(cwd);
+    if (opened.skipped.length === 0) {
+        // The digest of the text the compile read, not of the file now: a
+        // save that lands during the compile then reads as a change.
+        const stylesheets = opened.stylesheets.map(stylesheet => stylesheet.path);
+        prefixes.set(cwd, {
+            key,
+            stylesheets,
+            digest: stylesheetsDigest(opened.stylesheets),
+            read,
+        });
+    } else {
+        prefixes.delete(cwd);
+    }
     return read;
 }
 
