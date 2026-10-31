@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
@@ -68,6 +67,7 @@ import {
     findClassNameAuthorConflicts,
 } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
+import { sha256Of } from './content-digest.js';
 import {
     type CrossModuleForwardIndex,
     importedSpecifiersIn,
@@ -4870,7 +4870,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Read by code: the engine's wording is not a contract.
         const codes = new Set(result.issues?.map(issue => issue.code));
         const budgetExceeded = codes.has('ast-budget');
-        const inputSha256 = createHash('sha256').update(content).digest('hex');
+        const inputSha256 = sha256Of(content).hex;
         // The version the transform hook will see again, so a table settled
         // between the prescan and that transform is not said twice.
         diagnosticLimiter.version(projectRelative(filePath), inputSha256);
@@ -5657,7 +5657,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function recordAuthoredClassesOf(file: string, code: string): void {
         const key = normalizeSourceFilename(file);
-        const digest = createHash('sha256').update(code).digest('base64');
+        const digest = sha256Of(code).base64;
         if (authoredRead.get(key) === digest) return;
         authoredRead.set(key, digest);
         recordAuthoredClasses(code);
@@ -6916,7 +6916,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const relative = projectRelative(file);
         // Every version, clean ones too: an undo back to a version that had
         // findings must read as an edit, not as the version already said.
-        diagnosticLimiter.version(relative, createHash('sha256').update(source).digest('hex'));
+        diagnosticLimiter.version(relative, sha256Of(source).hex);
         if (!hasFindings(result.diagnostics, result.issues)) return;
         // A watch rebuild keeps this module, and with it the levels it was
         // reported at, unless it depends on the files the levels come from:

@@ -10,6 +10,7 @@ import {
     type TokenData,
 } from '@csszyx/compiler';
 import { diagnosticFileOf } from '@csszyx/compiler/internal';
+import { sha256Of } from './content-digest.js';
 
 // 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
 // resurrect it as `undefined`, and the injection would then route a file's
@@ -176,7 +177,7 @@ export function resolveTransformCacheDir(rootDir: string, cacheDir?: string): st
  * @returns Short key plus full content hash for read-time verification.
  */
 export function createTransformCacheKey(input: TransformCacheKeyInput): TransformCacheKey {
-    const inputSha256 = createHash('sha256').update(input.source).digest('hex');
+    const inputSha256 = sha256Of(input.source).hex;
     const globalVarAliases = normalizeGlobalVarAliasEntries(input.globalVarAliases);
     const keyMaterial = [
         `schema=${CACHE_SCHEMA_VERSION}`,
