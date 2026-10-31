@@ -188,20 +188,24 @@ function toolDiagnostic(issue: SzDiagnosticIssue): ToolDiagnostic {
  * JSON is a JavaScript expression, so the object goes into the source with
  * only the characters a JS parser reacts to escaped.
  * An object JSON cannot write (one that references itself) reports nothing
- * here; the runtime transform reports it as `transformError`.
+ * here; the runtime transform reports it as `transformError`. An engine that
+ * cannot run throws: with no issues to read, the object is not known to be
+ * valid, and the call fails with the engine's own error.
  *
  * @param sz The object to compile.
  * @returns The diagnostics.
  */
 function engineDiagnostics(sz: Record<string, unknown>): ToolDiagnostic[] {
+    let json: string;
     try {
-        const source = `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
-        // Both engine artifacts always report the issue list.
-        const { issues } = transformSource(source, { filename: PREVIEW_FILE });
-        return (issues as SzDiagnosticIssue[]).map(toolDiagnostic);
+        json = JSON.stringify(sz);
     } catch {
         return [];
     }
+    const source = `export const A = () => <p sz={${escapeUnsafeChars(json)}} />;`;
+    // Both engine artifacts always report the issue list.
+    const { issues } = transformSource(source, { filename: PREVIEW_FILE });
+    return (issues as SzDiagnosticIssue[]).map(toolDiagnostic);
 }
 
 /**
