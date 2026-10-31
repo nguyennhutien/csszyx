@@ -92,8 +92,8 @@ interface ResolvedSignature {
 }
 
 /**
- * Resolve a signature's properties once, so the quadratic coverage pass below
- * compares prepared sets instead of rebuilding them for every pair.
+ * Resolve a signature's properties once, so the coverage pass below compares
+ * prepared sets instead of rebuilding them for every pair it asks.
  * O(r * p) for r rules of p properties.
  *
  * @param signature - Signature as read from compiled CSS.
@@ -178,10 +178,55 @@ export function createMergeSignatureTable(
         byCandidate[candidate] = id;
     }
     const resolved = signatures.map(resolveSides);
-    const coverage = resolved.map(later =>
-        resolved.flatMap((earlier, id) => (signatureCovers(later, earlier) ? [id] : [])),
-    );
-    return options.prune === false ? [byCandidate, coverage] : prune(byCandidate, coverage);
+    return options.prune === false
+        ? [byCandidate, coverageOf(resolved)]
+        : prune(byCandidate, coverageOf(resolved));
+}
+
+/**
+ * Which ids each id covers, asking only the pairs that can cover.
+ *
+ * A signature covers another only if, in every context the other writes in,
+ * it writes every property the other writes there ({@link signatureCovers}).
+ * So the ids that can cover one all write its first property in its first
+ * context, left to right: a padding class is never asked about a colour. The
+ * pairs asked drop from s² to the sum, over (context, property), of the
+ * square of the ids writing it. Ids are visited in order, so every row comes
+ * out ascending, as the all-pairs pass wrote it.
+ *
+ * @param resolved - Signatures by id.
+ * @returns Id → the ids it covers, ascending.
+ */
+function coverageOf(resolved: readonly ResolvedSignature[]): number[][] {
+    const ltr = (signature: ResolvedSignature): ReadonlyMap<string, ReadonlySet<string>> =>
+        signature.sides[0] as ReadonlyMap<string, ReadonlySet<string>>;
+    const writers = new Map<string, number[]>();
+    resolved.forEach((signature, id) => {
+        for (const [context, properties] of ltr(signature)) {
+            for (const property of properties) {
+                const key = `${context}\0${property}`;
+                const ids = writers.get(key);
+                if (ids === undefined) writers.set(key, [id]);
+                else ids.push(id);
+            }
+        }
+    });
+    const all = resolved.map((_, id) => id);
+    const coverage = resolved.map((): number[] => []);
+    resolved.forEach((earlier, id) => {
+        const first = ltr(earlier).entries().next();
+        const property = first.done === true ? undefined : first.value[1].values().next().value;
+        const laters =
+            first.done === true || property === undefined
+                ? all
+                : (writers.get(`${first.value[0]}\0${property}`) as number[]);
+        for (const later of laters) {
+            if (signatureCovers(resolved[later] as ResolvedSignature, earlier)) {
+                (coverage[later] as number[]).push(id);
+            }
+        }
+    });
+    return coverage;
 }
 
 /**
