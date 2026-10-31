@@ -145,6 +145,8 @@ export interface PlanGlobalVarAliasesInput {
     aliasPrefix?: string;
     /** Additional reserved names or prefixes. Prefixes may end with `*`. */
     reserved?: string[];
+    /** The engine artifact the build names, for the alias encoder. */
+    parser?: ParserMode;
 }
 
 /** Output from the pure global variable alias planner. */

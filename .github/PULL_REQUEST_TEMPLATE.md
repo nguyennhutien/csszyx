@@ -1,19 +1,27 @@
-## What & why
+<!--
+Title: a Conventional Commit, `type(scope): subject`. It becomes the squash
+commit and the changelog line, so name what a user sees.
 
-What does this change do, and why? Link any related issue
-(`Closes #123`).
+Open with a paragraph, no heading: what a user saw before, what they see now,
+and why it changed. Link the issue it closes (`Closes #123`).
 
-## Type
+A short change can stop there. A longer one, a change that bundles several
+user-visible changes, or one that moves a number, adds:
 
-- [ ] Bug fix
-- [ ] Feature
-- [ ] Docs / chore / CI
+## What changes
 
-## Checklist
+One bullet per change a user sees, by package, and the docs page it updates.
 
-- [ ] Tests added or updated for the change (and `pnpm test` passes)
-- [ ] `pnpm lint` and `pnpm type-check` pass
-- [ ] For `sz` / Tailwind behavior changes: both engine builds stay parity-gated
-- [ ] Commits follow Conventional Commits and are signed off (`git commit -s`,
-      see CONTRIBUTING.md)
-- [ ] Docs / snippets updated if behavior changed
+## Numbers
+
+Required for a `perf` change and for any change to a size budget, memory or
+work done. A before/after table, `main` against this PR, with units in the
+cells, then one line: the machine, how many runs and which statistic, and the
+command that reproduces it.
+
+A breaking change ends with one line: `BREAKING CHANGE: …`.
+
+CI shows whether the tests pass, so there is no checklist here. When something
+cannot be tested automatically, say in one line what you checked and how.
+Commits are signed off (`git commit -s`, see CONTRIBUTING.md).
+-->

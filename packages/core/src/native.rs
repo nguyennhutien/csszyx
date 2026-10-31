@@ -94,6 +94,30 @@ pub struct NativeModuleLinksQuery {
     pub style_texts: Option<bool>,
 }
 
+/// The mangled class name for one index, as the wasm artifact's `encode`
+/// gives it.
+#[napi(js_name = "encodeClassName")]
+#[must_use]
+pub fn encode_class_name_native(index: u32) -> String {
+    crate::encoder::encode(index as usize)
+}
+
+/// The mangle map's checksum, from the map's own entries: originals and
+/// their mangled names in the same order (see `mangle::checksum_of_entries`).
+///
+/// # Errors
+///
+/// When the two lists differ in length.
+#[napi(js_name = "computeMangleChecksum")]
+pub fn compute_mangle_checksum_native(
+    originals: Vec<String>,
+    mangled: Vec<String>,
+) -> napi::Result<String> {
+    crate::mangle::checksum_of_entries(originals, mangled).ok_or_else(|| {
+        napi::Error::from_reason("computeMangleChecksum: the two lists differ in length")
+    })
+}
+
 /// Reads the stylesheets each module imports, the names it re-exports and,
 /// when asked, the values it exports for the cross-module registry.
 #[cfg(feature = "native-engine")]

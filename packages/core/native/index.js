@@ -237,6 +237,28 @@ export function scanGlobalVarUsages(files, query) {
     return laterExport('scanGlobalVarUsages')(files, query);
 }
 
+/**
+ * The mangled class name for one index.
+ *
+ * @param {number} index - The class's position in the mangle order.
+ * @returns {string} Its name.
+ */
+export function encodeClassName(index) {
+    return laterExport('encodeClassName')(index);
+}
+
+/**
+ * The mangle map's checksum, from the map's own entries. Two lists rather
+ * than the object: reading an object's keys natively walks its prototype too.
+ *
+ * @param {string[]} originals - The original class names.
+ * @param {string[]} mangled - Their mangled names, in the same order.
+ * @returns {string} The checksum the browser recomputes.
+ */
+export function computeMangleChecksum(originals, mangled) {
+    return laterExport('computeMangleChecksum')(originals, mangled);
+}
+
 export function migrateBatch(files, options) {
     return laterExport('migrateBatch')(files, options);
 }

@@ -553,32 +553,88 @@ function collectClassSink(
 export function collectAuthoredClassNames(source: string): Set<string> {
     const classes = new Set<string>();
     let cursor = 0;
-    while (cursor < source.length) {
-        if (source[cursor] === '"' || source[cursor] === "'") {
-            const keyEnd = quotedEnd(source, cursor, source[cursor]);
-            const key = decodeJavaScriptString(source.slice(cursor + 1, keyEnd - 1));
-            cursor =
-                key === 'class' || key === 'className'
-                    ? collectClassSink(classes, source, cursor, keyEnd)
-                    : keyEnd;
-            continue;
-        }
-        const regionEnd = lexicalRegionEnd(source, cursor);
-        if (regionEnd !== cursor) {
-            cursor = regionEnd;
-            continue;
-        }
-        if (!/[A-Z_$]/i.test(source[cursor])) {
-            cursor++;
-            continue;
-        }
-        let nameEnd = cursor + 1;
-        while (/[\w$]/.test(source[nameEnd] ?? '')) nameEnd++;
-        cursor = isClassSink(source, cursor, nameEnd)
-            ? collectClassSink(classes, source, cursor, nameEnd)
-            : nameEnd;
-    }
+    while (cursor < source.length) cursor = scanFrom(classes, source, cursor);
     return classes;
+}
+
+/**
+ * Read what starts at one offset: a quoted key, a template, comment or regex,
+ * a name, or one other character, collecting any class sink it opens.
+ *
+ * @param classes - Where candidates go.
+ * @param source - Complete source text.
+ * @param cursor - The offset.
+ * @returns Where the scan goes on, always past `cursor`.
+ */
+function scanFrom(classes: Set<string>, source: string, cursor: number): number {
+    const code = source.codePointAt(cursor) as number;
+    if (code === QUOTE_DOUBLE || code === QUOTE_SINGLE) {
+        const keyEnd = quotedEnd(source, cursor, source[cursor] as string);
+        return isClassKey(source, cursor + 1, keyEnd - 1)
+            ? collectClassSink(classes, source, cursor, keyEnd)
+            : keyEnd;
+    }
+    if (code === BACKTICK || code === SLASH) {
+        const regionEnd = lexicalRegionEnd(source, cursor);
+        return regionEnd === cursor ? cursor + 1 : regionEnd;
+    }
+    if (!isIdentifierStart(code)) return cursor + 1;
+    let nameEnd = cursor + 1;
+    while (nameEnd < source.length && isIdentifierPart(source.codePointAt(nameEnd) as number))
+        nameEnd++;
+    // Only `class` (5) and `className` (9) are sinks.
+    const named = nameEnd - cursor;
+    return (named === 5 || named === 9) && isClassSink(source, cursor, nameEnd)
+        ? collectClassSink(classes, source, cursor, nameEnd)
+        : nameEnd;
+}
+
+const QUOTE_DOUBLE = 34;
+const QUOTE_SINGLE = 39;
+const BACKTICK = 96;
+const SLASH = 47;
+
+/**
+ * `/[A-Z_$]/i` for one UTF-16 unit: ASCII only, as that regex is without `u`.
+ *
+ * @param code - The unit.
+ * @returns Whether an identifier starts with it.
+ */
+function isIdentifierStart(code: number): boolean {
+    return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95 || code === 36;
+}
+
+/**
+ * `/[\w$]/` for one UTF-16 unit.
+ *
+ * @param code - The unit.
+ * @returns Whether an identifier continues with it.
+ */
+function isIdentifierPart(code: number): boolean {
+    return isIdentifierStart(code) || (code >= 48 && code <= 57);
+}
+
+/**
+ * Whether a quoted key spells `class` or `className`, decoding only when it
+ * carries an escape. Decoding never lengthens text, so a key shorter than
+ * `class` is not one.
+ *
+ * @param source - Complete source text.
+ * @param start - First unit inside the quotes.
+ * @param end - The closing quote's offset.
+ * @returns Whether the key names a class sink.
+ */
+function isClassKey(source: string, start: number, end: number): boolean {
+    if (end - start < 5) return false;
+    const backslash = source.indexOf('\\', start);
+    if (backslash === -1 || backslash >= end) {
+        const length = end - start;
+        if (length !== 5 && length !== 9) return false;
+        const raw = source.slice(start, end);
+        return raw === 'class' || raw === 'className';
+    }
+    const key = decodeJavaScriptString(source.slice(start, end));
+    return key === 'class' || key === 'className';
 }
 
 /**

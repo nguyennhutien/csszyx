@@ -35,6 +35,7 @@ export function validateGlobalVarAliasInputs(
         autoPrefix: options.autoPrefix,
         aliasPrefix: options.aliasPrefix,
         reserved: options.reserved,
+        parser: options.parser,
     });
     if (plan.diagnostics.length > 0 || plan.entries.length === 0) {
         return { scans, plan, usageDiagnostics: [] };
