@@ -35,11 +35,11 @@ jobs:
             target: aarch64-unknown-linux-musl
             platform: linux-arm64-musl
             cross: true
-          - runner: macos-14
+          - runner: macos-15
             target: x86_64-apple-darwin
             platform: darwin-x64
             cross: false
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64-apple-darwin
             platform: darwin-arm64
             cross: false
@@ -159,7 +159,7 @@ jobs:
           - runner: ubuntu-24.04-arm
             platform: linux-arm64-musl
             alpine: true
-          - runner: macos-14
+          - runner: macos-15
             platform: darwin-x64
             alpine: false
             node-arch: x64
