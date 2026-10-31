@@ -15,6 +15,8 @@ import {
     transform,
 } from '@csszyx/compiler';
 import {
+    classNameEncoder,
+    computeMangleChecksum,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     isWasmTransformAvailable,
@@ -22,13 +24,13 @@ import {
 import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
     diagnosticFileOf,
+    type ParserMode,
     reportTemplateSzDiagnostics,
     resolveParserMode,
     transformRustBatchUnrendered,
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
-import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
@@ -1353,13 +1355,15 @@ export function mangleEligibleClasses(
 const tokenByIndex: string[] = [];
 
 /**
- * Deterministic token for one encoder index, crossing the WASM boundary at
+ * Deterministic token for one encoder index, crossing the engine boundary at
  * most once per index per process.
  *
  * @param index Encoder sequence index.
+ * @param encode The encoder on the build's engine artifact; every artifact
+ *        gives the same token for an index, so one cache serves them all.
  * @returns The Base62 token.
  */
-function tokenAt(index: number): string {
+function tokenAt(index: number, encode: (index: number) => string): string {
     const cached = tokenByIndex[index];
     if (cached !== undefined) {
         return cached;
@@ -1380,22 +1384,25 @@ function tokenAt(index: number): string {
  *
  * @param eligibleClasses Classes to mangle, in stable sorted order.
  * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @param parser The engine artifact the build names, if any.
  * @returns The class → token map.
  */
 export function allocateMangleTokens(
     eligibleClasses: readonly string[],
     forbiddenTokens: ReadonlySet<string>,
+    parser?: ParserMode,
 ): Record<string, string> {
+    const encode = classNameEncoder({ parser });
     const map: Record<string, string> = {};
     // `tokenIndex` advances independently of the class index whenever a token
     // is skipped, and never rewinds — total encoder calls stay linear in
     // census + skips even when the forbidden set blocks long runs.
     let tokenIndex = 0;
     for (const className of eligibleClasses) {
-        let token = tokenAt(tokenIndex);
+        let token = tokenAt(tokenIndex, encode);
         while (forbiddenTokens.has(token)) {
             tokenIndex++;
-            token = tokenAt(tokenIndex);
+            token = tokenAt(tokenIndex, encode);
         }
         map[className] = token;
         tokenIndex++;
@@ -1987,16 +1994,19 @@ export function normalizeGlobalVarAliasesForCache(
  *
  * @param config User global-var mangle config.
  * @param aliasPrefix Active generated alias prefix.
+ * @param parser The engine artifact the build names, if any.
  * @returns Deterministic original-to-alias entries.
  */
 function createEarlyGlobalVarAliasEntries(
     config: GlobalVarMangleConfig | undefined,
     aliasPrefix: string,
+    parser: ParserMode | undefined,
 ): Array<[string, string]> {
     if (config?.enabled !== true || !config.tokens || config.tokens.length === 0) {
         return [];
     }
     const tokens = sortStrings(new Set(config.tokens));
+    const encode = classNameEncoder({ parser });
     return tokens.map((original, index) => [original, `${aliasPrefix}${encode(index)}`]);
 }
 
@@ -3260,6 +3270,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
         globalVarMangleConfig,
         globalVarAliasPrefix,
+        options.build?.parser,
     );
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
@@ -5923,7 +5934,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // hash of this map: allocating one with mangling off spent an encoder
         // call per class to attest a census the page never carried.
         if (!manglingEnabled) return {};
-        return allocateMangleTokens(eligible, forbiddenTokens);
+        return allocateMangleTokens(eligible, forbiddenTokens, activeParser().parser);
     }
 
     /**
@@ -5982,8 +5993,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             state.mangleMap = computeMangleMap();
         }
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
-        state.checksum = compute_mangle_checksum(
+        state.checksum = computeMangleChecksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
+            { parser: activeParser().parser },
         );
         state.finalized = true;
     }

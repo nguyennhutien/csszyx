@@ -530,6 +530,26 @@ export function scanModuleLinks(
 export function engineIdentity(): NativeEngineIdentity | null;
 
 /**
+ * The mangled class name for one index.
+ *
+ * @param index The class's position in the mangle order.
+ * @returns Its name.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates it.
+ */
+export function encodeClassName(index: number): string;
+
+/**
+ * The mangle map's checksum, from the map's own entries. Two lists rather
+ * than the object: reading an object's keys natively walks its prototype too.
+ *
+ * @param originals The original class names.
+ * @param mangled Their mangled names, in the same order.
+ * @returns The checksum the browser recomputes.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates it.
+ */
+export function computeMangleChecksum(originals: string[], mangled: string[]): string;
+
+/**
  * Reads the global custom-property usages csszyx does not rewrite.
  *
  * @param files Modules to read.

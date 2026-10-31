@@ -90,6 +90,8 @@ interface ParserWasmModule {
     transform_batch_json(filesJson: string, optionsJson: string): string;
     scan_module_links_json(filesJson: string, queryJson: string): string;
     scan_global_var_usages_json(filesJson: string, queryJson: string): string;
+    encode(index: number): string;
+    compute_mangle_checksum(map: Readonly<Record<string, string>>): string;
 }
 
 /**
@@ -432,4 +434,29 @@ function fromWasmResult(
         ),
         cssVariableMap: aggregateCssVariableMap(result.css_variable_map ?? []),
     };
+}
+
+/**
+ * The mangled class name for one index, on the wasm artifact.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param index - The class's position in the mangle order.
+ * @returns Its name.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function encodeClassNameWasm(index: number): string {
+    return requireParserWasm().encode(index);
+}
+
+/**
+ * The mangle map's checksum, on the wasm artifact, from the map's own keys
+ * as the browser reads them.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param map - Original class name → mangled name.
+ * @returns The checksum the browser recomputes.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function computeMangleChecksumWasm(map: Readonly<Record<string, string>>): string {
+    return requireParserWasm().compute_mangle_checksum(Object.fromEntries(Object.entries(map)));
 }

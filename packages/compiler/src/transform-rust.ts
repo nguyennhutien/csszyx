@@ -1,6 +1,8 @@
 import * as nativeModule from '@csszyx/core/native';
 import {
     CsszyxNativeUnavailableError,
+    computeMangleChecksum,
+    encodeClassName,
     getNativePackageName,
     type NativeTransformResult,
     scanGlobalVarUsages,
@@ -618,4 +620,45 @@ function encodeOrderedValue(value: unknown): unknown {
         ]);
     }
     return value as OrderedTransportValue;
+}
+
+/**
+ * The mangled class name for one index, on the native engine.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param index - The class's position in the mangle order.
+ * @returns Its name.
+ * @throws {RustTransformUnavailableError} when the native engine cannot run.
+ */
+export function encodeClassNameRust(index: number): string {
+    try {
+        checkNativeEngine();
+        return encodeClassName(index);
+    } catch (error) {
+        throw asRustUnavailable(error);
+    }
+}
+
+/**
+ * The mangle map's checksum, on the native engine.
+ *
+ * The map crosses as its own entries, two lists, because reading an object's
+ * keys natively also walks its prototype, where the browser reads own keys.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param map - Original class name → mangled name.
+ * @returns The checksum the browser recomputes.
+ * @throws {RustTransformUnavailableError} when the native engine cannot run.
+ */
+export function computeMangleChecksumRust(map: Readonly<Record<string, string>>): string {
+    const entries = Object.entries(map);
+    try {
+        checkNativeEngine();
+        return computeMangleChecksum(
+            entries.map(([original]) => original),
+            entries.map(([, mangled]) => mangled),
+        );
+    } catch (error) {
+        throw asRustUnavailable(error);
+    }
 }
