@@ -626,15 +626,18 @@ function isIdentifierPart(code: number): boolean {
  */
 function isClassKey(source: string, start: number, end: number): boolean {
     if (end - start < 5) return false;
-    const backslash = source.indexOf('\\', start);
-    if (backslash === -1 || backslash >= end) {
-        const length = end - start;
-        if (length !== 5 && length !== 9) return false;
-        const raw = source.slice(start, end);
-        return raw === 'class' || raw === 'className';
+    // Look for an escape inside the key only: a search that ran on to the end
+    // of the file would read the rest of it once per literal.
+    for (let index = start; index < end; index++) {
+        if (source.codePointAt(index) === 92) {
+            const key = decodeJavaScriptString(source.slice(start, end));
+            return key === 'class' || key === 'className';
+        }
     }
-    const key = decodeJavaScriptString(source.slice(start, end));
-    return key === 'class' || key === 'className';
+    const length = end - start;
+    if (length !== 5 && length !== 9) return false;
+    const raw = source.slice(start, end);
+    return raw === 'class' || raw === 'className';
 }
 
 /**
