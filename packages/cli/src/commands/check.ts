@@ -29,6 +29,7 @@ import {
     szDiagnosticPositionOf,
 } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
+import { isCsszyxError } from '@csszyx/compiler/errors';
 import {
     createEmittedClassOracle,
     DEPENDENCY_OUTPUT_DIRS,
@@ -1152,6 +1153,13 @@ interface SzDiagnostics {
     classOrigins: Map<string, string>;
     /** Literal sz pairs, keyed by project-relative file. */
     pairsByFile: Map<string, SzValuePair[]>;
+    /** Files the engine threw on, each with the first line of its error. */
+    unchecked: { file: string; reason: string }[];
+}
+
+/** The engine could not run: its error message, for the run to print. */
+interface EngineDown {
+    engineDown: string;
 }
 
 /**
@@ -1167,13 +1175,14 @@ interface SzDiagnostics {
  * @param files - Absolute paths to scan.
  * @param cwd - Project root, for relative reporting.
  * @param classPrefix - The Tailwind prefix to lower with, or null.
- * @returns The diagnostics and the class origins found.
+ * @returns The diagnostics and the class origins found, or the engine's
+ *          error when it cannot run.
  */
 async function collectSzDiagnostics(
     files: string[],
     cwd: string,
     classPrefix: string | null,
-): Promise<SzDiagnostics> {
+): Promise<SzDiagnostics | EngineDown> {
     const issues: SzIssue[] = [];
     // One origin per class is enough to point at: the report answers "where did
     // this come from", not "everywhere it appears".
@@ -1181,6 +1190,7 @@ async function collectSzDiagnostics(
     // Read from the same source text the lowering pass sees, so a file skipped
     // there is skipped here too rather than reported by only one of them.
     const pairsByFile = new Map<string, SzValuePair[]>();
+    const unchecked: SzDiagnostics['unchecked'] = [];
 
     // Read ahead, then lowered in the order given: the first file to produce a
     // class is the origin reported for it.
@@ -1194,6 +1204,12 @@ async function collectSzDiagnostics(
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
         const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
+        // Every other file would fail the same way, so the scan ends here.
+        if (typeof found === 'object' && 'engineDown' in found) return found;
+        if (typeof found === 'string') {
+            unchecked.push({ file: currentFile, reason: found });
+            continue;
+        }
         for (const issue of checkedIssues(found)) {
             const { text, help, note } = renderSzDiagnosticParts(
                 issue,
@@ -1213,15 +1229,16 @@ async function collectSzDiagnostics(
             });
         }
     }
-    return { issues, classOrigins, pairsByFile };
+    return { issues, classOrigins, pairsByFile, unchecked };
 }
 
 /**
  * Lower one file and note which classes it was the first to produce.
  *
- * A file the reference parser cannot read yields no usable sz signal here; the
- * bundler surfaces real parse errors at build time, so it is skipped rather
- * than failing a whole-project scan.
+ * A syntax error comes back as a `parse-error` issue, so a throw is the engine
+ * failing on this file. The file is left out and its reason returned, so the
+ * scan goes on and the run names it. An engine that cannot run at all is not
+ * one file's problem: it would fail every file, so that error is rethrown.
  *
  * @param source - File contents.
  * @param file - Absolute path, for diagnostics.
@@ -1229,8 +1246,8 @@ async function collectSzDiagnostics(
  * @param relativePath - Path as reported to the user.
  * @param classOrigins - Origins map, extended in place.
  * @param classPrefix - The Tailwind prefix to lower with, or null.
- * @returns The file's compiler diagnostics and the code of each, index-parallel
- *          (both empty when unreadable).
+ * @returns The file's compiler diagnostics, the first line of the error the
+ *          engine threw on it, or the engine's error when it cannot run.
  */
 function recordFileClasses(
     source: string,
@@ -1239,17 +1256,83 @@ function recordFileClasses(
     relativePath: string,
     classOrigins: Map<string, string>,
     classPrefix: string | null,
-): SzDiagnosticIssue[] {
+): SzDiagnosticIssue[] | string | EngineDown {
     try {
         const result = transformSource(source, { filename: file, rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
         return result.issues ?? [];
-    } catch {
-        // Unreadable by the engine; see the note above.
-        return [];
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (isEngineDown(error)) return { engineDown: message };
+        const end = message.indexOf('\n');
+        return end === -1 ? message : message.slice(0, end);
     }
+}
+
+/**
+ * Name each file the engine threw on, and fail the run: a gate that left a
+ * file out has not checked the project.
+ *
+ * @param out - The reporter.
+ * @param unchecked - The files, each with its reason.
+ */
+function reportUncheckedFiles(out: Reporter, unchecked: SzDiagnostics['unchecked']): void {
+    if (unchecked.length === 0) return;
+    out.runWarn('Files the engine threw on, so they were not checked:');
+    for (const { file, reason } of unchecked) out.runInfo(`  ${file}: ${reason}`);
+    out.runWarn(
+        `\u2716 ${unchecked.length} file(s) were not checked: reinstall csszyx so its engine matches, and report the file at https://github.com/nguyennhutien/csszyx/issues if it still fails.`,
+    );
+    process.exitCode = 1;
+}
+
+/** Codes an engine throws when it cannot run at all, whatever the file. */
+const ENGINE_DOWN_CODES: ReadonlySet<string> = new Set([
+    'engine-version-skew',
+    'native-engine-unavailable',
+    'wasm-engine-unavailable',
+]);
+
+/**
+ * Whether an error says the engine cannot run, rather than that it could not
+ * read one file.
+ *
+ * @param error - What the engine threw.
+ * @returns True for an engine that is missing, fails to load, or comes from
+ *          another build.
+ */
+function isEngineDown(error: unknown): boolean {
+    return isCsszyxError(error) && ENGINE_DOWN_CODES.has(error.code);
+}
+
+/**
+ * Lower every file, or report that the engine cannot run and fail the run.
+ *
+ * Skipping each file the engine throws on would turn an engine that cannot
+ * run into a project with no findings, so that one error stops the check.
+ *
+ * @param out - The reporter.
+ * @param files - The files to lower.
+ * @param cwd - Project root.
+ * @param classPrefix - The Tailwind prefix to lower with, or null.
+ * @returns The diagnostics, or null when the engine cannot run.
+ */
+async function collectSzDiagnosticsOrStop(
+    out: Reporter,
+    files: string[],
+    cwd: string,
+    classPrefix: string | null,
+): Promise<SzDiagnostics | null> {
+    const lowered = await collectSzDiagnostics(files, cwd, classPrefix);
+    if (!('engineDown' in lowered)) return lowered;
+    out.runWarn(lowered.engineDown);
+    out.runWarn(
+        `\u2716 The engine cannot run, so no file was checked: fix the error above and run \`csszyx check\` again.`,
+    );
+    process.exitCode = 1;
+    return null;
 }
 
 /**
@@ -1773,6 +1856,40 @@ function runDeadClassPass(
 }
 
 /**
+ * Lower every file with the Tailwind prefix the project's stylesheets set.
+ *
+ * The first pass runs without a prefix, which is right only when no entry
+ * sets one: a prefixed project serves `tw:p-4`, and asking about `p-4` would
+ * call every class dead. Only a prefixed project pays for the second pass.
+ *
+ * @param out - The reporter.
+ * @param files - The files to lower.
+ * @param cwd - Project root.
+ * @returns The diagnostics, the opened stylesheets and any prefix
+ *          disagreement, or null when the engine cannot run.
+ */
+async function lowerWithProjectPrefix(
+    out: Reporter,
+    files: string[],
+    cwd: string,
+): Promise<{
+    lowered: SzDiagnostics;
+    opened: OpenedOracles;
+    disagreement: string[] | null;
+} | null> {
+    const unprefixed = await collectSzDiagnosticsOrStop(out, files, cwd, null);
+    if (!unprefixed) return null;
+    const opened = await openOraclesWhenAsked(cwd, unprefixed);
+    const { prefix, disagreement } = agreedPrefix(
+        opened,
+        out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off',
+    );
+    const lowered =
+        prefix === null ? unprefixed : await collectSzDiagnosticsOrStop(out, files, cwd, prefix);
+    return lowered && { lowered, opened, disagreement };
+}
+
+/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Each finding carries the level `csszyx.config` gives it. `process.exitCode`
@@ -1813,19 +1930,13 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
     if (!files) return;
 
-    const unprefixed = await collectSzDiagnostics(files, cwd, null);
-    const opened = await openOraclesWhenAsked(cwd, unprefixed);
-    // Lowered without a prefix above, which is right only when no entry sets
-    // one: a prefixed project serves `tw:p-4`, and asking about `p-4` would
-    // call every class dead. Only a prefixed project pays for the second pass.
-    const { prefix, disagreement } = agreedPrefix(
-        opened,
-        out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off',
-    );
-    const { issues, classOrigins, pairsByFile } =
-        prefix === null ? unprefixed : await collectSzDiagnostics(files, cwd, prefix);
+    const scanned = await lowerWithProjectPrefix(out, files, cwd);
+    if (!scanned) return;
+    const { opened, disagreement } = scanned;
+    const { issues, classOrigins, pairsByFile, unchecked } = scanned.lowered;
 
     reportSelectedIssues(out, issues, files.length, wants, failOn);
+    reportUncheckedFiles(out, unchecked);
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.

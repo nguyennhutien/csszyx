@@ -1664,6 +1664,9 @@ from the project root, and `--pattern` is read relative to that directory.
 | ``✖ `--pattern {pattern}` is an absolute path, so it would not stay inside `{dir}`: pass a pattern relative to the directory.`` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
 | ``✖ `{dir}` does not exist under `{cwd}`, so there is nothing to check: pass a directory under it, or leave `[dir]` out to check the whole project.`` | Exits non-zero rather than passing on the zero files a missing directory would match. |
 | `✖ Could not list the files to check: {reason}` | The glob itself failed; exits non-zero. |
+| ``✖ The engine cannot run, so no file was checked: fix the error above and run `csszyx check` again.`` | Printed under the engine's own `native-engine-unavailable`, `wasm-engine-unavailable` or `engine-version-skew` error; exits non-zero with no report. |
+| `Files the engine threw on, so they were not checked:` + one line per file reading `{file}: {reason}` | A file the engine failed on. A syntax error is a `parse-error` finding instead, so this is a broken engine or a csszyx bug. |
+| `✖ {n} file(s) were not checked: reinstall csszyx so its engine matches, and report the file at https://github.com/nguyennhutien/csszyx/issues if it still fails.` | Printed under that list; exits non-zero. The other files are still checked. |
 | ``✖ {n} file(s) given to `--files` do not exist, so no file was checked: fix each path above; a relative path is read from `--cwd`, or the current directory.`` | Exits non-zero, before any file is scanned. |
 | `Values that belong to a different sz key:` + two lines per offender, the second reading ``\`{key}: '{value}'\` emits \`{className}\`, which sets {sets}, not the property \`{key}\` sets.`` | A value written on a key that owns neither it nor its CSS property: the registry's `sibling-keyword` sentence; `--json` adds its `help`, `note`, `args` and `url`. |
 | `✖ {n} value(s) emit a class that sets another property than their key: move each to the key that sets that property, or declare a theme token named after it if the spelling was deliberate.` | Exits non-zero at `error`. |
@@ -1809,7 +1812,10 @@ Every finding has a level — `info`, `warn` or `error` — from
 [`csszyx.config`](/docs/reference/config/#csszyxconfig). The run exits 1 when
 at least one finding is `error`, or when the run itself failed: files that could
 not be read, a stylesheet that would not compile, a config with an id it does
-not know. `info` and `warn` findings are reported and the run still passes.
+not know, a file the engine threw on, an engine that cannot run. `info` and
+`warn` findings are reported and the run still passes. An engine that is missing or from another release
+(`native-engine-unavailable`, `wasm-engine-unavailable`, `engine-version-skew`)
+stops the run before any report, since no file could be checked.
 
 ```yaml
 # .github/workflows/ci.yml
