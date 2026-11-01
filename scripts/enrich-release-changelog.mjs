@@ -187,7 +187,14 @@ export function readCommitOverride(body) {
 export function expandedSquashMessage(firstLine, pullRequest) {
     const override = readCommitOverride(pullRequest.body);
     const { pr } = readTrailingPr(firstLine);
-    if (override && pr !== null) return `(#${pr})\n\n${override}`;
+    // Each subject of the block starts an entry, as release-please reads it,
+    // so it is written as the bullet `parseConventional` takes for one.
+    const entriesOf = text =>
+        text
+            .split('\n')
+            .map(line => (parseConventionalLine(line) ? `* ${line}` : line))
+            .join('\n');
+    if (override && pr !== null) return `(#${pr})\n\n${entriesOf(override)}`;
     return buildSquashBody(firstLine, pullRequest.commitMessages);
 }
 
@@ -199,55 +206,87 @@ export function expandedSquashMessage(firstLine, pullRequest) {
  * @returns {Array<{ type: string, scope: string, desc: string, pr: string | null }>} Parsed entries in first-seen order.
  */
 export function parseConventional(messages) {
-    const seen = new Set();
+    const seen = new Map();
     const out = [];
     for (const message of messages) {
-        const firstLine = message.split('\n', 1)[0] ?? '';
-        const pr = readTrailingPr(firstLine).pr;
+        const pr = readTrailingPr(message.split('\n', 1)[0] ?? '').pr;
         // A `BREAKING CHANGE:` footer sits in the body BELOW the bullet it
         // belongs to, so notes attach to the most recently parsed entry and
         // keep collecting until a blank line or the next bullet ends them.
         let noteTarget = null;
         let collecting = false;
-        for (const raw of message.split('\n')) {
+        for (const [index, raw] of message.split('\n').entries()) {
             const line = raw.trim().replace(/^[*-]\s+/, '');
-            const parsed = parseConventionalLine(line);
+            const parsed = readEntryLine(index, raw, line);
             if (parsed) {
                 collecting = false;
-                const { type, scope, breaking } = parsed;
-                const desc = readTrailingPr(parsed.desc).text.trim();
-                const key = `${type}|${scope}|${desc}`;
-                if (seen.has(key)) {
-                    noteTarget =
-                        out.find(entry => `${entry.type}|${entry.scope}|${entry.desc}` === key) ??
-                        null;
-                    continue;
-                }
-                seen.add(key);
-                // A `!` with no footer still breaks; the description is then
-                // the only note the author gave us.
-                const entry = { type, scope, desc, pr, breaking, note: breaking ? desc : '' };
-                out.push(entry);
-                noteTarget = entry;
-                continue;
-            }
-            if (BREAKING_FOOTER.test(line)) {
+                noteTarget = entryFor(parsed, pr, seen, out);
+            } else if (BREAKING_FOOTER.test(line)) {
                 collecting = true;
-                if (noteTarget) {
-                    noteTarget.breaking = true;
-                    noteTarget.note = line.replace(BREAKING_FOOTER, '').trim();
-                }
-                continue;
+                if (noteTarget) addFooter(noteTarget, line.replace(BREAKING_FOOTER, '').trim());
+            } else if (collecting) {
+                collecting = line !== '';
+                if (collecting && noteTarget) noteTarget.note = `${noteTarget.note} ${line}`.trim();
             }
-            if (!collecting) continue;
-            if (line === '') {
-                collecting = false;
-                continue;
-            }
-            if (noteTarget) noteTarget.note = `${noteTarget.note} ${line}`.trim();
         }
     }
     return dropUnscopedTwins(out);
+}
+
+/**
+ * The entry a message line starts, if it starts one.
+ *
+ * An entry is the subject or a bullet at the margin. A body line is prose
+ * however it reads: wrapped text can start `build:`, and an indented example
+ * can be `docs: https://…`.
+ *
+ * @param {number} index - The line's place in its message.
+ * @param {string} raw - The line as written.
+ * @param {string} line - The line trimmed, without its bullet.
+ * @returns {ReturnType<typeof parseConventionalLine>} The parsed subject, or null.
+ */
+function readEntryLine(index, raw, line) {
+    return index === 0 || /^[*-]\s/.test(raw) ? parseConventionalLine(line) : null;
+}
+
+/**
+ * The entry a parsed subject names: the one already read under the same
+ * type, scope and description, or a new one.
+ *
+ * @param {NonNullable<ReturnType<typeof parseConventionalLine>>} parsed - The subject.
+ * @param {string | null} pr - The pull request its message belongs to.
+ * @param {Map<string, object>} seen - Entries read so far, by key.
+ * @param {object[]} out - Entries in first-seen order.
+ * @returns {object} The entry later footers attach to.
+ */
+function entryFor(parsed, pr, seen, out) {
+    const { type, scope, breaking } = parsed;
+    const desc = readTrailingPr(parsed.desc).text.trim();
+    const key = `${type}|${scope}|${desc}`;
+    const known = seen.get(key);
+    if (known) return known;
+    // A `!` with no footer still breaks; the description is then the only
+    // note the author gave us.
+    const entry = { type, scope, desc, pr, breaking, note: breaking ? desc : '' };
+    seen.set(key, entry);
+    out.push(entry);
+    return entry;
+}
+
+/**
+ * Adds a `BREAKING CHANGE:` footer to the entry above it.
+ *
+ * A second footer is a second change: it starts a line of its own, rendered
+ * as its own bullet, and the first stays.
+ *
+ * @param {{ desc: string, breaking: boolean, note: string }} entry - The entry.
+ * @param {string} footer - The footer's text.
+ */
+function addFooter(entry, footer) {
+    const footed = entry.breaking && entry.note !== entry.desc;
+    if (!footed) entry.note = footer;
+    else if (!entry.note.split('\n').includes(footer)) entry.note = `${entry.note}\n${footer}`;
+    entry.breaking = true;
 }
 
 /**
@@ -287,6 +326,28 @@ function dropUnscopedTwins(entries) {
 }
 
 /**
+ * The entries the breaking section lists.
+ *
+ * A breaking entry with no footer has only its subject to say. When a footer
+ * of the same pull request says how it breaks, that subject is the pull
+ * request title repeating the `!` of the commit the footer belongs to, and
+ * listing it adds a bullet that tells the reader nothing to do.
+ *
+ * @param {ReturnType<typeof parseConventional>} entries - Entries of shown types.
+ * @returns {ReturnType<typeof parseConventional>} The breaking ones to list.
+ */
+function breakingEntries(entries) {
+    const footless = entry => entry.note === entry.desc;
+    const explained = new Set(
+        entries.filter(entry => entry.breaking && !footless(entry)).map(entry => entry.pr),
+    );
+    return entries.filter(
+        entry =>
+            entry.breaking && !(footless(entry) && entry.pr !== null && explained.has(entry.pr)),
+    );
+}
+
+/**
  * Render the markdown body of a version's CHANGELOG section (grouped by section,
  * hidden types dropped). The caller supplies the existing `## [x] (date)` header
  * to preserve release-please's compare link and date.
@@ -313,14 +374,17 @@ export function buildSection(header, entries, sectionMap, repoUrl) {
     // Breaking changes lead, the way conventional-changelog renders them: a
     // reader deciding whether to upgrade must not have to scan a 30-line
     // feature list to find out what broke.
-    const breaking = entries.filter(entry => entry.breaking && sectionMap.has(entry.type));
+    const breaking = breakingEntries(entries.filter(entry => sectionMap.has(entry.type)));
     if (breaking.length > 0) {
         md += '\n\n### ⚠ BREAKING CHANGES\n\n';
         md += breaking
-            .map(entry => {
+            .flatMap(entry => {
                 const scope = entry.scope ? `**${entry.scope}:** ` : '';
                 const link = entry.pr ? ` ([#${entry.pr}](${repoUrl}/issues/${entry.pr}))` : '';
-                return `* ${scope}${entry.note || entry.desc}${link}`;
+                // One bullet per footer; `parseConventional` puts each on a line.
+                return (entry.note || entry.desc)
+                    .split('\n')
+                    .map(note => `* ${scope}${note}${link}`);
             })
             .join('\n');
     }

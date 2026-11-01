@@ -141,6 +141,85 @@ describe('release changelog enrichment', () => {
         assert.equal(entries.find(entry => entry.scope === 'core')?.breaking, false);
     });
 
+    it('reads a body line shaped like a subject as prose, not as an entry', () => {
+        // A commit body wraps its prose at 72 columns, and a line can start
+        // with `build:` or hold an indented `docs:` example. Taken for an entry,
+        // such a line took the footer below it into a hidden type, and the
+        // footer never reached the notes (0.18.0, #382 and #387).
+        const entries = parseConventional([
+            [
+                'perf(unplugin)!: ship ES modules only (#382)',
+                '',
+                'Most of the shipped code had no CommonJS reader left, and a',
+                'build: a Jest suite runs the runtime through its own resolver.',
+                '',
+                'BREAKING CHANGE: a project typed with `"module": "nodenext"` needs TypeScript 5.8.',
+                '',
+                '* feat(diagnostics)!: render every engine diagnostic',
+                '',
+                '      docs: https://csszyx.com/e/unknown-key',
+                '',
+                'BREAKING CHANGE: `szKeySuggestionFor` is removed.',
+            ].join('\n'),
+        ]);
+
+        assert.deepEqual(
+            entries.map(entry => [entry.type, entry.note]),
+            [
+                ['perf', 'a project typed with `"module": "nodenext"` needs TypeScript 5.8.'],
+                ['feat', '`szKeySuggestionFor` is removed.'],
+            ],
+        );
+    });
+
+    it('keeps every footer a commit carries, one bullet each', () => {
+        // Two footers with no blank line between them: the second used to
+        // replace the first (0.18.0, #396).
+        const entries = parseConventional([
+            [
+                'feat(errors)!: one registry (#396)',
+                '',
+                'BREAKING CHANGE: `code` is `native-engine-unavailable`.',
+                'BREAKING CHANGE: errors carry `code` and `args`.',
+            ].join('\n'),
+        ]);
+        const section = buildSection(
+            '## [0.18.0] (2026-11-01)',
+            entries,
+            new Map([['feat', 'Features']]),
+            'https://github.com/example/repo',
+        );
+
+        assert.match(
+            section,
+            /\* \*\*errors:\*\* `code` is `native-engine-unavailable`\. \(\[#396\]/,
+        );
+        assert.match(section, /\* \*\*errors:\*\* errors carry `code` and `args`\. \(\[#396\]/);
+    });
+
+    it('leaves out a footless breaking subject its pull request explains below', () => {
+        // The pull request title `fix!: …` breaks because a commit below it
+        // does, and that commit's footer says how. The title alone adds a
+        // bullet that says nothing; with no footer anywhere it is the note.
+        const section = buildSection(
+            '## [0.18.0] (2026-11-01)',
+            parseConventional([
+                'fix!: settle the public API (#406)\n\n* fix(compiler)!: take options\n\nBREAKING CHANGE: `transform` takes an options object.',
+                'feat!: lower sz with the prefix Tailwind sets (#324)',
+            ]),
+            new Map([
+                ['feat', 'Features'],
+                ['fix', 'Bug Fixes'],
+            ]),
+            'https://github.com/example/repo',
+        );
+        const breaking = section.split('### Features')[0];
+
+        assert.doesNotMatch(breaking, /settle the public API/);
+        assert.match(breaking, /`transform` takes an options object/);
+        assert.match(breaking, /lower sz with the prefix Tailwind sets/);
+    });
+
     it('renders breaking changes first, using the note over the subject', () => {
         const entries = parseConventional([
             [
