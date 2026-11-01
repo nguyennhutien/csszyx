@@ -31,7 +31,7 @@ import {
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
 import { getNativePackageName } from '@csszyx/core/native';
-import { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
+import type { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
     createGitignoreQuery,
     createWalkRootRelative,
@@ -50,7 +50,7 @@ import {
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
 } from '@csszyx/types';
-import { preprocess as vuePreprocess } from '@csszyx/vue-adapter';
+import type { preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
@@ -617,6 +617,42 @@ let _hasWarnedNativeFallback = false;
 // an investigation. Each distinct mode announces itself once.
 const _loggedActiveParsers = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
+
+/** A framework whose templates an adapter lowers. */
+type TemplateFramework = 'vue' | 'svelte';
+
+/** An adapter's `preprocess`: the Vue and Svelte ones take and return the same shape. */
+type TemplatePreprocess = typeof vuePreprocess | typeof sveltePreprocess;
+
+/**
+ * Each adapter's `preprocess`, once loaded. An adapter loads with the first
+ * file of its framework, so a build of another framework never loads it.
+ */
+const templateAdapters: Partial<Record<TemplateFramework, TemplatePreprocess>> = {};
+
+/**
+ * The framework whose adapter lowers a module, if any.
+ *
+ * @param id - Bundler module identifier.
+ * @returns The framework, or null for a module the compiler lowers.
+ */
+function templateFrameworkOf(id: string): TemplateFramework | null {
+    if (id.endsWith('.vue')) return 'vue';
+    return id.endsWith('.svelte') ? 'svelte' : null;
+}
+
+/**
+ * Loads a framework's adapter, once.
+ *
+ * @param framework - The framework.
+ */
+async function loadTemplateAdapter(framework: TemplateFramework): Promise<void> {
+    templateAdapters[framework] ??=
+        framework === 'vue'
+            ? (await import('@csszyx/vue-adapter')).preprocess
+            : (await import('@csszyx/svelte-adapter')).preprocess;
+}
+
 const PLUGIN_VERSION = findPackageVersionFromFile(
     fileURLToPath(import.meta.url),
     UNKNOWN_PACKAGE_VERSION,
@@ -6996,7 +7032,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         warn: (message: string) => void,
         watch?: (file: string) => void,
     ): PreTransformOutput {
-        if (id.endsWith('.vue') || id.endsWith('.svelte')) {
+        const framework = templateFrameworkOf(id);
+        if (framework !== null) {
             // A template has no csszyx runtime: a value the engine cannot
             // resolve at build time is an error, and the build stops on it.
             const adapterOptions = {
@@ -7005,9 +7042,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 parser: activeParser().parser,
                 classPrefix: createCompilerOptions().classPrefix,
             };
-            const result = id.endsWith('.vue')
-                ? vuePreprocess(code, adapterOptions)
-                : sveltePreprocess(code, adapterOptions);
+            // The transform hook loads it before it lowers the first file.
+            const preprocess = templateAdapters[framework] as TemplatePreprocess;
+            const result = preprocess(code, adapterOptions);
             reportTemplateSzDiagnostics(
                 {
                     warn,
@@ -7561,41 +7598,53 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
 
                 const hasSzProp = mayHoldSz(code);
-                // Every bundler's context has it; a caller that drives the
-                // hook by hand may not.
-                const watch =
-                    serving || typeof this.addWatchFile !== 'function'
-                        ? undefined
-                        : (file: string) => this.addWatchFile(file);
-                const output = hasSzProp
-                    ? transformSzSource(
-                          code,
-                          id,
-                          message => this.warn(codedWarning(message)),
-                          watch,
-                      )
-                    : unchangedPreTransform(code);
-                if (!hasSzProp && shouldProcessSource(id)) {
-                    recordFileVarMangleEntries(state, id, []);
-                    recordFileCSSVariableMetrics(state, id, null);
-                }
-
-                // Sequential, and order matters: each injector reads the source
-                // the previous one produced.
-                applyInjection(output, injectLayoutHydration(output.code, id));
-                applyInjection(output, injectRuntimeHelpers(output.code, output, id));
-                applyInjection(output, injectThemeGroups(code, output.code, id, output.usesSzcn));
-                applyInjection(output, injectMangleRuntime(output.code, id));
-                applyInjection(output, injectUnservedRuntime(output.code, id));
-
-                if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
-                    assertNoRSCBoundaryViolation(output.code, id);
-                    if (!skipRscRecords) {
-                        const record = createRSCModuleRecord(output.code, id);
-                        state.rscModules.set(record.id, record);
+                const lower = (): ReturnType<typeof collectPreTransformClasses> => {
+                    // Every bundler's context has it; a caller that drives the
+                    // hook by hand may not.
+                    const watch =
+                        serving || typeof this.addWatchFile !== 'function'
+                            ? undefined
+                            : (file: string) => this.addWatchFile(file);
+                    const output = hasSzProp
+                        ? transformSzSource(
+                              code,
+                              id,
+                              message => this.warn(codedWarning(message)),
+                              watch,
+                          )
+                        : unchangedPreTransform(code);
+                    if (!hasSzProp && shouldProcessSource(id)) {
+                        recordFileVarMangleEntries(state, id, []);
+                        recordFileCSSVariableMetrics(state, id, null);
                     }
+
+                    // Sequential, and order matters: each injector reads the source
+                    // the previous one produced.
+                    applyInjection(output, injectLayoutHydration(output.code, id));
+                    applyInjection(output, injectRuntimeHelpers(output.code, output, id));
+                    applyInjection(
+                        output,
+                        injectThemeGroups(code, output.code, id, output.usesSzcn),
+                    );
+                    applyInjection(output, injectMangleRuntime(output.code, id));
+                    applyInjection(output, injectUnservedRuntime(output.code, id));
+
+                    if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
+                        assertNoRSCBoundaryViolation(output.code, id);
+                        if (!skipRscRecords) {
+                            const record = createRSCModuleRecord(output.code, id);
+                            state.rscModules.set(record.id, record);
+                        }
+                    }
+                    return collectPreTransformClasses(output);
+                };
+                const framework = hasSzProp ? templateFrameworkOf(id) : null;
+                // The first file of a framework loads its adapter, so a build of
+                // another framework never does.
+                if (framework !== null && templateAdapters[framework] === undefined) {
+                    return loadTemplateAdapter(framework).then(lower);
                 }
-                return collectPreTransformClasses(output);
+                return lower();
             },
 
             /**
