@@ -2398,6 +2398,17 @@ function breakpointSegment(breakpoint: string): string {
         : `[${breakpoint}]`;
 }
 
+/**
+ * A breakpoint after `min-` or `max-`. Its name is the `--breakpoint-*` name
+ * a bare variant key writes, so it is spelled as that key is: `tabletLarge`
+ * → `tablet-large`. Mirrors `min_max_segment`.
+ */
+function minMaxSegment(breakpoint: string): string {
+    return isArbitraryVariant(breakpoint) || needsArbitraryBrackets(breakpoint)
+        ? breakpointSegment(breakpoint)
+        : camelToKebab(breakpoint);
+}
+
 /** Collects named and arbitrary min/max breakpoint variants. */
 function collectMinMaxVariants(
     kind: 'min' | 'max',
@@ -2407,7 +2418,7 @@ function collectMinMaxVariants(
 ): void {
     for (const [breakpoint, value] of Object.entries(breakpoints)) {
         if (isInactiveVariantValue(value)) continue;
-        appendVariantClasses(value, `${prefix}${kind}-${breakpointSegment(breakpoint)}:`, classes);
+        appendVariantClasses(value, `${prefix}${kind}-${minMaxSegment(breakpoint)}:`, classes);
     }
 }
 

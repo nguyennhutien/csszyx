@@ -484,7 +484,7 @@ describe('csszyx check — a variant the project does not serve', () => {
             expect.objectContaining({
                 kind: 'unserved-variant',
                 args: { form: 'unknown', variant: 'hovr', className: 'hovr:p-4' },
-                help: 'check the spelling of `hovr`.',
+                help: 'check the spelling of `hovr`; a camelCase key is written in kebab-case.',
                 note: expect.stringContaining('@custom-variant'),
             }),
             expect.objectContaining({

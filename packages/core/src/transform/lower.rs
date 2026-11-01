@@ -1547,8 +1547,20 @@ fn lower_breakpoint_variant(
         let StaticSzValue::Object(body) = &property.value else {
             continue;
         };
-        let segment = breakpoint_segment(&property.key);
+        let segment = min_max_segment(&property.key);
         lower_object_into(body, &format!("{prefix}{kind}-{segment}:"), classes);
+    }
+}
+
+/// A breakpoint after `min-` or `max-`. Its name is the `--breakpoint-*` name
+/// a bare variant key writes, so it is spelled as that key is: `tabletLarge`
+/// → `tablet-large`. Mirrors `minMaxSegment`.
+fn min_max_segment(breakpoint: &str) -> Cow<'_, str> {
+    match breakpoint_segment(breakpoint) {
+        Cow::Borrowed(name) if !(name.starts_with('[') && name.ends_with(']')) => {
+            Cow::Owned(kebab_case(name))
+        }
+        segment => segment,
     }
 }
 
@@ -4702,6 +4714,11 @@ mod tests {
                             "[40rem",
                             object(vec![property("p", StaticSzValue::Number(5.0))]),
                         ),
+                        // A camelCase name is kebab-cased, as a bare key is.
+                        property(
+                            "tabletLarge",
+                            object(vec![property("p", StaticSzValue::Number(6.0))]),
+                        ),
                         property("ignored", StaticSzValue::Boolean(false)),
                     ]),
                 ),
@@ -4735,6 +4752,7 @@ mod tests {
                 "min-md:p-2",
                 "min-[40rem]:p-3",
                 "min-[40rem:p-5",
+                "min-tablet-large:p-6",
                 "max-[900px]:hidden",
                 "hover:min-lg:p-4",
             ]
