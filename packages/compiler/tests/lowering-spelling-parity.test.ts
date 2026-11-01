@@ -284,6 +284,14 @@ describe.each(LANES)('a variant key the project names — %s', (_name, lower) =>
         [{ hoverFocus: { p: 1 } }, 'hover-focus:p-1'],
         [{ maskT: { p: 1 } }, 'mask-t:p-1'],
         [{ md: { tabletLarge: { p: 1 } } }, 'md:tablet-large:p-1'],
+        // A breakpoint after `min`/`max` is the same `--breakpoint-*` name, so
+        // it is spelled as the bare variant is; a length is still bracketed.
+        [{ max: { tabletLarge: { p: 1 } } }, 'max-tablet-large:p-1'],
+        [{ min: { wideScreen: { p: 1 } } }, 'min-wide-screen:p-1'],
+        [{ min: { '2xl': { p: 1 } } }, 'min-2xl:p-1'],
+        [{ min: { '[var(--bpLarge)]': { p: 1 } } }, 'min-[var(--bpLarge)]:p-1'],
+        // A container size is `--container-*`, kept as written like `@fooBar`.
+        [{ '@max': { sidebarWide: { p: 1 } } }, '@max-sidebarWide:p-1'],
         [{ tablet: { p: 1 } }, 'tablet:p-1'],
         [{ 'desktop-sm': { p: 1 } }, 'desktop-sm:p-1'],
         [{ '[& > li]': { p: 1 } }, '[&>li]:p-1'],

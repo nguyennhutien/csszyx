@@ -49,7 +49,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
         "help": {
             "aria": "write `aria: { {variant}: { … } }` for the ARIA state.",
             "attribute-or-aria": "write `{ '[{variant}]': { … } }` to match the HTML attribute, or `aria: { {variant}: { … } }` for the ARIA state.",
-            "unknown": "check the spelling of `{variant}`.",
+            "unknown": "check the spelling of `{variant}`; a camelCase key is written in kebab-case.",
             "container-name": "write `{ '{query}/{variant}': { … } }` for a container named `{variant}`; a name under a query is a variant."
         },
         "note": "the class is still emitted, and it styles nothing unless the project defines `{variant}` with `@custom-variant`."
