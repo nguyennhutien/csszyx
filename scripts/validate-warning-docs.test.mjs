@@ -8,6 +8,7 @@ import {
     findMissingMessages,
     isFullyComposed,
     normalizeMessage,
+    templateMatches,
 } from './validate-warning-docs.mjs';
 
 /**
@@ -380,4 +381,180 @@ test('a symbol written as a unicode escape is not a word', () => {
     const glyph = normalizeMessage('✖ 3 listed file(s) could not be read');
 
     assert.equal(escaped, glyph);
+});
+
+test('reads the code of a header line rather than its example position', () => {
+    const found = extractDocumentedMessages(
+        ['```text', '[csszyx] unknown-key: src/Card.tsx:3:16', '```'].join('\n'),
+    );
+    assert.deepEqual(found, [{ code: 'unknown-key', line: 2 }]);
+});
+
+test('reports a header line whose code the registry does not have', () => {
+    const missing = findMissingMessages(
+        [
+            { code: 'unknown-key', line: 2 },
+            { code: 'unknown-kee', line: 9 },
+        ],
+        '',
+        { codes: new Set(['unknown-key']) },
+    );
+    assert.deepEqual(
+        missing.map(entry => entry.line),
+        [9],
+    );
+});
+
+test('reads the sentence, help and note under a header, not the docs link', () => {
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '[csszyx] unknown-key: src/Card.tsx:3:16',
+            '  `bgg` is not an sz property at all.',
+            '  help: write `bg` if you meant it.',
+            '  note: the class is still emitted.',
+            '  docs: https://csszyx.com/e/unknown-key',
+            '```',
+        ].join('\n'),
+    );
+    assert.deepEqual(
+        found.map(entry => entry.line),
+        [2, 3, 4, 5],
+    );
+    // The renderer writes the `help:` and `note:` labels; source holds only the text.
+    assert.equal(found[2].text, 'write `bg` if you meant it.');
+    assert.equal(found[3].text, 'the class is still emitted.');
+});
+
+test('skips the lines a fence labels as an older release', () => {
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '# 0.17',
+            '[csszyx] Unknown property "bgg" in sz prop at src/Card.tsx:3. Check for typos.',
+            '',
+            '# 0.18',
+            '[csszyx] unknown-key: src/Card.tsx:3:16',
+            '```',
+        ].join('\n'),
+    );
+    assert.deepEqual(found, [{ code: 'unknown-key', line: 6 }]);
+});
+
+test('reads only marked messages on a page other than the reference', () => {
+    const mdx = [
+        'Run `claude mcp add csszyx -- npx --no-install csszyx-mcp now please`.',
+        'It prints `[csszyx] this message is quoted on a guide page`.',
+    ].join('\n');
+    assert.equal(extractDocumentedMessages(mdx).length, 2);
+    assert.deepEqual(
+        extractDocumentedMessages(mdx, { reference: false }).map(entry => entry.line),
+        [2],
+    );
+});
+
+test('holds a line under a header to the templates of that code', () => {
+    const templates = new Map([
+        [
+            'unknown-key',
+            ['`{key}` is not an sz property.', '{spellingHint}; for a custom utility, define it.'],
+        ],
+    ]);
+    const missing = findMissingMessages(
+        [
+            { text: '`bgg` is not an sz property.', line: 3, under: 'unknown-key' },
+            {
+                text: 'write `bg` if you meant it; for a custom utility, define it.',
+                line: 4,
+                under: 'unknown-key',
+            },
+            { text: '`bgg` is not a known sz property.', line: 5, under: 'unknown-key' },
+        ],
+        '',
+        { codes: new Set(['unknown-key']), templates },
+    );
+    assert.deepEqual(
+        missing.map(entry => entry.line),
+        [5],
+    );
+});
+
+test('reads a header written as an inline span', () => {
+    assert.deepEqual(
+        extractDocumentedMessages('| `[csszyx] unknown-key: src/Card.tsx:3:16` | x |'),
+        [{ code: 'unknown-key', line: 1 }],
+    );
+});
+
+test('holds a nested problem line to any template in the registry', () => {
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '[csszyx] config-invalid: csszyx.config.ts',
+            '  This file has 1 problem(s); each one is ignored.',
+            '  - (warning) development: `development` is a plugin option, so it is ignored.',
+            '    help: pass it to the csszyx plugin in your bundler config.',
+            '```',
+        ].join('\n'),
+    );
+    assert.deepEqual(found.slice(2), [
+        { text: '`development` is a plugin option, so it is ignored.', line: 4, under: '*' },
+        { text: 'pass it to the csszyx plugin in your bundler config.', line: 5, under: '*' },
+    ]);
+    const templates = new Map([
+        ['config-invalid', ['This file has {count} problem(s); each one is ignored.']],
+        [
+            'config-field-unknown',
+            [
+                '`{key}` is a plugin option, so it is ignored.',
+                'pass it to the csszyx plugin in your bundler config.',
+            ],
+        ],
+    ]);
+    assert.deepEqual(findMissingMessages(found.slice(1), '', { codes: new Set(), templates }), []);
+});
+
+test('reads the sentence a header carries when the diagnostic has no place', () => {
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '[csszyx] removed-key: The boolean shorthand `flex` was removed.',
+            "  help: write `{ display: 'flex' }` instead, or run `csszyx migrate`.",
+            '```',
+        ].join('\n'),
+    );
+    assert.deepEqual(found, [
+        { code: 'removed-key', line: 2 },
+        { text: 'The boolean shorthand `flex` was removed.', line: 2, under: 'removed-key' },
+        {
+            text: "write `{ display: 'flex' }` instead, or run `csszyx migrate`.",
+            line: 3,
+            under: 'removed-key',
+        },
+    ]);
+});
+
+test('matches one line of a template that spans several', () => {
+    assert.ok(
+        templateMatches(
+            'each failure, as Tailwind reported it:\n    {stylesheets}',
+            'each failure, as Tailwind reported it:',
+        ),
+    );
+});
+
+test('reads only the code of a production line', () => {
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '[csszyx] slash-opacity-string: {"key":"bg","color":"red-500"} https://csszyx.com/e/slash-opacity-string',
+            '```',
+        ].join('\n'),
+    );
+    assert.deepEqual(found, [{ code: 'slash-opacity-string', line: 2 }]);
+});
+
+test('a template that is almost all placeholder vouches for no line', () => {
+    assert.equal(templateMatches('{note}.', 'any sentence at all would match this.'), false);
+    assert.equal(templateMatches('`{key}` {reason}.', '`a` is not read from this file.'), false);
 });
