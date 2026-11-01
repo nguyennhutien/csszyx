@@ -4719,6 +4719,16 @@ mod tests {
                             "tabletLarge",
                             object(vec![property("p", StaticSzValue::Number(6.0))]),
                         ),
+                        // A bracketed value is the author's CSS and keeps its
+                        // case; a lone bracket is no bracketed value.
+                        property(
+                            "[var(--bpLarge)]",
+                            object(vec![property("p", StaticSzValue::Number(7.0))]),
+                        ),
+                        property(
+                            "[40Rem",
+                            object(vec![property("p", StaticSzValue::Number(8.0))]),
+                        ),
                         property("ignored", StaticSzValue::Boolean(false)),
                     ]),
                 ),
@@ -4753,6 +4763,8 @@ mod tests {
                 "min-[40rem]:p-3",
                 "min-[40rem:p-5",
                 "min-tablet-large:p-6",
+                "min-[var(--bpLarge)]:p-7",
+                "min-[40-rem:p-8",
                 "max-[900px]:hidden",
                 "hover:min-lg:p-4",
             ]
