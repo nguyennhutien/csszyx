@@ -24,6 +24,7 @@ const control = vi.hoisted(() => ({
     html: false,
     htmlUnavailable: false,
     htmlNonError: false,
+    missingNormalized: false,
 }));
 
 vi.mock('@csszyx/compiler/migrate', async importOriginal => {
@@ -42,7 +43,11 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
                 });
             }
             if (control.other) throw new Error('the engine refused the resolution map');
-            return actual.migrateRustBatch(...args);
+            const results = actual.migrateRustBatch(...args);
+            if (control.missingNormalized) {
+                for (const result of results) delete result.stats.szKeysNormalized;
+            }
+            return results;
         },
         migrateRustHtml: (...args: Parameters<typeof actual.migrateRustHtml>) => {
             if (control.htmlUnavailable) {
@@ -100,11 +105,22 @@ afterEach(() => {
     control.html = false;
     control.htmlUnavailable = false;
     control.htmlNonError = false;
+    control.missingNormalized = false;
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
 
 describe('an install with no native engine', () => {
+    it('keeps a changed file when the engine omitted its optional normalized-key count', async () => {
+        control.missingNormalized = true;
+        const logs = mute();
+        const cwd = fixture();
+        const file = join(cwd, 'src/Alpha.tsx');
+        writeFileSync(file, 'export const A = () => <div sz={{ padding: 4 }} />;');
+        await migrate({ cwd, keysOnly: true, dryRun: true });
+        expect(logs.join('\n')).toContain('0 sz key(s) normalized');
+        expect(readFileSync(file, 'utf8')).toContain('padding: 4');
+    });
     it('says which package to install instead of throwing at the caller', async () => {
         control.unavailable = true;
         const logs = mute();

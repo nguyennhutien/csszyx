@@ -135,6 +135,22 @@ describe('@csszyx/core/native loader', () => {
         );
     });
 
+    it('preserves native initialization failures instead of calling them missing packages', () => {
+        expect(() => loadNativeBinding(fixturePath('fixtures/native-binding-throws.cjs'))).toThrow(
+            expect.objectContaining({ code: 'ERR_DLOPEN_FAILED' }),
+        );
+    });
+
+    it('recognizes an ESM module-not-found error for the requested binding', () => {
+        const fixture = fixturePath('fixtures/native-binding-esm-missing.cjs');
+        expect(() => loadNativeBinding(fixture)).toThrow(
+            expect.objectContaining({
+                code: 'native-engine-unavailable',
+                args: { form: 'not-installed', packageName: fixture },
+            }),
+        );
+    });
+
     it('loads and caches a valid native package binding', () => {
         const fixture = fixturePath('fixtures/native-binding.cjs');
         const binding = loadNativeBinding(fixture);

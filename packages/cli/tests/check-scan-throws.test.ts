@@ -18,11 +18,14 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('fast-glob', () => ({
-    default: () => Promise.reject('a bare string, not an Error'),
-}));
+const rejected = vi.hoisted(() => ({ reason: 'a bare string, not an Error' as unknown }));
+vi.mock('fast-glob', () => ({ default: () => Promise.reject(rejected.reason) }));
 
 import { check } from '../src/commands/check.js';
+import { migrate } from '../src/commands/migrate.js';
+import { nextPrebuild } from '../src/commands/next-prebuild.js';
+import { nextWatch } from '../src/commands/next-watch.js';
+import { scanCollisions } from '../src/commands/scan-collisions.js';
 
 const dirs: string[] = [];
 
@@ -30,9 +33,47 @@ afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
     process.exitCode = undefined;
     vi.restoreAllMocks();
+    rejected.reason = 'a bare string, not an Error';
 });
 
 describe('csszyx check — a scan that rejects with a non-Error', () => {
+    it('reports the message of a stylesheet scan Error', async () => {
+        rejected.reason = new Error('EACCES: stylesheet directory denied');
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await scanCollisions();
+        expect(log.mock.calls.flat().join(' ')).toContain('EACCES: stylesheet directory denied');
+        expect(process.exitCode).toBe(1);
+    });
+    it.each([nextPrebuild, nextWatch])(
+        'returns a failure status for a Next scan rejection',
+        async command => {
+            const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+            const cwd = mkdtempSync(join(tmpdir(), 'csszyx-next-scan-throw-'));
+            dirs.push(cwd);
+            vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+            expect(await command()).toBe(1);
+            expect([...errors.mock.calls, ...log.mock.calls].flat().join(' ')).toContain(
+                'a bare string, not an Error',
+            );
+        },
+    );
+    it.each([
+        [scanCollisions, 1],
+        [migrate, undefined],
+    ] as const)(
+        'reports scan failure without losing the thrown value',
+        async (command, exitCode) => {
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+            vi.spyOn(console, 'info').mockImplementation(() => {});
+            const cwd = mkdtempSync(join(tmpdir(), 'csszyx-scan-throw-'));
+            dirs.push(cwd);
+            vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+            await command();
+            expect(log.mock.calls.flat().join(' ')).toContain('a bare string, not an Error');
+            expect(process.exitCode).toBe(exitCode);
+        },
+    );
     it('reports what was thrown instead of an undefined message', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});

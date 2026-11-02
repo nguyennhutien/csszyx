@@ -19,7 +19,7 @@
 /**
  *
  */
-export type ContextType = 'none' | 'key' | 'value' | 'variant-key' | 'variant-value';
+export type ContextType = SzContext['type'];
 
 /** Which csszyx surface the expression belongs to. */
 export type SzForm = 'sz' | 'szs' | 'szv' | 'szr';
@@ -27,10 +27,7 @@ export type SzForm = 'sz' | 'szs' | 'szv' | 'szr';
 /**
  *
  */
-export interface SzContext {
-    type: ContextType;
-    /** The key whose value is being completed — undefined for key position. */
-    currentKey: string | undefined;
+interface SzContextFields {
     /** Object brace depth: 1 = top-level, 2 = inside a variant object. */
     depth: number;
     /** Surface the expression belongs to (`sz` for `none`). */
@@ -41,6 +38,16 @@ export interface SzContext {
     /** Keys already assigned at the cursor's depth since its `{` opened. */
     siblings: readonly string[];
 }
+
+/** Value contexts only follow a colon with a normalized, nonempty key. */
+export type SzContext = SzContextFields &
+    (
+        | { type: 'none'; currentKey: undefined }
+        | { type: 'key'; currentKey: undefined }
+        | { type: 'variant-key'; currentKey: undefined }
+        | { type: 'value'; currentKey: string }
+        | { type: 'variant-value'; currentKey: string }
+    );
 
 const NONE: SzContext = {
     type: 'none',
@@ -122,10 +129,10 @@ function findCallFormStart(
         const idx = text.lastIndexOf(marker, from);
         if (idx === -1) return null;
         from = idx - 1;
-        const before = idx > 0 ? (text[idx - 1] ?? '') : '';
+        const before = text.charAt(idx - 1);
         if (/[\w$]/.test(before)) continue;
         let bodyStart = idx + marker.length;
-        while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) bodyStart++;
+        while (bodyStart < text.length && /\s/.test(text.charAt(bodyStart))) bodyStart++;
         if (text[bodyStart] === '{') {
             return {
                 idx,
@@ -134,6 +141,25 @@ function findCallFormStart(
         }
     }
     return null;
+}
+
+/**
+ * Describe where a quoted sz attribute's body opens: an explicit object when
+ * the first non-space character is `{`, otherwise the quoted text itself.
+ *
+ * @param text Source text.
+ * @param afterMarker Offset just past `sz="` or `sz='`.
+ * @param quote Attribute quote style.
+ * @returns The body's opening description.
+ */
+function quotedSzStart(text: string, afterMarker: number, quote: '"' | "'"): SzStart {
+    let bodyStart = afterMarker;
+    while (bodyStart < text.length && /\s/.test(text.charAt(bodyStart))) {
+        bodyStart++;
+    }
+    return text[bodyStart] === '{'
+        ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
+        : { bodyStart: afterMarker, explicit: false, terminator: quote, form: 'sz' };
 }
 
 /**
@@ -149,20 +175,7 @@ function findLastQuotedSz(text: string, quote: '"' | "'"): { idx: number; start:
     if (idx === -1) {
         return null;
     }
-    let bodyStart = idx + marker.length;
-    while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) {
-        bodyStart++;
-    }
-    const start: SzStart =
-        text[bodyStart] === '{'
-            ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
-            : {
-                  bodyStart: idx + marker.length,
-                  explicit: false,
-                  terminator: quote,
-                  form: 'sz',
-              };
-    return { idx, start };
+    return { idx, start: quotedSzStart(text, idx + marker.length, quote) };
 }
 
 /**
@@ -217,12 +230,13 @@ export function parseSzContext(text: string): SzContext {
 
     // Owners of depth 2..current, outer→inner (depth 1 — the root — has none).
     const parents = state.keyStack.slice(2, state.depth + 1);
-    const siblings = [...(state.siblingsAt[state.depth] ?? [])];
+    // Every live depth is initialized by createSzContextScanState/openSzContextObject.
+    const siblings = [...state.siblingsAt[state.depth]];
 
-    if (state.lastColon >= (state.segStart[state.depth] ?? 0)) {
+    if (state.lastColon >= state.segStart[state.depth]) {
         return {
             type: state.depth === 1 ? 'value' : 'variant-value',
-            currentKey: state.keyAtColon || undefined,
+            currentKey: state.keyAtColon,
             depth: state.depth,
             form: start.form,
             parents,
@@ -322,7 +336,7 @@ function scanSzContextCharacter(
  * @param index - Opening brace offset.
  */
 function openSzContextObject(state: SzContextScanState, index: number): void {
-    const owner = state.lastColon >= (state.segStart[state.depth] ?? 0) ? state.keyAtColon : '';
+    const owner = state.lastColon >= state.segStart[state.depth] ? state.keyAtColon : '';
     state.depth++;
     state.keyStack[state.depth] = owner;
     state.siblingsAt[state.depth] = new Set();
@@ -369,11 +383,11 @@ function resetSzContextSegment(state: SzContextScanState, segmentStart: number):
  * @param state - Mutable scanner state.
  */
 function recordSzContextKey(source: string, index: number, state: SzContextScanState): void {
-    const segment = normalizeKeySegment(source.slice(state.segStart[state.depth] ?? 0, index));
+    const segment = normalizeKeySegment(source.slice(state.segStart[state.depth], index));
     if (segment === '') return;
     state.lastColon = index;
     state.keyAtColon = segment;
-    state.siblingsAt[state.depth]?.add(segment);
+    state.siblingsAt[state.depth].add(segment);
 }
 
 /**
@@ -446,15 +460,7 @@ function findQuotedSz(text: string, from: number, quote: '"' | "'"): MarkerHit |
     if (idx === -1) {
         return null;
     }
-    let bodyStart = idx + marker.length;
-    while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) {
-        bodyStart++;
-    }
-    const start: SzStart =
-        text[bodyStart] === '{'
-            ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
-            : { bodyStart: idx + marker.length, explicit: false, terminator: quote, form: 'sz' };
-    return { idx, start };
+    return { idx, start: quotedSzStart(text, idx + marker.length, quote) };
 }
 
 /**
@@ -568,7 +574,7 @@ function findExplicitSzObjectEnd(text: string, start: number): number {
  * @returns Extracted expression and next search offset.
  */
 function scanImplicitSzExpression(text: string, hit: MarkerHit): SzExpressionScanResult {
-    const end = findImplicitSzEnd(text, hit.start.bodyStart, hit.start.terminator ?? '"');
+    const end = findImplicitSzEnd(text, hit.start.bodyStart, hit.start.terminator as string);
     if (end === -1) return { nextSearchFrom: hit.idx + 4 };
     return {
         expression: {

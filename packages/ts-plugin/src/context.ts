@@ -83,9 +83,9 @@ function replacementSpan(text: string, position: number, allowHyphen: boolean): 
         /[\w$]/.test(character) || (allowHyphen && character === '-');
     let start = position;
     let end = position;
-    for (let count = 0; start > 0 && count < 256 && isPart(text[start - 1] ?? ''); count += 1)
+    for (let count = 0; start > 0 && count < 256 && isPart(text.charAt(start - 1)); count += 1)
         start -= 1;
-    for (let count = 0; end < text.length && count < 256 && isPart(text[end] ?? ''); count += 1)
+    for (let count = 0; end < text.length && count < 256 && isPart(text.charAt(end)); count += 1)
         end += 1;
     return { start, length: end - start };
 }
@@ -342,8 +342,9 @@ function jsxAttributeAnchor(
     if (!tsMod.isIdentifier(name) || !SZ_JSX_ATTRS.has(name.text)) return null;
     if (name.text === 'sz') return resolveChain(chain);
     if (!nested) return null;
+    // TypeScript gives JSX attributes an opening element parent even while
+    // recovering an unfinished tag in the editor.
     const opening = attribute.parent.parent;
-    if (!tsMod.isJsxOpeningElement(opening) && !tsMod.isJsxSelfClosingElement(opening)) return null;
     if (/^[a-z]/.test(opening.tagName.getText())) return null;
     return resolveChain(chain.slice(0, -1));
 }
@@ -617,12 +618,12 @@ function cursorPrefixStart(
     let start = position;
     for (
         let count = 0;
-        start > objectStart && count < 256 && /[\w$-]/.test(text[start - 1] ?? '');
+        start > objectStart && count < 256 && /[\w$-]/.test(text.charAt(start - 1));
         count += 1
     ) {
         start -= 1;
     }
-    return start > objectStart && /[\w$-]/.test(text[start - 1] ?? '') ? undefined : start;
+    return start > objectStart && /[\w$-]/.test(text.charAt(start - 1)) ? undefined : start;
 }
 
 /** Skip bounded whitespace before a cursor prefix.
@@ -638,7 +639,7 @@ function beforeCursorPrefix(
 ): number | undefined {
     let scan = prefixStart - 1;
     let count = 0;
-    while (scan > objectStart && count < 256 && /\s/.test(text[scan] ?? '')) {
+    while (scan > objectStart && count < 256 && /\s/.test(text.charAt(scan))) {
         scan -= 1;
         count += 1;
     }
@@ -654,7 +655,7 @@ function beforeCursorPrefix(
 function nameBeforeColon(text: string, colon: number, objectStart: number): string | undefined {
     let end = colon;
     let whitespace = 0;
-    while (end > objectStart && whitespace < 256 && /\s/.test(text[end - 1] ?? '')) {
+    while (end > objectStart && whitespace < 256 && /\s/.test(text.charAt(end - 1))) {
         end -= 1;
         whitespace += 1;
     }
@@ -662,7 +663,7 @@ function nameBeforeColon(text: string, colon: number, objectStart: number): stri
     let start = end;
     for (
         let count = 0;
-        start > objectStart && count < 256 && /[\w$]/.test(text[start - 1] ?? '');
+        start > objectStart && count < 256 && /[\w$]/.test(text.charAt(start - 1));
         count += 1
     ) {
         start -= 1;

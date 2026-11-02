@@ -225,11 +225,8 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
 
     if (supportsConstructableSheets()) {
         sheets ??= initSheets();
-        const resolved = sheets.get(tier) ?? sheets.get('base');
-        if (!resolved) {
-            return;
-        }
-        const sheet = resolved;
+        // initSheets always creates base, including when an unknown tier falls back.
+        const sheet = (sheets.get(tier) ?? sheets.get('base')) as CSSStyleSheet;
         const rule = wrapForTier(cssRule, tier);
         try {
             sheet.insertRule(rule, sheet.cssRules.length);

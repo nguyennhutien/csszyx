@@ -844,7 +844,7 @@ function resolveBorderDeclaration(utility: string): string | null {
     if (utility === 'border') return 'border-width: 1px';
     if (/^border-[trblxyse]$/.test(utility)) {
         const property = BORDER_SIDES[utility.slice(7)];
-        return property ? `${property}: 1px` : null;
+        return `${property}: 1px`;
     }
     if (/^border-\d+$/.test(utility)) return `border-width: ${utility.slice(7)}px`;
     // An arbitrary width: `border-[3px]`. Gated on the classifier because the
@@ -856,7 +856,7 @@ function resolveBorderDeclaration(utility: string): string | null {
     const sideWidth = /^border-([trblxse])-(\d+)$/.exec(utility);
     if (!sideWidth) return null;
     const property = BORDER_SIDES[sideWidth[1]];
-    return property ? `${property}: ${sideWidth[2]}px` : null;
+    return `${property}: ${sideWidth[2]}px`;
 }
 
 /**
@@ -867,8 +867,7 @@ function resolveRadiusDeclaration(utility: string): string | null {
     if (utility === 'rounded') return 'border-radius: var(--radius)';
     if (!utility.startsWith('rounded-')) return null;
     const value = utility.slice(8);
-    if (value === 'none') return 'border-radius: 0';
-    if (value === 'full') return 'border-radius: calc(infinity * 1px)';
+    // rounded-none/full are resolved by KEYWORD_RULES before this resolver.
     if (RADIUS_SIZES.has(value)) return `border-radius: var(--radius-${value})`;
     const direction = own(ROUNDED_DIRECTIONS, value);
     if (direction !== undefined) return direction;

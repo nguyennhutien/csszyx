@@ -9,6 +9,11 @@ import { describe, expect, it } from 'vitest';
 
 import { mangleCodeClassesSync } from '../src/unplugin.js';
 
+it('preserves a trailing escape in an unfinished szs string', () => {
+    const source = 'const view = { szs: { root: "p-4' + '\\' + '} };';
+    expect(mangleCodeClassesSync(source, new Map([['p-4', 'a']]))).toBe(source);
+});
+
 const MAP: Record<string, string> = {
     flex: 'z',
     'items-center': 'h',

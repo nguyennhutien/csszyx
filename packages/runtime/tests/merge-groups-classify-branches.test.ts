@@ -25,6 +25,37 @@ import {
 } from '../src/merge-groups.js';
 import { themeCollisionLine } from './helpers/theme-lines.js';
 
+describe('ambiguous utility values retain their distinct CSS properties', () => {
+    it.each([
+        ['decoration', 'red-500', 'color'],
+        ['decoration', 'wavy', 'style'],
+        ['decoration', 'auto', 'thickness'],
+        ['decoration', '3', 'thickness'],
+        ['decoration', '[2px]', 'thickness'],
+        ['stroke', 'red-500', 'color'],
+        ['stroke', '3', 'width'],
+        ['stroke', '[2px]', 'width'],
+        ['from', 'red-500', 'color'],
+        ['text', '[color:var(--ink)]', 'color'],
+        ['text', '(color:--ink)', 'color'],
+        ['text', '[length:var(--size)]', 'size'],
+        ['text', '(length:--size)', 'size'],
+        ['text', 'center', 'align'],
+        ['text', 'balance', 'wrap'],
+        ['bg', 'center', 'position'],
+        ['bg', 'position-[10%_20%]', 'position'],
+        ['bg', 'repeat-x', 'repeat'],
+        ['bg', 'fixed', 'attachment'],
+        ['flex', 'wrap-reverse', 'wrap'],
+    ])('%s-%s writes %s', (prefix, value, property) => {
+        expect(classifyAmbiguousValue(prefix, value)).toBe(`${prefix}:${property}`);
+    });
+
+    it('does not guess the property of an unknown decoration value', () => {
+        expect(classifyAmbiguousValue('decoration', 'custom-decoration')).toBeNull();
+    });
+});
+
 afterEach(() => {
     _resetSzcnGroups();
     vi.restoreAllMocks();

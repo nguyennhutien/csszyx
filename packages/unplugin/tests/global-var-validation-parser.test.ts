@@ -16,6 +16,14 @@ const { createGlobalVarAliasValidationOptions, validateGlobalVarAliasInputs } = 
 );
 
 describe('the global-var usage scan', () => {
+    it('accepts a CSS-only validation request without source files', () => {
+        const options = createGlobalVarAliasValidationOptions({
+            rootDir: '/repo',
+            cssAssets: [],
+            tokens: [],
+        });
+        expect(options.sourceFiles).toEqual([]);
+    });
     it('runs on the parser the build passes', () => {
         validateGlobalVarAliasInputs(
             createGlobalVarAliasValidationOptions({

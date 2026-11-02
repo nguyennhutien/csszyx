@@ -351,10 +351,8 @@ export function buildRecoveryManifest(
     const sorted: Record<string, TokenData> = {};
     const sortedKeys = sortStrings(tokens.keys());
     for (const key of sortedKeys) {
-        const data = tokens.get(key);
-        if (!data) {
-            continue;
-        }
+        // sortedKeys comes from this map, which is unchanged during serialization.
+        const data = tokens.get(key) as TokenData;
         if (stripped && data.mode === 'dev-only') {
             strippedDevOnlyPaths.push(data.path);
             continue;

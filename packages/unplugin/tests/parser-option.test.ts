@@ -177,36 +177,90 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain('bg-(--brand-primary)');
     });
 
-    it('rewrites CSS assets with the validated explicit global variable alias plan', async () => {
+    it.each([false, true])(
+        'validates CSS assets before publishing aliases (invalid asset: %s)',
+        async invalidAsset => {
+            const [prePlugin, , postPlugin] = (await started(() =>
+                vitePlugin({
+                    build: { emitManifest: true, parser: 'wasm', cache: false },
+                    production: {
+                        mangleGlobalVars: {
+                            enabled: true,
+                            tokens: ['--brand-primary'],
+                        },
+                    },
+                }),
+            )) as [TransformHook, unknown, GenerateBundleHook];
+            prePlugin.transform.call(
+                { warn: vi.fn() },
+                "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+                '/repo/src/App.tsx',
+            );
+            const bundle = {
+                'assets/z.css': {
+                    type: 'asset',
+                    fileName: 'assets/z.css',
+                    source: '.other{color:var(--brand-primary)}',
+                },
+                ...(invalidAsset
+                    ? {
+                          'assets/opaque.css': {
+                              type: 'asset',
+                              fileName: 'assets/opaque.css',
+                              source: 42,
+                          },
+                      }
+                    : {}),
+                'assets/app.css': {
+                    type: 'asset',
+                    fileName: 'assets/app.css',
+                    source: ':root{--brand-primary:red}.card{color:var(--brand-primary)}',
+                },
+            };
+
+            const emitFile = vi.fn();
+            if (invalidAsset) {
+                expect(() => postPlugin.generateBundle.call({ emitFile }, {}, bundle)).toThrow(
+                    'Unknown word 42',
+                );
+                return;
+            }
+            postPlugin.generateBundle.call({ emitFile }, {}, bundle);
+
+            const css = String((bundle['assets/app.css'] as { source: string }).source);
+            expect(css).toContain('---gz:var(--brand-primary)');
+            expect(css).toContain('color:var(---gz)');
+        },
+    );
+
+    it('reports the authored location of out-of-band global variable writes', async () => {
         const [prePlugin, , postPlugin] = (await started(() =>
             vitePlugin({
-                build: { emitManifest: true, parser: 'wasm', cache: false },
-                production: {
-                    mangleGlobalVars: {
-                        enabled: true,
-                        tokens: ['--brand-primary'],
-                    },
-                },
+                build: { parser: 'wasm', cache: false },
+                production: { mangleGlobalVars: { enabled: true, tokens: ['--brand-primary'] } },
             }),
         )) as [TransformHook, unknown, GenerateBundleHook];
         prePlugin.transform.call(
             { warn: vi.fn() },
-            "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+            "document.body.style.setProperty('--brand-primary', color);\nexport const App = () => <div sz={{ p: 4 }} />;",
             '/repo/src/App.tsx',
         );
+        const emitFile = vi.fn();
         const bundle = {
             'assets/app.css': {
                 type: 'asset',
                 fileName: 'assets/app.css',
-                source: ':root{--brand-primary:red}.card{color:var(--brand-primary)}',
+                source: ':root{--brand-primary:red}',
             },
         };
-
-        postPlugin.generateBundle.call({ emitFile: vi.fn() }, {}, bundle);
-
-        const css = String((bundle['assets/app.css'] as { source: string }).source);
-        expect(css).toContain('---gz:var(--brand-primary)');
-        expect(css).toContain('color:var(---gz)');
+        expect(() => postPlugin.generateBundle.call({ emitFile }, {}, bundle)).toThrow(
+            expect.objectContaining({
+                code: 'mangle-global-vars-plan-invalid',
+                message: expect.stringMatching(/style-set-property.*--brand-primary.*App\.tsx:1:/),
+            }),
+        );
+        expect(bundle['assets/app.css'].source).toBe(':root{--brand-primary:red}');
+        expect(emitFile).not.toHaveBeenCalled();
     });
 
     it('fails closed when explicit global variable tokens are missing from emitted CSS', async () => {
@@ -249,9 +303,16 @@ describe('csszyx parser selection', () => {
         tempDirs.push(root);
         const cssPath = join(root, 'tokens.css');
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
+        const extraCssPath = join(root, 'other.css');
+        writeFileSync(extraCssPath, '.other{color:blue}');
         const [, , postPlugin] = (await started(() =>
             vitePlugin({
-                build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
+                build: {
+                    emitManifest: true,
+                    parser: 'wasm',
+                    cache: true,
+                    scanCss: [cssPath, extraCssPath],
+                },
                 production: {
                     mangleGlobalVars: {
                         enabled: true,
@@ -660,6 +721,22 @@ describe('csszyx parser selection', () => {
                 ),
             }),
         );
+    });
+
+    it.each(['not-a-number', '0'])('ignores an invalid variable-map safety cap: %s', async cap => {
+        process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = cap;
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const A = ({p}) => <div sz={{p}} />;',
+            '/repo/src/App.tsx',
+        );
+        expect(String(prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID))).toContain('--_sz-p');
     });
 
     it('exposes CSS variable hoisting efficacy metrics', async () => {

@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import nextTurboLoader, {
     type NextTurboLoaderContext,
@@ -16,6 +16,7 @@ import nextTurboLoader, {
 
 const tempDirs: string[] = [];
 afterEach(() => {
+    vi.unstubAllEnvs();
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -60,6 +61,29 @@ function loaderContext(
 const source = 'export const App = () => <div sz={{ p: 4 }} />;';
 
 describe('nextTurboLoader default export', () => {
+    it('wraps non-Error loader failures for the callback', () => {
+        const root = tempRoot();
+        const callback = vi.fn();
+        const ctx = loaderContext(root, join(root, 'src/App.tsx'), {
+            getOptions: () => {
+                throw 'options unavailable';
+            },
+            callback,
+        });
+        nextTurboLoader.call(ctx, source);
+        expect(callback).toHaveBeenCalledWith(new Error('options unavailable'));
+    });
+
+    it('requires a prebuild when NODE_ENV selects production', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        const root = tempRoot();
+        const filename = writeSource(root, source);
+        const ctx = loaderContext(root, filename, { getOptions: () => baseOptions });
+        expect(() => nextTurboLoader.call(ctx, source)).toThrow(
+            expect.objectContaining({ code: 'next-turbo-cache-unseeded' }),
+        );
+    });
+
     it('reports the result through the loader callback when present', () => {
         const root = tempRoot();
         const filename = writeSource(root, source);

@@ -76,8 +76,12 @@ export const COLOR_OBJECT_PROPS: ReadonlySet<string> = new Set(COLOR_VALUE_PROPS
 
 const COLOR_FORM: ObjectValueForm = {
     members: [
-        { name: 'color', detail: 'color token', values: VALUE_SUGGESTIONS.color ?? [] },
-        { name: 'op', detail: 'opacity', values: VALUE_SUGGESTIONS.opacity ?? [] },
+        {
+            name: 'color',
+            detail: 'color token',
+            values: VALUE_SUGGESTIONS.color as readonly string[],
+        },
+        { name: 'op', detail: 'opacity', values: VALUE_SUGGESTIONS.opacity as readonly string[] },
     ],
 };
 

@@ -216,3 +216,13 @@ describe('metadata data surface', () => {
         expect(negativeValueSuggestions('definitely-missing', true)).toEqual([]);
     });
 });
+
+it('keeps dynamic holes in a style chain permissive', () => {
+    expect(resolveStyleChain(new Array<string>(1))).toEqual({ kind: 'style', form: null });
+});
+
+it('offers real color and opacity values in the color object form', () => {
+    const members = objectValueForm('bg')?.members;
+    expect(members?.find(member => member.name === 'color')?.values).toContain('red-500');
+    expect(members?.find(member => member.name === 'op')?.values).toContain('50');
+});

@@ -183,7 +183,6 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
 
         skipWhitespace();
         while (pos < input.length && input[pos] !== '}') {
-            const from = pos;
             const key = parseKey();
             skipWhitespace();
             // A key always takes a value. Without the colon the text is a
@@ -207,9 +206,7 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
                 pos++;
             }
             skipWhitespace();
-            if (pos === from) {
-                unexpected();
-            }
+            // The required colon above always advances pos; otherwise it throws.
         }
         pos++; // skip }
 

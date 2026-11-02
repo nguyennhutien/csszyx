@@ -48,7 +48,9 @@ vi.mock('vscode', () => ({
     },
 }));
 
-const { COMPANION_TRIGGERS, SzCompanionProvider } = await import('../src/companion-provider.js');
+const { COMPANION_TRIGGERS, SzCompanionProvider, labelOf } = await import(
+    '../src/companion-provider.js'
+);
 
 interface FakePosition {
     line: number;
@@ -238,5 +240,16 @@ describe('SzCompanionProvider', () => {
                 item => item.label === 'red-500',
             ),
         ).toBe(true);
+    });
+});
+
+it('does not suggest values for an unknown member of a structured color', () => {
+    expect(itemsAt('<div sz={{ bg: { unknown:| } }} />', trigger(':'))).toBeUndefined();
+});
+
+describe('labelOf', () => {
+    it('reads a string label and the text of a CompletionItemLabel', () => {
+        expect(labelOf({ label: 'p' } as never)).toBe('p');
+        expect(labelOf({ label: { label: 'px', description: 'padding' } } as never)).toBe('px');
     });
 });

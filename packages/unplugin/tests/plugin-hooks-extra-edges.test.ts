@@ -4,12 +4,12 @@
  * `watchChange` delete path, the `transformIndexHtml` recovery-manifest
  * injection, and the `buildEnd` unscoped-monorepo content-scope warning.
  */
-import * as fs from 'node:fs';
+import fsDefault, * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { vitePlugin } from '../src/unplugin.js';
+import { unplugin, vitePlugin } from '../src/unplugin.js';
 import {
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
@@ -46,6 +46,12 @@ function harness(options = {}, root?: string): Harness {
 }
 
 describe('virtual-module load hook', () => {
+    it('returns null when the raw loader is asked for an unrelated module', () => {
+        const plugin = unplugin.raw({}, { framework: 'vite' }) as unknown as {
+            load: (id: string) => unknown;
+        };
+        expect(plugin.load('unrelated-module')).toBeNull();
+    });
     it('loads the checksum-only virtual module', async () => {
         const h = harness();
         await h.invoke('configResolved', { root: h.root, command: 'build' });
@@ -81,6 +87,43 @@ describe('watchChange delete', () => {
 });
 
 describe('transformIndexHtml recovery injection', () => {
+    it('does not mistake a custom html-prefixed element for the document root', async () => {
+        const h = harness({ build: { cache: false } });
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        const source = 'export default function Root() { return <htmlish sz={{ p: 4 }} />; }';
+        const result = (await h.invoke(
+            'transform',
+            source,
+            path.join(h.root, 'src/layout.tsx'),
+        )) as { code: string };
+        expect(result.code).toContain('<htmlish');
+        expect(result.code).toContain('p-4');
+        expect(result.code).not.toContain('data-sz-checksum');
+    });
+    it('handles an HTML fragment without an opening body or head', async () => {
+        const h = harness({ build: { cache: false } });
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        await h.invoke(
+            'transform',
+            'const A = () => <div szRecover="csr" sz={{ p: 4 }} />;',
+            path.join(h.root, 'src/App.tsx'),
+        );
+        const result = await h.invoke('transformIndexHtml', '<div id="root"></div>');
+        expect(result).toContain('<div id="root"></div>');
+        expect(result).toContain('csszyx');
+    });
+
+    it('uses the current directory when the host supplies no root', async () => {
+        const h = harness({ build: { cache: false } });
+        vi.spyOn(process, 'cwd').mockReturnValue(h.root);
+        await h.invoke('configResolved', { command: 'build' });
+        const transformed = await h.invoke(
+            'transform',
+            'const A = () => <div sz={{ p: 4 }} />;',
+            path.join(h.root, 'src/App.tsx'),
+        );
+        expect(transformed).toMatchObject({ code: expect.stringContaining('p-4') });
+    });
     it('injects a recovery manifest once szRecover tokens have been collected', async () => {
         const h = harness({ build: { cache: false } });
         await h.invoke('configResolved', { root: h.root, command: 'build' });
@@ -165,6 +208,48 @@ describe('buildEnd unscoped-monorepo content-scope warning', () => {
 
         const message = warn.mock.calls.map(c => String(c[0])).join('\n');
         expect(message).toContain('UNSCOPED in a monorepo');
+    });
+});
+
+describe('buildEnd unscoped content scope outside a monorepo', () => {
+    it('answers the workspace question once, and stays quiet on every build end', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const h = harness();
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        await h.invoke('transform', '@import "tailwindcss";\n', path.join(h.root, 'src/app.css'));
+        const exists = vi.spyOn(fsDefault, 'existsSync');
+        const workspaceProbes = (): number =>
+            exists.mock.calls.filter(([file]) => String(file).endsWith('pnpm-workspace.yaml'))
+                .length;
+        await h.invoke('buildEnd');
+        const firstWalk = workspaceProbes();
+        await h.invoke('buildEnd');
+        // The walk up the directory tree ran on the first build end only.
+        expect(firstWalk).toBeGreaterThan(0);
+        expect(workspaceProbes()).toBe(firstWalk);
+        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).not.toContain(
+            'UNSCOPED in a monorepo',
+        );
+    });
+});
+
+describe('Tailwind entry @source injection', () => {
+    it('does not append the safelist directive to an entry that already has it', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const h = harness();
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        await h.invoke(
+            'transform',
+            'export const A = () => <div sz={{ p: 4 }} />;',
+            path.join(h.root, 'src/App.tsx'),
+        );
+        const entry = path.join(h.root, 'src/app.css');
+        const first = (await h.invoke('transform', '@import "tailwindcss";\n', entry)) as {
+            code: string;
+        };
+        expect(first.code).toMatch(/@source "[^"]+";\n$/);
+        // The bundler hands the injected text back, as on a second pass.
+        expect(await h.invoke('transform', first.code, entry)).toBeNull();
     });
 });
 

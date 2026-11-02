@@ -43,6 +43,28 @@ function traceLine(lines: string[], label: string): string | undefined {
 }
 
 describe('prescan trace labels', () => {
+    it('suppresses file timings that do not match the requested trace filter', async () => {
+        vi.stubEnv('CSSZYX_BENCH_TRACE', '1');
+        vi.stubEnv('CSSZYX_BENCH_TRACE_FILE', 'Selected.tsx');
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-trace-filter-'));
+        tempDirs.push(root);
+        fs.mkdirSync(path.join(root, 'src'));
+        const { vitePlugin } = await import('../src/unplugin.js');
+        const [pre] = vitePlugin({ build: { cache: false } }) as unknown as [
+            {
+                configResolved: (config: { root: string; command: string }) => Promise<void>;
+                transform: (code: string, id: string) => unknown;
+            },
+        ];
+        await pre.configResolved({ root, command: 'build' });
+        pre.transform(
+            'export const A = () => <div sz={{p:4}} />;',
+            path.join(root, 'src/Other.tsx'),
+        );
+        expect(
+            logged.some(line => line.includes('[csszyx:bench]') && line.includes('Other.tsx')),
+        ).toBe(false);
+    });
     it('reports each stage with the counts that size it', async () => {
         vi.stubEnv('CSSZYX_BENCH_TRACE', '1');
         const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-trace-')));

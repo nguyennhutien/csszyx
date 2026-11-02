@@ -78,11 +78,14 @@ export function createNextSafelistShardFromMetadata(
 }
 
 /**
+ * Add the static classes inside the generated `_sz({...})` runtime calls of a
+ * transform result to a class sink, so the safelist names them. Values the
+ * runtime resolves stay out: only string, number and boolean literals are read.
  *
- * @param result
- * @param discoveredClasses
+ * @param result - The compiler result.
+ * @param discoveredClasses - The sz-generated class sink.
  */
-function collectRuntimeStaticClasses(
+export function collectRuntimeStaticClasses(
     result: SourceTransformResult,
     discoveredClasses: Set<string>,
 ): void {
@@ -92,7 +95,7 @@ function collectRuntimeStaticClasses(
     const szCallRe = /_sz\(\s*\{/g;
     for (const szMatch of result.code.matchAll(szCallRe)) {
         let depth = 1;
-        let index = (szMatch.index ?? 0) + szMatch[0].length;
+        let index = szMatch.index + szMatch[0].length;
         while (index < result.code.length && depth > 0) {
             if (result.code[index] === '{') {
                 depth++;
@@ -101,7 +104,7 @@ function collectRuntimeStaticClasses(
             }
             index++;
         }
-        const objectSource = result.code.slice((szMatch.index ?? 0) + szMatch[0].length, index - 1);
+        const objectSource = result.code.slice(szMatch.index + szMatch[0].length, index - 1);
         collectRuntimeStringClasses(objectSource, discoveredClasses);
         collectRuntimeNumberClasses(objectSource, discoveredClasses);
         collectRuntimeBooleanClasses(objectSource, discoveredClasses);

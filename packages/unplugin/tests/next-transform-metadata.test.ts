@@ -9,6 +9,21 @@ import {
 } from '../src/next-transform-metadata.js';
 
 describe('Next transform metadata', () => {
+    it('collects quoted and boolean literals from a runtime object result', () => {
+        const source = 'const App=({rest})=> <div sz={{ ...rest }} />;';
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
+        const metadata = collectNextTransformMetadata(
+            {
+                ...result,
+                usesRuntime: true,
+                code: `_sz({ display: "flex", color: 'red-500', hidden: true, italic: false })`,
+            },
+            source,
+            '/repo/src/App.tsx',
+        );
+        expect(metadata.classes).toEqual(['flex', 'text-red-500']);
+        expect(metadata.classes).not.toContain('italic');
+    });
     it('collects generated classes separately from raw className strings', () => {
         const source =
             'const App=()=> <div className="existing" sz={{ p: 4, display: "flex" }} />;';

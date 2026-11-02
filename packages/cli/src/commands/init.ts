@@ -876,19 +876,16 @@ export async function injectNextPlugin(cwd: string): Promise<boolean> {
     ];
 
     const found = await readFirstExisting(candidates);
-    let configPath = found?.path;
-    const content = found?.content ?? null;
-
-    if (!configPath) {
+    if (found === null) {
         // Create next.config.js
-        configPath = path.join(cwd, 'next.config.js');
+        const configPath = path.join(cwd, 'next.config.js');
         await fs.writeFile(configPath, generateNextConfig());
         printInfo('Created next.config.js with csszyx plugin');
         return true;
     }
 
     // next.config already exists but doesn't have csszyx — too risky to auto-modify
-    return content?.includes('csszyx') ?? false;
+    return found.content.includes('csszyx');
 }
 
 /**

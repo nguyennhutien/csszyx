@@ -11,15 +11,23 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { CssSyntaxError } from 'postcss';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack, { type Configuration, type Stats } from 'webpack';
 
+vi.mock('../src/css-mangler.js', async importOriginal => {
+    const actual = await importOriginal<typeof import('../src/css-mangler.js')>();
+    return { ...actual, mangleCSSSync: vi.fn(actual.mangleCSSSync) };
+});
+
+import { mangleCSSSync } from '../src/css-mangler.js';
 import { webpackPlugin } from '../src/unplugin.js';
 
 const WEBPACK_TEST_TIMEOUT_MS = 30_000;
 const tempDirs: string[] = [];
 
 afterEach(() => {
+    vi.mocked(mangleCSSSync).mockReset();
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -41,8 +49,18 @@ class EmitExtraAssetsPlugin {
                     compilation.emitAsset(
                         'page.html',
                         new RawSource(
-                            '<div class="m-3 author-kept"></div><aside class=\'m-3\'></aside>',
+                            '<div class=" m-3  author-kept "></div><aside class=\'m-3\'></aside>',
                         ),
+                    );
+                    compilation.emitAsset(
+                        'unchanged.html',
+                        new RawSource(
+                            '<div class="author-kept"></div><aside class=\'author-other\'></aside>',
+                        ),
+                    );
+                    compilation.emitAsset(
+                        'unchanged.css',
+                        new RawSource('/* no class selectors */'),
                     );
                     compilation.emitAsset('extra.js', new RawSource('var x={className:"m-3"};'));
                 },
@@ -130,6 +148,12 @@ describe('webpack processAssets mangle pass', () => {
         expect(html).toContain(token as string);
         expect(html).not.toContain('m-3');
         expect(html).toContain('author-kept');
+        const unchanged = readFileSync(join(root, 'dist/unchanged.html'), 'utf8');
+        expect(unchanged).toContain('author-kept');
+        expect(unchanged).toContain('author-other');
+        expect(readFileSync(join(root, 'dist/unchanged.css'), 'utf8')).toBe(
+            '/* no class selectors */',
+        );
         // Read the attribute rather than a spelling of it: the HTML minifier
         // chooses its own quoting and drops the quotes entirely when the value
         // allows, so asserting one spelling pins a formatting choice that is not
@@ -144,3 +168,30 @@ describe('webpack processAssets mangle pass', () => {
         expect(extraJs).not.toContain('"m-3"');
     });
 });
+
+it.each([
+    ['a syntax error', new CssSyntaxError('unfinished stylesheet'), false],
+    ['an unexpected error', new Error('mangler unavailable'), true],
+] as const)(
+    'handles %s from the CSS output pass',
+    { timeout: WEBPACK_TEST_TIMEOUT_MS },
+    async (_name, failure, fatal) => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-webpack-mangle-failure-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'));
+        writeFileSync(join(root, 'src/index.js'), "import './style.css';");
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 3 }} />;');
+        const css = '.m-3 { margin: 0.75rem; }';
+        writeFileSync(join(root, 'src/style.css'), css);
+        vi.mocked(mangleCSSSync).mockImplementation(() => {
+            throw failure;
+        });
+        if (fatal) {
+            await expect(runWebpack(root)).rejects.toThrow('mangler unavailable');
+        } else {
+            await runWebpack(root);
+            expect(readFileSync(join(root, 'dist/assets/style.css'), 'utf8')).toBe(css);
+        }
+        expect(mangleCSSSync).toHaveBeenCalled();
+    },
+);

@@ -46,6 +46,7 @@ describe('startNextWatch failure normalization', () => {
         const session = await startNextWatch({ cwd, parserMode: 'wasm' }, { watch: factory });
         // Emit a NON-Error runtime failure — reportFailure must wrap it.
         emitter.emit('error', 'raw string failure');
+        emitter.emit('error', 'later failure must not replace the first');
         const error = await session.failure;
         expect(error).toBeInstanceOf(Error);
         expect(error.message).toContain('raw string failure');
@@ -120,36 +121,43 @@ describe('canonicalWatchRoot', () => {
 });
 
 describe('nextWatch when its watcher will not close', () => {
-    it('fails the run in the registry words, naming what the watcher reported', async () => {
-        vi.spyOn(console, 'log').mockImplementation(() => {});
-        const errors: string[] = [];
-        vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
-            errors.push(parts.join(' '));
-        });
-        const cwd = tempRoot();
-        const emitter = new EventEmitter();
-        const fake = Object.assign(emitter, {
-            close: async () => {
-                throw new Error('EBUSY: resource busy');
-            },
-        });
-        const factory = ((..._args: unknown[]) => {
-            queueMicrotask(() => emitter.emit('ready'));
-            // A runtime failure once running ends the run, which closes the
-            // watcher on the way out.
-            setTimeout(() => emitter.emit('error', new Error('watch failed')), 50);
-            return fake;
-        }) as never;
+    it.each([new Error('EBUSY: resource busy'), 'EBUSY: resource busy'])(
+        'fails the run in the registry words, naming what the watcher reported: %s',
+        async failure => {
+            vi.spyOn(console, 'log').mockImplementation(() => {});
+            const errors: string[] = [];
+            vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
+                errors.push(parts.join(' '));
+            });
+            const cwd = tempRoot();
+            const emitter = new EventEmitter();
+            const fake = Object.assign(emitter, {
+                close: async () => {
+                    throw failure;
+                },
+            });
+            const factory = ((..._args: unknown[]) => {
+                queueMicrotask(() => emitter.emit('ready'));
+                // A runtime failure once running ends the run, which closes the
+                // watcher on the way out.
+                setTimeout(() => emitter.emit('error', new Error('watch failed')), 50);
+                return fake;
+            }) as never;
 
-        const code = await nextWatch({ cwd, parserMode: 'wasm', silent: true }, { watch: factory });
+            const code = await nextWatch(
+                { cwd, parserMode: 'wasm', silent: true },
+                { watch: factory },
+            );
 
-        expect(code).toBe(1);
-        expect(stripVTControlCharacters(errors.join('\n'))).toContain(
-            '✗ [csszyx] next-watcher-unclosed:\n' +
-                '  The Next safelist watcher failed while closing, so `csszyx next watch` exits with code 1.\n' +
-                '  help: run `csszyx next prebuild` to write the safelist from every source again.\n' +
-                '  note: the watcher reported: EBUSY: resource busy; a file saved after its last finished cycle may be missing from the safelist.\n' +
-                '  docs: https://csszyx.com/e/next-watcher-unclosed',
-        );
-    }, 15000);
+            expect(code).toBe(1);
+            expect(stripVTControlCharacters(errors.join('\n'))).toContain(
+                '✗ [csszyx] next-watcher-unclosed:\n' +
+                    '  The Next safelist watcher failed while closing, so `csszyx next watch` exits with code 1.\n' +
+                    '  help: run `csszyx next prebuild` to write the safelist from every source again.\n' +
+                    '  note: the watcher reported: EBUSY: resource busy; a file saved after its last finished cycle may be missing from the safelist.\n' +
+                    '  docs: https://csszyx.com/e/next-watcher-unclosed',
+            );
+        },
+        15000,
+    );
 });

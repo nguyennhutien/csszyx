@@ -11,7 +11,6 @@ import {
     sortStrings,
     type TokenData,
     type TransformSourceCodeOptions,
-    transform,
 } from '@csszyx/compiler';
 import {
     classNameEncoder,
@@ -220,6 +219,7 @@ import {
 } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
+import { collectRuntimeStaticClasses } from './next-transform-metadata.js';
 import {
     missingTailwindStylesheetError,
     openProjectStyleModel,
@@ -1561,7 +1561,7 @@ export function realContentHashDisabledMessage(): string {
  */
 function cssVariableEntries(result: SourceTransformResult): Array<[string, string]> {
     const entries: Array<[string, string]> = [];
-    for (const [original, value] of result.cssVariableMap ?? []) {
+    for (const [original, value] of result.cssVariableMap) {
         if (Array.isArray(value)) {
             for (const mangled of value) {
                 entries.push([original, mangled]);
@@ -1927,7 +1927,7 @@ function buildVarMangleMap(
     const next: Record<string, CssVariableMangleValue> = {};
     const files = sortStrings(entriesByFile.keys());
     for (const file of files) {
-        for (const [original, mangled] of entriesByFile.get(file) ?? []) {
+        for (const [original, mangled] of entriesByFile.get(file) as Array<[string, string]>) {
             addVarMangleMapping(next, original, mangled);
         }
     }
@@ -2200,10 +2200,7 @@ function buildCSSVariableMetrics(
 ): CSSVariableMetrics {
     const total = emptyCSSVariableMetrics();
     for (const file of sortStrings(metricsByFile.keys())) {
-        const metrics = metricsByFile.get(file);
-        if (!metrics) {
-            continue;
-        }
+        const metrics = metricsByFile.get(file) as CSSVariableMetrics;
         total.componentClassUses += metrics.componentClassUses;
         total.componentStyleDeclarations += metrics.componentStyleDeclarations;
         total.estimatedHoistedDeclarationsSaved += metrics.estimatedHoistedDeclarationsSaved;
@@ -2936,7 +2933,7 @@ function mangleQuotedStringLiterals(body: string, mangle: (inner: string) => str
             const ch = body[j];
             if (ch === '\\') {
                 // Escape: consume the backslash and the character it escapes.
-                inner += ch + (body[j + 1] ?? '');
+                inner += ch + body.charAt(j + 1);
                 j += 2;
                 continue;
             }
@@ -3579,7 +3576,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const parserInput: Parameters<typeof resolveParserMode>[0] = {
         configParser: options.build?.parser,
         envParser: process.env.CSSZYX_PARSER,
-        defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
+        defaultParser: DEFAULT_BUILD_CONFIG.parser,
         isRustAvailable: isRustTransformAvailable,
         isWasmAvailable: isWasmTransformAvailable,
     };
@@ -3599,11 +3596,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const { parser: parserMode, degraded: parserDegraded } = activeParser();
         if (parserDegraded && !_hasWarnedNativeFallback) {
             _hasWarnedNativeFallback = true;
-            if (parserMode === 'wasm') {
-                console.warn(
-                    diagnosticMessage('native-engine-unavailable', { form: 'wasm-fallback' }),
-                );
-            }
+            // `resolveParserMode` degrades only to the wasm build, so a
+            // degraded mode is always wasm here.
+            console.warn(diagnosticMessage('native-engine-unavailable', { form: 'wasm-fallback' }));
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
@@ -3734,7 +3729,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         const cacheRoot = path.resolve(
             state.rootDir,
-            options.build?.cacheDir ?? DEFAULT_BUILD_CONFIG.cacheDir ?? '.csszyx/cache',
+            options.build?.cacheDir ?? DEFAULT_BUILD_CONFIG.cacheDir,
         );
         return resolveGlobalVarScanCacheDir(cacheRoot);
     }
@@ -4602,10 +4597,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             misses.map(file => ({ filename: file.effectiveFilename, source: file.content })),
             compilerOptions,
         );
-        for (let index = 0; index < misses.length; index++) {
-            const miss = misses[index];
-            const result = batchResults[index];
-            if (!miss || !result) continue;
+        // One result per input, in input order.
+        for (const [index, miss] of misses.entries()) {
+            const result = batchResults[index] as SourceTransformResult;
             cacheRustPrescanResult(miss, result, cacheRoot);
             results.set(miss.filePath, result);
         }
@@ -5492,111 +5486,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Extracts static classes hidden inside generated `_sz({...})` runtime calls.
-     *
-     * @param result Compiler result.
-     * @param discoveredClasses sz-generated class sink.
-     */
-    function collectRuntimeStaticClasses(
-        result: SourceTransformResult,
-        discoveredClasses: Set<string>,
-    ): void {
-        if (!result.usesRuntime) {
-            return;
-        }
-        const szCallRe = /_sz\(\s*\{/g;
-        for (const szMatch of result.code.matchAll(szCallRe)) {
-            let depth = 1;
-            let idx = (szMatch.index ?? 0) + szMatch[0].length;
-            while (idx < result.code.length && depth > 0) {
-                if (result.code[idx] === '{') {
-                    depth++;
-                } else if (result.code[idx] === '}') {
-                    depth--;
-                }
-                idx++;
-            }
-            const objStr = result.code.slice((szMatch.index ?? 0) + szMatch[0].length, idx - 1);
-            collectRuntimeStringClasses(objStr, discoveredClasses);
-            collectRuntimeNumberClasses(objStr, discoveredClasses);
-            collectRuntimeBooleanClasses(objStr, discoveredClasses);
-        }
-    }
-
-    /**
-     * Extracts static string values from an `_sz({...})` object string.
-     *
-     * @param objStr Object source text.
-     * @param discoveredClasses sz-generated class sink.
-     */
-    function collectRuntimeStringClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const strKv = /\b(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
-        for (const kv of objStr.matchAll(strKv)) {
-            try {
-                const val = kv[2] ?? kv[3];
-                collectTransformClasses(transform({ [kv[1]]: val }), discoveredClasses);
-            } catch {
-                // Skip invalid runtime static fragments.
-            }
-        }
-    }
-
-    /**
-     * Extracts static number values from an `_sz({...})` object string.
-     *
-     * @param objStr Object source text.
-     * @param discoveredClasses sz-generated class sink.
-     */
-    function collectRuntimeNumberClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const numKv = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
-        for (const kv of objStr.matchAll(numKv)) {
-            try {
-                collectTransformClasses(
-                    transform({ [kv[1]]: Number.parseFloat(kv[2]) }),
-                    discoveredClasses,
-                );
-            } catch {
-                // Skip invalid runtime static fragments.
-            }
-        }
-    }
-
-    /**
-     * Extracts static boolean values from an `_sz({...})` object string.
-     *
-     * @param objStr Object source text.
-     * @param discoveredClasses sz-generated class sink.
-     */
-    function collectRuntimeBooleanClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const boolKv = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
-        for (const kv of objStr.matchAll(boolKv)) {
-            try {
-                collectTransformClasses(
-                    transform({ [kv[1]]: kv[2] === 'true' }),
-                    discoveredClasses,
-                );
-            } catch {
-                // Skip invalid runtime static fragments.
-            }
-        }
-    }
-
-    /**
-     * Adds transform() className output to a class sink.
-     *
-     * @param result transform() result.
-     * @param discoveredClasses sz-generated class sink.
-     */
-    function collectTransformClasses(
-        result: ReturnType<typeof transform>,
-        discoveredClasses: Set<string>,
-    ): void {
-        for (const cls of result.className.split(/\s+/).filter(Boolean)) {
-            discoveredClasses.add(cls);
-        }
-    }
-
-    /**
      * Add every whitespace-delimited class from one string to the safelist.
      *
      * @param value Class string.
@@ -5619,7 +5508,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ];
         for (const pattern of patterns) {
             for (const match of code.matchAll(pattern)) {
-                addSafelistClasses(match[1] ?? '');
+                addSafelistClasses(match[1]);
             }
         }
     }
@@ -5631,10 +5520,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function collectExpressionClasses(code: string): void {
         for (const match of code.matchAll(/className=\{/g)) {
-            const bodyStart = (match.index ?? 0) + match[0].length;
+            const bodyStart = match.index + match[0].length;
             const expression = code.slice(bodyStart, findJsxExpressionEnd(code, bodyStart));
             for (const stringMatch of expression.matchAll(/"([^"]+)"|'([^']+)'/g)) {
-                addSafelistClasses(stringMatch[1] ?? stringMatch[2] ?? '');
+                addSafelistClasses(stringMatch[1] ?? stringMatch[2]);
             }
         }
     }
@@ -7881,10 +7770,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
-                if (options.build?.scanCss) {
+                const scanCss = options.build?.scanCss;
+                if (scanCss) {
                     compiler.hooks.thisCompilation.tap('csszyx:theme-deps', compilation => {
-                        const root = compiler.context || process.cwd();
-                        for (const file of expandFilePatterns(root, options.build?.scanCss ?? [])) {
+                        for (const file of expandFilePatterns(compiler.context, scanCss)) {
                             compilation.fileDependencies.add(file);
                         }
                     });

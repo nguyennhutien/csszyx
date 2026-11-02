@@ -569,7 +569,7 @@ function sameGlobalVarAliases(
     for (let index = 0; index < left.length; index++) {
         const leftEntry = left[index];
         const rightEntry = right[index];
-        if (leftEntry?.[0] !== rightEntry?.[0] || leftEntry?.[1] !== rightEntry?.[1]) {
+        if (leftEntry?.[0] !== rightEntry[0] || leftEntry?.[1] !== rightEntry[1]) {
             return false;
         }
     }
@@ -624,13 +624,13 @@ export function evictMemoryCacheToBudget(
 ): number {
     let total = totalCodeChars;
     while (cache.size > maxEntries || (total > maxCodeChars && cache.size > 1)) {
-        const oldest = cache.keys().next().value;
-        if (oldest === undefined) {
+        const entry = cache.entries().next();
+        if (entry.done) {
             break;
         }
-        const evicted = cache.get(oldest);
+        const [oldest, evicted] = entry.value;
         cache.delete(oldest);
-        total -= evicted?.code.length ?? 0;
+        total -= evicted.code.length;
     }
     return total;
 }

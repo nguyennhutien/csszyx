@@ -11,6 +11,30 @@ import {
 } from '../src/next-watcher-loop.js';
 
 describe('Next watcher loop', () => {
+    it('does not clear a handle before an immediate injected scheduler returns it', () => {
+        const handle = 1 as unknown as ReturnType<typeof setTimeout>;
+        const cleared: Array<ReturnType<typeof setTimeout>> = [];
+        const reasons: string[][] = [];
+        const loop = new NextWatcherLoop({
+            context: context(),
+            setTimeout: callback => {
+                callback();
+                return handle;
+            },
+            clearTimeout: timer => cleared.push(timer),
+            runCycle: (_context, _options, pending) => {
+                reasons.push([...pending]);
+                return RESULT;
+            },
+        });
+        loop.notify('source-change');
+        expect(reasons).toEqual([['source-change']]);
+        expect(loop.lastResult).toBe(RESULT);
+        expect(cleared).toEqual([]);
+        loop.dispose();
+        expect(cleared).toEqual([handle]);
+        expect(loop.pending).toBe(false);
+    });
     function context() {
         return createNextStateContext({
             explicitRoot: '/repo/apps/web',
