@@ -1,5 +1,197 @@
 # csszyx
 
+## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** a camelCase variant or breakpoint name csszyx does not know is written in kebab-case by the build as well as the runtime, after `min` and `max` too: `{ tabletLarge: … }` writes `tablet-large:` and `{ max: { tabletLarge: … } }` writes `max-tablet-large:`. Declare the kebab-case name (`@custom-variant tablet-large`, `--breakpoint-tablet-large`).
+* `serializeManifest(manifest, true)` is now `serializeManifest(manifest, { pretty: true })`.
+* **core:** a value such as `animate: '(--spin)'` emits nothing and is reported as `bracketed-value`; write `animate: '--spin'`.
+* **core:** `op` is a percent from 0 to 100 on every value. `op: 0.05` is now 0.05%, where it wrote `/[0.05]` (5%); write `op: 5`. A numeric string such as `op: '20'` no longer writes an opacity; write `op: 20`, or a percent string such as `op: '20%'`.
+* **diagnostics:** `CsszyxNativeUnavailableError` from `@csszyx/core/native` has `code` `native-engine-unavailable` (was `CSSZYX_NATIVE_UNAVAILABLE`), and its message starts `[csszyx] native-engine-unavailable:`. errors the browser packages throw carry `code` and `args`, and their message starts `[csszyx] <code>:`; test them with `isCsszyxError(err)` and `err.code` (from `csszyx` or `@csszyx/runtime`).
+* **diagnostics:** every engine diagnostic starts with `[csszyx] <code>: <place>`, then its sentence, `help:` and `note:` lines, and a `docs:` link; the sentences are reworded. `szKeySuggestionFor` is removed from `@csszyx/compiler`: read `issue.args.suggestion`.
+* **diagnostics:** stop writing diagnostic sentences in the engine
+* **diagnostics:** `@csszyx/core` transform results no longer carry `diagnostics` and its options no longer take `rootDir`; render `issues` with `@csszyx/compiler`. `csszyx check` fails on `fallback-missing-css`.
+* **cli:** write `help` and `note` as fields in `check --json`
+* **diagnostics:** `csszyx check --json` writes `version: 2`: an `sz-diagnostic` finding's `message` is the main sentence only, with `help` and `note` as their own fields, and the MCP `csszyx_validate` tool returns the same fields per diagnostic.
+* **compiler:** drop the text classifiers of diagnostic kinds
+* **compiler:** `@csszyx/compiler` no longer exports `szDiagnosticKindOf`, `isAdvisorySzDiagnostic`, `SZ_DIAGNOSTIC_KIND_IDS` or `SzDiagnosticKindId`; read `result.issues[i].code` instead.
+* **recovery:** the recovery mode reaches the DOM as `data-sz-recover`, and `getRecoveryMode` and `verifyRecoveryToken` read it from there. Code that read `szRecover` off an element must read `data-sz-recover`.
+* the engine functions (`transformSource`, `transformRust`, `transformWasm`, `scanModuleLinks`, `scanGlobalVarUsages`, `extractCrossModuleRegistryEntries` and their variants, the availability probes and `*UnavailableError`) are imported from `@csszyx/compiler/engine`; code that calls them with only `@csszyx/compiler` installed must add `@csszyx/core`. `CsszyxCompiler` is removed.
+* **adapters:** `@csszyx/vue-adapter` needs `vue` 3.5 and `@csszyx/svelte-adapter` needs `svelte` 5; Svelte's quoted `sz="{ p: 4 }"` is no longer read (write `sz={{ p: 4 }}`); a file the framework cannot parse stops the build; `mergeClassAttributes` is no longer exported from either adapter.
+* **adapters:** `parseObjectLiteral` is no longer exported from `@csszyx/vue-adapter` or `@csszyx/svelte-adapter`, and an `sz` value in a Vue or Svelte template that only the runtime knows stops the build instead of being left as written.
+* **compiler:** `@csszyx/compiler` exports `RustTransformUnavailableError` instead of `OxcRustNotImplementedError`, and no longer exports `ASTBudgetExceededError`; read the `ast-budget` issue on the result.
+* **core:** some keys write the spelling every Tailwind v4 serves: `start`/`insetS` and `end`/`insetE` write `start-4`/`end-4` (was `inset-s-4`/`inset-e-4`), `bgSize` writes `bg-[length:…]` and `bg-(length:--x)` (was `bg-size-…`), `bgPos: '--x'` writes `bg-(position:--x)`, and a runtime `shadowColor` writes `shadow-(color:--…)`; tests and selectors on the 0.17 names change.
+* `csszyx.config` is now read by every plugin and by `check`; replace the file `csszyx init` wrote before this release with `export default defineConfig({ diagnostics: { … } })`, or delete it. `CsszyxConfig` is deprecated in favour of `defineConfig`, and `development.strictMode` is removed.
+* **runtime:** let a `szv()` result stand wherever `sz` takes a value
+* **migrate:** `szv()` factories now return `SzProps` instead of `SzObject`, and every variant row is type-checked like `sz={...}`: an unknown key (also nested, e.g. `hover: { bgg }`) or an invalid value is a compile error. A row typed `SzObject` or with an index signature no longer compiles (type it `SzProps`), a shared row without `as const` fails inside `szv` as it already did at `sz={row}`, and `const o: SzObject = f()` must become `SzProps`. Types only; runtime behaviour is unchanged.
+* **cli:** read each diagnostic's kind from its engine code
+* **core:** `check --json` `kind` is never `other` for engine diagnostics, and `SZ_DIAGNOSTIC_CODES` lists every engine code; filters on `other` must name the new ids.
+* **cli:** fail check only on error-level findings, and add --fail-on
+* **cli:** `csszyx check` exits 0 when only `info`/`warn` findings remain; `class-precedence` and `duplicate-sz` are `info` by default. A gate that must fail on them sets those ids to `'error'` under `diagnostics.rules` in `csszyx.config`, or passes `--fail-on info`.
+* **unplugin:** warn at build about sz classes the project Tailwind serves no CSS for
+* **unplugin:** builds print `dead-class` warnings for `sz` classes the project's Tailwind does not serve; set `diagnostics.rules['dead-class']` to `off` to hide them.
+* write `touch-action` and `contain` as one sz key per group, settled by object order
+* **adapters:** give `require()` the named exports `import` gets
+* `require` of `@csszyx/vue-adapter` or `@csszyx/svelte-adapter` returns the named exports, `default` included, instead of a bare function.
+* **core:** class names and `sz` written on different sides of a spread no longer merge: each side becomes one class name where its `sz` stands, so in React the last one replaces the others (`className="card" {...rest} sz={{ p: 4 }}` renders `p-4`) and the build prints a `spread-split-class` warning naming the element; write them in one `sz` array after the spread, in the order that should win, such as `sz={['card', rest.className, { p: 4 }]}`. A Svelte component with `class` and `sz` on either side of a spread fails to compile with `attribute_duplicate`; put both after the spread, reading the spread's class in the string: `{...rest} class="card {rest.class ?? ''}" sz={{ p: 4 }}`.
+* **unplugin:** a Tailwind utility in a static `className` is dropped when a static `sz` on the same element sets every property it sets (`className="card pb-2" sz={{ p: 4 }}` renders `card p-4`), and jest snapshots follow the build's table; find affected sites with `csszyx check --rule merge-covered-key --rule merge-covered-class`, keep a refinement by writing it in `sz` after its shorthand, or set `build.mergeCoveredClasses: false`, or the `mergeCoveredClasses` option of `csszyxTurbopack` on Turbopack.
+* **unplugin:** `sz` objects, `szcn` and `_szcn` merge only Tailwind's own utilities: a class from `@utility`, a plugin or plain CSS, and a Tailwind class a rule of the project's CSS selects on, is never removed and never removes another, so `szcn('z-10', 'z-modal')` now keeps both; give such a class a `@theme` token (`--color-brand`, `--radius-pill`) and delete its hand-written rule, which also replaces `registerSzcnGroups`.
+* **unplugin:** a later key in a static `sz` object or array now replaces an earlier key whose CSS it fully covers, so `{ pb: 2, p: 4 }` compiles to `p-4`; write `{ p: 4, pb: 2 }` to keep both.
+* **api:** `csszyxTurbopack` takes one options object. `csszyxTurbopack({}, opts)` becomes `csszyxTurbopack(opts)`; `csszyxTurbopack(config, opts)` becomes `csszyxTurbopack({ turbopack: config, ...opts })`. For a config alone, use `csszyxTurbopack({ turbopack: config })`. Extra arguments and unrecognized top-level keys throw and name the replacement; `rules` and `resolveAlias` belong inside `turbopack`.
+* **runtime:** merge classes only on evidence from compiled CSS
+* **unplugin:** `szcn` and `_szcn` now drop an earlier class only when the table the build generates from the project's compiled CSS proves the later class sets everything it set. Output changes for pairs the old prefix rules merged or kept apart differently: `flex block` now keeps only `block` and `border-t-2 border-2` only `border-2`, while `text-2xl text-[0.8rem]`, `transition transition-none` and any pair that differs in its `!` flag keep both. Where no table is registered, `szcn` removes only exact repeats and prints one development warning: the esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun lanes, jest before the build or `csszyx next prebuild` has run, and the runtime used on its own. `registerSzcnGroups` and `setSzcnGroups` no longer affect `szcn`; they still name the property `classify` and `splitBox` read. Custom `@theme` tokens merge with nothing to register.
+* `sz` classes carry the prefix the project's Tailwind sets: with `@import "tailwindcss" prefix(tw)` they are written `tw:p-4`. When the project's Tailwind stylesheets set different prefixes the build stops with `prefix-disagreement`; list the stylesheets the build loads with the `tailwindStylesheet` option.
+
+### Features
+
+* **api:** use options objects and narrow unplugin exports ([#334](https://github.com/nguyennhutien/csszyx/issues/334)) ([cb4b7f6](https://github.com/nguyennhutien/csszyx/commit/cb4b7f6a1b0867b411081d0b6ff85b5b8651f05b))
+* **cli:** fail check only on error-level findings, and add --fail-on ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **cli:** print each merge-audit removal at its file, line and key ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **cli:** read each diagnostic's kind from its engine code ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **cli:** write `help` and `note` as fields in `check --json` ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** drop the text classifiers of diagnostic kinds ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **core:** give every engine diagnostic a code and a position ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **diagnostics:** carry each diagnostic's named args on its issue ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** give every diagnostic an id and a page ([#385](https://github.com/nguyennhutien/csszyx/issues/385)) ([fea2221](https://github.com/nguyennhutien/csszyx/commit/fea22218842e2b183d446a417807b057799dad8c))
+* **diagnostics:** head the cap, held and config lines with a code ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** print every diagnostic and error from one reviewed registry ([#396](https://github.com/nguyennhutien/csszyx/issues/396)) ([88e1b31](https://github.com/nguyennhutien/csszyx/commit/88e1b3190dad871c90aa77d9e1b7ec992959f57a))
+* **diagnostics:** render every engine diagnostic from the registry ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** stop writing diagnostic sentences in the engine ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* fail a watch rebuild when the Tailwind prefix changes ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* follow a Tailwind prefix that changes on a running dev server ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* let the engine write a Tailwind prefix before every class ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* let the MCP compile preview take the Tailwind prefix ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* lower sz objects with the Tailwind prefix at runtime ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* lower sz with the prefix the project's Tailwind sets ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* lower sz with the Tailwind prefix on the Next Turbopack lane ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* lower sz with the Tailwind prefix under jest ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **mcp-server:** say that the compile preview does not merge ([2b65136](https://github.com/nguyennhutien/csszyx/commit/2b65136cab4e96756eeca7f8f033e8aa84de0af0))
+* read csszyx.config in every plugin and the Next commands, typed by defineConfig ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* record the stylesheet facts from every bundler build ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* record the Tailwind prefix from next prebuild and next watch ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* register the prefix for `szr` and keep classes a React `<style>` selects on ([#420](https://github.com/nguyennhutien/csszyx/issues/420)) ([0872959](https://github.com/nguyennhutien/csszyx/commit/0872959ff3952367395c6c3a096c06e7dcec3485))
+* **runtime:** let a `szv()` result stand wherever `sz` takes a value ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **runtime:** merge classes only on evidence from compiled CSS ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
+* stop the build when a Tailwind entry does not compile ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* stop the build when Tailwind entries set different prefixes ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **unplugin:** deliver the merge table to Turbopack, jest and Vite dev ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
+* **unplugin:** derive merge signatures from project CSS ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
+* **unplugin:** drop the class-name classes a static `sz` covers ([38b33f0](https://github.com/nguyennhutien/csszyx/commit/38b33f0ceb853a0c9c6da96e627e198c977ac080))
+* **unplugin:** merge a later `sz` key over an earlier one it covers ([2b65136](https://github.com/nguyennhutien/csszyx/commit/2b65136cab4e96756eeca7f8f033e8aa84de0af0))
+* **unplugin:** merge covered `sz` keys under Turbopack ([2b65136](https://github.com/nguyennhutien/csszyx/commit/2b65136cab4e96756eeca7f8f033e8aa84de0af0))
+* **unplugin:** print each build diagnostic at the level csszyx.config gives it ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **unplugin:** read csszyx.config again when it or a module it imports changes ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **unplugin:** say what a merge-related reload or refusal leaves behind ([2b65136](https://github.com/nguyennhutien/csszyx/commit/2b65136cab4e96756eeca7f8f033e8aa84de0af0))
+* **unplugin:** warn at build about sz classes the project Tailwind serves no CSS for ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* write `font-variant-numeric` as one sz key per group ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* write `touch-action` and `contain` as one sz key per group, settled by object order ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+
+
+### Bug Fixes
+
+* **adapters:** give `require()` the named exports `import` gets ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **adapters:** lower Vue and Svelte sz through the engine ([#378](https://github.com/nguyennhutien/csszyx/issues/378)) ([fcbe02b](https://github.com/nguyennhutien/csszyx/commit/fcbe02bdaefd019ddc628a9db20a8c114071ef54))
+* **adapters:** read Vue and Svelte templates with their own parsers ([#381](https://github.com/nguyennhutien/csszyx/issues/381)) ([07005f3](https://github.com/nguyennhutien/csszyx/commit/07005f3d59ac482348fa8856f072332e24d42720))
+* catch a changed ignore matcher, read Rolldown's new markers, quiet Turbopack warnings ([#411](https://github.com/nguyennhutien/csszyx/issues/411)) ([efe62fe](https://github.com/nguyennhutien/csszyx/commit/efe62fef6861916a7f6faea5dc8f9fe86f0f3e9b))
+* check a prefixed project against the classes it serves ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **cli:** fail `csszyx check` when the engine cannot run ([#428](https://github.com/nguyennhutien/csszyx/issues/428)) ([8c82f7c](https://github.com/nguyennhutien/csszyx/commit/8c82f7cf00fa9ff0b316246f680e888c5477540c))
+* **cli:** read the project's prefix again when an imported stylesheet or config module changes ([#419](https://github.com/nguyennhutien/csszyx/issues/419)) ([6fdb00b](https://github.com/nguyennhutien/csszyx/commit/6fdb00be20b23e99f5c37380787ac9183442f3ed))
+* **cli:** reap a removed source's classes when the watcher never reports it ([#368](https://github.com/nguyennhutien/csszyx/issues/368)) ([b9f2ec6](https://github.com/nguyennhutien/csszyx/commit/b9f2ec6150e2f968994478595841db1a4eb0bab9))
+* **cli:** resolve a relative `--cwd` before `check` resolves Tailwind ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **cli:** watch through `fs.watch` on macOS and Windows in `next watch` ([#346](https://github.com/nguyennhutien/csszyx/issues/346)) ([1054a4b](https://github.com/nguyennhutien/csszyx/commit/1054a4be0ae0cc47f57b69a6e6b95c22fa88195d))
+* **cli:** write what `check --json` says about the run to stderr ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** count a lone low surrogate as three bytes in span columns ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** drop the names and code left from the removed Babel and oxc lanes ([#373](https://github.com/nguyennhutien/csszyx/issues/373)) ([4480b0f](https://github.com/nguyennhutien/csszyx/commit/4480b0fbfac317a414d484a5132f7fb6a4967f3c))
+* **compiler:** match a Windows root in any separator or letter case ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** report an unknown or replaced sz key once at runtime ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **compiler:** run `transformSource` on the artifact `parser` or `CSSZYX_PARSER` names ([#416](https://github.com/nguyennhutien/csszyx/issues/416)) ([0f68d25](https://github.com/nguyennhutien/csszyx/commit/0f68d258fe02ae00f4d1f8d1fd559e9773560d19))
+* **config:** name a rule id whose level cannot be set ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **core:** defer a runtime value under a variant key and report it ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **core:** emit only the last value of a repeated key in a `.jsx` sz object ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **core:** merge a class name and `sz` only on the same side of a spread ([#345](https://github.com/nguyennhutien/csszyx/issues/345)) ([bc69f22](https://github.com/nguyennhutien/csszyx/commit/bc69f220e8bcbbf70c74f69d598c7448c4be5b0e))
+* **core:** read an element's whole tag on the AST-free lane ([#344](https://github.com/nguyennhutien/csszyx/issues/344)) ([bc9feca](https://github.com/nguyennhutien/csszyx/commit/bc9feca8a203c713219736f8c5f3f79f16f5a111))
+* **core:** report a fast-path key on the line it is written ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **core:** report a variable written in parentheses, and read every theme namespace ([#404](https://github.com/nguyennhutien/csszyx/issues/404)) ([c510f22](https://github.com/nguyennhutien/csszyx/commit/c510f22aa448ffccc91d493974eeb258cc8852d2))
+* **core:** report removed boolean sugar whatever shape its value has ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **core:** spell a camelCase breakpoint after `min` and `max` as its variant ([#425](https://github.com/nguyennhutien/csszyx/issues/425)) ([f920377](https://github.com/nguyennhutien/csszyx/commit/f920377d27e00f7cf016987f51e068ef17780a8b))
+* **core:** write classes Tailwind serves for negative scales, fractions and CSS-wide keywords ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **core:** write every 0.18 value one way on the runtime and the engine ([#401](https://github.com/nguyennhutien/csszyx/issues/401)) ([570f9c4](https://github.com/nguyennhutien/csszyx/commit/570f9c4479816ffd0b424c71df4bbbff7518271e))
+* **core:** write the same class at runtime and at build, in a spelling every Tailwind v4 serves ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **csszyx:** keep a `__proto__` key in a parsed `sz` attribute ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **csszyx:** read `sz="flex gap-2"` as a class list in the CDN runtime ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **csszyx:** stop the CDN runtime freezing the page on an unquoted value ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* decide Tailwind entry stylesheets the way Tailwind's build does ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **diagnostics:** drop the nudge beside `unresolvable-spread` ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** drop the nudge for an `sz` value the szr report names ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** hold every sentence to one casing rule ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** name a group value before its group as its group's ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** report each syntax error once, with its message ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** retire `other` now every lane keeps the engine code ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** reword the engine diagnostics after a DX pass ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **diagnostics:** skip `runtime-family-conflict` for a dropped key ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **dynamic:** keep the special sz keys in `purifySz` ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **dynamic:** keep the unsafe-value warning out of production browsers ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **engine:** report the `closed-enum-value` forms the runtime names ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **engine:** send a file with a bare `sz` to the parser path ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* free the parse behind cross-module forwards ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* install only what each setup runs, and stop on mismatched csszyx packages ([#382](https://github.com/nguyennhutien/csszyx/issues/382)) ([c68f09c](https://github.com/nguyennhutien/csszyx/commit/c68f09cf20a0910b56f8091a2ae7b9c5dfae20f6))
+* judge markers and opacity under a Tailwind prefix ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **mcp-server:** fail `csszyx_validate` when the engine cannot run ([#418](https://github.com/nguyennhutien/csszyx/issues/418)) ([8c5fff5](https://github.com/nguyennhutien/csszyx/commit/8c5fff5d3d88b7b65720f570c423d4d2f6b3b0ab))
+* **migrate:** ask the project's Tailwind before turning a class into sz ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **migrate:** keep `ring-inset` in `className` so the ring width survives ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **migrate:** keep size fractions and the `-safe` align-content keywords ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **migrate:** read mask utilities onto their layers and a negative axis rotation onto its axis ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **migrate:** write the sz key `check` accepts for keyword classes ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **next:** print each Turbopack warning once, from the project root ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* point each package's `require` lane at its CommonJS declarations ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* read the project's Tailwind prefix and answers in `migrate`, `classNameToSzObject` and MCP ([#417](https://github.com/nguyennhutien/csszyx/issues/417)) ([0cf5444](https://github.com/nguyennhutien/csszyx/commit/0cf5444995cd367684c70506200a56994beec1b1))
+* read the stylesheets an app imports from JavaScript ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **recovery:** write the `szRecover` mode as `data-sz-recover` ([#386](https://github.com/nguyennhutien/csszyx/issues/386)) ([bd3f3f3](https://github.com/nguyennhutien/csszyx/commit/bd3f3f33ab10b63f3c6836becf4ecd2cf9ae329f))
+* resolve stylesheet imports the way the project's Tailwind does ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **runtime:** place the `inline-table` and `table-*` display classes with `display` in `splitBox` ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **runtime:** place the special sz keys in `splitBoxSz` as `splitBox` places their classes ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* settle the shape of every public call and entry ([#406](https://github.com/nguyennhutien/csszyx/issues/406)) ([9e236e7](https://github.com/nguyennhutien/csszyx/commit/9e236e7bef0ff4075aed18a652369d8106f3e8ce))
+* **ts-plugin:** suggest every theme category the declaration writes ([#405](https://github.com/nguyennhutien/csszyx/issues/405)) ([cf25172](https://github.com/nguyennhutien/csszyx/commit/cf2517234dec4cfe5c090fd41051f4ddea598891))
+* **unplugin:** declare the namespace that `require` of the CommonJS entries returns ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **unplugin:** escape the unserved list inside webpack's eval wrapper ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
+* **unplugin:** keep a class an arbitrary variant or a style block selects on ([#343](https://github.com/nguyennhutien/csszyx/issues/343)) ([40ba9ca](https://github.com/nguyennhutien/csszyx/commit/40ba9ca64453a22bd9b1178993ce70fda9a0759e))
+* **unplugin:** keep a Vite dev page when csszyx writes its own files ([#340](https://github.com/nguyennhutien/csszyx/issues/340)) ([cb1d705](https://github.com/nguyennhutien/csszyx/commit/cb1d7051346e8a776ceedd70d68bb91c12ea1654))
+* **unplugin:** keep stylesheets under `--ignore` out of the Next prefix vote ([#332](https://github.com/nguyennhutien/csszyx/issues/332)) ([2e5f710](https://github.com/nguyennhutien/csszyx/commit/2e5f710ac516b6255e3bf41f504c517f482657af))
+* **unplugin:** keep the theme-group import below a module's directives ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
+* **unplugin:** let esbuild wait for the plugin's setup ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **unplugin:** load the Vue and Svelte adapters only for their own files ([#427](https://github.com/nguyennhutien/csszyx/issues/427)) ([86039bb](https://github.com/nguyennhutien/csszyx/commit/86039bbd5884ab19ba3039d40d05929f0574391d))
+* **unplugin:** merge only Tailwind's own utilities ([#339](https://github.com/nguyennhutien/csszyx/issues/339)) ([67dfdb7](https://github.com/nguyennhutien/csszyx/commit/67dfdb7c1461ff11516d20823e491e474d1f6f10))
+* **unplugin:** place every dead class at its sz key, and name a sign the project does not serve ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **unplugin:** print the engine's diagnostics under Turbopack ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **unplugin:** read a file of string literals in time linear in its length ([#424](https://github.com/nguyennhutien/csszyx/issues/424)) ([90a9531](https://github.com/nguyennhutien/csszyx/commit/90a95310e71c07abe9958bdbb9a01a840adee7c7))
+* **unplugin:** read stylesheets the way the project's Tailwind reads them ([df02ce7](https://github.com/nguyennhutien/csszyx/commit/df02ce718e82eecf019ca54eb0178f5e2cb2f3be))
+* **unplugin:** retain important across style roots ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **unplugin:** skip gitignored stylesheets and markup when reading theme tokens and merge hooks ([5a5fcf7](https://github.com/nguyennhutien/csszyx/commit/5a5fcf7a49485f76901e1bd211c38a00ec85eecd))
+* **vscode:** report each sz key with the code and words of the build ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+
+
+### Performance
+
+* **compiler:** add transforms that leave diagnostics for the caller ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** bound and remember the unknown-key suggestion ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** drop dev-only warnings from production app bundles ([c84c9f3](https://github.com/nguyennhutien/csszyx/commit/c84c9f339cfb6686ce22128467ec08412a96d026))
+* **compiler:** load the renderer's tables without the lowering ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** locate spans from a mark every 64 bytes, not the line ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** place the key tables' chunk after the capability rows ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** put the category map ahead of the key tables' chunk ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** search sz key typos by length with a bit-parallel distance ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **compiler:** skip the environment reads when a key cannot warn ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+* **compiler:** split diagnostic templates into segments once per entry ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **core:** win back the transform speed 0.18 lost ([#398](https://github.com/nguyennhutien/csszyx/issues/398)) ([3ef2f73](https://github.com/nguyennhutien/csszyx/commit/3ef2f731c07aac5a055d0759154f940459d1b00e))
+* place source positions without rescanning the file ([#399](https://github.com/nguyennhutien/csszyx/issues/399)) ([9090048](https://github.com/nguyennhutien/csszyx/commit/909004883e15448f5acb91525d20f9f7d9a370dd))
+* **unplugin:** bound concurrent style root inspection ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+* **unplugin:** do each per-file step of a build once ([#421](https://github.com/nguyennhutien/csszyx/issues/421)) ([9c7c222](https://github.com/nguyennhutien/csszyx/commit/9c7c2228b91b418d74f9261483e53c07e328d863))
+* **unplugin:** read the prescan's source hooks in one Tailwind scan ([#400](https://github.com/nguyennhutien/csszyx/issues/400)) ([bfcb116](https://github.com/nguyennhutien/csszyx/commit/bfcb1162c53f9bc8863d7ff72ad35e62ceb4c193))
+* **unplugin:** render only the diagnostics a build lane prints ([c134e5f](https://github.com/nguyennhutien/csszyx/commit/c134e5f026687ec2274dcffb21beae3585420b00))
+* **unplugin:** stop loading fast-glob when the plugin is imported ([0d3892a](https://github.com/nguyennhutien/csszyx/commit/0d3892a7f8c5fb54c4c269decdd5c6f1db95d60b))
+
 ## [0.17.2](https://github.com/nguyennhutien/csszyx/compare/v0.17.1...v0.17.2) (2026-09-14)
 
 ### Features
