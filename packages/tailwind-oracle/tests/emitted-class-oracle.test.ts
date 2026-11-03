@@ -23,6 +23,53 @@ const REPO = path.resolve(import.meta.dirname, '../../..');
 /** Stylesheet that pulls in stock Tailwind and nothing else. */
 const STOCK = '@import "tailwindcss";';
 
+it('loads named ESM plugin exports when the project has no Tailwind module resolver', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-named-plugin-'));
+    const file = path.join(root, 'plugin.mjs');
+    fs.writeFileSync(
+        file,
+        "export const candidate = 'plugin-color'; export const css = '.plugin-color { color: red; }';",
+    );
+    try {
+        const oracle = await createEmittedClassOracle(
+            { resolveFrom: root, cssBase: root, css: '@plugin "./plugin.mjs";' },
+            async () => ({
+                version: '4.3.3',
+                root,
+                loadDesignSystem: async (
+                    _css: string,
+                    options: {
+                        loadModule(
+                            id: string,
+                            base: string,
+                            hint: string,
+                        ): Promise<{ path: string; base: string; module: unknown }>;
+                    },
+                ) => {
+                    const loaded = await options.loadModule('./plugin.mjs', root, 'plugin');
+                    expect(loaded.path).toBe(file);
+                    expect(loaded.base).toBe(root);
+                    expect(loaded.module).toMatchObject({
+                        candidate: 'plugin-color',
+                        css: '.plugin-color { color: red; }',
+                    });
+                    const plugin = loaded.module as { candidate: string; css: string };
+                    return {
+                        candidatesToCss: (candidates: readonly string[]) =>
+                            candidates.map(candidate =>
+                                candidate === plugin.candidate ? plugin.css : null,
+                            ),
+                    };
+                },
+            }),
+        );
+        if (!oracle.ok) throw new Error(oracle.reason);
+        expect(oracle.findDead(['plugin-color', 'missing-probe'])).toEqual(['missing-probe']);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 /**
  * Build a ready oracle over the repository's own Tailwind, failing the test
  * when it degrades — these cases are about what Tailwind serves, so a skip

@@ -137,7 +137,10 @@ function decodeAttributeWhitespace(value: string): string {
         /&#(?:(\d+)|x([\da-f]+));|&(?:Tab|NewLine);/gi,
         (entity, decimal: string | undefined, hexadecimal: string | undefined) => {
             if (!decimal && !hexadecimal) return ' ';
-            const codePoint = Number.parseInt(decimal ?? hexadecimal ?? '', decimal ? 10 : 16);
+            const codePoint = Number.parseInt(
+                decimal ?? (hexadecimal as string),
+                decimal ? 10 : 16,
+            );
             return [9, 10, 12, 13, 32].includes(codePoint) ? ' ' : entity;
         },
     );
@@ -195,7 +198,7 @@ function commentEnd(source: string, start: number): number {
 function isRegexStart(source: string, start: number): boolean {
     let cursor = start - 1;
     while (cursor >= 0 && /\s/.test(source[cursor])) cursor--;
-    if (source[cursor] === '<' && /[A-Z]/i.test(source[start + 1] ?? '')) return false;
+    if (source[cursor] === '<' && /[A-Z]/i.test(source.charAt(start + 1))) return false;
     if (cursor < 0 || REGEX_PREFIXES.has(source[cursor])) return true;
     if (!/[\w$]/.test(source[cursor])) return false;
     const end = cursor + 1;
@@ -223,7 +226,7 @@ function regexEnd(source: string, start: number): number {
             cursor++;
         } else if (character === '/' && !inCharacterClass) {
             cursor++;
-            while (/[A-Z]/i.test(source[cursor] ?? '')) cursor++;
+            while (/[A-Z]/i.test(source.charAt(cursor))) cursor++;
             break;
         } else cursor++;
     }
@@ -461,14 +464,14 @@ function collectClassDirective(
     sinkStart: number,
     valueStart: number,
 ): number | null {
-    if (!/[\w$-]/.test(source[valueStart] ?? '')) return null;
+    if (!/[\w$-]/.test(source.charAt(valueStart))) return null;
     let directiveEnd = valueStart;
-    while (/[\w$-]/.test(source[directiveEnd] ?? '')) directiveEnd++;
+    while (/[\w$-]/.test(source.charAt(directiveEnd))) directiveEnd++;
     const equals = triviaEnd(source, directiveEnd);
     if (source[equals] !== '=') {
         const insideMarkupTag =
             source.lastIndexOf('<', sinkStart) > source.lastIndexOf('>', sinkStart);
-        const next = source[equals] ?? '';
+        const next = source.charAt(equals);
         const continuesMarkupTag =
             next === '/' || next === '>' || next === '{' || /[A-Z_:]/i.test(next);
         if (!insideMarkupTag || !continuesMarkupTag) return null;

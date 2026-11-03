@@ -9,9 +9,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// Keep real filesystem behavior while allowing one permission error at the IO boundary.
+vi.mock('node:fs', async importOriginal => ({
+    ...(await importOriginal<typeof import('node:fs')>()),
+}));
 
 import {
+    assertNoRSCGraphViolation,
     createRSCModuleRecord,
     deleteRSCModuleRecord,
     findRSCBoundaryViolation,
@@ -24,6 +30,7 @@ import {
 
 const tempDirs: string[] = [];
 afterEach(() => {
+    vi.restoreAllMocks();
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -34,6 +41,11 @@ function tempDir(prefix = 'csszyx-rsc-edge-'): string {
 }
 
 describe('directive prologue lexing', () => {
+    it('handles an empty module and a semicolon-free directive after an unrelated directive', () => {
+        expect(hasUseServerDirective('')).toBe(false);
+        expect(hasUseClientDirective('')).toBe(false);
+        expect(hasUseClientDirective("'use strict';\n'use client' \t\n")).toBe(true);
+    });
     it('detects a use client directive behind a UTF-8 BOM', () => {
         expect(hasUseClientDirective('﻿"use client";\nexport const X = 1;')).toBe(true);
     });
@@ -78,6 +90,22 @@ describe('Next App Router entry detection', () => {
 });
 
 describe('runtime import scanner malformed inputs', () => {
+    it.each([
+        "import 'unterminated",
+        'import { x }',
+        "import from './dependency';",
+        "import { _sz } from '@csszyx/runtime",
+        "import * as bad-name from '@csszyx/runtime';",
+        "import bad-name from '@csszyx/runtime';",
+        "// import { _sz } from '@csszyx/runtime';",
+    ])('does not manufacture an import from incomplete or commented text: %s', statement => {
+        const record = createRSCModuleRecord(
+            `'use server';\n${statement}`,
+            '/repo/rsc-scan-edge.ts',
+        );
+        expect(record.imports).toEqual([]);
+        expect(record.runtimeImports).toEqual([]);
+    });
     it('ignores a side-effect import of a non-whole-forbidden runtime module', () => {
         // `import 'csszyx'` is a runtime source but not a whole-module-forbidden
         // client entry, so the side-effect form contributes no symbols.
@@ -302,5 +330,57 @@ describe('local import resolution against a real tree', () => {
         const record = createRSCModuleRecord(`import { z } from '${abs}';\n`, importer);
         const resolved = fs.realpathSync(path.join(root, 'shared.ts')).replace(/\\/g, '/');
         expect(record.imports).toContain(resolved);
+    });
+});
+
+describe('local import cache failures', () => {
+    it('keeps unrelated positive entries when deleting another module', () => {
+        const dir = tempDir();
+        const provider = path.join(dir, 'kept.ts');
+        fs.writeFileSync(provider, 'export const kept = 1;');
+        const importer = path.join(dir, 'server.ts');
+        const code = "import './kept';";
+        const expected = createRSCModuleRecord(code, importer).imports;
+        expect(expected).toEqual([fs.realpathSync(provider)]);
+        expect(deleteRSCModuleRecord(new Map(), path.join(dir, 'other.ts'))).toBe(false);
+        expect(createRSCModuleRecord(code, importer).imports).toEqual(expected);
+    });
+
+    it('ignores unrelated dynamic modules and reports a forbidden graph edge', () => {
+        expect(() => assertNoRSCGraphViolation(new Map())).not.toThrow();
+        expect(
+            findRSCBoundaryViolation("'use server'; import('other-package');", '/repo/server.ts'),
+        ).toBeNull();
+        const root = createRSCModuleRecord(
+            "'use server'; import { _sz } from '@csszyx/runtime';",
+            '/repo/rsc-root.ts',
+        );
+        expect(() => assertNoRSCGraphViolation(new Map([[root.id, root]]))).toThrow(
+            expect.objectContaining({ code: 'rsc-boundary-violation' }),
+        );
+    });
+    it('forgets a cached provider removed without a watcher notification', () => {
+        const dir = tempDir();
+        const importer = path.join(dir, 'server.ts');
+        const provider = path.join(dir, 'dependency.ts');
+        fs.writeFileSync(provider, 'export const x = 1;');
+        const code = "import { x } from './dependency';";
+        expect(createRSCModuleRecord(code, importer).imports).toEqual([fs.realpathSync(provider)]);
+        fs.unlinkSync(provider);
+        expect(createRSCModuleRecord(code, importer).imports).toEqual([]);
+    });
+
+    it('propagates a provider permission failure instead of treating it as absent', () => {
+        const dir = tempDir();
+        const provider = path.join(dir, 'dependency');
+        const stat = fs.statSync;
+        const denied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+        vi.spyOn(fs, 'statSync').mockImplementation((...args: Parameters<typeof fs.statSync>) => {
+            if (args[0] === provider) throw denied;
+            return stat(...args);
+        });
+        expect(() =>
+            createRSCModuleRecord("import './dependency';", path.join(dir, 'server.ts')),
+        ).toThrow(denied);
     });
 });

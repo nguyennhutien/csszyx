@@ -169,7 +169,7 @@ export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord
  */
 export function deleteRSCModuleRecord(records: Map<string, RSCModuleRecord>, id: string): boolean {
     const normalized = normalizeModuleId(id);
-    const clean = normalizePathSeparators(id.split('?')[0] ?? id);
+    const clean = normalizePathSeparators(id.split('?')[0] as string);
     const resolved = normalizePathSeparators(path.resolve(clean));
     pruneRSCModulePathCaches(new Set([normalized, resolved, clean]));
 
@@ -249,9 +249,9 @@ const APP_ROUTER_ENTRIES = new Set([
  * @returns true for supported Next App Router route entry filenames
  */
 function isNextAppRouterEntry(id: string): boolean {
-    const clean = normalizePathSeparators(id.split('?')[0] ?? id);
+    const clean = normalizePathSeparators(id.split('?')[0] as string);
     if (!clean.includes('/app/') && !clean.startsWith('app/')) return false;
-    const basename = clean.split('/').pop() ?? '';
+    const basename = clean.split('/').pop() as string;
     const dotIdx = basename.indexOf('.');
     if (dotIdx === -1) return false;
     const stem = basename.slice(0, dotIdx);
@@ -314,7 +314,8 @@ function walkRSCGraph(
     if (runtime && symbol) {
         return {
             symbol,
-            path: chain[0] ?? current.id,
+            // The walk starts with the root id and only appends to its chain.
+            path: chain[0] as string,
             importChain: [...chain, runtime.source],
         };
     }
@@ -936,7 +937,7 @@ function skipSpaces(line: string, at: number): number {
  * @returns normalized module ID
  */
 function normalizeModuleId(id: string): string {
-    const clean = id.split('?')[0] ?? id;
+    const clean = id.split('?')[0] as string;
     const cached = normalizedModuleIdCache.get(clean);
     if (cached) {
         return cached;
@@ -1065,7 +1066,7 @@ function readForbiddenDefaultSymbol(clause: string): string | null {
         braceStart !== -1 && braceEnd !== -1
             ? clause.slice(0, braceStart) + clause.slice(braceEnd + 1)
             : clause;
-    const candidate = stripped.trimStart().split(',', 1)[0]?.trim() ?? '';
+    const candidate = (stripped.trimStart().split(',', 1)[0] as string).trim();
     return isIdentifier(candidate) && FORBIDDEN_SYMBOLS.has(candidate) ? candidate : null;
 }
 
@@ -1078,7 +1079,10 @@ function readForbiddenDefaultSymbol(clause: string): string | null {
 function hasNamespaceImport(clause: string): boolean {
     const parts = splitAsciiWhitespace(clause);
     return (
-        parts.length >= 3 && parts[0] === '*' && parts[1] === 'as' && isIdentifier(parts[2] ?? '')
+        parts.length >= 3 &&
+        parts[0] === '*' &&
+        parts[1] === 'as' &&
+        isIdentifier(parts[2] as string)
     );
 }
 

@@ -959,7 +959,7 @@ function isBackgroundImage(value: string): boolean {
  * @returns The border property group, or `null` when uncertain.
  */
 function classifyBorderValue(prefix: string, value: string): string | null {
-    const firstSegment = value.split('-', 1)[0] ?? '';
+    const firstSegment = value.split('-', 1)[0] as string;
     if (firstSegment === 'offset' || DIRECTIONAL_SEGMENTS.has(firstSegment)) {
         // `border-t` carries no value of its own and is a width, which the
         // empty remainder already answers below.

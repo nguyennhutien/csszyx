@@ -53,7 +53,7 @@ const CHAIN_COMMAND: vscode.Command = {
  * @returns A new item inserting `key: $1` (or `variant: { $1 }`) that reopens suggestions.
  */
 function toChainingItem(item: vscode.CompletionItem): vscode.CompletionItem {
-    const name = typeof item.label === 'string' ? item.label : item.label.label;
+    const name = labelOf(item);
     const clone = new vscode.CompletionItem(item.label, item.kind);
     clone.detail = item.detail;
     clone.documentation = item.documentation;
@@ -73,11 +73,12 @@ const CHAINING_KEY_ITEMS = [...KEY_COMPLETIONS, ...TOP_LEVEL_VARIANT_COMPLETIONS
 const IMPORT_SCAN_CHARS = 4_000;
 const CSSZYX_IMPORT = /from\s+['"](?:csszyx|@csszyx\/runtime)['"]/;
 
-/** Read a completion item's plain label.
+/** Read a completion item's plain label, whether it was built from a string or a
+ * `CompletionItemLabel`.
  * @param item - Completion item.
  * @returns The label text.
  */
-function labelOf(item: vscode.CompletionItem): string {
+export function labelOf(item: vscode.CompletionItem): string {
     return typeof item.label === 'string' ? item.label : item.label.label;
 }
 
@@ -150,8 +151,6 @@ function styleChainFor(context: SzContext): readonly string[] | null {
             return context.depth >= 2 ? context.parents.slice(1) : null;
         case 'szv':
             return szvStyleChain(context.parents);
-        default:
-            return null;
     }
 }
 
@@ -209,8 +208,6 @@ function completionsForContext(
             context.siblings,
         );
     }
-    if (context.type !== 'value' && context.type !== 'variant-value') return undefined;
-    if (!context.currentKey) return undefined;
     if (!form) return getValueCompletions(context.currentKey);
     const member = form.members.find(candidate => candidate.name === context.currentKey);
     return member ? memberValueItems(member) : undefined;

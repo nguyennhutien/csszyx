@@ -1,6 +1,6 @@
 import { act, createElement, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applySzVars, patchSzVars } from '../src/index.js';
 import { useSzVars } from '../src/react.js';
@@ -79,6 +79,25 @@ describe('useSzVars', () => {
         }
         act(() => root.render(createElement(Probe)));
         expect(document.documentElement.style.getPropertyValue('--hook')).toBe('ran');
+    });
+
+    it('waits for a target when the document has no root element', () => {
+        function Probe() {
+            useSzVars({ detached: 'value' });
+            return null;
+        }
+        const html = document.documentElement;
+        const missingRoot = vi
+            .spyOn(document, 'documentElement', 'get')
+            .mockReturnValue(null as unknown as HTMLElement);
+        try {
+            act(() => root.render(createElement(Probe)));
+            expect(html.style.getPropertyValue('--detached')).toBe('');
+        } finally {
+            missingRoot.mockRestore();
+        }
+        act(() => root.render(createElement(Probe)));
+        expect(html.style.getPropertyValue('--detached')).toBe('value');
     });
 
     it('applies vars to the ref element and re-applies when they change', () => {

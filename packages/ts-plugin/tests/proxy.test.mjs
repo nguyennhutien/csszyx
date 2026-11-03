@@ -264,3 +264,29 @@ test('activation reports every switch it was given', () => {
         ),
     );
 });
+
+test('late cancellation and non-Error host failures preserve the base result', () => {
+    const base = { entries: [{ name: 'base', kind: 'var', sortText: '1' }] };
+    for (const fail of [false, true]) {
+        let cancelled = false;
+        const logs = [];
+        const proxy = init({ typescript: ts }).create({
+            config: {},
+            languageService: {
+                getCompletionsAtPosition: () => base,
+                getProgram: () => {
+                    if (fail) throw 'host stopped';
+                    cancelled = true;
+                    return undefined;
+                },
+            },
+            project: { projectService: {
+                logger: { info: text => logs.push(text) },
+                cancellationToken: { isCancellationRequested: () => cancelled },
+            } },
+        });
+        assert.strictEqual(proxy.getCompletionsAtPosition('/x.tsx', 0), base);
+        if (fail) assert.ok(logs.some(text => text.includes('completion failed (unknown)')));
+        else assert.ok(logs.every(text => !text.includes('completion failed')));
+    }
+});

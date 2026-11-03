@@ -4,7 +4,7 @@
  * config was found, since a project with no `tailwind.config.js` is the state
  * the availability message exists to explain.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -61,6 +61,16 @@ async function run(options: Parameters<typeof generateTypes>[0]): Promise<{
 }
 
 describe('generate-types: the Tailwind guard', () => {
+    it('prints a dependency failure even when it is not an Error', async () => {
+        availability.resolveTailwindV3.mockRejectedValue('lookup unavailable');
+        const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));
+        try {
+            const { errors } = await run({ cwd });
+            expect(errors).toContain('lookup unavailable');
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
     it('resolves Tailwind beside an explicit nested config, not from the invocation cwd', async () => {
         const cwd = mkdtempSync(join(tmpdir(), 'csszyx-generate-types-root-'));
         const configPath = join(cwd, 'packages/legacy/tailwind.config.js');
@@ -89,7 +99,9 @@ describe('generate-types: the Tailwind guard', () => {
     // availability message says the command has no job on v4 at all.
     it('answers the install state before reporting that no config was found', async () => {
         availability.resolveTailwindV3.mockRejectedValue(WRONG_MAJOR);
-        const { errors } = await run({ cwd: mkdtempSync(join(tmpdir(), 'csszyx-gt-')) });
+        const { errors } = await run({
+            cwd: mkdtempSync(join(tmpdir(), 'csszyx-gt-')),
+        });
         expect(errors).toBe(`✖ ${WRONG_MAJOR.message}`);
         expect(errors).not.toContain('tailwind-config-missing');
     });
@@ -142,6 +154,24 @@ describe('generate-types: the Tailwind guard', () => {
 });
 
 describe('generate-types: a config it cannot read', () => {
+    it('reads a theme exported by name when the module has no default export', async () => {
+        availability.resolveTailwindV3.mockResolvedValue({
+            version: '3.4.19',
+            resolveConfig: (config: unknown) => config,
+        } as never);
+        const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));
+        writeFileSync(
+            join(cwd, 'tailwind.config.mjs'),
+            "export const theme = { colors: { brand: '#123456' } };\n",
+        );
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            await generateTypes({ cwd, config: 'tailwind.config.mjs' });
+            expect(readFileSync(join(cwd, 'csszyx.d.ts'), 'utf8')).toContain("'brand'");
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
     it('names a --config path that does not exist, in the registry words', async () => {
         availability.resolveTailwindV3.mockResolvedValue({ version: '3.4.19' });
         const cwd = mkdtempSync(join(tmpdir(), 'csszyx-gt-'));

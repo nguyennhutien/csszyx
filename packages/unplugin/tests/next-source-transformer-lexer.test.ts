@@ -49,6 +49,8 @@ function base(overrides: Partial<Parameters<typeof transformNextSource>[0]> = {}
 
 describe('fail-closed lexer does not trip on non-sz constructs', () => {
     it.each([
+        ['a line comment ending at EOF', '// sz={{ p: 4 }}'],
+        ['an unfinished block comment', '/* sz={{ p: 4 }}'],
         ['an escaped regex slash', 'const r = /a\\/sz={{ p: 4 }}b/;\n'],
         ['a regex character class', 'const r = /[sz]={{ p: 4 }}/;\n'],
         ['regex flags', 'const r = /sz={{ p: 4 }}/gi;\n'],
@@ -75,7 +77,12 @@ describe('global-var-alias cache-key normalization', () => {
                 source,
                 filename,
                 cacheRoot,
-                compilerOptions: { globalVarAliases: new Map([['--brand', '--gz']]) },
+                compilerOptions: {
+                    globalVarAliases: new Map([
+                        ['--space', '--gy'],
+                        ['--brand', '--gz'],
+                    ]),
+                },
             }),
         );
         const second = transformNextSource(
@@ -83,7 +90,12 @@ describe('global-var-alias cache-key normalization', () => {
                 source,
                 filename,
                 cacheRoot,
-                compilerOptions: { globalVarAliases: [['--brand', '--gz']] },
+                compilerOptions: {
+                    globalVarAliases: [
+                        ['--brand', '--gz'],
+                        ['--space', '--gy'],
+                    ],
+                },
             }),
         );
         const third = transformNextSource(
@@ -91,7 +103,7 @@ describe('global-var-alias cache-key normalization', () => {
                 source,
                 filename,
                 cacheRoot,
-                compilerOptions: { globalVarAliases: { '--brand': '--gz' } },
+                compilerOptions: { globalVarAliases: { '--brand': '--gz', '--space': '--gy' } },
             }),
         );
 

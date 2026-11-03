@@ -30,6 +30,15 @@ describe('file pattern helpers', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
+    it('retains an absolute literal alongside a glob during directory filtering', () => {
+        const file = path.join(root, 'src/App.tsx');
+        expect(expandFilePatterns(root, [file, 'src/styles/*.css'])).toEqual([
+            file,
+            path.join(root, 'src/styles/extra.css'),
+            path.join(root, 'src/styles/theme.css'),
+        ]);
+    });
+
     it('normalizes bundler query suffixes and Windows separators', () => {
         expect(normalizeFileId('src\\App.tsx?import')).toBe('src/App.tsx');
     });

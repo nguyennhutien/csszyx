@@ -60,7 +60,10 @@ describe('extractGlobalVarAliasesForManifest', () => {
     it('includes aliases from the validated CSS plan even without TSX metadata', () => {
         const validation = {
             plan: {
-                entries: [{ original: '--brand-primary', alias: '---gz', scopes: ['rule::root'] }],
+                entries: [
+                    { original: '--brand-primary', alias: '---gz', scopes: ['rule::root'] },
+                    { original: '--other', alias: '--another-prefix', scopes: ['rule::root'] },
+                ],
             },
         } as never;
 

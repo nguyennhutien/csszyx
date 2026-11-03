@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { hasTokens, mergeThemes, parseThemeBlocks } from '../src/theme-scanner.js';
 
 describe('parseThemeBlocks', () => {
+    it('retains theme tokens before an unfinished layer without inventing later tokens', () => {
+        expect(parseThemeBlocks('@theme { --color-brand: red; } @layer').colors).toEqual(['brand']);
+        expect(
+            parseThemeBlocks('@theme { --color-brand: red; } @layer utilities {').colors,
+        ).toEqual(['brand']);
+    });
     it('returns empty theme for CSS with no @theme block', () => {
         const css = `
 body { margin: 0; }

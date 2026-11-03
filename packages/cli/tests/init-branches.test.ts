@@ -12,7 +12,9 @@ import { join } from 'node:path';
 import { execa } from 'execa';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('execa', () => ({ execa: vi.fn(async () => ({ stdout: '', stderr: '' })) }));
+vi.mock('execa', () => ({
+    execa: vi.fn(async () => ({ stdout: '', stderr: '' })),
+}));
 
 import { init } from '../src/commands/init.js';
 
@@ -30,10 +32,53 @@ function write(root: string, rel: string, content: string): void {
 afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
     vi.clearAllMocks();
+    vi.restoreAllMocks();
 });
 function mute(): void {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 }
+
+describe('init stops after a failed setup step', () => {
+    it('does not create config after package installation fails', async () => {
+        mute();
+        const errors = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = tempRoot();
+        write(cwd, 'package.json', '{}');
+        vi.mocked(execa).mockRejectedValueOnce(new Error('registry unavailable'));
+
+        await init({ yes: true, cwd });
+
+        expect(errors.mock.calls.flat().join(' ')).toContain('registry unavailable');
+        expect(existsSync(join(cwd, 'csszyx.config.mjs'))).toBe(false);
+        expect(existsSync(join(cwd, '.gitignore'))).toBe(false);
+    });
+
+    it('reports an unwritable config and leaves later setup files alone', async () => {
+        mute();
+        const errors = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = tempRoot();
+        write(cwd, 'package.json', '{}');
+        mkdirSync(join(cwd, 'csszyx.config.mjs'));
+
+        await init({ yes: true, cwd });
+
+        expect(errors.mock.calls.flat().join(' ')).toContain('EISDIR');
+        expect(existsSync(join(cwd, '.gitignore'))).toBe(false);
+    });
+
+    it('keeps an existing csszyx ignore and tolerates a JS-only tsconfig setup', async () => {
+        mute();
+        const cwd = tempRoot();
+        write(cwd, 'package.json', '{}');
+        write(cwd, '.gitignore', 'node_modules\n.csszyx\n');
+        write(cwd, 'jsconfig.json', '{}');
+
+        await init({ yes: true, cwd });
+
+        expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).toBe('node_modules\n.csszyx\n');
+        expect(existsSync(join(cwd, 'tsconfig.json'))).toBe(false);
+    });
+});
 
 describe('init Vite plugin injection', () => {
     it('installs the Vite Tailwind package and wires an empty vite.config', async () => {
@@ -42,7 +87,10 @@ describe('init Vite plugin injection', () => {
         write(
             cwd,
             'package.json',
-            JSON.stringify({ dependencies: { vue: '^3', vite: '^7' }, devDependencies: {} }),
+            JSON.stringify({
+                dependencies: { vue: '^3', vite: '^7' },
+                devDependencies: {},
+            }),
         );
         write(cwd, 'tsconfig.json', JSON.stringify({ include: ['src'] }));
         write(
@@ -211,7 +259,10 @@ describe('init Next.js existing-config paths', () => {
         write(
             cwd,
             'package.json',
-            JSON.stringify({ dependencies: { next: '^16', react: '^19' }, devDependencies: {} }),
+            JSON.stringify({
+                dependencies: { next: '^16', react: '^19' },
+                devDependencies: {},
+            }),
         );
         mkdirSync(join(cwd, 'app'));
         write(cwd, 'app/globals.css', '@import "tailwindcss";\n');
@@ -257,7 +308,9 @@ describe('init unknown framework', () => {
         return vi.mocked(execa).mock.calls.flatMap(call => call[1] as string[]);
     }
 
-    const PLAIN = { 'package.json': JSON.stringify({ name: 'plain', dependencies: {} }) };
+    const PLAIN = {
+        'package.json': JSON.stringify({ name: 'plain', dependencies: {} }),
+    };
 
     it('prints a PostCSS config with csszyx before the Tailwind plugin it installed', async () => {
         const out = await initPrinted(PLAIN);
@@ -307,7 +360,9 @@ describe('init unknown framework', () => {
 
     it('names the PostCSS plugin a project already on Tailwind does not list', async () => {
         const out = await initPrinted({
-            'package.json': JSON.stringify({ devDependencies: { tailwindcss: '^4' } }),
+            'package.json': JSON.stringify({
+                devDependencies: { tailwindcss: '^4' },
+            }),
         });
 
         expect(out).toContain(
@@ -381,7 +436,9 @@ describe('init tsconfig and sz-types edge paths', () => {
         write(
             cwd,
             'tsconfig.json',
-            JSON.stringify({ include: ['src', './.csszyx/theme.d.ts', 'csszyx-env.d.ts'] }),
+            JSON.stringify({
+                include: ['src', './.csszyx/theme.d.ts', 'csszyx-env.d.ts'],
+            }),
         );
         // An existing env file without the jsx reference → append path.
         write(cwd, 'csszyx-env.d.ts', '// pre-existing header\n');

@@ -754,10 +754,16 @@ export const DEFAULT_PRODUCTION_CONFIG: Readonly<ProductionConfig> = /* @__PURE_
  */
 export const DEFAULT_IMPORTED_STATIC_SZ = true;
 
+/** The build defaults, with the fields a build reads without its own fallback set. */
+type DefaultBuildConfig = BuildConfig & {
+    cacheDir: string;
+    parser: NonNullable<BuildConfig['parser']>;
+};
+
 /**
  * Default build configuration.
  */
-export const DEFAULT_BUILD_CONFIG: Readonly<BuildConfig> = /* @__PURE__ */ Object.freeze({
+export const DEFAULT_BUILD_CONFIG: Readonly<DefaultBuildConfig> = /* @__PURE__ */ Object.freeze({
     emitManifest: false,
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',

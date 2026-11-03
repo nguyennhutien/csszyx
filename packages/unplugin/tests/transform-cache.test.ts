@@ -111,6 +111,51 @@ describe('transform cache', () => {
         };
     }
 
+    it('round-trips a transform without a CSS variable map and reads older missing maps', () => {
+        const root = tempRoot();
+        const value = result();
+        delete value.cssVariableMap;
+        writeTransformCache(root, input(), value);
+        expect(readTransformCache(root, input())?.cssVariableMap).toEqual(new Map());
+        const file = entryFile(root, createTransformCacheKey(input()).key);
+        const stored = JSON.parse(readFileSync(file, 'utf8'));
+        delete stored.result.cssVariableMap;
+        writeFileSync(file, JSON.stringify(stored));
+        expect(readTransformCache(root, input())?.cssVariableMap).toEqual(new Map());
+    });
+
+    it.each([undefined, [], [['--other', '--gz']], [['--brand', '--gy']], [null]])(
+        'rejects a cache entry with changed or malformed aliases: %j',
+        aliases => {
+            const root = tempRoot();
+            const request = input({ globalVarAliases: [['--brand', '--gz']] });
+            writeTransformCache(root, request, result());
+            const file = entryFile(root, createTransformCacheKey(request).key);
+            const stored = JSON.parse(readFileSync(file, 'utf8'));
+            stored.globalVarAliases = aliases;
+            writeFileSync(file, JSON.stringify(stored));
+            expect(readTransformCache(root, request)).toBeNull();
+        },
+    );
+
+    it('discards non-string alias pairs when deriving a cache key', () => {
+        const malformed = [
+            [null, '--x'],
+            ['--y', 42],
+        ] as unknown as Array<[string, string]>;
+        expect(createTransformCacheKey(input({ globalVarAliases: malformed }))).toEqual(
+            createTransformCacheKey(input({ globalVarAliases: [] })),
+        );
+    });
+
+    it('evicts entries without a timestamp as ancient entries', () => {
+        const root = tempRoot();
+        const file = join(root, 'old.json');
+        writeFileSync(file, '{}');
+        expect(evictOldTransformCacheEntries(root, { now: 1000, maxAgeMs: 100 })).toBe(1);
+        expect(existsSync(file)).toBe(false);
+    });
+
     it('resolves the transform cache under the configured cache directory', () => {
         expect(resolveTransformCacheDir('/repo', undefined)).toBe('/repo/.csszyx/cache/transform');
         expect(resolveTransformCacheDir('/repo', '.custom-cache')).toBe(
@@ -566,4 +611,10 @@ describe('evictMemoryCacheToBudget', () => {
         expect(evictMemoryCacheToBudget(cache, 10, 1000, 500)).toBe(10);
         expect(cache.size).toBe(1);
     });
+});
+
+it('terminates memory eviction even with an impossible negative entry budget', () => {
+    const cache = new Map([['only', { code: 'abc' }]]);
+    expect(evictMemoryCacheToBudget(cache, 3, -1, 0)).toBe(0);
+    expect(cache.size).toBe(0);
 });

@@ -182,7 +182,8 @@ function escapeLeadingClassCharacter(className: string, char: string): string | 
  * @returns CSS-safe character representation.
  */
 function escapeClassCharacter(char: string): string {
-    const codePoint = char.codePointAt(0) ?? 0;
+    // One character of a class name, never empty.
+    const codePoint = char.codePointAt(0) as number;
     const requiresEscape =
         (codePoint >= 33 && codePoint <= 47 && codePoint !== 45) ||
         (codePoint >= 58 && codePoint <= 64) ||

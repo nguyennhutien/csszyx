@@ -56,3 +56,35 @@ assert.strictEqual(
 
 console.log('contract checks passed');
 });
+
+test('completion limits, cancellation, and owned value details', () => {
+    const { buildSzKeyEntries, buildSzValueEntries, buildMemberValueEntries } = require('../dist/completions.js');
+    const options = { tsMod: ts, limit: 2, replacementSpan: { start: 0, length: 0 } };
+    assert.strictEqual(buildSzKeyEntries(options).length, 2);
+    assert.deepStrictEqual(buildSzValueEntries({ ...options, property: 'p', quoted: false, shouldStop: () => true }), []);
+    assert.deepStrictEqual(buildMemberValueEntries({ ...options, member: { name: 'at', values: ['10', '20'] }, quoted: false, shouldStop: () => true }), []);
+    const value = completionDetails(ts, '4', { owner: DATA_OWNER, schema: 1, group: 'value' });
+    assert.strictEqual(value.documentation[0].text, 'csszyx value completion');
+    const base = { entries: [{ name: 'existing', kind: 'var', sortText: '1' }] };
+    assert.strictEqual(mergeCompletions(base, [{ name: 'extra', kind: 'var', sortText: '2' }], 1), base);
+});
+
+test('an unknown metadata schema disables every completion builder', () => {
+    const Module = require('node:module');
+    const original = Module._load;
+    const target = require.resolve('../dist/completions.js');
+    const cached = require.cache[target];
+    delete require.cache[target];
+    try {
+        Module._load = function(id, ...rest) {
+            const result = original.call(this, id, ...rest);
+            return id === '@csszyx/tooling-metadata' ? { ...result, METADATA_SCHEMA_VERSION: 2 } : result;
+        };
+        const future = require(target);
+        const options = { tsMod: ts, limit: 10, replacementSpan: { start: 0, length: 0 }, form: {members: []}, member: {values: []}, property: 'p', quoted: false };
+        for (const build of [future.buildSzKeyEntries, future.buildFormKeyEntries, future.buildMemberValueEntries, future.buildSzValueEntries]) assert.deepStrictEqual(build(options), []);
+    } finally {
+        Module._load = original;
+        require.cache[target] = cached;
+    }
+});

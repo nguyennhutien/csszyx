@@ -10,6 +10,10 @@ import {
 } from '../src/unplugin.js';
 
 describe('cssHasContentScope', () => {
+    it('reads the modifiers of a final import without a semicolon', () => {
+        expect(cssHasContentScope('@import "tailwindcss" source(none)')).toBe(true);
+        expect(cssHasContentScope('@import "tailwindcss"')).toBe(false);
+    });
     it('true for source(none)', () => {
         expect(cssHasContentScope('@import "tailwindcss" source(none);')).toBe(true);
     });

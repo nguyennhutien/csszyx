@@ -245,3 +245,37 @@ describe('warnUnsafeArbitrary — dev-mode warning still fires once', () => {
         warn.mockRestore();
     });
 });
+
+describe('border side grammar', () => {
+    it.each([
+        ['t', 'border-top-width'],
+        ['r', 'border-right-width'],
+        ['b', 'border-bottom-width'],
+        ['l', 'border-left-width'],
+        ['x', 'border-inline-width'],
+        ['y', 'border-block-width'],
+        ['s', 'border-inline-start-width'],
+        ['e', 'border-inline-end-width'],
+    ])('resolves the bare border-%s side', (side, property) => {
+        expect(generateDeclarations(`border-${side}`)).toBe(`${property}: 1px`);
+    });
+
+    it.each([
+        ['t', 'border-top-width'],
+        ['r', 'border-right-width'],
+        ['b', 'border-bottom-width'],
+        ['l', 'border-left-width'],
+        ['x', 'border-inline-width'],
+        ['s', 'border-inline-start-width'],
+        ['e', 'border-inline-end-width'],
+    ])('resolves the numeric border-%s width', (side, property) => {
+        expect(generateDeclarations(`border-${side}-3`)).toBe(`${property}: 3px`);
+    });
+
+    it.each([
+        ['rounded-none', 'border-radius: 0'],
+        ['rounded-full', 'border-radius: calc(infinity * 1px)'],
+    ])('resolves %s through the keyword table', (utility, declaration) => {
+        expect(generateDeclarations(utility)).toBe(declaration);
+    });
+});

@@ -124,54 +124,60 @@ describe('prescan → transform-hook result handoff (1× cold transform)', () =>
     // entry per file. The hook only writes an entry after actually
     // transforming, so the on-disk entry count is the witness: unchanged
     // content must add zero entries, edited content must still add one.
-    it('the hook adds no disk entry for content the prescan already transformed', async () => {
-        const root = mkdtempSync(join(tmpdir(), 'csszyx-handoff-'));
-        tempDirs.push(root);
-        mkdirSync(join(root, 'src'), { recursive: true });
-        for (const [file, source] of Object.entries(FIXTURE_FILES)) {
-            writeFileSync(join(root, file), source, 'utf8');
-        }
-
-        const [prePlugin] = vitePlugin({ build: { cache: true } }) as Array<
-            ViteConfigHook & {
-                transform?:
-                    | { handler?: (code: string, id: string) => unknown }
-                    | ((code: string, id: string) => unknown);
+    it.each([false, true])(
+        'the hook rejects stale prescan results (reuse before edit: %s)',
+        async reuseBeforeEdit => {
+            const root = mkdtempSync(join(tmpdir(), 'csszyx-handoff-'));
+            tempDirs.push(root);
+            mkdirSync(join(root, 'src'), { recursive: true });
+            for (const [file, source] of Object.entries(FIXTURE_FILES)) {
+                writeFileSync(join(root, file), source, 'utf8');
             }
-        >;
-        await prePlugin?.configResolved?.({ root });
 
-        const cacheDir = join(root, '.csszyx/cache/transform');
-        const entriesAfterPrescan = countJsonFiles(cacheDir);
-        expect(entriesAfterPrescan).toBeGreaterThan(0);
+            const [prePlugin] = vitePlugin({ build: { cache: true } }) as Array<
+                ViteConfigHook & {
+                    transform?:
+                        | { handler?: (code: string, id: string) => unknown }
+                        | ((code: string, id: string) => unknown);
+                }
+            >;
+            await prePlugin?.configResolved?.({ root });
 
-        const appPath = join(root, 'src/App.tsx');
-        const appSource = readFileSync(appPath, 'utf8');
-        const rawTransform = prePlugin?.transform;
-        const transform = typeof rawTransform === 'function' ? rawTransform : rawTransform?.handler;
-        expect(typeof transform).toBe('function');
+            const cacheDir = join(root, '.csszyx/cache/transform');
+            const entriesAfterPrescan = countJsonFiles(cacheDir);
+            expect(entriesAfterPrescan).toBeGreaterThan(0);
 
-        // Bound like the bundler binds it: the hook reports diagnostics through
-        // `this.warn`, so calling it bare crashes the moment a fixture produces
-        // one. Same shape as the other direct-hook tests.
-        const context = { warn: vi.fn() };
+            const appPath = join(root, 'src/App.tsx');
+            const appSource = readFileSync(appPath, 'utf8');
+            const rawTransform = prePlugin?.transform;
+            const transform =
+                typeof rawTransform === 'function' ? rawTransform : rawTransform?.handler;
+            expect(typeof transform).toBe('function');
 
-        // Unchanged content → handoff serves the prescan result; no re-transform,
-        // no second entry.
-        const reused = (await transform?.call(context, appSource, appPath)) as {
-            code?: string;
-        } | null;
-        expect(reused?.code).toContain('className');
-        expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan);
+            // Bound like the bundler binds it: the hook reports diagnostics through
+            // `this.warn`, so calling it bare crashes the moment a fixture produces
+            // one. Same shape as the other direct-hook tests.
+            const context = { warn: vi.fn() };
 
-        // Edited content → sha mismatch, the hook transforms and caches as before.
-        const edited = appSource.replace('p: 4', 'p: 8');
-        const fresh = (await transform?.call(context, edited, appPath)) as {
-            code?: string;
-        } | null;
-        expect(fresh?.code).toContain('p-8');
-        expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan + 1);
-    });
+            // Unchanged content → handoff serves the prescan result; no re-transform,
+            // no second entry.
+            if (reuseBeforeEdit) {
+                const reused = (await transform?.call(context, appSource, appPath)) as {
+                    code?: string;
+                } | null;
+                expect(reused?.code).toContain('className');
+                expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan);
+            }
+
+            // Edited content → sha mismatch, the hook transforms and caches as before.
+            const edited = appSource.replace('p: 4', 'p: 8');
+            const fresh = (await transform?.call(context, edited, appPath)) as {
+                code?: string;
+            } | null;
+            expect(fresh?.code).toContain('p-8');
+            expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan + 1);
+        },
+    );
 });
 
 /**

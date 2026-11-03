@@ -4,7 +4,7 @@
  * branch, check's pattern + no-sz skip, scan-collisions' unclosed-span handling,
  * and pure helpers (isColorValue, sz-codegen null/array, flattenColors DEFAULT).
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -41,6 +41,17 @@ function captureLogs(): string[] {
 }
 
 describe('audit byte formatting', () => {
+    it('reports empty output and handles a dist directory with no HTML', async () => {
+        const logs = captureLogs();
+        const cwd = tempRoot();
+        vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+        mkdirSync(join(cwd, 'dist'));
+        writeFileSync(join(cwd, 'dist/app.css'), '');
+        audit();
+        expect(logs.join('\n')).toContain('0 B');
+        await doctor();
+        expect(logs.join('\n')).not.toContain('Found 1 HTML');
+    });
     it('formats kilobyte-scale build output', async () => {
         const logs = captureLogs();
         const cwd = tempRoot();
@@ -73,7 +84,9 @@ describe('doctor checksum-missing branch', () => {
         const cwd = tempRoot();
         writeFileSync(
             join(cwd, 'package.json'),
-            JSON.stringify({ devDependencies: { csszyx: '^0.11', tailwindcss: '^4' } }),
+            JSON.stringify({
+                devDependencies: { csszyx: '^0.11', tailwindcss: '^4' },
+            }),
         );
         mkdirSync(join(cwd, 'dist'));
         writeFileSync(join(cwd, 'dist/index.html'), '<html><body>no checksum here</body></html>');
@@ -91,7 +104,9 @@ describe('doctor checksum-missing branch', () => {
         const cwd = tempRoot();
         writeFileSync(
             join(cwd, 'package.json'),
-            JSON.stringify({ devDependencies: { csszyx: '^0.11', tailwindcss: '^4' } }),
+            JSON.stringify({
+                devDependencies: { csszyx: '^0.11', tailwindcss: '^4' },
+            }),
         );
         mkdirSync(join(cwd, 'dist'));
         writeFileSync(join(cwd, 'dist/index.html'), '<html><body>no checksum here</body></html>');
@@ -154,7 +169,11 @@ describe('next-prebuild non-json output paths', () => {
             errors.push(p.join(' ')),
         );
         const cwd = tempRoot();
-        const code = await nextPrebuild({ root: cwd, cwd, pattern: 'app/**/*.none' });
+        const code = await nextPrebuild({
+            root: cwd,
+            cwd,
+            pattern: 'app/**/*.none',
+        });
         expect(code).toBe(1);
         expect(errors.join('\n')).toContain(
             `No source file under \`${cwd}\` matches \`app/**/*.none\`, so there is nothing to scan for classes.`,
@@ -171,7 +190,11 @@ describe('next-prebuild non-json output paths', () => {
         writeFileSync(join(cwd, 'package.json'), '{"name":"a","private":true}');
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div />;');
-        const code = await nextPrebuild({ root: cwd, cwd, mode: 'staging' as 'production' });
+        const code = await nextPrebuild({
+            root: cwd,
+            cwd,
+            mode: 'staging' as 'production',
+        });
         expect(code).toBe(1);
         expect(errors.join('\n')).toContain(
             '`--mode staging` is not a mode this command takes, so the command did not run.',
@@ -210,6 +233,37 @@ describe('pure helper branches', () => {
             'brand',
             'brand-500',
         ]);
+    });
+
+    it('ignores absent and non-color entries in a theme', () => {
+        expect(
+            flattenColors({
+                absent: null,
+                factory: () => 'red',
+                valid: '#f00',
+            } as never),
+        ).toEqual(['valid']);
+    });
+
+    it('omits breakpoint comments when requested', () => {
+        const decl = generateTypeDeclarations({ screens: { sm: '640px' } } as never, {
+            includeComments: false,
+        });
+        expect(decl).toContain('sm');
+        expect(decl).not.toContain('Styles applied at sm');
+    });
+
+    it('writes the default declaration filename in the current directory', async () => {
+        const previous = process.cwd();
+        // `process.cwd()` reports the resolved path, and macOS's temp dir is a symlink.
+        const cwd = realpathSync(tempRoot());
+        try {
+            process.chdir(cwd);
+            expect(await generateAndWriteTypes({} as never)).toBe(join(cwd, 'csszyx.d.ts'));
+            expect(readFileSync(join(cwd, 'csszyx.d.ts'), 'utf8')).toContain('SzObject');
+        } finally {
+            process.chdir(previous);
+        }
     });
 
     it('generateTypeDeclarations tolerates a theme with no colors', () => {

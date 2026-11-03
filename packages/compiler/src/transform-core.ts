@@ -1345,10 +1345,11 @@ function isTailwindBuildFunction(value: string): boolean {
         return false;
     }
 
-    if (!isAsciiIdentifierStartCode(value.codePointAt(2) ?? -1)) return false;
+    // In range: the length check above admits five characters or more.
+    if (!isAsciiIdentifierStartCode(value.codePointAt(2) as number)) return false;
 
     let index = 3;
-    while (index < length && isAsciiIdentifierCode(value.codePointAt(index) ?? -1)) {
+    while (index < length && isAsciiIdentifierCode(value.codePointAt(index) as number)) {
         index += 1;
     }
     if (index === 2 || index >= length || value.codePointAt(index) !== 40) {
@@ -1367,13 +1368,12 @@ function isTailwindBuildFunction(value: string): boolean {
 function scanTailwindFunctionBody(value: string, start: number): boolean {
     const state = { depth: 0, quote: 0, escaped: false };
     for (let index = start; index < value.length; index++) {
-        const code = value.codePointAt(index) ?? -1;
+        const code = value.codePointAt(index) as number;
         if (consumeTailwindQuotedCode(code, state)) continue;
         if (code === 40) state.depth += 1;
         if (code === 41) {
             state.depth -= 1;
             if (state.depth === 0) return index === value.length - 1;
-            if (state.depth < 0) return false;
         }
     }
     return false;
@@ -2193,8 +2193,8 @@ function buildColorObjectClass(
     color: { color: string; op?: number | string },
     prefix: string,
 ): string {
-    const utilityPrefix =
-        PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    // The caller admits only keys present in PROPERTY_MAP.
+    const utilityPrefix = PROPERTY_MAP[key];
     // A colour object takes its opacity in `op`; a plain slash opacity in
     // `color` still writes a served class, with `op` as the opacity when both
     // are given, and points at `op`. The important modifier ends the class.
@@ -3450,7 +3450,7 @@ function collectTransformStringProperty(
 ): boolean {
     let utility: string | null = null;
     if (COMPLEX_TRANSFORM_KEYS.has(key) && isComplexUtilityValue(value)) {
-        utility = `${PROPERTY_MAP[key] || key}-[${normalizeArbitraryValue(value)}]`;
+        utility = `${PROPERTY_MAP[key]}-[${normalizeArbitraryValue(value)}]`;
     } else if (key === 'transformStyle') utility = `transform-${value}`;
     else if (key === 'perspective') utility = formatPerspective(value);
     else if (key === 'perspectiveOrigin') utility = formatPerspectiveOrigin(value);

@@ -339,3 +339,41 @@ describe('extractSzObjectAt', () => {
         expect(extractSzObjectAt(text, cursor)).toBe("{ bg: 'red', p: 4 }");
     });
 });
+
+describe('incomplete editor input', () => {
+    it.each(['szr(', 'szv(123', 'szr(   '])('ignores %s without an object argument', text => {
+        expect(parseSzContext(text).type).toBe('none');
+    });
+
+    it.each([
+        ['szr({ p: 1 }); szv({ base: { color:', 'szv', 'color'],
+        ['szv({}); szr({ p:', 'szr', 'p'],
+        ['<Card szs={{header: {p: 1}}} />; szv({base: { m:', 'szv', 'm'],
+        ['szr({}); <Card szs={{header: { gap:', 'szs', 'gap'],
+    ])('uses the last styling expression in %s', (text, form, currentKey) => {
+        expect(parseSzContext(text)).toMatchObject({
+            form,
+            currentKey,
+            type: expect.stringMatching(/value$/),
+        });
+    });
+
+    it('has a normalized nonempty key at every value cursor position', () => {
+        const samples = [
+            '<div sz={{ p: 4, hover: { color: "red", gap: [1, 2] }, m: 2 }} />',
+            '<div sz="p: 4, hover: { color: \'red\' }, m: 2">',
+            'szv({ base: {p: 1}, variants: {size: {lg: {gap: 2}}}})',
+            "szr({ '': 4, ['computed']: 2, : 3, valid: { color: 'red' } })",
+        ];
+        for (const text of samples) {
+            for (let end = 0; end <= text.length; end++) {
+                const context = parseSzContext(text.slice(0, end));
+                if (context.type === 'value' || context.type === 'variant-value') {
+                    expect(context.currentKey).toMatch(/^[a-z_$][\w$]*$/i);
+                    expect(context.siblings).toContain(context.currentKey);
+                    expect(context.depth).toBeGreaterThan(0);
+                }
+            }
+        }
+    });
+});

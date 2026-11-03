@@ -56,9 +56,9 @@ function keyDetail(name: string): string {
  * @returns Whether the key is a JavaScript identifier.
  */
 function isIdentifier(name: string): boolean {
-    if (!name || !IDENTIFIER_START.test(name[0] ?? '')) return false;
+    if (!name || !IDENTIFIER_START.test(name.charAt(0))) return false;
     for (let index = 1; index < name.length; index += 1)
-        if (!IDENTIFIER_PART.test(name[index] ?? '')) return false;
+        if (!IDENTIFIER_PART.test(name.charAt(index))) return false;
     return true;
 }
 

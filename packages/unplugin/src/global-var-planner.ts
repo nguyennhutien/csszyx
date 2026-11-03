@@ -54,11 +54,16 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
                 ],
             };
         }
+        // validateCandidates rejects every name without a definition.
         entries.push({
             original,
             alias,
             scopes: sortStrings(
-                new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
+                new Set(
+                    (definitions.get(original) as CssVarDefinition[]).map(
+                        definition => definition.scopeId,
+                    ),
+                ),
             ),
         });
     }

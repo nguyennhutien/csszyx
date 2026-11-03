@@ -133,40 +133,52 @@ describe('migrate reporting overflow and audit branches', () => {
 });
 
 describe('migrate write-failure branches', () => {
-    it('warns but continues when a transformed file cannot be written back', async () => {
-        const logs = mute();
-        const dir = tempRoot();
-        const target = join(dir, 'App.tsx');
-        writeFileSync(target, 'export const A = () => <div className="p-4 bg-blue-500" />;');
-        const real = fs.writeFileSync;
-        // migrate writes to the path fast-glob found, which is spelled with
-        // forward slashes on every platform; match on the file, not the
-        // separator, or the spy never fires on Windows and nothing is denied.
-        const isTarget = (p: string): boolean => path.resolve(p) === path.resolve(target);
-        vi.spyOn(fs, 'writeFileSync').mockImplementation(((p: fs.PathOrFileDescriptor, ...rest) => {
-            if (typeof p === 'string' && isTarget(p)) throw new Error('EACCES: denied');
-            return (real as unknown as (...a: unknown[]) => unknown)(p, ...rest);
-        }) as typeof fs.writeFileSync);
-        await migrate({ cwd: dir });
-        expect(logs.join('\n')).toContain('Could not write');
-    });
+    it.each([new Error('EACCES: denied'), 'EACCES: denied'])(
+        'warns but continues when a transformed file cannot be written back: %s',
+        async failure => {
+            const logs = mute();
+            const dir = tempRoot();
+            const target = join(dir, 'App.tsx');
+            writeFileSync(target, 'export const A = () => <div className="p-4 bg-blue-500" />;');
+            const real = fs.writeFileSync;
+            // migrate writes to the path fast-glob found, which is spelled with
+            // forward slashes on every platform; match on the file, not the
+            // separator, or the spy never fires on Windows and nothing is denied.
+            const isTarget = (p: string): boolean => path.resolve(p) === path.resolve(target);
+            vi.spyOn(fs, 'writeFileSync').mockImplementation(((
+                p: fs.PathOrFileDescriptor,
+                ...rest
+            ) => {
+                if (typeof p === 'string' && isTarget(p)) throw failure;
+                return (real as unknown as (...a: unknown[]) => unknown)(p, ...rest);
+            }) as typeof fs.writeFileSync);
+            await migrate({ cwd: dir });
+            expect(logs.join('\n')).toContain('Could not write App.tsx: EACCES: denied');
+        },
+    );
 
-    it('warns when the audit todo file cannot be written', async () => {
-        const logs = mute();
-        const dir = tempRoot();
-        writeFileSync(
-            join(dir, 'Custom.tsx'),
-            'export const C = () => <div className="p-4 btn-brandx" />;',
-        );
-        const todoPath = join(dir, '.csszyx-todo.json');
-        const real = fs.writeFileSync;
-        vi.spyOn(fs, 'writeFileSync').mockImplementation(((p: fs.PathOrFileDescriptor, ...rest) => {
-            if (typeof p === 'string' && p === todoPath) throw new Error('EACCES: denied');
-            return (real as unknown as (...a: unknown[]) => unknown)(p, ...rest);
-        }) as typeof fs.writeFileSync);
-        await migrate({ cwd: dir, audit: true });
-        expect(logs.join('\n')).toContain('Could not write');
-    });
+    it.each([new Error('EACCES: denied'), 'EACCES: denied'])(
+        'warns when the audit todo file cannot be written: %s',
+        async failure => {
+            const logs = mute();
+            const dir = tempRoot();
+            writeFileSync(
+                join(dir, 'Custom.tsx'),
+                'export const C = () => <div className="p-4 btn-brandx" />;',
+            );
+            const todoPath = join(dir, '.csszyx-todo.json');
+            const real = fs.writeFileSync;
+            vi.spyOn(fs, 'writeFileSync').mockImplementation(((
+                p: fs.PathOrFileDescriptor,
+                ...rest
+            ) => {
+                if (typeof p === 'string' && p === todoPath) throw failure;
+                return (real as unknown as (...a: unknown[]) => unknown)(p, ...rest);
+            }) as typeof fs.writeFileSync);
+            await migrate({ cwd: dir, audit: true });
+            expect(logs.join('\n')).toContain('Could not write .csszyx-todo.json: EACCES: denied');
+        },
+    );
 });
 
 describe('migrate TTY prompt branch', () => {
@@ -178,7 +190,10 @@ describe('migrate TTY prompt branch', () => {
             'export const A = () => <div className="p-4 total-mysteryx">x</div>;',
         );
         const originalTTY = process.stdout.isTTY;
-        Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+        Object.defineProperty(process.stdout, 'isTTY', {
+            value: true,
+            configurable: true,
+        });
         vi.spyOn(readline, 'createInterface').mockReturnValue({
             question: (_q: string, cb: (answer: string) => void) => cb('y'),
             close: () => {},
@@ -197,6 +212,36 @@ describe('migrate TTY prompt branch', () => {
 });
 
 describe('migrate @sz-todo strip corner cases', () => {
+    it('preserves an empty marker and removes an inline resolved marker', async () => {
+        mute();
+        const dir = tempRoot();
+        const file = join(dir, 'K.tsx');
+        writeFileSync(
+            file,
+            'export const K = () => <div>{/* @sz-todo: */}{/* @sz-todo: note */}<span className="p-4 mysteryclassx" /></div>;',
+        );
+        writeFileSync(join(dir, '.csszyx-todo.json'), JSON.stringify({ mysteryclassx: { m: 1 } }));
+        await migrate({ cwd: dir, resolveTodos: '.csszyx-todo.json' });
+        const out = readFileSync(file, 'utf8');
+        expect(out).toContain('{/* @sz-todo: */}');
+        expect(out).not.toContain('@sz-todo: note');
+        expect(out).toContain('m: 1');
+    });
+
+    it('abbreviates a long unresolved list without removing its todo entries', async () => {
+        const logs = mute();
+        const dir = tempRoot();
+        const names = Array.from({ length: 12 }, (_, index) => `unknown-item-${index}`);
+        writeFileSync(
+            join(dir, 'K.tsx'),
+            `export const K = () => <div className="p-4 ${names.join(' ')}" />;`,
+        );
+        const todoPath = join(dir, '.csszyx-todo.json');
+        writeFileSync(todoPath, JSON.stringify({}));
+        await migrate({ cwd: dir, resolveTodos: '.csszyx-todo.json' });
+        expect(logs.join('\n')).toMatch(/Still unresolved after this pass \(12\): .*\.\.\./);
+        expect(readFileSync(join(dir, 'K.tsx'), 'utf8')).toContain(names.join(' '));
+    });
     it('strips a complete single-line todo (with trailing newline) while keeping a plain comment', async () => {
         mute();
         const dir = tempRoot();

@@ -703,3 +703,91 @@ test('a member the structured form does not declare offers nothing', () => {
         0,
     );
 });
+
+test('unassistable syntax and positions fail closed', () => {
+    for (const source of [
+        'const A = <div foo:sz={{ /*|*/ }} />;',
+        'const A = <div szs={{ slot: { /*|*/ } }} />;',
+        "import { szv } from 'csszyx'; szv({ variants: { /*|*/ } });",
+        "import * as cx from 'csszyx'; cx.unrelated({ /*|*/ });",
+        "import { szr } from 'other'; szr({ /*|*/ });",
+        'const A = <div sz={{ bg: { unexpected: "/*|*/" } }} />;',
+        'const A = <div sz={{ [key]: "/*|*/" }} />;',
+        'const A = <div sz={{ bg: { color' + ' '.repeat(256) + ': /*|*/ } }} />;',
+        'const A = <div sz={{ ' + 'x'.repeat(257) + '/*|*/ }}/>;',
+        'const A = <div sz={{ p: 4' + ' '.repeat(257) + '/*|*/ }}/>;',
+    ]) assert.deepStrictEqual(entriesAtMarker(source), [], source);
+});
+
+test('unresolved aliased imports still prove the runtime call', () => {
+    const entries = entriesAtMarker("import { szr as style } from 'csszyx'; style({ /*|*/ });", { forceUnresolvedSymbols: true });
+    assert.ok(entries.some(entry => entry.name === 'p'));
+});
+
+// These calls use TypeScript's real recovered AST, with only the checker boundary
+// replaced: a language-service host can answer before symbol binding completes.
+function directContext(marked, checkerFor = () => ({ getSymbolAtLocation: () => undefined }), stop = () => false, tsModule = ts) {
+    const position = marked.indexOf('/*|*/');
+    const source = ts.createSourceFile('/virtual/a.tsx', marked.replace('/*|*/', ''), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return require('../dist/context.js').getSzContext(tsModule, source, position, () => checkerFor(source), stop);
+}
+
+test('cancellation interrupts each stage of source and symbol lookup', () => {
+    const cases = [
+        ["import {szr as style} from 'csszyx'; style({ /*|*/ });", () => ({ getSymbolAtLocation: () => undefined })],
+        ["import {szr} from 'csszyx'; szr({ /*|*/ });", source => ({ getSymbolAtLocation: () => ({ declarations: [source.statements[0].importClause.namedBindings.elements[0]] }) })],
+        ["import * as cx from 'csszyx'; cx.szr({ /*|*/ });", source => ({ getSymbolAtLocation: () => ({ declarations: [source.statements[0].importClause.namedBindings] }) })],
+    ];
+    for (const [source, checker] of cases) {
+        let checks = 0;
+        assert.strictEqual(directContext(source, checker, () => { checks++; return false; }).kind, 'key');
+        for (let cut = 1; cut <= checks; cut++) {
+            let seen = 0;
+            assert.strictEqual(directContext(source, checker, () => ++seen >= cut), null, `cancel ${cut}: ${source}`);
+        }
+    }
+});
+
+test('incomplete checker symbols never turn unrelated calls into styling calls', () => {
+    const bareSymbol = () => ({ getSymbolAtLocation: () => ({}) });
+    assert.strictEqual(directContext('szr({ /*|*/ })', bareSymbol), null);
+    assert.strictEqual(directContext('cx.szr({ /*|*/ })', bareSymbol), null);
+    assert.strictEqual(directContext("import * as cx from 'csszyx'; factory().szr({ /*|*/ });"), null);
+    assert.strictEqual(directContext("import {szr} from 'csszyx'; (szr)({ /*|*/ });"), null);
+    assert.strictEqual(directContext("import szr from 'csszyx'; szr({ /*|*/ });", source => ({ getSymbolAtLocation: () => ({ declarations: [source.statements[0].importClause] }) })), null);
+});
+
+test('a property symbol can prove its import before its receiver symbol is ready', () => {
+    const context = directContext("import {szr} from 'csszyx'; cx.szr({ /*|*/ });", source => ({
+        getSymbolAtLocation: node => node.text === 'szr' ? { declarations: [source.statements[0].importClause.namedBindings.elements[0]] } : undefined,
+    }));
+    assert.strictEqual(context.kind, 'key');
+});
+
+test('unsupported EOF navigation and invalid host positions return no context', () => {
+    const compat = { ...ts, findPrecedingToken: undefined };
+    assert.strictEqual(directContext('const A = <div sz={{ /*|*/', undefined, undefined, compat), null);
+    const { getSzContext } = require('../dist/context.js');
+    const source = ts.createSourceFile('x.tsx', 'const A = <div sz={{}}/>', ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    for (const position of [-1, source.getFullText().length + 1]) assert.strictEqual(getSzContext(ts, source, position, () => { throw Error('checker must not run'); }), null);
+    const declaration = ts.createSourceFile('x.d.ts', '', ts.ScriptTarget.Latest, true);
+    assert.strictEqual(getSzContext(ts, declaration, 0, () => { throw Error('checker must not run'); }), null);
+});
+
+test('value completions respect the values-disabled setting', () => {
+    const fileName = '/virtual/test.tsx';
+    const source = ts.createSourceFile(fileName, 'const A = <div sz={{ p:  }}/>', ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const entries = computeSzEntries({ tsMod: ts, fileName, position: source.text.indexOf('p:') + 3,
+        config: { enabled: true, values: false }, deadline: Infinity, projectRoot: '/virtual',
+        languageService: { getProgram: () => ({ getSourceFile: () => source, getTypeChecker: () => { throw Error('JSX needs no checker'); } }) },
+    });
+    assert.deepStrictEqual(entries, []);
+});
+
+test('slot contexts keep their opening element while TypeScript recovers unfinished tags', () => {
+    for (const source of [
+        'const A = <Widget szs={{ root: { /*|*/',
+        'const A = <Widget szs={{ root: { /*|*/ } }} />',
+        'const A = <Widget szs={{ root: { /*|*/ } }}>',
+    ]) assert.strictEqual(directContext(source).kind, 'key', source);
+});

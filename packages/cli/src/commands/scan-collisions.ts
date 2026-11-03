@@ -178,7 +178,7 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
     const names = sortStrings(risky.keys());
     printWarn(`${names.length} class name(s) could collide with a mangled token:`);
     for (const name of names) {
-        const where = [...(risky.get(name) ?? [])].slice(0, 3).join(', ');
+        const where = [...(risky.get(name) as Set<string>)].slice(0, 3).join(', ');
         printInfo(`  .${name}  (selector declared in ${where})`);
     }
     // The scan reads stylesheets only. A class is usually emitted from a

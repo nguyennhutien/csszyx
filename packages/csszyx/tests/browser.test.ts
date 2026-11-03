@@ -43,6 +43,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
 describe('csszyx/browser standalone runtime', () => {
@@ -80,6 +81,37 @@ describe('csszyx/browser standalone runtime', () => {
         await loadRuntime();
         expect(document.getElementById('n')?.className).toBe('');
         expect(document.getElementById('e')?.className).toBe('');
+    });
+
+    it('ignores empty tokens in externally supplied class aliases and raw class lists', async () => {
+        window.__SZ_MANGLE_MAP__ = { 'p-4': ' x  y ' };
+        document.body.innerHTML =
+            '<div id="alias" sz="{p: 4}"></div><div id="raw" sz=" flex gap-2 "></div>';
+        await loadRuntime();
+        expect(document.getElementById('alias')?.className).toBe('x y');
+        expect(document.getElementById('raw')?.className).toBe('flex gap-2');
+    });
+
+    it('does not initialize the DOM without a window', async () => {
+        vi.stubGlobal('window', undefined);
+        await loadRuntime();
+        expect(document.body.classList.contains('sz-ready')).toBe(false);
+    });
+
+    it('ignores inserted text and comment nodes, and still compiles an element beside them', async () => {
+        await loadRuntime();
+        const element = document.createElement('div');
+        element.setAttribute('sz', '{p: 4}');
+        // One mutation batch: the text and comment nodes must be skipped
+        // without stopping the observer before it reaches the element.
+        document.body.append(
+            document.createTextNode('text'),
+            document.createComment('comment'),
+            element,
+        );
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(document.body.textContent).toBe('text');
+        expect(element.className).toContain('p-4');
     });
 
     it('routes class names through a window mangle map when present', async () => {

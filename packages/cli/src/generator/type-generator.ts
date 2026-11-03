@@ -52,7 +52,7 @@ interface PropertyMapping {
 /**
  * Mapping of sz properties to Tailwind utilities.
  */
-export const PROPERTY_MAPPINGS: PropertyMapping[] = [
+export const PROPERTY_MAPPINGS = [
     // Layout
     {
         prop: 'display',
@@ -416,12 +416,12 @@ export const PROPERTY_MAPPINGS: PropertyMapping[] = [
         valueType: 'ease',
         description: 'Transition timing function',
     },
-];
+] as const satisfies readonly PropertyMapping[];
 
 /**
  * Static value types that don't come from theme.
  */
-const STATIC_VALUE_TYPES: Record<string, string[]> = {
+const STATIC_VALUE_TYPES = {
     display: [
         'block',
         'inline-block',
@@ -543,7 +543,7 @@ const STATIC_VALUE_TYPES: Record<string, string[]> = {
     ],
     transition: ['none', 'all', 'colors', 'opacity', 'shadow', 'transform'],
     ease: ['linear', 'in', 'out', 'in-out'],
-};
+} satisfies Record<string, string[]>;
 
 /**
  * Generate a union whose values are safe single-quoted TypeScript literals.
@@ -618,7 +618,8 @@ export function generateTypeDeclarations(
     ];
 
     // Build value type map
-    const valueTypeMap: Record<string, string[]> = {
+    const valueTypeMap: Record<(typeof PROPERTY_MAPPINGS)[number]['valueType'], string[]> &
+        Record<string, string[]> = {
         colors,
         spacing,
         sizing,
@@ -734,7 +735,7 @@ export function generateTypeDeclarations(
     const properties: string[] = [];
 
     for (const mapping of PROPERTY_MAPPINGS) {
-        const values = valueTypeMap[mapping.valueType] || [];
+        const values = valueTypeMap[mapping.valueType];
         const unionType = generateUnionType(values);
 
         let propDef = '';
