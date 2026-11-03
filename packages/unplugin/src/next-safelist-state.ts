@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { CsszyxError } from '@csszyx/compiler/errors';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import lockfile from 'proper-lockfile';
 import { type AtomicWriteOptions, atomicWriteFileSync } from './atomic-write.js';
 import { diagnosticMessage } from './diagnostic-message.js';
@@ -223,7 +224,7 @@ interface ShardRecord {
  */
 export function resolveNextSafelistStatePaths(
     rootDir: string,
-    cacheDir = '.csszyx/cache',
+    cacheDir: string = DEFAULT_BUILD_CONFIG.cacheDir,
     outputFile: string = SAFELIST_FILE,
 ): NextSafelistStatePaths {
     const resolvedCacheDir = path.resolve(rootDir, cacheDir);

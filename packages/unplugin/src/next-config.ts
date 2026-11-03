@@ -156,6 +156,8 @@ export function csszyxTurbopack(
         });
     }
     const existing = options.turbopack ?? {};
+    // `DEFAULT_BUILD_CONFIG.parser`, spelled out: importing `@csszyx/types`
+    // would nearly double this entry's import time, and a test pins the two.
     const { glob = '*.tsx', parserMode = 'rust', safelistOutputFile } = options;
     // Must match `csszyx next prebuild`'s default (it bakes { mangleVars: false }
     // into the production manifest hash) or the loader's config-hash gate fails.

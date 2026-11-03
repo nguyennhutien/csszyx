@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { describe, expect, it } from 'vitest';
 
 import { csszyxTurbopack } from '../src/next-config.js';
@@ -17,11 +18,11 @@ describe('csszyxTurbopack', () => {
         expect('as' in rule).toBe(false);
     });
 
-    it('defaults parserMode to rust', () => {
+    it('defaults parserMode to the build default parser', () => {
         const rule = csszyxTurbopack().rules?.['*.tsx'] as {
             loaders: Array<{ options: { parserMode: string } }>;
         };
-        expect(rule.loaders[0].options.parserMode).toBe('rust');
+        expect(rule.loaders[0].options.parserMode).toBe(DEFAULT_BUILD_CONFIG.parser);
     });
 
     it.each([true, false])('forwards an explicit importedStaticSz of %s', value => {

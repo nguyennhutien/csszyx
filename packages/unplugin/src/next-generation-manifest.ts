@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { diagnosticError } from './diagnostic-message.js';
 import { type AtomicWriteOptions, atomicWriteFileSync } from './next-safelist-state.js';
 
@@ -46,7 +47,7 @@ export type NextGenerationManifestValidation = { ok: true } | { ok: false; reaso
  */
 export function resolveNextGenerationManifestPath(
     rootDir: string,
-    cacheDir = '.csszyx/cache',
+    cacheDir: string = DEFAULT_BUILD_CONFIG.cacheDir,
 ): string {
     return path.resolve(rootDir, cacheDir, 'generation-manifest.json');
 }

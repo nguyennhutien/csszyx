@@ -16,6 +16,7 @@ import path from 'node:path';
 import { isCsszyxError } from '@csszyx/compiler/errors';
 import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import type { SzDiagnosticLevel } from '@csszyx/types';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { isAtLeastLevel } from '@csszyx/unplugin/diagnostics';
 import {
     auditMerges,
@@ -23,7 +24,6 @@ import {
     type MergeAuditKind,
     openStylesheetModel,
 } from '@csszyx/unplugin/next-prebuild';
-
 import {
     type FindingInput,
     PREFIX_DISAGREEMENT,
@@ -117,7 +117,7 @@ export async function reportMergeAudit(
     try {
         ({ model } = await openStylesheetModel({
             root: input.cwd,
-            cacheDir: path.join(input.cwd, '.csszyx/cache'),
+            cacheDir: path.join(input.cwd, DEFAULT_BUILD_CONFIG.cacheDir),
         }));
     } catch (error) {
         out.runWarn(`\u2716 Merge audit did not run: ${notRunReason(error)}`);

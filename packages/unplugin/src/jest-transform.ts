@@ -40,10 +40,9 @@ import path from 'node:path';
 
 import { VERSION as compilerVersion, type SourceTransformResult } from '@csszyx/compiler';
 import { transformSourceUnrendered } from '@csszyx/compiler/internal';
-
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
-
 import {
     importMergeRegistration,
     loadsCsszyxRuntime,
@@ -778,7 +777,8 @@ interface JestProject {
  * @returns The project.
  */
 function openJestProject(root: string, options: JestTransformOptions): JestProject {
-    const cacheRoot = options.cacheRoot ?? path.resolve(root, '.csszyx/cache', 'transform');
+    const cacheRoot =
+        options.cacheRoot ?? path.resolve(root, DEFAULT_BUILD_CONFIG.cacheDir, 'transform');
     // The facts file lives beside the transform cache, as the build writes it.
     const cacheDir = path.dirname(cacheRoot);
     const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();
