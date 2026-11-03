@@ -83,6 +83,7 @@ export function globToRegExp(pattern: string): RegExp {
         }
     }
     out += '$';
+    // eslint-disable-next-line security/detect-non-literal-regexp -- every character outside `*` and `?` is escaped above
     return new RegExp(out);
 }
 

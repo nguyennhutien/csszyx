@@ -180,6 +180,7 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
         const { root, page } = app(PREFIXED);
 
         expect(() => runNextTurboLoader(APP, loaderContext(root, page), OPTIONS)).toThrow(
+            // eslint-disable-next-line security/detect-non-literal-regexp -- the root is escaped with escapeRegExp
             new RegExp(
                 `^\\[csszyx\\] next-prefix-unread:\\n {2}The Turbopack loader has no Tailwind prefix for \`${escapeRegExp(root)}\` \\(.+\\), so it stops\\.\\n` +
                     ' {2}help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first\\.\\n' +
@@ -318,6 +319,7 @@ describe('the Next prebuild and the Tailwind prefix', () => {
                 code: 'next-prefix-unread',
                 args: { lane: 'prebuild', root, reason: expect.any(String) },
                 message: expect.stringMatching(
+                    // eslint-disable-next-line security/detect-non-literal-regexp -- the root is escaped with escapeRegExp
                     new RegExp(
                         `^\\[csszyx\\] next-prefix-unread:\\n {2}The Next prebuild has no Tailwind prefix for \`${escapeRegExp(root)}\` \\(.+\\), so it stops\\.\\n` +
                             ' {2}help: run it through `csszyx next prebuild`, which reads the stylesheets first; from a script, call `prepareNextStylesheetFacts` before `runNextPrebuild`\\.\\n' +

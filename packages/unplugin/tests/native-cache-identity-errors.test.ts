@@ -30,6 +30,7 @@ vi.mock('node:module', async original => {
                             throw new Error('native package metadata disappeared');
                         return {};
                     }
+                    // eslint-disable-next-line security/detect-non-literal-require -- forwards every other id to the real require
                     return require(id);
                 },
                 require,

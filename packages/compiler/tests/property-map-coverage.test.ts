@@ -37,16 +37,19 @@ const SPECIAL_CASE_EXEMPT = new Set([
     '@container',
 ]);
 
+/**
+ * Every key the tests write at the start of an object entry: `{ key:` or
+ * `, key:`, never part of a longer key (`p` is not found in `pt:`).
+ */
+const TESTED_KEYS = new Set(Array.from(testContent.matchAll(/[{,]\s*([\w$]+)\s*:/g), m => m[1]));
+
 describe('PROPERTY_MAP — every key has test coverage', () => {
     const keys = Object.keys(PROPERTY_MAP).filter(k => !SPECIAL_CASE_EXEMPT.has(k));
 
     for (const key of keys) {
         it(`${key}`, () => {
-            // Matches: `{ key:` or `, key:` — ensures the key starts an object
-            // entry and is immediately followed by : (no partial match like p → pt).
-            const pattern = new RegExp(`[{,]\\s*${key}\\s*:`);
             expect(
-                pattern.test(testContent),
+                TESTED_KEYS.has(key),
                 `No test found for PROPERTY_MAP key "${key}". Add a test in packages/compiler/tests/.`,
             ).toBe(true);
         });
@@ -60,9 +63,8 @@ describe('PROPERTY_MAP — every key has test coverage', () => {
 describe('KNOWN_SPECIAL_PROPERTIES — every key has test coverage', () => {
     for (const key of KNOWN_SPECIAL_PROPERTIES) {
         it(`${key}`, () => {
-            const pattern = new RegExp(`[{,]\\s*${key}\\s*:`);
             expect(
-                pattern.test(testContent),
+                TESTED_KEYS.has(key),
                 `No test found for special-cased key "${key}". Add a test in packages/compiler/tests/.`,
             ).toBe(true);
         });

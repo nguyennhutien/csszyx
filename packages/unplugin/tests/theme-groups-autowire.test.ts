@@ -107,6 +107,7 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     it('every theme category reaches its group, weights not mis-filed as families', () => {
         // Whitespace-tolerant: the bundler may pretty-print the payload.
         const entry = (key: string, token: string): RegExp =>
+            // eslint-disable-next-line security/detect-non-literal-regexp -- key and token are fixed theme names from this test
             new RegExp(`"${key}":\\s*\\[\\s*"${token}"\\s*\\]`);
         expect(bundle).toMatch(entry('colors', 'brand'));
         expect(bundle).toMatch(entry('textSizes', 'huge'));

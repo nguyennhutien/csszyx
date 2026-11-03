@@ -43,6 +43,7 @@ export default [
             '**/examples/**',
             '**/pkg/**',
             '**/pkg-node/**',
+            '**/pkg-parser/**',
             '**/.turbo/**',
             '**/test-results/**',
             '**/playwright-report/**',
@@ -68,7 +69,13 @@ export default [
         files: ['**/*.ts', '**/*.tsx'],
         ...security.configs.recommended,
         rules: {
-            ...security.configs.recommended.rules,
+            // Errors, not the plugin's warnings: `eslint .` in CI fails only on
+            // an error, so a warning reached main as an annotation nobody had
+            // to read. A deliberate case is disabled on its line, with the
+            // reason, so the next one is still caught.
+            ...Object.fromEntries(
+                Object.keys(security.configs.recommended.rules).map(rule => [rule, 'error']),
+            ),
             'security/detect-object-injection': 'off',
             'security/detect-non-literal-fs-filename': 'off',
             'security/detect-unsafe-regex': 'off',
