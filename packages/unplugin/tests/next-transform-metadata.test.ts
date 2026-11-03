@@ -24,6 +24,91 @@ describe('Next transform metadata', () => {
         expect(metadata.classes).toEqual(['flex', 'text-red-500']);
         expect(metadata.classes).not.toContain('italic');
     });
+
+    /**
+     * The classes collected from one runtime `_sz` result.
+     * @param code - The transformed code the engine would have returned.
+     * @returns The collected classes, sorted.
+     */
+    function runtimeClasses(code: string): string[] {
+        const source = 'const App=({rest})=> <div sz={{ ...rest }} />;';
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
+        return collectNextTransformMetadata(
+            { ...result, usesRuntime: true, code },
+            source,
+            '/repo/src/App.tsx',
+        ).classes;
+    }
+
+    it.each([
+        ['a number as the last key', '_sz({ display: "flex", p: 4 })', ['flex', 'p-4']],
+        ['a boolean as the last key', '_sz({ p: 4, truncate: true })', ['p-4', 'truncate']],
+        ['a key before a trailing comma', '_sz({ p: 4, m: 2, })', ['m-2', 'p-4']],
+        ['a number before a line comment', '_sz({ p: 4 // pad\n })', ['p-4']],
+    ])('collects %s of a runtime object', (_label, code, classes) => {
+        expect(runtimeClasses(code)).toEqual(classes);
+    });
+
+    it.each([
+        // `hover: { p: 4 }` is `hover:p-4`, which the engine reports itself;
+        // a bare `p-4` read out of it is a class the source never asked for.
+        ['a variant object', "_sz({ hover: { p: 4, color: 'red-500' }, m: 2 })", ['m-2']],
+        ['a parenthesised spread', '_sz({ w: x, ...(f ? {} : { mt: 1 }), m: 2 })', ['m-2']],
+    ])(
+        'reads only the top level of a runtime object, never a key inside %s',
+        (_label, code, classes) => {
+            expect(runtimeClasses(code)).toEqual(classes);
+        },
+    );
+
+    it.each([
+        [
+            'a quoted string',
+            '_sz({ content: "{", hover: { y: "a\\"}", z: `}` }, w: `(`, p: 4 })',
+            ['content-[{]', 'p-4'],
+        ],
+        ['a block comment', '_sz({ /* } */ p: 4, m: 2 })', ['m-2', 'p-4']],
+        [
+            'a regular expression',
+            '_sz({ w: /[}]/.test(v) ? "full" : "auto", p: 4, m: 2 })',
+            ['m-2', 'p-4'],
+        ],
+        [
+            'a template inside a template',
+            '_sz({ content: `${b ? `}` : ""}`, p: 4, m: 2 })',
+            ['m-2', 'p-4'],
+        ],
+    ])('keeps a brace inside %s from ending the runtime object', (_label, code, classes) => {
+        expect(runtimeClasses(code)).toEqual(classes);
+    });
+
+    it.each([
+        [
+            'a line comment',
+            "_sz({ ...r, // it's\n hover: { p: 8 }, m: 2 }); const o = { gap: 3 }; s('y')",
+        ],
+        [
+            'a regular expression',
+            "_sz({ w: /'/.test(v) ? 1 : 0, m: 2 }); const cfg = { opacity: 50 }; t('x')",
+        ],
+        [
+            'a template interpolation',
+            '_sz({ content: `${"`"}`, m: 2 }); const o = { gap: 3 }; q("x")',
+        ],
+    ])('keeps a quote inside %s from reading past the runtime object', (_label, code) => {
+        expect(runtimeClasses(code)).toEqual(['m-2']);
+    });
+
+    it.each([
+        ['an object with no closing brace', '_sz({ p: 4, m: 2', ['m-2', 'p-4']],
+        ['a string with no closing quote', "_sz({ p: 4, a: 'oops, m: 2 })", ['m-2', 'p-4']],
+        ['a call that is not `_sz`', 'foo({ p: 4 })', []],
+        ['an object followed by other code', '_sz({ p: 4 }); const o = { m: 2 }', ['p-4']],
+        ['two calls in a row', '_sz({ p: 4 }); _sz({ m: 2 })', ['m-2', 'p-4']],
+    ])('reads %s without losing or inventing a class', (_label, code, classes) => {
+        expect(runtimeClasses(code)).toEqual(classes);
+    });
+
     it('collects generated classes separately from raw className strings', () => {
         const source =
             'const App=()=> <div className="existing" sz={{ p: 4, display: "flex" }} />;';

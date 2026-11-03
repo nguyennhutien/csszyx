@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 
 import { type SourceTransformResult, transform } from '@csszyx/compiler';
-import { collectMergeCallClassNames } from './authored-class-scanner.js';
+import { collectMergeCallClassNames, lexicalRegionEnd } from './authored-class-scanner.js';
 import { emittedClassSites } from './dead-class.js';
 import type { NextSafelistShardInput, NextShardClassSite } from './next-safelist-state.js';
 import { sortStrings } from './sort.js';
@@ -94,21 +94,89 @@ export function collectRuntimeStaticClasses(
     }
     const szCallRe = /_sz\(\s*\{/g;
     for (const szMatch of result.code.matchAll(szCallRe)) {
-        let depth = 1;
-        let index = szMatch.index + szMatch[0].length;
-        while (index < result.code.length && depth > 0) {
-            if (result.code[index] === '{') {
-                depth++;
-            } else if (result.code[index] === '}') {
-                depth--;
-            }
-            index++;
-        }
-        const objectSource = result.code.slice(szMatch.index + szMatch[0].length, index - 1);
+        const objectSource = topLevelOf(result.code, szMatch.index + szMatch[0].length);
         collectRuntimeStringClasses(objectSource, discoveredClasses);
         collectRuntimeNumberClasses(objectSource, discoveredClasses);
         collectRuntimeBooleanClasses(objectSource, discoveredClasses);
     }
+}
+
+/**
+ * The top level of the object that opens just before `start`, up to its
+ * closing brace, with every nested object, array and call blanked out. A key
+ * inside `hover: { p: 4 }` lowers under its variant, which the engine reports
+ * itself, so read on its own it would name a class the source never asked
+ * for. Strings, templates, comments and regular expressions are stepped over
+ * whole by the scanner the authored-class pass uses, so a brace or a quote
+ * inside one neither nests, closes nor opens anything. Only a quoted string
+ * at the top level stays visible, because it is a value the collectors read.
+ *
+ * @param code - The transformed source.
+ * @param start - The index just past the object's opening brace.
+ * @returns The object's top-level text, everything else replaced by spaces.
+ */
+function topLevelOf(code: string, start: number): string {
+    const scan: TopLevelScan = { depth: 0, out: '' };
+    let cursor = start;
+    while (cursor < code.length) {
+        const regionEnd = lexicalRegionEnd(code, cursor);
+        if (regionEnd !== cursor) {
+            keepRegion(scan, code.slice(cursor, regionEnd));
+            cursor = regionEnd;
+        } else if (!keepCode(scan, code.charAt(cursor++))) break;
+    }
+    return scan.out;
+}
+
+/** Where {@link topLevelOf} is: how deep it has nested, and what it kept. */
+interface TopLevelScan {
+    depth: number;
+    out: string;
+}
+
+/**
+ * Append a string, template, comment or regular expression: a quoted string
+ * at the top level as written, anything else blanked.
+ *
+ * @param scan - The scan to append to.
+ * @param region - The region's source text.
+ */
+function keepRegion(scan: TopLevelScan, region: string): void {
+    scan.out += scan.depth === 0 && QUOTES.has(region.charAt(0)) ? region : blank(region);
+}
+
+/**
+ * Append one character of ordinary code, tracking how deep it nests.
+ *
+ * @param scan - The scan to append to.
+ * @param ch - The character.
+ * @returns `false` at the brace that closes the object, `true` otherwise.
+ */
+function keepCode(scan: TopLevelScan, ch: string): boolean {
+    if (CLOSERS.has(ch)) {
+        if (scan.depth === 0) return false;
+        scan.depth--;
+        scan.out += ' ';
+        return true;
+    }
+    if (OPENERS.has(ch)) scan.depth++;
+    scan.out += scan.depth === 0 ? ch : ' ';
+    return true;
+}
+
+const OPENERS = new Set(['{', '[', '(']);
+const CLOSERS = new Set(['}', ']', ')']);
+const QUOTES = new Set(['"', "'"]);
+
+/**
+ * Replace text with spaces, keeping its line breaks, so a key the collectors
+ * read after a blanked line comment still ends at a newline.
+ *
+ * @param text - The text to hide.
+ * @returns Spaces and newlines of the same length.
+ */
+function blank(text: string): string {
+    return text.replaceAll(/[^\n]/g, ' ');
 }
 
 /**
@@ -136,7 +204,7 @@ function collectRuntimeStringClasses(objectSource: string, discoveredClasses: Se
  * @param discoveredClasses
  */
 function collectRuntimeNumberClasses(objectSource: string, discoveredClasses: Set<string>): void {
-    const numberKeyValue = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+    const numberKeyValue = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n]|$)/g;
     for (const match of objectSource.matchAll(numberKeyValue)) {
         try {
             collectTransformClasses(
@@ -155,7 +223,7 @@ function collectRuntimeNumberClasses(objectSource: string, discoveredClasses: Se
  * @param discoveredClasses
  */
 function collectRuntimeBooleanClasses(objectSource: string, discoveredClasses: Set<string>): void {
-    const booleanKeyValue = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+    const booleanKeyValue = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n]|$)/g;
     for (const match of objectSource.matchAll(booleanKeyValue)) {
         try {
             collectTransformClasses(
