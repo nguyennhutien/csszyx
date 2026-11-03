@@ -12,6 +12,11 @@ import { pathToFileURL } from 'node:url';
  * sites across nine packages plus the Rust engine, and rewording one is a
  * one-line change that leaves the page silently lying.
  *
+ * Every docs page is read, since the upgrade guide and the feature pages quote
+ * the same messages. A line printed under a `[csszyx] <code>:` header is held
+ * to that code's templates in the registry, so an example value in the quote
+ * does not hide a reworded sentence, and the header's code must exist.
+ *
  * This gate runs one direction only — every message quoted in the docs must be
  * findable in source. That direction is exact, so it can block merges today.
  * The opposite direction (source messages nobody documented) needs a baseline
@@ -28,7 +33,11 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 /** Where the engine diagnostics' templates live. */
 const DIAGNOSTIC_REGISTRY = 'scripts/diagnostics/registry.mjs';
 
-const DOC_PATH = 'apps/docs/src/content/docs/docs/reference/warnings.mdx';
+/** The page that lists every message; it may quote one without the prefix. */
+const REFERENCE_PAGE = 'apps/docs/src/content/docs/docs/reference/warnings.mdx';
+
+/** Where the docs pages live; every one of them is read. */
+const DOCS_DIRECTORY = 'apps/docs/src/content/docs';
 
 /** Minimum words for a `[csszyx]`-prefixed inline span to count as a message. */
 const MIN_INLINE_WORDS = 4;
@@ -124,29 +133,130 @@ function wordCount(normalized) {
 }
 
 /**
+ * A fence line that opens a diagnostic: the code, then the place it points at.
+ *
+ * The place is example data (`src/Card.tsx:3:16`), so only the code is held to
+ * the registry. The capture is the code.
+ */
+const HEADER_LINE = /^\[csszyx\] ([a-z][a-z0-9-]*):(?:\s+\S+)?\s*$/;
+
+/**
+ * A fence line that is a diagnostic with no place: the code, then the
+ * sentence on the same line. The captures are the code and the sentence.
+ */
+const PLACELESS_LINE = /^\[csszyx\] ([a-z][a-z0-9-]*): (\S+\s+\S.*)$/;
+
+/** Fewest literal words a template needs before it can vouch for a line. */
+const MIN_TEMPLATE_WORDS = 3;
+
+/** A `{name}` slot in a registry template. */
+const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9]*\}/;
+
+/** What follows the code on a production line: the args as JSON, then the link. */
+const PRODUCTION_REST = /^\{.*\} https:\/\/csszyx\.com\/e\/[a-z0-9-]+$/;
+
+/** A fence line that labels what follows as output of an older release. */
+const OLDER_RELEASE_LABEL = /^#\s*0\.17\b/;
+
+/** Any `# ` label inside a fence ends the section an older-release label opened. */
+const FENCE_LABEL = /^#\s/;
+
+/** A problem a message lists under its own sentence: `- (warning) <path>: …`. */
+const NESTED_PROBLEM = /^\s*- \((?:error|warning|info)\) (?:[^\s`]+: )?/;
+
+/** What a nested line is held to: every template of every code. */
+const ANY_CODE = '*';
+
+/** Minimum words for a detail line under a header to count as a message. */
+const MIN_DETAIL_WORDS = 4;
+
+/**
  * Pull the messages a docs page quotes verbatim.
  *
- * Two shapes carry them: an inline code span marked with the `[csszyx]` prefix,
- * and a line inside a ```text fence showing rendered terminal output. Prose that
- * merely mentions an option (`quiet: true`) is not a message, so an inline span
- * has to be prefixed to qualify — being conservative keeps a blocking gate
- * quiet enough to survive.
+ * Inside a ```text fence a diagnostic prints as a header holding its code and
+ * position, then indented sentence, `help:` and `note:` lines. The header gives
+ * a code to look up; each detail line is wording to find in source, except
+ * `docs:`, which is a link. A line with the message marker outside that shape
+ * is wording too. Lines under a `# 0.17` label show the old output on purpose
+ * and are skipped.
+ *
+ * Outside a fence, an inline code span counts when it carries the prefix. On
+ * the reference page a long unprefixed span counts as well, because the
+ * fallback table splits each message into reason and suggestion cells; on any
+ * other page such a span is far more often a command or a type error than a
+ * quote, so only marked spans count there.
  *
  * @param mdx Raw MDX file contents.
- * @returns Messages with the 1-based line they appear on.
+ * @param options.reference Whether this is the warnings reference page.
+ * @returns Wording entries `{ text, line }` and header entries `{ code, line }`,
+ *          with the 1-based line each appears on.
  */
-export function extractDocumentedMessages(mdx) {
+export function extractDocumentedMessages(mdx, { reference = true } = {}) {
     const found = [];
     const lines = String(mdx).split('\n');
     let inFence = false;
+    let olderRelease = false;
+    let underHeader;
 
     lines.forEach((line, index) => {
         if (/^\s*```/.test(line)) {
             inFence = !inFence;
+            olderRelease = false;
+            underHeader = undefined;
             return;
         }
 
         if (inFence) {
+            if (FENCE_LABEL.test(line)) {
+                olderRelease = OLDER_RELEASE_LABEL.test(line);
+                underHeader = undefined;
+                return;
+            }
+            if (olderRelease) {
+                return;
+            }
+            const header = HEADER_LINE.exec(line);
+            if (header) {
+                found.push({ code: header[1], line: index + 1 });
+                underHeader = header[1];
+                return;
+            }
+            const placeless = PLACELESS_LINE.exec(line.trim());
+            if (placeless) {
+                const [, code, sentence] = placeless;
+                found.push({ code, line: index + 1 });
+                // A production line carries the args as JSON and the link in
+                // place of a sentence; only its code is wording to check.
+                if (!PRODUCTION_REST.test(sentence)) {
+                    found.push({ text: sentence, line: index + 1, under: code });
+                }
+                underHeader = code;
+                return;
+            }
+            if (underHeader && /^\s+\S/.test(line)) {
+                // A bullet, and anything indented under one, is another
+                // diagnostic's sentence that this one lists, so any template
+                // may account for it.
+                const nested = NESTED_PROBLEM.test(line) || /^\s{4}/.test(line);
+                // The renderer writes the `help:` and `note:` labels and a
+                // bullet's level and path; source holds only the text after them.
+                const detail = line
+                    .trim()
+                    .replace(NESTED_PROBLEM, '')
+                    .replace(/^(?:help|note):\s*/, '');
+                if (
+                    !line.trim().startsWith('docs:') &&
+                    wordCount(normalizeMessage(detail)) >= MIN_DETAIL_WORDS
+                ) {
+                    found.push({
+                        text: detail,
+                        line: index + 1,
+                        under: nested ? ANY_CODE : underHeader,
+                    });
+                }
+                return;
+            }
+            underHeader = undefined;
             // A fence renders a whole terminal block, including a filename
             // header and indented detail lines built from example data. Only the
             // prefixed line is a message; the rest illustrates the layout.
@@ -157,11 +267,17 @@ export function extractDocumentedMessages(mdx) {
         }
 
         for (const text of extractCodeSpans(line)) {
+            const header = HEADER_LINE.exec(text);
+            if (header) {
+                found.push({ code: header[1], line: index + 1 });
+                continue;
+            }
             const words = wordCount(normalizeMessage(text));
-            const required = text.includes('[csszyx]')
-                ? MIN_INLINE_WORDS
-                : MIN_UNPREFIXED_INLINE_WORDS;
-            if (words >= required) {
+            const marked = text.includes('[csszyx]');
+            if (!marked && !reference) {
+                continue;
+            }
+            if (words >= (marked ? MIN_INLINE_WORDS : MIN_UNPREFIXED_INLINE_WORDS)) {
                 found.push({ text, line: index + 1 });
             }
         }
@@ -247,6 +363,37 @@ export function longestAnchoredRun(message, haystack) {
 }
 
 /**
+ * Whether a printed line is one rendering of a registry template.
+ *
+ * A `{name}` placeholder stands for any non-empty text, the way the renderer
+ * fills it from the diagnostic's args or a computed hint; everything else must
+ * match exactly, apart from runs of whitespace.
+ *
+ * @param template A sentence, `help` or `note` template from the registry.
+ * @param text The line as the docs print it, without its `help:` or `note:` label.
+ * @returns True when the line could have come from the template.
+ */
+export function templateMatches(template, text) {
+    const squash = value => value.replace(/\s+/g, ' ').trim();
+    // A template that spans lines prints each line on its own, so any one of
+    // them may be what the docs quote.
+    if (template.includes('\n')) {
+        return template.split('\n').some(part => templateMatches(part, text));
+    }
+    const literal = template.split(PLACEHOLDER);
+    // A template that is mostly placeholders, such as `{note}.`, would match
+    // any line, so it vouches for none.
+    if (wordCount(normalizeMessage(literal.join(' '))) < MIN_TEMPLATE_WORDS) {
+        return false;
+    }
+    const pattern = squash(template)
+        .split(PLACEHOLDER)
+        .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.+');
+    return new RegExp(`^${pattern}$`).test(squash(text));
+}
+
+/**
  * Find documented messages that source no longer anchors.
  *
  * An exact whole-message match is the wrong test, and measuring proved it: the
@@ -262,11 +409,44 @@ export function longestAnchoredRun(message, haystack) {
  *
  * @param documented Messages from {@link extractDocumentedMessages}.
  * @param haystack Normalized literals from every source file.
+ * @param options.codes Every diagnostic id the registry declares; a header
+ *        entry is missing when its code is not among them.
+ * @param options.templates Each code's sentence, `help` and `note` templates.
+ *        A line printed under that code's header must match one of them, its
+ *        `{placeholders}` standing for any text; a code with none falls back
+ *        to the haystack.
  * @returns Entries that source no longer accounts for.
  */
-export function findMissingMessages(documented, haystack) {
+export function findMissingMessages(
+    documented,
+    haystack,
+    { codes = new Set(), templates = new Map() } = {},
+) {
     const missing = [];
     for (const entry of documented) {
+        if (entry.code !== undefined) {
+            if (!codes.has(entry.code)) {
+                missing.push({ ...entry, text: `[csszyx] ${entry.code}:`, unknownCode: true });
+            }
+            continue;
+        }
+        const own =
+            entry.under === ANY_CODE
+                ? [...templates.values()].flat()
+                : entry.under === undefined
+                  ? undefined
+                  : templates.get(entry.under);
+        if (own !== undefined && own.length > 0) {
+            // A line whose template is all computed text, such as a fallback's
+            // `{fallbackSuggestion}`, is held to the source words instead.
+            if (
+                !own.some(template => templateMatches(template, entry.text)) &&
+                !isFullyComposed(normalizeMessage(entry.text), haystack)
+            ) {
+                missing.push({ ...entry, unmatchedTemplate: true });
+            }
+            continue;
+        }
         const normalized = normalizeMessage(entry.text);
         if (isFullyComposed(normalized, haystack)) {
             continue;
@@ -504,48 +684,73 @@ export function buildSourceHaystack(repositoryRoot, files) {
  *
  * @returns Process exit code: 0 when the docs match, 1 when they do not.
  */
-export function main() {
-    const mdx = readFileSync(path.join(REPO_ROOT, DOC_PATH), 'utf8');
-    const documented = extractDocumentedMessages(mdx);
+export async function main() {
+    const pages = execFileSync('git', ['ls-files', DOCS_DIRECTORY], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+    })
+        .split('\n')
+        .filter(file => /\.mdx?$/.test(file));
+    const documented = pages.flatMap(page =>
+        extractDocumentedMessages(readFileSync(path.join(REPO_ROOT, page), 'utf8'), {
+            reference: page === REFERENCE_PAGE,
+        }).map(entry => ({ ...entry, page })),
+    );
 
-    if (documented.length === 0) {
+    if (!documented.some(entry => entry.page === REFERENCE_PAGE)) {
         console.error(
-            `[warning-docs] Extracted no messages from ${DOC_PATH}. The page or the ` +
+            `[warning-docs] Extracted no messages from ${REFERENCE_PAGE}. The page or the ` +
                 'extractor changed shape — a gate that checks nothing must not pass.',
         );
         return 1;
     }
 
+    const { DIAGNOSTICS } = await import(
+        pathToFileURL(path.join(REPO_ROOT, DIAGNOSTIC_REGISTRY)).href
+    );
+    const codes = new Set(DIAGNOSTICS.map(diagnostic => diagnostic.id));
+    const templates = new Map(
+        DIAGNOSTICS.map(diagnostic => [
+            diagnostic.id,
+            [diagnostic.text, diagnostic.help, diagnostic.note].flatMap(field =>
+                typeof field === 'string' ? [field] : Object.values(field ?? {}),
+            ),
+        ]),
+    );
     const files = listSourceFiles(REPO_ROOT);
     const haystack = buildSourceHaystack(REPO_ROOT, files);
-    const missing = findMissingMessages(documented, haystack);
+    const missing = findMissingMessages(documented, haystack, { codes, templates });
 
     if (missing.length > 0) {
         console.error(
             `[warning-docs] ${missing.length} of ${documented.length} documented message(s) ` +
-                `are no longer anchored in ${files.length} source files:\n`,
+                `in ${pages.length} pages are no longer anchored in ${files.length} source files:\n`,
         );
         for (const entry of missing) {
-            console.error(
-                `  ${DOC_PATH}:${entry.line}  (longest verbatim run: ${entry.anchor}/${entry.required} words)`,
-            );
+            const why = entry.unknownCode
+                ? 'no diagnostic has this code'
+                : entry.unmatchedTemplate
+                  ? `matches no template of \`${entry.under}\``
+                  : `longest verbatim run: ${entry.anchor}/${entry.required} words`;
+            console.error(`  ${entry.page}:${entry.line}  (${why})`);
             console.error(`    ${entry.text.slice(0, 160)}\n`);
         }
         console.error(
             'Either the message was reworded (update the docs to match the source) or it ' +
                 'was removed (drop the row). Placeholders, line breaks and substituted ' +
-                'values are all ignored, so only the wording itself can differ.',
+                'values are all ignored, so only the wording itself can differ. Output of ' +
+                'an older release goes under a `# 0.17` line in its fence.',
         );
         return 1;
     }
 
     console.log(
-        `[warning-docs] ${documented.length} documented message(s) verified against ` +
-            `${files.length} source files.`,
+        `[warning-docs] ${documented.length} documented message(s) in ${pages.length} pages ` +
+            `verified against ${files.length} source files.`,
     );
     return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    process.exit(main());
+    process.exit(await main());
 }

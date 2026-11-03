@@ -18,7 +18,9 @@ changes rename `sz` keys or change an API shape, and the type checker,
    stops on a runtime or an engine from another release, with
    [`runtime-version-skew`](#the-build-stops-when-csszyxruntime-is-from-another-release)
    or [`engine-version-skew`](/docs/reference/warnings/#the-compiler-and-the-engine-come-from-different-releases),
-   each naming the version to install.
+   each naming the version to install. `@csszyx/unplugin` now lists
+   `tailwindcss` `>=3.4.19 <5` as an optional peer, so your package manager
+   warns about a Tailwind outside that range.
 2. If `csszyx init` wrote a `csszyx.config.ts` or `csszyx.config.js` for you,
    replace it with the
    [0.18 template](#csszyxconfig-sets-how-loudly-each-finding-is-reported).
@@ -46,9 +48,9 @@ changes rename `sz` keys or change an API shape, and the type checker,
 
    Its findings are `info`, so the audit does not fail the run.
 7. Build. If the build stops, its message names the stylesheet or the option to
-   fix. A line ending in `(dead-class)` names an `sz` class that
+   fix. A line headed `[csszyx] dead-class:` names an `sz` class that
    [produces no CSS](#the-build-names-sz-classes-that-produce-no-css), and one
-   ending in `(unsigned-value)` a
+   headed `[csszyx] unsigned-value:` a
    [sign your Tailwind has no negative for](#a-negative-your-tailwind-does-not-serve-is-reported).
 
 | Change | What you see | Found by | Fixed by |
@@ -72,6 +74,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Core in Node only](#csszyxcore-runs-in-node-only-and-verifymanglemapintegrity-is-gone) | `verifyMangleMapIntegrity` not exported; `Could not resolve "@csszyx/core"` in a browser build | `tsc`, the bundler | you |
 | [`@csszyx/core/native` results](#csszyxcorenative-returns-codes-instead-of-sentences) | no `diagnostics` on a result; `rootDir` not accepted | `tsc` | you |
 | [Thrown errors carry a code](#errors-csszyx-throws-carry-a-code) | `err.code` is `native-engine-unavailable` where it was `CSSZYX_NATIVE_UNAVAILABLE`; messages start `[csszyx] <code>:` | your `catch` | you |
+| [Recovery mode attribute](#the-recovery-mode-reaches-the-dom-as-data-sz-recover) | `data-sz-recover="csr"` where 0.17 left `szRecover` | your snapshots, a selector | you, if your code reads it |
 | [ES modules only](#csszyxunplugin-and-csszyxcompiler-ship-es-modules-only) | `TS1471` or `TS1479` in a CommonJS TypeScript file | `tsc` | you |
 | [Adapters under `require`](#require-of-the-vue-and-svelte-adapters-returns-the-exports) | `require(...)` returns an object | your config fails to load | you |
 | [Vue and Svelte take static values only](#vue-and-svelte-templates-take-static-sz-values-only) | `this sz value is only known at runtime` | the build | you |
@@ -83,17 +86,18 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [`check --json` kinds](#check---json-no-longer-reports-other-for-engine-diagnostics) | `kind` is never `other` for an engine finding | your CI filter | you |
 | [`check --json` version 2](#check---json-writes-version-2-with-help-and-note-as-fields) | `"version": 2`; `message` holds no `help:` line | your CI parser | you |
 | [MCP `csszyx_validate` fields](#check---json-writes-version-2-with-help-and-note-as-fields) | each warning is an object, not a string | your MCP client | you |
-| [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is not read from this file `` at every build | the build, `csszyx check` | you |
+| [`csszyx.config`](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | `` `development` is a plugin option `` at every build | the build, `csszyx check` | you |
 | [`check` exit code](#csszyx-check-fails-only-on-error-findings) | `check` passes with a `class-precedence` or `duplicate-sz` finding | your CI | you |
-| [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `produces no CSS under this project's Tailwind (dead-class)` | the build | you |
-| [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `serves no negative` … `(unsigned-value)` | the build, `csszyx check` | you |
+| [Build-time `dead-class`](#the-build-names-sz-classes-that-produce-no-css) | `[csszyx] dead-class:` on `break-bogus` | the build | you |
+| [A sign Tailwind serves no negative for](#a-negative-your-tailwind-does-not-serve-is-reported) | `[csszyx] unsigned-value:` on `-p-2` | the build, `csszyx check` | you |
 | [A variant Tailwind does not serve](#a-variant-your-tailwind-does-not-serve-is-reported) | `[csszyx] unserved-variant:` on `{ hidden: { p: 4 } }` | the build, `csszyx check`, dev runtime | you |
 | [A CSS-wide keyword no property takes](#a-css-wide-keyword-no-property-takes-is-reported) | `[csszyx] inert-keyword:` on `{ ring: 'inherit' }` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
 | [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
 | [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
-| [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`; `{ '@md': { sidebar: … } }` writes `@md:sidebar:` | the build (`unserved-variant`), your snapshots | you |
+| [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`, `tablet-large:` for `tabletLarge`, and `@md:sidebar:` for `{ '@md': { sidebar: … } }` | the build (`unserved-variant`), your snapshots | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
+| [A variable on a width key](#a-css-variable-goes-to-the-property-its-key-names) | `border-(length:--w)` where 0.17 wrote `border-(--w)`, a colour | your snapshots, how the page looks | you, if the variable holds a colour |
 | [`op` is a percent](#a-colour-objects-op-is-a-percent) | `op: 0.05` is 0.05%, where 0.17 wrote 5%; `[csszyx] opacity-value:` | the build, dev runtime | you |
 | [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` or `{ animate: '(--spin)' }` | the build, dev runtime | you |
 | [A value with a space](#a-value-with-a-space-in-it-is-one-class) | `brightness-[calc(1px_+_2px)]` where 0.17 wrote two classes | your snapshots | nothing |
@@ -105,7 +109,7 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [Exported tables are read-only](#exported-tables-are-read-only) | `TypeError` on a write to `PROPERTY_MAP` or another record table in an ES module | `tsc`, runtime throw | you, if you change them |
 | [Public and internal entries](#which-entries-are-public) | nothing; an internal entry can change in any release | none | you, if you import one |
 | [Global variable map format](#the-global-variable-map-carries-its-format) | a tool reading `.csszyx/global-var-map.json` reads no aliases | your tool | you, if a tool reads it |
-| [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `(dead-class)` on `pbs-4` | the build, `csszyx check` | you |
+| [Logical keys need Tailwind 4.2](#logical-block-and-inline-keys-need-tailwind-42) | `[csszyx] dead-class:` on `pbs-4` | the build, `csszyx check` | you |
 | [`migrate` asks your Tailwind](#migrate-leaves-classes-your-tailwind-does-not-serve) | more entries under `Unrecognized classes` | `csszyx migrate` | you |
 | [Config edits apply without a restart](#csszyxconfig-sets-how-loudly-each-finding-is-reported) | findings printed again at their new level | dev and watch lanes | nothing |
 
@@ -192,9 +196,11 @@ later key. A Vite dev server or a webpack development build prints one count at
 start:
 
 ```text
-[csszyx] {n} class(es) in {m} file(s) were removed: another class on the same element sets every property they set.
-  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.
-  note: set `merge-covered-key` and `merge-covered-class` to `'off'` in `diagnostics.rules` of `{config}` to hide this line; `build.mergeCoveredClasses: false` keeps the classes.
+[csszyx] merge-covered-held:
+  The build removed 3 class(es) in 2 file(s), because another class on the same element sets every property they set.
+  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them; `build.mergeCoveredClasses: false` in the plugin options keeps every one.
+  note: this line stays until each id after `--rule` is `'off'` in `diagnostics.rules` of `csszyx.config.ts`.
+  docs: https://csszyx.com/e/merge-covered-held
 ```
 
 The line names only the ids that removed a class. Under the `atomic` preset each
@@ -341,7 +347,7 @@ the runtime used on its own. Without a table, `szcn` removes exact repeats only.
 ```text
 [csszyx] merge-table-missing: `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.
   help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.
-  note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.
+  note: the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.
   docs: https://csszyx.com/e/merge-table-missing
 ```
 
@@ -432,7 +438,7 @@ object:
 
 ```text
 [csszyx] moved-value: src/Map.tsx:3:16
-  `touch: pan-x` moved to `touchPanX`, and nothing is emitted for it.
+  `touch: 'pan-x'` moved to `touchPanX`, and nothing is emitted for it.
   help: write `{ touchPanX: 'x' }`, or run `csszyx migrate`.
   docs: https://csszyx.com/e/moved-value
 ```
@@ -747,8 +753,10 @@ when the build starts (on Turbopack, in `csszyx next prebuild` and in the
 loader) if your project resolves another one:
 
 ```text
-[csszyx] runtime-version-skew: @csszyx/unplugin 0.18.0 found @csszyx/runtime 0.17.2 at /app/node_modules/@csszyx/runtime
-help: install @csszyx/runtime@0.18.0; the build and the runtime lower sz objects with rules from the same release
+[csszyx] runtime-version-skew:
+  `@csszyx/unplugin` 0.18.0 found `@csszyx/runtime` 0.17.2 at `/app/node_modules/@csszyx/runtime`, and the two must come from the same release, so the build stops.
+  help: install `@csszyx/runtime@0.18.0`.
+  docs: https://csszyx.com/e/runtime-version-skew
 ```
 
 **You are affected** when your lockfile holds `@csszyx/runtime` at another
@@ -840,6 +848,12 @@ fields are gone: `args` names what is missing (`form`, and `platform`,
 `RustMigrateUnavailableError` from `@csszyx/compiler/migrate` takes the same
 args in place of its detail string.
 
+An error the bundler plugin stops a build with starts the same way. A runtime
+helper imported in a Server Component, which 0.17 reported as
+`csszyxRSCViolation: <symbol> imported in Server Component <path>`, now reads
+`[csszyx] rsc-boundary-violation: <path>`, so a log filter on the old prefix
+no longer matches.
+
 **The edit.** Match on the code, and recognise the error with `isCsszyxError`,
 from `csszyx` or `@csszyx/runtime`. Two copies of csszyx in one app have two
 error classes, so `instanceof` can answer `false` where the guard does not:
@@ -854,6 +868,30 @@ try {
     throw err;
 }
 ```
+
+## The recovery mode reaches the DOM as data-sz-recover
+
+0.17 left `szRecover` on the element under that name, so React printed
+``React does not recognize the `szRecover` prop on a DOM element`` in
+development for every element that used it. The build now writes the mode as
+`data-sz-recover`, and the runtime reads it from there:
+
+```tsx
+<div sz={{ p: 4 }} szRecover="csr" />
+// 0.18 → <div className="p-4" data-sz-recover="csr" data-sz-recovery-token="…" />
+```
+
+The build also renames a value it cannot read, such as a variable, and prints
+its [`sz-recover`](/docs/reference/warnings/#sz--other-build-diagnostics) warning.
+
+**You are affected** when a test, a selector or your own code reads `szRecover`
+or `szrecover` off an element. `getRecoveryMode` and `verifyRecoveryToken`
+follow the rename themselves.
+
+**The edit.** Read `data-sz-recover`.
+
+**Tooling.** No command lists these reads. Search for `szrecover`, ignoring
+case, outside the attribute you write in JSX.
 
 ## @csszyx/unplugin and @csszyx/compiler ship ES modules only
 
@@ -1183,7 +1221,8 @@ Every build start and every `csszyx check` run now prints:
 ```text
 [csszyx] config-invalid: csszyx.config.ts
   This file has 1 problem(s); each one is ignored, and the rest of the file applies.
-  - (warning) development: `development` is not read from this file; plugin options belong in the bundler config.
+  - (warning) development: `development` is a plugin option, and this file does not set plugin options, so it is ignored.
+    help: pass it to the csszyx plugin in your bundler config.
   help: https://csszyx.com/docs/reference/config/#csszyxconfig describes every field; a dev server, a watch build and `csszyx next watch` read it again when it or a module it imports is saved.
   docs: https://csszyx.com/e/config-invalid
 ```
@@ -1300,8 +1339,11 @@ or `csszyx next watch` under Turbopack, now ask the project's Tailwind about
 every class an `sz` prop emitted, and print each one it serves no CSS for:
 
 ```text
-[csszyx] src/Card.tsx:3:22: `break-bogus` (sz key `break`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
-  help: fix the sz key or value, or define the class with Tailwind's @utility; `csszyx check --rule dead-class` lists every one.
+[csszyx] dead-class: src/Card.tsx:3:22
+  `break-bogus` produces no CSS: this project's Tailwind serves no such utility.
+  help: fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.
+  note: the class is still emitted, and it styles nothing.
+  docs: https://csszyx.com/e/dead-class
 ```
 
 **You are affected** when `csszyx check` already reported `dead-class` findings
@@ -1339,8 +1381,11 @@ word, and its two lanes disagreed: `{ p: -2 }` gave `p--2` at runtime and
 Tailwind whether it serves the class:
 
 ```text
-[csszyx] src/Card.tsx:3:22: `-p-2` (sz key `p`) is emitted by an sz prop and produces no CSS: this project's Tailwind serves no negative `p-2`; drop the sign, or define it with @utility (unsigned-value).
-  help: `csszyx check --rule unsigned-value` lists every one.
+[csszyx] unsigned-value: src/Card.tsx:3:22
+  `-p-2` produces no CSS: this project's Tailwind serves `p-2` but no negative form of it.
+  help: drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.
+  note: the class is still emitted, and it styles nothing.
+  docs: https://csszyx.com/e/unsigned-value
 ```
 
 **You are affected** when an `sz` object gives a negative number to a key whose
@@ -1472,7 +1517,8 @@ literals, an `szv()` factory, or a `dynamic()` value for a true runtime value.
 Fix the spelling of a key that was meant as a property. The full matrix is in
 [`sz` — unresolved expressions](/docs/reference/warnings/#sz--unresolved-expressions).
 
-**Tooling.** The build only. `csszyx check` does not list runtime fallbacks.
+**Tooling.** `csszyx check` lists each key under `fallback-missing-css` and
+exits 1.
 
 ## A colour string with a slash opacity is reported
 
@@ -1541,6 +1587,12 @@ gives `min-tablet`; a length is still bracketed, as on every other key
 (`'640px'` → `min-[640px]`). `@min` and `@max` read a container size the same
 way (`{ '@min': { sidebar: … } }` → `@min-sidebar`).
 
+The build writes a camelCase variant name in kebab-case, the way Tailwind
+spells a variant: `{ tabletLarge: { … } }` gives `tablet-large:` on both lanes, where
+0.17's build wrote `tabletLarge:` and its runtime `tablet-large:`, and
+`{ min: { tabletLarge: … } }` gives `min-tablet-large`. A container size after
+`@min` or `@max` keeps the spelling you wrote.
+
 A named container query is one key, spelled as Tailwind spells the class:
 `{ '@md/sidebar': … }` gives `@md/sidebar:`. A name nested under a query is a
 variant, as under any other variant, so `{ '@md': { tablet: … } }` gives
@@ -1551,11 +1603,17 @@ while the build's engine wrote `@md:tablet:`. `{ '@min': { '[475px]': … } }`
 gave `@min:[475px]:` on the engine and now gives `@min-[475px]:` on both.
 
 **You are affected** when an `sz` object uses a breakpoint or container name of
-your own under `min`, `max`, `@min` or `@max`, or nests a container's name under
-a query (`{ '@md': { sidebar: … } }`).
+your own under `min`, `max`, `@min` or `@max`, nests a container's name under
+a query (`{ '@md': { sidebar: … } }`), or writes a variant of your own in
+camelCase.
+
+**What you see.** The build reports `unserved-variant` for a camelCase name your
+stylesheet declares as written, such as `--breakpoint-tabletLarge` or
+`@custom-variant tabletLarge`.
 
 **The edit.** Write a named container as one key, `{ '@md/sidebar': … }`;
-`csszyx migrate` writes it that way. A nested name the project serves no variant
+`csszyx migrate` writes it that way. Declare a camelCase variant in kebab-case:
+`--breakpoint-tablet-large`, `@custom-variant tablet-large`. A nested name the project serves no variant
 for is reported by the build as
 [`unserved-variant`](#a-variant-your-tailwind-does-not-serve-is-reported), and a
 breakpoint or container size it does not have as a dead class.
@@ -1572,8 +1630,13 @@ snapshots change:
 | `{ end: 4 }`, `{ insetE: 4 }` | `inset-e-4` (Tailwind 4.2+) | `end-4` |
 | `{ bgSize: 'auto 100px' }` | `bg-size-[auto_100px]` (Tailwind 4.1+) | `bg-[length:auto_100px]` |
 | `{ bgSize: '--x' }` | `bg-size-(--x)` (Tailwind 4.1+) | `bg-(length:--x)` |
-| `{ bgPos: '--x' }` | `bg-(--x)`, which Tailwind reads as a colour | `bg-(position:--x)` |
-| `{ shadowColor: x }`, `x` known at runtime | `shadow-(--…)`, which Tailwind reads as the shadow | `shadow-(color:--…)` |
+| `{ weight: '--w' }` | `font-(weight:--w)` | `font-(--w)` |
+
+Two more classes change because 0.17's styled nothing. `{ cursor: 'inherit' }`
+wrote `cursor-inherit`, which Tailwind does not serve, and now writes
+`cursor-[inherit]`. A selector key with spaces, `{ '[& > li]': { p: 1 } }`,
+wrote `[& > li]:p-1`, which the spaces split into three classes, and now writes
+`[&>li]:p-1`.
 
 **You are affected** when a test or a selector matches one of the 0.17 names.
 On Tailwind older than 4.2, `start` and `end` now style the element, and so
@@ -1581,6 +1644,37 @@ does `bgSize` on 4.0.
 
 **The edit.** Update the snapshots and selectors. Nothing in your `sz` code
 changes.
+
+## A CSS variable goes to the property its key names
+
+Tailwind reads a bare variable on a utility that two properties share as one of
+them: `border-(--x)` sets the border colour, `bg-(--x)` the background colour and
+`shadow-(--x)` the shadow. 0.17 wrote that bare form for keys that name the
+other property, so the variable set the wrong one. 0.18 adds Tailwind's type
+hint:
+
+| `sz` | 0.17 | 0.18 |
+| --- | --- | --- |
+| `{ border: '--w' }`, and every `border*` width key | `border-(--w)`, a colour | `border-(length:--w)` |
+| `{ outline: '--w' }` | `outline-(--w)`, a colour | `outline-(length:--w)` |
+| `{ ring: '--w' }`, `{ insetRing: '--w' }`, `{ ringOffset: '--w' }` | `ring-(--w)`, `inset-ring-(--w)`, `ring-offset-(--w)`, each a colour | `ring-(length:--w)`, `inset-ring-(length:--w)`, `ring-offset-(length:--w)` |
+| `{ decorationThickness: '--w' }` | `decoration-(--w)`, a colour | `decoration-(length:--w)` |
+| `{ strokeWidth: '--w' }` | `stroke-(--w)`, a colour | `stroke-(length:--w)` |
+| `{ fromPos: '--p' }`, `{ viaPos: '--p' }`, `{ toPos: '--p' }` | `from-(--p)`, `via-(--p)`, `to-(--p)`, each a colour | `from-(length:--p)`, `via-(length:--p)`, `to-(length:--p)` |
+| `{ bgPos: '--x' }` | `bg-(--x)`, a colour | `bg-(position:--x)` |
+| `{ shadowColor: x }`, `x` known at runtime | `shadow-(--…)`, the shadow | `shadow-(color:--…)` |
+
+**You are affected** when an `sz` object gives one of these keys a CSS
+variable. The build prints nothing. A variable that holds a width now sets the width,
+as the 0.17 docs described, and one that holds a colour stops colouring the
+element.
+
+**The edit.** For a colour, write the colour key, which keeps the bare form:
+`{ borderColor: '--brand' }` writes `border-(--brand)`, and so do `outlineColor`,
+`ringColor`, `decorationColor`, `stroke`, `from`, `via` and `to`.
+
+**Tooling.** No command lists these keys. Search your `sz` objects for one of
+the keys above with a value that starts with `--`.
 
 ## A colour object's op is a percent
 
@@ -1625,7 +1719,7 @@ keys 0.17 wrote `animate-[(--spin)]`, a class Tailwind does not serve.
 
 ```text
 [csszyx] bracketed-value: src/Card.tsx:3:22
-  `w: '[100px]'` wraps its value in brackets, which csszyx writes itself, so nothing is emitted for it.
+  `w: '[100px]'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.
   help: write `w: '100px'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`.
 ```
 
@@ -1644,7 +1738,9 @@ Tailwind reads it: `brightness-[calc(1px_+_2px)]`. A value no key takes, such
 as `{ display: 'flex hidden' }`, writes `flex_hidden` and is reported as a
 `closed-enum-value`.
 
-**The edit.** None. Update a snapshot that holds the split classes.
+**The edit.** None for a value that holds a space on purpose, such as a
+`calc()`. Update a snapshot that holds the split classes. A value that holds two
+values by mistake takes one: `{ display: 'flex' }`.
 
 ## The build and the runtime write one spelling
 
@@ -1841,7 +1937,11 @@ classes style nothing. 0.17 wrote them without a word; the build now reports
 each one as [`dead-class`](#the-build-names-sz-classes-that-produce-no-css):
 
 ```text
-[csszyx] src/Card.tsx:3:22: `pbs-4` (sz key `pbs`) is emitted by an sz prop and produces no CSS under this project's Tailwind (dead-class).
+[csszyx] dead-class: src/Card.tsx:3:22
+  `pbs-4` produces no CSS: this project's Tailwind serves no such utility.
+  help: fix the sz key or value, or define the class with Tailwind's `@utility`; `csszyx check --rule dead-class` lists every one.
+  note: the class is still emitted, and it styles nothing.
+  docs: https://csszyx.com/e/dead-class
 ```
 
 **The edit.** Upgrade Tailwind to 4.2 or later, or write the physical key
@@ -1874,3 +1974,24 @@ the colour key `bg`. The 4.1 spellings `bg-size-[…]` still read as `bgSize`.
 
 **The edit.** Resolve the listed classes by hand or through
 `csszyx migrate --audit`, as for any unrecognized class.
+
+## Build time and memory
+
+0.18 does more work per `sz` prop: it asks your Tailwind which classes it serves
+and compares the classes on each element. Measured with `vite build` on macOS
+(Apple Silicon), Node 24, Vite 8 and Tailwind 4.3, against 0.17.2 on the same
+machine and apps. Build time is the median of 12 runs after 2 warm-ups, cold
+and warm cache, with and without `production.mangle`. Peak memory is the median
+of 7. Run-to-run spread stayed under 9 %. The CSS each build wrote is
+byte-identical to 0.17.2's.
+
+| App | Engine | Build time | Peak memory |
+| --- | --- | --- | --- |
+| a component library, 1,144 files | native | −4 % to +2 % | −25 to −1 MB |
+| a component library, 1,144 files | wasm | +6 % to +10 % | −9 to +26 MB |
+| 800 generated components, every element with `sz` and variants | native | 0 % to +7 % | +45 to +55 MB |
+| 800 generated components, every element with `sz` and variants | wasm | +4 % to +8 % | +59 to +88 MB |
+
+The dev server, hot reload, Turbopack, webpack and jest were not measured. The
+timing runs through `pnpm bench:external` in the csszyx repository. The two apps
+and the memory script are not in the repository.
