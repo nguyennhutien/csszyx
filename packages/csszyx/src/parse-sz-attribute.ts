@@ -133,28 +133,28 @@ export function parseSzAttribute(rawInput: string): Record<string, unknown> {
             return parseArray();
         }
 
-        let token = '';
+        let word = '';
         while (pos < input.length && /[\w.\-+]/.test(input[pos])) {
-            token += input[pos];
+            word += input[pos];
             pos++;
         }
 
-        if (token === 'true') {
+        if (word === 'true') {
             return true;
         }
-        if (token === 'false') {
+        if (word === 'false') {
             return false;
         }
-        if (token === 'null') {
+        if (word === 'null') {
             return null;
         }
 
-        const num = Number(token);
-        if (!Number.isNaN(num) && token !== '') {
+        const num = Number(word);
+        if (!Number.isNaN(num) && word !== '') {
             return num;
         }
 
-        return token;
+        return word;
     };
 
     const parseArray = (): unknown[] => {

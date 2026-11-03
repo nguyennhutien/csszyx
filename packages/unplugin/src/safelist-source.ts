@@ -331,7 +331,9 @@ export function legacySourceError(cssFile: string, target: string): Error {
  * options after the quote (`layer(…)`, `source(…)`) are outside the match.
  */
 const TAILWIND_SPECIFIER = String.raw`["']tailwindcss(?:\/[^"']*)?["']`;
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from the constant above
 const TAILWIND_IMPORT = new RegExp(String.raw`@import\s+${TAILWIND_SPECIFIER}`);
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from the constant above
 const TAILWIND_IMPORT_PARAMS = new RegExp(`^${TAILWIND_SPECIFIER}`);
 
 /**

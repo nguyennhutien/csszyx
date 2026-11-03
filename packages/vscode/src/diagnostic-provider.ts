@@ -191,6 +191,7 @@ function createKeyDiagnostic(
     key: string,
     value: unknown,
 ): vscode.Diagnostic | null {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- the key is escaped
     const keyPattern = new RegExp(String.raw`\b${escapeRegex(key)}\s*:`);
     const localMatch = keyPattern.exec(expressionSource);
     if (!localMatch) {

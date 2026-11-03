@@ -196,10 +196,10 @@ describe('the gitignore modes', () => {
         const marked: string[] = [];
         const all: string[] = [];
         walkProject(root, { skipDirs: new Set(), gitignore: 'mark' }, file => {
-            const token = /cls-[a-z]+/.exec(readFileSync(file.path, 'utf8'))?.[0];
-            if (token === undefined) return;
-            all.push(token);
-            if (file.gitignored) marked.push(token);
+            const marker = /cls-[a-z]+/.exec(readFileSync(file.path, 'utf8'))?.[0];
+            if (marker === undefined) return;
+            all.push(marker);
+            if (file.gitignored) marked.push(marker);
         });
         expect(all.sort()).toHaveLength(APP_SOURCES);
         expect(marked.sort()).toEqual([

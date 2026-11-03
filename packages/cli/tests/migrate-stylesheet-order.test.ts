@@ -25,7 +25,10 @@ const REPO = resolve(import.meta.dirname, '../../..');
  */
 function rustItem(file: string, name: string): string {
     const source = readFileSync(resolve(REPO, file), 'utf8');
-    const start = source.search(new RegExp(`(fn|const) ${name}\\b`));
+    // The lookahead keeps `fn` in `const fn name` free for the next match.
+    const start =
+        Array.from(source.matchAll(/(?:fn|const) (?=(\w+))/g)).find(m => m[1] === name)?.index ??
+        -1;
     expect(start).toBeGreaterThan(-1);
     return source.slice(start, source.slice(start).search(/\n[}\]]/) + start);
 }

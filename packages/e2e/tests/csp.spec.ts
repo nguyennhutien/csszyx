@@ -111,6 +111,7 @@ test.describe('production build under script-src self', () => {
             for (const sheet of document.styleSheets) walk(sheet.cssRules);
             const hasRule = (token: string): boolean => {
                 const escaped = CSS.escape(token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // eslint-disable-next-line security/detect-non-literal-regexp -- the class name is escaped on the line above
                 const pattern = new RegExp(`(^|[^\\w-])\\.${escaped}(?![\\w-])`);
                 return selectors.some(selector => pattern.test(selector));
             };

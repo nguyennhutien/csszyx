@@ -169,11 +169,8 @@ describe('the categories the declaration writes', () => {
         const typed = [
             ...props.matchAll(/type (CT_\w+) = CustomTheme extends \{ (\w+): infer T \}/g),
         ];
-        const read = typed
-            .filter(([, alias]) =>
-                new RegExp(`\\b${alias}\\b`).test(props.replace(/^type CT_.*$/gm, '')),
-            )
-            .map(([, , category]) => category);
+        const used = new Set(props.replace(/^type CT_.*$/gm, '').match(/\w+/g));
+        const read = typed.filter(([, alias]) => used.has(alias)).map(([, , category]) => category);
         expect([...read].sort()).toEqual(
             THEME_CATEGORIES.filter(category => category !== 'breakpoints').sort(),
         );

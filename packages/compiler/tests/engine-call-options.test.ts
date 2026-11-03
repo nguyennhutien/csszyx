@@ -83,12 +83,15 @@ describe('the engine entry', () => {
         const source = await import('node:fs').then(fs =>
             fs.readFileSync(new URL('../src/engine.ts', import.meta.url), 'utf8'),
         );
+        const exported = Array.from(source.matchAll(/export type \{([^}]*)\}/g), m => m[1])
+            .join(' ')
+            .match(/\w+/g);
         for (const name of [
             'TransformSourceOptions',
             'TransformSourceCodeOptions',
             'SourceTransformResult',
         ]) {
-            expect(source, name).toMatch(new RegExp(`export type \\{[^}]*\\b${name}\\b`));
+            expect(exported, name).toContain(name);
         }
     });
 });

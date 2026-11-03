@@ -80,6 +80,7 @@ const KEYWORDS: Readonly<Record<string, KeywordCheck>> = {
         ),
     pattern: (rule, value, at) =>
         when(
+            // eslint-disable-next-line security/detect-non-literal-regexp -- the pattern is the schema's own, the value under test
             typeof value === 'string' && !new RegExp(rule as string, 'u').test(value),
             `${at}: ${JSON.stringify(value)} does not match ${rule}`,
         ),

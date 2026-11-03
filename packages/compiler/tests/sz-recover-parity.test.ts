@@ -82,6 +82,7 @@ describe('szRecover diagnostics are identical on every engine', () => {
         for (const [name, engine] of ENGINES) {
             const { code } = engine(tsx, { filename: '/p/t.tsx' });
             expect(code, name).toMatch(
+                // eslint-disable-next-line security/detect-non-literal-regexp -- the mode is one of the fixed recovery modes
                 new RegExp(
                     `<section data-sz-recover="${mode}" data-sz-recovery-token="[0-9a-f]{12}">`,
                 ),

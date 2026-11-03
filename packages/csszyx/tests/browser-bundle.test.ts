@@ -58,8 +58,9 @@ const devBundlePath = resolveBundlePath('browser.dev.iife.js');
  * Dispatching it here reproduces that ordering rather than sidestepping it.
  */
 function loadBundle(): void {
-    // biome-ignore lint/security/noGlobalEval: running the shipped artefact as a script tag is the point
-    eval(readFileSync(bundlePath, 'utf8'));
+    // Running the shipped artefact as a script tag is the point; Biome and ESLint both ask.
+    // biome-ignore lint/security/noGlobalEval: see above
+    eval(readFileSync(bundlePath, 'utf8')); // eslint-disable-line security/detect-eval-with-expression -- see above
     document.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
 }
 

@@ -233,6 +233,7 @@ describe('the groups a first pass reports', () => {
             // A key that owns several classes is one place; the next key is
             // written after it.
             if (key !== previous) {
+                // eslint-disable-next-line security/detect-non-literal-regexp -- the key is one identifier from the test table
                 const match = new RegExp(`\\b${key}:`, 'g');
                 match.lastIndex = from;
                 from = match.exec(source)?.index ?? -1;
