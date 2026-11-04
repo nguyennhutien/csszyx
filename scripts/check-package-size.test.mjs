@@ -1870,3 +1870,27 @@ test('the CDN bundle reads its sinks against the registry, its passthrough named
     const dev = SIZE_BUDGETS.find(budget => budget.name === 'csszyx CDN development bundle');
     assert.equal(dev.productionCodes, undefined);
 });
+
+test('the CI size step builds every package a budget reads', () => {
+    // The workspace build before that step runs with `--affected`, so a PR
+    // that leaves a package alone leaves its dist unbuilt, and the gate fails
+    // on a file it cannot open. The step builds the gated packages itself;
+    // each one a budget reads has to be on that list.
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const workflow = readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+    const step = workflow.slice(workflow.indexOf('- name: Package size gate'));
+    const build = step.split('\n').find(line => line.includes('turbo run build'));
+    assert.ok(build, 'the size step builds its packages');
+    const built = new Set([...build.matchAll(/--filter=(\S+)/g)].map(match => match[1]));
+    const read = new Set(
+        SIZE_BUDGETS.map(budget => {
+            const dir = budget.target.split('/').slice(0, 2).join('/');
+            return JSON.parse(readFileSync(path.join(repoRoot, dir, 'package.json'), 'utf8')).name;
+        }),
+    );
+    assert.deepEqual(
+        [...read].filter(name => !built.has(name)),
+        [],
+        'packages a budget reads that the CI size step does not build',
+    );
+});
