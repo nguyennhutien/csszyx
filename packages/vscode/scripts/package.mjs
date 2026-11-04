@@ -33,7 +33,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveVsceArguments } from './package-utils.mjs';
+import { runVsce } from './package-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
@@ -102,17 +102,14 @@ writeFileSync(
 );
 cpSync(pluginBundle, path.join(stagedPluginDir, 'dist/index.js'));
 
-const { isPublish, commandArgs } = resolveVsceArguments(process.argv.slice(2));
-
-// Publish with a Microsoft Entra ID token (from the CI azure/login session)
-// instead of a PAT when VSCE_AZURE_CREDENTIAL is set. vsce reads the token via
-// its Azure identity chain; nothing else about packaging changes.
-if (isPublish && process.env.VSCE_AZURE_CREDENTIAL === 'true') {
-    commandArgs.push('--azure-credential');
-}
-
 try {
-    execFileSync('npx', commandArgs, { cwd: outDir, stdio: 'inherit' });
+    // Publishes with a Microsoft Entra ID token (from the CI azure/login
+    // session) when VSCE_AZURE_CREDENTIAL is set; see resolveVsceCredential
+    // for why the PAT is removed from vsce's environment then.
+    const { isPublish } = runVsce(process.argv.slice(2), process.env, {
+        cwd: outDir,
+        exec: execFileSync,
+    });
     if (!isPublish) {
         const { version } = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
         const vsixName = readdirSync(outDir).find(f => f.endsWith('.vsix')) ?? `csszyx-${version}.vsix`;
