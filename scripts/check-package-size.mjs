@@ -926,6 +926,26 @@ export const SIZE_BUDGETS = [
         // Measured 13,382.
         maxGzipBytes: 13_700,
     },
+    {
+        name: '@csszyx/vue-adapter `.`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/vue-adapter',
+        subpath: '.',
+        // A Vue build loads it with its first `.vue` file, and Vite loads it
+        // from the config of a project that uses the adapter's own plugin.
+        // Its own files only: the template kit and `@vue/compiler-sfc` are
+        // other packages. Measured 2,837.
+        maxGzipBytes: 3_150,
+    },
+    {
+        name: '@csszyx/svelte-adapter `.`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/svelte-adapter',
+        subpath: '.',
+        // The same for a Svelte build and `svelte.config.js`; the template
+        // kit and `svelte/compiler` are other packages. Measured 2,087.
+        maxGzipBytes: 2_400,
+    },
 ];
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);

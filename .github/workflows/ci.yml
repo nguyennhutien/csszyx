@@ -902,18 +902,19 @@ jobs:
 
       # Absolute gzip budgets for the JS that reaches user bundles (runtime,
       # dynamic, the compiler browser entry closure), for the code Node loads
-      # from the compiler, the plugin, the CLI and the MCP server, and for the VS Code
-      # extension's bundle. Bytes are deterministic, so unlike timing this
-      # can be a hard gate with zero flake risk. The
-      # gated packages are built explicitly first: the workspace build above
-      # may scope them away via --affected, and the check treats a missing
-      # dist as a failure rather than a pass — turbo serves already-built
-      # packages from cache, so the extra build is seconds, not minutes. A test
+      # from the compiler, the plugin, the CLI, the MCP server and the template
+      # adapters, and for the VS Code extension's bundle. Bytes are
+      # deterministic, so unlike timing this can be a hard gate with zero flake
+      # risk. The gated packages are built explicitly first: the workspace
+      # build above may scope them away via --affected, and the check treats a
+      # missing dist as a failure rather than a pass — turbo serves
+      # already-built packages from cache, so the extra build is seconds, not
+      # minutes. A test
       # in `scripts/check-package-size.test.mjs` fails when a budget reads a
       # package this list does not build.
       - name: Package size gate
         run: |
-          pnpm exec turbo run build --filter=@csszyx/core --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler --filter=csszyx --filter=@csszyx/unplugin --filter=@csszyx/cli --filter=@csszyx/mcp-server --filter=@csszyx/vscode
+          pnpm exec turbo run build --filter=@csszyx/core --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler --filter=csszyx --filter=@csszyx/unplugin --filter=@csszyx/cli --filter=@csszyx/mcp-server --filter=@csszyx/vue-adapter --filter=@csszyx/svelte-adapter --filter=@csszyx/vscode
           pnpm check:package-size
 
       # Allocations of the engine's diagnostic path, counted as V8
