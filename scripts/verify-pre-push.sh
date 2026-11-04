@@ -43,7 +43,7 @@ if [ -n "$upstream" ]; then
                 lint_files+=("$f")
                 ;;
         esac
-    done < <(git diff --name-only --diff-filter=AMR "$upstream..HEAD")
+    done < <(git diff --name-only --diff-filter=AMR "$upstream...HEAD")
 fi
 
 # ── Early exit: no source files → nothing to verify ──────────────────
