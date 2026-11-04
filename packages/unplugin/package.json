@@ -87,13 +87,13 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
-    "ignore": "7.0.13",
+    "ignore": "7.0.14",
     "minimatch": "^11.0.1",
-    "postcss": "^8.5.31",
+    "postcss": "^8.5.32",
     "postcss-selector-parser": "^7.1.7",
     "postcss-value-parser": "^4.2.0",
     "proper-lockfile": "^4.1.2",
-    "unplugin": "^3.4.0"
+    "unplugin": "^3.7.0"
   },
   "peerDependencies": {
     "@csszyx/runtime": "workspace:*",
