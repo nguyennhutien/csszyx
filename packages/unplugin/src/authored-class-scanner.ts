@@ -252,12 +252,13 @@ function templateEnd(source: string, start: number): number {
 }
 
 /**
- * Return the end of a lexical region, or the same offset for ordinary code.
+ * Return the end of a lexical region (a string, template, comment or regular
+ * expression), or the same offset for ordinary code.
  * @param source Complete source text.
  * @param start Candidate lexical-region offset.
  * @returns Region end, or start when ordinary code begins there.
  */
-function lexicalRegionEnd(source: string, start: number): number {
+export function lexicalRegionEnd(source: string, start: number): number {
     const character = source[start];
     if (character === '"' || character === "'") return quotedEnd(source, start, character);
     if (character === '`') return templateEnd(source, start);
