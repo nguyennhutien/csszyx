@@ -10,6 +10,8 @@ on:
       - "rust-toolchain.toml"
       - ".rustfmt.toml"
       - ".mise.toml"
+      - ".github/actions/install-wasm-pack/**"
+      - ".github/workflows/rust-check.yml"
   pull_request:
     branches: [main, develop]
     paths:
@@ -19,6 +21,8 @@ on:
       - "rust-toolchain.toml"
       - ".rustfmt.toml"
       - ".mise.toml"
+      - ".github/actions/install-wasm-pack/**"
+      - ".github/workflows/rust-check.yml"
 
 # Nothing here writes: it checks out, installs and runs checks. Said in the file
 # rather than left to the repository setting, which is `read` today and is one
@@ -100,8 +104,11 @@ jobs:
       - name: Run native engine and migrate tests
         run: cargo test --features native-engine,migrate
 
+      # The release build every other job installs, from the action that
+      # pins its version and sums: a build from crates.io here could differ,
+      # and a failed install would only show at `wasm-pack build`.
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked --version 0.14.0 || true
+        uses: ./.github/actions/install-wasm-pack
 
       # See ci.yml — pre-install wasm-bindgen-cli so `--mode no-install`
       # below can skip wasm-pack's own install step (which has a parse
