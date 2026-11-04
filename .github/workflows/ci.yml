@@ -901,7 +901,8 @@ jobs:
           pnpm exec turbo run build ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
       # Absolute gzip budgets for the JS that reaches user bundles (runtime,
-      # dynamic, the compiler browser entry closure) and for the VS Code
+      # dynamic, the compiler browser entry closure), for the code Node loads
+      # from the compiler, the plugin, the CLI and the MCP server, and for the VS Code
       # extension's bundle. Bytes are deterministic, so unlike timing this
       # can be a hard gate with zero flake risk. The
       # gated packages are built explicitly first: the workspace build above
@@ -910,7 +911,7 @@ jobs:
       # packages from cache, so the extra build is seconds, not minutes.
       - name: Package size gate
         run: |
-          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler --filter=@csszyx/vscode
+          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler --filter=@csszyx/unplugin --filter=@csszyx/cli --filter=@csszyx/mcp-server --filter=@csszyx/vscode
           pnpm check:package-size
 
       # Allocations of the engine's diagnostic path, counted as V8
