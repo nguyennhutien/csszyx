@@ -94,11 +94,14 @@ pre-push:
       # Only verify pushes to origin. Private mirror (feature) and AI
       # docs (private/internal/docs) don't need verification — CI runs
       # on origin after PR creation.
-      # {push_remote} is lefthook's template for the remote name.
+      # Git passes the remote's name as the hook's first argument, which
+      # lefthook substitutes for {1}. It has no {push_remote} template: that
+      # text stays as written, so every push, origin included, would skip.
+      # lefthook matches `ref` against the branch name, not `refs/heads/…`.
       skip:
-        - ref: refs/heads/internal/*
+        - ref: internal/*
       run: |
-        remote="{push_remote}"
+        remote="{1}"
         if [ "$remote" != "origin" ] && [ -n "$remote" ]; then
           echo "[pre-push] Remote '$remote' — skipping verification."
           exit 0
