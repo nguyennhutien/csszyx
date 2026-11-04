@@ -64,8 +64,8 @@ import { browserDiagnostics, EDITOR_IDS } from './gen-diagnostic-codes.mjs';
  *
  * A fourth kind prices code that never reaches a browser but runs at the
  * start of every build: `kind: 'node-entry'` sums the gzip bytes of the files
- * a Node process loads when it imports one export subpath, the entry and every
- * file it reaches through a static import. Node compiles each of them whole
+ * a Node process loads when it imports one export subpath (or runs one `bin`),
+ * the entry and every file it reaches through a static import. Node compiles each of them whole
  * before the first call returns, so a heavy import added to a build-time
  * entry is start-up time for every build, dev server and CLI run.
  *
@@ -77,9 +77,10 @@ import { browserDiagnostics, EDITOR_IDS } from './gen-diagnostic-codes.mjs';
  * Budgets are absolute gzip byte ceilings committed here, not diffs against a
  * stored baseline — nothing external to fetch, nothing that can go stale.
  * Crossing one is a one-line change to the number below plus a sentence in the
- * PR explaining the growth. Set them from a measured baseline plus ~10%
- * headroom: wide enough that legitimate small growth does not thrash the
- * number, tight enough that silently swallowing a 30KB dependency fails.
+ * PR explaining the growth. Set them ~300 gzip bytes above a measurement,
+ * or 2% for a Node entry over 30 KB: wide enough that legitimate small growth
+ * does not thrash the number, tight enough that silently swallowing a 30KB
+ * dependency fails.
  */
 
 /**
@@ -756,6 +757,143 @@ export const SIZE_BUDGETS = [
         // 2026-10-31, measured 32,759: the same encoder, checksum and runs.
         maxGzipBytes: 33_050,
         excludedModules: ['src/state-variants.generated.ts'],
+    },
+    // The plugin and the CLI run in Node at the start of every build, dev
+    // server, test worker and CLI run, so every entry a user process imports
+    // gets a ceiling on the files of its own package that it loads, shared
+    // chunks included. The other csszyx packages it imports are not counted
+    // here. Measured 2026-11-04. Headroom is 300 bytes, or 2% above
+    // 30 KB: the shared chunks behind `.` and the Next and Jest lanes grow
+    // together, by up to 1,834 bytes in one PR over the
+    // 23 main commits before this one, and 300 would have made 3 of those
+    // PRs raise 15 numbers. 2% still fails the 30 KB dependency this gate is
+    // for.
+    {
+        name: '@csszyx/unplugin `.`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: '.',
+        // Measured 115,603. `./vite` and `./webpack` re-export it from the
+        // same chunk, 76 gzip bytes each of their own.
+        maxGzipBytes: 117_950,
+        wrappers: ['./vite', './webpack'],
+    },
+    {
+        name: '@csszyx/unplugin `./css-mangler`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './css-mangler',
+        // Measured 1,928.
+        maxGzipBytes: 2250,
+    },
+    {
+        name: '@csszyx/unplugin `./next`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './next',
+        // Measured 753.
+        maxGzipBytes: 1100,
+    },
+    {
+        name: '@csszyx/unplugin `./diagnostics`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './diagnostics',
+        // Measured 21,344.
+        maxGzipBytes: 21_650,
+    },
+    {
+        name: '@csszyx/unplugin `./next-turbo-loader`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './next-turbo-loader',
+        // Measured 78,516.
+        maxGzipBytes: 80_100,
+    },
+    {
+        name: '@csszyx/unplugin `./next-prebuild`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './next-prebuild',
+        // Measured 68,217.
+        maxGzipBytes: 69_600,
+    },
+    {
+        name: '@csszyx/unplugin `./next-watcher`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './next-watcher',
+        // Measured 16,122.
+        maxGzipBytes: 16_450,
+    },
+    {
+        name: '@csszyx/unplugin `./jest`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './jest',
+        // Measured 59,152.
+        maxGzipBytes: 60_350,
+    },
+    {
+        name: '@csszyx/unplugin `./postcss`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/unplugin',
+        subpath: './postcss',
+        // Measured 8,385.
+        maxGzipBytes: 8700,
+    },
+    {
+        name: '@csszyx/cli `.`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/cli',
+        subpath: '.',
+        // Measured 9,363.
+        maxGzipBytes: 9700,
+    },
+    {
+        name: '@csszyx/cli bin `csszyx`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/cli',
+        bin: 'csszyx',
+        // Measured 3,865.
+        maxGzipBytes: 4200,
+    },
+    // The compiler's other Node-only exports, which its app bundle leaves
+    // out because no browser loads them: the plugin imports `.` and
+    // `./report`, and `csszyx migrate` imports `./migrate`. Same headroom.
+    {
+        name: '@csszyx/compiler `.`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: '.',
+        // Measured 58,492.
+        maxGzipBytes: 59_700,
+    },
+    {
+        name: '@csszyx/compiler `./migrate`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './migrate',
+        // Measured 27,572.
+        maxGzipBytes: 27_900,
+    },
+    {
+        name: '@csszyx/compiler `./report`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './report',
+        // Measured 31,045.
+        maxGzipBytes: 31_700,
+    },
+    // The MCP server's bin, which is also its `.` export: an editor starts
+    // it for every session.
+    {
+        name: '@csszyx/mcp-server bin `csszyx-mcp`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/mcp-server',
+        bin: 'csszyx-mcp',
+        // Measured 13,382.
+        maxGzipBytes: 13_700,
     },
 ];
 
@@ -1519,6 +1657,10 @@ export function nodeEntryFiles(entryFile) {
         format: 'esm',
         platform: 'node',
         packages: 'external',
+        // The workspace tsconfig maps each `@csszyx/*` package to its `src`
+        // for the type checker, and esbuild follows `paths` before it decides
+        // what is external, which counted that source as this entry's.
+        tsconfigRaw: '{}',
         logLevel: 'silent',
     });
     const seen = new Set();
@@ -1532,6 +1674,68 @@ export function nodeEntryFiles(entryFile) {
         }
     }
     return [...seen].map(file => path.resolve(dir, file)).sort();
+}
+
+/** The file a node-entry budget prices: the export `subpath` it names, or
+ * the `bin` a package's manifest maps to a file, which is what a user runs.
+ *
+ * @param {{ subpath?: string, bin?: string }} budget the node-entry budget, naming exactly one
+ * @param {string} target absolute package directory
+ * @returns {string} absolute entry file
+ */
+function nodeEntryFile(budget, target) {
+    if ((budget.subpath === undefined) === (budget.bin === undefined)) {
+        throw new Error('a node-entry budget names exactly one of `subpath` and `bin`');
+    }
+    const manifest = JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8'));
+    if (budget.bin !== undefined) {
+        const file = manifest.bin?.[budget.bin];
+        if (file === undefined) throw new Error(`no bin \`${budget.bin}\` in ${manifest.name}`);
+        return path.resolve(target, file);
+    }
+    const entry = listExportSubpaths(target).find(({ subpath }) => subpath === budget.subpath);
+    if (entry === undefined) {
+        throw new Error(`no export subpath \`${budget.subpath}\` in ${manifest.name}`);
+    }
+    return entry.file;
+}
+
+/** The most gzip bytes a node-entry wrapper may add of its own. */
+const WRAPPER_MAX_GZIP_BYTES = 300;
+
+/** Check the exports a node-entry budget names as `wrappers`: each re-exports
+ * the budget's entry, so it may load only its own file and files the entry
+ * loads, and its own file stays small. One ceiling then covers the code the
+ * entry and its wrappers share, instead of one number per wrapper that every
+ * change to that code would have to raise.
+ *
+ * @param {{ subpath?: string, wrappers?: string[] }} budget the node-entry budget
+ * @param {string} target absolute package directory
+ * @param {string[]} files what the budget's entry loads
+ * @returns {string[]} one problem per wrapper that is not thin
+ */
+function wrapperProblems(budget, target, files) {
+    const loaded = new Set(files);
+    const problems = [];
+    for (const wrapper of budget.wrappers ?? []) {
+        const file = nodeEntryFile({ subpath: wrapper }, target);
+        for (const extra of nodeEntryFiles(file)) {
+            if (extra !== file && !loaded.has(extra)) {
+                problems.push(
+                    `\`${wrapper}\` loads ${path.relative(path.dirname(file), extra)}, which ` +
+                        `\`${budget.subpath}\` does not; give it a budget of its own`,
+                );
+            }
+        }
+        const own = gzipTotalBytes([file]);
+        if (own > WRAPPER_MAX_GZIP_BYTES) {
+            problems.push(
+                `\`${wrapper}\` is ${own} gzip bytes of its own, over the ` +
+                    `${WRAPPER_MAX_GZIP_BYTES} a wrapper may add; give it a budget of its own`,
+            );
+        }
+    }
+    return problems;
 }
 
 /** Sum the gzip size of each file, compressed independently at a fixed level
@@ -1590,16 +1794,10 @@ export function checkBudgets(budgets, rootDir) {
         const entryMeasurements = [];
         try {
             if (budget.kind === 'node-entry') {
-                const entry = listExportSubpaths(target).find(
-                    ({ subpath }) => subpath === budget.subpath,
-                );
-                if (entry === undefined) {
-                    const { name } = JSON.parse(
-                        readFileSync(path.join(target, 'package.json'), 'utf8'),
-                    );
-                    throw new Error(`no export subpath \`${budget.subpath}\` in ${name}`);
+                files = nodeEntryFiles(nodeEntryFile(budget, target));
+                for (const problem of wrapperProblems(budget, target, files)) {
+                    failures.push(`${budget.name}: ${problem}`);
                 }
-                files = nodeEntryFiles(entry.file);
                 gzipBytes = gzipTotalBytes(files);
                 const excluded = budget.excludedModules ?? [];
                 for (const problem of excluded.length > 0

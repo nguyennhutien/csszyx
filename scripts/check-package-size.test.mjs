@@ -570,9 +570,46 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ['per-key-rows-', 'closed-enum-tables-'],
     );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 10);
+    assert.equal(SIZE_BUDGETS.length, 25);
+    // The compiler's Node-only exports, the plugin, the CLI and the MCP server
+    // run in Node at the start of every build, command and editor session, so
+    // every runtime export and bin they ship is priced: by a node-entry
+    // budget, as a wrapper one declares, or as a browser entry of the app
+    // bundle. Compared by file, so an export and a bin sharing one file are
+    // one entry.
+    for (const target of [
+        'packages/compiler',
+        'packages/unplugin',
+        'packages/cli',
+        'packages/mcp-server',
+    ]) {
+        const dir = fileURLToPath(new URL(`../${target}`, import.meta.url));
+        const manifest = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+        const fileOf = Object.fromEntries(
+            listExportSubpaths(dir).map(({ subpath, file }) => [subpath, file]),
+        );
+        const binFile = name => path.resolve(dir, manifest.bin[name]);
+        const priced = new Set();
+        for (const budget of SIZE_BUDGETS.filter(b => b.target === target)) {
+            if (budget.kind === 'node-entry') {
+                priced.add(budget.bin === undefined ? fileOf[budget.subpath] : binFile(budget.bin));
+                for (const wrapper of budget.wrappers ?? []) priced.add(fileOf[wrapper]);
+            }
+            for (const subpath of Object.keys(budget.entryBudgets ?? {}))
+                priced.add(fileOf[subpath]);
+        }
+        const shipped = [...Object.values(fileOf), ...Object.keys(manifest.bin ?? {}).map(binFile)];
+        assert.deepEqual(
+            shipped.filter(file => !priced.has(file)),
+            [],
+            `${target} ships an entry no budget prices`,
+        );
+    }
     for (const budget of SIZE_BUDGETS) {
         assert.ok(['app-bundle', 'installed-app', 'file', 'node-entry'].includes(budget.kind));
+        if (budget.kind === 'node-entry') {
+            assert.ok((budget.subpath === undefined) !== (budget.bin === undefined), budget.name);
+        }
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
         assert.ok(!path.isAbsolute(budget.target), 'targets are repo-relative');
     }
@@ -641,14 +678,15 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
     // The two entries the build tools import are priced by what Node loads.
     assert.deepEqual(
-        SIZE_BUDGETS.filter(budget => budget.kind === 'node-entry').map(budget => [
-            budget.target,
-            budget.subpath,
-            budget.excludedModules,
-        ]),
+        SIZE_BUDGETS.filter(
+            budget => budget.kind === 'node-entry' && budget.target === 'packages/compiler',
+        ).map(budget => [budget.target, budget.subpath, budget.excludedModules]),
         [
             ['packages/compiler', './engine', ['src/state-variants.generated.ts']],
             ['packages/compiler', './internal', ['src/state-variants.generated.ts']],
+            ['packages/compiler', '.', undefined],
+            ['packages/compiler', './migrate', undefined],
+            ['packages/compiler', './report', undefined],
         ],
     );
     // Every app bundle prices each entry on its own, no entry ceiling is
@@ -872,6 +910,110 @@ test('node-entry budgets count every file a static import loads, and no lazy one
         assert.deepEqual(failures, []);
         assert.deepEqual(results[0].files, loaded);
         assert.equal(results[0].gzipBytes, gzipTotalBytes(loaded));
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('node-entry budgets leave another package out even when a tsconfig maps it to its source', () => {
+    // The workspace tsconfig maps `@csszyx/*` to each package's `src` for the
+    // type checker; esbuild reads `paths` too, and would count that source.
+    const root = makeFixture({
+        ...enginePackage(),
+        'tsconfig.base.json': JSON.stringify({
+            compilerOptions: { paths: { 'other-pkg': ['./packages/other/src/index.ts'] } },
+        }),
+        'packages/thing/tsconfig.json': JSON.stringify({ extends: '../../tsconfig.base.json' }),
+        'packages/other/src/index.ts': 'export const b = 2;\n',
+    });
+    const dist = path.join(root, 'packages/thing/dist');
+    try {
+        assert.deepEqual(
+            nodeEntryFiles(path.join(dist, 'engine.mjs')),
+            ['a.mjs', 'c.mjs', 'engine.mjs'].map(file => path.join(dist, file)),
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry budget can price a bin the package ships instead of an export', () => {
+    const files = enginePackage();
+    const manifest = JSON.parse(files['packages/thing/package.json']);
+    files['packages/thing/package.json'] = JSON.stringify({
+        ...manifest,
+        bin: { thing: './dist/a.mjs' },
+    });
+    const root = makeFixture(files);
+    const dist = path.join(root, 'packages/thing/dist');
+    try {
+        const { failures, results } = checkBudgets(
+            engineBudget({ subpath: undefined, bin: 'thing' }),
+            root,
+        );
+        assert.deepEqual(failures, []);
+        assert.deepEqual(
+            results[0].files,
+            ['a.mjs', 'c.mjs'].map(file => path.join(dist, file)),
+        );
+        const missing = checkBudgets(engineBudget({ subpath: undefined, bin: 'nope' }), root);
+        assert.equal(missing.failures.length, 1);
+        assert.match(missing.failures[0], /no bin `nope` in thing/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+/** The fixture with a `./wrap` export that re-exports `./engine`'s module.
+ * @param {string} wrapSource the wrapper's source
+ * @returns {Record<string, string>} fixture file map
+ */
+function wrappedPackage(wrapSource) {
+    const files = enginePackage();
+    const manifest = JSON.parse(files['packages/thing/package.json']);
+    manifest.exports['./wrap'] = { default: './dist/wrap.mjs' };
+    files['packages/thing/package.json'] = JSON.stringify(manifest);
+    files['packages/thing/dist/wrap.mjs'] = wrapSource;
+    files['packages/thing/dist/extra.mjs'] = `export const e = ${JSON.stringify(DEV_TEXT)};\n`;
+    return files;
+}
+
+test('a node-entry wrapper passes when it loads only its own file and the entry it wraps', () => {
+    const root = makeFixture(wrappedPackage("export { a } from './a.mjs';\n"));
+    try {
+        const { failures } = checkBudgets(engineBudget({ wrappers: ['./wrap'] }), root);
+        assert.deepEqual(failures, []);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry wrapper fails when it loads a file the entry does not, or grows', () => {
+    const extra = makeFixture(
+        wrappedPackage("export { a } from './a.mjs';\nexport { e } from './extra.mjs';\n"),
+    );
+    const heavy = makeFixture(wrappedPackage(`export const w = ${JSON.stringify(DEV_TEXT)};\n`));
+    try {
+        const loads = checkBudgets(engineBudget({ wrappers: ['./wrap'] }), extra);
+        assert.equal(loads.failures.length, 1);
+        assert.match(loads.failures[0], /`\.\/wrap` loads extra\.mjs, which `\.\/engine` does not/);
+        const grows = checkBudgets(engineBudget({ wrappers: ['./wrap'] }), heavy);
+        assert.equal(grows.failures.length, 1);
+        assert.match(grows.failures[0], /`\.\/wrap` is \d+ gzip bytes of its own, over the 300/);
+    } finally {
+        rmSync(extra, { recursive: true, force: true });
+        rmSync(heavy, { recursive: true, force: true });
+    }
+});
+
+test('a node-entry budget names exactly one of subpath and bin', () => {
+    const root = makeFixture(enginePackage());
+    try {
+        for (const extra of [{ bin: 'thing' }, { subpath: undefined }]) {
+            const { failures } = checkBudgets(engineBudget(extra), root);
+            assert.equal(failures.length, 1);
+            assert.match(failures[0], /names exactly one of `subpath` and `bin`/);
+        }
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
