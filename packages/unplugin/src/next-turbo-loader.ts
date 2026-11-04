@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { SourceTransformResult } from '@csszyx/compiler';
 import { CsszyxError } from '@csszyx/compiler/errors';
 import { diagnosticFileOf } from '@csszyx/compiler/internal';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { diagnosticError, diagnosticMessage } from './diagnostic-message.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
@@ -247,7 +248,7 @@ export function runNextTurboLoader(
     const transformInput = {
         source,
         filename: loaderContext.resourcePath,
-        parserMode: options.parserMode ?? 'rust',
+        parserMode: options.parserMode ?? DEFAULT_BUILD_CONFIG.parser,
         compilerOptions: nextCompilerOptions({
             base: options.compilerOptions,
             statics: crossModule.statics,
@@ -286,7 +287,7 @@ export function runNextTurboLoader(
     });
     const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix, {
         file: loaderContext.resourcePath,
-        parser: options.parserMode ?? 'rust',
+        parser: options.parserMode ?? DEFAULT_BUILD_CONFIG.parser,
     });
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and

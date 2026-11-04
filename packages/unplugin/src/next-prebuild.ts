@@ -36,6 +36,7 @@ export { openStylesheetModel, prepareNextStylesheetFacts } from './next-styleshe
 // stylesheet walk with, so one pattern reads the same in both.
 export { createRootIgnoreMatcher, type RootIgnoreMatcher } from './root-ignore-matcher.js';
 
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
@@ -224,7 +225,7 @@ export function writeNextPrebuildShards(options: NextPrebuildOptions): NextPrebu
         const transform = transformNextSource({
             source,
             filename,
-            parserMode: options.parserMode ?? 'rust',
+            parserMode: options.parserMode ?? DEFAULT_BUILD_CONFIG.parser,
             compilerOptions: nextCompilerOptions({
                 base: options.compilerOptions,
                 statics: crossModule.statics,

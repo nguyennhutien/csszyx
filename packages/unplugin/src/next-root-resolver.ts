@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 
 /** Source used to resolve a Next app root. */
 export type NextAppRootSource = 'explicit' | 'loader-root-context' | 'loader-context' | 'cwd';
@@ -52,7 +53,10 @@ export function resolveNextAppRoot(input: NextAppRootInput): NextAppRootResoluti
  * @param cacheDir User configured cache dir. Defaults to `.csszyx/cache`.
  * @returns Absolute cache path scoped under `appRoot`.
  */
-export function resolveNextAppCacheDir(appRoot: string, cacheDir = '.csszyx/cache'): string {
+export function resolveNextAppCacheDir(
+    appRoot: string,
+    cacheDir: string = DEFAULT_BUILD_CONFIG.cacheDir,
+): string {
     return path.resolve(appRoot, cacheDir);
 }
 

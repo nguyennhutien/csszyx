@@ -10,6 +10,7 @@ import {
     type TokenData,
 } from '@csszyx/compiler';
 import { diagnosticFileOf } from '@csszyx/compiler/internal';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { sha256Of } from './content-digest.js';
 
 // 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
@@ -167,7 +168,7 @@ export interface TransformCacheKey {
  * @returns Absolute directory for transform cache entries.
  */
 export function resolveTransformCacheDir(rootDir: string, cacheDir?: string): string {
-    return path.resolve(rootDir, cacheDir ?? '.csszyx/cache', 'transform');
+    return path.resolve(rootDir, cacheDir ?? DEFAULT_BUILD_CONFIG.cacheDir, 'transform');
 }
 
 /**
