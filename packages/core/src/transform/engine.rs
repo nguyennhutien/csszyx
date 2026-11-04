@@ -27,15 +27,19 @@ use std::time::Instant;
 /// the transform itself intact.
 #[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy)]
-pub(crate) struct Instant;
+pub struct Instant;
 
 #[cfg(target_arch = "wasm32")]
 impl Instant {
-    pub(crate) fn now() -> Self {
+    pub const fn now() -> Self {
         Self
     }
 
-    pub(crate) fn elapsed(self) -> core::time::Duration {
+    #[expect(
+        clippy::unused_self,
+        reason = "the call sites read `start.elapsed()`, as with std::time::Instant"
+    )]
+    pub const fn elapsed(self) -> core::time::Duration {
         core::time::Duration::ZERO
     }
 }

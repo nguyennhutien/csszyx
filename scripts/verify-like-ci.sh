@@ -146,12 +146,13 @@ pnpm check:szcn-collision-blocklist
 # invisible until CI: the default build, `native-engine` (transform engine in
 # engine.rs), and `native` (the napi/FFI binding in native.rs, checked by
 # check-native.mjs — e.g. a redundant clone there is default-clippy-invisible).
-echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check, cargo test, parity harnesses)..."
+echo "[verify-like-ci] Rust gates (rustfmt, clippy x4 feature sets, native check, cargo test, parity harnesses)..."
 (
     cd "$REPO/packages/core"
     cargo fmt --all -- --check
     cargo clippy --all-targets -- -D warnings
     cargo clippy --features native-engine,migrate --all-targets -- -D warnings
+    cargo clippy --target wasm32-unknown-unknown --features native-engine -- -D warnings
     node scripts/check-native.mjs
     cargo test
     # Full native-engine run: inline tests of every gated module plus every

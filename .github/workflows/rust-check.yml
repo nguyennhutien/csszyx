@@ -77,6 +77,11 @@ jobs:
       - name: Run clippy (native-engine, migrate)
         run: cargo clippy --features native-engine,migrate --all-targets -- -D warnings
 
+      # The shipped wasm is built for wasm32 with `native-engine`, and that pair
+      # compiles code (the wasm clock stub) neither run above sees.
+      - name: Run clippy (wasm32, native-engine)
+        run: cargo clippy --target wasm32-unknown-unknown --features native-engine -- -D warnings
+
       - name: Run tests
         run: cargo test
 
