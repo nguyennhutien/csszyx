@@ -3,7 +3,8 @@
  * binding or the wasm module, and the tables behind them. That costs about
  * 300 ms on a laptop and several seconds on a shared CI runner, and a file's
  * first test paid it inside the 5 s a test gets, so it timed out there while
- * every test after it took a millisecond.
+ * every test after it took a millisecond. Every file whose tests reach the
+ * engine warms it here.
  */
 import { beforeAll } from 'vitest';
 
