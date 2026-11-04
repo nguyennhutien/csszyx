@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { handleCompilePreview } from '../src/tools/compile-preview';
 import { project, removeProjects } from './helpers/project';
+import { warmUp } from './helpers/warm-up';
 
 afterEach(() => {
     removeProjects();
@@ -24,6 +25,8 @@ async function preview(
         (await handleCompilePreview({ source, classPrefix }, { cwd })).content[0].text,
     );
 }
+
+warmUp(() => preview('export const A = () => <div sz={{ p: 4 }} />;'));
 
 describe('csszyx_compile_preview', () => {
     it('reports the classes a sz prop compiles to, in emission order', async () => {

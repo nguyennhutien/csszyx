@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { handleMigrate } from '../src/tools/migrate';
 import { project, removeProjects } from './helpers/project';
+import { warmUp } from './helpers/warm-up';
+
+warmUp(() => handleMigrate({ code: '<div className="p-4" />' }));
 
 describe('csszyx_migrate tool', () => {
     it('should transform JSX snippet from className to sz prop', async () => {
