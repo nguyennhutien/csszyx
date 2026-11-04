@@ -4,8 +4,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@csszyx/compiler/internal', async importOriginal => ({
-    ...(await importOriginal<typeof import('@csszyx/compiler/internal')>()),
+vi.mock('@csszyx/compiler/template', async importOriginal => ({
+    ...(await importOriginal<typeof import('@csszyx/compiler/template')>()),
     requirePeer: () => ({ VERSION: '4.2.19', parse: () => ({}) }),
 }));
 

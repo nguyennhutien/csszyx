@@ -10,15 +10,15 @@
  */
 
 import {
+    lowerSzAttributes,
     mayHoldSzAttribute,
     reportTemplateSzDiagnostics,
-    rewriteTemplateSz,
     type SourceMap,
     type TemplateSzDiagnostic,
     type TemplateSzOptions,
     type TemplateSzReporter,
-    transformTemplateFile,
-} from '@csszyx/compiler/internal';
+    templateVitePlugin,
+} from '@csszyx/compiler/template';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import type { Plugin } from 'vite';
 
@@ -75,23 +75,10 @@ export function transformMarkup(
 ): { code: string; map: SourceMap | null; count: number; diagnostics: TemplateSzDiagnostic[] } {
     if (!mayHoldSzAttribute(content))
         return { code: content, map: null, count: 0, diagnostics: [] };
-    const reading = readSzAttributes(content, options.filename);
-    if (reading.diagnostics.length > 0 || reading.attributes.length === 0) {
-        return { code: content, map: null, count: 0, diagnostics: reading.diagnostics };
-    }
-    const { code, map, count, classNames, diagnostics } = rewriteTemplateSz(
-        content,
-        reading.attributes,
+    return lowerSzAttributes(
+        { file: content, reading: readSzAttributes(content, options.filename), label: 'svelte' },
         options,
     );
-    if (options.debug) {
-        reading.attributes.forEach((attribute, index) => {
-            console.log(
-                `[csszyx/svelte] ${attribute.value.source} -> ${JSON.stringify(classNames[index])}`,
-            );
-        });
-    }
-    return { code, map, count, diagnostics };
 }
 
 /**
@@ -178,16 +165,11 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
  * ```
  */
 export function vitePlugin(options: SvelteAdapterOptions = {}): Plugin {
-    return {
+    return templateVitePlugin({
         name: 'csszyx-svelte-vite',
-        enforce: 'pre' as const,
-
-        transform(code: string, id: string) {
-            return transformTemplateFile(this, code, id, '.svelte', (source, filename) =>
-                preprocess(source, { ...options, filename }),
-            );
-        },
-    };
+        extension: '.svelte',
+        preprocess: (source, filename) => preprocess(source, { ...options, filename }),
+    });
 }
 
 /**

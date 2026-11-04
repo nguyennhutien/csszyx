@@ -62,6 +62,7 @@ internal one ships in the same release as every package that reads it.
 | `@csszyx/compiler/browser` | public | The browser-safe lowering. |
 | `@csszyx/compiler/migrate` | internal | The migrate engine calls `@csszyx/cli` makes; use `migrateSource` or `classNameToSzObject` from `@csszyx/cli`. |
 | `@csszyx/compiler/internal` | internal | The build lanes' calls; use `@csszyx/compiler/engine`. |
+| `@csszyx/compiler/template` | internal | What the Vue and Svelte adapters lower templates with; use `@csszyx/vue-adapter` or `@csszyx/svelte-adapter`. |
 | `@csszyx/compiler/report` | internal | The diagnostic words every package renders with. |
 | `@csszyx/compiler/errors` | internal | The error class every package throws; use `isCsszyxError` from `@csszyx/runtime`. |
 | `@csszyx/compiler/sz-limits` | internal | The depth limits the runtime shares. |

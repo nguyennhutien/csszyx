@@ -1,8 +1,8 @@
 /**
  * A build loads only the adapter of the frameworks it has files of.
  *
- * Each adapter here fails to load, so a build that reached one it had no file
- * for would fail: lowering React, Vue or Svelte alone must not touch the other
+ * Each adapter and the template kit here fail to load, so a build that
+ * reached one it had no file for would fail: lowering React, Vue or Svelte alone must not touch the other
  * frameworks' adapters. The real adapter is restored for the framework a test
  * lowers. vitest keeps a mocked module once one import of it has succeeded,
  * so every test here that expects the broken import runs before the first
@@ -15,7 +15,7 @@ import {
     adapterTransformer as transformer,
 } from './template-adapter-harness.js';
 
-const broken = vi.hoisted(() => ({ vue: true, svelte: true }));
+const broken = vi.hoisted(() => ({ vue: true, svelte: true, kit: true }));
 
 vi.mock('@csszyx/vue-adapter', async importOriginal => {
     if (broken.vue) throw new Error('the Vue adapter was loaded');
@@ -25,12 +25,19 @@ vi.mock('@csszyx/svelte-adapter', async importOriginal => {
     if (broken.svelte) throw new Error('the Svelte adapter was loaded');
     return importOriginal();
 });
+// The kit both adapters share, and magic-string with it: a React build has no
+// template file, so it never loads either.
+vi.mock('@csszyx/compiler/template', async importOriginal => {
+    if (broken.kit) throw new Error('the template kit was loaded');
+    return importOriginal();
+});
 
 afterEach(() => {
     removeAdapterTestRoots();
     vi.resetModules();
     broken.vue = true;
     broken.svelte = true;
+    broken.kit = true;
 });
 
 describe('a framework file', () => {
@@ -42,7 +49,7 @@ describe('a framework file', () => {
 });
 
 describe('a build of one framework', () => {
-    it('lowers React with neither adapter', async () => {
+    it('lowers React with neither adapter nor the template kit', async () => {
         const transform = await transformer();
         const result = (await transform(
             'export const A = () => <div sz={{ p: 4 }} />;',
@@ -55,6 +62,7 @@ describe('a build of one framework', () => {
 
     it('lowers Vue with the Vue adapter alone', async () => {
         broken.vue = false;
+        broken.kit = false;
         const transform = await transformer();
         const result = (await transform(
             '<template><div :sz="{ p: 4 }" /></template>',
@@ -67,6 +75,7 @@ describe('a build of one framework', () => {
 
     it('lowers Svelte with the Svelte adapter alone', async () => {
         broken.svelte = false;
+        broken.kit = false;
         const transform = await transformer();
         const result = (await transform('<div sz={{ p: 4 }}></div>', 'src/A.svelte')) as {
             code: string;

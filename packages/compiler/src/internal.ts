@@ -1,14 +1,14 @@
 /**
- * What the csszyx packages share with one another and nobody else: the Vue
- * and Svelte adapters lower template `sz` through it, and the
- * CLI and the build plugin read the engine's output and choose an artifact
- * with it. Its shape follows the adapters and may change in any release.
+ * What the csszyx packages share with one another and nobody else: the CLI
+ * and the build plugin read the engine's output and choose an artifact with
+ * it. A template adapter's kit is `@csszyx/compiler/template`, kept apart so
+ * the build plugin loads it only for a template file. Its shape may change in
+ * any release.
  *
  * @module internal
  * @internal Not a stable API.
  */
 
-export type { SourceMap } from 'magic-string';
 export {
     fillSzDiagnosticTemplate,
     type SzDiagnosticTemplate,
@@ -27,22 +27,6 @@ export {
     type ResolveParserModeResult,
     resolveParserMode,
 } from './parser-mode.js';
-export { type RequirePeerInput, requirePeer } from './peer-module.js';
-export {
-    mayHoldSzAttribute,
-    type PlaceTemplateDiagnosticInput,
-    placeTemplateDiagnostic,
-    reportTemplateSzDiagnostics,
-    rewriteTemplateSz,
-    type TemplateSzAttribute,
-    type TemplateSzDiagnostic,
-    type TemplateSzLowering,
-    type TemplateSzOptions,
-    type TemplateSzReporter,
-    type TemplateSzRewrite,
-    type TemplateSzValue,
-    transformTemplateFile,
-} from './template-sz.js';
 export { transformRustBatchUnrendered, transformRustUnrendered } from './transform-rust.js';
 export { transformSourceUnrendered } from './transform-select.js';
 export { transformWasmUnrendered } from './transform-wasm.js';

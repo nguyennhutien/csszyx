@@ -9,16 +9,16 @@
  */
 
 import {
-    placeTemplateDiagnostic,
-    requirePeer,
-    type TemplateSzAttribute,
-    type TemplateSzDiagnostic,
-} from '@csszyx/compiler/internal';
-import {
     SVELTE_VERSION_UNSUPPORTED,
     type SzBrowserDiagnostic,
     TEMPLATE_UNPARSABLE,
 } from '@csszyx/compiler/report';
+import {
+    placeTemplateDiagnostic,
+    requirePeer,
+    type TemplateSzAttribute,
+    type TemplateSzDiagnostic,
+} from '@csszyx/compiler/template';
 
 /** A node of Svelte's modern AST; only the fields the adapter reads. */
 interface SvelteNode {

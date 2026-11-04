@@ -7,6 +7,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { type CsszyxError, isCsszyxError } from '../src/errors.js';
+import { TEMPLATE_LANG_UNSUPPORTED, TEMPLATE_RUNTIME_VALUE } from '../src/report.js';
 import {
     mayHoldSzAttribute,
     placeTemplateDiagnostic,
@@ -14,8 +15,7 @@ import {
     rewriteTemplateSz,
     type TemplateSzAttribute,
     transformTemplateFile,
-} from '../src/internal.js';
-import { TEMPLATE_LANG_UNSUPPORTED, TEMPLATE_RUNTIME_VALUE } from '../src/report.js';
+} from '../src/template.js';
 
 const PARSERS = ['rust', 'wasm'] as const;
 

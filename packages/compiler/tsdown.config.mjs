@@ -110,6 +110,8 @@ export default defineBuild([
             engine: 'src/engine.ts',
             // What the adapters, the CLI and the build plugin share; not a stable API.
             internal: 'src/internal.ts',
+            // What a template adapter lowers with; only a template file loads it.
+            template: 'src/template.ts',
         },
         hooks: {
             // The root is an ES module, and the declarations of `@csszyx/runtime`

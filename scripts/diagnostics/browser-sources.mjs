@@ -26,6 +26,7 @@ export const COMPILER_NODE_SUBPATHS = [
     './internal',
     './migrate',
     './package.json',
+    './template',
 ];
 
 /** Packages whose every source can land in a browser bundle. */

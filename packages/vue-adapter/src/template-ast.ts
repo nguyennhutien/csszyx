@@ -10,16 +10,16 @@
  */
 
 import {
-    placeTemplateDiagnostic,
-    requirePeer,
-    type TemplateSzAttribute,
-    type TemplateSzDiagnostic,
-} from '@csszyx/compiler/internal';
-import {
     type SzBrowserDiagnostic,
     TEMPLATE_LANG_UNSUPPORTED,
     TEMPLATE_UNPARSABLE,
 } from '@csszyx/compiler/report';
+import {
+    placeTemplateDiagnostic,
+    requirePeer,
+    type TemplateSzAttribute,
+    type TemplateSzDiagnostic,
+} from '@csszyx/compiler/template';
 
 import { decodeCharacterReferences } from './character-references.js';
 
