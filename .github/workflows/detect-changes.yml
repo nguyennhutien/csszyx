@@ -162,6 +162,14 @@ jobs:
               # where the job it changes never runs, and main is the first place
               # the new version is tried.
               - '.github/workflows/coverage.yml'
+              # The same for ci.yml: its Build job carries the size step and
+              # the test that checks the step builds every package a budget
+              # reads, so a change to ci.yml alone runs them.
+              - '.github/workflows/ci.yml'
+              # The composite actions, `setup-wasm` above all: every build job
+              # installs the Rust and wasm toolchain through it. The same
+              # holds: left out, a change to one skips every job that uses it.
+              - '.github/actions/**'
               # package.json and pnpm-lock.yaml are intentionally NOT here — both
               # go through content-aware gates below (pkg-gate / lock-gate), so a
               # metadata-only package.json edit or a pure-transitive lockfile
@@ -220,6 +228,9 @@ jobs:
               - 'packages/unplugin/**'
               - '.github/workflows/ci.yml'
               - '.github/workflows/detect-changes.yml'
+              # The only jobs that run `setup-wasm` on Windows and macOS, so
+              # the only place its per-OS branches are tried before main.
+              - '.github/actions/**'
             # What the szv() type-cost gate measures: the row typing, the
             # SzProps it checks rows against (with the compiler declarations
             # around it), the gate itself and the workflows that run it. A

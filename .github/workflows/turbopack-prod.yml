@@ -19,6 +19,9 @@ on:
       - 'packages/unplugin/src/next-*.ts'
       - 'scripts/verify-turbopack-prod.sh'
       - '.github/workflows/turbopack-prod.yml'
+      # The toolchain this workflow installs through `setup-wasm`.
+      - '.github/actions/setup-wasm/**'
+      - '.github/actions/install-wasm-pack/**'
   pull_request:
     paths:
       - 'playground/nextjs-16/package.json'
@@ -27,6 +30,9 @@ on:
       - 'packages/unplugin/src/next-*.ts'
       - 'scripts/verify-turbopack-prod.sh'
       - '.github/workflows/turbopack-prod.yml'
+      # The toolchain this workflow installs through `setup-wasm`.
+      - '.github/actions/setup-wasm/**'
+      - '.github/actions/install-wasm-pack/**'
 
 # Nothing here writes: it checks out, installs and runs checks. Said in the file
 # rather than left to the repository setting, which is `read` today and is one

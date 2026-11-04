@@ -1,0 +1,59 @@
+name: Install wasm-pack
+description: >-
+  Install wasm-pack v0.14.0 from its release archive, checked against a
+  SHA-256 pinned per target, and put it on PATH. The one place the version
+  and its sums live: `setup-wasm` and the Rust Check workflow both use it.
+
+runs:
+  using: composite
+  steps:
+    - name: Install wasm-pack
+      # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
+      # sequence, expected a string" parse error on the second wasm-pack
+      # invocation within the same job (nodejs target after bundler).
+      #
+      # Installed here rather than through `jetli/wasm-pack-action`, which
+      # unpacks into `/tmp` and renames the binary into `~/.cargo/bin`: a
+      # rename cannot cross filesystems, and on runners where `/tmp` and the
+      # home directory are separate mounts it fails with EXDEV. This unpacks
+      # into the runner's temp directory and puts that on PATH, so nothing
+      # moves. Each archive's SHA-256 is pinned, read from the release on
+      # 2026-11-04; a new version needs new sums.
+      shell: bash
+      env:
+        WASM_PACK_VERSION: v0.14.0
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) target=x86_64-unknown-linux-musl
+            sum=278a8d668085821f4d1a637bd864f1713f872b0ae3a118c77562a308c0abfe8d ;;
+          Linux-ARM64) target=aarch64-unknown-linux-musl
+            sum=5941c7b05060440ff37ee50fe9009a408e63fa5ba607a3b0736f5a887ec5f2ca ;;
+          macOS-ARM64) target=aarch64-apple-darwin
+            sum=9d0e70c6b229de18f0abfe910f2963e8f09ebae218250e9b09a1c3fdd955bef9 ;;
+          macOS-X64) target=x86_64-apple-darwin
+            sum=46b66072ee9912b53f83841aecb04479a60e0705f7bb8b6681b377a07a512a23 ;;
+          Windows-X64) target=x86_64-pc-windows-msvc
+            sum=d484c8e8bcd9e8c30097fbac78b52dd159598f99d11e43a50f5d143b67c721f1 ;;
+          *) echo "::error::No pinned wasm-pack $WASM_PACK_VERSION build for $RUNNER_OS-$RUNNER_ARCH."
+            exit 1 ;;
+        esac
+        temp="$RUNNER_TEMP"
+        if command -v cygpath > /dev/null; then temp="$(cygpath -u "$temp")"; fi
+        dir="$temp/wasm-pack-$WASM_PACK_VERSION"
+        archive="$dir.tar.gz"
+        mkdir -p "$dir"
+        curl --fail --silent --show-error --location --retry 3 --output "$archive" \
+          "https://github.com/wasm-bindgen/wasm-pack/releases/download/$WASM_PACK_VERSION/wasm-pack-$WASM_PACK_VERSION-$target.tar.gz"
+        if command -v sha256sum > /dev/null; then
+          actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+        else
+          actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+        fi
+        if [ "$actual" != "$sum" ]; then
+          echo "::error::wasm-pack $WASM_PACK_VERSION for $target has SHA-256 $actual, expected $sum."
+          exit 1
+        fi
+        tar -xzf "$archive" -C "$dir" --strip-components=1
+        "$dir/wasm-pack" --version
+        echo "$RUNNER_TEMP/wasm-pack-$WASM_PACK_VERSION" >> "$GITHUB_PATH"
