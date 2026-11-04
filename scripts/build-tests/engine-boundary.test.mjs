@@ -13,5 +13,5 @@ import { checkEngineBoundary } from '../check-engine-boundary.mjs';
 test('only the build subpaths reach the engine, and the browser packages install none', () => {
     const { problems, engineSubpaths } = checkEngineBoundary();
     assert.deepEqual(problems, []);
-    assert.deepEqual(engineSubpaths, ['./engine', './internal', './migrate']);
+    assert.deepEqual(engineSubpaths, ['./engine', './internal', './migrate', './template']);
 });

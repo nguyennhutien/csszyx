@@ -72,6 +72,12 @@ const THROWN_BY_ENTRY = {
         'ENGINE_VERSION_SKEW',
         'INTERNAL_ERROR',
         'OPTIONS_OBJECT_REQUIRED__ENGINE_CALL',
+        'WASM_ENGINE_UNAVAILABLE',
+    ],
+    'template.ts': [
+        'ENGINE_VERSION_SKEW',
+        'INTERNAL_ERROR',
+        'OPTIONS_OBJECT_REQUIRED__ENGINE_CALL',
         'PEER_MODULE_UNRESOLVED',
         'TEMPLATE_RUNTIME_VALUE',
         'TEMPLATE_SZ_INVALID',
@@ -86,16 +92,19 @@ const THROWN_BY_ENTRY = {
 } as const;
 
 describe('the engine entries load no lowering', () => {
-    it.each(['engine.ts', 'internal.ts'])('%s reaches no transform-core.ts', entry => {
-        const reached = reachable([path.join(compilerSrc, entry)]);
-        // The renderer is reached, so the walk followed the path the tables
-        // are read on.
-        expect(reached).toContain(path.join(compilerSrc, 'diagnostic-render-helpers.ts'));
-        expect(reached).toContain(path.join(compilerSrc, 'sz-key-suggestion.ts'));
-        expect(reached).not.toContain(LOWERING);
-    });
+    it.each(['engine.ts', 'internal.ts', 'template.ts'])(
+        '%s reaches no transform-core.ts',
+        entry => {
+            const reached = reachable([path.join(compilerSrc, entry)]);
+            // The renderer is reached, so the walk followed the path the tables
+            // are read on.
+            expect(reached).toContain(path.join(compilerSrc, 'diagnostic-render-helpers.ts'));
+            expect(reached).toContain(path.join(compilerSrc, 'sz-key-suggestion.ts'));
+            expect(reached).not.toContain(LOWERING);
+        },
+    );
 
-    it.each(['engine.ts', 'internal.ts'])(
+    it.each(['engine.ts', 'internal.ts', 'template.ts'])(
         '%s loads the engine words and none of what only other Node lines say',
         entry => {
             const reached = reachable([path.join(compilerSrc, entry)]);

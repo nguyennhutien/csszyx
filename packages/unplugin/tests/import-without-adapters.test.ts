@@ -35,6 +35,18 @@ const RECORD = `
     // Packages, not modules: one adapter is several files.
     const adapters = () =>
         new Set(resolved.map(url => /(vue|svelte)-adapter\\//.exec(url)?.[1]).filter(Boolean)).size;
+    // The template kit both adapters share, and the source-map writer it
+    // pulls in: only a build that meets a template file needs either.
+    const templateKit = () =>
+        new Set(
+            resolved
+                .map(url => /(compiler\\/dist\\/template)\\.|\\/(magic-string)\\//.exec(url))
+                .filter(Boolean)
+                .map(match => match[1] ?? match[2]),
+        ).size;
+    // Packages of one framework, by name, from any adapter.
+    const frameworkPackages = name =>
+        resolved.filter(url => new RegExp('/(@' + name + '/|' + name + '/|' + name + '-adapter/)').test(url)).length;
 `;
 
 /**
@@ -44,15 +56,31 @@ const RECORD = `
  * @returns The count.
  */
 function adaptersLoaded(script: string): number {
+    return recorded('adapters()', script) as number;
+}
+
+/**
+ * What the child's recorder counts after it runs `script`.
+ *
+ * @param count - The recorder expression to print, e.g. `templateKit()`.
+ * @param script - CommonJS run in the child; it calls `done()` when finished.
+ * @param parse - Reads the child's output; a number by default.
+ * @returns The count.
+ */
+function recorded(
+    count: string,
+    script: string,
+    parse: (out: string) => unknown = Number,
+): unknown {
     const out = execFileSync(
         process.execPath,
         [
             '-e',
-            `${RECORD}\nconst done = () => process.stdout.write(String(adapters()));\n${script}`,
+            `${RECORD}\nconst done = () => process.stdout.write(JSON.stringify(${count}));\n${script}`,
         ],
         { encoding: 'utf8', cwd: PACKAGE },
     );
-    return Number(out);
+    return parse(out);
 }
 
 /** Every entry the package exports, as built. */
@@ -79,5 +107,38 @@ describe('the plugin entries', () => {
         expect(
             adaptersLoaded(`import(${JSON.stringify(path.join(PACKAGE, entry))}).then(done);`),
         ).toBe(0);
+    });
+});
+
+describe('the template kit', () => {
+    it('is recorded when imported, so a zero below means something', () => {
+        expect(recorded('templateKit()', "import('@csszyx/compiler/template').then(done);")).toBe(
+            2,
+        );
+    });
+
+    it.each(ENTRIES)('%s loads neither the template kit nor magic-string on import', entry => {
+        expect(
+            recorded(
+                'templateKit()',
+                `import(${JSON.stringify(path.join(PACKAGE, entry))}).then(done);`,
+            ),
+        ).toBe(0);
+    });
+});
+
+describe('each adapter', () => {
+    it.each([
+        ['svelte', 'vue'],
+        ['vue', 'svelte'],
+    ])('the %s adapter loads nothing of %s', (framework, other) => {
+        const counts = recorded(
+            `[frameworkPackages(${JSON.stringify(framework)}), frameworkPackages(${JSON.stringify(other)})]`,
+            `import('@csszyx/${framework}-adapter').then(done);`,
+            JSON.parse,
+        ) as [number, number];
+        // Its own packages are counted, so the zero for the other means something.
+        expect(counts[0]).toBeGreaterThan(0);
+        expect(counts[1]).toBe(0);
     });
 });

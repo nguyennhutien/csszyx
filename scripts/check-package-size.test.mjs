@@ -570,7 +570,7 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ['per-key-rows-', 'closed-enum-tables-'],
     );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 25);
+    assert.equal(SIZE_BUDGETS.length, 26);
     // The compiler's Node-only exports, the plugin, the CLI and the MCP server
     // run in Node at the start of every build, command and editor session, so
     // every runtime export and bin they ship is priced: by a node-entry
@@ -673,6 +673,7 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         './internal',
         './migrate',
         './report',
+        './template',
     ]);
     assert.equal(compiler?.subpaths, undefined, 'an inclusion list would miss new exports');
     assert.ok(Object.hasOwn(compiler.entryBudgets, './browser'));
@@ -682,8 +683,17 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
             budget => budget.kind === 'node-entry' && budget.target === 'packages/compiler',
         ).map(budget => [budget.target, budget.subpath, budget.excludedModules]),
         [
-            ['packages/compiler', './engine', ['src/state-variants.generated.ts']],
-            ['packages/compiler', './internal', ['src/state-variants.generated.ts']],
+            [
+                'packages/compiler',
+                './engine',
+                ['src/state-variants.generated.ts', 'src/template-sz.ts', 'src/peer-module.ts'],
+            ],
+            [
+                'packages/compiler',
+                './internal',
+                ['src/state-variants.generated.ts', 'src/template-sz.ts', 'src/peer-module.ts'],
+            ],
+            ['packages/compiler', './template', ['src/state-variants.generated.ts']],
             ['packages/compiler', '.', undefined],
             ['packages/compiler', './migrate', undefined],
             ['packages/compiler', './report', undefined],

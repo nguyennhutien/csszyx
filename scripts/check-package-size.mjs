@@ -222,7 +222,7 @@ export const SIZE_BUDGETS = [
         // set no app ships. It is priced through its consumers instead: a
         // site imports it from a `NODE_ENV` branch, and `checkTemplateLeaks`
         // fails any production bundle that keeps a template.
-        excludeSubpaths: ['.', './engine', './internal', './migrate', './report'],
+        excludeSubpaths: ['.', './engine', './internal', './migrate', './report', './template'],
         // Raised from 14,700 on 2026-10-02, measured 14,903: a replaced key, a
         // moved value and a later group overriding a stand-alone key now warn
         // in production as well (ADR 0011, its `productionMessages` below), so
@@ -743,8 +743,20 @@ export const SIZE_BUDGETS = [
         // check, so a native build no longer loads the wasm to mangle (about
         // 5 MB of resident memory a process); and the wasm module-link scan
         // goes in runs of 8 MB of source. Raised on the user's call.
-        maxGzipBytes: 30_250,
-        excludedModules: ['src/state-variants.generated.ts'],
+        // 30,500 on 2026-11-04, measured 30,154 (29,925 before): no code
+        // grew. `./template` now shares the engine-choice chunk, so Rolldown
+        // split it from the transform-select chunk `./engine` and
+        // `./internal` load alone, and this sum pays one more file's gzip
+        // header and dictionary. Merging the two with a `codeSplitting`
+        // group was measured: 0.2 to 0.8 ms faster per Node import, no
+        // resident-memory change, none in a Vue build, and any added group
+        // re-lays out the browser `transform-core` chunk (`./browser` +107).
+        maxGzipBytes: 30_500,
+        excludedModules: [
+            'src/state-variants.generated.ts',
+            'src/template-sz.ts',
+            'src/peer-module.ts',
+        ],
     },
     {
         name: '@csszyx/compiler `./internal`, loaded by Node',
@@ -755,7 +767,26 @@ export const SIZE_BUDGETS = [
         // migrate class-name options object. 32,500 on 2026-10-27, measured
         // 32,427 (32,023 before): the same engine-call refusal. 33,050 on
         // 2026-10-31, measured 32,759: the same encoder, checksum and runs.
-        maxGzipBytes: 33_050,
+        // 31,000 on 2026-11-04, measured 30,663: a template adapter's kit
+        // moved to `./template`, and with it `magic-string`, which every
+        // build loaded through this entry: 2 ms and 1.2 MB importing this
+        // entry alone, about 0.3 MB and no time above the noise in the
+        // whole plugin process.
+        maxGzipBytes: 31_000,
+        excludedModules: [
+            'src/state-variants.generated.ts',
+            'src/template-sz.ts',
+            'src/peer-module.ts',
+        ],
+    },
+    {
+        name: '@csszyx/compiler `./template`, loaded by Node',
+        kind: 'node-entry',
+        target: 'packages/compiler',
+        subpath: './template',
+        // Measured 32,324 on 2026-11-04: what a template adapter lowers with,
+        // loaded only when a build meets a `.vue` or `.svelte` file.
+        maxGzipBytes: 32_650,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev

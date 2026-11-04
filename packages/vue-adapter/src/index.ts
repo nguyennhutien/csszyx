@@ -10,14 +10,14 @@
  */
 
 import {
+    lowerSzAttributes,
     mayHoldSzAttribute,
-    rewriteTemplateSz,
     type SourceMap,
     type TemplateSzAttribute,
     type TemplateSzDiagnostic,
     type TemplateSzOptions,
-    transformTemplateFile,
-} from '@csszyx/compiler/internal';
+    templateVitePlugin,
+} from '@csszyx/compiler/template';
 import type { Plugin } from 'vite';
 
 import { type ReadFailure, readSzAttributes } from './template-ast.js';
@@ -142,24 +142,20 @@ function lowerFile(
     options: VueAdapterOptions,
     reading: { attributes: TemplateSzAttribute[]; failure: ReadFailure | null },
 ): PreprocessResult {
-    if (reading.failure) {
-        const { offset, place } = reading.failure;
-        return unchanged(file, [place({ file, filename: options.filename, offset })]);
-    }
-    if (reading.attributes.length === 0) return unchanged(file, []);
-    const { code, map, count, classNames, diagnostics } = rewriteTemplateSz(
-        file,
-        reading.attributes,
+    const diagnostics = reading.failure
+        ? [
+              reading.failure.place({
+                  file,
+                  filename: options.filename,
+                  offset: reading.failure.offset,
+              }),
+          ]
+        : [];
+    const lowered = lowerSzAttributes(
+        { file, reading: { attributes: reading.attributes, diagnostics }, label: 'vue' },
         options,
     );
-    if (options.debug) {
-        reading.attributes.forEach((attribute, index) => {
-            console.log(
-                `[csszyx/vue] ${attribute.value.source} -> ${JSON.stringify(classNames[index])}`,
-            );
-        });
-    }
-    return { code, map, transformed: count > 0, count, diagnostics };
+    return { ...lowered, transformed: lowered.count > 0 };
 }
 
 /**
@@ -226,16 +222,11 @@ export function preprocess(source: string, options: VueAdapterOptions = {}): Pre
  * ```
  */
 export function vitePlugin(options: VueAdapterOptions = {}): Plugin {
-    return {
+    return templateVitePlugin({
         name: 'csszyx-vue',
-        enforce: 'pre' as const,
-
-        transform(code: string, id: string) {
-            return transformTemplateFile(this, code, id, '.vue', (source, filename) =>
-                preprocess(source, { ...options, filename }),
-            );
-        },
-    };
+        extension: '.vue',
+        preprocess: (source, filename) => preprocess(source, { ...options, filename }),
+    });
 }
 
 /**

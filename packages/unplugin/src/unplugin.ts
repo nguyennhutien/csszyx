@@ -23,14 +23,13 @@ import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
     diagnosticFileOf,
     type ParserMode,
-    reportTemplateSzDiagnostics,
     resolveParserMode,
     transformRustBatchUnrendered,
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
+import type { TemplatePreprocess } from '@csszyx/compiler/template';
 import { getNativePackageName } from '@csszyx/core/native';
-import type { preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
     createGitignoreQuery,
     createWalkRootRelative,
@@ -49,7 +48,6 @@ import {
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
 } from '@csszyx/types';
-import type { preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
@@ -618,17 +616,34 @@ let _hasWarnedNativeFallback = false;
 const _loggedActiveParsers = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 
-/** A framework whose templates an adapter lowers. */
-type TemplateFramework = 'vue' | 'svelte';
+/**
+ * The template adapters, by framework: the extension of the files each lowers
+ * and how to load it. A new adapter is one entry here, and the `satisfies`
+ * below checks its `preprocess` against the kit's {@link TemplatePreprocess}.
+ * Nothing in this table is imported until a build meets a file of that
+ * extension.
+ */
+const TEMPLATE_ADAPTERS = {
+    vue: { extension: '.vue', load: async () => (await import('@csszyx/vue-adapter')).preprocess },
+    svelte: {
+        extension: '.svelte',
+        load: async () => (await import('@csszyx/svelte-adapter')).preprocess,
+    },
+} as const satisfies Record<string, { extension: string; load: () => Promise<TemplatePreprocess> }>;
 
-/** An adapter's `preprocess`: the Vue and Svelte ones take and return the same shape. */
-type TemplatePreprocess = typeof vuePreprocess | typeof sveltePreprocess;
+/** A framework whose templates an adapter lowers. */
+type TemplateFramework = keyof typeof TEMPLATE_ADAPTERS;
+
+/** How the template lane hands a file's diagnostics to the bundler. */
+type TemplateReport = typeof import('@csszyx/compiler/template').reportTemplateSzDiagnostics;
 
 /**
- * Each adapter's `preprocess`, once loaded. An adapter loads with the first
- * file of its framework, so a build of another framework never loads it.
+ * Each adapter's `preprocess`, once loaded, and the kit's reporter, which
+ * loads with the first adapter: a build with no template file loads neither,
+ * and a build of one framework never loads another's adapter.
  */
 const templateAdapters: Partial<Record<TemplateFramework, TemplatePreprocess>> = {};
+let reportTemplateSzDiagnostics: TemplateReport | undefined;
 
 /**
  * The framework whose adapter lowers a module, if any.
@@ -637,20 +652,49 @@ const templateAdapters: Partial<Record<TemplateFramework, TemplatePreprocess>> =
  * @returns The framework, or null for a module the compiler lowers.
  */
 function templateFrameworkOf(id: string): TemplateFramework | null {
-    if (id.endsWith('.vue')) return 'vue';
-    return id.endsWith('.svelte') ? 'svelte' : null;
+    for (const [framework, adapter] of Object.entries(TEMPLATE_ADAPTERS)) {
+        if (id.endsWith(adapter.extension)) return framework as TemplateFramework;
+    }
+    return null;
 }
 
 /**
- * Loads a framework's adapter, once.
+ * Each framework's load while it runs: the files that arrive before the first
+ * load ends wait on it instead of starting their own.
+ */
+const templateAdapterLoads: Partial<Record<TemplateFramework, Promise<void>>> = {};
+
+/**
+ * Loads a framework's adapter and the kit's reporter, once each. A load that
+ * fails is forgotten, so the next file of that framework tries again.
  *
  * @param framework - The framework.
+ * @returns When both are loaded.
  */
-async function loadTemplateAdapter(framework: TemplateFramework): Promise<void> {
-    templateAdapters[framework] ??=
-        framework === 'vue'
-            ? (await import('@csszyx/vue-adapter')).preprocess
-            : (await import('@csszyx/svelte-adapter')).preprocess;
+function loadTemplateAdapter(framework: TemplateFramework): Promise<void> {
+    templateAdapterLoads[framework] ??= Promise.all([
+        templateAdapters[framework] ?? TEMPLATE_ADAPTERS[framework].load(),
+        reportTemplateSzDiagnostics ?? loadTemplateReport(),
+    ]).then(
+        ([preprocess, report]) => {
+            templateAdapters[framework] = preprocess;
+            reportTemplateSzDiagnostics = report;
+        },
+        (error: unknown) => {
+            delete templateAdapterLoads[framework];
+            throw error;
+        },
+    );
+    return templateAdapterLoads[framework];
+}
+
+/**
+ * The kit's reporter, from `@csszyx/compiler/template`.
+ *
+ * @returns The reporter.
+ */
+async function loadTemplateReport(): Promise<TemplateReport> {
+    return (await import('@csszyx/compiler/template')).reportTemplateSzDiagnostics;
 }
 
 const PLUGIN_VERSION = findPackageVersionFromFile(
@@ -3921,8 +3965,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             !isUserExcluded(id) &&
             isUserIncluded(id) &&
             (matchesScriptExtension(id, SOURCE_MODULE_EXTENSIONS) ||
-                id.endsWith('.vue') ||
-                id.endsWith('.svelte'))
+                templateFrameworkOf(id) !== null)
         );
     }
 
@@ -6934,7 +6977,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // The transform hook loads it before it lowers the first file.
             const preprocess = templateAdapters[framework] as TemplatePreprocess;
             const result = preprocess(code, adapterOptions);
-            reportTemplateSzDiagnostics(
+            (reportTemplateSzDiagnostics as TemplateReport)(
                 {
                     warn,
                     error: error => {
