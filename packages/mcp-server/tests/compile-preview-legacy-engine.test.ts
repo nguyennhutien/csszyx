@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { handleCompilePreview } from '../src/tools/compile-preview';
+import { warmUp } from './helpers/warm-up';
 
 /** The fields the mocked engine leaves out of its result. */
 const engine = vi.hoisted(() => ({ omits: ['mergeGroups', 'mergeOverrides'] }));
@@ -23,6 +24,8 @@ vi.mock('@csszyx/compiler/engine', async importOriginal => {
         },
     };
 });
+
+warmUp(() => handleCompilePreview({ source: 'export const A = () => <div sz={{ p: 4 }} />;' }));
 
 describe('csszyx_compile_preview with an engine that reports no object lists', () => {
     it('notes the merge whenever the module holds two classes', async () => {

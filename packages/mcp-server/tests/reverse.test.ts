@@ -13,10 +13,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { handleReverse, roundTrip } from '../src/tools/reverse';
 import { project, removeProjects } from './helpers/project';
+import { warmUp } from './helpers/warm-up';
 
 afterEach(() => {
     removeProjects();
 });
+
+warmUp(() => handleReverse({ classes: 'p-4' }));
 
 async function reverse(classes: string, cwd?: string) {
     return JSON.parse((await handleReverse({ classes }, { cwd })).content[0].text);
