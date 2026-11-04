@@ -25,6 +25,14 @@ import type { Plugin } from 'vite';
 import { readSzAttributes } from './markup-ast.js';
 
 /**
+ * The extension of the files this adapter lowers: a Svelte component.
+ * `@csszyx/unplugin` routes a file here by it before loading the adapter.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
+export const extension = '.svelte';
+
+/**
  * Preprocessor options.
  */
 export interface SvelteAdapterOptions extends TemplateSzOptions {
@@ -167,7 +175,7 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
 export function vitePlugin(options: SvelteAdapterOptions = {}): Plugin {
     return templateVitePlugin({
         name: 'csszyx-svelte-vite',
-        extension: '.svelte',
+        extension,
         preprocess: (source, filename) => preprocess(source, { ...options, filename }),
     });
 }

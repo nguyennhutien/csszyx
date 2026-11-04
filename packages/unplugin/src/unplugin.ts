@@ -621,7 +621,8 @@ const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
  * and how to load it. A new adapter is one entry here, and the `satisfies`
  * below checks its `preprocess` against the kit's {@link TemplatePreprocess}.
  * Nothing in this table is imported until a build meets a file of that
- * extension.
+ * extension, so each row repeats the extension its adapter exports;
+ * {@link templateAdapterExtensions} lets a test hold the two equal.
  */
 const TEMPLATE_ADAPTERS = {
     vue: { extension: '.vue', load: async () => (await import('@csszyx/vue-adapter')).preprocess },
@@ -633,6 +634,22 @@ const TEMPLATE_ADAPTERS = {
 
 /** A framework whose templates an adapter lowers. */
 type TemplateFramework = keyof typeof TEMPLATE_ADAPTERS;
+
+/**
+ * The extension the plugin routes to each framework's adapter.
+ *
+ * @internal Read by a test against each adapter's own `extension`; the
+ *   package index does not re-export it.
+ * @returns Framework to extension.
+ */
+export function templateAdapterExtensions(): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(TEMPLATE_ADAPTERS).map(([framework, adapter]) => [
+            framework,
+            adapter.extension,
+        ]),
+    );
+}
 
 /** How the template lane hands a file's diagnostics to the bundler. */
 type TemplateReport = typeof import('@csszyx/compiler/template').reportTemplateSzDiagnostics;

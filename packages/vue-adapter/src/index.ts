@@ -23,6 +23,14 @@ import type { Plugin } from 'vite';
 import { type ReadFailure, readSzAttributes } from './template-ast.js';
 
 /**
+ * The extension of the files this adapter lowers: a Vue single-file component.
+ * `@csszyx/unplugin` routes a file here by it before loading the adapter.
+ *
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
+export const extension = '.vue';
+
+/**
  * Preprocessor options.
  */
 export interface VueAdapterOptions extends TemplateSzOptions {
@@ -224,7 +232,7 @@ export function preprocess(source: string, options: VueAdapterOptions = {}): Pre
 export function vitePlugin(options: VueAdapterOptions = {}): Plugin {
     return templateVitePlugin({
         name: 'csszyx-vue',
-        extension: '.vue',
+        extension,
         preprocess: (source, filename) => preprocess(source, { ...options, filename }),
     });
 }
