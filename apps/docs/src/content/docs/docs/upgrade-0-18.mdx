@@ -346,7 +346,7 @@ the runtime used on its own. Without a table, `szcn` removes exact repeats only.
 
 ```text
 [csszyx] merge-table-missing: `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.
-  help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.
+  help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first, and without `@csszyx/unplugin/jest` require `.csszyx/merge-registration.cjs` from a `setupFiles` entry.
   note: the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.
   docs: https://csszyx.com/e/merge-table-missing
 ```
