@@ -62,6 +62,9 @@ function findingsIn(file) {
     source.split('\n').forEach((line, index) => {
         if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
         for (const match of line.matchAll(literal)) {
+            // A slash right after `<` opens an HTML close tag inside a string
+            // or template (`'</script>'`), not a regex literal.
+            if (match.index > 0 && line[match.index - 1] === '<') continue;
             const [, body, flags] = match;
             if (!new RegExp(TAG, 'i').test(body)) continue;
             const reasons = [];
