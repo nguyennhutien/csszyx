@@ -57,6 +57,39 @@ describe('patchSzVars', () => {
     });
 });
 
+/**
+ * Sets vars on `:root`, no ref given.
+ *
+ * @returns Nothing to render.
+ */
+function RootProbe() {
+    useSzVars({ hook: 'ran' });
+    return null;
+}
+
+/**
+ * Sets vars on `:root`, for the document that has none yet.
+ *
+ * @returns Nothing to render.
+ */
+function DetachedProbe() {
+    useSzVars({ detached: 'value' });
+    return null;
+}
+
+/**
+ * Sets vars on its own element.
+ *
+ * @param props - The value of `--pad`.
+ * @param props.pad - The value.
+ * @returns The element.
+ */
+function RefProbe({ pad }: { pad: string }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useSzVars({ pad }, ref);
+    return createElement('div', { ref });
+}
+
 describe('useSzVars', () => {
     let container: HTMLDivElement;
     let root: ReturnType<typeof createRoot>;
@@ -73,43 +106,30 @@ describe('useSzVars', () => {
     });
 
     it('applies vars to :root when no ref is passed', () => {
-        function Probe() {
-            useSzVars({ hook: 'ran' });
-            return null;
-        }
-        act(() => root.render(createElement(Probe)));
+        act(() => root.render(createElement(RootProbe)));
         expect(document.documentElement.style.getPropertyValue('--hook')).toBe('ran');
     });
 
     it('waits for a target when the document has no root element', () => {
-        function Probe() {
-            useSzVars({ detached: 'value' });
-            return null;
-        }
         const html = document.documentElement;
         const missingRoot = vi
             .spyOn(document, 'documentElement', 'get')
             .mockReturnValue(null as unknown as HTMLElement);
         try {
-            act(() => root.render(createElement(Probe)));
+            act(() => root.render(createElement(DetachedProbe)));
             expect(html.style.getPropertyValue('--detached')).toBe('');
         } finally {
             missingRoot.mockRestore();
         }
-        act(() => root.render(createElement(Probe)));
+        act(() => root.render(createElement(DetachedProbe)));
         expect(html.style.getPropertyValue('--detached')).toBe('value');
     });
 
     it('applies vars to the ref element and re-applies when they change', () => {
-        function Probe({ pad }: { pad: string }) {
-            const ref = useRef<HTMLDivElement>(null);
-            useSzVars({ pad }, ref);
-            return createElement('div', { ref });
-        }
-        act(() => root.render(createElement(Probe, { pad: '4' })));
+        act(() => root.render(createElement(RefProbe, { pad: '4' })));
         const div = container.querySelector('div');
         expect(div?.style.getPropertyValue('--pad')).toBe('4');
-        act(() => root.render(createElement(Probe, { pad: '8' })));
+        act(() => root.render(createElement(RefProbe, { pad: '8' })));
         expect(div?.style.getPropertyValue('--pad')).toBe('8');
     });
 });

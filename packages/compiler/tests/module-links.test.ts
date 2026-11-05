@@ -150,7 +150,7 @@ describe.each(LINK_SCANNERS)('the %s artifact', (_name, scan) => {
             [
                 {
                     filename: '/p/a.tsx',
-                    source: String.raw`export const A = () => <><style>{/'/.test("'") && '[class~="pb-[2px]"] {}'}</style>
+                    source: `export const A = () => <><style>{/'/.test("'") && '[class~="pb-[2px]"] {}'}</style>
 <style>{'.pb-2 {}'}</style></>;
 const page = '<style>.c {}</style>';`,
                 },

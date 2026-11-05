@@ -1,5 +1,5 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
     "vcs": {
         "enabled": true,
         "clientKind": "git",
@@ -145,6 +145,25 @@
                 "rules": {
                     "style": {
                         "useForOf": "off"
+                    },
+                    "suspicious": {
+                        "noUndeclaredEnvVars": {
+                            "level": "on",
+                            "options": {
+                                "allowedEnvVars": [
+                                    "CODESPACES",
+                                    "REMOTE_CONTAINERS",
+                                    "GH_REPO",
+                                    "GITHUB_STEP_SUMMARY",
+                                    "RUNNER_TEMP",
+                                    "RELEASE_BRANCH",
+                                    "CSSZYX_BENCH_HISTORY",
+                                    "CSSZYX_BENCH_HISTORY_DIR",
+                                    "CSSZYX_TAILWIND_VERSIONS_DIR",
+                                    "CSSZYX_UPDATE_TAILWIND_VERSIONS_BASELINE"
+                                ]
+                            }
+                        }
                     }
                 }
             }
