@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "ignore": "7.0.13"
+    "ignore": "7.0.14"
   },
   "sideEffects": false,
   "license": "MIT"
