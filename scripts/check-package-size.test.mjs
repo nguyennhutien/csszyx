@@ -570,9 +570,10 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         ['per-key-rows-', 'closed-enum-tables-'],
     );
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 26);
-    // The compiler's Node-only exports, the plugin, the CLI and the MCP server
-    // run in Node at the start of every build, command and editor session, so
+    assert.equal(SIZE_BUDGETS.length, 28);
+    // The compiler's Node-only exports, the plugin, the CLI, the MCP server
+    // and the template adapters run in Node at the start of every build,
+    // command and editor session, so
     // every runtime export and bin they ship is priced: by a node-entry
     // budget, as a wrapper one declares, or as a browser entry of the app
     // bundle. Compared by file, so an export and a bin sharing one file are
@@ -582,6 +583,8 @@ test('committed budgets cover the user-shipped surfaces and the engine entries',
         'packages/unplugin',
         'packages/cli',
         'packages/mcp-server',
+        'packages/vue-adapter',
+        'packages/svelte-adapter',
     ]) {
         const dir = fileURLToPath(new URL(`../${target}`, import.meta.url));
         const manifest = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
