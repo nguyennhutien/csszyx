@@ -130,8 +130,8 @@ describe('generateThemeDts', () => {
         });
 
         expect(output).toContain('interface VariantModifiers {');
-        expect(output).toContain('tablet?: SzPropsBase;');
-        expect(output).toContain('desktop?: SzPropsBase;');
+        expect(output).toContain('tablet?: SzProps;');
+        expect(output).toContain('desktop?: SzProps;');
         // Both interfaces live in the same module augmentation block.
         expect(output).toContain("declare module '@csszyx/compiler'");
     });
@@ -143,8 +143,8 @@ describe('generateThemeDts', () => {
             sourceFiles: ['theme.css'],
         });
 
-        expect(output).toContain("'3xl'?: SzPropsBase;");
-        expect(output).toContain('tablet?: SzPropsBase;');
+        expect(output).toContain("'3xl'?: SzProps;");
+        expect(output).toContain('tablet?: SzProps;');
     });
 
     it('omits the VariantModifiers block when there are no breakpoints', () => {
@@ -155,6 +155,7 @@ describe('generateThemeDts', () => {
         });
 
         expect(output).not.toContain('VariantModifiers');
+        expect(output).not.toContain('import type');
     });
 });
 

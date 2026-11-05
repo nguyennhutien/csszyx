@@ -30,8 +30,8 @@ describe('generateThemeDts emitter escaping (F2)', () => {
 
     it('quotes non-identifier breakpoint keys as today', () => {
         const out = dts({ breakpoints: ['tablet', '3xl'] });
-        expect(out).toContain('tablet?: SzPropsBase;');
-        expect(out).toContain("'3xl'?: SzPropsBase;");
+        expect(out).toContain('tablet?: SzProps;');
+        expect(out).toContain("'3xl'?: SzProps;");
     });
 
     it('escapes a hostile token so it cannot break the string literal', () => {
@@ -42,8 +42,8 @@ describe('generateThemeDts emitter escaping (F2)', () => {
 
     it('escapes a hostile breakpoint key (quoteKey path) and a newline', () => {
         const out = dts({ breakpoints: ["a'b", 'c\nd'] });
-        expect(out).toContain("'a\\'b'?: SzPropsBase;");
-        expect(out).toContain("'c\\nd'?: SzPropsBase;");
+        expect(out).toContain("'a\\'b'?: SzProps;");
+        expect(out).toContain("'c\\nd'?: SzProps;");
         // no real newline injected into the generated declaration
         expect(out).not.toContain('c\nd');
     });
