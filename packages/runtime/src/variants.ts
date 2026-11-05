@@ -79,10 +79,12 @@ type VariantBodyKeys<T, IsTable extends boolean> = T extends object
 type KnownSchemaKeys<V> = { [K in keyof V]: { [R in keyof V[K]]: KnownRowKeys<V[K][R]> } };
 
 /**
- *
+ * The option picked per dimension. `-readonly` because `szv` infers the
+ * schema with `const`, and a mapped type would otherwise copy that
+ * `readonly` onto a selection the caller builds field by field.
  */
 type VariantSelection<V extends VariantSchema> = {
-    [K in keyof V]?: keyof V[K] | null | undefined;
+    -readonly [K in keyof V]?: keyof V[K] | null | undefined;
 };
 
 /**
