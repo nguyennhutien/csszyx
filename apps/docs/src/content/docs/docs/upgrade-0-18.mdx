@@ -285,6 +285,16 @@ export const Card = (rest) => <div className="card pb-2" {...rest} sz={{ p: 4 }}
 `sz` or class name sits after it. An element with no spread between them is
 unchanged.
 
+A spread that provably carries no class is no wall, and merges as in 0.17: an
+object literal, `cond && { … }` or `cond ? { … } : { … }`, whose keys are all
+written out (no `...other`, no `[key]`) and none of which is `className`, `class`
+or `sz`:
+
+```tsx
+<div className="item" {...(!disabled && { onClick })} sz={{ py: 3 }} />
+// → <div className="item py-3" {...(!disabled && { onClick })} />
+```
+
 **What you see.** The build prints this in every mode, production included:
 
 ```text

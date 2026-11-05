@@ -877,6 +877,16 @@ after the spread, in the order that should win:
 so the spread's is `rest.class`. Vue JSX merges every `class` instead, so there
 all of them apply.
 
+A spread csszyx can read that carries no class is no wall. That is an object
+literal, `cond && { … }` or `cond ? { … } : { … }`, whose keys are all written
+out (no `...other`, no `[key]`) and none of which is `className`, `class` or
+`sz`. The element merges as though the spread were not there:
+
+```tsx
+<div className="card" {...(open && { onClick })} sz={{ p: 4 }} />
+// → className="card p-4" {...(open && { onClick })}
+```
+
 In a Svelte component two `class` attributes on one element are an error, so
 Svelte stops the build with `attribute_duplicate: Attributes need to be
 unique`, pointing at the `class` csszyx wrote where `sz` stood. The Svelte

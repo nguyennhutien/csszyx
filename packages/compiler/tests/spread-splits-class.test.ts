@@ -177,6 +177,68 @@ describe('a class name and sz on either side of a spread', () => {
         }
     });
 
+    // A spread whose object the compiler can read, with no `className`,
+    // `class` or `sz` key, carries no class: it is no wall, so the element
+    // merges as though the spread stood before the class name.
+    it.each([
+        ['an object', '{...{ onClick: c }}'],
+        ['an empty object', '{...{}}'],
+        ['a guarded object', '{...(!n && { onClick: c })}'],
+        ['a choice of two objects', "{...(n ? { id: 'a' } : { title: 'b' })}"],
+        [
+            'shorthand, method, getter and string keys',
+            "{...{ c, f() {}, get g() { return 1; }, 'aria-label': 'x', 2: 'y' }}",
+        ],
+        ['a cast object', '{...({ onClick: c } as object)}'],
+    ])('merges across %s that carries no class', (_name, spread) => {
+        for (const { name, code, issues } of transformElement(
+            `<div className="card" ${spread} sz={{ p: 4 }} />`,
+        )) {
+            expect(code, name).toContain(`className="card p-4" ${spread}`);
+            expect(code.match(/className=/g), name).toHaveLength(1);
+            expect(
+                issues.filter(issue => issue.code === 'spread-split-class'),
+                name,
+            ).toEqual([]);
+        }
+    });
+
+    it('merges a runtime class name across a guarded object, as 0.17 did', () => {
+        for (const { name, code } of transformElement(
+            "<div className={c('x', n && 'y')} {...(!n && { onClick: r })} sz={{ py: 3, md: { py: 2 } }} />",
+        )) {
+            expect(code, name).toContain(
+                `className={_szMerge(c('x', n && 'y'), "py-3 md:py-2")} {...(!n && { onClick: r })}`,
+            );
+            expect(code.match(/className=/g), name).toHaveLength(1);
+        }
+    });
+
+    it.each([
+        ['a computed key', '{...{ [n]: c }}'],
+        ['a computed literal key', "{...{ ['id']: c }}"],
+        ['a nested spread', '{...{ ...r }}'],
+        ['an `||` fallback', '{...(n || { onClick: c })}'],
+        ['a `??` fallback', '{...(n ?? { onClick: c })}'],
+        ['a choice with a non-object branch', "{...(n ? { id: 'a' } : r)}"],
+        ['a `className` key', "{...{ className: 'x' }}"],
+        ['a quoted `className` key', "{...{ 'className': 'x' }}"],
+        ['a `class` key', "{...{ class: 'x' }}"],
+        ['an `sz` key', '{...{ sz: c }}'],
+        ['a guarded `className`', "{...(n && { className: 'x' })}"],
+        ['a `className` in one branch', "{...(n ? { id: 'a' } : { className: 'x' })}"],
+    ])('still splits across %s', (_name, spread) => {
+        for (const { name, code, issues } of transformElement(
+            `<div className="card" ${spread} sz={{ p: 4 }} />`,
+        )) {
+            expect(code, name).toContain(`className="card" ${spread} className="p-4"`);
+            expect(
+                issues.map(issue => issue.code),
+                name,
+            ).toContain('spread-split-class');
+        }
+    });
+
     it.each([
         ['<div {...r} className="card pb-2" sz={{ p: 4 }} />', 'className="card pb-2 p-4"'],
         ['<div className="card pb-2" sz={{ p: 4 }} {...r} />', 'className="card pb-2 p-4"'],
