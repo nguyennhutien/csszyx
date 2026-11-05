@@ -34,9 +34,12 @@ import {
     createGitignoreQuery,
     createWalkRootRelative,
     DEPENDENCY_OUTPUT_DIRS,
+    fileMayContainSafelistableSz,
     GENERATED_REPORT_DIRS,
     type GitignoreMode,
     loadContentScanner,
+    moduleMayHoldSz,
+    SOURCE_MODULE_EXTENSIONS,
     stripCssBlockComments,
     walkProject,
 } from '@csszyx/tailwind-oracle';
@@ -1394,34 +1397,6 @@ export function isHardIgnoredPath(id: string, sourceDirs: readonly string[] = []
 }
 
 /**
- * Whether a file's text may contain csszyx classes the prescan should extract
- * into the safelist. The prescan reads files instead of parsing every one, so it
- * needs a cheap text proxy for "worth transforming". A `sz=` / `sz:` prop is the
- * obvious case, but a `szv(...)` declaration ALSO produces safelistable classes
- * (the compiler extracts every variant from the config), and a layout component
- * built as a prop API resolves szv via `_sz(...)` with NO `sz=` in the file — so
- * gating on `sz` alone left those variants unsafelisted (silent dead classes).
- * `szv(` is a precise, csszyx-owned token, so including it costs at most an extra
- * file transform (the prescan is fail-open: when in doubt, scan).
- *
- * @param content - The source file text.
- * @returns true when the file should be prescanned for safelist extraction.
- */
-export function fileMayContainSafelistableSz(content: string): boolean {
-    return (
-        content.includes('sz=') ||
-        content.includes('szs=') ||
-        content.includes('sz:') ||
-        content.includes('szv(') ||
-        content.includes('szr(') ||
-        // dynamic() literal args are extracted for the safelist, but a module
-        // containing ONLY dynamic() calls never passed this gate — the
-        // engine-parity harness caught its classes missing on all engines.
-        content.includes('dynamic(')
-    );
-}
-
-/**
  * Return csszyx-owned classes that are safe to rename.
  *
  * @param ownedClasses Classes emitted from sz transforms.
@@ -2558,9 +2533,6 @@ const STYLESHEET_FILE_EXTENSIONS = [
     '.sss',
 ] as const;
 
-/** Script extensions accepted by the transform gate, incl. module flavours. */
-const SOURCE_MODULE_EXTENSIONS = [...SCRIPT_ID_EXTENSIONS, '.cts', '.mts', '.cjs', '.mjs'] as const;
-
 /**
  * Whether a bundler id names a script file: an extension at the end of the id,
  * or an extension immediately followed by a `?` query (Vite-style resource
@@ -3093,28 +3065,6 @@ function prefixChange(
     if (before === null) return { change: 'added', after: after as string };
     if (after === null) return { change: 'removed', before };
     return { change: 'changed', before, after };
-}
-
-/**
- * Whether a module may hold an `sz` value or an `szr()` call, read cheaply
- * before the compiler runs.
- *
- * szr-only modules (no sz attribute) once skipped the compiler entirely,
- * which also skipped the szr import rewrite and its fallback diagnostics.
- * The test is deliberately loose: a false positive only costs one file the
- * compiler pass, which then changes nothing.
- *
- * @param code - The module's source.
- * @returns True when the compiler should look at it.
- */
-function mayHoldSz(code: string): boolean {
-    return (
-        code.includes('sz=') ||
-        code.includes('szs=') ||
-        /\bsz\s*:\s*["'{]/.test(code) ||
-        code.includes('sz: "') ||
-        code.includes('szr(')
-    );
 }
 
 /**
@@ -3795,16 +3745,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Module flavours included: the engine-parity harness caught the prescan
     // walk skipping `.mjs` entirely — every class in such a file was silently
     // dead under Tailwind `source(none)` on ALL engines.
-    const SOURCE_EXTENSIONS = new Set([
-        '.tsx',
-        '.jsx',
-        '.ts',
-        '.js',
-        '.mjs',
-        '.cjs',
-        '.mts',
-        '.cts',
-    ]);
+    const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set(SOURCE_MODULE_EXTENSIONS);
 
     /**
      * User exclude filters must run before any parser call. This is the escape
@@ -7595,7 +7536,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return transformTailwindCssEntry(code, id);
                 }
 
-                const hasSzProp = mayHoldSz(code);
+                const hasSzProp = moduleMayHoldSz(code);
                 const lower = (): ReturnType<typeof collectPreTransformClasses> => {
                     // Every bundler's context has it; a caller that drives the
                     // hook by hand may not.

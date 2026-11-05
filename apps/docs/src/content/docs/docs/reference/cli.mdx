@@ -31,6 +31,32 @@ directory instead of the shell's.
 | `audit` | Reports the built asset sizes of a `dist/` directory. | [Below](#audit) |
 | `scan-collisions` | Finds class names in the project's own CSS that a mangled token could collide with. | [Below](#scan-collisions) |
 
+## `check`
+
+Without `--pattern` or `--files`, `check` reads every module the build lowers:
+`**/*.{ts,tsx,js,jsx,cts,mts,cjs,mjs}`, so a `szv()` catalog in a
+`button.styles.ts` is checked like a component. Declaration files (`.d.ts`,
+`.d.mts`, `.d.cts`), `csszyx.config.*`, and the folders `node_modules`, `.git`,
+`.next`, `.nuxt`, `.astro`, `.turbo`, `dist` and `build` are left out. Other
+output folders, such as `out`, `coverage` or `storybook-static`, are read, as
+the build's safelist scan reads them; leave them out with `--ignore`.
+
+On Next.js with Turbopack, `csszyxTurbopack` lowers `*.tsx` unless its `glob`
+says otherwise, while `check` reads every flavour above. Narrow `check` with
+`--pattern` to match a narrower `glob`.
+
+`check` does not read your bundler config or the options passed to the csszyx
+plugin. An `exclude` there narrows the build, not the check, so pass the same
+files to `--ignore`, once per glob:
+
+```bash
+# the plugin has exclude: [/\.stories\.tsx?$/]
+npx csszyx check --ignore "**/*.stories.tsx" --ignore "**/*.stories.ts"
+```
+
+The options, the reports and running it in CI are in
+[What `check` reports](/docs/reference/warnings/#what-check-reports).
+
 ## `next-prebuild` and `next-watch`
 
 Both take the same options; `next-watch` adds `--debounce-ms`. Setup is in

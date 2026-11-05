@@ -1,7 +1,7 @@
+import { fileMayContainSafelistableSz } from '@csszyx/tailwind-oracle';
 import { describe, expect, it } from 'vitest';
 
 import {
-    fileMayContainSafelistableSz,
     isCompileSourceOptedIn,
     isHardIgnoredPath,
     isPackagesSkippedSource,

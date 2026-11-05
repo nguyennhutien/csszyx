@@ -1848,14 +1848,15 @@ either way, so the format can change without changing what failing means.
 pre-commit:
   commands:
     csszyx:
-      glob: "*.{jsx,tsx}"
+      glob: "*.{ts,tsx,js,jsx,cts,mts,cjs,mjs}"
       run: npx csszyx check --files {staged_files}
 ```
 
 Scoping to a subset is sound because the scan lowers each file on its own, with
 no cross-module registry: a file checked alone yields exactly what it yields in
-a whole-project run. Paths that are not `.jsx`/`.tsx` are dropped rather than
-refused, so a README staged alongside a component does not fail the hook.
+a whole-project run. Paths that are not a module the build lowers, and
+declaration files and `csszyx.config.*`, are dropped rather than refused, so a
+README staged alongside a component does not fail the hook.
 
 A path that *is* a source file and still cannot be read is the opposite case,
 and fails the run. Counting it as scanned is how the command came to print

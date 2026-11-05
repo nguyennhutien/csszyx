@@ -64,6 +64,7 @@ export {
     type GitignoreMode,
     type ProjectWalkOptions,
     type ProjectWalkResult,
+    SOURCE_MODULE_EXTENSIONS,
     STYLESHEET_WALK_SKIP_DIRS,
     type StylesheetImportCandidates,
     type StylesheetWalk,
@@ -81,6 +82,7 @@ export {
     szValuePairs,
     type ThemeNamespace,
 } from './sibling-keyword.js';
+export { fileMayContainSafelistableSz, moduleMayHoldSz } from './sz-marker.js';
 export {
     type CollisionOracle,
     type DeclaredToken,

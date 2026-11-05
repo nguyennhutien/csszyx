@@ -36,12 +36,14 @@ import {
     type DeclaredToken,
     type EmittedClassOracle,
     FILE_READ_CONCURRENCY,
+    fileMayContainSafelistableSz,
     findSiblingKeywordValues,
     findTailwindCssEntries,
     findThemeCollisions,
     mapConcurrent,
     readTextFiles,
     type SiblingKeywordFinding,
+    SOURCE_MODULE_EXTENSIONS,
     STYLESHEET_COMPILE_CONCURRENCY,
     type SzValuePair,
     skippedDirGlobs,
@@ -56,6 +58,7 @@ import {
     hoistedSignUtility,
     inertUnderEveryRoot,
     isAtLeastLevel,
+    isCsszyxConfigFile,
     isRemovedRuleId,
     loadCurrentDiagnosticPolicy,
     loadDiagnosticPolicy,
@@ -99,7 +102,11 @@ export interface CheckOptions {
      * keep paths relative to it.
      */
     dir?: string;
-    /** Glob to match source files, relative to `dir` when one is given. Defaults to `**\/*.{jsx,tsx}`. */
+    /**
+     * Glob to match source files, relative to `dir` when one is given.
+     * Defaults to every module the build lowers:
+     * `**\/*.{ts,tsx,js,jsx,cts,mts,cjs,mjs}`, declaration files left out.
+     */
     pattern?: string;
     /** Extra ignore globs appended to the defaults. */
     ignore?: string[];
@@ -207,20 +214,40 @@ const DEFAULT_IGNORE = skippedDirGlobs(DEPENDENCY_OUTPUT_DIRS, { anchored: false
 /**
  * Read one source file, returning null when it cannot contribute diagnostics.
  *
+ * Gated on the build prescan's own marker test: a file whose text only says
+ * `sz` (a `size`, a variable named `sz`) is one the build never parses, so a
+ * syntax error in it is not a finding.
+ *
  * @param file Absolute source path.
- * @returns Source text containing sz syntax, or null when irrelevant/unreadable.
+ * @returns Source text the build would lower, or null when irrelevant/unreadable.
  */
 async function readSzSource(file: string): Promise<string | null> {
     try {
         const source = await readFile(file, 'utf8');
-        return source.includes('sz') ? source : null;
+        return fileMayContainSafelistableSz(source) ? source : null;
     } catch {
         return null;
     }
 }
 
-/** Extensions the scan can lower. */
-const SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
+/** Extensions the scan lowers: the modules the build lowers. */
+const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set(SOURCE_MODULE_EXTENSIONS);
+
+/** The files a run reads when it is given no pattern. */
+const DEFAULT_PATTERN = `**/*.{${SOURCE_MODULE_EXTENSIONS.map(ext => ext.slice(1)).join(',')}}`;
+
+/**
+ * Whether a file with a source extension is still not one the build lowers: a
+ * `.d.ts` (or `.d.mts`, `.d.cts`) holds types only, and `csszyx.config.*` is
+ * read by the config loader, which reports its own problems as `config-invalid`.
+ *
+ * @param cwd - Project root, where the config file sits.
+ * @param file - Absolute path to test.
+ * @returns True for a file the scan leaves out.
+ */
+function isNeverLowered(cwd: string, file: string): boolean {
+    return /\.d\.[cm]?ts$/.test(file) || isCsszyxConfigFile(cwd, file);
+}
 
 /** An explicit file list, split into what can be read and what cannot. */
 interface ListedFiles {
@@ -254,6 +281,7 @@ function listedSourceFiles(listed: readonly string[], cwd: string): ListedFiles 
         const file = withPosixSeparators(given);
         if (!SOURCE_EXTENSIONS.has(path.extname(file))) continue;
         const absolute = path.isAbsolute(file) ? file : path.join(cwd, file);
+        if (isNeverLowered(cwd, absolute)) continue;
         if (existsSync(absolute)) files.push(absolute);
         else missing.push(given);
     }
@@ -1571,7 +1599,12 @@ async function resolveScanFiles(
             missing = listed.missing;
             files = listed.files;
         } else {
-            files = await fg([...patterns], { cwd: root, ignore: [...ignore], absolute: true });
+            const found = await fg([...patterns], {
+                cwd: root,
+                ignore: [...ignore],
+                absolute: true,
+            });
+            files = found.filter(file => !isNeverLowered(cwd, file));
         }
     } catch (err) {
         s?.fail('File scan failed');
@@ -1995,7 +2028,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     // fast-glob reads a backslash as an escape, so a Windows-shaped glob
     // matches nothing and the run passes having scanned no files at all.
-    const patterns = options.pattern ? [withPosixSeparators(options.pattern)] : ['**/*.{jsx,tsx}'];
+    const patterns = options.pattern ? [withPosixSeparators(options.pattern)] : [DEFAULT_PATTERN];
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
 
     // This command IS the full project scan, so suppress the compiler's

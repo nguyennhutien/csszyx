@@ -58,6 +58,23 @@ export const DEPENDENCY_OUTPUT_DIRS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Script modules the build lowers: the plugin's transform gate and its prescan
+ * read these, and `csszyx check` scans them when it is not given a pattern.
+ * One list, so a module flavour the build lowers cannot be missing from the
+ * check that claims to flag what the build flags.
+ */
+export const SOURCE_MODULE_EXTENSIONS = [
+    '.ts',
+    '.tsx',
+    '.js',
+    '.jsx',
+    '.cts',
+    '.mts',
+    '.cjs',
+    '.mjs',
+] as const;
+
+/**
  * Generated reports and build copies: a Rust `target/`, a coverage report, a
  * built Storybook. They carry copies of the app's stylesheets and pages from
  * some earlier build, so the stylesheet and markup walks skip them. The sz
