@@ -9,6 +9,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { handleCliFlags, isEntrypoint, server, startWhenEntrypoint, TOOLS } from '../src/index.js';
+import { handleCompilePreview } from '../src/tools/compile-preview';
+import { warmUp } from './helpers/warm-up';
+
+warmUp(() => handleCompilePreview({ source: 'export const A = () => <div sz={{ p: 4 }} />;' }));
 
 describe('handleCliFlags', () => {
     afterEach(() => vi.restoreAllMocks());

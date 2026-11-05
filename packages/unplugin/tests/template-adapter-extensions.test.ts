@@ -16,6 +16,12 @@ describe('the template adapter table', () => {
             const adapter = (await import(`@csszyx/${framework}-adapter`)) as {
                 extension?: string;
             };
+            // The adapter is read from its built dist, so a dist from before
+            // the export reads as undefined: say so, rather than blame the row.
+            expect(
+                adapter.extension,
+                `@csszyx/${framework}-adapter exports no \`extension\`; rebuild it`,
+            ).toBeDefined();
             expect(routed).toBe(adapter.extension);
         },
     );

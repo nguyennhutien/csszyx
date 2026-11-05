@@ -2,6 +2,9 @@ import { KNOWN_SPECIAL_PROPERTIES, type SzObject, transform } from '@csszyx/comp
 import { describe, expect, it, vi } from 'vitest';
 
 import { handleValidate } from '../src/tools/validate';
+import { warmUp } from './helpers/warm-up';
+
+warmUp(async () => handleValidate({ sz: { p: 4 } }));
 
 describe('csszyx_validate', () => {
     // `Object.prototype` members are words an author can write as keys; a
