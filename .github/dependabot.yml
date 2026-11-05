@@ -52,6 +52,15 @@ updates:
       # mount, per that test.
       - dependency-name: "@napi-rs/cli"
         versions: [">=3.8.0"]
+      # 0.50.0 moved to `markdownlint` 0.42.0, which pins `re2js` at exactly
+      # 2.8.6, inside GHSA-gg6h-894w-4m9c (quadratic-time lookbehind matching,
+      # high; fixed in 2.8.7), and the dependency review job fails the PR on
+      # it. `markdownlint` has told Dependabot to skip `re2js` 2.8.x
+      # (DavidAnson/markdownlint#2346), and 0.49.x does not depend on `re2js`
+      # at all. Drop this entry once a `markdownlint-cli` release resolves a
+      # patched `re2js`.
+      - dependency-name: "markdownlint-cli"
+        versions: [">=0.50.0"]
     groups:
       npm-development:
         dependency-type: "development"
