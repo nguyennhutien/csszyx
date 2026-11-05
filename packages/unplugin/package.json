@@ -87,7 +87,7 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
-    "ignore": "7.0.13",
+    "ignore": "7.0.14",
     "minimatch": "^11.0.1",
     "postcss": "^8.5.31",
     "postcss-selector-parser": "^7.1.7",

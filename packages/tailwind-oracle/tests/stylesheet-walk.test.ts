@@ -371,17 +371,14 @@ describe('a stylesheet that cannot be read', () => {
 
 describe('an `ignore` release that no longer matches a path apart from its parents', () => {
     const verdict = () => ({ ignored: false, unignored: false });
-    it.each([
-        ['has no internal rule list', {}],
-        // 7.0.14 dropped `checkUnignored`, so the call csszyx makes would pass
-        // `true` where the mode belongs and throw a TypeError deep inside `ignore`.
-        [
-            'takes the rule list test without `checkUnignored`',
-            {
-                _rules: { test: (_path: string, _mode: string) => verdict() },
-            },
-        ],
-    ])('stops the walk with a message when it %s', async (_shape, internals) => {
+    /**
+     * Walk a small project against an `ignore` whose instances carry
+     * `internals`.
+     *
+     * @param internals - Fields spread over each instance `add` returns.
+     * @returns What the walk threw, if anything.
+     */
+    async function walkWith(internals: object): Promise<unknown> {
         vi.resetModules();
         vi.doMock('ignore', () => ({
             default: () => ({
@@ -390,12 +387,43 @@ describe('an `ignore` release that no longer matches a path apart from its paren
         }));
         const fresh = await import('../src/project-walk.js');
         const root = tree({ '.gitignore': 'gen/\n', 'src/app.css': '.a {}\n' });
-        let thrown: unknown;
         try {
             fresh.walkProject(root, { skipDirs: new Set(), gitignore: 'skip' }, () => {});
         } catch (error) {
-            thrown = error;
+            return error;
         }
+        return undefined;
+    }
+
+    // 7.0.14 dropped `checkUnignored`; 7.0.13 and earlier take it. Each is
+    // called with the arguments its own shape takes.
+    it.each([
+        ['without `checkUnignored`, as 7.0.14 has it', 2, ['src/', 'regex']],
+        ['with `checkUnignored`, as 7.0.13 has it', 3, ['src/', true, 'regex']],
+    ])('reads the rule list test %s', async (_shape, arity, args) => {
+        const calls: unknown[][] = [];
+        const test =
+            arity === 2
+                ? (path: string, mode: string) => {
+                      calls.push([path, mode]);
+                      return verdict();
+                  }
+                : (path: string, checkUnignored: boolean, mode: string) => {
+                      calls.push([path, checkUnignored, mode]);
+                      return verdict();
+                  };
+        expect(await walkWith({ _rules: { test } })).toBeUndefined();
+        expect(calls).toContainEqual(args);
+    });
+
+    it.each([
+        ['has no internal rule list', {}],
+        [
+            'takes the rule list test with an arity no release has had',
+            { _rules: { test: (_path: string) => verdict() } },
+        ],
+    ])('stops the walk with a message when it %s', async (_shape, internals) => {
+        const thrown = await walkWith(internals);
         expect(isCsszyxError(thrown)).toBe(true);
         expect(thrown).toMatchObject({
             code: 'ignore-package-incompatible',

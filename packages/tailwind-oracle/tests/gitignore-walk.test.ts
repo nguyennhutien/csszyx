@@ -778,3 +778,46 @@ describe('a walk root that is itself a link', () => {
             expect([file, queried]).toEqual([file, walked]);
     });
 });
+
+describe('a run of three or more asterisks that fills a path segment', () => {
+    // git reads such a run as a globstar, and `ignore` 7.0.14 started to as
+    // well. Tailwind's Scanner reads it as `*`, one segment, which is what
+    // `ignore` did before, so the walk keeps reading it that way: a file
+    // csszyx skips would be a file Tailwind still scans for classes.
+    const FILES = {
+        'k.tsx': source('runroot'),
+        'a/b/x.tsx': source('runab'),
+        'a/m/b/y.tsx': source('runamb'),
+        'a/m/n/b/z.tsx': source('runamnb'),
+        'x/x.tsx': source('runxx'),
+        'deep/x/x.tsx': source('rundeepx'),
+    };
+
+    it.each([
+        ['a/***/b', ['cls-runab', 'cls-runamnb', 'cls-rundeepx', 'cls-runroot', 'cls-runxx']],
+        ['***/x', ['cls-runab', 'cls-runamb', 'cls-runamnb', 'cls-runroot', 'cls-runxx']],
+        ['****/x', ['cls-runab', 'cls-runamb', 'cls-runamnb', 'cls-runroot', 'cls-runxx']],
+        // Every `b` under `a` is left out, then one segment's worth taken back.
+        ['a/**/b\n!a/***/b', ['cls-runamb', 'cls-rundeepx', 'cls-runroot', 'cls-runxx']],
+        // Trailing spaces are dropped before the run is read.
+        ['***/x  ', ['cls-runab', 'cls-runamb', 'cls-runamnb', 'cls-runroot', 'cls-runxx']],
+    ])('reads `%s` as one segment, as Tailwind does', (pattern, kept) => {
+        const root = tree({ ...FILES, '.gitignore': `${pattern}\n` });
+        gitInit(root);
+        expect(walkSees(root)).toEqual(tailwindSees(root));
+        expect(walkSees(root)).toEqual(kept);
+        for (const [file, walked, queried] of walkAgainstQuery(root))
+            expect([file, queried]).toEqual([file, walked]);
+    });
+
+    it('reads it the same way in a nested .gitignore', () => {
+        const root = tree({
+            ...FILES,
+            'a/.gitignore': '***/b\n',
+        });
+        gitInit(root);
+        expect(walkSees(root)).toEqual(tailwindSees(root));
+        expect(walkSees(root)).toContain('cls-runab');
+        expect(walkSees(root)).not.toContain('cls-runamb');
+    });
+});
