@@ -114,3 +114,79 @@ describe.each(LANES)('a variable in parentheses on every key — %s', (_name, lo
         expect(lower({ [key]: '(--x)' })).toEqual({ className: '', kinds: ['bracketed-value'] });
     });
 });
+
+/** One lane: an sz object in, the `help:` lines it printed out. */
+type HelpLane = (sz: Record<string, unknown>) => string[];
+
+/**
+ * The `help:` lines among printed diagnostics.
+ *
+ * @param messages - The printed diagnostics.
+ * @returns Each help line, trimmed.
+ */
+function helpLines(messages: readonly string[]): string[] {
+    return messages.flatMap(message =>
+        message
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.startsWith('help:')),
+    );
+}
+
+const HELP_LANES: ReadonlyArray<readonly [string, HelpLane]> = [
+    [
+        'runtime',
+        sz => {
+            const warnings: string[] = [];
+            const original = console.warn;
+            console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+            try {
+                transform(sz as never);
+            } finally {
+                console.warn = original;
+            }
+            return helpLines(warnings);
+        },
+    ],
+    ...ENGINES.map(
+        ([name, engine]) =>
+            [
+                name,
+                (sz: Record<string, unknown>): string[] =>
+                    helpLines(
+                        captureWarnings(
+                            engine,
+                            `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
+                            '/p/src/Bracketed.jsx',
+                        ).warnings,
+                    ),
+            ] as const,
+    ),
+];
+
+describe.each(HELP_LANES)('what the help offers for a wrapped value — %s', (_name, help) => {
+    // Taking off the first and last character is the fix only when they are
+    // one pair of brackets around a value with none of its own.
+    it.each([
+        [{ w: '[100px]' }, "write `w: '100px'`"],
+        [{ top: '-[1px]!' }, "write `top: '-1px!'`"],
+        [{ animate: '(--spin)' }, "write `animate: '--spin'`"],
+    ])('%j: %s', (sz, expected) => {
+        expect(help(sz)).toEqual([expect.stringContaining(expected)]);
+    });
+
+    // Grid line names at both ends, or brackets nested inside, are no such
+    // pair: the value goes in `css: { … }` or an arbitrary class.
+    it.each([
+        [{ gridCols: '[a]_1fr_[b]' }],
+        [{ gridCols: '[a] 1fr [b]' }],
+        [{ gridCols: '[[a]_1fr_[b]]' }],
+        [{ gridRows: '[[a]_1fr]' }],
+    ])('%j points to `css` instead of a value it cannot write', sz => {
+        const lines = help(sz);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).not.toContain('write `grid');
+        expect(lines[0]).toContain('`css: { … }`');
+        expect(lines[0]).toContain('`className`');
+    });
+});

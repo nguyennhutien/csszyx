@@ -1118,10 +1118,13 @@ const _warnedBracketedValues = new Set<string>();
 
 /**
  * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
+ * What to write is offered only when no bracket remains inside (`[a] 1fr [b]`,
+ * `[[a] 1fr]`): the outer two are then no one pair around a value. Mirrors
+ * `collect_bracketed_values`.
  *
  * @param key - The sz key.
  * @param value - The value as written.
- * @param inner - What to write instead.
+ * @param inner - The value without its outer brackets.
  */
 function warnBracketedValue(key: string, value: string, inner: string): void {
     if (
@@ -1130,7 +1133,10 @@ function warnBracketedValue(key: string, value: string, inner: string): void {
         !_warnedBracketedValues.has(`${key}:${value}`)
     ) {
         _warnedBracketedValues.add(`${key}:${value}`);
-        szReport({ diagnostic: BRACKETED_VALUE, args: { key, value, inner }, at: szWarnLocation });
+        const args = /[[\]]/.test(inner)
+            ? ({ form: 'escape', key, value } as const)
+            : ({ form: 'unwrap', key, value, inner } as const);
+        szReport({ diagnostic: BRACKETED_VALUE, args, at: szWarnLocation });
     }
 }
 

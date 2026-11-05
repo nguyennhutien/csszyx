@@ -3377,11 +3377,14 @@ fn bracketed_inner(key: &str, value: &str) -> Option<String> {
 
 /// Each string value in the brackets csszyx writes itself
 /// ([`bracket_wrapped_inner`]), with its key, the value, what to write, and
-/// where it is written.
+/// where it is written. What to write is `None` when brackets remain inside
+/// (`[a] 1fr [b]`, `[[a] 1fr]`): the outer two are then no one pair around a
+/// value, and no `sz` value carries such a one. Mirrors `warnBracketedValue`
+/// in `transform-core.ts`.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_bracketed_values(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, String, u32)>,
+    out: &mut Vec<(String, String, Option<String>, u32)>,
 ) {
     for property in &object.properties {
         match &property.value {
@@ -3390,7 +3393,7 @@ pub(crate) fn collect_bracketed_values(
                     out.push((
                         property.key.clone(),
                         value.clone(),
-                        inner,
+                        (!inner.contains(['[', ']'])).then_some(inner),
                         property.span.start,
                     ));
                 }
@@ -3515,31 +3518,20 @@ mod tests {
         let mut found = Vec::new();
         collect_bracketed_values(&object, &mut found);
         let named: Vec<_> = found
-            .into_iter()
-            .map(|(key, value, inner, _)| (key, value, inner))
+            .iter()
+            .map(|(key, value, inner, _)| (key.as_str(), value.as_str(), inner.as_deref()))
             .collect();
         assert_eq!(
             named,
             [
-                ("w".to_string(), "[100px]".to_string(), "100px".to_string()),
-                ("top".to_string(), "-[1px]".to_string(), "-1px".to_string()),
-                ("h".to_string(), "[2px]".to_string(), "2px".to_string()),
-                (
-                    "gridRows".to_string(),
-                    "[[a]_1fr]".to_string(),
-                    "[a]_1fr".to_string()
-                ),
-                ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
-                (
-                    "animate".to_string(),
-                    "(--spin)".to_string(),
-                    "--spin".to_string()
-                ),
-                (
-                    "ease".to_string(),
-                    "(--snappy)!".to_string(),
-                    "--snappy!".to_string()
-                ),
+                ("w", "[100px]", Some("100px")),
+                ("top", "-[1px]", Some("-1px")),
+                ("h", "[2px]", Some("2px")),
+                // Brackets inside: the outer two are no one pair to take off.
+                ("gridRows", "[[a]_1fr]", None),
+                ("mt", "-[3px]!", Some("-3px!")),
+                ("animate", "(--spin)", Some("--spin")),
+                ("ease", "(--snappy)!", Some("--snappy!")),
             ]
         );
     }
