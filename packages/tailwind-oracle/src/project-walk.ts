@@ -166,13 +166,23 @@ interface GitignoreLayer {
     verdict: (relative: string) => GitignoreVerdict;
 }
 
-/** The part of an `ignore` instance that matches one path without its parents. */
+/**
+ * The rule list an `ignore` instance keeps, which matches one path without its
+ * parents. 7.0.14 dropped `checkUnignored` and scans from the last rule, so the
+ * last rule to match decides, as in git; with `checkUnignored` set, earlier
+ * releases give the same verdict.
+ */
 interface OwnPathRules {
+    test(path: string, mode: 'regex'): GitignoreVerdict;
+}
+
+/** The same list in `ignore` 7.0.13 and earlier. */
+interface OwnPathRulesWithUnignored {
     test(path: string, checkUnignored: boolean, mode: 'regex'): GitignoreVerdict;
 }
 
 /** The `ignore` version this package pins in its `dependencies`. */
-const IGNORE_PINNED = '7.0.13';
+const IGNORE_PINNED = '7.0.14';
 
 /**
  * Match one path against an `ignore` instance's patterns, its parent folders
@@ -183,8 +193,9 @@ const IGNORE_PINNED = '7.0.13';
  * not: an outer `gen/` cannot ignore `x/gen/a.css` once `x/.gitignore` has
  * taken `x/gen/` back, because the walk already entered `x/gen/`. `checkIgnore`
  * asks about the parents the same way. The rule list `ignore` keeps internally
- * matches one path alone; this reaches it, and fails loudly if a release of
- * `ignore` moves it rather than read every nested negation wrong.
+ * matches one path alone; this reaches it, in either shape a release has given
+ * it, and fails loudly on any other rather than read every nested negation
+ * wrong.
  *
  * @param matcher - The instance the `.gitignore` was added to.
  * @returns A verdict per path.
@@ -192,14 +203,19 @@ const IGNORE_PINNED = '7.0.13';
 function ownPathVerdict(
     matcher: ReturnType<typeof ignore>,
 ): (relative: string) => GitignoreVerdict {
-    const rules = (matcher as unknown as { _rules?: Partial<OwnPathRules> })._rules;
-    // The arity too: 7.0.14 kept the name and dropped `checkUnignored`, so a
-    // name check alone lets the call below throw inside `ignore`.
-    if (typeof rules?.test !== 'function' || rules.test.length !== 3) {
-        throw szDiagnosticError('ignore-package-incompatible', { pinned: IGNORE_PINNED });
+    const rules = (matcher as unknown as { _rules?: { test?: unknown } })._rules;
+    const test = rules?.test;
+    // The arity decides the shape: a name check alone would let a call with
+    // the wrong arguments throw inside `ignore`.
+    if (typeof test === 'function' && test.length === 2) {
+        const own = rules as OwnPathRules;
+        return relative => own.test(relative, 'regex');
     }
-    const own = rules as OwnPathRules;
-    return relative => own.test(relative, true, 'regex');
+    if (typeof test === 'function' && test.length === 3) {
+        const own = rules as OwnPathRulesWithUnignored;
+        return relative => own.test(relative, true, 'regex');
+    }
+    throw szDiagnosticError('ignore-package-incompatible', { pinned: IGNORE_PINNED });
 }
 
 /** The name of the file a walk reads patterns from. */
@@ -220,6 +236,36 @@ function readGitignoreText(dir: string): string | null {
 }
 
 /**
+ * A run of three or more asterisks that fills a path segment; a line's
+ * trailing spaces, which git drops, end it as the line's end does.
+ */
+const SEGMENT_STAR_RUN = /(^|\/)\*{3,}(?=\/| *$)/g;
+
+/**
+ * A `.gitignore` as Tailwind's Scanner reads it, for `ignore` to match.
+ *
+ * The Scanner reads a run of three or more asterisks that fills a segment
+ * (`a/***\/b`, `***\/x`) as `*`, one segment. git reads it as `**`, and so does
+ * `ignore` from 7.0.14; before that `ignore` read it as the Scanner does. The
+ * run is written as `*` here so the walk skips what the Scanner skips, on any
+ * release. A run next to other characters (`a***`) is the same in all three.
+ *
+ * @param text - The `.gitignore`.
+ * @returns The same lines, each such run written as `*`.
+ */
+function asScannerReads(text: string): string {
+    return text
+        .split(/(\r?\n)/)
+        .map(line => {
+            if (line.startsWith('#')) return line;
+            const negated = line.startsWith('!');
+            const glob = (negated ? line.slice(1) : line).replace(SEGMENT_STAR_RUN, '$1*');
+            return negated ? `!${glob}` : glob;
+        })
+        .join('');
+}
+
+/**
  * Read one `.gitignore` into a layer.
  *
  * @param dir - The folder holding it.
@@ -235,7 +281,7 @@ function readGitignore(dir: string, read: string[]): GitignoreLayer | null {
     return {
         base: dir,
         self: emptyPathVerdict(text),
-        verdict: ownPathVerdict(ignore({ ignorecase: false }).add(text)),
+        verdict: ownPathVerdict(ignore({ ignorecase: false }).add(asScannerReads(text))),
     };
 }
 
