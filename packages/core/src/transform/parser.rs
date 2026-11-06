@@ -9032,6 +9032,10 @@ export const C = ({ styles }) => <div sz={styles} />;
             "{...(n ? { id: 'a' } : { title: 'b' })}",
             "{...{ c, f() {}, get g() { return 1; }, 'aria-label': 'x', 2: 'y' }}",
             "{...({ onClick: c } as object)}",
+            "{...(n ? { id: 'a' } : null)}",
+            "{...(n ? undefined : { id: 'a' })}",
+            "{...(n ? { id: 'a' } : false)}",
+            "{...(n && null)}",
         ] {
             assert!(!split(spread), "{spread}");
         }
@@ -9050,6 +9054,8 @@ export const C = ({ styles }) => <div sz={styles} />;
             "{...{ 'class': 'x' }}",
             "{...{ sz: c }}",
             "{...(n ? { id: 'a' } : { className: 'x' })}",
+            "{...(n ? null : r)}",
+            "{...(n ? true : null)}",
         ] {
             assert!(split(spread), "{spread}");
         }
