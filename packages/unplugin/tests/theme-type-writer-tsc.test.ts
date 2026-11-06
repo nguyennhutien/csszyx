@@ -40,15 +40,18 @@ szv({ variants: { size: { sm: { tablet: { hover: { bgg: 'red-500' } } } } } });
  * Type-check the consumer beside the generated declaration.
  *
  * @param skipLibCheck - The consumer's `skipLibCheck`; `true` skips the generated `.d.ts`
+ * @param source - The consumer's text.
+ * @param withTheme - Whether the generated declaration is in the program,
+ *        as it is when `tsconfig.json` includes it.
  * @returns Every diagnostic, as `file:line TScode: message`
  */
-function typeCheck(skipLibCheck: boolean): string[] {
+function typeCheck(skipLibCheck: boolean, source = CONSUMER_SOURCE, withTheme = true): string[] {
     const theme = parseThemeBlocks(
         '@theme { --breakpoint-tablet: 40rem; --breakpoint-3xl: 120rem; }',
     );
     const files = new Map([
         [THEME_DTS, generateThemeDts({ outputPath: THEME_DTS, theme, sourceFiles: ['t.css'] })],
-        [CONSUMER, CONSUMER_SOURCE],
+        [CONSUMER, source],
     ]);
     const options: ts.CompilerOptions = {
         strict: true,
@@ -69,7 +72,7 @@ function typeCheck(skipLibCheck: boolean): string[] {
             ? getSourceFile(name, languageVersion, ...rest)
             : ts.createSourceFile(name, text, languageVersion, true);
     };
-    const program = ts.createProgram([CONSUMER, THEME_DTS], options, host);
+    const program = ts.createProgram(withTheme ? [CONSUMER, THEME_DTS] : [CONSUMER], options, host);
     return ts.getPreEmitDiagnostics(program).map(diagnostic => {
         const where = diagnostic.file
             ? `${diagnostic.file.fileName.replace(ROOT, '')}:${
@@ -87,6 +90,16 @@ describe('the generated theme declaration, type-checked', () => {
 
     it('checks keys under a project breakpoint, nested too, with skipLibCheck on', () => {
         expect(typeCheck(true)).toEqual([]);
+    });
+
+    it('reports a project breakpoint in an `szv` row as `NotAnSzKey` without the file', () => {
+        const row = `import { szv } from '@csszyx/runtime';
+export const row = szv({ variants: { size: { sm: { tablet: { p: 4 } } } } });
+`;
+        const diagnostics = typeCheck(true, row, false);
+        expect(diagnostics).toHaveLength(1);
+        expect(diagnostics[0]).toContain('NotAnSzKey<"tablet">');
+        expect(typeCheck(true, row)).toEqual([]);
     });
 });
 
