@@ -129,7 +129,12 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { has: { img: { p: 1.3 } } },
         { group: { has: { img: { p: 1.1 } } } },
     ],
-    'bracketed-value': [{ w: '[100px]' }, { hover: { top: '-[1px]' } }],
+    'bracketed-value/unwrap': [
+        { w: '[100px]' },
+        { hover: { top: '-[1px]' } },
+        { md: { gridRows: '[[a]_1fr]' } },
+    ],
+    'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }],
     'opacity-value/range': [
         { bg: { color: 'red-500', op: 150 } },
         { hover: { borderColor: { color: 'blue-600', op: '20' } } },

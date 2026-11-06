@@ -2388,7 +2388,10 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // `buildGenericStringClass` in `transform-core.ts`.
             let final_value = if key == "aspect" && is_decimal_ratio(value) {
                 format!("[{value}]")
-            } else if needs_brackets(value) {
+            } else if needs_brackets(value)
+                // A grid line name (`[a]_1fr`), which no bare class carries.
+                || (takes_grid_line_names(key) && value.contains('['))
+            {
                 // Tailwind arbitrary values cannot contain raw spaces (the class
                 // attribute would split into separate tokens), so collapse
                 // whitespace to underscores, matching the JavaScript transform it replaced.
@@ -3340,10 +3343,10 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 /// The value inside the brackets `value` starts and ends with, its sign kept
 /// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
 /// `1px!`), or the variable inside the parentheses csszyx writes for one
-/// (`(--brand)` is `--brand`), or `None` when it is not wrapped. Grid line
-/// names at both ends (`[a] 1fr [b]`) read as wrapped too; they are written in
-/// `css: {…}`, where a value is never read so. Mirrors `bracketWrappedInner`
-/// in `transform-core.ts`.
+/// (`(--brand)` is `--brand`), or `None` when it is not wrapped. The first and
+/// last bracket need not be one pair here (`[a] 1fr [b]`); [`bracketed_inner`]
+/// tells them apart on the keys whose CSS takes grid line names. Mirrors
+/// `bracketWrappedInner` in `transform-core.ts`.
 pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
     let (body, bang) = value
         .strip_suffix('!')
@@ -3368,20 +3371,66 @@ fn paren_variable(value: &str) -> Option<&str> {
 
 /// [`bracket_wrapped_inner`] for a key's value. A custom property's value is a
 /// declaration value, where `[a]` is a grid line name, so it never is wrapped.
+/// On a key whose CSS takes grid line names, only one pair of brackets around
+/// the whole value is a wrapping: `[a] 1fr [b]` names two lines and lowers.
 fn bracketed_inner(key: &str, value: &str) -> Option<String> {
     if key.starts_with("--") {
         return None;
     }
-    bracket_wrapped_inner(value)
+    let inner = bracket_wrapped_inner(value)?;
+    if takes_grid_line_names(key) && outer_bracket_pair(value) == Some(false) {
+        return None;
+    }
+    Some(inner)
+}
+
+/// Whether a key's CSS property takes grid line names in its value
+/// (`grid-template-columns`, `grid-template-rows`). Mirrors
+/// `GRID_LINE_NAME_KEYS` in `transform-core.ts`.
+fn takes_grid_line_names(key: &str) -> bool {
+    matches!(key, "gridCols" | "gridRows")
+}
+
+/// Whether the first `[` of a value closes at its last `]`, so the two are one
+/// pair around the whole value: `Some(true)` for `[[a]_1fr]`, `Some(false)`
+/// for `[a]_1fr_[b]`, and `None` when the brackets do not balance (`[[a]`),
+/// which no grid template is. Mirrors `outerBracketPair` in
+/// `transform-core.ts`.
+fn outer_bracket_pair(value: &str) -> Option<bool> {
+    let last = value.rfind(']');
+    let mut depth = 0i32;
+    let mut first_closes = None;
+    for (at, byte) in value.bytes().enumerate() {
+        match byte {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+                if depth == 0 && first_closes.is_none() {
+                    first_closes = Some(Some(at) == last);
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth == 0 {
+        first_closes
+    } else {
+        None
+    }
 }
 
 /// Each string value in the brackets csszyx writes itself
-/// ([`bracket_wrapped_inner`]), with its key, the value, what to write, and
-/// where it is written.
+/// ([`bracketed_inner`]), with its key, the value, what to write, and where it
+/// is written. What to write is `None` when brackets remain inside on a key
+/// whose CSS takes no grid line names (`p: '[a] 1 [b]'`): no `sz` value of
+/// that key carries one. Mirrors `warnBracketedValue` in `transform-core.ts`.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_bracketed_values(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, String, u32)>,
+    out: &mut Vec<(String, String, Option<String>, u32)>,
 ) {
     for property in &object.properties {
         match &property.value {
@@ -3390,7 +3439,10 @@ pub(crate) fn collect_bracketed_values(
                     out.push((
                         property.key.clone(),
                         value.clone(),
-                        inner,
+                        (!inner.contains(['[', ']'])
+                            || (takes_grid_line_names(&property.key)
+                                && outer_bracket_pair(value) == Some(true)))
+                        .then_some(inner),
                         property.span.start,
                     ));
                 }
@@ -3504,6 +3556,11 @@ mod tests {
                 property("css", object(vec![property("width", text("[1px]"))])),
                 property("hover", object(vec![property("h", text("[2px]"))])),
                 property("gridRows", text("[[a]_1fr]")),
+                property("gridCols", text("[a]_1fr_[b]")),
+                property("gridCols", text("[[a]")),
+                property("gridCols", text("[a]]_[b]")),
+                property("gridCols", text("(--cols)")),
+                property("p", text("[a]_1_[b]")),
                 property("mt", text("-[3px]!")),
                 property("animate", text("(--spin)")),
                 property("ease", text("(--snappy)!")),
@@ -3515,31 +3572,26 @@ mod tests {
         let mut found = Vec::new();
         collect_bracketed_values(&object, &mut found);
         let named: Vec<_> = found
-            .into_iter()
-            .map(|(key, value, inner, _)| (key, value, inner))
+            .iter()
+            .map(|(key, value, inner, _)| (key.as_str(), value.as_str(), inner.as_deref()))
             .collect();
         assert_eq!(
             named,
             [
-                ("w".to_string(), "[100px]".to_string(), "100px".to_string()),
-                ("top".to_string(), "-[1px]".to_string(), "-1px".to_string()),
-                ("h".to_string(), "[2px]".to_string(), "2px".to_string()),
-                (
-                    "gridRows".to_string(),
-                    "[[a]_1fr]".to_string(),
-                    "[a]_1fr".to_string()
-                ),
-                ("mt".to_string(), "-[3px]!".to_string(), "-3px!".to_string()),
-                (
-                    "animate".to_string(),
-                    "(--spin)".to_string(),
-                    "--spin".to_string()
-                ),
-                (
-                    "ease".to_string(),
-                    "(--snappy)!".to_string(),
-                    "--snappy!".to_string()
-                ),
+                ("w", "[100px]", Some("100px")),
+                ("top", "-[1px]", Some("-1px")),
+                ("h", "[2px]", Some("2px")),
+                // One pair around a grid template: line names inside are CSS.
+                ("gridRows", "[[a]_1fr]", Some("[a]_1fr")),
+                // Brackets that do not balance: no grid template, no offer.
+                ("gridCols", "[[a]", None),
+                ("gridCols", "[a]]_[b]", None),
+                ("gridCols", "(--cols)", Some("--cols")),
+                // Brackets inside elsewhere: no value of that key carries them.
+                ("p", "[a]_1_[b]", None),
+                ("mt", "-[3px]!", Some("-3px!")),
+                ("animate", "(--spin)", Some("--spin")),
+                ("ease", "(--snappy)!", Some("--snappy!")),
             ]
         );
     }
@@ -3743,6 +3795,24 @@ mod tests {
             ],
         });
         assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// Grid line names are CSS's own brackets: on the keys whose property
+    /// takes them, the value is bracketed and lowered, and only one pair
+    /// around the whole value is a wrapping, which writes nothing.
+    #[test]
+    fn grid_line_names_lower_as_an_arbitrary_value() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property("gridCols", text("[a]_1fr_[b]")),
+                property("gridRows", text("[a]_auto")),
+                property("gridCols", text("[[a]_1fr]")),
+                property("gridCols", text("[[a]")),
+                property("gridCols", text("[a]]_[b]")),
+            ],
+        });
+        assert_eq!(classes, ["grid-cols-[[a]_1fr_[b]]", "grid-rows-[[a]_auto]"]);
     }
 
     /// A CSS-wide keyword on `bgImg` is the property's value, never a URL.

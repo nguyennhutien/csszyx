@@ -273,7 +273,12 @@ export const SIZE_BUDGETS = [
         // that chunk ahead of the capability rows: it had stayed in the
         // lowering's chunk, after the tables, which cost `./browser` 89 to 115
         // bytes in each bundler measured (esbuild, Vite, Rollup).
-        maxGzipBytes: 17_360,
+        //
+        // Raised from 17,360 on 2026-11-06, measured 17,410 (17,317 before):
+        // `gridCols` and `gridRows` lower grid line names, which takes a
+        // bracket-balance scan and the grid key test in the runtime
+        // lowering, +93 gzip. Budget the usual ~300 above.
+        maxGzipBytes: 17_700,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -288,7 +293,9 @@ export const SIZE_BUDGETS = [
             // once the tables moved to leaf modules, 2026-10-19 (-8; 16,584
             // in the chunk order that put them first, see the union), and
             // 16,332 with the category map ahead of them, the same day.
-            './browser': 16_600,
+            // 16,683 with grid line names lowering, 2026-11-06 (16,581
+            // before, see the union), so raised from 16,600.
+            './browser': 16_980,
             // `./sz-limits` measured 501 on 2026-10-20 (346 before):
             // `SzDepthError` extends the error class of `./errors`, measured
             // 357 alone, which ships to the browser because the runtime
@@ -566,7 +573,9 @@ export const SIZE_BUDGETS = [
         name: '@csszyx/vscode extension bundle',
         kind: 'file',
         target: 'packages/vscode/dist/extension.js',
-        maxGzipBytes: 50_300,
+        // Raised from 50,300 on 2026-11-06, measured 50,374: the grid line
+        // names lowering it carries with the compiler's (see that budget).
+        maxGzipBytes: 50_650,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -593,7 +602,9 @@ export const SIZE_BUDGETS = [
         name: 'csszyx CDN bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.iife.js',
-        maxGzipBytes: 16_200,
+        // Raised from 16,200 on 2026-11-06, measured 16,245: the grid line
+        // names lowering (see the compiler's budget).
+        maxGzipBytes: 16_550,
         // A `<script>` tag loads it as built, so the leak gate reads its bytes.
         templateFree: {},
         build: cdnBuildOptions('production'),
