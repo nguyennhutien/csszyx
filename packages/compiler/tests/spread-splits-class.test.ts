@@ -8,6 +8,11 @@
  * the earlier. So each keeps the place it was written in, the `sz` classes
  * come out as a class name of their own where `sz` stood, and the build says
  * that the class name before the spread no longer applies.
+ *
+ * A spread the compiler can read and that carries no class (an object with
+ * no `className`, `class` or `sz` key, a guarded one, or a choice of such an
+ * object and `null`, `undefined` or `false`) is no wall: the element merges
+ * as though the spread were not there.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -190,6 +195,13 @@ describe('a class name and sz on either side of a spread', () => {
             "{...{ c, f() {}, get g() { return 1; }, 'aria-label': 'x', 2: 'y' }}",
         ],
         ['a cast object', '{...({ onClick: c } as object)}'],
+        ['a `satisfies` object', '{...({ onClick: c } satisfies object)}'],
+        ['a non-null object', '{...({ onClick: c })!}'],
+        ['an `as const` object', "{...({ id: 'a' } as const)}"],
+        ['a guarded cast object', '{...(n && ({ id: 1 } as const))}'],
+        ['a choice of an object or `null`', "{...(n ? { id: 'a' } : null)}"],
+        ['a choice of `undefined` or an object', "{...(n ? undefined : { id: 'a' })}"],
+        ['a choice of an object or `false`', "{...(n ? { id: 'a' } : false)}"],
     ])('merges across %s that carries no class', (_name, spread) => {
         for (const { name, code, issues } of transformElement(
             `<div className="card" ${spread} sz={{ p: 4 }} />`,
@@ -215,6 +227,35 @@ describe('a class name and sz on either side of a spread', () => {
     });
 
     it.each([
+        [
+            'sz written before a class-free spread and the class name',
+            '<div sz={{ p: 4 }} {...{ onClick: c }} className="card" />',
+            '<div {...{ onClick: c }} className="card p-4" />',
+            false,
+        ],
+        [
+            'a class-free spread before a spread that may carry a class',
+            '<div className="card" {...{ onClick: c }} {...r} sz={{ p: 4 }} />',
+            '<div className="card" {...{ onClick: c }} {...r} className="p-4" />',
+            true,
+        ],
+        [
+            'a class-free spread after one that may carry a class',
+            '<div {...r} className="card" {...{ onClick: c }} sz={{ p: 4 }} />',
+            '<div {...r} className="card p-4" {...{ onClick: c }} />',
+            false,
+        ],
+    ])('only a spread that may carry a class splits: %s', (_name, element, emitted, splits) => {
+        for (const { name, code, issues } of transformElement(element)) {
+            expect(code, name).toContain(emitted);
+            expect(
+                issues.some(issue => issue.code === 'spread-split-class'),
+                name,
+            ).toBe(splits);
+        }
+    });
+
+    it.each([
         ['a computed key', '{...{ [n]: c }}'],
         ['a computed literal key', "{...{ ['id']: c }}"],
         ['a nested spread', '{...{ ...r }}'],
@@ -227,6 +268,11 @@ describe('a class name and sz on either side of a spread', () => {
         ['an `sz` key', '{...{ sz: c }}'],
         ['a guarded `className`', "{...(n && { className: 'x' })}"],
         ['a `className` in one branch', "{...(n ? { id: 'a' } : { className: 'x' })}"],
+        ['a shorthand `className`', '{...{ className }}'],
+        ['a shorthand `sz`', '{...{ sz }}'],
+        ['a method named `class`', '{...{ class() {} }}'],
+        ['a getter named `className`', "{...{ get className() { return 'x'; } }}"],
+        ['a choice of `null` or an unknown value', '{...(n ? null : r)}'],
     ])('still splits across %s', (_name, spread) => {
         for (const { name, code, issues } of transformElement(
             `<div className="card" ${spread} sz={{ p: 4 }} />`,

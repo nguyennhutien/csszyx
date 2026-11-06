@@ -449,8 +449,9 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
         let element_name = jsx_element_name(&element.name);
-        // One side per spread: the `sz` and the class name written between two
-        // spreads, or before the first or after the last.
+        // One side per spread that may carry a class: the `sz` and the class
+        // name written between two such spreads, or before the first or after
+        // the last. A spread that provably carries none is no boundary.
         let mut sides: Vec<SideAttributes> = vec![SideAttributes::default()];
         let mut style_attribute_index = None;
         let mut recovery_attribute_index = None;
@@ -613,12 +614,24 @@ fn spread_carries_no_class(spread: &JSXSpreadAttribute<'_>) -> bool {
         Expression::LogicalExpression(logical)
             if logical.operator == oxc_ast::ast::LogicalOperator::And =>
         {
-            is_class_free_object(&logical.right)
+            is_class_free_branch(&logical.right)
         }
         Expression::ConditionalExpression(conditional) => {
-            is_class_free_object(&conditional.consequent)
-                && is_class_free_object(&conditional.alternate)
+            is_class_free_branch(&conditional.consequent)
+                && is_class_free_branch(&conditional.alternate)
         }
+        expression => is_class_free_object(expression),
+    }
+}
+
+/// Whether one branch of a guarded or chosen spread carries no class: a
+/// class-free object, or `null`, `undefined` or `false`, which JSX spreads as
+/// nothing. A local binding named `undefined` is not looked for.
+fn is_class_free_branch<'a>(expression: &'a Expression<'a>) -> bool {
+    match unwrap_expression(expression) {
+        Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
         expression => is_class_free_object(expression),
     }
 }

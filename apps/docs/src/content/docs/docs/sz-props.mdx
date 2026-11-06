@@ -878,8 +878,8 @@ so the spread's is `rest.class`. Vue JSX merges every `class` instead, so there
 all of them apply.
 
 A spread csszyx can read that carries no class is no wall. That is an object
-literal, `cond && { … }` or `cond ? { … } : { … }`, whose keys are all written
-out (no `...other`, no `[key]`) and none of which is `className`, `class` or
+literal, `cond && { … }`, or `cond ? { … } : { … }` where either branch may also
+be `null`, `undefined` or `false`, whose keys are all written out (no `...other`, no `[key]`) and none of which is `className`, `class` or
 `sz`. The element merges as though the spread were not there:
 
 ```tsx
