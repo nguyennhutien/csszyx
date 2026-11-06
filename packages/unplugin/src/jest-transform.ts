@@ -40,6 +40,7 @@ import path from 'node:path';
 
 import { VERSION as compilerVersion, type SourceTransformResult } from '@csszyx/compiler';
 import { transformSourceUnrendered } from '@csszyx/compiler/internal';
+import { SOURCE_MODULE_EXTENSIONS } from '@csszyx/tailwind-oracle';
 import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { createCapFlush, createDiagnosticLimiter } from './diagnostic-limiter.js';
 import type { DiagnosticPolicy } from './diagnostic-policy.js';
@@ -484,8 +485,11 @@ function loadJestDiagnosticPolicy(root: string): DiagnosticPolicy {
     return syncLaneDiagnosticPolicy(root, { lane: 'jest', loadWithoutState: true }).policy;
 }
 
-/** Files carrying an `sz` prop; others are handed back untouched. */
-const DEFAULT_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'] as const;
+/**
+ * Files carrying an `sz` prop; others are handed back untouched. The module
+ * flavours the build lowers, so a suite lowers what the app does.
+ */
+const DEFAULT_EXTENSIONS = SOURCE_MODULE_EXTENSIONS;
 
 /**
  * Finish compiled code the way the plugin does before handing it to a bundler.

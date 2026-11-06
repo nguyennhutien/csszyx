@@ -31,7 +31,7 @@ describe('nextWatch command lifecycle', () => {
         expect(code).toBe(1);
         expect(errors.join('\n')).toContain('[csszyx] no-source-files:');
         expect(errors.join('\n')).toMatch(
-            /No source file under `[^`]+` matches `\{app,pages,src\}\/\*\*\/\*\.\{ts,tsx,js,jsx,mjs,cjs\}`, so there is nothing to scan for classes\./,
+            /No source file under `[^`]+` matches `\{app,pages,src\}\/\*\*\/\*\.\{ts,tsx,js,jsx,cts,mts,cjs,mjs\}`, so there is nothing to scan for classes\./,
         );
     });
 
