@@ -306,7 +306,7 @@ How the table reaches the browser depends on the lane:
 | Vite, Rollup | bundled with the app. On the Vite dev server, source edits refresh the table before normal HMR without reloading the page. A stylesheet edit that changes the table reloads the page; edits that leave the table unchanged keep normal HMR. |
 | webpack, Next.js (webpack) | bundled with the app, settled again on every compilation |
 | Next.js (Turbopack) | `.csszyx/merge-registration.mjs`, written by `csszyx next prebuild` and kept current by `csszyx next watch`; the modules that call `szcn` import it |
-| jest | the same file (its `.cjs` twin), as the last build or `csszyx next prebuild` left it — run one before the suite. See [Testing](/docs/testing/#what-szcn-merges-in-a-suite). |
+| jest | the same file (its `.cjs` twin), as the last build or `csszyx next prebuild` left it — run one before the suite. `@csszyx/unplugin/jest` loads it; a suite with its own transformer requires it from a `setupFiles` entry. See [Testing](/docs/testing/#a-suite-that-keeps-its-own-transformer). |
 | esbuild, Rspack, Rsbuild, Rolldown, Farm, Bun | none — `szcn` only drops exact repeats |
 
 A project with more than one Tailwind entry (several files that

@@ -10,7 +10,7 @@ import { runtimeMessage } from '../../../compiler/tests/engine-message.js';
 export const MISSING_TABLE_LINE = runtimeMessage(
     'merge-table-missing',
     "`szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.",
-    'help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first.',
+    'help: use the csszyx plugin for Vite, Rollup, webpack or Next.js, which registers one; for jest, run the build or `csszyx next prebuild` first, and without `@csszyx/unplugin/jest` require `.csszyx/merge-registration.cjs` from a `setupFiles` entry.',
     'note: the csszyx plugin registers no table under esbuild, Rspack, Rsbuild, Rolldown, Farm or Bun.',
 );
 

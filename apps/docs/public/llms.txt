@@ -824,7 +824,9 @@ are compiler-injected, do not hand-author them):
     (`` `gap-${n}` ``) and every class on a lane with no table: esbuild,
     Rspack, Rsbuild, Rolldown, Farm, Bun. Turbopack gets the table from
     `csszyx next prebuild` / `csszyx next watch`; jest reads the file the last
-    build wrote (`.csszyx/merge-registration.cjs`, `.mjs` for native-ESM jest).
+    build wrote (`.csszyx/merge-registration.cjs`, `.mjs` for native-ESM jest),
+    through `@csszyx/unplugin/jest` or, without it, a `setupFiles` entry that
+    requires it from the build's root.
   - Several Tailwind entries: a pair merges only when EVERY entry agrees.
 - Compiler-injected `_szMerge(existingClassName, compiledSz)` in the full
   runtime uses the same uncached, mangle-aware utility merge engine as `szcn`,
