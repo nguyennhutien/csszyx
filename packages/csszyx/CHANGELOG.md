@@ -2,20 +2,23 @@
 
 ## [0.18.1](https://github.com/nguyennhutien/csszyx/compare/v0.18.0...v0.18.1) (2026-11-06)
 
-
 ### Bug Fixes
 
-* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459)) ([776d759](https://github.com/nguyennhutien/csszyx/commit/776d759724f52cc236409950d91ae56502af5f94))
-* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457)) ([cefdba5](https://github.com/nguyennhutien/csszyx/commit/cefdba52b1c1ca69ea7c4cf170e697041a36f254))
-* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450)) ([9e71933](https://github.com/nguyennhutien/csszyx/commit/9e71933bcb2c4fdf18230013dcb5353a4a87b0e4))
-* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460)) ([3f4ddae](https://github.com/nguyennhutien/csszyx/commit/3f4ddae4134eb3b130f690eeeeac015fa36fdb48))
-* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434)) ([b218dfe](https://github.com/nguyennhutien/csszyx/commit/b218dfec6353ff96957f89b63cffe10edaab3181))
-* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433)) ([d2158dc](https://github.com/nguyennhutien/csszyx/commit/d2158dc04f6d0a091e6d51d14d0eab5194730b06))
-
+* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433))
+* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434))
+* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450))
+* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457))
+* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* **core:** read `null`, `undefined` and `false` branches as class-free ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **runtime:** keep the `szv` selection type mutable ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **compiler:** type `snapStrictness` on `SzProps` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** import `SzProps` for breakpoints in `theme.d.ts` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** augment `csszyx` in the generated theme declaration ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
 
 ### Performance
 
-* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443)) ([5db7c11](https://github.com/nguyennhutien/csszyx/commit/5db7c118ce48b11dfbd9c3757735add5b6dcc6c3))
+* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443))
 
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-03)
 
