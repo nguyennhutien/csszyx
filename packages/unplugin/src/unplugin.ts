@@ -243,7 +243,7 @@ import {
     parseThemeBlocks,
     parseUtilityBlocks,
 } from './theme-scanner.js';
-import { writeThemeDts } from './theme-type-writer.js';
+import { themeModuleFor, writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
     evictMemoryCacheToBudget,
@@ -2459,7 +2459,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     const merged = mergeThemes(themes);
     reportClassNameAuthorConflicts(rootDir, sourceFiles, merged);
     const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
-    writeThemeDts({ outputPath, theme: merged, sourceFiles });
+    writeThemeDts({ outputPath, theme: merged, sourceFiles, augments: themeModuleFor(rootDir) });
 
     // TypeScript types the theme only when a config it reads includes the file.
     if (!_hasWarnedTsConfig) {

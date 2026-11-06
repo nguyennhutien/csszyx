@@ -57,6 +57,11 @@ const _safeAlignment: SzProps = {
     placeSelf: 'center-safe',
 };
 
+// Scroll-snap strictness is its own key, beside `snapType`, as in the compiler.
+const _snapStrictness: SzProps = { snapType: 'x', snapStrictness: 'mandatory' };
+// @ts-expect-error - `loose` is not a scroll-snap strictness.
+const _snapStrictnessTypo: SzProps = { snapStrictness: 'loose' };
+
 // @ts-expect-error - `justify-safe-center` is not a Tailwind utility, so it styles nothing.
 const _safeReversed: SzProps = { justify: 'safe-center' };
 
@@ -107,6 +112,8 @@ export {
     _nested3,
     _safeAlignment,
     _safeReversed,
+    _snapStrictness,
+    _snapStrictnessTypo,
     _szscObject,
     _szscTypo,
     _szsRead,

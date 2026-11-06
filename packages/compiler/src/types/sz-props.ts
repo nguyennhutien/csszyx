@@ -1684,6 +1684,9 @@ export interface InteractivityProps {
     /** @see https://tailwindcss.com/docs/scroll-snap-type */
     snapType?: 'none' | 'x' | 'y' | 'both' | 'mandatory' | 'proximity';
 
+    /** `snap-mandatory` | `snap-proximity` — the strictness half of scroll-snap-type */
+    snapStrictness?: 'mandatory' | 'proximity';
+
     /**
      * `touch-auto` | `touch-none` | `touch-manipulation` — the touch-action
      * keywords that stand alone. Written after `touchPan*` / `touchPinchZoom`

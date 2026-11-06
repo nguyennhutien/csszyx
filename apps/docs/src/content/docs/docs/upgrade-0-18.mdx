@@ -511,6 +511,12 @@ const o: SzProps = badgeSz({ shape: "pill" });
 
 A row table built at runtime as `Record<string, SzProps>` still compiles.
 
+A breakpoint declared in your CSS (`--breakpoint-tablet`) is an sz key only
+once its types are generated: set
+[`build.scanCss`](/docs/reference/config/#theme-auto-scan-scancss) and add
+`.csszyx/theme.d.ts` to `include` in `tsconfig.json`. Without it, `tablet:` in
+a row reads `NotAnSzKey<"tablet">`.
+
 **Tooling.** `tsc --noEmit`. Neither `csszyx check` nor `csszyx migrate` changes
 types.
 

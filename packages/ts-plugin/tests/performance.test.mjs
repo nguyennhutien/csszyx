@@ -42,7 +42,7 @@ function measure(source, themeValues = false) {
             ? {
                   [themeFileName]: `declare module '@csszyx/compiler' {
                       interface CustomTheme { colors: 'brand'; spacings: 'gutter'; }
-                      interface VariantModifiers { tablet?: SzPropsBase; }
+                      interface VariantModifiers { tablet?: SzProps; }
                   } export {};`,
               }
             : {}),

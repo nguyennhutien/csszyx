@@ -45,6 +45,18 @@ export const resultWithSelection: SzProps = buttonSz({ size: 'lg' });
 export const resultWithoutSelection: SzProps = buttonSz();
 export const resultAsRow: SzProps = { ...buttonSz({ tone: 'loud' }), p: 2 };
 
+// ── The selection is a plain, mutable object ──
+/**
+ * Component props are often built from the selection and filled in field by
+ * field, so its keys are not `readonly` even though `szv` infers the schema
+ * with `const`.
+ */
+type ButtonSelection = NonNullable<Parameters<typeof buttonSz>[0]>;
+const mutableSelection: ButtonSelection = {};
+mutableSelection.size = 'lg';
+mutableSelection.tone = null;
+export const fromMutableSelection: SzProps = buttonSz(mutableSelection);
+
 // ── Rows that must keep compiling ──
 declare const runtimeRows: Record<string, SzProps>;
 export const fromRuntimeRows: SzProps = szv({ variants: { size: runtimeRows } })({ size: 'any' });
@@ -148,6 +160,8 @@ export function szvRejects(): void {
     // ── Call-site names: option, dimension and default stay checked ──
     // @ts-expect-error - `xl` is not an option of `size`
     buttonSz({ size: 'xl' });
+    // @ts-expect-error - `xl` is not an option of `size`, assigned field by field too
+    mutableSelection.size = 'xl';
     // @ts-expect-error - `sizee` is not a dimension
     buttonSz({ sizee: 'sm' });
     szv({

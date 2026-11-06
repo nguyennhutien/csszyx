@@ -814,6 +814,16 @@ After the first build, `.csszyx/theme.d.ts` is generated. Add it to your
 Result: `{ bg: 'brand-500' }` and `{ maxW: '--spacing-prose' }` get full
 autocomplete and type-checking.
 
+A `--breakpoint-*` token becomes a variant key typed like the built-in `md`.
+With `--breakpoint-tablet: 40rem;` in `@theme`, `{ tablet: { p: 4 } }` and
+`{ tablet: { hover: { p: 4 } } }` type-check in `sz` and in `szv` rows, and a
+typo under `tablet` is an error. Without the generated file in `include`, a
+project breakpoint in an `szv` row is reported as `NotAnSzKey`. The file
+augments `csszyx` when the project has it installed, so it applies under pnpm
+and Yarn too, where `@csszyx/compiler` is out of the project's reach; a project
+without `csszyx` gets `@csszyx/compiler`. It compiles with `skipLibCheck` on
+or off.
+
 `scanCss` accepts a glob or array: `['src/index.css', 'src/tokens.css']`.
 Theme files are watched in dev mode — hot-reload triggers type regeneration.
 
