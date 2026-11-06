@@ -74,7 +74,7 @@ const namesAtMarker = source => entriesAtMarker(source).map(entry => entry.name)
 const generatedTheme = `
 declare module '@csszyx/compiler' {
     interface CustomTheme { colors: 'brand' | 'red-500'; spacings: 'gutter'; }
-    interface VariantModifiers { tablet?: SzPropsBase; '3xl'?: SzPropsBase; }
+    interface VariantModifiers { tablet?: SzProps; '3xl'?: SzProps; }
 }
 export {};
 `;
