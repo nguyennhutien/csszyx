@@ -103,24 +103,24 @@ function findingsIn(file) {
 
 /** Check every changed file and exit with the verdict. */
 function main() {
-const findings = changedFiles().flatMap(findingsIn);
+    const findings = changedFiles().flatMap(findingsIn);
 
-if (findings.length === 0) {
-    console.log('[tag-filter] Every changed tag-matching regex sees the tag in any spelling.');
-    process.exit(0);
-}
+    if (findings.length === 0) {
+        console.log('[tag-filter] Every changed tag-matching regex sees the tag in any spelling.');
+        process.exit(0);
+    }
 
-for (const finding of findings) {
-    console.error(`\n${finding.file}:${finding.line}  ${finding.source}`);
-    for (const reason of finding.reasons) console.error(`    - ${reason}`);
-}
-console.error(
-    `\n✖ ${findings.length} tag-matching regex(es) can miss a spelling a browser accepts.` +
-        '\n  Add the `i` flag, and match a close tag as `<\\/tag[^>]*>`.' +
-        '\n  CodeQL reports this class too, as js/bad-tag-filter. Run `pnpm codeql:local`' +
-        '\n  for the real queries — this check does not stand in for them.',
-);
-process.exit(1);
+    for (const finding of findings) {
+        console.error(`\n${finding.file}:${finding.line}  ${finding.source}`);
+        for (const reason of finding.reasons) console.error(`    - ${reason}`);
+    }
+    console.error(
+        `\n✖ ${findings.length} tag-matching regex(es) can miss a spelling a browser accepts.` +
+            '\n  Add the `i` flag, and match a close tag as `<\\/tag[^>]*>`.' +
+            '\n  CodeQL reports this class too, as js/bad-tag-filter. Run `pnpm codeql:local`' +
+            '\n  for the real queries — this check does not stand in for them.',
+    );
+    process.exit(1);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
