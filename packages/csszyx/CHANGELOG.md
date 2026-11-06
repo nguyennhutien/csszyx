@@ -1,5 +1,25 @@
 # csszyx
 
+## [0.18.1](https://github.com/nguyennhutien/csszyx/compare/v0.18.0...v0.18.1) (2026-11-06)
+
+### Bug Fixes
+
+* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433))
+* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434))
+* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450))
+* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457))
+* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* **core:** read `null`, `undefined` and `false` branches as class-free ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **runtime:** keep the `szv` selection type mutable ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **compiler:** type `snapStrictness` on `SzProps` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** import `SzProps` for breakpoints in `theme.d.ts` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** augment `csszyx` in the generated theme declaration ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+
+### Performance
+
+* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443))
+
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-03)
 
 ### ⚠ BREAKING CHANGES
