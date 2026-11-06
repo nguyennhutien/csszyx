@@ -819,7 +819,9 @@ With `--breakpoint-tablet: 40rem;` in `@theme`, `{ tablet: { p: 4 } }` and
 `{ tablet: { hover: { p: 4 } } }` type-check in `sz` and in `szv` rows, and a
 typo under `tablet` is an error. Without the generated file in `include`, a
 project breakpoint in an `szv` row is reported as `NotAnSzKey`. The file
-imports `SzProps` from `@csszyx/compiler` and compiles with `skipLibCheck` on
+augments `csszyx` when the project has it installed, so it applies under pnpm
+and Yarn too, where `@csszyx/compiler` is out of the project's reach; a project
+without `csszyx` gets `@csszyx/compiler`. It compiles with `skipLibCheck` on
 or off.
 
 `scanCss` accepts a glob or array: `['src/index.css', 'src/tokens.css']`.

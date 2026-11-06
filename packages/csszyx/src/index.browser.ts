@@ -21,6 +21,10 @@
  * no bundler can shake it back out.
  */
 
+// The interfaces a project's `.csszyx/theme.d.ts` augments. Re-exported so
+// the augmentation names `csszyx`, which every package manager lets the
+// project resolve, rather than `@csszyx/compiler`, which pnpm does not.
+export type { CustomTheme, VariantModifiers } from '@csszyx/compiler';
 // === Runtime Helpers ===
 // === Variant Authoring ===
 // === Hydration & SSR ===

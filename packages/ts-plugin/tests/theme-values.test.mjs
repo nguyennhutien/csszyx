@@ -27,7 +27,7 @@ declare module '@csszyx/compiler' {
         shadows: 'float';
     }
     interface VariantModifiers {
-        ${breakpoints}?: SzPropsBase;
+        ${breakpoints}?: SzProps;
     }
 }
 export {};
@@ -61,6 +61,17 @@ test('reads only the nearest generated theme declaration and maps every category
     assert.deepStrictEqual(themeValuesForProperty(snapshot, 'rounded'), ['panel']);
     assert.deepStrictEqual(themeValuesForProperty(snapshot, 'shadow'), ['float']);
     assert.deepStrictEqual(themeValuesForProperty(snapshot, 'display'), []);
+});
+
+test('reads a declaration that augments `csszyx`, as a pnpm project gets', () => {
+    const file = source(
+        '/repo/.csszyx/theme.d.ts',
+        declaration().replace("'@csszyx/compiler'", "'csszyx'"),
+    );
+    const snapshot = themeSnapshotForProgram({ tsMod: ts, program: program(file), projectRoot: '/repo' });
+
+    assert.deepStrictEqual(snapshot.colors, ['brand']);
+    assert.deepStrictEqual(snapshot.breakpoints, ['tablet']);
 });
 
 test('reads every category the generated declaration writes', () => {

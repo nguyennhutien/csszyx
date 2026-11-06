@@ -1,4 +1,8 @@
-import { THEME_VALUE_PROPERTIES, type ThemeValueCategory } from '@csszyx/tooling-metadata';
+import {
+    THEME_AUGMENT_MODULES,
+    THEME_VALUE_PROPERTIES,
+    type ThemeValueCategory,
+} from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
 
 const MAX_THEME_SOURCE_BYTES = 128 * 1024;
@@ -208,7 +212,7 @@ function addBreakpoints(
     return true;
 }
 
-/** Parse only `declare module '@csszyx/compiler'` interface declarations.
+/** Parse only the interface declarations of a module a theme declaration augments.
  * @param tsMod - Host TypeScript instance.
  * @param sourceFile - Generated declaration already in the Program.
  * @param shouldStop - Cooperative cancellation/deadline check.
@@ -232,7 +236,7 @@ function parseThemeSource(
     return tokenCount(theme) === 0 ? EMPTY_THEME_SNAPSHOT : freezeTheme(theme);
 }
 
-/** The block of a `declare module '@csszyx/compiler'` statement, if it is one.
+/** The block of a `declare module` statement for `csszyx` or `@csszyx/compiler`, if it is one.
  * @param tsMod - Host TypeScript instance.
  * @param statement - Top-level statement to classify.
  * @returns The module block, or undefined for every other statement.
@@ -242,7 +246,10 @@ function compilerModuleBlock(
     statement: ts.Statement,
 ): ts.ModuleBlock | undefined {
     if (!tsMod.isModuleDeclaration(statement)) return undefined;
-    if (!tsMod.isStringLiteral(statement.name) || statement.name.text !== '@csszyx/compiler') {
+    if (
+        !tsMod.isStringLiteral(statement.name) ||
+        !(THEME_AUGMENT_MODULES as readonly string[]).includes(statement.name.text)
+    ) {
         return undefined;
     }
     // A module named by a string literal carries either no body or a block.

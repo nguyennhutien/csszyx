@@ -1,9 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { parseThemeBlocks, THEME_CATEGORIES } from '../src/theme-scanner.js';
-import { generateThemeDts } from '../src/theme-type-writer.js';
+import { generateThemeDts, themeModuleFor } from '../src/theme-type-writer.js';
 
 const EMPTY_THEME = parseThemeBlocks('');
 
@@ -175,5 +177,58 @@ describe('the categories the declaration writes', () => {
         expect([...read].sort()).toEqual(
             THEME_CATEGORIES.filter(category => category !== 'breakpoints').sort(),
         );
+    });
+});
+
+describe('the module the declaration augments', () => {
+    const theme = parseThemeBlocks('@theme { --breakpoint-tablet: 40rem; }');
+
+    it('augments `@csszyx/compiler` unless told otherwise', () => {
+        const dts = generateThemeDts({ outputPath: 'x', theme, sourceFiles: [] });
+        expect(dts).toContain("declare module '@csszyx/compiler' {");
+        expect(dts).toContain("import type { SzProps } from '@csszyx/compiler';");
+    });
+
+    it('augments and imports from `csszyx` when the project lists it', () => {
+        const dts = generateThemeDts({
+            outputPath: 'x',
+            theme,
+            sourceFiles: [],
+            augments: 'csszyx',
+        });
+        expect(dts).toContain("declare module 'csszyx' {");
+        expect(dts).toContain("import type { SzProps } from 'csszyx';");
+        expect(dts).not.toContain('@csszyx/compiler');
+    });
+});
+
+describe('themeModuleFor', () => {
+    const roots: string[] = [];
+    afterEach(() => {
+        for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    });
+    const project = (withCsszyxAt?: string): string => {
+        const root = mkdtempSync(path.join(os.tmpdir(), 'csszyx-theme-module-'));
+        roots.push(root);
+        const app = path.join(root, 'apps', 'web');
+        mkdirSync(app, { recursive: true });
+        if (withCsszyxAt !== undefined) {
+            const dir = path.join(withCsszyxAt === 'root' ? root : app, 'node_modules', 'csszyx');
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(path.join(dir, 'package.json'), '{ "name": "csszyx" }');
+        }
+        return app;
+    };
+
+    it('picks `csszyx` when the project reaches it', () => {
+        expect(themeModuleFor(project('app'))).toBe('csszyx');
+    });
+
+    it('picks `csszyx` when a parent folder holds it, as a workspace root does', () => {
+        expect(themeModuleFor(project('root'))).toBe('csszyx');
+    });
+
+    it('keeps `@csszyx/compiler` when no `csszyx` is reachable', () => {
+        expect(themeModuleFor(project())).toBe('@csszyx/compiler');
     });
 });

@@ -89,3 +89,90 @@ describe('the generated theme declaration, type-checked', () => {
         expect(typeCheck(true)).toEqual([]);
     });
 });
+
+/**
+ * A pnpm project lists `csszyx` and nothing else: `@csszyx/compiler` sits in
+ * the store, reachable from `csszyx` but not from the project. The layout is
+ * virtual and outside this repository, so nothing resolves by walking up into
+ * a workspace `node_modules`.
+ */
+const PNPM_ROOT = '/virtual-pnpm-project/';
+const PNPM_CSSZYX = `${PNPM_ROOT}node_modules/csszyx/`;
+const COMPILER_TYPES = fileURLToPath(new URL('../../compiler/dist/index.d.mts', import.meta.url));
+
+/**
+ * Type-check a consumer of `csszyx` under that layout.
+ *
+ * @param augments - The module the generated declaration augments.
+ * @returns Every diagnostic, as `file:line TScode: message`.
+ */
+function typeCheckUnderPnpm(augments: 'csszyx' | '@csszyx/compiler'): string[] {
+    const theme = parseThemeBlocks('@theme { --breakpoint-tablet: 40rem; }');
+    const themeDts = `${PNPM_ROOT}.csszyx/theme.d.ts`;
+    const consumer = `${PNPM_ROOT}consumer.ts`;
+    const files = new Map([
+        [`${PNPM_CSSZYX}package.json`, '{ "name": "csszyx", "types": "index.d.ts" }'],
+        // The interfaces as `csszyx` re-exports them: the compiler's own.
+        [
+            `${PNPM_CSSZYX}index.d.ts`,
+            `export type { CustomTheme, SzProps, VariantModifiers } from ${JSON.stringify(
+                COMPILER_TYPES,
+            )};`,
+        ],
+        [
+            themeDts,
+            generateThemeDts({ outputPath: themeDts, theme, sourceFiles: ['t.css'], augments }),
+        ],
+        [
+            consumer,
+            `import type { SzProps } from 'csszyx';
+export const flat: SzProps = { tablet: { p: 4 } };
+// @ts-expect-error - \`bgg\` is not an sz key under a project breakpoint
+export const typo: SzProps = { tablet: { bgg: 'red-500' } };
+`,
+        ],
+    ]);
+    const options: ts.CompilerOptions = {
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        target: ts.ScriptTarget.ES2022,
+        types: [],
+    };
+    const host = ts.createCompilerHost(options);
+    const { fileExists, readFile, getSourceFile, directoryExists } = host;
+    const virtual = (name: string) => name.startsWith(PNPM_ROOT);
+    host.fileExists = name => files.has(name) || (!virtual(name) && fileExists(name));
+    host.readFile = name => files.get(name) ?? (virtual(name) ? undefined : readFile(name));
+    host.directoryExists = name =>
+        virtual(`${name}/`)
+            ? [...files.keys()].some(file => file.startsWith(`${name}/`))
+            : (directoryExists?.(name) ?? true);
+    host.realpath = name => name;
+    host.getSourceFile = (name, languageVersion, ...rest) => {
+        const text = files.get(name);
+        return text === undefined
+            ? getSourceFile(name, languageVersion, ...rest)
+            : ts.createSourceFile(name, text, languageVersion, true);
+    };
+    const program = ts.createProgram([consumer, themeDts], options, host);
+    return ts
+        .getPreEmitDiagnostics(program)
+        .map(
+            diagnostic =>
+                `${diagnostic.file?.fileName.replace(PNPM_ROOT, '') ?? ''} TS${diagnostic.code}`,
+        );
+}
+
+describe('the generated theme declaration under pnpm', () => {
+    it('types a project breakpoint when it augments `csszyx`, the package the project lists', () => {
+        expect(typeCheckUnderPnpm('csszyx')).toEqual([]);
+    });
+
+    it('cannot reach `@csszyx/compiler`, which the project does not list', () => {
+        // `tablet` is no known key, so the plain use is an excess property.
+        expect(typeCheckUnderPnpm('@csszyx/compiler')).toEqual(['consumer.ts TS2353']);
+    });
+});

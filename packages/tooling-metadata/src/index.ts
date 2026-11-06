@@ -21,6 +21,7 @@ export {
     type StyleChainResolution,
     szvStyleChain,
 } from './relations';
+export { THEME_AUGMENT_MODULES, type ThemeAugmentModule } from './theme-modules';
 export {
     BOOLEAN_SHORTHANDS,
     KNOWN_SPECIAL_PROPERTIES,
