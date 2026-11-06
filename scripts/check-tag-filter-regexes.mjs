@@ -21,11 +21,15 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const baseRef = process.argv[2] ?? 'origin/main';
 
-/** Tag names whose spelling a browser treats case-insensitively. */
-const TAG = String.raw`<\/?\s*(script|iframe|object|embed|style|img|svg|a)\b`;
+/**
+ * Tag names whose spelling a browser treats case-insensitively, read in a
+ * regex body, where a close tag's slash is usually escaped (`<\/script`).
+ */
+const TAG = String.raw`<\\?\/?\s*(script|iframe|object|embed|style|img|svg|a)\b`;
 
 /**
  * @returns changed files this check applies to.
@@ -42,29 +46,30 @@ function changedFiles() {
 }
 
 /**
- * Find regex literals in a source file and report the ones that filter a tag
+ * Find regex literals in source text and report the ones that filter a tag
  * without being able to see every spelling of it.
  *
- * @param file - path to read.
+ * @param source - the file's text.
+ * @param file - the path the findings name.
  * @returns one finding per unsound literal.
  */
-function findingsIn(file) {
-    let source;
-    try {
-        source = readFileSync(file, 'utf8');
-    } catch {
-        return [];
-    }
+export function findingsInSource(source, file) {
     const findings = [];
     // A regex literal on one line: an opening slash, a body with no unescaped
     // slash or newline, a closing slash, then flags.
     const literal = /\/((?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+)\/([dgimsuvy]*)/g;
     source.split('\n').forEach((line, index) => {
         if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
-        for (const match of line.matchAll(literal)) {
+        literal.lastIndex = 0;
+        for (let match = literal.exec(line); match !== null; match = literal.exec(line)) {
             // A slash right after `<` opens an HTML close tag inside a string
-            // or template (`'</script>'`), not a regex literal.
-            if (match.index > 0 && line[match.index - 1] === '<') continue;
+            // or template (`'</script>'`), not a regex literal. Look again from
+            // the next character, so a real regex later on the line whose
+            // opening slash this false match swallowed is still read.
+            if (match.index > 0 && line[match.index - 1] === '<') {
+                literal.lastIndex = match.index + 1;
+                continue;
+            }
             const [, body, flags] = match;
             if (!new RegExp(TAG, 'i').test(body)) continue;
             const reasons = [];
@@ -84,6 +89,20 @@ function findingsIn(file) {
     return findings;
 }
 
+/**
+ * @param file - path to read.
+ * @returns the findings in the file, none when it cannot be read.
+ */
+function findingsIn(file) {
+    try {
+        return findingsInSource(readFileSync(file, 'utf8'), file);
+    } catch {
+        return [];
+    }
+}
+
+/** Check every changed file and exit with the verdict. */
+function main() {
 const findings = changedFiles().flatMap(findingsIn);
 
 if (findings.length === 0) {
@@ -102,3 +121,6 @@ console.error(
         '\n  for the real queries — this check does not stand in for them.',
 );
 process.exit(1);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
