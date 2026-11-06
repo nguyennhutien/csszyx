@@ -1747,16 +1747,12 @@ A custom property (`{ '--x': '[a]' }`) is a declaration value and is not read.
 `animate: '(--spin)'` → `animate: '--spin'`. `csszyx migrate` writes
 `font-(--v)` as `weight: '--v'`.
 
-A value with brackets of its own, such as grid line names at both ends
-(`gridCols: '[a]_1fr_[b]'`), has no `sz` spelling, and the help says so instead
-of offering one. Write the declaration in `css`, or the class in `className`:
-
-```tsx
-// before
-<div sz={{ gridCols: '[a]_1fr_[b]' }} />
-// after
-<div sz={{ css: { gridTemplateColumns: '[a] 1fr [b]' } }} />
-```
+Grid line names are CSS's own brackets, and `gridCols` and `gridRows` lower
+them: `gridCols: '[full-start] minmax(1rem, 1fr) [full-end]'` writes
+`grid-cols-[[full-start]_minmax(1rem,_1fr)_[full-end]]`. Only one pair around
+the whole value is reported, `gridCols: '[[a]_1fr_[b]]'` → `gridCols:
+'[a]_1fr_[b]'`. On any other key a value with brackets of its own has no `sz`
+spelling, and the help points to `css: { … }` or `className` instead.
 
 **Tooling.** `csszyx check` lists every site and exits 1. The build prints the
 diagnostic but does not fail. `csszyx migrate` does not rewrite these values.

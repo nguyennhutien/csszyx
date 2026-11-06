@@ -1079,10 +1079,10 @@ const PAREN_VARIABLE = /^\(--[^()]*\)$/;
  * The value inside the brackets `value` starts and ends with, its sign kept in
  * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
  * `1px!`), or the variable inside the parentheses csszyx writes for one
- * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. Grid
- * line names at both ends (`[a] 1fr [b]`) read as wrapped too; they are
- * written in `css: {…}`, where a value is never read so. Mirrors
- * `bracket_wrapped_inner`.
+ * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. The
+ * first and last bracket need not be one pair here (`[a] 1fr [b]`);
+ * `dropBracketedValue` tells them apart on the keys whose CSS takes grid line
+ * names. Mirrors `bracket_wrapped_inner`.
  *
  * @param value - The value as written.
  * @returns What to write instead, or `undefined`.
@@ -1098,9 +1098,38 @@ function bracketWrappedInner(value: string): string | undefined {
 }
 
 /**
+ * Keys whose CSS property takes grid line names in its value
+ * (`grid-template-columns`, `grid-template-rows`). Mirrors
+ * `takes_grid_line_names`.
+ */
+const GRID_LINE_NAME_KEYS: ReadonlySet<string> = new Set(['gridCols', 'gridRows']);
+
+/**
+ * Whether the first `[` of a value closes at its last `]`, so the two are one
+ * pair around the whole value. Mirrors `first_bracket_closes_last`.
+ *
+ * @param value - The value as written.
+ * @returns True for one pair around the whole value.
+ */
+function firstBracketClosesLast(value: string): boolean {
+    const last = value.lastIndexOf(']');
+    let depth = 0;
+    for (let at = 0; at < value.length; at++) {
+        if (value[at] === '[') depth++;
+        else if (value[at] === ']') {
+            depth = Math.max(0, depth - 1);
+            if (depth === 0) return at === last;
+        }
+    }
+    return false;
+}
+
+/**
  * Whether a key's value is wrapped in the brackets csszyx writes itself, which
  * is reported and emits nothing. A custom property's value is a declaration
- * value, where `[a]` is a grid line name, so it never is.
+ * value, where `[a]` is a grid line name, so it never is. On a key whose CSS
+ * takes grid line names, only one pair around the whole value is a wrapping:
+ * `[a] 1fr [b]` names two lines and lowers.
  *
  * @param key - The sz key.
  * @param value - Its value.
@@ -1110,6 +1139,9 @@ function dropBracketedValue(key: string, value: SzValue): boolean {
     if (typeof value !== 'string' || key.startsWith('--')) return false;
     const inner = bracketWrappedInner(value);
     if (inner === undefined) return false;
+    if (GRID_LINE_NAME_KEYS.has(key) && value.includes('[') && !firstBracketClosesLast(value)) {
+        return false;
+    }
     warnBracketedValue(key, value, inner);
     return true;
 }
@@ -1118,9 +1150,9 @@ const _warnedBracketedValues = new Set<string>();
 
 /**
  * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
- * What to write is offered only when no bracket remains inside (`[a] 1fr [b]`,
- * `[[a] 1fr]`): the outer two are then no one pair around a value. Mirrors
- * `collect_bracketed_values`.
+ * What to write is offered unless brackets remain inside on a key whose CSS
+ * takes no grid line names (`p: '[a] 1 [b]'`): no `sz` value of that key
+ * carries one. Mirrors `collect_bracketed_values`.
  *
  * @param key - The sz key.
  * @param value - The value as written.
@@ -1133,9 +1165,10 @@ function warnBracketedValue(key: string, value: string, inner: string): void {
         !_warnedBracketedValues.has(`${key}:${value}`)
     ) {
         _warnedBracketedValues.add(`${key}:${value}`);
-        const args = /[[\]]/.test(inner)
-            ? ({ form: 'escape', key, value } as const)
-            : ({ form: 'unwrap', key, value, inner } as const);
+        const args =
+            !GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(inner)
+                ? ({ form: 'escape', key, value } as const)
+                : ({ form: 'unwrap', key, value, inner } as const);
         szReport({ diagnostic: BRACKETED_VALUE, args, at: szWarnLocation });
     }
 }
@@ -1262,7 +1295,8 @@ function needsArbitraryBrackets(value: string): boolean {
         isArbitraryLength(value) ||
         value.startsWith('#') || // Hex colors
         containsCssFunctionCall(value) ||
-        value.includes(' ') // Values with spaces need brackets
+        value.includes(' ') || // Values with spaces need brackets
+        value.includes('[') // A grid line name (`[a]_1fr`), which no bare class carries
     );
 }
 

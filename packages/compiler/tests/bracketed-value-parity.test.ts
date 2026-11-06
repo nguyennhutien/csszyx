@@ -5,8 +5,11 @@
  * `w-[100px]`, while `w: '[1/2]'` wrote `w-[1/2]`, `width: 1/2`, and
  * `m: '-[var(--v)]'` nested them. One spelling is supported, the value
  * without its brackets: a wrapped one writes nothing and `bracketed-value`
- * names the key and what to write. Grid line names at both ends read as
- * wrapped too; they are written in `css: {…}`, which is never read so.
+ * names the key and what to write. Grid line names are CSS's own brackets:
+ * on `gridCols` and `gridRows` a value whose first bracket closes before its
+ * end (`[a] 1fr [b]`) is lowered, and only one pair around the whole value
+ * is the wrapping. On any other key brackets inside are no value csszyx can
+ * write, and the help points to `css: {…}`.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
@@ -74,7 +77,11 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ m: '-[var(--v)]' }],
         [{ w: '[calc(100% - 2px)]' }],
         [{ hover: { w: '[10px]' } }],
-        [{ gridCols: '[a] 1fr [b]' }],
+        // One pair around a whole grid template, line names inside or not.
+        [{ gridCols: '[1fr_2fr]' }],
+        [{ gridCols: '[[a]_1fr_[b]]' }],
+        // Brackets inside a value on a key whose CSS takes no line names.
+        [{ p: '[a]_1_[b]' }],
         // The important modifier sits outside the brackets.
         [{ w: '[10px]!' }],
         [{ top: '-[1px]!' }],
@@ -91,6 +98,18 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
 
     it.each([
         [{ gridCols: '[a] 1fr' }, 'grid-cols-[[a]_1fr]'],
+        // Grid line names at both ends are CSS, not csszyx's brackets.
+        [{ gridCols: '[a] 1fr [b]' }, 'grid-cols-[[a]_1fr_[b]]'],
+        [{ gridCols: '[a]_1fr_[b]' }, 'grid-cols-[[a]_1fr_[b]]'],
+        [{ gridRows: '[a]_auto' }, 'grid-rows-[[a]_auto]'],
+        [
+            {
+                gridCols:
+                    '[full-start] minmax(1rem, 1fr) [content-start] minmax(0, 60rem) [content-end] minmax(1rem, 1fr) [full-end]',
+            },
+            'grid-cols-[[full-start]_minmax(1rem,_1fr)_[content-start]_minmax(0,_60rem)_[content-end]_minmax(1rem,_1fr)_[full-end]]',
+        ],
+        [{ md: { gridCols: '[a]_1fr_[b]' } }, 'md:grid-cols-[[a]_1fr_[b]]'],
         [{ css: { gridTemplateColumns: '[a] 1fr [b]' } }, '[grid-template-columns:[a]_1fr_[b]]'],
         [{ w: '100px' }, 'w-[100px]'],
         [{ '--cols': '[a]' }, '[--cols:[a]]'],
@@ -171,22 +190,23 @@ describe.each(HELP_LANES)('what the help offers for a wrapped value — %s', (_n
         [{ w: '[100px]' }, "write `w: '100px'`"],
         [{ top: '-[1px]!' }, "write `top: '-1px!'`"],
         [{ animate: '(--spin)' }, "write `animate: '--spin'`"],
+        // Around a whole grid template the inner value, line names and all.
+        [{ gridCols: '[[a]_1fr_[b]]' }, "write `gridCols: '[a]_1fr_[b]'`"],
+        [{ gridRows: '[[a]_1fr]' }, "write `gridRows: '[a]_1fr'`"],
     ])('%j: %s', (sz, expected) => {
         expect(help(sz)).toEqual([expect.stringContaining(expected)]);
     });
 
-    // Grid line names at both ends, or brackets nested inside, are no such
-    // pair: the value goes in `css: { … }` or an arbitrary class.
-    it.each([
-        [{ gridCols: '[a]_1fr_[b]' }],
-        [{ gridCols: '[a] 1fr [b]' }],
-        [{ gridCols: '[[a]_1fr_[b]]' }],
-        [{ gridRows: '[[a]_1fr]' }],
-    ])('%j points to `css` instead of a value it cannot write', sz => {
-        const lines = help(sz);
-        expect(lines).toHaveLength(1);
-        expect(lines[0]).not.toContain('write `grid');
-        expect(lines[0]).toContain('`css: { … }`');
-        expect(lines[0]).toContain('`className`');
-    });
+    // Brackets inside a value on a key whose CSS takes no line names: the
+    // value goes in `css: { … }` or an arbitrary class.
+    it.each([[{ p: '[a]_1_[b]' }], [{ w: '[[a]_1fr]' }]])(
+        '%j points to `css` instead of a value it cannot write',
+        sz => {
+            const lines = help(sz);
+            expect(lines).toHaveLength(1);
+            expect(lines[0]).not.toContain('write `');
+            expect(lines[0]).toContain('`css: { … }`');
+            expect(lines[0]).toContain('`className`');
+        },
+    );
 });

@@ -891,9 +891,11 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         // `unwrap`: one pair of brackets (or the parentheses of a variable)
-        // around a value with none of its own, so `inner` is what to write.
-        // `escape`: brackets inside too, such as grid line names at both ends
-        // (`[a] 1fr [b]`), which no `sz` value can carry; `inner` is absent.
+        // around a value, so `inner` is what to write. On `gridCols` and
+        // `gridRows` the inner value may hold grid line names; a value whose
+        // first bracket closes before its end (`[a] 1fr [b]`) is not wrapped
+        // there and lowers. `escape`: brackets inside a value of any other
+        // key, which no `sz` value of it can carry; `inner` is absent.
         forms: ['unwrap', 'escape'],
         args: {
             form: formArg(['unwrap', 'escape']),
@@ -904,7 +906,7 @@ export const DIAGNOSTICS = [
         text: "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
         help: {
             unwrap: "write `{key}: '{inner}'`.",
-            escape: 'write the declaration in `css: { … }`, or the class in `className`; the brackets inside, such as grid line names, are part of the value.',
+            escape: 'write the declaration in `css: { … }`, or the class in `className`; the brackets inside are part of the value.',
         },
         sources: [ENGINE, CORE_TS],
     },

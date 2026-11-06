@@ -1138,7 +1138,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "text": "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
         "help": {
             "unwrap": "write `{key}: '{inner}'`.",
-            "escape": "write the declaration in `css: { … }`, or the class in `className`; the brackets inside, such as grid line names, are part of the value."
+            "escape": "write the declaration in `css: { … }`, or the class in `className`; the brackets inside are part of the value."
         }
     },
     {
