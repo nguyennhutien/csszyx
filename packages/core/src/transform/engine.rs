@@ -3526,17 +3526,20 @@ mod tests {
         let file = TransformFile {
             filename: "src/App.tsx".to_string(),
             source:
-                "export const A = () => <div sz={{ w: '[100px]', gridCols: '[a]_1fr_[b]' }} />;"
+                "export const A = () => <div sz={{ w: '[100px]', p: '[a]_1_[b]', gridCols: '[a]_1fr_[b]', gridRows: '[[a]_1fr]' }} />;"
                     .to_string(),
         };
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
+        // `gridCols` names two grid lines and lowers; around a whole grid
+        // template, line names inside are offered back.
         assert_eq!(
             lines(&result),
             [
                 r#"bracketed-value {"form":"unwrap","key":"w","value":"[100px]","inner":"100px"}"#,
-                r#"bracketed-value {"form":"escape","key":"gridCols","value":"[a]_1fr_[b]"}"#,
+                r#"bracketed-value {"form":"escape","key":"p","value":"[a]_1_[b]"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
             ]
         );
     }

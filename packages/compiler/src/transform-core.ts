@@ -1106,22 +1106,26 @@ const GRID_LINE_NAME_KEYS: ReadonlySet<string> = new Set(['gridCols', 'gridRows'
 
 /**
  * Whether the first `[` of a value closes at its last `]`, so the two are one
- * pair around the whole value. Mirrors `first_bracket_closes_last`.
+ * pair around the whole value: `true` for `[[a]_1fr]`, `false` for
+ * `[a]_1fr_[b]`, and `undefined` when the brackets do not balance (`[[a]`),
+ * which no grid template is. Mirrors `outer_bracket_pair`.
  *
  * @param value - The value as written.
- * @returns True for one pair around the whole value.
+ * @returns Whether the outer pair wraps the whole value, if the brackets balance.
  */
-function firstBracketClosesLast(value: string): boolean {
+function outerBracketPair(value: string): boolean | undefined {
     const last = value.lastIndexOf(']');
     let depth = 0;
+    let firstCloses: boolean | undefined;
     for (let at = 0; at < value.length; at++) {
         if (value[at] === '[') depth++;
         else if (value[at] === ']') {
-            depth = Math.max(0, depth - 1);
-            if (depth === 0) return at === last;
+            depth--;
+            if (depth < 0) return undefined;
+            if (depth === 0 && firstCloses === undefined) firstCloses = at === last;
         }
     }
-    return false;
+    return depth === 0 ? firstCloses : undefined;
 }
 
 /**
@@ -1139,9 +1143,7 @@ function dropBracketedValue(key: string, value: SzValue): boolean {
     if (typeof value !== 'string' || key.startsWith('--')) return false;
     const inner = bracketWrappedInner(value);
     if (inner === undefined) return false;
-    if (GRID_LINE_NAME_KEYS.has(key) && value.includes('[') && !firstBracketClosesLast(value)) {
-        return false;
-    }
+    if (GRID_LINE_NAME_KEYS.has(key) && outerBracketPair(value) === false) return false;
     warnBracketedValue(key, value, inner);
     return true;
 }
@@ -1165,10 +1167,12 @@ function warnBracketedValue(key: string, value: string, inner: string): void {
         !_warnedBracketedValues.has(`${key}:${value}`)
     ) {
         _warnedBracketedValues.add(`${key}:${value}`);
-        const args =
-            !GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(inner)
-                ? ({ form: 'escape', key, value } as const)
-                : ({ form: 'unwrap', key, value, inner } as const);
+        const offered =
+            !/[[\]]/.test(inner) ||
+            (GRID_LINE_NAME_KEYS.has(key) && outerBracketPair(value) === true);
+        const args = !offered
+            ? ({ form: 'escape', key, value } as const)
+            : ({ form: 'unwrap', key, value, inner } as const);
         szReport({ diagnostic: BRACKETED_VALUE, args, at: szWarnLocation });
     }
 }
@@ -1295,8 +1299,7 @@ function needsArbitraryBrackets(value: string): boolean {
         isArbitraryLength(value) ||
         value.startsWith('#') || // Hex colors
         containsCssFunctionCall(value) ||
-        value.includes(' ') || // Values with spaces need brackets
-        value.includes('[') // A grid line name (`[a]_1fr`), which no bare class carries
+        value.includes(' ') // Values with spaces need brackets
     );
 }
 
@@ -3750,7 +3753,12 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
     const ratio = normalizeRatioValue(rawKey, key, value);
     if (ratio) return ratio;
-    if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
+    if (
+        needsArbitraryBrackets(value) ||
+        /^\d+\.\d+%$/.test(value) ||
+        // A grid line name (`[a]_1fr`), which no bare class carries.
+        (GRID_LINE_NAME_KEYS.has(rawKey) && value.includes('['))
+    ) {
         return `[${normalizeArbitraryValue(value)}]`;
     }
     return value;

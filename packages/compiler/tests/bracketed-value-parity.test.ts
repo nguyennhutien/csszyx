@@ -82,6 +82,9 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ gridCols: '[[a]_1fr_[b]]' }],
         // Brackets inside a value on a key whose CSS takes no line names.
         [{ p: '[a]_1_[b]' }],
+        // Brackets that do not balance are no grid template.
+        [{ gridCols: '[[a]' }],
+        [{ gridCols: '[a]]_[b]' }],
         // The important modifier sits outside the brackets.
         [{ w: '[10px]!' }],
         [{ top: '-[1px]!' }],
@@ -199,7 +202,7 @@ describe.each(HELP_LANES)('what the help offers for a wrapped value — %s', (_n
 
     // Brackets inside a value on a key whose CSS takes no line names: the
     // value goes in `css: { … }` or an arbitrary class.
-    it.each([[{ p: '[a]_1_[b]' }], [{ w: '[[a]_1fr]' }]])(
+    it.each([[{ p: '[a]_1_[b]' }], [{ w: '[[a]_1fr]' }], [{ gridCols: '[[a]' }]])(
         '%j points to `css` instead of a value it cannot write',
         sz => {
             const lines = help(sz);

@@ -2388,7 +2388,10 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // `buildGenericStringClass` in `transform-core.ts`.
             let final_value = if key == "aspect" && is_decimal_ratio(value) {
                 format!("[{value}]")
-            } else if needs_brackets(value) {
+            } else if needs_brackets(value)
+                // A grid line name (`[a]_1fr`), which no bare class carries.
+                || (takes_grid_line_names(key) && value.contains('['))
+            {
                 // Tailwind arbitrary values cannot contain raw spaces (the class
                 // attribute would split into separate tokens), so collapse
                 // whitespace to underscores, matching the JavaScript transform it replaced.
@@ -3221,12 +3224,7 @@ fn is_bare_fraction(value: &str) -> bool {
 }
 
 fn needs_brackets(value: &str) -> bool {
-    // A `[` is a grid line name (`[a]_1fr`), which no bare class can carry.
-    if value.starts_with('#')
-        || contains_css_function_call(value)
-        || value.contains(' ')
-        || value.contains('[')
-    {
+    if value.starts_with('#') || contains_css_function_call(value) || value.contains(' ') {
         return true;
     }
 
@@ -3380,7 +3378,7 @@ fn bracketed_inner(key: &str, value: &str) -> Option<String> {
         return None;
     }
     let inner = bracket_wrapped_inner(value)?;
-    if takes_grid_line_names(key) && value.contains('[') && !first_bracket_closes_last(value) {
+    if takes_grid_line_names(key) && outer_bracket_pair(value) == Some(false) {
         return None;
     }
     Some(inner)
@@ -3394,23 +3392,34 @@ fn takes_grid_line_names(key: &str) -> bool {
 }
 
 /// Whether the first `[` of a value closes at its last `]`, so the two are one
-/// pair around the whole value.
-fn first_bracket_closes_last(value: &str) -> bool {
+/// pair around the whole value: `Some(true)` for `[[a]_1fr]`, `Some(false)`
+/// for `[a]_1fr_[b]`, and `None` when the brackets do not balance (`[[a]`),
+/// which no grid template is. Mirrors `outerBracketPair` in
+/// `transform-core.ts`.
+fn outer_bracket_pair(value: &str) -> Option<bool> {
     let last = value.rfind(']');
-    let mut depth = 0usize;
+    let mut depth = 0i32;
+    let mut first_closes = None;
     for (at, byte) in value.bytes().enumerate() {
         match byte {
             b'[' => depth += 1,
             b']' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return Some(at) == last;
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+                if depth == 0 && first_closes.is_none() {
+                    first_closes = Some(Some(at) == last);
                 }
             }
             _ => {}
         }
     }
-    false
+    if depth == 0 {
+        first_closes
+    } else {
+        None
+    }
 }
 
 /// Each string value in the brackets csszyx writes itself
@@ -3430,8 +3439,10 @@ pub(crate) fn collect_bracketed_values(
                     out.push((
                         property.key.clone(),
                         value.clone(),
-                        (takes_grid_line_names(&property.key) || !inner.contains(['[', ']']))
-                            .then_some(inner),
+                        (!inner.contains(['[', ']'])
+                            || (takes_grid_line_names(&property.key)
+                                && outer_bracket_pair(value) == Some(true)))
+                        .then_some(inner),
                         property.span.start,
                     ));
                 }
@@ -3547,6 +3558,7 @@ mod tests {
                 property("gridRows", text("[[a]_1fr]")),
                 property("gridCols", text("[a]_1fr_[b]")),
                 property("gridCols", text("[[a]")),
+                property("gridCols", text("[a]]_[b]")),
                 property("gridCols", text("(--cols)")),
                 property("p", text("[a]_1_[b]")),
                 property("mt", text("-[3px]!")),
@@ -3571,6 +3583,9 @@ mod tests {
                 ("h", "[2px]", Some("2px")),
                 // One pair around a grid template: line names inside are CSS.
                 ("gridRows", "[[a]_1fr]", Some("[a]_1fr")),
+                // Brackets that do not balance: no grid template, no offer.
+                ("gridCols", "[[a]", None),
+                ("gridCols", "[a]]_[b]", None),
                 ("gridCols", "(--cols)", Some("--cols")),
                 // Brackets inside elsewhere: no value of that key carries them.
                 ("p", "[a]_1_[b]", None),
@@ -3780,6 +3795,24 @@ mod tests {
             ],
         });
         assert_eq!(classes, ["bg-revert", "cursor-[revert]"]);
+    }
+
+    /// Grid line names are CSS's own brackets: on the keys whose property
+    /// takes them, the value is bracketed and lowered, and only one pair
+    /// around the whole value is a wrapping, which writes nothing.
+    #[test]
+    fn grid_line_names_lower_as_an_arbitrary_value() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let classes = lower_static_sz_object(&StaticSzObject {
+            properties: vec![
+                property("gridCols", text("[a]_1fr_[b]")),
+                property("gridRows", text("[a]_auto")),
+                property("gridCols", text("[[a]_1fr]")),
+                property("gridCols", text("[[a]")),
+                property("gridCols", text("[a]]_[b]")),
+            ],
+        });
+        assert_eq!(classes, ["grid-cols-[[a]_1fr_[b]]", "grid-rows-[[a]_auto]"]);
     }
 
     /// A CSS-wide keyword on `bgImg` is the property's value, never a URL.
@@ -4325,8 +4358,6 @@ mod tests {
     fn needs_brackets_extended() {
         // Color functions and CSS units must be wrapped as arbitrary values.
         assert!(needs_brackets("rgb(255,0,0)"));
-        // A grid line name has no bare class form.
-        assert!(needs_brackets("[a]_1fr"));
         assert!(needs_brackets("hsl(200,50%,50%)"));
         assert!(needs_brackets("oklch(50% 0.1 200)"));
         assert!(needs_brackets("50dvh"));
