@@ -116,9 +116,13 @@ A suite that compiles with Babel (or `ts-jest`, `@swc/jest`) and does not chain
 it. Load the table the build wrote from a setup file:
 
 ```js
-// jest.setup.js, beside the .csszyx folder the build writes
-const f = require('path').join(__dirname, '.csszyx/merge-registration.cjs');
-if (require('fs').existsSync(f)) require(f);
+// jest.setup.js. The build writes `.csszyx` in its own root: Vite's `root`,
+// webpack's `context`, the Next.js project folder. Point `root` there.
+const path = require('path');
+const root = __dirname; // for example path.resolve(__dirname, 'apps/web')
+const table = path.join(root, '.csszyx/merge-registration.cjs');
+if (require('fs').existsSync(table)) require(table);
+else console.warn(`csszyx: no merge table at ${table}; run the build first`);
 ```
 
 ```js
@@ -131,8 +135,9 @@ module.exports = {
 Jest runs `setupFiles` in each test file's module registry, so every test sees
 the table. Its limits:
 
-- It reads the `.csszyx` folder next to the setup file. Under Jest `projects`,
-  give each app its own setup file beside its own `.csszyx`.
+- It reads the `.csszyx` folder at `root`, which is where the build writes it,
+  not always beside the setup file. Under Jest `projects`, give each app its
+  own setup file pointing at its own build root.
 - `jest.resetModules()` empties the registry, and the runtime a test requires
   afterwards has no table. Require the setup file again after the reset.
 - The file registers the table on the copy of `@csszyx/runtime` that `require`
@@ -140,8 +145,8 @@ the table. Its limits:
   else, such as the runtime's source, gives `szcn` a second copy with no table.
 - A Jest that runs native ES modules loads the runtime's ES build, which the
   `.cjs` file does not reach. Import `.csszyx/merge-registration.mjs` instead.
-- Before a build has written the file, the setup loads nothing and `szcn` keeps
-  every class, as below.
+- Before a build has written the file, the setup warns, loads nothing, and
+  `szcn` keeps every class, as below.
 
 ### Where the classes come from
 
