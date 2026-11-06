@@ -449,8 +449,9 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
         let element_name = jsx_element_name(&element.name);
-        // One side per spread: the `sz` and the class name written between two
-        // spreads, or before the first or after the last.
+        // One side per spread that may carry a class: the `sz` and the class
+        // name written between two such spreads, or before the first or after
+        // the last. A spread that provably carries none is no boundary.
         let mut sides: Vec<SideAttributes> = vec![SideAttributes::default()];
         let mut style_attribute_index = None;
         let mut recovery_attribute_index = None;
@@ -464,11 +465,13 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             let attr = match item {
                 JSXAttributeItem::Attribute(attr) => attr,
                 JSXAttributeItem::SpreadAttribute(spread) => {
-                    self.fold_side(&mut sides, &element_name);
-                    sides.push(SideAttributes {
-                        spread: Some(text_span(spread.argument.span())),
-                        ..SideAttributes::default()
-                    });
+                    if !spread_carries_no_class(spread) {
+                        self.fold_side(&mut sides, &element_name);
+                        sides.push(SideAttributes {
+                            spread: Some(text_span(spread.argument.span())),
+                            ..SideAttributes::default()
+                        });
+                    }
                     has_spread_attribute = true;
                     spread_count += 1;
                     safe_style_spread = if spread_count == 1 {
@@ -600,6 +603,54 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 /// would break the one-line note it is quoted in.
 fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Whether a JSX spread provably carries no class name: an object literal,
+/// `x && {…}` or `c ? {…} : {…}`, each object listing only non-computed keys
+/// other than `className`, `class` and `sz`. Such a spread cannot replace a
+/// class name written before it, so it opens no new side.
+fn spread_carries_no_class(spread: &JSXSpreadAttribute<'_>) -> bool {
+    match unwrap_expression(&spread.argument) {
+        Expression::LogicalExpression(logical)
+            if logical.operator == oxc_ast::ast::LogicalOperator::And =>
+        {
+            is_class_free_branch(&logical.right)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            is_class_free_branch(&conditional.consequent)
+                && is_class_free_branch(&conditional.alternate)
+        }
+        expression => is_class_free_object(expression),
+    }
+}
+
+/// Whether one branch of a guarded or chosen spread carries no class: a
+/// class-free object, or `null`, `undefined` or `false`, which JSX spreads as
+/// nothing. A local binding named `undefined` is not looked for.
+fn is_class_free_branch<'a>(expression: &'a Expression<'a>) -> bool {
+    match unwrap_expression(expression) {
+        Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        expression => is_class_free_object(expression),
+    }
+}
+
+/// Whether `expression` is an object literal whose every member is a property
+/// with a static key that is not `className`, `class` or `sz`. A nested spread
+/// or a computed key could carry any of them.
+fn is_class_free_object<'a>(expression: &'a Expression<'a>) -> bool {
+    let Expression::ObjectExpression(object) = unwrap_expression(expression) else {
+        return false;
+    };
+    object.properties.iter().all(|property| match property {
+        ObjectPropertyKind::ObjectProperty(property) => {
+            !property.computed
+                && static_property_key(&property.key)
+                    .is_some_and(|key| !matches!(key.as_str(), "className" | "class" | "sz"))
+        }
+        ObjectPropertyKind::SpreadProperty(_) => false,
+    })
 }
 
 /// Classify one JSX spread whose object branches can absorb generated style vars.
@@ -8956,6 +9007,57 @@ export const C = ({ styles }) => <div sz={styles} />;
 
             assert!(element.has_spread_attribute, "{attributes}");
             assert!(element.safe_style_spread.is_none(), "{attributes}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_splits_sides_only_at_a_spread_that_may_carry_a_class() {
+        let split = |spread: &str| {
+            let source = format!(
+                "const X = ({{ c, n, r }}) => <div className=\"card\" {spread} sz={{{{ p: 4 }}}} />;"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let element = &parsed.ir.jsx_opening_elements[0];
+            assert!(element.has_spread_attribute, "{spread}");
+            !parsed.ir.spread_split_classes.is_empty()
+        };
+
+        for spread in [
+            "{...{}}",
+            "{...{ onClick: c }}",
+            "{...(!n && { onClick: c })}",
+            "{...(n ? { id: 'a' } : { title: 'b' })}",
+            "{...{ c, f() {}, get g() { return 1; }, 'aria-label': 'x', 2: 'y' }}",
+            "{...({ onClick: c } as object)}",
+            "{...(n ? { id: 'a' } : null)}",
+            "{...(n ? undefined : { id: 'a' })}",
+            "{...(n ? { id: 'a' } : false)}",
+            "{...(n && null)}",
+        ] {
+            assert!(!split(spread), "{spread}");
+        }
+
+        for spread in [
+            "{...r}",
+            "{...{ [n]: c }}",
+            "{...{ ['id']: c }}",
+            "{...{ ...r }}",
+            "{...(n || { onClick: c })}",
+            "{...(n ?? { onClick: c })}",
+            "{...(n && r)}",
+            "{...(n ? { id: 'a' } : r)}",
+            "{...(n ? r : { id: 'a' })}",
+            "{...{ className: 'x' }}",
+            "{...{ 'class': 'x' }}",
+            "{...{ sz: c }}",
+            "{...(n ? { id: 'a' } : { className: 'x' })}",
+            "{...(n ? null : r)}",
+            "{...(n ? true : null)}",
+        ] {
+            assert!(split(spread), "{spread}");
         }
     }
 
