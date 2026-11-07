@@ -1112,7 +1112,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "unwrap",
+            "escape"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "unwrap",
+                    "escape"
+                ]
+            },
             "key": {
                 "type": "string"
             },
@@ -1124,7 +1135,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
-        "help": "write `{key}: '{inner}'`; grid line names at both ends, such as `[a] 1fr [b]`, go in `css: { … }`."
+        "help": {
+            "unwrap": "write `{key}: '{inner}'`.",
+            "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value."
+        }
     },
     {
         "id": "opacity-value",

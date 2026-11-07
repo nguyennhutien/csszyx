@@ -1079,10 +1079,10 @@ const PAREN_VARIABLE = /^\(--[^()]*\)$/;
  * The value inside the brackets `value` starts and ends with, its sign kept in
  * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
  * `1px!`), or the variable inside the parentheses csszyx writes for one
- * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. Grid
- * line names at both ends (`[a] 1fr [b]`) read as wrapped too; they are
- * written in `css: {…}`, where a value is never read so. Mirrors
- * `bracket_wrapped_inner`.
+ * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. The
+ * first and last bracket need not be one pair here (`[a] 1fr [b]`);
+ * `dropBracketedValue` tells them apart on the keys whose CSS takes grid line
+ * names. Mirrors `bracket_wrapped_inner`.
  *
  * @param value - The value as written.
  * @returns What to write instead, or `undefined`.
@@ -1098,9 +1098,82 @@ function bracketWrappedInner(value: string): string | undefined {
 }
 
 /**
+ * Keys whose CSS property takes grid line names in its value
+ * (`grid-template-columns`, `grid-template-rows`). Mirrors
+ * `takes_grid_line_names`.
+ */
+const GRID_LINE_NAME_KEYS: ReadonlySet<string> = new Set([
+    'gridCols',
+    'gridRows',
+    'gridTemplateColumns',
+    'gridTemplateRows',
+]);
+
+/** Track keywords a grid template spells bare between `_`. */
+const GRID_TRACK_KEYWORDS: ReadonlySet<string> = new Set([
+    'auto',
+    'min-content',
+    'max-content',
+    'none',
+    'subgrid',
+    'masonry',
+]);
+
+/**
+ * Whether a grid template value needs the arbitrary form: it names a grid
+ * line (`[a]_1fr`), or it spells a space `_` between tracks (`1fr_2fr`,
+ * `auto_1fr`). A name that only holds `_` (`main_layout`) is a theme value
+ * Tailwind serves bare, so a `_` brackets only beside a track. Mirrors
+ * `is_grid_track_list`.
+ *
+ * @param value - The value as written.
+ * @returns True when the value is bracketed.
+ */
+function isGridTrackList(value: string): boolean {
+    return (
+        value.includes('[') ||
+        (value.includes('_') &&
+            value
+                .split('_')
+                .some(
+                    segment =>
+                        /^[\d.]/.test(segment) ||
+                        /[(%]/.test(segment) ||
+                        GRID_TRACK_KEYWORDS.has(segment),
+                ))
+    );
+}
+
+/**
+ * Whether the first `[` of a value closes at its last `]`, so the two are one
+ * pair around the whole value: `true` for `[[a]_1fr]`, `false` for
+ * `[a]_1fr_[b]`, and `undefined` when the brackets do not balance (`[[a]`),
+ * which no grid template is. Mirrors `outer_bracket_pair`.
+ *
+ * @param value - The value as written.
+ * @returns Whether the outer pair wraps the whole value, if the brackets balance.
+ */
+function outerBracketPair(value: string): boolean | undefined {
+    const last = value.lastIndexOf(']');
+    let depth = 0;
+    let firstCloses: boolean | undefined;
+    for (let at = 0; at < value.length; at++) {
+        if (value[at] === '[') depth++;
+        else if (value[at] === ']') {
+            depth--;
+            if (depth < 0) return undefined;
+            if (depth === 0 && firstCloses === undefined) firstCloses = at === last;
+        }
+    }
+    return depth === 0 ? firstCloses : undefined;
+}
+
+/**
  * Whether a key's value is wrapped in the brackets csszyx writes itself, which
  * is reported and emits nothing. A custom property's value is a declaration
- * value, where `[a]` is a grid line name, so it never is.
+ * value, where `[a]` is a grid line name, so it never is. On a key whose CSS
+ * takes grid line names, only one pair around the whole value is a wrapping:
+ * `[a] 1fr [b]` names two lines and lowers.
  *
  * @param key - The sz key.
  * @param value - Its value.
@@ -1108,7 +1181,13 @@ function bracketWrappedInner(value: string): string | undefined {
  */
 function dropBracketedValue(key: string, value: SzValue): boolean {
     if (typeof value !== 'string' || key.startsWith('--')) return false;
-    const inner = bracketWrappedInner(value);
+    let inner = bracketWrappedInner(value);
+    if (GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(value)) {
+        // A sign is no part of a grid template, whatever its brackets.
+        const pair = value.startsWith('-') ? undefined : outerBracketPair(value);
+        if (pair === false) return false;
+        if (pair === undefined) inner ??= value;
+    }
     if (inner === undefined) return false;
     warnBracketedValue(key, value, inner);
     return true;
@@ -1118,10 +1197,13 @@ const _warnedBracketedValues = new Set<string>();
 
 /**
  * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
+ * What to write is offered unless brackets remain inside on a key whose CSS
+ * takes no grid line names (`p: '[a] 1 [b]'`): no `sz` value of that key
+ * carries one. Mirrors `collect_bracketed_values`.
  *
  * @param key - The sz key.
  * @param value - The value as written.
- * @param inner - What to write instead.
+ * @param inner - The value without its outer brackets.
  */
 function warnBracketedValue(key: string, value: string, inner: string): void {
     if (
@@ -1130,7 +1212,12 @@ function warnBracketedValue(key: string, value: string, inner: string): void {
         !_warnedBracketedValues.has(`${key}:${value}`)
     ) {
         _warnedBracketedValues.add(`${key}:${value}`);
-        szReport({ diagnostic: BRACKETED_VALUE, args: { key, value, inner }, at: szWarnLocation });
+        const offered =
+            GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(value)
+                ? !value.startsWith('-') && outerBracketPair(value) === true
+                : !/[[\]]/.test(inner);
+        const args = { form: offered ? 'unwrap' : 'escape', key, value, inner } as const;
+        szReport({ diagnostic: BRACKETED_VALUE, args, at: szWarnLocation });
     }
 }
 
@@ -3710,7 +3797,13 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
     const ratio = normalizeRatioValue(rawKey, key, value);
     if (ratio) return ratio;
-    if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
+    if (
+        needsArbitraryBrackets(value) ||
+        /^\d+\.\d+%$/.test(value) ||
+        // A grid line name (`[a]_1fr`) or tracks spelled with `_`
+        // (`1fr_2fr`): no bare class carries either.
+        (GRID_LINE_NAME_KEYS.has(rawKey) && isGridTrackList(value))
+    ) {
         return `[${normalizeArbitraryValue(value)}]`;
     }
     return value;

@@ -110,25 +110,29 @@ Controlling flex/grid item order.
 
 Specifying the columns in a grid layout.
 
-| Concept          | CSS Rule                                                  | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                        |
-| :--------------- | :-------------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :---------------------------------------------------------- |
-| **1-12**         | `grid-template-columns: repeat(<number>, minmax(0, 1fr))` | `grid-cols-<number>`      | `{ gridCols: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare |
-| **None**         | `grid-template-columns: none`                             | `grid-cols-none`          | `{ gridCols: 'none' }`        |                   |                                                             |
-| **Subgrid**      | `grid-template-columns: subgrid`                          | `grid-cols-subgrid`       | `{ gridCols: 'subgrid' }`     |                   |                                                             |
-| **Arbitrary**    | `grid-template-columns: 200px`                            | `grid-cols-[200px]`       | `{ gridCols: '200px' }`       |                   |                                                             |
-| **CSS Variable** | `grid-template-columns: var(--grid-cols)`                 | `grid-cols-(--grid-cols)` | `{ gridCols: '--grid-cols' }` |                   | **Sugar**: Auto-detects `--`.                               |
+| Concept             | CSS Rule                                                  | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
+| :------------------ | :-------------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
+| **1-12**            | `grid-template-columns: repeat(<number>, minmax(0, 1fr))` | `grid-cols-<number>`      | `{ gridCols: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
+| **None**            | `grid-template-columns: none`                             | `grid-cols-none`          | `{ gridCols: 'none' }`        |                   |                                                                                          |
+| **Subgrid**         | `grid-template-columns: subgrid`                          | `grid-cols-subgrid`       | `{ gridCols: 'subgrid' }`     |                   |                                                                                          |
+| **Arbitrary**       | `grid-template-columns: 200px`                            | `grid-cols-[200px]`       | `{ gridCols: '200px' }`       |                   |                                                                                          |
+| **CSS Variable**    | `grid-template-columns: var(--grid-cols)`                 | `grid-cols-(--grid-cols)` | `{ gridCols: '--grid-cols' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
+| **Line names**      | `grid-template-columns: [a] 1fr [b]`                      | `grid-cols-[[a]_1fr_[b]]` | `{ gridCols: '[a] 1fr [b]' }` |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
+| **Tracks with `_`** | `grid-template-columns: 1fr 2fr`                          | `grid-cols-[1fr_2fr]`     | `{ gridCols: '1fr_2fr' }`     |                   | `_` spells a space between tracks; a theme name holding `_` stays bare                   |
 
 ## Grid Template Rows
 
 Specifying the rows in a grid layout.
 
-| Concept          | CSS Rule                                               | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                        |
-| :--------------- | :----------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :---------------------------------------------------------- |
-| **1-12**         | `grid-template-rows: repeat(<number>, minmax(0, 1fr))` | `grid-rows-<number>`      | `{ gridRows: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare |
-| **None**         | `grid-template-rows: none`                             | `grid-rows-none`          | `{ gridRows: 'none' }`        |                   |                                                             |
-| **Subgrid**      | `grid-template-rows: subgrid`                          | `grid-rows-subgrid`       | `{ gridRows: 'subgrid' }`     |                   |                                                             |
-| **Arbitrary**    | `grid-template-rows: 200px`                            | `grid-rows-[200px]`       | `{ gridRows: '200px' }`       |                   |                                                             |
-| **CSS Variable** | `grid-template-rows: var(--grid-rows)`                 | `grid-rows-(--grid-rows)` | `{ gridRows: '--grid-rows' }` |                   | **Sugar**: Auto-detects `--`.                               |
+| Concept             | CSS Rule                                               | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
+| :------------------ | :----------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
+| **1-12**            | `grid-template-rows: repeat(<number>, minmax(0, 1fr))` | `grid-rows-<number>`      | `{ gridRows: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
+| **None**            | `grid-template-rows: none`                             | `grid-rows-none`          | `{ gridRows: 'none' }`        |                   |                                                                                          |
+| **Subgrid**         | `grid-template-rows: subgrid`                          | `grid-rows-subgrid`       | `{ gridRows: 'subgrid' }`     |                   |                                                                                          |
+| **Arbitrary**       | `grid-template-rows: 200px`                            | `grid-rows-[200px]`       | `{ gridRows: '200px' }`       |                   |                                                                                          |
+| **CSS Variable**    | `grid-template-rows: var(--grid-rows)`                 | `grid-rows-(--grid-rows)` | `{ gridRows: '--grid-rows' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
+| **Line names**      | `grid-template-rows: [a] auto`                         | `grid-rows-[[a]_auto]`    | `{ gridRows: '[a] auto' }`    |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
+| **Tracks with `_`** | `grid-template-rows: 1fr 2fr`                          | `grid-rows-[1fr_2fr]`     | `{ gridRows: '1fr_2fr' }`     |                   | `_` spells a space between tracks; a theme name holding `_` stays bare                   |
 
 ## Grid Column (Start/End/Span)
 
