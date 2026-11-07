@@ -967,13 +967,28 @@ pub mod issue {
         )
     }
 
-    /// `bracketed-value`: A value wrapped in the brackets or parentheses csszyx writes itself.
+    /// `bracketed-value` (`unwrap`): A value wrapped in the brackets or parentheses csszyx writes itself.
     #[must_use]
     #[inline]
-    pub fn bracketed_value(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
+    pub fn bracketed_value_unwrap(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
         (
             DiagnosticCode::BracketedValue,
             Args::default()
+                .text("form", "unwrap")
+                .text("key", key)
+                .text("value", value)
+                .text("inner", inner),
+        )
+    }
+
+    /// `bracketed-value` (`escape`): A value wrapped in the brackets or parentheses csszyx writes itself.
+    #[must_use]
+    #[inline]
+    pub fn bracketed_value_escape(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::BracketedValue,
+            Args::default()
+                .text("form", "escape")
                 .text("key", key)
                 .text("value", value)
                 .text("inner", inner),
@@ -1543,17 +1558,29 @@ mod tests {
             args.to_json(),
             r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
         );
-        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        let (code, args) = issue::bracketed_value_unwrap("key", "value", "inner");
         assert_eq!(code, DiagnosticCode::BracketedValue);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","value":"value","inner":"inner"}"#
+            r#"{"form":"unwrap","key":"key","value":"value","inner":"inner"}"#
         );
-        let (code, args) = issue::bracketed_value("key", "value", "inner");
+        let (code, args) = issue::bracketed_value_unwrap("key", "value", "inner");
         assert_eq!(code, DiagnosticCode::BracketedValue);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","value":"value","inner":"inner"}"#
+            r#"{"form":"unwrap","key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value_escape("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"escape","key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value_escape("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"escape","key":"key","value":"value","inner":"inner"}"#
         );
         let (code, args) = issue::opacity_value_range("key", "op", Some("percent"));
         assert_eq!(code, DiagnosticCode::OpacityValue);

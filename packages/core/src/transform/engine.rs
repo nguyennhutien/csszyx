@@ -853,7 +853,7 @@ struct KeyValueFindings {
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     invalid_opacities: Vec<super::lower::InvalidOpacity>,
-    bracketed_values: Vec<(String, String, String, u32)>,
+    bracketed_values: Vec<super::lower::BracketedValue>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -939,7 +939,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.mask_layers, 12, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
-        retain_first_occurrence(&mut found.bracketed_values, 15, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.bracketed_values, 15, seen, |found| found.at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -979,8 +979,13 @@ fn push_group_key_value_diagnostics<'a>(
         );
         out.push_issue(issue, *offset);
     }
-    for (key, value, inner, offset) in &found.bracketed_values {
-        out.push_issue(issue::bracketed_value(key, value, inner), *offset);
+    for found in &found.bracketed_values {
+        let issue = if found.offered {
+            issue::bracketed_value_unwrap(&found.key, &found.value, &found.inner)
+        } else {
+            issue::bracketed_value_escape(&found.key, &found.value, &found.inner)
+        };
+        out.push_issue(issue, found.at);
     }
     push_mask_member_diagnostics(&found.mask_members, out);
     push_moved_value_diagnostics(&found.moved_values, out);
@@ -3515,6 +3520,29 @@ mod tests {
         // twin above stays diagnostic-free, which is what keeps this precise.
         assert_eq!(lines(&result), ["class-precedence {}"]);
         assert_eq!(positions(&result, &file.source), [(1, 33)]);
+    }
+
+    #[test]
+    fn a_bracketed_value_offers_its_inner_value_only_for_one_outer_pair() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ w: '[100px]', p: '[a]_1_[b]', gridCols: '[a]_1fr_[b]', gridRows: '[[a]_1fr]' }} />;"
+                    .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        // `gridCols` names two grid lines and lowers; around a whole grid
+        // template, line names inside are offered back.
+        assert_eq!(
+            lines(&result),
+            [
+                r#"bracketed-value {"form":"unwrap","key":"w","value":"[100px]","inner":"100px"}"#,
+                r#"bracketed-value {"form":"escape","key":"p","value":"[a]_1_[b]","inner":"a]_1_[b"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
+            ]
+        );
     }
 
     #[test]
