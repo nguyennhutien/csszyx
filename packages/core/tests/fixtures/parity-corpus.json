@@ -15976,6 +15976,44 @@
     "runtime": "grid-cols-(--grid-cols)"
   },
   {
+    "sz": "{\"gridCols\":\"[a] 1fr [b]\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "gridCols",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "[a] 1fr [b]"
+          }
+        }
+      ]
+    },
+    "runtime": "grid-cols-[[a]_1fr_[b]]"
+  },
+  {
+    "sz": "{\"gridCols\":\"1fr_2fr\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "gridCols",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1fr_2fr"
+          }
+        }
+      ]
+    },
+    "runtime": "grid-cols-[1fr_2fr]"
+  },
+  {
     "sz": "{\"gridCols\":4}",
     "ir": {
       "properties": [
@@ -16126,6 +16164,44 @@
       ]
     },
     "runtime": "grid-rows-(--grid-rows)"
+  },
+  {
+    "sz": "{\"gridRows\":\"[a] auto\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "gridRows",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "[a] auto"
+          }
+        }
+      ]
+    },
+    "runtime": "grid-rows-[[a]_auto]"
+  },
+  {
+    "sz": "{\"gridRows\":\"1fr_2fr\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "gridRows",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1fr_2fr"
+          }
+        }
+      ]
+    },
+    "runtime": "grid-rows-[1fr_2fr]"
   },
   {
     "sz": "{\"gridRows\":\"200px\"}",
