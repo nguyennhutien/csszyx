@@ -72,7 +72,7 @@ Utilities for animating elements with CSS animations.
 | :------------ | :----------------------------------- | :---------------------------------------------------------------- | :--------------------------------------- | :--- |
 | **None**      | `animation: none;`                   | `animate-none`                                                    | `{ animate: 'none' }`                    |      |
 | **Keywords**  | `animation: spin 1s linear infinite` | `animate-spin`, `animate-ping`, `animate-pulse`, `animate-bounce` | `{ animate: 'spin' }`                    |      |
-| **Arbitrary** | `animation: spin_1s_linear_infinite` | `animate-[spin_1s_linear_infinite]`                               | `{ animate: 'spin_1s_linear_infinite' }` |      |
+| **Arbitrary** | `animation: spin 1s linear infinite` | `animate-[spin_1s_linear_infinite]`                               | `{ animate: 'spin 1s linear infinite' }` |      |
 
 ## Animation Delay
 

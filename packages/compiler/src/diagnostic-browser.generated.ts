@@ -65,6 +65,9 @@ export const BRACKETED_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['bracketed-va
 /** `opacity-value`: An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction. */
 export const OPACITY_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['opacity-value']> = {"id":"opacity-value","args":"form key op percent?","text":{"range":"`{key}: { op: {op} }` is not a number from 0 to 100, so the colour is written without an opacity.","fraction":"`{key}: { op: {op} }` is {op}% opacity: `op` is a percent, not a fraction of 1."},"help":{"range":"write `op` as a number from `0` to `100`, such as `op: 50` or `op: 33.3`.","fraction":"write `op: {percent}` for {percent}%."}};
 
+/** `underscore-space`: An `_` in an `sz` value that this project's Tailwind reads as a space. */
+export const UNDERSCORE_SPACE: SzBrowserDiagnostic<SzDiagnosticArgs['underscore-space']> = {"id":"underscore-space","args":"key value? className literal? spaced? escaped?","text":"`{key}: {literal}` emits `{className}`, and this project's Tailwind reads its `_` as a space.","help":"write `{key}: {spaced}` for a space; for an underscore, write `{key}: {escaped}`.","note":"the class is still emitted."};
+
 /** `unsigned-value`: A negative value on a key Tailwind serves no negative utility for. */
 export const UNSIGNED_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['unsigned-value']> = {"id":"unsigned-value","args":"className utility","text":"`{className}` produces no CSS: this project's Tailwind serves `{utility}` but no negative form of it.","help":"drop the sign, or define the negative with Tailwind's `@utility`; `csszyx check --rule unsigned-value` lists every one.","note":"the class is still emitted, and it styles nothing."};
 

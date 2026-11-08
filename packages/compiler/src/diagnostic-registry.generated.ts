@@ -441,6 +441,14 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         }
     },
     {
+        "id": "underscore-space",
+        "position": "site",
+        "args": "key value? className literal? spaced? escaped?",
+        "text": "`{key}: {literal}` emits `{className}`, and this project's Tailwind reads its `_` as a space.",
+        "help": "write `{key}: {spaced}` for a space; for an underscore, write `{key}: {escaped}`.",
+        "note": "the class is still emitted."
+    },
+    {
         "id": "unsigned-value",
         "position": "file",
         "args": "className utility"

@@ -233,6 +233,10 @@ sz={{ '@container': true, '@md': { display: 'flex' } }}
 { w: '[333px]' }             // Wrong → { w: '333px' }
 { top: '[-1px]' }            // Wrong → { top: '-1px' }
 
+// ❌ `_` for a space — write the space; csszyx spells it `_` in the class
+{ gridCols: '1fr_2fr' }      // Wrong → { gridCols: '1fr 2fr' }
+{ content: "'a_b'" }         // Tailwind styles `a b`; for an underscore write "'a\\_b'"
+
 // ❌ Tailwind class strings as values
 { p: 'p-4' }                 // Wrong → { p: 4 }
 { bg: 'bg-blue-500' }        // Wrong → { bg: 'blue-500' }
@@ -1366,7 +1370,7 @@ them as custom-utility fallbacks.
 | **Top Right**    | `mask-position: top right`       | `mask-top-right`                  | `{ maskPos: 'top-right' }`       |                    |
 | **Bottom Left**  | `mask-position: bottom left`     | `mask-bottom-left`                | `{ maskPos: 'bottom-left' }`     |                    |
 | **Bottom Right** | `mask-position: bottom right`    | `mask-bottom-right`               | `{ maskPos: 'bottom-right' }`    |                    |
-| **Arbitrary**    | `mask-position: center top 1rem` | `mask-position-[center_top_1rem]` | `{ maskPos: 'center_top_1rem' }` | Spaces become `_`. |
+| **Arbitrary**    | `mask-position: center top 1rem` | `mask-position-[center_top_1rem]` | `{ maskPos: 'center top 1rem' }` | Spaces become `_`. |
 
 ### mask-repeat
 
@@ -1748,29 +1752,29 @@ Controlling flex/grid item order.
 
 Specifying the columns in a grid layout.
 
-| Concept             | CSS Rule                                                  | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
-| :------------------ | :-------------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
-| **1-12**            | `grid-template-columns: repeat(<number>, minmax(0, 1fr))` | `grid-cols-<number>`      | `{ gridCols: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
-| **None**            | `grid-template-columns: none`                             | `grid-cols-none`          | `{ gridCols: 'none' }`        |                   |                                                                                          |
-| **Subgrid**         | `grid-template-columns: subgrid`                          | `grid-cols-subgrid`       | `{ gridCols: 'subgrid' }`     |                   |                                                                                          |
-| **Arbitrary**       | `grid-template-columns: 200px`                            | `grid-cols-[200px]`       | `{ gridCols: '200px' }`       |                   |                                                                                          |
-| **CSS Variable**    | `grid-template-columns: var(--grid-cols)`                 | `grid-cols-(--grid-cols)` | `{ gridCols: '--grid-cols' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
-| **Line names**      | `grid-template-columns: [a] 1fr [b]`                      | `grid-cols-[[a]_1fr_[b]]` | `{ gridCols: '[a] 1fr [b]' }` |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
-| **Tracks with `_`** | `grid-template-columns: 1fr 2fr`                          | `grid-cols-[1fr_2fr]`     | `{ gridCols: '1fr_2fr' }`     |                   | `_` spells a space between tracks; a theme name holding `_` stays bare                   |
+| Concept          | CSS Rule                                                  | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
+| :--------------- | :-------------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
+| **1-12**         | `grid-template-columns: repeat(<number>, minmax(0, 1fr))` | `grid-cols-<number>`      | `{ gridCols: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
+| **None**         | `grid-template-columns: none`                             | `grid-cols-none`          | `{ gridCols: 'none' }`        |                   |                                                                                          |
+| **Subgrid**      | `grid-template-columns: subgrid`                          | `grid-cols-subgrid`       | `{ gridCols: 'subgrid' }`     |                   |                                                                                          |
+| **Arbitrary**    | `grid-template-columns: 200px`                            | `grid-cols-[200px]`       | `{ gridCols: '200px' }`       |                   |                                                                                          |
+| **CSS Variable** | `grid-template-columns: var(--grid-cols)`                 | `grid-cols-(--grid-cols)` | `{ gridCols: '--grid-cols' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
+| **Line names**   | `grid-template-columns: [a] 1fr [b]`                      | `grid-cols-[[a]_1fr_[b]]` | `{ gridCols: '[a] 1fr [b]' }` |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
+| **Tracks**       | `grid-template-columns: 1fr 2fr`                          | `grid-cols-[1fr_2fr]`     | `{ gridCols: '1fr 2fr' }`     |                   | Write the space; the class spells it `_`                                                 |
 
 ## Grid Template Rows
 
 Specifying the rows in a grid layout.
 
-| Concept             | CSS Rule                                               | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
-| :------------------ | :----------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
-| **1-12**            | `grid-template-rows: repeat(<number>, minmax(0, 1fr))` | `grid-rows-<number>`      | `{ gridRows: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
-| **None**            | `grid-template-rows: none`                             | `grid-rows-none`          | `{ gridRows: 'none' }`        |                   |                                                                                          |
-| **Subgrid**         | `grid-template-rows: subgrid`                          | `grid-rows-subgrid`       | `{ gridRows: 'subgrid' }`     |                   |                                                                                          |
-| **Arbitrary**       | `grid-template-rows: 200px`                            | `grid-rows-[200px]`       | `{ gridRows: '200px' }`       |                   |                                                                                          |
-| **CSS Variable**    | `grid-template-rows: var(--grid-rows)`                 | `grid-rows-(--grid-rows)` | `{ gridRows: '--grid-rows' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
-| **Line names**      | `grid-template-rows: [a] auto`                         | `grid-rows-[[a]_auto]`    | `{ gridRows: '[a] auto' }`    |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
-| **Tracks with `_`** | `grid-template-rows: 1fr 2fr`                          | `grid-rows-[1fr_2fr]`     | `{ gridRows: '1fr_2fr' }`     |                   | `_` spells a space between tracks; a theme name holding `_` stays bare                   |
+| Concept          | CSS Rule                                               | Tailwind v4 Class         | `sz` Prop (Canonical)         | `sz` Prop (Alias) | Note                                                                                     |
+| :--------------- | :----------------------------------------------------- | :------------------------ | :---------------------------- | :---------------- | :--------------------------------------------------------------------------------------- |
+| **1-12**         | `grid-template-rows: repeat(<number>, minmax(0, 1fr))` | `grid-rows-<number>`      | `{ gridRows: <number> }`      |                   | v4: fully dynamic, no static scale, accept any integer bare                              |
+| **None**         | `grid-template-rows: none`                             | `grid-rows-none`          | `{ gridRows: 'none' }`        |                   |                                                                                          |
+| **Subgrid**      | `grid-template-rows: subgrid`                          | `grid-rows-subgrid`       | `{ gridRows: 'subgrid' }`     |                   |                                                                                          |
+| **Arbitrary**    | `grid-template-rows: 200px`                            | `grid-rows-[200px]`       | `{ gridRows: '200px' }`       |                   |                                                                                          |
+| **CSS Variable** | `grid-template-rows: var(--grid-rows)`                 | `grid-rows-(--grid-rows)` | `{ gridRows: '--grid-rows' }` |                   | **Sugar**: Auto-detects `--`.                                                            |
+| **Line names**   | `grid-template-rows: [a] auto`                         | `grid-rows-[[a]_auto]`    | `{ gridRows: '[a] auto' }`    |                   | CSS's own brackets; only one pair around the whole value is reported (`bracketed-value`) |
+| **Tracks**       | `grid-template-rows: 1fr 2fr`                          | `grid-rows-[1fr_2fr]`     | `{ gridRows: '1fr 2fr' }`     |                   | Write the space; the class spells it `_`                                                 |
 
 ## Grid Column (Start/End/Span)
 
@@ -2072,7 +2076,7 @@ Utilities for controlling the cursor style when hovering over an element.
 | Concept       | CSS Rule           | Tailwind v4 Class                    | `sz` Prop (Object Syntax)           | Note |
 | :------------ | :----------------- | :----------------------------------- | :---------------------------------- | :--- |
 | **Keywords**  | `cursor: (etc)`    | `cursor-pointer`, `cursor-wait`(etc) | `{ cursor: 'pointer' }`             |      |
-| **Arbitrary** | `cursor: (etc)`    | `cursor-[url(h.cur),_pointer]`       | `{ cursor: 'url(h.cur),_pointer' }` |      |
+| **Arbitrary** | `cursor: (etc)`    | `cursor-[url(h.cur),_pointer]`       | `{ cursor: 'url(h.cur), pointer' }` |      |
 | **Variable**  | `cursor: var(--c)` | `cursor-(--c)`                       | `{ cursor: '--c' }`                 |      |
 
 ## Field Sizing
@@ -2749,6 +2753,7 @@ CSS custom properties (`--*`) are passed through unchanged.
 
 - `css: {}` is intentional bypass — no sz-layer mapping applied. `{ css: { backgroundColor: 'red' } }` outputs `[background-color:red]`, not `bg-red`.
 - Spaces in values are normalised to underscores: `repeat(3, 1fr)` → `repeat(3,_1fr)`.
+- Write a space as a space. An `_` written in a value is read as a space by Tailwind in most places (`url()` and the name in `var()` keep it), and the build, `csszyx check` and `csszyx_validate` say so (`underscore-space`); for an underscore, write `\\_` in source.
 - Works inside `dynamic()` at runtime — the same compiler logic handles the `css` key.
 
 ### Custom property as a key
@@ -3345,7 +3350,7 @@ Utilities for controlling the origin of transformations.
 | Concept       | CSS Rule                     | Tailwind v4 Class                                                                                                                                                 | `sz` Prop (Object Syntax) | Note                             |
 | :------------ | :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------ | :------------------------------- |
 | **Keywords**  | `transform-origin: center`   | `origin-center`, `origin-top`, `origin-top-right`, `origin-right`, `origin-bottom-right`, `origin-bottom`, `origin-bottom-left`, `origin-left`, `origin-top-left` | `{ origin: 'top' }`       | Shorthand for `transformOrigin`. |
-| **Arbitrary** | `transform-origin: (etc)`    | `origin-[33%_75%]`                                                                                                                                                | `{ origin: '33%_75%' }`   |                                  |
+| **Arbitrary** | `transform-origin: (etc)`    | `origin-[33%_75%]`                                                                                                                                                | `{ origin: '33% 75%' }`   |                                  |
 | **Variable**  | `transform-origin: var(--o)` | `origin-(--o)`                                                                                                                                                    | `{ origin: '--o' }`       |                                  |
 
 ## Transform Style
@@ -3383,7 +3388,7 @@ Utilities for controlling the origin of the perspective.
 | Concept       | CSS Rule                     | Tailwind v4 Class                                          | `sz` Prop (Object Syntax)          | Note |
 | :------------ | :--------------------------- | :--------------------------------------------------------- | :--------------------------------- | :--- |
 | **Keywords**  | `perspective-origin: center` | `perspective-origin-center`, `perspective-origin-top`(etc) | `{ perspectiveOrigin: 'top' }`     |      |
-| **Arbitrary** | `perspective-origin: (etc)`  | `perspective-origin-[25%_25%]`                             | `{ perspectiveOrigin: '25%_25%' }` |      |
+| **Arbitrary** | `perspective-origin: (etc)`  | `perspective-origin-[25%_25%]`                             | `{ perspectiveOrigin: '25% 25%' }` |      |
 
 ## Transform
 
@@ -3470,7 +3475,7 @@ Utilities for animating elements with CSS animations.
 | :------------ | :----------------------------------- | :---------------------------------------------------------------- | :--------------------------------------- | :--- |
 | **None**      | `animation: none;`                   | `animate-none`                                                    | `{ animate: 'none' }`                    |      |
 | **Keywords**  | `animation: spin 1s linear infinite` | `animate-spin`, `animate-ping`, `animate-pulse`, `animate-bounce` | `{ animate: 'spin' }`                    |      |
-| **Arbitrary** | `animation: spin_1s_linear_infinite` | `animate-[spin_1s_linear_infinite]`                               | `{ animate: 'spin_1s_linear_infinite' }` |      |
+| **Arbitrary** | `animation: spin 1s linear infinite` | `animate-[spin_1s_linear_infinite]`                               | `{ animate: 'spin 1s linear infinite' }` |      |
 
 ## Animation Delay
 

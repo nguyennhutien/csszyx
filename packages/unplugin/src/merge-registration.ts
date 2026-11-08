@@ -31,10 +31,11 @@ import {
     tableOverrideRemovesFrom,
     tableRemovesFrom,
 } from './merge-signature.js';
-import type { NextClassOrigin } from './next-safelist-state.js';
+import type { NextClassOrigin, NextUnderscoreOrigin } from './next-safelist-state.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { readStyleHooks } from './source-hooks.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
+import { type UnderscoreSpaceFinding, underscoreSpaceFindings } from './underscore-space.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import { createUnservedRuntimeModule } from './virtual-modules.js';
 
@@ -114,6 +115,12 @@ export interface MergeRegistrationInput {
      * design system serves nothing for are returned as `dead-class` findings.
      */
     classOrigins?: ReadonlyMap<string, readonly NextClassOrigin[]>;
+    /**
+     * Each `_` written in an `sz` value across the project. Given, the ones
+     * every root that serves the class reads as a space are returned as
+     * `underscore-space` findings.
+     */
+    underscoreSites?: readonly NextUnderscoreOrigin[];
     /** Class names written in `className` attributes across the project. */
     authoredClasses: Iterable<string>;
     /** String literals written inside `szcn(...)` calls across the project. */
@@ -140,9 +147,10 @@ export function writeMergeRegistration(input: MergeRegistrationInput): {
     path: string;
     changed: boolean;
     dead: DeadClassFinding[];
+    underscore: UnderscoreSpaceFinding[];
 } {
-    const { unserved, table, dead } = settle(input);
-    return { ...writeMergeRegistrationModule(input.root, unserved, table), dead };
+    const { unserved, table, dead, underscore } = settle(input);
+    return { ...writeMergeRegistrationModule(input.root, unserved, table), dead, underscore };
 }
 
 /**
@@ -365,12 +373,15 @@ function settle(input: MergeRegistrationInput): {
     unserved: string[];
     table: MergeSignatureTable;
     dead: DeadClassFinding[];
+    underscore: UnderscoreSpaceFinding[];
 } {
     const { model } = input;
     // No design system is no answer. Registering nothing is right: every class
     // keeps the placement it has today, and every merge keeps both sides.
     const facts = model?.facts ?? null;
-    if (model === null || facts === null) return { unserved: [], table: [{}, []], dead: [] };
+    if (model === null || facts === null) {
+        return { unserved: [], table: [{}, []], dead: [], underscore: [] };
+    }
     const authored = new Set(input.authoredClasses);
     // Tailwind's own scan as well as the shards' census, as the bundler lanes do.
     const candidates = [
@@ -407,7 +418,17 @@ function settle(input: MergeRegistrationInput): {
             })),
         );
     }
-    return { unserved, table, dead: findDeadSzClasses(model, origins) };
+    const relative = (sourcePath: string): string =>
+        path.relative(input.root, sourcePath).split(path.sep).join('/');
+    const sites = (input.underscoreSites ?? []).map(({ sourcePath, ...site }) => ({
+        ...site,
+        file: relative(sourcePath),
+    }));
+    const underscore =
+        sites.length === 0
+            ? []
+            : underscoreSpaceFindings(sites, classes => model.cssPerRoot(classes));
+    return { unserved, table, dead: findDeadSzClasses(model, origins), underscore };
 }
 
 /**

@@ -339,13 +339,14 @@ export async function startNextWatch(
             model,
             classes: census.classes,
             classOrigins: census.classOrigins,
+            underscoreSites: census.underscoreSites,
             authoredClasses: census.authoredClasses,
             mergeLiterals: census.mergeLiterals,
             sources: files,
         });
         if (registration.warning !== null) printWatcherNotice(registration.warning);
         for (const line of nextDeadClassLines(
-            registration.dead,
+            registration,
             diagnostics.policy,
             deadClassLimiter,
             true,

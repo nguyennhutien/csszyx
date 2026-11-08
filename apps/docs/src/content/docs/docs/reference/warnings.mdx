@@ -1655,6 +1655,8 @@ from the project root, and `--pattern` is read relative to that directory.
 | `✖ {n} emitted class(es) produce no CSS: each uses a variant this project's Tailwind does not serve.` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
 | `CSS-wide keywords no property takes:` + one line per class | The served classes whose CSS-wide keyword no property they set takes (`ring-inherit`), with the file that first emitted each; `rule` `dead-class`, `kind` `inert-keyword` in `--json`, with `args` (`className`, `keyword`). |
 | ``✖ {n} emitted class(es) style nothing: no property they set takes their CSS-wide keyword; set the property in `css: { … }`.`` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
+| ``An `_` this project's Tailwind reads as a space:`` + one line per value | Each `sz` value whose `_` the project's Tailwind reads as a space, at the key that writes it, with a `help:` line naming the value with a space and with `\\_`; `rule` `dead-class`, `kind` `underscore-space` in `--json`, with `line`, `column` and `args` (`key`, `value`, `className`, `literal`, `spaced`, `escaped`). |
+| ``✖ {n} sz value(s) carry an `_` this project's Tailwind reads as a space: write the space, or `\\_` in source for an underscore.`` | Printed under that list. `!` instead of `✖` when none of them fails the run. |
 | `Dead-class check skipped: this project has no Tailwind stylesheet.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
 | ``✖ A Tailwind stylesheet of this project did not compile (named above), so the dead-class check did not run and `csszyx check` fails until it compiles.`` | Exits non-zero. See below. |

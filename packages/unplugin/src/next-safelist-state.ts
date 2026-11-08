@@ -27,8 +27,8 @@ const DEFAULT_STALE_LOCK_MS = 30_000;
  * Bumped only for a change an older reader cannot pass over: 0.17.2 deletes
  * every shard whose number is not its own, so a bump for a field it would
  * only ignore made a 0.17 session beside this one drop this one's classes.
- * The fields added since (`authoredClasses`, `mergeLiterals`, `classSites`)
- * are optional under format 1; a shard written without them is read without
+ * The fields added since (`authoredClasses`, `mergeLiterals`, `classSites`,
+ * `underscoreSites`) are optional under format 1; a shard written without them is read without
  * them and replaced at the next write for its source.
  */
 export const NEXT_SAFELIST_SHARD_FORMAT = 1;
@@ -75,6 +75,29 @@ export interface NextShardClassSite {
     key: string;
 }
 
+/**
+ * Where a source writes an `_` in an `sz` value: the `underscore-space` fact,
+ * which the Next commands ask the project's Tailwind about.
+ */
+export interface NextShardUnderscoreSite {
+    /** The `sz` key, or the property a `css` object sets. */
+    key: string;
+    /** The value as written. */
+    value: string;
+    /** The class it lowers into. */
+    className: string;
+    /** The line of the key, 1-based. */
+    line: number;
+    /** The column of the key, 1-based. */
+    column: number;
+}
+
+/** One `_` a source writes, with the source. */
+export interface NextUnderscoreOrigin extends NextShardUnderscoreSite {
+    /** Absolute path of the source. */
+    sourcePath: string;
+}
+
 /** One source that emits a class, at its key when the engine placed it there. */
 export interface NextClassOrigin {
     /** Absolute path of the source. */
@@ -99,6 +122,8 @@ export interface NextSafelistShardInput {
     mergeLiterals?: readonly string[];
     /** Where the source writes each class the engine placed, by class. */
     classSites?: readonly NextShardClassSite[];
+    /** Each `_` the source writes in an `sz` value, in source order. */
+    underscoreSites?: readonly NextShardUnderscoreSite[];
     cacheKey?: string;
     timestamp?: number;
     pid?: number;
@@ -128,6 +153,8 @@ export interface NextSafelistMaterializeResult {
      * finding names.
      */
     classOrigins: Map<string, NextClassOrigin[]>;
+    /** Each `_` written in an `sz` value, sources in path order. */
+    underscoreSites: NextUnderscoreOrigin[];
     classCount: number;
     sourceCount: number;
     tombstonedSourceCount: number;
@@ -202,6 +229,8 @@ interface ShardFile {
     mergeLiterals?: string[];
     /** Absent in shards written before the dead-class report placed classes. */
     classSites?: NextShardClassSite[];
+    /** Absent in shards written before the build named an `_` read as a space. */
+    underscoreSites?: NextShardUnderscoreSite[];
     timestamp: number;
     pid: number;
 }
@@ -299,6 +328,9 @@ export function materializeNextSafelist(
     );
     const classNames = sortStrings(new Set(sortedSources.flatMap(([, classSet]) => classSet)));
     const classOrigins = collectClassOrigins(records);
+    const underscoreSites = records.flatMap(({ sourcePath, underscoreSites: sites }) =>
+        (sites ?? []).map(site => ({ ...site, sourcePath })),
+    );
     const authoredClasses = sortStrings(
         new Set(records.flatMap(data => data.authoredClasses ?? [])),
     );
@@ -318,6 +350,7 @@ export function materializeNextSafelist(
         authoredClasses,
         mergeLiterals,
         classOrigins,
+        underscoreSites,
         classCount: classNames.length,
         sourceCount: sortedSources.length,
         tombstonedSourceCount,
@@ -470,7 +503,7 @@ function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean 
  * @returns True when each optional field is absent from both or the same.
  */
 function sameOptionalFields(left: Partial<ShardFile>, right: ShardFile): boolean {
-    return (['authoredClasses', 'mergeLiterals', 'classSites'] as const).every(
+    return (['authoredClasses', 'mergeLiterals', 'classSites', 'underscoreSites'] as const).every(
         field => JSON.stringify(left[field]) === JSON.stringify(right[field]),
     );
 }
@@ -521,6 +554,28 @@ function isClassSiteList(value: unknown): value is NextShardClassSite[] {
 }
 
 /**
+ * Whether a value read from a shard is a list of `_` sites of the shape written.
+ *
+ * @param value - The parsed `underscoreSites` field.
+ * @returns True for an array of well-formed sites.
+ */
+function isUnderscoreSiteList(value: unknown): value is NextShardUnderscoreSite[] {
+    return (
+        Array.isArray(value) &&
+        value.every(
+            site =>
+                typeof site === 'object' &&
+                site !== null &&
+                typeof site.key === 'string' &&
+                typeof site.value === 'string' &&
+                typeof site.className === 'string' &&
+                Number.isFinite(site.line) &&
+                Number.isFinite(site.column),
+        )
+    );
+}
+
+/**
  * Compare two normalized class lists.
  *
  * Both sides come from {@link normalizeShardInput}, which sorts and dedupes, so
@@ -564,6 +619,9 @@ function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
             ? {}
             : { mergeLiterals: sortStrings(new Set(input.mergeLiterals)) }),
         ...(input.classSites === undefined ? {} : { classSites: [...input.classSites] }),
+        ...(input.underscoreSites === undefined || input.underscoreSites.length === 0
+            ? {}
+            : { underscoreSites: [...input.underscoreSites] }),
         timestamp:
             input.timestamp !== undefined && Number.isFinite(input.timestamp)
                 ? input.timestamp
@@ -648,6 +706,9 @@ function normalizeShardRecord(filePath: string, data: Partial<ShardFile>): Shard
                 : {}),
             ...(Array.isArray(data.mergeLiterals) ? { mergeLiterals: data.mergeLiterals } : {}),
             ...(isClassSiteList(data.classSites) ? { classSites: data.classSites } : {}),
+            ...(isUnderscoreSiteList(data.underscoreSites)
+                ? { underscoreSites: data.underscoreSites }
+                : {}),
             timestamp: data.timestamp,
             pid: data.pid,
         }),

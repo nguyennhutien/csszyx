@@ -148,13 +148,21 @@ describe('locateEngineSpans', () => {
     it('reads each span at its offset, and only when asked', () => {
         const source = 'x\ny';
         const located = locateEngineSpans(source, {
-            issues: [{ code: 'unknown-key', start: 2, args: { key: 'k' } }],
+            issues: [
+                { code: 'unknown-key', start: 2, args: { key: 'k' } },
+                {
+                    code: 'underscore-space',
+                    start: 2,
+                    args: { key: 'content', value: "'a_b'", className: "content-['a_b']" },
+                },
+            ],
             mergeGroups: [{ keys: ['m', 'p'], keyStarts: [0, 2], classes: ['m-1', 'p-4'] }],
             singleClassGroups: [{ keys: ['m'], keyStarts: [2], classes: ['m-2'] }],
             mergeOverrides: [{ start: 2, base: ['a'], over: ['b'] }],
         });
 
-        // Read through JSON: a position is an accessor, not an own field.
+        // Read through JSON: a position is an accessor, not an own field. The
+        // `underscore-space` fact leaves the issues: no lane prints it as it is.
         expect(JSON.parse(JSON.stringify(located))).toEqual({
             issues: [{ code: 'unknown-key', args: { key: 'k' }, line: 2, column: 1 }],
             mergeGroups: [
@@ -171,6 +179,15 @@ describe('locateEngineSpans', () => {
                 { keys: ['m'], positions: [{ line: 2, column: 1 }], classes: ['m-2'] },
             ],
             mergeOverrides: [{ line: 2, column: 1, base: ['a'], over: ['b'] }],
+            underscoreValues: [
+                {
+                    key: 'content',
+                    value: "'a_b'",
+                    className: "content-['a_b']",
+                    line: 2,
+                    column: 1,
+                },
+            ],
         });
         expect(located.issues[0]?.line).toBe(2);
         expect(located.mergeGroups[0]?.positions[0]?.column).toBe(1);
@@ -301,7 +318,10 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
         );
 
         expect(reads()).toBe(0);
-        expect(JSON.stringify(restored)).toBe(JSON.stringify(locateEngineSpans('x\ny', raw)));
+        // A file with no fact stores none, so none is read back.
+        const { underscoreValues, ...located } = locateEngineSpans('x\ny', raw);
+        expect(underscoreValues).toEqual([]);
+        expect(JSON.stringify(restored)).toBe(JSON.stringify(located));
         expect(restored.issues?.[0]?.line).toBe(2);
         // A second store of what was read back gives the offsets again.
         expect(storeEngineSpans(restored)).toEqual(raw);
@@ -320,6 +340,25 @@ describe('storeEngineSpans and restoreEngineSpans', () => {
         expect(storeEngineSpans(plain)).toEqual(plain);
         expect(restoreEngineSpans('x\ny', plain)).toEqual(plain);
         expect(storeEngineSpans({})).toEqual({});
+        const fact = { key: 'content', value: "'a_b'", className: "content-['a_b']" };
+        const stored = storeEngineSpans(
+            locateEngineSpans('x\ny', {
+                issues: [{ code: 'underscore-space', start: 2, args: fact }],
+                mergeGroups: [],
+                mergeOverrides: [],
+            }),
+        );
+        expect(stored.underscoreValues).toEqual([{ ...fact, start: 2 }]);
+        expect(
+            JSON.parse(JSON.stringify(restoreEngineSpans('x\ny', stored).underscoreValues)),
+        ).toEqual([{ ...fact, line: 2, column: 1 }]);
+        const unplaced = { ...fact, line: 1, column: 1 };
+        expect(storeEngineSpans({ underscoreValues: [unplaced] }).underscoreValues).toEqual([
+            unplaced,
+        ]);
+        expect(
+            restoreEngineSpans('x\ny', { underscoreValues: [unplaced] }).underscoreValues,
+        ).toEqual([unplaced]);
         expect(restoreEngineSpans('x\ny', {})).toEqual({});
     });
 

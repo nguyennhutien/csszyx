@@ -289,7 +289,7 @@
             "forward": [
                 {
                     "sz": {
-                        "animate": "spin_1s_linear_infinite"
+                        "animate": "spin 1s linear infinite"
                     },
                     "class": "animate-[spin_1s_linear_infinite]"
                 },
@@ -4402,7 +4402,7 @@
                 },
                 {
                     "sz": {
-                        "gridCols": "1fr_2fr"
+                        "gridCols": "1fr 2fr"
                     },
                     "class": "grid-cols-[1fr_2fr]"
                 },
@@ -4498,7 +4498,7 @@
                 },
                 {
                     "sz": {
-                        "gridRows": "1fr_2fr"
+                        "gridRows": "1fr 2fr"
                     },
                     "class": "grid-rows-[1fr_2fr]"
                 },
@@ -5889,7 +5889,7 @@
                 },
                 {
                     "sz": {
-                        "maskPos": "center_top_1rem"
+                        "maskPos": "center top 1rem"
                     },
                     "class": "mask-position-[center_top_1rem]"
                 },
@@ -7146,7 +7146,7 @@
                 },
                 {
                     "sz": {
-                        "origin": "33%_75%"
+                        "origin": "33% 75%"
                     },
                     "class": "origin-[33%_75%]"
                 }
@@ -7635,7 +7635,7 @@
             "forward": [
                 {
                     "sz": {
-                        "perspectiveOrigin": "25%_25%"
+                        "perspectiveOrigin": "25% 25%"
                     },
                     "class": "perspective-origin-[25%_25%]"
                 }

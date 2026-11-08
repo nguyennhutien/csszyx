@@ -60,7 +60,9 @@ import {
     loadCurrentDiagnosticPolicy,
     loadDiagnosticPolicy,
     removedRuleIdDiagnostic,
+    type UnderscoreSite,
     type UnservedVariant,
+    underscoreSpaceFindings,
     unservedVariantOf,
     unsignedClass,
     variantDroppedForms,
@@ -1155,6 +1157,8 @@ interface SzDiagnostics {
     pairsByFile: Map<string, SzValuePair[]>;
     /** Files the engine threw on, each with the first line of its error. */
     unchecked: { file: string; reason: string }[];
+    /** Each `_` written in an `sz` value, files in scan order. */
+    underscoreSites: UnderscoreSite[];
 }
 
 /** The engine could not run: its error message, for the run to print. */
@@ -1191,6 +1195,7 @@ async function collectSzDiagnostics(
     // there is skipped here too rather than reported by only one of them.
     const pairsByFile = new Map<string, SzValuePair[]>();
     const unchecked: SzDiagnostics['unchecked'] = [];
+    const underscoreSites: UnderscoreSite[] = [];
 
     // Read ahead, then lowered in the order given: the first file to produce a
     // class is the origin reported for it.
@@ -1203,7 +1208,11 @@ async function collectSzDiagnostics(
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
-        const found = recordFileClasses(source, file, cwd, currentFile, classOrigins, classPrefix);
+        const found = recordFileClasses(source, file, cwd, currentFile, {
+            classOrigins,
+            underscoreSites,
+            classPrefix,
+        });
         // Every other file would fail the same way, so the scan ends here.
         if (typeof found === 'object' && 'engineDown' in found) return found;
         if (typeof found === 'string') {
@@ -1229,7 +1238,7 @@ async function collectSzDiagnostics(
             });
         }
     }
-    return { issues, classOrigins, pairsByFile, unchecked };
+    return { issues, classOrigins, pairsByFile, unchecked, underscoreSites };
 }
 
 /**
@@ -1244,8 +1253,10 @@ async function collectSzDiagnostics(
  * @param file - Absolute path, for diagnostics.
  * @param cwd - Project root.
  * @param relativePath - Path as reported to the user.
- * @param classOrigins - Origins map, extended in place.
- * @param classPrefix - The Tailwind prefix to lower with, or null.
+ * @param sinks - What the file adds to, and how it is lowered.
+ * @param sinks.classOrigins - Origins map, extended in place.
+ * @param sinks.underscoreSites - Each `_` written in an `sz` value, appended.
+ * @param sinks.classPrefix - The Tailwind prefix to lower with, or null.
  * @returns The file's compiler diagnostics, the first line of the error the
  *          engine threw on it, or the engine's error when it cannot run.
  */
@@ -1254,13 +1265,21 @@ function recordFileClasses(
     file: string,
     cwd: string,
     relativePath: string,
-    classOrigins: Map<string, string>,
-    classPrefix: string | null,
+    sinks: {
+        classOrigins: Map<string, string>;
+        underscoreSites: UnderscoreSite[];
+        classPrefix: string | null;
+    },
 ): SzDiagnosticIssue[] | string | EngineDown {
+    const { classOrigins, underscoreSites, classPrefix } = sinks;
     try {
         const result = transformSource(source, { filename: file, rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
+        }
+        // Field by field: a located fact resolves its position in getters.
+        for (const { key, value, className, line, column } of result.underscoreValues ?? []) {
+            underscoreSites.push({ key, value, className, line, column, file: relativePath });
         }
         return result.issues ?? [];
     } catch (error) {
@@ -1856,6 +1875,73 @@ function runDeadClassPass(
 }
 
 /**
+ * Report each `_` an `sz` value carries that the project's Tailwind reads as
+ * a space, under `underscore-space` in the `dead-class` group: by every
+ * stylesheet that serves the class (`underscoreSpaceFindings`), the question
+ * the build asks of the same design systems.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param opened - The project's oracles.
+ * @param sites - Each `_` written in an `sz` value.
+ * @param pass - The run's switches.
+ * @param pass.allow - Classes the project vouched for.
+ * @param pass.wants - The run's rule selection.
+ * @param pass.disagreement - The prefix disagreement, or null when the entries agree.
+ * @param pass.failOn - The quietest level that fails the run.
+ */
+function runUnderscorePass(
+    out: Reporter,
+    opened: OpenedOracles,
+    sites: readonly UnderscoreSite[],
+    pass: {
+        allow: readonly string[];
+        wants: RuleSelection;
+        disagreement: readonly string[] | null;
+        failOn: SzDiagnosticLevel;
+    },
+): void {
+    const { oracles } = opened;
+    if (sites.length === 0 || oracles.length === 0 || pass.disagreement !== null) return;
+    if (!pass.wants('dead-class', UNDERSCORE_SPACE)) return;
+    const vouched = new Set(pass.allow);
+    const shown = underscoreSpaceFindings(sites, classes =>
+        oracles.map(oracle => oracle.cssFor(classes)),
+    )
+        .filter(finding => !vouched.has(finding.className))
+        .map(finding => ({
+            finding,
+            level: out.levelOf({ rule: 'dead-class', kind: UNDERSCORE_SPACE, file: finding.file }),
+        }))
+        .filter(entry => entry.level !== 'off');
+    if (shown.length === 0) return;
+    out.warn("\nAn `_` this project's Tailwind reads as a space:");
+    for (const { finding, level } of shown) {
+        const { key, value, className, literal, spaced, escaped, file, line, column } = finding;
+        const recorded = registryFinding({
+            rule: 'dead-class',
+            code: UNDERSCORE_SPACE,
+            file,
+            line,
+            column,
+            args: { key, value, className, literal, spaced, escaped },
+        });
+        out.push(recorded);
+        out.info(`  ${levelTag(level)}${file}:${line}:${column} ${recorded.message}`);
+        for (const part of partLines(recorded, '    ')) out.info(part);
+    }
+    const { mark, below } = summaryMark(
+        shown.map(entry => entry.level),
+        pass.failOn,
+    );
+    out.warn(
+        `\n${mark} ${shown.length} sz value(s) carry an \`_\` this project's Tailwind reads as a space: write the space, or \`\\\\_\` in source for an underscore.${belowNote(below, pass.failOn)}`,
+    );
+}
+
+/** The id an `_` read as a space is reported under. */
+const UNDERSCORE_SPACE = 'underscore-space';
+
+/**
  * Lower every file with the Tailwind prefix the project's stylesheets set.
  *
  * The first pass runs without a prefix, which is right only when no entry
@@ -1933,19 +2019,21 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const scanned = await lowerWithProjectPrefix(out, files, cwd);
     if (!scanned) return;
     const { opened, disagreement } = scanned;
-    const { issues, classOrigins, pairsByFile, unchecked } = scanned.lowered;
+    const { issues, classOrigins, pairsByFile, unchecked, underscoreSites } = scanned.lowered;
 
     reportSelectedIssues(out, issues, files.length, wants, failOn);
     reportUncheckedFiles(out, unchecked);
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
-    runDeadClassPass(out, opened, classOrigins, {
+    const deadPass = {
         allow: [...(options.allow ?? []), ...configAllow.classes],
         wants,
         disagreement,
         failOn,
-    });
+    };
+    runDeadClassPass(out, opened, classOrigins, deadPass);
+    runUnderscorePass(out, opened, underscoreSites, deadPass);
 
     // Runs last and independently: a value on the wrong key survives both
     // passes above, which is the whole reason it needs its own.

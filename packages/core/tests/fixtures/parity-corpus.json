@@ -7084,7 +7084,7 @@
     "runtime": "content-stretch"
   },
   {
-    "sz": "{\"animate\":\"spin_1s_linear_infinite\"}",
+    "sz": "{\"animate\":\"spin 1s linear infinite\"}",
     "ir": {
       "properties": [
         {
@@ -7095,7 +7095,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "spin_1s_linear_infinite"
+            "value": "spin 1s linear infinite"
           }
         }
       ]
@@ -15995,7 +15995,7 @@
     "runtime": "grid-cols-[[a]_1fr_[b]]"
   },
   {
-    "sz": "{\"gridCols\":\"1fr_2fr\"}",
+    "sz": "{\"gridCols\":\"1fr 2fr\"}",
     "ir": {
       "properties": [
         {
@@ -16006,7 +16006,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "1fr_2fr"
+            "value": "1fr 2fr"
           }
         }
       ]
@@ -16185,7 +16185,7 @@
     "runtime": "grid-rows-[[a]_auto]"
   },
   {
-    "sz": "{\"gridRows\":\"1fr_2fr\"}",
+    "sz": "{\"gridRows\":\"1fr 2fr\"}",
     "ir": {
       "properties": [
         {
@@ -16196,7 +16196,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "1fr_2fr"
+            "value": "1fr 2fr"
           }
         }
       ]
@@ -19160,7 +19160,7 @@
     "runtime": "mask-left"
   },
   {
-    "sz": "{\"maskPos\":\"center_top_1rem\"}",
+    "sz": "{\"maskPos\":\"center top 1rem\"}",
     "ir": {
       "properties": [
         {
@@ -19171,7 +19171,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "center_top_1rem"
+            "value": "center top 1rem"
           }
         }
       ]
@@ -21957,7 +21957,7 @@
     "runtime": "origin-(--o)"
   },
   {
-    "sz": "{\"origin\":\"33%_75%\"}",
+    "sz": "{\"origin\":\"33% 75%\"}",
     "ir": {
       "properties": [
         {
@@ -21968,7 +21968,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "33%_75%"
+            "value": "33% 75%"
           }
         }
       ]
@@ -22907,7 +22907,7 @@
     "runtime": "perspective-[500px]"
   },
   {
-    "sz": "{\"perspectiveOrigin\":\"25%_25%\"}",
+    "sz": "{\"perspectiveOrigin\":\"25% 25%\"}",
     "ir": {
       "properties": [
         {
@@ -22918,7 +22918,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "25%_25%"
+            "value": "25% 25%"
           }
         }
       ]

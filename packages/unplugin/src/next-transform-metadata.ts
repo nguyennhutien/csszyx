@@ -4,7 +4,11 @@ import { createHash } from 'node:crypto';
 import { type SourceTransformResult, transform } from '@csszyx/compiler';
 import { collectMergeCallClassNames, lexicalRegionEnd } from './authored-class-scanner.js';
 import { emittedClassSites } from './dead-class.js';
-import type { NextSafelistShardInput, NextShardClassSite } from './next-safelist-state.js';
+import type {
+    NextSafelistShardInput,
+    NextShardClassSite,
+    NextShardUnderscoreSite,
+} from './next-safelist-state.js';
 import { sortStrings } from './sort.js';
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {
@@ -19,6 +23,8 @@ export interface NextTransformMetadata {
      * column and key a `dead-class` line names.
      */
     classSites: NextShardClassSite[];
+    /** Each `_` the source writes in an `sz` value, at its key. */
+    underscoreSites: NextShardUnderscoreSite[];
     recoveryTokenCount: number;
     cssVariableCount: number;
 }
@@ -50,6 +56,10 @@ export function collectNextTransformMetadata(
             const site = placed.get(className);
             return site === undefined ? [] : [{ className, ...site }];
         }),
+        // Field by field: a located fact resolves its position in getters.
+        underscoreSites: (result.underscoreValues ?? []).map(
+            ({ key, value, className, line, column }) => ({ key, value, className, line, column }),
+        ),
         recoveryTokenCount: result.recoveryTokens.size,
         cssVariableCount: result.cssVariableMap.size,
     };
@@ -74,6 +84,7 @@ export function createNextSafelistShardFromMetadata(
         authoredClasses: metadata.rawClassNames,
         mergeLiterals: metadata.mergeLiterals,
         classSites: metadata.classSites,
+        underscoreSites: metadata.underscoreSites,
     };
 }
 

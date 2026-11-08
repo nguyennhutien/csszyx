@@ -76,3 +76,13 @@ export {
     shouldHoldAdvisories,
     suppressedAdvisoryMessage,
 } from './transform-diagnostics.js';
+export {
+    reportUnderscoreSpaces,
+    type UnderscoreFact,
+    type UnderscoreSite,
+    type UnderscoreSpaceFinding,
+    underscoreSpaceFindings,
+    underscoreSpaceMessage,
+    underscoreSpaceProbes,
+    underscoreSpaceVerdicts,
+} from './underscore-space.js';

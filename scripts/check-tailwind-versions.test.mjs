@@ -16,6 +16,8 @@ import {
     spellingFindings,
     TAILWIND_VERSIONS,
     tableFindings,
+    UNDERSCORE_CASES,
+    underscoreDifferences,
     verifyIntegrity,
 } from './check-tailwind-versions.mjs';
 
@@ -121,7 +123,14 @@ test('fails on growth and on a stale entry, so the baseline only shrinks by hand
 
 test('writes the baseline so a regenerated file is already the formatted one', () => {
     const found = {
-        '4.0.0': { regressed: [], dead: ['p|var'], spelling: [], table: [], variant: [] },
+        '4.0.0': {
+            regressed: [],
+            dead: ['p|var'],
+            spelling: [],
+            table: [],
+            variant: [],
+            underscore: [],
+        },
     };
     const text = renderBaseline('4.3.3', found);
 
@@ -140,4 +149,19 @@ test('holds the served state variants to the baseline like every other finding',
     ]);
     const text = renderBaseline('4.3.3', { '4.0.0': found });
     assert.match(text, /"variant": \{\n {16}"inert: served by the pin, not here": true\n {12}\}/);
+});
+
+test('names an `_` one version reads as a space and the pin keeps, both ways', () => {
+    const pinned = new Set(["content-['a_b']", 'grid-cols-[1fr_2fr]']);
+    assert.deepEqual(underscoreDifferences(new Set(pinned), pinned), []);
+    assert.deepEqual(
+        underscoreDifferences(new Set(["content-['a_b']", 'bg-[url(/a_b.png)]']), pinned),
+        [
+            'bg-[url(/a_b.png)]: reads the `_` of `url(/a_b.png)`, the pin keeps it',
+            'grid-cols-[1fr_2fr]: keeps the `_` of `1fr_2fr`, the pin reads it',
+        ],
+    );
+    for (const [, value, className] of UNDERSCORE_CASES) {
+        assert.ok(className.includes(value), `${className} carries ${value}`);
+    }
 });

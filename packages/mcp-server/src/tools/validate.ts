@@ -19,6 +19,7 @@
  * Example: { padding: 4 } → error "Unknown prop 'padding'. Use 'p' instead."
  */
 
+import { projectAnswers } from '@csszyx/cli';
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_SPECIAL_PROPERTIES,
@@ -38,6 +39,7 @@ import { MAX_SZ_DEPTH } from '@csszyx/compiler/sz-limits';
 import { z } from 'zod';
 
 import { escapeUnsafeChars } from './source-literal.js';
+import { underscoreSpaceAnswers, underscoreUncheckedNote } from './underscore-space.js';
 
 export const validateSchema = z.object({
     sz: z
@@ -196,16 +198,30 @@ function toolDiagnostic(issue: SzDiagnosticIssue): ToolDiagnostic {
  * @returns The diagnostics.
  */
 function engineDiagnostics(sz: Record<string, unknown>): ToolDiagnostic[] {
+    const result = engineResult(sz);
+    // Both engine artifacts always report the issue list.
+    return result === null ? [] : (result.issues as SzDiagnosticIssue[]).map(toolDiagnostic);
+}
+
+/**
+ * Compile an object as one element of a module.
+ *
+ * @param sz The object to compile.
+ * @param classPrefix The Tailwind prefix to lower with, or null for none.
+ * @returns The engine's result, or null for an object JSON cannot write.
+ */
+function engineResult(
+    sz: Record<string, unknown>,
+    classPrefix: string | null = null,
+): ReturnType<typeof transformSource> | null {
     let json: string;
     try {
         json = JSON.stringify(sz);
     } catch {
-        return [];
+        return null;
     }
     const source = `export const A = () => <p sz={${escapeUnsafeChars(json)}} />;`;
-    // Both engine artifacts always report the issue list.
-    const { issues } = transformSource(source, { filename: PREVIEW_FILE });
-    return (issues as SzDiagnosticIssue[]).map(toolDiagnostic);
+    return transformSource(source, { filename: PREVIEW_FILE, classPrefix });
 }
 
 /**
@@ -308,6 +324,73 @@ function diagnoseEntries(sz: Record<string, unknown>, errors: ValidationError[])
 export function handleValidate(input: ValidateInput): {
     content: Array<{ type: 'text'; text: string }>;
 } {
+    return reply(validation(input));
+}
+
+/**
+ * {@link handleValidate}, with each `_` the project's Tailwind reads as a
+ * space added to the warnings: the question the build asks, answered before
+ * the object is written. An `_` that could not be asked about, with no
+ * stylesheet to ask, is said in `underscoreNote`.
+ *
+ * @param input - The validated input object.
+ * @param context - Where the project is; the server's working directory by default.
+ * @param context.cwd - The project root.
+ * @returns MCP tool response with validation results.
+ */
+export async function handleValidateInProject(
+    input: ValidateInput,
+    context: { cwd?: string } = {},
+): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+    const validated = validation(input);
+    // One project for both questions: its stylesheets compile at most once.
+    // Lowered under the project's prefix, as the build lowers it: that
+    // Tailwind serves only the prefixed class.
+    const answers = projectAnswers(context.cwd ?? process.cwd());
+    const { prefix } = await answers.prefix();
+    const result = engineResult(input.sz, prefix);
+    const underscore = await underscoreSpaceAnswers(
+        result?.underscoreValues ?? [],
+        answers,
+        PREVIEW_FILE,
+    );
+    const found = underscore.found.map(({ key, value, className, literal, spaced, escaped }) =>
+        toolDiagnostic({
+            code: 'underscore-space',
+            args: { key, value, className, literal, spaced, escaped },
+        } as SzDiagnosticIssue),
+    );
+    const warnings = [...(validated.warnings ?? []), ...found];
+    return reply({
+        ...validated,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        ...(underscore.skipped === null
+            ? {}
+            : { underscoreNote: underscoreUncheckedNote(underscore.skipped) }),
+    });
+}
+
+/**
+ * @param payload - What the tool answers.
+ * @returns The MCP response carrying it.
+ */
+function reply(payload: object): { content: Array<{ type: 'text'; text: string }> } {
+    return { content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }] };
+}
+
+/**
+ * Validate an object: its keys, the engine's diagnostics, and its classes.
+ *
+ * @param input - The validated input object.
+ * @returns The answer, before it is written as text.
+ */
+function validation(input: ValidateInput): {
+    valid: boolean;
+    errors?: ValidationError[];
+    warnings?: ToolDiagnostic[];
+    transformResult?: { className: string; classCount: number };
+    transformError?: string;
+} {
     const errors: ValidationError[] = [];
 
     for (const key of Object.keys(input.sz)) {
@@ -327,27 +410,15 @@ export function handleValidate(input: ValidateInput): {
     }
 
     return {
-        content: [
-            {
-                type: 'text' as const,
-                text: JSON.stringify(
-                    {
-                        valid: errors.length === 0 && !transformError,
-                        errors: errors.length > 0 ? errors : undefined,
-                        warnings: warnings.length > 0 ? warnings : undefined,
-                        transformResult: transformResult
-                            ? {
-                                  className: transformResult.className,
-                                  classCount: transformResult.className.split(/\s+/).filter(Boolean)
-                                      .length,
-                              }
-                            : undefined,
-                        transformError: transformError ?? undefined,
-                    },
-                    null,
-                    2,
-                ),
-            },
-        ],
+        valid: errors.length === 0 && !transformError,
+        errors: errors.length > 0 ? errors : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        transformResult: transformResult
+            ? {
+                  className: transformResult.className,
+                  classCount: transformResult.className.split(/\s+/).filter(Boolean).length,
+              }
+            : undefined,
+        transformError: transformError ?? undefined,
     };
 }

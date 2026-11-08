@@ -48,6 +48,27 @@ export interface SzDiagnosticIssue<C extends SzDiagnosticCode = SzDiagnosticCode
 export type SzIssue = { [C in SzDiagnosticCode]: SzDiagnosticIssue<C> }[SzDiagnosticCode];
 
 /**
+ * An `sz` string value with a bare `_`, and the arbitrary class it lowers
+ * into: csszyx writes a space as `_` too, so the class alone cannot say which
+ * the author wrote. A fact, not a diagnostic: whether Tailwind reads that `_`
+ * as a space is asked of the project's Tailwind where one is loaded
+ * (`underscore-space`), so no lane prints it as it stands.
+ *
+ * @internal Read by the bundler plugin, `csszyx check` and the MCP tools; not a stable shape.
+ */
+export interface SzUnderscoreValue extends SourcePosition {
+    /** The `sz` key, or the CSS property of a `css` declaration. */
+    key: string;
+    /** The value as written. */
+    value: string;
+    /** The class it lowers into. */
+    className: string;
+}
+
+/** The engine code that carries an {@link SzUnderscoreValue}. */
+export const UNDERSCORE_FACT = 'underscore-space';
+
+/**
  * One static object a merge would read, from a pass with no merge table.
  *
  * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
@@ -368,6 +389,32 @@ class LocatedIssue extends LocatedSpan implements SzDiagnosticIssue {
     }
 }
 
+/** A located `underscore-space` fact. */
+class LocatedUnderscoreValue extends LocatedSpan implements SzUnderscoreValue {
+    key: string;
+    value: string;
+    className: string;
+
+    /**
+     * @param fact - What the engine reported.
+     * @param fact.key - The key.
+     * @param fact.value - The value.
+     * @param fact.className - The class.
+     * @param start - The byte offset.
+     * @param locate - The file's locator.
+     */
+    constructor(
+        fact: { key: string; value: string; className: string },
+        start: number,
+        locate: ByteOffsetLocator,
+    ) {
+        super(start, locate);
+        this.key = fact.key;
+        this.value = fact.value;
+        this.className = fact.className;
+    }
+}
+
 /** A located merge pair. */
 class LocatedOverride extends LocatedSpan implements SzMergeOverride {
     base: string[];
@@ -488,6 +535,8 @@ export interface LocatedEngineSpans {
     mergeGroups: SzMergeGroup[];
     singleClassGroups: SzMergeGroup[];
     mergeOverrides: SzMergeOverride[];
+    /** The engine's `underscore-space` facts, taken out of `issues`. */
+    underscoreValues: SzUnderscoreValue[];
 }
 
 /**
@@ -765,14 +814,18 @@ export function decodeEngineSpans(source: string, spans: string): LocatedEngineS
     at = 0;
     readFormat();
     wireLocate = createByteOffsetLocator(source);
-    const issues = readList(readIssue);
-    if (issues.length > 0) readArgs(issues);
+    const read = readList(readIssue);
+    if (read.length > 0) readArgs(read);
     const mergeGroups = readList(readGroup);
     const singleClassGroups = readList(readGroup);
     const mergeOverrides = readList(readPair);
     if (at !== wire.length) malformed('text after the last list');
     wire = '';
-    return { issues, mergeGroups, singleClassGroups, mergeOverrides };
+    const locate = wireLocate;
+    const { issues, underscoreValues } = splitUnderscoreFacts(read, issue =>
+        locateUnderscoreValue(issue, LocatedSpan.startOf(issue) as number, locate),
+    );
+    return { issues, mergeGroups, singleClassGroups, mergeOverrides, underscoreValues };
 }
 
 /**
@@ -784,12 +837,55 @@ export function decodeEngineSpans(source: string, spans: string): LocatedEngineS
  */
 export function locateEngineSpans(source: string, raw: RawEngineSpans): LocatedEngineSpans {
     const locate = createByteOffsetLocator(source);
+    const { issues, underscoreValues } = splitUnderscoreFacts(raw.issues, issue =>
+        locateUnderscoreValue(issue, issue.start, locate),
+    );
     return {
-        issues: raw.issues.map(issue => locateIssue(issue, locate)),
+        issues: issues.map(issue => locateIssue(issue, locate)),
         mergeGroups: raw.mergeGroups.map(group => locateGroup(group, locate)),
         singleClassGroups: (raw.singleClassGroups ?? []).map(group => locateGroup(group, locate)),
         mergeOverrides: raw.mergeOverrides.map(pair => locateOverride(pair, locate)),
+        underscoreValues,
     };
+}
+
+/**
+ * Take the engine's `underscore-space` facts out of its issues: they are no
+ * diagnostic until the project's Tailwind has answered, and a lane that
+ * renders every issue would otherwise print them.
+ *
+ * @param reported - The issues, as reported.
+ * @param fact - Locates one fact.
+ * @returns The issues left, and the facts.
+ */
+function splitUnderscoreFacts<I extends { code: string }>(
+    reported: readonly I[],
+    fact: (issue: I) => SzUnderscoreValue,
+): { issues: I[]; underscoreValues: SzUnderscoreValue[] } {
+    const issues: I[] = [];
+    const underscoreValues: SzUnderscoreValue[] = [];
+    for (const issue of reported) {
+        if (issue.code === UNDERSCORE_FACT) underscoreValues.push(fact(issue));
+        else issues.push(issue);
+    }
+    return { issues, underscoreValues };
+}
+
+/**
+ * @param issue - An `underscore-space` issue, as reported.
+ * @param issue.args - Its args.
+ * @param start - Its byte offset.
+ * @param locate - The file's locator.
+ * @returns It as a located fact.
+ */
+function locateUnderscoreValue(
+    issue: { args?: object },
+    start: number,
+    locate: ByteOffsetLocator,
+): SzUnderscoreValue {
+    // The engine writes all three on this code.
+    const args = issue.args as { key: string; value: string; className: string };
+    return new LocatedUnderscoreValue(args, start, locate);
 }
 
 /**
@@ -836,6 +932,15 @@ export interface StoredEngineSpans {
     mergeGroups?: Array<RawMergeGroup | SzMergeGroup>;
     singleClassGroups?: Array<RawMergeGroup | SzMergeGroup>;
     mergeOverrides?: Array<RawMergeOverride | SzMergeOverride>;
+    underscoreValues?: Array<RawUnderscoreValue | SzUnderscoreValue>;
+}
+
+/** An `underscore-space` fact as a store keeps it. */
+interface RawUnderscoreValue {
+    key: string;
+    value: string;
+    className: string;
+    start: number;
 }
 
 /**
@@ -881,6 +986,14 @@ export function storeEngineSpans(spans: PartialLocatedEngineSpans): StoredEngine
             return start === undefined ? pair : { start, base: pair.base, over: pair.over };
         });
     }
+    // Left out when empty, as a store written before the facts has none.
+    if (spans.underscoreValues && spans.underscoreValues.length > 0) {
+        stored.underscoreValues = spans.underscoreValues.map(fact => {
+            const start = LocatedSpan.startOf(fact);
+            const { key, value, className } = fact;
+            return start === undefined ? fact : { key, value, className, start };
+        });
+    }
     return stored;
 }
 
@@ -912,6 +1025,11 @@ export function restoreEngineSpans(
     if (stored.mergeOverrides) {
         restored.mergeOverrides = stored.mergeOverrides.map(pair =>
             'start' in pair ? locateOverride(pair, locate) : pair,
+        );
+    }
+    if (stored.underscoreValues) {
+        restored.underscoreValues = stored.underscoreValues.map(fact =>
+            'start' in fact ? new LocatedUnderscoreValue(fact, fact.start, locate) : fact,
         );
     }
     return restored;

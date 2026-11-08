@@ -80,6 +80,7 @@ CSS custom properties (`--*`) are passed through unchanged.
 
 - `css: {}` is intentional bypass — no sz-layer mapping applied. `{ css: { backgroundColor: 'red' } }` outputs `[background-color:red]`, not `bg-red`.
 - Spaces in values are normalised to underscores: `repeat(3, 1fr)` → `repeat(3,_1fr)`.
+- Write a space as a space. An `_` written in a value is read as a space by Tailwind in most places (`url()` and the name in `var()` keep it), and the build, `csszyx check` and `csszyx_validate` say so (`underscore-space`); for an underscore, write `\\_` in source.
 - Works inside `dynamic()` at runtime — the same compiler logic handles the `css` key.
 
 ### Custom property as a key

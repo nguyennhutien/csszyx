@@ -91,6 +91,8 @@ export interface RegistryFindingInput {
     file?: string;
     /** 1-based line, when the finding has one. */
     line?: number;
+    /** 1-based column, when the finding has a site. */
+    column?: number;
 }
 
 /**
@@ -103,7 +105,7 @@ export interface RegistryFindingInput {
  * @returns The finding; its kind is the code.
  */
 export function registryFinding(input: RegistryFindingInput): FindingInput {
-    const { rule, code, args, file, line } = input;
+    const { rule, code, args, file, line, column } = input;
     const { text, help, note } = renderSzDiagnosticParts(
         { code, args },
         SZ_DIAGNOSTIC_COMPUTED_VALUES,
@@ -113,6 +115,7 @@ export function registryFinding(input: RegistryFindingInput): FindingInput {
         kind: code,
         ...(file === undefined ? {} : { file }),
         ...(line === undefined ? {} : { line }),
+        ...(column === undefined ? {} : { column }),
         // An absent part stays `undefined`, which the JSON leaves out.
         message: text,
         help,

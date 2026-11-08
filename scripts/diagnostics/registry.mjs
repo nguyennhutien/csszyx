@@ -942,6 +942,37 @@ export const DIAGNOSTICS = [
         },
         sources: [ENGINE, CORE_TS],
     },
+    {
+        id: 'underscore-space',
+        summary: "An `_` in an `sz` value that this project's Tailwind reads as a space.",
+        // The engine reports the fact only: which class carries an `_` the
+        // author wrote (csszyx writes a space as `_` too, so the class alone
+        // cannot tell). Whether Tailwind reads it as a space is the project's
+        // Tailwind's answer (PROJECT-RULES §4), asked where one is loaded: the
+        // build, `csszyx check` and the MCP tools. The runtime has none to ask.
+        surfaces: {
+            engine: {},
+            check: { group: 'dead-class' },
+            runtime: { production: false, host: 'node' },
+        },
+        position: 'site',
+        // `value` is the string as the engine read it, for the check to work
+        // from; no sentence prints it raw. `literal`, `spaced` and
+        // `escaped` are JS literals the check writes once Tailwind has
+        // answered, each `_` it reads as a space turned into a space or `\\_`.
+        args: {
+            key: STRING,
+            value: OPTIONAL_STRING,
+            className: STRING,
+            literal: OPTIONAL_STRING,
+            spaced: OPTIONAL_STRING,
+            escaped: OPTIONAL_STRING,
+        },
+        text: "`{key}: {literal}` emits `{className}`, and this project's Tailwind reads its `_` as a space.",
+        help: 'write `{key}: {spaced}` for a space; for an underscore, write `{key}: {escaped}`.',
+        note: 'the class is still emitted.',
+        sources: [ENGINE, CHECK, 'packages/unplugin/src/underscore-space.ts'],
+    },
 
     // --- check: kinds a non-engine `csszyx check` pass reports ---
     {

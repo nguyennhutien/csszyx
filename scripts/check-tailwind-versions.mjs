@@ -26,7 +26,11 @@
  * - `variant`: a state name (`hidden`, `checked`, or an HTML attribute the
  *   table leaves out because the pin serves it, `inert`) this version serves
  *   as a bare variant and the pin does not, or the other way round — the
- *   runtime reports `unserved-variant` from the table measured on the pin.
+ *   runtime reports `unserved-variant` from the table measured on the pin;
+ * - `underscore`: an `_` in one of {@link UNDERSCORE_CASES} this version
+ *   reads as a space and the pin keeps, or the other way round — the docs say
+ *   where Tailwind keeps an `_`, and the build's `underscore-space` asks the
+ *   project's own Tailwind either way.
  *
  * Each list, per version, is a ratchet baseline in
  * `packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json`:
@@ -107,7 +111,41 @@ export const TAILWIND_VERSIONS = [
 export const BASELINE_FORMAT = 1;
 
 /** The finding lists, in the order they are reported. */
-const KINDS = ['regressed', 'dead', 'spelling', 'table', 'variant'];
+const KINDS = ['regressed', 'dead', 'spelling', 'table', 'variant', 'underscore'];
+
+/**
+ * An `_` in each place the docs and the AI docs name, as the engine reports
+ * it: `[key, value, className]`. Whether Tailwind reads it as a space is the
+ * project's answer at build; what the docs say about it (`url()` and the name
+ * in `var()` keep it, a string and a track list do not) must hold on every
+ * listed Tailwind, so a version that answers otherwise is a finding.
+ *
+ * @type {ReadonlyArray<readonly [key: string, value: string, className: string]>}
+ */
+export const UNDERSCORE_CASES = [
+    ['content', "'a_b'", "content-['a_b']"],
+    ['gridCols', '1fr_2fr', 'grid-cols-[1fr_2fr]'],
+    ['--x', 'var(--a,a_b)', '[--x:var(--a,a_b)]'],
+    ['bgImg', 'url(/a_b.png)', 'bg-[url(/a_b.png)]'],
+    ['--x', 'var(--a_b)', '[--x:var(--a_b)]'],
+];
+
+/**
+ * The cases one version and the pin answer differently about.
+ *
+ * @param {ReadonlySet<string>} here - The `className`s this version reports.
+ * @param {ReadonlySet<string>} pinned - The ones the pin reports.
+ * @returns {string[]} One line per case, sorted.
+ */
+export function underscoreDifferences(here, pinned) {
+    return UNDERSCORE_CASES.map(([, value, className]) => [value, className])
+        .filter(([, className]) => here.has(className) !== pinned.has(className))
+        .map(
+            ([value, className]) =>
+                `${className}: ${here.has(className) ? 'reads' : 'keeps'} the \`_\` of \`${value}\`, the pin ${pinned.has(className) ? 'reads' : 'keeps'} it`,
+        )
+        .sort();
+}
 
 /**
  * Values besides the column probes' plain ones whose class, served, shows a
@@ -428,6 +466,9 @@ async function main() {
     const { lowerEveryCase } = await import(
         '../packages/tailwind-oracle/tests/sz-capability-cases.js'
     );
+    const { underscoreSpaceFindings } = await import(
+        '../packages/unplugin/src/underscore-space.js'
+    );
     const engines = await loadEngines();
     const lowered = lowerEveryCase(engines).map(c => ({
         id: c.id,
@@ -493,6 +534,12 @@ async function main() {
                 pinnedStates,
                 stateNames,
             ),
+            underscore: new Set(
+                underscoreSpaceFindings(
+                    UNDERSCORE_CASES.map(([key, value, className]) => ({ key, value, className })),
+                    classes => [oracle.cssFor(classes)],
+                ).map(finding => finding.className),
+            ),
             timing: { install: t1 - t0, ask: performance.now() - t1, cached },
         });
     }
@@ -508,6 +555,10 @@ async function main() {
                 spelling: perVersion.get(version).spelling,
                 table: perVersion.get(version).table,
                 variant: perVersion.get(version).variant,
+                underscore: underscoreDifferences(
+                    perVersion.get(version).underscore,
+                    perVersion.get(pin).underscore,
+                ),
             },
         ]),
     );

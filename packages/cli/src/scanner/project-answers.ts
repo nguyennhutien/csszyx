@@ -126,6 +126,18 @@ export interface ProjectAnswers {
         served: ReadonlyMap<string, boolean> | null;
         skipped: string | null;
     }>;
+    /**
+     * The CSS each compiled stylesheet writes for these classes, index for
+     * index: for a question answered per stylesheet, such as whether one reads
+     * an `_` as a space.
+     *
+     * @param classes - Class names, as emitted.
+     * @returns One array per stylesheet; and why none could be asked, or null.
+     */
+    cssPerRoot(classes: readonly string[]): Promise<{
+        css: Array<Array<string | null>>;
+        skipped: string | null;
+    }>;
 }
 
 /**
@@ -149,6 +161,7 @@ export function projectAnswers(cwd: string): ProjectAnswers {
             prefix: () => Promise.resolve({ prefix: null, unread }),
             ask: verdicts =>
                 Promise.resolve({ served: null, skipped: verdicts?.length ? unread : null }),
+            cssPerRoot: () => Promise.resolve({ css: [], skipped: unread }),
         };
     }
     let opened: ReturnType<typeof openCheckOracles> | undefined;
@@ -161,5 +174,13 @@ export function projectAnswers(cwd: string): ProjectAnswers {
             served: (await project.settle(verdicts)) ? project.answers : null,
             skipped: project.skipped(),
         }),
+        cssPerRoot: async classes => {
+            const { oracles, skipped, hadEntries } = await open(cwd);
+            const why = hadEntries ? skipped.join('; ') : 'this project has no Tailwind stylesheet';
+            return {
+                css: oracles.map(oracle => oracle.cssFor(classes)),
+                skipped: oracles.length === 0 ? why : null,
+            };
+        },
     };
 }
