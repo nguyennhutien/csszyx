@@ -8334,23 +8334,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             manglingEnabled &&
             compiler.options.mode !== 'development' &&
             Object.keys(state.mangleMap).length > 0;
-        const manifest = createBundleManifest(shouldMangle);
-        compilation.emitAsset(
-            'csszyx-manifest.json',
-            new compiler.webpack.sources.RawSource(JSON.stringify(manifest)),
-        );
-        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
-            const globalVarMap = createGlobalVarMapAssetSource(
-                state.varMangleMap,
-                globalVarAliasPrefix,
-                state.globalVarValidationResult,
-            );
-            if (globalVarMap) {
-                compilation.emitAsset(
-                    '.csszyx/global-var-map.json',
-                    new compiler.webpack.sources.RawSource(globalVarMap),
-                );
-            }
+        // The stage is tapped on `hooks.compilation`, which webpack copies onto
+        // every child compiler (html-webpack-plugin's template compile). A
+        // child reaches it while the parent is still transforming, so a file
+        // the prescan did not read has not joined the census yet: its copy of
+        // a whole-build file would differ from the parent's, and webpack fails
+        // the build on two assets of one name with different content. The
+        // child still rewrites its own assets; the build files are the
+        // parent's alone.
+        const ownsBuildFiles = !compilation.compiler.isChild();
+        if (ownsBuildFiles) {
+            emitWebpackBuildFiles(compilation, compiler, shouldMangle);
         }
 
         const mangledSources = new Set<string>();
@@ -8382,8 +8376,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
         // Webpack has no post-write hook in this plugin and prints no asset
         // table of its own, so the reason the Vite lane defers does not apply:
-        // here the end of asset processing IS the end of the build's output.
-        reportBuildSummary();
+        // here the end of the parent's asset processing IS the end of the
+        // build's output.
+        if (ownsBuildFiles) reportBuildSummary();
+    }
+
+    /**
+     * Emit the files that describe the whole build: the manifest, and the
+     * global variable map when configured.
+     *
+     * @param compilation The parent compilation.
+     * @param compiler Active Webpack compiler.
+     * @param shouldMangle Whether class mangling applies to this output.
+     */
+    function emitWebpackBuildFiles(
+        compilation: WebpackCompilation,
+        compiler: WebpackCompiler,
+        shouldMangle: boolean,
+    ): void {
+        const { RawSource } = compiler.webpack.sources;
+        compilation.emitAsset(
+            'csszyx-manifest.json',
+            new RawSource(JSON.stringify(createBundleManifest(shouldMangle))),
+        );
+        if (!shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) return;
+        const globalVarMap = createGlobalVarMapAssetSource(
+            state.varMangleMap,
+            globalVarAliasPrefix,
+            state.globalVarValidationResult,
+        );
+        if (globalVarMap)
+            compilation.emitAsset('.csszyx/global-var-map.json', new RawSource(globalVarMap));
     }
 
     /**

@@ -103,6 +103,7 @@ async function applyPlugin(options: {
         webpack: options.webpackNamespace,
         options: { mode: 'production', plugins: [], resolve: {}, module: { rules: [] } },
         hooks: new Proxy({}, { get: (_target, key) => hook(String(key)) }),
+        isChild: () => false,
     };
 
     webpackPlugin(options.config).apply(compiler as never);
@@ -120,6 +121,7 @@ async function applyPlugin(options: {
                 },
             },
         },
+        compiler,
         emitAsset: (name: string, source: RawSource) => emitted.set(name, source.source()),
         updateAsset: (name: string, source: RawSource) => emitted.set(name, source.source()),
     });
@@ -223,6 +225,44 @@ describe('webpack global-var validation over CSS assets', () => {
                 'theme.css': { source: () => '@theme{\n  --brand-primary:red;\n}' },
             }),
         ).toThrow(/\[tailwind-owned\] --brand-primary \(\S*theme\.css:2:3\): .*inside @theme/);
+    });
+});
+
+describe('webpack global-var map asset', () => {
+    const MAP_ASSET = '.csszyx/global-var-map.json';
+
+    it('emits the map beside the manifest by default', async () => {
+        const applied = await applyPlugin({
+            config: GLOBAL_VAR_CONFIG,
+            webpackNamespace: WEBPACK_NAMESPACE,
+        });
+
+        const emitted = applied.processAssets({ 'style.css': { source: () => BRAND_CSS } });
+
+        expect(emitted.has('csszyx-manifest.json')).toBe(true);
+        expect(emitted.has(MAP_ASSET)).toBe(true);
+    });
+
+    it('emits only the manifest when `emitMap` is false', async () => {
+        const applied = await applyPlugin({
+            config: {
+                ...GLOBAL_VAR_CONFIG,
+                production: {
+                    mangle: false,
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                        emitMap: false,
+                    },
+                },
+            },
+            webpackNamespace: WEBPACK_NAMESPACE,
+        });
+
+        const emitted = applied.processAssets({ 'style.css': { source: () => BRAND_CSS } });
+
+        expect(emitted.has('csszyx-manifest.json')).toBe(true);
+        expect(emitted.has(MAP_ASSET)).toBe(false);
     });
 });
 
