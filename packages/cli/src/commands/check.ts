@@ -62,6 +62,7 @@ import {
     removedRuleIdDiagnostic,
     type UnderscoreSite,
     type UnservedVariant,
+    underscoreFactsOf,
     underscoreSpaceFindings,
     unservedVariantOf,
     unsignedClass,
@@ -1277,9 +1278,8 @@ function recordFileClasses(
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
-        // Field by field: a located fact resolves its position in getters.
-        for (const { key, value, className, line, column } of result.underscoreValues ?? []) {
-            underscoreSites.push({ key, value, className, line, column, file: relativePath });
+        for (const fact of underscoreFactsOf(result)) {
+            underscoreSites.push({ ...fact, file: relativePath });
         }
         return result.issues ?? [];
     } catch (error) {

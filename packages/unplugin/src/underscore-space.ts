@@ -100,15 +100,66 @@ export function underscoreSpaceProbes<T extends UnderscoreFact>(
     return { classes, probed };
 }
 
+/** How the project's Tailwind reads one fact's value. */
+export interface UnderscoreReading<T extends UnderscoreFact> {
+    fact: T;
+    /**
+     * The value with each `_` every serving root reads as a space written as
+     * one, every other `_` kept; the value as written when no `_` is.
+     */
+    reading: string;
+    /** How many of its `_` every serving root reads as a space. */
+    spaces: number;
+}
+
 /**
- * The facts whose `_` every root that serves the class reads as a space, from
- * each root's CSS for {@link UnderscoreProbes.classes}.
+ * How every root that serves each fact's class reads its value, from each
+ * root's CSS for {@link UnderscoreProbes.classes}: what `csszyx migrate`
+ * writes for an arbitrary value, and what {@link underscoreSpaceVerdicts}
+ * reports.
  *
- * A fact is reported when every root that serves its class reads at least one
- * of its `_` as a space; a root serving nothing for the class has no say, and
- * a class no root serves is the dead pass's finding. A value the class does
- * not carry verbatim (spaces as `_`) is not judged. Each declaration
- * comparison is linear in that class's CSS.
+ * A root serving nothing for the class has no say, and a fact no root serves
+ * is left out: there is no answer to give. A value the class does not carry
+ * verbatim (spaces as `_`) is not asked about. Each declaration comparison is
+ * linear in that class's CSS.
+ *
+ * @param probes - What was asked.
+ * @param roots - Each root's CSS for `probes.classes`, index for index.
+ * @returns One reading per served fact, in the given order.
+ */
+export function underscoreSpaceReadings<T extends UnderscoreFact>(
+    probes: UnderscoreProbes<T>,
+    roots: ReadonlyArray<ReadonlyArray<string | null>>,
+): Array<UnderscoreReading<T>> {
+    const batch = probes.classes;
+    const readings: Array<UnderscoreReading<T>> = [];
+    for (const { fact, inValue, first } of probes.probed) {
+        const serving = roots.filter(css => css[first] != null);
+        if (serving.length === 0) continue;
+        const spacedAt = inValue.filter((_, offset) => {
+            const probe = first + 1 + offset;
+            return serving.every(css =>
+                readsAsSpace(
+                    batch[first] as string,
+                    // Index for index with the batch, so every entry is set.
+                    css[first] as string | null,
+                    batch[probe] as string,
+                    css[probe] as string | null,
+                ),
+            );
+        });
+        readings.push({
+            fact,
+            reading: replaceAt(fact.value, spacedAt, ' '),
+            spaces: spacedAt.length,
+        });
+    }
+    return readings;
+}
+
+/**
+ * The facts whose `_` every root that serves the class reads as a space,
+ * with what to write instead ({@link underscoreSpaceReadings}).
  *
  * @param probes - What was asked.
  * @param roots - Each root's CSS for `probes.classes`, index for index.
@@ -118,33 +169,28 @@ export function underscoreSpaceVerdicts<T extends UnderscoreFact>(
     probes: UnderscoreProbes<T>,
     roots: ReadonlyArray<ReadonlyArray<string | null>>,
 ): Array<T & UnderscoreFinding> {
-    const batch = probes.classes;
-    const found: Array<T & UnderscoreFinding> = [];
-    for (const { fact, inValue, first } of probes.probed) {
-        const serving = roots.filter(css => css[first] != null);
-        if (serving.length === 0) continue;
-        const spacedAt = inValue.filter((_, offset) => {
-            const probe = first + 1 + offset;
-            return serving.every(css =>
-                readsAsSpace(
-                    batch[first] as string,
-                    css[first] ?? null,
-                    batch[probe] as string,
-                    css[probe] ?? null,
-                ),
-            );
-        });
-        if (spacedAt.length === 0) continue;
-        const spaced = replaceAt(fact.value, spacedAt, ' ');
-        const escaped = replaceAt(fact.value, spacedAt, String.raw`\_`);
-        found.push({
+    return underscoreSpaceReadings(probes, roots)
+        .filter(({ spaces }) => spaces > 0)
+        .map(({ fact, reading }) => ({
             ...fact,
             literal: jsStringLiteral(fact.value),
-            spaced: jsStringLiteral(spaced),
-            escaped: jsStringLiteral(escaped),
-        });
+            spaced: jsStringLiteral(reading),
+            // The `_` read as a space are exactly those the reading turned.
+            escaped: jsStringLiteral(escapeWhereSpaced(fact.value, reading)),
+        }));
+}
+
+/**
+ * @param value - A value as written.
+ * @param reading - The same value with some `_` written as spaces.
+ * @returns The value with each of those `_` escaped instead.
+ */
+function escapeWhereSpaced(value: string, reading: string): string {
+    let out = '';
+    for (let index = 0; index < value.length; index++) {
+        out += value[index] === '_' && reading[index] === ' ' ? String.raw`\_` : value[index];
     }
-    return found;
+    return out;
 }
 
 /**
@@ -231,6 +277,32 @@ function comparable(
             value.replaceAll(String.raw`\_`, '_'),
         ]),
     );
+}
+
+/**
+ * The `_` facts of one transform, as plain fields.
+ *
+ * A located fact resolves its line and column in getters, which a spread
+ * drops, so every lane reads the facts through here. A result an older
+ * engine or cache entry produced, or none at all, carries no facts.
+ *
+ * @param result - A transform result, or null when there is none.
+ * @returns Each fact's key, value, class, line and column.
+ */
+export function underscoreFactsOf(
+    result: {
+        underscoreValues?: ReadonlyArray<
+            UnderscoreFact & { readonly line: number; readonly column: number }
+        >;
+    } | null,
+): Array<UnderscoreFact & { line: number; column: number }> {
+    return (result?.underscoreValues ?? []).map(({ key, value, className, line, column }) => ({
+        key,
+        value,
+        className,
+        line,
+        column,
+    }));
 }
 
 /**

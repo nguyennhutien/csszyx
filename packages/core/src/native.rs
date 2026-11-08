@@ -5,7 +5,9 @@
 
 use napi_derive::napi;
 
-use crate::migrate::{self, HtmlTransformOptions, InjectRuntime, ServedAnswers, SzObject};
+use crate::migrate::{
+    self, HtmlTransformOptions, InjectRuntime, ServedAnswers, SzObject, UnderscoreAnswers,
+};
 use crate::transform::{
     transform_batch_with_options, GlobalVarAliasEntry, ParserPath, RecoveryMode, TransformFile,
     TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -567,6 +569,12 @@ pub struct NativeMigrateOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, asked the same way.
     pub unserved_classes: Option<Vec<String>>,
+    /// Arbitrary values, as a class writes them, the project's Tailwind was
+    /// asked about; `underscoreReadings` holds the answer for each, index for
+    /// index.
+    pub underscore_values: Option<Vec<String>>,
+    /// Each value of `underscoreValues` as an sz object writes it.
+    pub underscore_readings: Option<Vec<String>>,
     /// The project's Tailwind prefix (`prefix(tw)`), read off each class.
     pub prefix: Option<String>,
 }
@@ -589,6 +597,12 @@ pub struct NativeMigrateHtmlOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, as for JSX.
     pub unserved_classes: Option<Vec<String>>,
+    /// Arbitrary values, as a class writes them, the project's Tailwind was
+    /// asked about; `underscoreReadings` holds the answer for each, index for
+    /// index.
+    pub underscore_values: Option<Vec<String>>,
+    /// Each value of `underscoreValues` as an sz object writes it.
+    pub underscore_readings: Option<Vec<String>>,
     /// The project's Tailwind prefix, as for JSX.
     pub prefix: Option<String>,
 }
@@ -610,6 +624,21 @@ pub struct NativeMigrateStats {
     /// Classes one of migrate's tables decided because the project's
     /// Tailwind had not been asked about them.
     pub table_verdicts: Vec<NativeTableVerdict>,
+    /// Arbitrary values with a bare `_` no answer covered.
+    pub underscore_questions: Vec<NativeUnderscoreQuestion>,
+}
+
+/// An arbitrary value with a bare `_` the project's Tailwind was not asked
+/// about.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeUnderscoreQuestion {
+    /// The utility it was read from, as `servedClasses` names a class.
+    pub class: String,
+    /// The value as the class writes it.
+    pub value: String,
+    /// What was written for it, each bare `_` as a space.
+    pub reading: String,
 }
 
 /// A class a table decided, with the table's verdict.
@@ -620,6 +649,33 @@ pub struct NativeTableVerdict {
     pub class: String,
     /// Whether the table took the class as served.
     pub served: bool,
+}
+
+/// The project's answers about `_`, from the two lists JavaScript sends;
+/// `None` when it sent neither.
+///
+/// # Errors
+///
+/// Returns a NAPI error when the lists are not the same length: an answer
+/// paired with the wrong value would write another value.
+fn underscore_answers(
+    values: Option<Vec<String>>,
+    readings: Option<Vec<String>>,
+) -> napi::Result<Option<UnderscoreAnswers>> {
+    match (values, readings) {
+        (None, None) => Ok(None),
+        (values, readings) => {
+            let (values, readings) = (values.unwrap_or_default(), readings.unwrap_or_default());
+            if values.len() != readings.len() {
+                return Err(napi::Error::from_reason(format!(
+                    "underscoreValues has {} entries and underscoreReadings {}",
+                    values.len(),
+                    readings.len()
+                )));
+            }
+            Ok(Some(values.into_iter().zip(readings).collect()))
+        }
+    }
 }
 
 /// The project's answers, from the two lists JavaScript sends; `None` when
@@ -677,6 +733,16 @@ impl From<migrate::TransformResult> for NativeMigrateResult {
                         served: verdict.served,
                     })
                     .collect(),
+                underscore_questions: result
+                    .stats
+                    .underscore_questions
+                    .into_iter()
+                    .map(|question| NativeUnderscoreQuestion {
+                        class: question.class,
+                        value: question.value,
+                        reading: question.reading,
+                    })
+                    .collect(),
             },
             potentially_unused_imports: result.potentially_unused_imports,
         }
@@ -704,11 +770,13 @@ pub fn migrate_batch_native(
             napi::Error::from_reason(format!("customMapJson is not a JSON object: {error}"))
         })?;
     let served = served_answers(options.served_classes, options.unserved_classes);
+    let underscores = underscore_answers(options.underscore_values, options.underscore_readings)?;
     let migrate_options = migrate::TransformOptions {
         inject_todos: options.inject_todos.unwrap_or(false),
         keys_only: options.keys_only.unwrap_or(false),
         custom_map: custom_map.as_ref(),
         served: served.as_ref(),
+        underscores: underscores.as_ref(),
         prefix: options.prefix.as_deref(),
     };
     Ok(files
@@ -729,6 +797,12 @@ pub struct NativeMigrateClassNameOptions {
     pub served_classes: Option<Vec<String>>,
     /// Utilities the project's Tailwind does not serve, as for a file.
     pub unserved_classes: Option<Vec<String>>,
+    /// Arbitrary values, as a class writes them, the project's Tailwind was
+    /// asked about; `underscoreReadings` holds the answer for each, index for
+    /// index.
+    pub underscore_values: Option<Vec<String>>,
+    /// Each value of `underscoreValues` as an sz object writes it.
+    pub underscore_readings: Option<Vec<String>>,
     /// The project's Tailwind prefix, as for a file.
     pub prefix: Option<String>,
 }
@@ -752,11 +826,13 @@ pub fn migrate_class_name_native(
 ) -> napi::Result<String> {
     let options = options.unwrap_or_default();
     let served = served_answers(options.served_classes, options.unserved_classes);
+    let underscores = underscore_answers(options.underscore_values, options.underscore_readings)?;
     migrate::migrate_class_name(
         &class_name,
         &migrate::ClassNameOptions {
             custom_map_json: options.custom_map_json.as_deref(),
             served: served.as_ref(),
+            underscores: underscores.as_ref(),
             prefix: options.prefix.as_deref(),
         },
     )
@@ -807,6 +883,7 @@ pub fn migrate_html_native(
         cdn_url: options.cdn_url,
         local_path: options.local_path,
         served: served_answers(options.served_classes, options.unserved_classes),
+        underscores: underscore_answers(options.underscore_values, options.underscore_readings)?,
         prefix: options.prefix,
     };
     Ok(migrate::transform_html_source(&source, &html_options).into())

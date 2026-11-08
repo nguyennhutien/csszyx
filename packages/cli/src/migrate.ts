@@ -92,6 +92,13 @@ export interface ClassNameToSzObjectOptions {
      */
     served?: ReadonlyMap<string, boolean>;
     /**
+     * What the project's Tailwind answered about the `_` of arbitrary values,
+     * keyed as the result's `underscoreQuestions` name them: the value an sz
+     * object writes, each `_` that Tailwind reads as a space written as one.
+     * Convert once without it, ask, and convert again, as `served`.
+     */
+    underscores?: ReadonlyMap<string, string>;
+    /**
      * The project's Tailwind prefix (`prefix(tw)`), or null for none: each
      * class is read with `<prefix>:` taken off its front, and one without it
      * stays in `className`, since that Tailwind serves no unprefixed utility.
@@ -100,7 +107,12 @@ export interface ClassNameToSzObjectOptions {
 }
 
 /** The keys {@link ClassNameToSzObjectOptions} has. */
-const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set(['customMap', 'served', 'prefix']);
+const CLASS_NAME_OPTION_KEYS: ReadonlySet<string> = new Set([
+    'customMap',
+    'served',
+    'underscores',
+    'prefix',
+]);
 
 /**
  * Convert one whole `className` attribute to an sz object.

@@ -56,6 +56,15 @@ describe.each(UNRENDERED_ENGINES)('underscore-space on %s', (_name, rendered, tr
         [{ w: 'calc(100%_-_2rem)' }, 'w', 'calc(100%_-_2rem)', 'w-[calc(100%_-_2rem)]'],
         [{ bgImg: 'url(/a_b.png)' }, 'bgImg', 'url(/a_b.png)', 'bg-[url(/a_b.png)]'],
         [{ '--x': 'a_b' }, '--x', 'a_b', '[--x:a_b]'],
+        // A colour object, at its `color`, as the class it is emitted as.
+        [
+            { bg: { color: 'oklch(0.5_0.1_10)', op: 50 } },
+            'color',
+            'oklch(0.5_0.1_10)',
+            'bg-[oklch(0.5_0.1_10)]/50',
+        ],
+        // The class as emitted, its space already an `_`.
+        [{ content: "'a b_c'" }, 'content', "'a b_c'", "content-['a_b_c']"],
     ])('reports %j', (sz, key, value, className) => {
         expect(factsOf(transform, sz)).toEqual([{ key, value, className }]);
     });

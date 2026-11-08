@@ -291,6 +291,13 @@ export interface NativeMigrateOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, asked the same way. */
     unservedClasses?: string[];
+    /**
+     * Arbitrary values, as a class writes them, the project's Tailwind was
+     * asked about; `underscoreReadings` holds the answer for each.
+     */
+    underscoreValues?: string[];
+    /** Each value of `underscoreValues` as an sz object writes it. */
+    underscoreReadings?: string[];
     /** The project's Tailwind prefix (`prefix(tw)`), read off each class. */
     prefix?: string;
 }
@@ -303,6 +310,13 @@ export interface NativeMigrateClassNameOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, as for JSX. */
     unservedClasses?: string[];
+    /**
+     * Arbitrary values, as a class writes them, the project's Tailwind was
+     * asked about; `underscoreReadings` holds the answer for each.
+     */
+    underscoreValues?: string[];
+    /** Each value of `underscoreValues` as an sz object writes it. */
+    underscoreReadings?: string[];
     /** The project's Tailwind prefix, as for JSX. */
     prefix?: string;
 }
@@ -323,6 +337,13 @@ export interface NativeMigrateHtmlOptions {
     servedClasses?: string[];
     /** Utilities the project's Tailwind does not serve, as for JSX. */
     unservedClasses?: string[];
+    /**
+     * Arbitrary values, as a class writes them, the project's Tailwind was
+     * asked about; `underscoreReadings` holds the answer for each.
+     */
+    underscoreValues?: string[];
+    /** Each value of `underscoreValues` as an sz object writes it. */
+    underscoreReadings?: string[];
     /** The project's Tailwind prefix, as for JSX. */
     prefix?: string;
 }
@@ -341,6 +362,18 @@ export interface NativeMigrateStats {
      * packages that predate the field.
      */
     tableVerdicts?: NativeTableVerdict[];
+    /** Arbitrary values with a bare `_` no answer covered. */
+    underscoreQuestions?: NativeUnderscoreQuestion[];
+}
+
+/** An arbitrary value with a bare `_` the project's Tailwind was not asked about. */
+export interface NativeUnderscoreQuestion {
+    /** The utility it was read from, as `servedClasses` names a class. */
+    class: string;
+    /** The value as the class writes it. */
+    value: string;
+    /** What was written for it, each bare `_` as a space. */
+    reading: string;
 }
 
 /** A class a migrate table decided, with the table's verdict. */

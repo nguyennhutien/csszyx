@@ -73,6 +73,14 @@ export interface MigrateRustOptions {
      */
     served?: ReadonlyMap<string, boolean>;
     /**
+     * What the project's Tailwind answered about the `_` of arbitrary values,
+     * keyed as {@link MigrateRustUnderscoreQuestion.value}: the value an sz
+     * object writes, each `_` that Tailwind reads as a space written as one.
+     * A value with no answer reads each bare `_` as a space and is reported
+     * in `stats.underscoreQuestions`.
+     */
+    underscores?: ReadonlyMap<string, string>;
+    /**
      * The project's Tailwind prefix (`prefix(tw)`), or null for none: each
      * class is read with `<prefix>:` taken off its front, and one without it
      * stays in `className`, since that Tailwind serves no unprefixed utility.
@@ -94,6 +102,8 @@ export interface MigrateRustHtmlOptions {
     localPath?: string;
     /** The project's answers, as for {@link MigrateRustOptions.served}. */
     served?: ReadonlyMap<string, boolean>;
+    /** The project's answers, as for {@link MigrateRustOptions.underscores}. */
+    underscores?: ReadonlyMap<string, string>;
     /** The project's Tailwind prefix, as for {@link MigrateRustOptions.prefix}. */
     prefix?: string | null;
 }
@@ -106,6 +116,16 @@ export interface MigrateRustTableVerdict {
     served: boolean;
 }
 
+/** An arbitrary value with a bare `_` the project's Tailwind was not asked about. */
+export interface MigrateRustUnderscoreQuestion {
+    /** The utility it was read from, as {@link MigrateRustTableVerdict.class} names one. */
+    class: string;
+    /** The value as the class writes it. */
+    value: string;
+    /** What was written for it, each bare `_` as a space; an answer that differs changes the file. */
+    reading: string;
+}
+
 /** The counts of one migrated file. */
 export interface MigrateRustStats {
     classNamesTransformed: number;
@@ -116,6 +136,8 @@ export interface MigrateRustStats {
     szKeysNormalized?: number;
     /** Classes a table decided unasked, with its verdict; absent when there were none. */
     tableVerdicts?: MigrateRustTableVerdict[];
+    /** Values read with each bare `_` as a space, unasked; absent when there were none. */
+    underscoreQuestions?: MigrateRustUnderscoreQuestion[];
 }
 
 /** What migrate did to one file, in the shape the TypeScript transformer returns. */
@@ -141,6 +163,12 @@ export interface MigrateRustConversion {
      * project about them and convert again with `served`.
      */
     tableVerdicts?: MigrateRustTableVerdict[];
+    /**
+     * Values read with each bare `_` as a space because the project's
+     * Tailwind was not asked; absent when there were none. Ask the project
+     * about them and convert again with `underscores`.
+     */
+    underscoreQuestions?: MigrateRustUnderscoreQuestion[];
 }
 
 /** One Tailwind utility read as an sz prop and value. */
@@ -226,6 +254,7 @@ export function migrateRustBatch(
                     options.customMapJson ??
                     (options.customMap ? JSON.stringify(options.customMap) : undefined),
                 ...servedLists(options.served),
+                ...underscoreLists(options.underscores),
                 prefix: options.prefix ?? undefined,
             },
         ).map(readResult),
@@ -253,6 +282,7 @@ export function migrateRustHtml(
                 cdnUrl: options.cdnUrl,
                 localPath: options.localPath,
                 ...servedLists(options.served),
+                ...underscoreLists(options.underscores),
                 prefix: options.prefix ?? undefined,
             }),
         ),
@@ -276,6 +306,24 @@ function servedLists(served: ReadonlyMap<string, boolean> | undefined): {
         (answer ? servedClasses : unservedClasses).push(className);
     }
     return { servedClasses, unservedClasses };
+}
+
+/**
+ * The project's answers about `_` as the two lists the binding takes, index
+ * for index.
+ *
+ * @param underscores - Answers by value, or none.
+ * @returns The values and their readings; nothing when there are no answers.
+ */
+function underscoreLists(underscores: ReadonlyMap<string, string> | undefined): {
+    underscoreValues?: string[];
+    underscoreReadings?: string[];
+} {
+    if (underscores === undefined) return {};
+    return {
+        underscoreValues: [...underscores.keys()],
+        underscoreReadings: [...underscores.values()],
+    };
 }
 
 /**
@@ -306,10 +354,14 @@ function guarded<T>(call: () => T): T {
  * @returns The same result with `szKeysNormalized` omitted when absent.
  */
 function readResult(result: NativeMigrateResult): MigrateRustResult {
-    const { szKeysNormalized, tableVerdicts, ...rest } = result.stats;
+    const { szKeysNormalized, tableVerdicts, underscoreQuestions, ...rest } = result.stats;
     // A file no table decided anything in carries no field, as before it
     // existed, so a caller comparing whole results is not handed an empty list.
-    const counts = tableVerdicts?.length ? { ...rest, tableVerdicts } : rest;
+    const counts = {
+        ...rest,
+        ...(tableVerdicts?.length ? { tableVerdicts } : {}),
+        ...(underscoreQuestions?.length ? { underscoreQuestions } : {}),
+    };
     return {
         code: result.code,
         changed: result.changed,
@@ -328,6 +380,8 @@ export interface MigrateRustClassNameOptions {
     customMap?: Record<string, unknown>;
     /** The project's answers, as for {@link MigrateRustOptions.served}. */
     served?: ReadonlyMap<string, boolean>;
+    /** The project's answers, as for {@link MigrateRustOptions.underscores}. */
+    underscores?: ReadonlyMap<string, string>;
     /** The project's Tailwind prefix, as for {@link MigrateRustOptions.prefix}. */
     prefix?: string | null;
 }
@@ -350,13 +404,14 @@ export function migrateRustClassName(
     className: string,
     options: MigrateRustClassNameOptions = {},
 ): MigrateRustConversion {
-    const { customMap, served, prefix } = options;
+    const { customMap, served, underscores, prefix } = options;
     return guarded(
         () =>
             JSON.parse(
                 migrateClassName(className, {
                     customMapJson: customMap ? JSON.stringify(customMap) : undefined,
                     ...servedLists(served),
+                    ...underscoreLists(underscores),
                     prefix: prefix ?? undefined,
                 }),
             ) as MigrateRustConversion,

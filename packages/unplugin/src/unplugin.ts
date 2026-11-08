@@ -268,6 +268,7 @@ import {
 import {
     reportUnderscoreSpaces,
     type UnderscoreSite,
+    underscoreFactsOf,
     underscoreSpaceFindings,
 } from './underscore-space.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
@@ -3466,22 +3467,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const relative = projectRelative(file.split('?')[0] as string);
         const first = objectRuleOutputs.get(result) ?? result;
         szClassesByFile.set(relative, szClassSites(relative, result.classes, first));
-        const facts = result.underscoreValues ?? first.underscoreValues ?? [];
+        // Few values carry an `_`, so their positions are resolved here
+        // rather than when a site is named.
+        const facts = underscoreFactsOf({
+            underscoreValues: result.underscoreValues ?? first.underscoreValues,
+        });
         if (facts.length === 0) underscoreSitesByFile.delete(relative);
-        // Read field by field: a located fact resolves its line and column in
-        // getters, which a spread would drop. Few values carry an `_`, so the
-        // positions are resolved here rather than when a site is named.
         else
             underscoreSitesByFile.set(
                 relative,
-                facts.map(({ key, value, className, line, column }) => ({
-                    key,
-                    value,
-                    className,
-                    line,
-                    column,
-                    file: relative,
-                })),
+                facts.map(fact => ({ ...fact, file: relative })),
             );
     }
 

@@ -22,12 +22,77 @@ use std::collections::{BTreeMap, HashMap};
 use serde::Serialize;
 
 use super::value::{ParsedClass, SzObject, SzValue};
-use crate::transform::lower::lower_static_sz_object;
+use crate::transform::lower::{has_bare_underscore, lower_static_sz_object};
 use crate::transform::{StaticSzObject, StaticSzProperty, StaticSzValue, TextSpan};
 
 /// The project's answers, by utility as written with its sign and without
 /// variants or `!`: `true` when its Tailwind serves the class.
 pub type ServedAnswers = HashMap<String, bool>;
+
+/// The project's answers about an arbitrary value's `_`.
+///
+/// Keyed by the value as the class writes it: the value an sz object writes,
+/// each `_` the project's Tailwind reads as a space written as one and every
+/// other `_` kept.
+///
+/// csszyx lowers a space to `_`, so both spellings write the class back; the
+/// answer decides which one says what the page shows. `url(/a_b.png)` keeps
+/// its `_` in Tailwind, and `bg: 'url(/a b.png)'` would name a file that is
+/// not there (PROJECT-RULES §4: the project's Tailwind says so, not a table).
+pub type UnderscoreAnswers = HashMap<String, String>;
+
+/// An arbitrary value with a bare `_` that no answer covered.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnderscoreQuestion {
+    /// The utility it was read from, as [`ServedAnswers`] keys a class.
+    pub class: String,
+    /// The value as the class writes it, as [`UnderscoreAnswers`] keys it.
+    pub value: String,
+    /// What was written for it: [`spaced_underscores`], so a caller tells an
+    /// answer that changes the file from one that does not.
+    pub reading: String,
+}
+
+/// The values read with no answer during one conversion, each once.
+#[derive(Debug, Default)]
+pub struct UnderscoreQuestions(RefCell<BTreeMap<String, String>>);
+
+impl UnderscoreQuestions {
+    /// The questions, sorted by value; the first class each was read from.
+    #[must_use]
+    pub fn into_sorted(self) -> Vec<UnderscoreQuestion> {
+        self.0
+            .into_inner()
+            .into_iter()
+            .map(|(value, class)| UnderscoreQuestion {
+                class,
+                reading: spaced_underscores(&value),
+                value,
+            })
+            .collect()
+    }
+}
+
+/// The value with each `_` no backslash precedes written as a space.
+///
+/// What an arbitrary value says when nobody asked the project. `\_` is an underscore
+/// to Tailwind wherever it sits, so it stays as written. Both spellings lower
+/// back to the same class.
+#[must_use]
+pub fn spaced_underscores(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut previous = '\0';
+    for character in value.chars() {
+        out.push(if character == '_' && previous != '\\' {
+            ' '
+        } else {
+            character
+        });
+        previous = character;
+    }
+    out
+}
 
 /// A class a table decided because nobody had asked the project about it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -61,6 +126,10 @@ impl TableVerdicts {
 pub struct Judge<'a> {
     answers: Option<&'a ServedAnswers>,
     asked: Option<&'a TableVerdicts>,
+    underscores: Option<&'a UnderscoreAnswers>,
+    asked_underscores: Option<&'a UnderscoreQuestions>,
+    /// The utility being read, which a question names.
+    class: &'a str,
 }
 
 impl<'a> Judge<'a> {
@@ -68,7 +137,57 @@ impl<'a> Judge<'a> {
     /// class it had to leave to the table.
     #[must_use]
     pub const fn new(answers: Option<&'a ServedAnswers>, asked: Option<&'a TableVerdicts>) -> Self {
-        Self { answers, asked }
+        Self {
+            answers,
+            asked,
+            underscores: None,
+            asked_underscores: None,
+            class: "",
+        }
+    }
+
+    /// This judge, with the project's answers about `_` in arbitrary values,
+    /// recording into `asked` every value it had to leave to the default.
+    #[must_use]
+    pub const fn with_underscores(
+        self,
+        answers: Option<&'a UnderscoreAnswers>,
+        asked: Option<&'a UnderscoreQuestions>,
+    ) -> Self {
+        Self {
+            underscores: answers,
+            asked_underscores: asked,
+            ..self
+        }
+    }
+
+    /// This judge, reading `class`, which a question about its value names.
+    #[must_use]
+    pub const fn reading(self, class: &'a str) -> Self {
+        Self { class, ..self }
+    }
+
+    /// An arbitrary value as an sz object writes it: the project's answer
+    /// when there is one, [`spaced_underscores`] otherwise, written down for
+    /// the caller to ask about.
+    ///
+    /// Cost: linear in `value`; one map lookup for a value with a bare `_`.
+    #[must_use]
+    pub fn spaces(self, value: &str) -> String {
+        if !has_bare_underscore(value) {
+            return value.to_string();
+        }
+        if let Some(answer) = self.underscores.and_then(|answers| answers.get(value)) {
+            return answer.clone();
+        }
+        if let Some(asked) = self.asked_underscores {
+            asked
+                .0
+                .borrow_mut()
+                .entry(value.to_string())
+                .or_insert_with(|| self.class.to_string());
+        }
+        spaced_underscores(value)
     }
 
     /// Whether `class` is served: the project's answer when there is one,
@@ -139,6 +258,41 @@ fn static_object(object: &SzObject) -> Option<StaticSzObject> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unasked_value_reads_each_bare_underscore_as_a_space() {
+        assert_eq!(spaced_underscores("1fr_2fr"), "1fr 2fr");
+        assert_eq!(spaced_underscores("_a_"), " a ");
+        // `\_` is an underscore to Tailwind, a backslash before it included.
+        assert_eq!(spaced_underscores("a\\_b"), "a\\_b");
+        assert_eq!(spaced_underscores("a\\\\_b"), "a\\\\_b");
+        assert_eq!(spaced_underscores("é_😀"), "é 😀");
+    }
+
+    #[test]
+    fn an_underscore_answer_wins_and_only_an_unanswered_value_is_written_down() {
+        let answers = UnderscoreAnswers::from([("url(a_b)".to_string(), "url(a_b)".to_string())]);
+        let asked = UnderscoreQuestions::default();
+        let judge = Judge::default().with_underscores(Some(&answers), Some(&asked));
+
+        assert_eq!(
+            judge.reading("bg-[url(a_b)]").spaces("url(a_b)"),
+            "url(a_b)"
+        );
+        assert_eq!(judge.reading("w-[a_b]").spaces("a_b"), "a b");
+        assert_eq!(judge.reading("h-[a_b]").spaces("a_b"), "a b");
+        assert_eq!(judge.reading("p-[1px]").spaces("1px"), "1px");
+        assert_eq!(judge.reading("m-[a\\_b]").spaces("a\\_b"), "a\\_b");
+        assert_eq!(
+            asked.into_sorted(),
+            [UnderscoreQuestion {
+                class: "w-[a_b]".to_string(),
+                value: "a_b".to_string(),
+                reading: "a b".to_string(),
+            }]
+        );
+        assert_eq!(Judge::default().spaces("a_b"), "a b");
+    }
 
     #[test]
     fn an_answer_wins_and_only_an_unanswered_class_is_written_down() {

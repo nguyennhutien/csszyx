@@ -10,6 +10,7 @@
 //! nobody can hit is a rule nobody can check.
 
 use super::value::{js_number, SzValue};
+use super::verdict::{spaced_underscores, Judge};
 use crate::transform::generated::migrate_tables as tables;
 use crate::transform::generated::reverse_tables::reverse_property_key;
 
@@ -566,18 +567,20 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
         ParenColor => shape.paren.is_some_and(|inner| inner.starts_with("color:")),
         StartsWith(marker) => value.starts_with(marker),
         BracketPositionList => shape.bracket.is_some_and(|inner| {
-            let inner = decode_arbitrary_spaces(inner);
+            // Which rule reads the value, not what it says: the default
+            // spacing, so a question is asked only of the value emitted.
+            let inner = spaced_underscores(inner);
             inner.contains(' ')
                 && tables::bg_position_keywords(inner.split(' ').next().unwrap_or_default())
         }),
-        Hinted(hint) => after_hint(shape, hint).is_some(),
+        Hinted(hint) => after_hint(shape, hint, Judge::default()).is_some(),
     }
 }
 
 /// The inside of a bracket or paren value after `hint:`. A bracket's
 /// underscores are spaces; a paren holds a custom property, whose name may
 /// carry an underscore of its own.
-fn after_hint(shape: &Shape<'_>, hint: &str) -> Option<String> {
+fn after_hint(shape: &Shape<'_>, hint: &str, judge: Judge<'_>) -> Option<String> {
     let strip = |inner: &'_ str| -> Option<String> {
         inner
             .strip_prefix(hint)?
@@ -587,18 +590,25 @@ fn after_hint(shape: &Shape<'_>, hint: &str) -> Option<String> {
     shape
         .bracket
         .and_then(strip)
-        .map(|inner| decode_arbitrary_spaces(&inner))
+        .map(|inner| judge.spaces(&inner))
         .or_else(|| shape.paren.and_then(strip))
 }
 
 /// The value a matched rule writes, or `None` when no sz value writes the
 /// class back.
-pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> Option<SzValue> {
+/// `judge` says which `_` of a bracket value is a space.
+pub fn emit(
+    rule: &Rule,
+    prefix: &str,
+    shape: &Shape<'_>,
+    negative: bool,
+    judge: Judge<'_>,
+) -> Option<SzValue> {
     let value = shape.value;
     Some(match &rule.emit {
         Verbatim => SzValue::from(value),
         Literal(literal) => SzValue::from(*literal),
-        Unwrapped => SzValue::from(parse_string_value(value)),
+        Unwrapped => SzValue::from(parse_string_value(value, judge)),
         Number => SzValue::Number(shape.number.unwrap_or(f64::NAN)),
         ParenInner => SzValue::from(reference_value(shape.paren.unwrap_or_default())),
         ParenColorInner => SzValue::from(
@@ -607,12 +617,12 @@ pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> Opt
                 .and_then(|inner| inner.strip_prefix("color:"))
                 .unwrap_or_default(),
         ),
-        BracketInner => SzValue::from(decode_arbitrary_spaces(shape.bracket.unwrap_or_default())),
-        ParseValue => return parse_value(prefix, value, negative),
-        ParseValueUnsigned => return parse_value(prefix, value, false),
-        AfterMarker(marker) => SzValue::from(parse_string_value(&value[marker.len()..])),
+        BracketInner => SzValue::from(judge.spaces(shape.bracket.unwrap_or_default())),
+        ParseValue => return parse_value(prefix, value, negative, judge),
+        ParseValueUnsigned => return parse_value(prefix, value, false, judge),
+        AfterMarker(marker) => SzValue::from(parse_string_value(&value[marker.len()..], judge)),
         VarReference => SzValue::from(var_reference(shape.paren.unwrap_or_default())),
-        AfterHint(hint) => SzValue::from(after_hint(shape, hint).unwrap_or_default()),
+        AfterHint(hint) => SzValue::from(after_hint(shape, hint, judge).unwrap_or_default()),
     })
 }
 
@@ -645,15 +655,11 @@ pub fn is_fraction(value: &str) -> bool {
         .is_some_and(|(numerator, denominator)| all_digits(numerator) && all_digits(denominator))
 }
 
-/// Tailwind spells spaces inside arbitrary values as underscores.
-pub fn decode_arbitrary_spaces(value: &str) -> String {
-    value.replace('_', " ")
-}
-
-/// The value with its arbitrary brackets or custom-property parens removed.
-pub fn parse_string_value(value: &str) -> String {
+/// The value with its arbitrary brackets or custom-property parens removed;
+/// `judge` says which `_` of a bracket value is a space.
+pub fn parse_string_value(value: &str, judge: Judge<'_>) -> String {
     if let Some(inner) = wrapped(value, '[', ']') {
-        return decode_arbitrary_spaces(inner);
+        return judge.spaces(inner);
     }
     if let Some(inner) = wrapped(value, '(', ')') {
         return reference_value(inner);
@@ -780,10 +786,9 @@ pub fn prefix_takes_fractions(prefix: &str) -> bool {
 
 /// The general reading of a prefix's value, or `None` when the class has a
 /// sign no sz value carries.
-pub fn parse_value(prefix: &str, value: &str, negative: bool) -> Option<SzValue> {
+pub fn parse_value(prefix: &str, value: &str, negative: bool, judge: Judge<'_>) -> Option<SzValue> {
     if let Some(inner) = wrapped(value, '[', ']') {
-        return parse_arbitrary_value(prefix, &decode_arbitrary_spaces(inner), negative)
-            .map(SzValue::from);
+        return parse_arbitrary_value(prefix, &judge.spaces(inner), negative).map(SzValue::from);
     }
     if let Some(inner) = wrapped(value, '(', ')') {
         return Some(SzValue::from(signed_reference(inner, negative)));

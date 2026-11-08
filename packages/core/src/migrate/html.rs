@@ -13,7 +13,7 @@ use super::source::{TransformResult, TransformStats};
 use super::sz_codegen::sz_html_value;
 use super::value::is_js_whitespace;
 use super::variant_parser::{class_name_to_sz_object_with, Lookup};
-use super::verdict::{Judge, ServedAnswers, TableVerdicts};
+use super::verdict::{Judge, ServedAnswers, TableVerdicts, UnderscoreAnswers, UnderscoreQuestions};
 
 /// Where the runtime script comes from, when it is injected at all.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -60,6 +60,10 @@ pub struct HtmlTransformOptions {
     /// from the options JSON.
     #[serde(skip)]
     pub served: Option<ServedAnswers>,
+    /// What the project's Tailwind answered about the `_` of arbitrary
+    /// values. Handed in by the caller, as `served` is.
+    #[serde(skip)]
+    pub underscores: Option<UnderscoreAnswers>,
     /// The project's Tailwind prefix, read off the front of each class.
     /// Handed in by the caller, as `served` is.
     #[serde(skip)]
@@ -75,6 +79,7 @@ impl Default for HtmlTransformOptions {
             cdn_url: None,
             local_path: None,
             served: None,
+            underscores: None,
             prefix: None,
         }
     }
@@ -105,11 +110,13 @@ struct HtmlState<'a> {
 pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> TransformResult {
     let eol = detect_line_ending(source);
     let asked = TableVerdicts::default();
+    let asked_underscores = UnderscoreQuestions::default();
     let mut state = HtmlState {
         eol,
         lookup: Lookup {
             custom_map: None,
-            judge: Judge::new(options.served.as_ref(), Some(&asked)),
+            judge: Judge::new(options.served.as_ref(), Some(&asked))
+                .with_underscores(options.underscores.as_ref(), Some(&asked_underscores)),
             prefix: options.prefix.as_deref(),
         },
         braces: options.braces,
@@ -155,6 +162,7 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
             classes_unrecognized: unrecognized,
             sz_keys_normalized: None,
             table_verdicts: asked.into_sorted(),
+            underscore_questions: asked_underscores.into_sorted(),
         },
         potentially_unused_imports: Vec::new(),
     }

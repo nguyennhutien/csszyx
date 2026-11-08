@@ -3470,9 +3470,10 @@ pub(crate) struct UnderscoreValue {
 }
 
 /// Whether `value` holds an `_` the author wrote bare: not the `\_` that
-/// keeps one in Tailwind's reading.
-#[cfg(feature = "native-engine")]
-fn has_bare_underscore(value: &str) -> bool {
+/// keeps one in Tailwind's reading. The one rule for both directions: the
+/// engine's `underscore-space` fact, and the values migrate asks about.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+pub(crate) fn has_bare_underscore(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes
         .iter()
@@ -3501,9 +3502,9 @@ pub(crate) fn collect_underscore_values(object: &StaticSzObject, out: &mut Vec<U
                     out.push(UnderscoreValue {
                         key: property.key.clone(),
                         value: value.clone(),
-                        // As emitted: the project's Tailwind serves the class
-                        // under its prefix only.
-                        class_name: with_class_prefix(class_name),
+                        // As emitted: one class, its whitespace already `_`,
+                        // under the prefix the project's Tailwind serves.
+                        class_name: with_class_prefix(one_class(class_name)),
                         at: property.span.start,
                     });
                 }
@@ -3520,21 +3521,53 @@ pub(crate) fn collect_underscore_values(object: &StaticSzObject, out: &mut Vec<U
                             out.extend(classes.into_iter().map(|class_name| UnderscoreValue {
                                 key: declaration.key.clone(),
                                 value: value.clone(),
-                                class_name: with_class_prefix(class_name),
+                                class_name: with_class_prefix(one_class(class_name)),
                                 at: declaration.span.start,
                             }));
                         }
                     }
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
-                for_each_sz_object_in(&property.key, nested, &mut |object| {
-                    collect_underscore_values(object, out);
-                });
+            StaticSzValue::Object(nested) => {
+                if is_color_object(&property.key, nested) {
+                    collect_color_underscore(&property.key, nested, out);
+                } else {
+                    for_each_sz_object_in(&property.key, nested, &mut |object| {
+                        collect_underscore_values(object, out);
+                    });
+                }
             }
             _ => {}
         }
     }
+}
+
+/// A colour object's `color` with a bare `_`, at that member, naming the
+/// class the object is emitted as (`bg-[oklch(0.5_0.1_10)]/50`). Its members
+/// are not sz keys, so it is not walked as an object.
+#[cfg(feature = "native-engine")]
+fn collect_color_underscore(key: &str, nested: &StaticSzObject, out: &mut Vec<UnderscoreValue>) {
+    // `is_color_object` held, so `key` has a prefix and the object a string
+    // `color`: the class is always written, and only a bracketed one is asked.
+    let found = nested
+        .properties
+        .iter()
+        .find_map(|member| match &member.value {
+            StaticSzValue::String(value) if member.key == "color" && has_bare_underscore(value) => {
+                Some((member, value))
+            }
+            _ => None,
+        })
+        .and_then(|(member, value)| {
+            let class_name = format_color_opacity_object(key, nested, "")?;
+            class_name.contains('[').then(|| UnderscoreValue {
+                key: member.key.clone(),
+                value: value.clone(),
+                class_name: with_class_prefix(one_class(class_name)),
+                at: member.span.start,
+            })
+        });
+    out.extend(found);
 }
 
 /// A value written in the brackets csszyx writes itself.
@@ -3662,6 +3695,13 @@ mod tests {
                 ),
                 property("bg", object(vec![property("color", text("[a_b]"))])),
                 property(
+                    "bg",
+                    object(vec![
+                        property("color", text("oklch(0.5_0.1_10)")),
+                        property("op", StaticSzValue::Number(50.0)),
+                    ]),
+                ),
+                property(
                     "css",
                     object(vec![
                         property("gridTemplateAreas", text("'a_b'")),
@@ -3689,6 +3729,11 @@ mod tests {
                 ("content", "'a_b'", "content-['a_b']"),
                 ("bgImg", "url(/a_b.png)", "bg-[url(/a_b.png)]"),
                 ("w", "calc(1px_+_2px)", "w-[calc(1px_+_2px)]"),
+                // A colour object names the class it is emitted as, opacity
+                // included, at its `color`: `bg-[a_b]` is what the build
+                // writes for `bg: { color: '[a_b]' }`.
+                ("color", "[a_b]", "bg-[a_b]"),
+                ("color", "oklch(0.5_0.1_10)", "bg-[oklch(0.5_0.1_10)]/50"),
                 ("gridTemplateAreas", "'a_b'", "[grid-template-areas:'a_b']"),
             ]
         );

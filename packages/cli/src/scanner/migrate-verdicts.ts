@@ -19,7 +19,11 @@
  *
  * @module
  */
-import type { MigrateRustTableVerdict } from '@csszyx/compiler/migrate';
+import type {
+    MigrateRustTableVerdict,
+    MigrateRustUnderscoreQuestion,
+} from '@csszyx/compiler/migrate';
+import { underscoreSpaceProbes, underscoreSpaceReadings } from '@csszyx/unplugin/diagnostics';
 
 import type { OpenedOracles } from '../commands/check.js';
 
@@ -38,6 +42,23 @@ export interface MigrateVerdicts {
      *   when the file has to be migrated again.
      */
     settle(verdicts: readonly MigrateRustTableVerdict[] | undefined): Promise<boolean>;
+    /**
+     * Every answer about the `_` of an arbitrary value so far, by the value
+     * as the class writes it: the value as an sz object writes it, each `_`
+     * the project's Tailwind reads as a space written as one.
+     */
+    readonly underscores: Map<string, string>;
+    /**
+     * Ask about the values in `questions` that have no answer yet, through
+     * the comparison the build's `underscore-space` reads.
+     *
+     * @param questions - The values migrate read with each `_` as a space.
+     * @returns Whether any answer differs from that, which is when the file
+     *   has to be migrated again.
+     */
+    settleUnderscores(
+        questions: readonly MigrateRustUnderscoreQuestion[] | undefined,
+    ): Promise<boolean>;
     /** Why the project could not be asked, once that is known; null otherwise. */
     readonly skipped: () => string | null;
 }
@@ -66,25 +87,77 @@ export function createMigrateVerdicts(
     open: OpenProjectOracles = openCheckOracles,
 ): MigrateVerdicts {
     const answers = new Map<string, boolean>();
+    const underscores = new Map<string, string>();
     let opened: Promise<OpenedOracles> | undefined;
     let skipped: string | null = null;
+
+    /**
+     * The compiled stylesheets, compiled on the first question.
+     *
+     * @returns Them, or none with `skipped` set.
+     */
+    const oracles = async (): Promise<OpenedOracles['oracles']> => {
+        opened ??= open(cwd);
+        const { oracles: compiled, skipped: reasons } = await opened;
+        if (compiled.length === 0) skipped = reasons.join('; ') || 'no stylesheet imports Tailwind';
+        return compiled;
+    };
+
+    const settleUnderscores = async (
+        questions: readonly MigrateRustUnderscoreQuestion[] | undefined,
+    ): Promise<boolean> => {
+        if (!questions?.length) return false;
+        const unasked = new Map<string, string>();
+        for (const question of questions) {
+            if (!underscores.has(question.value) && !unasked.has(question.value)) {
+                unasked.set(question.value, question.class);
+            }
+        }
+        if (unasked.size > 0) {
+            const compiled = await oracles();
+            if (compiled.length === 0) return false;
+            // Each stylesheet is asked, and read, under its own prefix: its
+            // CSS names the class it was asked about. A stylesheet serving
+            // nothing for a class has no say; an `_` is a space only where
+            // every one that serves the class reads it as one.
+            const perStylesheet = compiled.map(oracle => {
+                const prefix = oracle.facts.prefix;
+                const probes = underscoreSpaceProbes(
+                    [...unasked].map(([value, className]) => ({
+                        key: '',
+                        value,
+                        className: prefix ? `${prefix}:${className}` : className,
+                    })),
+                );
+                const readings = underscoreSpaceReadings(probes, [oracle.cssFor(probes.classes)]);
+                return new Map(readings.map(({ fact, reading }) => [fact.value, reading]));
+            });
+            for (const value of unasked.keys()) {
+                const readings = perStylesheet.flatMap(byValue => {
+                    const reading = byValue.get(value);
+                    return reading === undefined ? [] : [reading];
+                });
+                if (readings.length > 0) underscores.set(value, agreedReading(value, readings));
+            }
+        }
+        return questions.some(question => {
+            const answer = underscores.get(question.value);
+            return answer !== undefined && answer !== question.reading;
+        });
+    };
 
     const settle = async (
         verdicts: readonly MigrateRustTableVerdict[] | undefined,
     ): Promise<boolean> => {
         if (!verdicts?.length) return false;
-        opened ??= open(cwd);
-        const { oracles, skipped: reasons } = await opened;
-        if (oracles.length === 0) {
-            skipped = reasons.join('; ') || 'no stylesheet imports Tailwind';
-            return false;
-        }
+        const compiled = await oracles();
+        if (compiled.length === 0) return false;
         const unasked = [
             ...new Set(verdicts.map(verdict => verdict.class).filter(c => !answers.has(c))),
         ];
         if (unasked.length > 0) {
             const servedSomewhere = new Set<string>();
-            for (const oracle of oracles) {
+            for (const oracle of compiled) {
                 const prefix = oracle.facts.prefix;
                 const asked = unasked.map(c => (prefix ? `${prefix}:${c}` : c));
                 const dead = new Set(oracle.findDead(asked));
@@ -97,5 +170,22 @@ export function createMigrateVerdicts(
         return verdicts.some(verdict => answers.get(verdict.class) !== verdict.served);
     };
 
-    return { answers, settle, skipped: () => skipped };
+    return { answers, settle, underscores, settleUnderscores, skipped: () => skipped };
+}
+
+/**
+ * One value as every stylesheet that serves its class reads it: an `_` is a
+ * space only where each reading has one.
+ *
+ * @param value - The value as the class writes it.
+ * @param readings - Each serving stylesheet's reading, one per stylesheet.
+ * @returns The value with those `_` as spaces.
+ */
+function agreedReading(value: string, readings: readonly string[]): string {
+    let out = '';
+    for (let index = 0; index < value.length; index++) {
+        const spaced = readings.every(reading => reading[index] === ' ');
+        out += value[index] === '_' && spaced ? ' ' : value[index];
+    }
+    return out;
 }

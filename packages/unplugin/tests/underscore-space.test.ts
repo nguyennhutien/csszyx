@@ -24,6 +24,7 @@ import {
     bareUnderscores,
     jsStringLiteral,
     reportUnderscoreSpaces,
+    underscoreFactsOf,
     underscoreSpaceFindings,
     underscoreSpaceProbes,
 } from '../src/underscore-space.js';
@@ -94,6 +95,19 @@ describe('underscoreSpaceFindings', () => {
                 escaped: "'var(--a,a\\\\_b)'",
             },
         ]);
+    });
+
+    it('reports a colour object, at its `color`, in the class it is emitted as', () => {
+        expect(reported([fact('color', 'oklch(0.5_0.1_10)', 'bg-[oklch(0.5_0.1_10)]/50')])).toEqual(
+            [
+                {
+                    key: 'color',
+                    literal: "'oklch(0.5_0.1_10)'",
+                    spaced: "'oklch(0.5 0.1 10)'",
+                    escaped: "'oklch(0.5\\\\_0.1\\\\_10)'",
+                },
+            ],
+        );
     });
 
     it('says nothing where Tailwind keeps the `_`', () => {
@@ -258,9 +272,14 @@ describe('underscoreSpaceFindings on generated values', () => {
     it.each(UNRENDERED_ENGINES)(
         'finds the `_` the %s engine reports, in the class it names',
         (_name, _rendered, transform) => {
-            for (const value of generatedValues(SPACED_PIECES, false)) {
+            // `--x` keeps its value as written; `content` is lowered by its
+            // own rule, and a fact must name the class that rule emits.
+            const cases = generatedValues(SPACED_PIECES, false).flatMap(value =>
+                ['--x', 'content'].map(key => ({ key, value })),
+            );
+            for (const { key, value } of cases) {
                 const source = `export const A = () => <p sz={${escapeUnsafeChars(
-                    JSON.stringify({ '--x': value }),
+                    JSON.stringify({ [key]: value }),
                 )}} />;`;
                 const result = transform(source, { filename: '/p/src/Underscore.jsx' });
                 const facts = (result.underscoreValues ?? []).map(({ key, value, className }) => ({
@@ -349,7 +368,42 @@ describe('jsStringLiteral', () => {
         ["'a b'", `"'a b'"`],
         [`a'b"c`, `'a\\'b"c'`],
         ['a\\_b', "'a\\\\_b'"],
+        ['a\nb\rc\td', "'a\\nb\\rc\\td'"],
     ])('writes %j as %s', (value, literal) => {
         expect(jsStringLiteral(value)).toBe(literal);
+    });
+});
+
+describe('underscoreFactsOf', () => {
+    /** A fact whose position sits in getters on its prototype, as the engine's does. */
+    class LocatedFact {
+        readonly key = 'content';
+        readonly value = "'a_b'";
+        readonly className = "content-['a_b']";
+        /** @returns The line. */
+        get line(): number {
+            return 2;
+        }
+        /** @returns The column. */
+        get column(): number {
+            return 9;
+        }
+    }
+
+    it('reads each fact as plain fields, and none from a result without them', () => {
+        const fact = new LocatedFact();
+        // The trap the helper is for: a spread drops a prototype's getters.
+        expect({ ...fact }).not.toHaveProperty('line');
+        const [read] = underscoreFactsOf({ underscoreValues: [fact] });
+        expect(Object.keys(read ?? {})).toEqual(['key', 'value', 'className', 'line', 'column']);
+        expect({ ...read }).toEqual({
+            key: 'content',
+            value: "'a_b'",
+            className: "content-['a_b']",
+            line: 2,
+            column: 9,
+        });
+        expect(underscoreFactsOf({})).toEqual([]);
+        expect(underscoreFactsOf(null)).toEqual([]);
     });
 });

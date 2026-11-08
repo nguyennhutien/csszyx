@@ -104,6 +104,21 @@ describe('csszyx check — an `_` read as a space', () => {
         ]);
     });
 
+    it('leaves it out of a run that ignores its id, and keeps the dead-class pass', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        log.mockClear();
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        await check({ cwd: project(), json: true, ignoreRule: ['underscore-space'] });
+        const findings: Array<{ kind: string }> = JSON.parse(
+            log.mock.calls.map(call => call.join(' ')).join('\n'),
+        ).findings;
+        expect(findings.filter(finding => finding.kind === 'underscore-space')).toEqual([]);
+        // The rest of the dead-class pass still runs: `content-['a_b']` styles
+        // something, so it is no `dead-class`, and nothing else is missing.
+        expect(findings.filter(finding => finding.kind === 'dead-class')).toEqual([]);
+    });
+
     it('says nothing when the config turns it off, or allows the class', async () => {
         const off = await findingsFor(
             project('export default { diagnostics: { rules: { "underscore-space": "off" } } };\n'),

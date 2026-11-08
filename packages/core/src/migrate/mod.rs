@@ -38,4 +38,7 @@ pub use variant_parser::{
     class_name_to_sz_object, class_name_to_sz_object_with, extract_variants, map_variant, tokenize,
     Conversion, Lookup,
 };
-pub use verdict::{lowers_back_to, Judge, ServedAnswers, TableVerdict, TableVerdicts};
+pub use verdict::{
+    lowers_back_to, spaced_underscores, Judge, ServedAnswers, TableVerdict, TableVerdicts,
+    UnderscoreAnswers, UnderscoreQuestion, UnderscoreQuestions,
+};

@@ -12,42 +12,27 @@
 import type { ProjectAnswers } from '@csszyx/cli';
 import {
     type UnderscoreSpaceFinding,
+    underscoreFactsOf,
     underscoreSpaceProbes,
     underscoreSpaceVerdicts,
 } from '@csszyx/unplugin/diagnostics';
 
-/** One fact as the engine reports it, its position resolved or not. */
-interface EngineFact {
-    readonly key: string;
-    readonly value: string;
-    readonly className: string;
-    readonly line: number;
-    readonly column: number;
-}
-
 /**
  * The facts the project's Tailwind reads an `_` of as a space.
  *
- * @param facts - The engine's facts for one module.
+ * @param result - The engine's transform of one module, or null when there
+ *        is none; its facts are read through `underscoreFactsOf`, which keeps
+ *        the positions a located fact holds in getters.
  * @param answers - The project's stylesheets.
  * @param file - The file the module is named as.
  * @returns The findings; and why the stylesheets could not be asked, or null.
  */
 export async function underscoreSpaceAnswers(
-    facts: readonly EngineFact[],
+    result: Parameters<typeof underscoreFactsOf>[0],
     answers: Pick<ProjectAnswers, 'cssPerRoot'>,
     file: string,
 ): Promise<{ found: UnderscoreSpaceFinding[]; skipped: string | null }> {
-    // Field by field: a located fact resolves its position in getters, which
-    // a spread drops.
-    const sites = facts.map(({ key, value, className, line, column }) => ({
-        key,
-        value,
-        className,
-        line,
-        column,
-        file,
-    }));
+    const sites = underscoreFactsOf(result).map(fact => ({ ...fact, file }));
     const probes = underscoreSpaceProbes(sites);
     if (probes.probed.length === 0) return { found: [], skipped: null };
     const { css, skipped } = await answers.cssPerRoot(probes.classes);

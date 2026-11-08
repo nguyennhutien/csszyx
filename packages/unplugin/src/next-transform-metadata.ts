@@ -10,6 +10,7 @@ import type {
     NextShardUnderscoreSite,
 } from './next-safelist-state.js';
 import { sortStrings } from './sort.js';
+import { underscoreFactsOf } from './underscore-space.js';
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {
     sourcePath: string;
@@ -56,10 +57,7 @@ export function collectNextTransformMetadata(
             const site = placed.get(className);
             return site === undefined ? [] : [{ className, ...site }];
         }),
-        // Field by field: a located fact resolves its position in getters.
-        underscoreSites: (result.underscoreValues ?? []).map(
-            ({ key, value, className, line, column }) => ({ key, value, className, line, column }),
-        ),
+        underscoreSites: underscoreFactsOf(result),
         recoveryTokenCount: result.recoveryTokens.size,
         cssVariableCount: result.cssVariableMap.size,
     };

@@ -857,16 +857,20 @@ export const SIZE_BUDGETS = [
         // Measured 21,344. 22,700 on 2026-11-08, measured 22,417: the
         // comparison that asks the project's Tailwind whether an `_` reads as
         // a space, and its report, which `csszyx check` and the Next commands
-        // import from here.
-        maxGzipBytes: 22_700,
+        // import from here. 23,000 on 2026-11-09, measured 22,696: the same
+        // comparison reads facts through one helper and splits whitespace as
+        // the engine does.
+        maxGzipBytes: 23_000,
     },
     {
         name: '@csszyx/unplugin `./next-turbo-loader`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './next-turbo-loader',
-        // Measured 78,516.
-        maxGzipBytes: 80_100,
+        // Measured 78,516. 81,800 on 2026-11-09, measured 80,197: the
+        // `_` facts the transform cache replays, and finding a value in its
+        // class however its whitespace was written.
+        maxGzipBytes: 81_800,
     },
     {
         name: '@csszyx/unplugin `./next-prebuild`, loaded by Node',
@@ -907,8 +911,10 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/cli',
         subpath: '.',
-        // Measured 9,363.
-        maxGzipBytes: 9700,
+        // Measured 9,363. 10,450 on 2026-11-09, measured 10,131: migrate asks
+        // the project's Tailwind which `_` of an arbitrary value it keeps,
+        // under each stylesheet's own prefix, and names what went unanswered.
+        maxGzipBytes: 10_450,
     },
     {
         name: '@csszyx/cli bin `csszyx`, loaded by Node',
@@ -953,8 +959,11 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/mcp-server',
         bin: 'csszyx-mcp',
-        // Measured 13,382.
-        maxGzipBytes: 13_700,
+        // Measured 13,382. 14,550 on 2026-11-09, measured 14,268: the tools
+        // ask the project's Tailwind about an `_` in a value
+        // (`csszyx_validate`, `csszyx_compile_preview`) and say when
+        // `csszyx_migrate` and `csszyx_reverse` could not.
+        maxGzipBytes: 14_550,
     },
     {
         name: '@csszyx/vue-adapter `.`, loaded by Node',

@@ -3558,6 +3558,9 @@ mod tests {
                 r#"bracketed-value {"form":"unwrap","key":"w","value":"[100px]","inner":"100px"}"#,
                 r#"bracketed-value {"form":"escape","key":"p","value":"[a]_1_[b]","inner":"a]_1_[b"}"#,
                 r#"bracketed-value {"form":"unwrap","key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
+                // A fact, not a verdict: the `_` the author wrote, which the
+                // build asks the project's Tailwind about.
+                r#"underscore-space {"key":"gridCols","value":"[a]_1fr_[b]","className":"grid-cols-[[a]_1fr_[b]]"}"#,
             ]
         );
     }
@@ -5436,7 +5439,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 34] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 35] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5615,6 +5618,11 @@ mod tests {
             (
                 DiagnosticCode::OpacityValue,
                 "<div sz={{ bg: { color: 'red-500', op: 150 } }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::UnderscoreSpace,
+                "<div sz={{ content: \"'a_b'\" }} />".into(),
                 TransformOptions::default(),
             ),
         ];

@@ -81,8 +81,10 @@ export {
     type UnderscoreFact,
     type UnderscoreSite,
     type UnderscoreSpaceFinding,
+    underscoreFactsOf,
     underscoreSpaceFindings,
     underscoreSpaceMessage,
     underscoreSpaceProbes,
+    underscoreSpaceReadings,
     underscoreSpaceVerdicts,
 } from './underscore-space.js';
