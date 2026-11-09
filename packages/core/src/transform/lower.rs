@@ -3455,6 +3455,121 @@ fn outer_bracket_pair(value: &str) -> Option<bool> {
     }
 }
 
+/// A string value with a bare `_`, and the arbitrary class it lowers into.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnderscoreValue {
+    /// The sz key, or the CSS property of a `css` declaration.
+    pub key: String,
+    /// The value as written.
+    pub value: String,
+    /// The class the value lowers into.
+    pub class_name: String,
+    /// Where the property is written.
+    pub at: u32,
+}
+
+/// Whether `value` holds an `_` the author wrote bare: not the `\_` that
+/// keeps one in Tailwind's reading. The one rule for both directions: the
+/// engine's `underscore-space` fact, and the values migrate asks about.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+pub(crate) fn has_bare_underscore(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes
+        .iter()
+        .enumerate()
+        .any(|(at, byte)| *byte == b'_' && (at == 0 || bytes[at - 1] != b'\\'))
+}
+
+/// Each arbitrary class a string value with a bare `_` lowers into.
+///
+/// csszyx writes a space as `_`, so the class alone cannot say whether the
+/// author wrote `_`. This is the fact only: whether Tailwind reads that `_` as
+/// a space is asked of the project's Tailwind by the build, `csszyx check`
+/// and the MCP tools (PROJECT-RULES §4), never decided here. A value lowered
+/// into no bracket (a theme name) is not one: Tailwind reads it as written.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_underscore_values(object: &StaticSzObject, out: &mut Vec<UnderscoreValue>) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) if has_bare_underscore(value) => {
+                let single = StaticSzObject {
+                    properties: vec![property.clone()],
+                };
+                let mut classes = Vec::new();
+                lower_object_into(&single, "", &mut classes);
+                for class_name in classes.into_iter().filter(|class| class.contains('[')) {
+                    out.push(UnderscoreValue {
+                        key: property.key.clone(),
+                        value: value.clone(),
+                        // As emitted: one class, its whitespace already `_`,
+                        // under the prefix the project's Tailwind serves.
+                        class_name: with_class_prefix(one_class(class_name)),
+                        at: property.span.start,
+                    });
+                }
+            }
+            StaticSzValue::Object(nested) if property.key == "css" => {
+                for declaration in &nested.properties {
+                    if let StaticSzValue::String(value) = &declaration.value {
+                        if has_bare_underscore(value) {
+                            let single = StaticSzObject {
+                                properties: vec![declaration.clone()],
+                            };
+                            let mut classes = Vec::new();
+                            lower_css_properties(&single, "", &mut classes);
+                            out.extend(classes.into_iter().map(|class_name| UnderscoreValue {
+                                key: declaration.key.clone(),
+                                value: value.clone(),
+                                class_name: with_class_prefix(one_class(class_name)),
+                                at: declaration.span.start,
+                            }));
+                        }
+                    }
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if is_color_object(&property.key, nested) {
+                    collect_color_underscore(&property.key, nested, out);
+                } else {
+                    for_each_sz_object_in(&property.key, nested, &mut |object| {
+                        collect_underscore_values(object, out);
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A colour object's `color` with a bare `_`, at that member, naming the
+/// class the object is emitted as (`bg-[oklch(0.5_0.1_10)]/50`). Its members
+/// are not sz keys, so it is not walked as an object.
+#[cfg(feature = "native-engine")]
+fn collect_color_underscore(key: &str, nested: &StaticSzObject, out: &mut Vec<UnderscoreValue>) {
+    // `is_color_object` held, so `key` has a prefix and the object a string
+    // `color`: the class is always written, and only a bracketed one is asked.
+    let found = nested
+        .properties
+        .iter()
+        .find_map(|member| match &member.value {
+            StaticSzValue::String(value) if member.key == "color" && has_bare_underscore(value) => {
+                Some((member, value))
+            }
+            _ => None,
+        })
+        .and_then(|(member, value)| {
+            let class_name = format_color_opacity_object(key, nested, "")?;
+            class_name.contains('[').then(|| UnderscoreValue {
+                key: member.key.clone(),
+                value: value.clone(),
+                class_name: with_class_prefix(one_class(class_name)),
+                at: member.span.start,
+            })
+        });
+    out.extend(found);
+}
+
 /// A value written in the brackets csszyx writes itself.
 #[cfg(feature = "native-engine")]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3527,6 +3642,8 @@ mod tests {
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
+    #[cfg(feature = "native-engine")]
+    use super::collect_underscore_values;
     use super::ClassPrefixScope;
     use super::{breakpoint_segment, format_static_class, is_dashed_function_call};
     use super::{
@@ -3553,6 +3670,73 @@ mod tests {
 
     fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
         StaticSzValue::Object(StaticSzObject { properties })
+    }
+
+    /// Every arbitrary class a value with a bare `_` lowers into is named, at
+    /// any depth; a space the author wrote, an escaped `\_`, a theme name and
+    /// a colour object are not. Whether Tailwind reads the `_` as a space is
+    /// not decided here: a `url()` is named too.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_bare_underscore_names_the_arbitrary_class_it_lowers_into() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let object = StaticSzObject {
+            properties: vec![
+                property("content", text("'a_b'")),
+                property("bgImg", text("url(/a_b.png)")),
+                property("_x", text("_")),
+                property("content", text("'a b'")),
+                property("content", text("'a\\_b'")),
+                property("fontFamily", text("my_font")),
+                property("p", StaticSzValue::Number(4.0)),
+                property(
+                    "hover",
+                    object(vec![property("w", text("calc(1px_+_2px)"))]),
+                ),
+                property("bg", object(vec![property("color", text("[a_b]"))])),
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", text("oklch(0.5_0.1_10)")),
+                        property("op", StaticSzValue::Number(50.0)),
+                    ]),
+                ),
+                property(
+                    "css",
+                    object(vec![
+                        property("gridTemplateAreas", text("'a_b'")),
+                        property("content", text("'a b'")),
+                        property("order", StaticSzValue::Number(1.0)),
+                    ]),
+                ),
+            ],
+        };
+        let mut found = Vec::new();
+        collect_underscore_values(&object, &mut found);
+        let named: Vec<_> = found
+            .iter()
+            .map(|found| {
+                (
+                    found.key.as_str(),
+                    found.value.as_str(),
+                    found.class_name.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("content", "'a_b'", "content-['a_b']"),
+                ("bgImg", "url(/a_b.png)", "bg-[url(/a_b.png)]"),
+                ("w", "calc(1px_+_2px)", "w-[calc(1px_+_2px)]"),
+                // A colour object names the class it is emitted as, opacity
+                // included, at its `color`: `bg-[a_b]` is what the build
+                // writes for `bg: { color: '[a_b]' }`.
+                ("color", "[a_b]", "bg-[a_b]"),
+                ("color", "oklch(0.5_0.1_10)", "bg-[oklch(0.5_0.1_10)]/50"),
+                ("gridTemplateAreas", "'a_b'", "[grid-template-areas:'a_b']"),
+            ]
+        );
     }
 
     #[test]

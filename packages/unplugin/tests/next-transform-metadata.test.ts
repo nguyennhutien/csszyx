@@ -143,7 +143,27 @@ describe('Next transform metadata', () => {
             authoredClasses: ['raw'],
             mergeLiterals: [],
             classSites: metadata.classSites,
+            underscoreSites: [],
         });
+    });
+
+    it('records each `_` the source writes in an `sz` value, at its key', () => {
+        const source = `const App=()=> <div sz={{ p: 2, content: "'a_b'" }} />;`;
+        const result = transformSource(source, { filename: '/repo/src/App.tsx' });
+        const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
+
+        expect(metadata.underscoreSites).toEqual([
+            {
+                key: 'content',
+                value: "'a_b'",
+                className: "content-['a_b']",
+                line: 1,
+                column: source.indexOf('content') + 1,
+            },
+        ]);
+        expect(createNextSafelistShardFromMetadata(metadata).underscoreSites).toEqual(
+            metadata.underscoreSites,
+        );
     });
 
     it('places each class at the key it was lowered from, as the Vite lane does', () => {

@@ -79,6 +79,8 @@ pub enum DiagnosticCode {
     BracketedValue,
     /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
     OpacityValue,
+    /// An `_` in an `sz` value that this project's Tailwind reads as a space.
+    UnderscoreSpace,
 }
 
 impl DiagnosticCode {
@@ -120,12 +122,13 @@ impl DiagnosticCode {
             Self::ColorSlashOpacity => "color-slash-opacity",
             Self::BracketedValue => "bracketed-value",
             Self::OpacityValue => "opacity-value",
+            Self::UnderscoreSpace => "underscore-space",
         }
     }
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 34] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 35] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -160,6 +163,7 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 34] = [
     DiagnosticCode::ColorSlashOpacity,
     DiagnosticCode::BracketedValue,
     DiagnosticCode::OpacityValue,
+    DiagnosticCode::UnderscoreSpace,
 ];
 
 /// Shared with the renderer, which prints it.
@@ -1030,6 +1034,29 @@ pub mod issue {
                 .optional_text("percent", percent),
         )
     }
+
+    /// `underscore-space`: An `_` in an `sz` value that this project's Tailwind reads as a space.
+    #[must_use]
+    #[inline]
+    pub fn underscore_space(
+        key: &str,
+        value: Option<&str>,
+        class_name: &str,
+        literal: Option<&str>,
+        spaced: Option<&str>,
+        escaped: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::UnderscoreSpace,
+            Args::default()
+                .text("key", key)
+                .optional_text("value", value)
+                .text("className", class_name)
+                .optional_text("literal", literal)
+                .optional_text("spaced", spaced)
+                .optional_text("escaped", escaped),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1603,5 +1630,21 @@ mod tests {
             args.to_json(),
             r#"{"form":"fraction","key":"key","op":"op"}"#
         );
+        let (code, args) = issue::underscore_space(
+            "key",
+            Some("value"),
+            "className",
+            Some("literal"),
+            Some("spaced"),
+            Some("escaped"),
+        );
+        assert_eq!(code, DiagnosticCode::UnderscoreSpace);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","className":"className","literal":"literal","spaced":"spaced","escaped":"escaped"}"#
+        );
+        let (code, args) = issue::underscore_space("key", None, "className", None, None, None);
+        assert_eq!(code, DiagnosticCode::UnderscoreSpace);
+        assert_eq!(args.to_json(), r#"{"key":"key","className":"className"}"#);
     }
 }

@@ -49,7 +49,7 @@ import { handleLookup, lookupSchema } from './tools/lookup.js';
 import { handleMigrate, migrateSchema } from './tools/migrate.js';
 import { handleReverse, reverseSchema } from './tools/reverse.js';
 import { handleTheme, themeSchema } from './tools/theme.js';
-import { handleValidate, validateSchema } from './tools/validate.js';
+import { handleValidateInProject, validateSchema } from './tools/validate.js';
 
 // ============================================================================
 // SERVER INIT
@@ -117,7 +117,7 @@ export const TOOLS = [
     {
         name: 'csszyx_validate',
         description:
-            'Validate a csszyx sz object for correctness. Detects unknown props, wrong types, deprecated CSS property names, and suggests fixes.',
+            'Validate a csszyx sz object for correctness. Detects unknown props, wrong types, deprecated CSS property names, and suggests fixes. Also asks the Tailwind stylesheets of the project the server runs in whether an `_` in a value is read as a space (`underscore-space`); `underscoreNote` says when they could not be asked.',
         inputSchema: {
             type: 'object' as const,
             properties: {
@@ -247,7 +247,7 @@ const TOOL_HANDLERS: Record<
 > = {
     csszyx_expand: { schema: expandSchema, handler: handleExpand as ToolHandler },
     csszyx_reverse: { schema: reverseSchema, handler: handleReverse as ToolHandler },
-    csszyx_validate: { schema: validateSchema, handler: handleValidate as ToolHandler },
+    csszyx_validate: { schema: validateSchema, handler: handleValidateInProject as ToolHandler },
     csszyx_lookup: { schema: lookupSchema, handler: handleLookup as ToolHandler },
     csszyx_migrate: { schema: migrateSchema, handler: handleMigrate as ToolHandler },
     csszyx_batch: { schema: batchSchema, handler: handleBatch as ToolHandler },

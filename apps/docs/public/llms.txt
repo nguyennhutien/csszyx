@@ -233,6 +233,10 @@ sz={{ '@container': true, '@md': { display: 'flex' } }}
 { w: '[333px]' }             // Wrong → { w: '333px' }
 { top: '[-1px]' }            // Wrong → { top: '-1px' }
 
+// ❌ `_` for a space — write the space; csszyx spells it `_` in the class
+{ gridCols: '1fr_2fr' }      // Wrong → { gridCols: '1fr 2fr' }
+{ content: "'a_b'" }         // Tailwind styles `a b`; for an underscore write "'a\\_b'"
+
 // ❌ Tailwind class strings as values
 { p: 'p-4' }                 // Wrong → { p: 4 }
 { bg: 'bg-blue-500' }        // Wrong → { bg: 'blue-500' }

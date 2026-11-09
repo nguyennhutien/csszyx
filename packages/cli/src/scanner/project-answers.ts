@@ -9,7 +9,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { MigrateRustTableVerdict } from '@csszyx/compiler/migrate';
+import type {
+    MigrateRustTableVerdict,
+    MigrateRustUnderscoreQuestion,
+} from '@csszyx/compiler/migrate';
 
 import { createMigrateVerdicts, openCheckOracles } from './migrate-verdicts.js';
 
@@ -126,6 +129,33 @@ export interface ProjectAnswers {
         served: ReadonlyMap<string, boolean> | null;
         skipped: string | null;
     }>;
+    /**
+     * Ask about the `_` of the arbitrary values a conversion read with each
+     * `_` as a space.
+     *
+     * @param questions - The values, as the conversion names them.
+     * @returns The answers to convert again with, or null when every answer
+     *   agrees with a space for each `_`; the questions no stylesheet
+     *   answered, whose every `_` stays a space; and why, or null when
+     *   every one was answered.
+     */
+    askUnderscores(questions: readonly MigrateRustUnderscoreQuestion[] | undefined): Promise<{
+        underscores: ReadonlyMap<string, string> | null;
+        unanswered: MigrateRustUnderscoreQuestion[];
+        skipped: string | null;
+    }>;
+    /**
+     * The CSS each compiled stylesheet writes for these classes, index for
+     * index: for a question answered per stylesheet, such as whether one reads
+     * an `_` as a space.
+     *
+     * @param classes - Class names, as emitted.
+     * @returns One array per stylesheet; and why none could be asked, or null.
+     */
+    cssPerRoot(classes: readonly string[]): Promise<{
+        css: Array<Array<string | null>>;
+        skipped: string | null;
+    }>;
 }
 
 /**
@@ -149,6 +179,13 @@ export function projectAnswers(cwd: string): ProjectAnswers {
             prefix: () => Promise.resolve({ prefix: null, unread }),
             ask: verdicts =>
                 Promise.resolve({ served: null, skipped: verdicts?.length ? unread : null }),
+            askUnderscores: questions =>
+                Promise.resolve({
+                    underscores: null,
+                    unanswered: [...(questions ?? [])],
+                    skipped: questions?.length ? unread : null,
+                }),
+            cssPerRoot: () => Promise.resolve({ css: [], skipped: unread }),
         };
     }
     let opened: ReturnType<typeof openCheckOracles> | undefined;
@@ -161,5 +198,26 @@ export function projectAnswers(cwd: string): ProjectAnswers {
             served: (await project.settle(verdicts)) ? project.answers : null,
             skipped: project.skipped(),
         }),
+        askUnderscores: async questions => {
+            const changed = await project.settleUnderscores(questions);
+            const unanswered = (questions ?? []).filter(
+                question => !project.underscores.has(question.value),
+            );
+            const why =
+                project.skipped() ?? "no stylesheet of the project serves the value's class";
+            return {
+                underscores: changed ? project.underscores : null,
+                unanswered,
+                skipped: unanswered.length > 0 ? why : null,
+            };
+        },
+        cssPerRoot: async classes => {
+            const { oracles, skipped, hadEntries } = await open(cwd);
+            const why = hadEntries ? skipped.join('; ') : 'this project has no Tailwind stylesheet';
+            return {
+                css: oracles.map(oracle => oracle.cssFor(classes)),
+                skipped: oracles.length === 0 ? why : null,
+            };
+        },
     };
 }

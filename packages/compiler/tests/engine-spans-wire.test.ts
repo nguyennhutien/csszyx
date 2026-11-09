@@ -78,6 +78,7 @@ describe('decodeEngineSpans', () => {
                 { keys: ['m'], positions: [{ line: 2, column: 1 }], classes: ['m-2'] },
             ],
             mergeOverrides: [{ line: 2, column: 1, base: ['a'], over: ['b'] }],
+            underscoreValues: [],
         });
         expect(decoded(text)).toEqual({
             issues: [{ code: 'unknown-key', start: 2, args: { key: 'k' } }],
@@ -87,13 +88,14 @@ describe('decodeEngineSpans', () => {
         });
     });
 
-    it('reads a file with nothing to report as four empty lists, never as absent ones', () => {
+    it('reads a file with nothing to report as empty lists, never as absent ones', () => {
         // `mergeGroupsOf` reads an absent list as the whole file in one group.
         expect(decodeEngineSpans('x', '1,0,0,0,0,')).toEqual({
             issues: [],
             mergeGroups: [],
             singleClassGroups: [],
             mergeOverrides: [],
+            underscoreValues: [],
         });
     });
 

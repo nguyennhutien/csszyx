@@ -3,6 +3,8 @@
  * once per class, served when any stylesheet serves it, and nothing compiled
  * until a table has decided something.
  */
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OpenedOracles } from '../src/commands/check.js';
@@ -115,5 +117,108 @@ describe('the project answering for a migrate run', () => {
         const none = createMigrateVerdicts('/p', async () => project([]));
         await none.settle([{ class: '-z-auto', served: false }]);
         expect(none.skipped()).toBe('no stylesheet imports Tailwind');
+    });
+});
+
+describe('the `_` of an arbitrary value, as the project reads it', () => {
+    // A path, not a URL's pathname: on Windows that is `/D:/…`, which resolves nothing.
+    const REPO = fileURLToPath(new URL('../../..', import.meta.url));
+
+    /**
+     * The repository's Tailwind, as one compiled stylesheet, recording the
+     * classes it is asked about.
+     *
+     * @param prefix - The prefix its `@import` sets, compiled as written:
+     *        the real Tailwind answers only the classes that carry it.
+     * @returns The oracle and what it was asked.
+     */
+    async function realStylesheet(prefix: string | null = null) {
+        const { createEmittedClassOracle } = await import('@csszyx/tailwind-oracle');
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: prefix ? `@import "tailwindcss" prefix(${prefix});` : '@import "tailwindcss";',
+            cssBase: REPO,
+        });
+        if (!oracle.ok) throw new Error(oracle.reason);
+        const asked: string[] = [];
+        const stylesheet = {
+            ok: true,
+            facts: { prefix },
+            findDead: () => [],
+            cssFor(classes: readonly string[]) {
+                asked.push(...classes);
+                return oracle.cssFor(classes);
+            },
+        } as unknown as OpenedOracles['oracles'][number];
+        return { stylesheet, asked };
+    }
+
+    const URL_VALUE = {
+        class: 'bg-[url(/a_b.png)]',
+        value: 'url(/a_b.png)',
+        reading: 'url(/a b.png)',
+    };
+    const STRING_VALUE = { class: "content-['a_b']", value: "'a_b'", reading: "'a b'" };
+
+    it('keeps an `_` the project keeps, and asks each value once', async () => {
+        const { stylesheet, asked } = await realStylesheet();
+        const verdicts = createMigrateVerdicts('/p', async () => project([stylesheet]));
+
+        // The `url()` answer differs from writing every `_` as a space.
+        expect(await verdicts.settleUnderscores([URL_VALUE, STRING_VALUE])).toBe(true);
+        expect(verdicts.underscores).toEqual(
+            new Map([
+                ['url(/a_b.png)', 'url(/a_b.png)'],
+                ["'a_b'", "'a b'"],
+            ]),
+        );
+        const count = asked.length;
+        expect(await verdicts.settleUnderscores([URL_VALUE])).toBe(true);
+        expect(asked).toHaveLength(count);
+    });
+
+    it('says nothing changes when the project reads every `_` as a space', async () => {
+        const { stylesheet } = await realStylesheet();
+        const verdicts = createMigrateVerdicts('/p', async () => project([stylesheet]));
+        expect(await verdicts.settleUnderscores([STRING_VALUE])).toBe(false);
+        expect(await verdicts.settleUnderscores(undefined)).toBe(false);
+    });
+
+    it('asks with the prefix the stylesheet sets', async () => {
+        const { stylesheet, asked } = await realStylesheet('tw');
+        const verdicts = createMigrateVerdicts('/p', async () => project([stylesheet]));
+        await verdicts.settleUnderscores([URL_VALUE, STRING_VALUE]);
+        expect(asked[0]).toBe('tw:bg-[url(/a_b.png)]');
+        expect(verdicts.underscores).toEqual(
+            new Map([
+                ['url(/a_b.png)', 'url(/a_b.png)'],
+                ["'a_b'", "'a b'"],
+            ]),
+        );
+    });
+
+    it('reads each stylesheet under its own prefix, when two set different ones', async () => {
+        const plain = await realStylesheet();
+        const prefixed = await realStylesheet('tw');
+        for (const order of [
+            [plain.stylesheet, prefixed.stylesheet],
+            [prefixed.stylesheet, plain.stylesheet],
+        ]) {
+            const verdicts = createMigrateVerdicts('/p', async () => project(order));
+            await verdicts.settleUnderscores([URL_VALUE, STRING_VALUE]);
+            expect(verdicts.underscores).toEqual(
+                new Map([
+                    ['url(/a_b.png)', 'url(/a_b.png)'],
+                    ["'a_b'", "'a b'"],
+                ]),
+            );
+        }
+    });
+
+    it('has no answer when no stylesheet compiled, and says why', async () => {
+        const verdicts = createMigrateVerdicts('/p', async () => project([], ['no Tailwind']));
+        expect(await verdicts.settleUnderscores([URL_VALUE])).toBe(false);
+        expect(verdicts.underscores.size).toBe(0);
+        expect(verdicts.skipped()).toBe('no Tailwind');
     });
 });

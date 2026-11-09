@@ -95,11 +95,33 @@ async function convert(
     classes: string,
     prefix: string | null,
     project: ProjectAnswers,
-): Promise<ReturnType<typeof classNameToSzObject> & { skipped: string | null }> {
+): Promise<
+    ReturnType<typeof classNameToSzObject> & {
+        skipped: string | null;
+        unanswered: Awaited<ReturnType<ProjectAnswers['askUnderscores']>>['unanswered'];
+        underscoresSkipped: string | null;
+    }
+> {
     const first = classNameToSzObject(classes, { prefix });
     const { served, skipped } = await project.ask(first.tableVerdicts);
-    if (served === null) return { ...first, skipped };
-    return { ...classNameToSzObject(classes, { served, prefix }), skipped };
+    const {
+        underscores,
+        unanswered,
+        skipped: underscoresSkipped,
+    } = await project.askUnderscores(first.underscoreQuestions);
+    if (served === null && underscores === null) {
+        return { ...first, skipped, unanswered, underscoresSkipped };
+    }
+    return {
+        ...classNameToSzObject(classes, {
+            prefix,
+            ...(served === null ? {} : { served }),
+            ...(underscores === null ? {} : { underscores }),
+        }),
+        skipped,
+        unanswered,
+        underscoresSkipped,
+    };
 }
 
 /**
@@ -120,11 +142,8 @@ export async function handleReverse(
     const cwd = context.cwd ?? process.cwd();
     const project = projectAnswers(cwd);
     const { prefix, unread } = await project.prefix();
-    const { szObject, unrecognized, tableVerdicts, skipped } = await convert(
-        classes,
-        prefix,
-        project,
-    );
+    const { szObject, unrecognized, tableVerdicts, skipped, unanswered, underscoresSkipped } =
+        await convert(classes, prefix, project);
     const unrecognizedSet = new Set(unrecognized);
     const recognized = classes.split(/\s+/).filter(cls => cls && !unrecognizedSet.has(cls));
 
@@ -139,7 +158,10 @@ export async function handleReverse(
                         totalRecognized: Object.keys(szObject).length,
                         totalUnrecognized: unrecognized.length,
                         roundTrip: roundTrip(szObject, recognized, prefix),
-                        note: projectNote(unread, skipped, tableVerdicts),
+                        note: projectNote(unread, skipped, tableVerdicts, {
+                            values: unanswered,
+                            skipped: underscoresSkipped,
+                        }),
                     },
                     null,
                     2,

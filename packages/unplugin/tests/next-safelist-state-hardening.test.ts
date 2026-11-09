@@ -82,6 +82,7 @@ describe('materializeNextSafelist over a polluted shards directory', () => {
             authoredClasses: [],
             mergeLiterals: [],
             classOrigins: new Map(),
+            underscoreSites: [],
             classCount: 0,
             sourceCount: 0,
             tombstonedSourceCount: 0,

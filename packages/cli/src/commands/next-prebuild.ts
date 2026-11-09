@@ -107,13 +107,14 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             model: facts.model,
             classes: result.cycle.materialize.classes,
             classOrigins: result.cycle.materialize.classOrigins,
+            underscoreSites: result.cycle.materialize.underscoreSites,
             authoredClasses: result.cycle.materialize.authoredClasses,
             mergeLiterals: result.cycle.materialize.mergeLiterals,
             sources: matches,
         });
         if (registration.warning !== null) console.warn(registration.warning);
         for (const line of nextDeadClassLines(
-            registration.dead,
+            registration,
             diagnostics.policy,
             createDiagnosticLimiter(),
             mode === 'development',

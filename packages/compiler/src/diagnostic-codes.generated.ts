@@ -36,7 +36,8 @@ export type SzDiagnosticCode =
     | 'mangle-vars-hoist-skipped'
     | 'color-slash-opacity'
     | 'bracketed-value'
-    | 'opacity-value';
+    | 'opacity-value'
+    | 'underscore-space';
 
 /**
  * The named values each live id carries, by id: what a site passes with it,
@@ -78,6 +79,7 @@ export interface SzDiagnosticArgs {
     'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
     'bracketed-value': { readonly form: 'unwrap' | 'escape'; readonly key: string; readonly value: string; readonly inner: string };
     'opacity-value': { readonly form: 'range' | 'fraction'; readonly key: string; readonly op: string; readonly percent?: string };
+    'underscore-space': { readonly key: string; readonly value?: string; readonly className: string; readonly literal?: string; readonly spaced?: string; readonly escaped?: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
     'inert-keyword': { readonly className: string; readonly keyword: string };
     'dead-class': { readonly className: string };
@@ -244,6 +246,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'color-slash-opacity',
     'bracketed-value',
     'opacity-value',
+    'underscore-space',
 ];
 
 /** A pass of `csszyx check`; setting one sets every kind it reports. */
@@ -310,6 +313,7 @@ export type SzSettableDiagnosticId =
     | 'color-slash-opacity'
     | 'bracketed-value'
     | 'opacity-value'
+    | 'underscore-space'
     | 'unsigned-value'
     | 'inert-keyword'
     | 'prefix-disagreement'
@@ -358,6 +362,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'color-slash-opacity',
     'bracketed-value',
     'opacity-value',
+    'underscore-space',
     'unsigned-value',
     'inert-keyword',
     'prefix-disagreement',
@@ -400,6 +405,7 @@ export type SzDiagnosticId =
     | 'color-slash-opacity'
     | 'bracketed-value'
     | 'opacity-value'
+    | 'underscore-space'
     | 'unsigned-value'
     | 'inert-keyword'
     | 'dead-class'

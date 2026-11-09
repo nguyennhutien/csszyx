@@ -106,6 +106,44 @@ describe('Next safelist state', () => {
         expect(classOrigins.get('only-B.tsx')).toEqual([{ sourcePath: join(root, 'src/B.tsx') }]);
     });
 
+    it('carries each `_` a source writes, sources in path order', () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const site = { key: 'content', value: "'a_b'", className: "content-['a_b']", column: 9 };
+        for (const [name, line] of [
+            ['B.tsx', 2],
+            ['A.tsx', 1],
+            ['C.tsx', 0],
+        ] as const) {
+            const sourcePath = join(root, 'src', name);
+            writeFileSync(sourcePath, 'export {}');
+            writeNextSafelistShard(
+                paths.shardsDir,
+                {
+                    sourcePath,
+                    sourceHash: name,
+                    classes: ["content-['a_b']"],
+                    underscoreSites: line === 0 ? [] : [{ ...site, line }],
+                    timestamp: 1,
+                },
+                { retryDelayMs: 0 },
+            );
+        }
+
+        expect(materializeNextSafelist(paths, { retryDelayMs: 0 }).underscoreSites).toEqual([
+            { ...site, line: 1, sourcePath: join(root, 'src/A.tsx') },
+            { ...site, line: 2, sourcePath: join(root, 'src/B.tsx') },
+        ]);
+        // An empty list is not written: a shard without one reads the same.
+        const shards = readdirSync(paths.shardsDir).map(file =>
+            JSON.parse(readFileSync(join(paths.shardsDir, file), 'utf8')),
+        );
+        const written = shards.find(shard => shard.sourcePath.endsWith('C.tsx'));
+        expect(written).toBeDefined();
+        expect(written).not.toHaveProperty('underscoreSites');
+    });
+
     it('reads a shard an older version wrote, and replaces it once the source is seen again', () => {
         // Format 1 carried no sites. Its classes still reach the safelist; the
         // next write for the same source is not skipped as equivalent, so the
@@ -234,6 +272,45 @@ describe('Next safelist state', () => {
         }
     });
 
+    it('keeps a shard whose `_` sites are not of the shape it writes, without them', () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const paths = resolveNextSafelistStatePaths(root);
+        const sourcePath = join(root, 'src/A.tsx');
+        writeFileSync(sourcePath, 'export {}');
+        mkdirSync(paths.shardsDir, { recursive: true });
+        const shard = {
+            version: NEXT_SAFELIST_SHARD_FORMAT,
+            cacheKey: 'odd',
+            sourcePath,
+            sourceHash: 'h',
+            classes: ['p-8'],
+            timestamp: 1,
+            pid: 1,
+        };
+        const site = {
+            key: 'content',
+            value: 'a_b',
+            className: '[content:a_b]',
+            line: 1,
+            column: 1,
+        };
+        for (const [index, underscoreSites] of [
+            'a_b',
+            [{ ...site, value: 4 }],
+            [{ ...site, line: '1' }],
+            [null],
+        ].entries()) {
+            writeFileSync(
+                join(paths.shardsDir, 'odd.json'),
+                JSON.stringify({ ...shard, underscoreSites, timestamp: index + 1 }),
+            );
+            const found = materializeNextSafelist(paths, { retryDelayMs: 0 });
+            expect(found.classes).toEqual(['p-8']);
+            expect(found.underscoreSites).toEqual([]);
+        }
+    });
+
     it('merges source shards into a deterministic Tailwind source file', () => {
         const root = tempRoot();
         const sourcePath = join(root, 'src/App.tsx');
@@ -263,6 +340,7 @@ describe('Next safelist state', () => {
                 ['bg-red-500', [{ sourcePath }]],
                 ['p-8', [{ sourcePath }]],
             ]),
+            underscoreSites: [],
             classCount: 3,
             sourceCount: 1,
             tombstonedSourceCount: 0,

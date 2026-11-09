@@ -854,6 +854,7 @@ struct KeyValueFindings {
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     invalid_opacities: Vec<super::lower::InvalidOpacity>,
     bracketed_values: Vec<super::lower::BracketedValue>,
+    underscore_values: Vec<super::lower::UnderscoreValue>,
     mask_members: Vec<(String, String, Vec<String>, u32)>,
     moved_values: Vec<super::lower::MovedValue>,
     mask_layers: Vec<(String, &'static str, u32)>,
@@ -876,6 +877,7 @@ impl KeyValueFindings {
         self.color_slash_opacities.clear();
         self.invalid_opacities.clear();
         self.bracketed_values.clear();
+        self.underscore_values.clear();
         self.mask_members.clear();
         self.moved_values.clear();
         self.mask_layers.clear();
@@ -917,6 +919,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
         super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
         super::lower::collect_bracketed_values(object, &mut found.bracketed_values);
+        super::lower::collect_underscore_values(object, &mut found.underscore_values);
         super::lower::collect_moved_values(object, &mut found.moved_values);
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
@@ -940,6 +943,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.color_slash_opacities, 13, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.bracketed_values, 15, seen, |found| found.at);
+        retain_first_occurrence(&mut found.underscore_values, 16, seen, |found| found.at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -985,6 +989,19 @@ fn push_group_key_value_diagnostics<'a>(
         } else {
             issue::bracketed_value_escape(&found.key, &found.value, &found.inner)
         };
+        out.push_issue(issue, found.at);
+    }
+    // A fact for the check that asks the project's Tailwind; the build does
+    // not print it as it stands.
+    for found in &found.underscore_values {
+        let issue = issue::underscore_space(
+            &found.key,
+            Some(&found.value),
+            &found.class_name,
+            None,
+            None,
+            None,
+        );
         out.push_issue(issue, found.at);
     }
     push_mask_member_diagnostics(&found.mask_members, out);
@@ -3541,6 +3558,9 @@ mod tests {
                 r#"bracketed-value {"form":"unwrap","key":"w","value":"[100px]","inner":"100px"}"#,
                 r#"bracketed-value {"form":"escape","key":"p","value":"[a]_1_[b]","inner":"a]_1_[b"}"#,
                 r#"bracketed-value {"form":"unwrap","key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
+                // A fact, not a verdict: the `_` the author wrote, which the
+                // build asks the project's Tailwind about.
+                r#"underscore-space {"key":"gridCols","value":"[a]_1fr_[b]","className":"grid-cols-[[a]_1fr_[b]]"}"#,
             ]
         );
     }
@@ -5419,7 +5439,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 34] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 35] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5598,6 +5618,11 @@ mod tests {
             (
                 DiagnosticCode::OpacityValue,
                 "<div sz={{ bg: { color: 'red-500', op: 150 } }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::UnderscoreSpace,
+                "<div sz={{ content: \"'a_b'\" }} />".into(),
                 TransformOptions::default(),
             ),
         ];

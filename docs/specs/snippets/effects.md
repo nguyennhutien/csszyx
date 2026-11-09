@@ -148,7 +148,7 @@ them as custom-utility fallbacks.
 | **Top Right**    | `mask-position: top right`       | `mask-top-right`                  | `{ maskPos: 'top-right' }`       |                    |
 | **Bottom Left**  | `mask-position: bottom left`     | `mask-bottom-left`                | `{ maskPos: 'bottom-left' }`     |                    |
 | **Bottom Right** | `mask-position: bottom right`    | `mask-bottom-right`               | `{ maskPos: 'bottom-right' }`    |                    |
-| **Arbitrary**    | `mask-position: center top 1rem` | `mask-position-[center_top_1rem]` | `{ maskPos: 'center_top_1rem' }` | Spaces become `_`. |
+| **Arbitrary**    | `mask-position: center top 1rem` | `mask-position-[center_top_1rem]` | `{ maskPos: 'center top 1rem' }` | Spaces become `_`. |
 
 ### mask-repeat
 

@@ -12,7 +12,10 @@
 //! would be a second encoding to keep in step.
 
 use super::variant_parser::{class_name_to_sz_object_with, Conversion, Lookup};
-use super::verdict::{Judge, ServedAnswers, TableVerdict, TableVerdicts};
+use super::verdict::{
+    Judge, ServedAnswers, TableVerdict, TableVerdicts, UnderscoreAnswers, UnderscoreQuestion,
+    UnderscoreQuestions,
+};
 use super::{parse_class, SzObject};
 
 /// Decode a payload, naming the field that would not parse.
@@ -38,6 +41,10 @@ struct JudgedConversion {
     /// entry points leave `stats.tableVerdicts` out.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     table_verdicts: Vec<TableVerdict>,
+    /// Arbitrary values with a bare `_` no answer covered; left out when
+    /// there is none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    underscore_questions: Vec<UnderscoreQuestion>,
 }
 
 /// What [`migrate_class_name`] reads besides the classes.
@@ -47,6 +54,8 @@ pub struct ClassNameOptions<'a> {
     pub custom_map_json: Option<&'a str>,
     /// The project's Tailwind answers, as `migrate` asks them.
     pub served: Option<&'a ServedAnswers>,
+    /// The project's Tailwind answers about the `_` of arbitrary values.
+    pub underscores: Option<&'a UnderscoreAnswers>,
     /// The project's Tailwind prefix, read off the front of each class.
     pub prefix: Option<&'a str>,
 }
@@ -75,17 +84,20 @@ pub fn migrate_class_name(
         .map(|text| decode("the resolution map", text))
         .transpose()?;
     let asked = TableVerdicts::default();
+    let asked_underscores = UnderscoreQuestions::default();
     let conversion = class_name_to_sz_object_with(
         class_name,
         Lookup {
             custom_map: custom_map.as_ref(),
-            judge: Judge::new(options.served, Some(&asked)),
+            judge: Judge::new(options.served, Some(&asked))
+                .with_underscores(options.underscores, Some(&asked_underscores)),
             prefix: options.prefix,
         },
     );
     encode(&JudgedConversion {
         conversion,
         table_verdicts: asked.into_sorted(),
+        underscore_questions: asked_underscores.into_sorted(),
     })
 }
 

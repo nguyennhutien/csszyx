@@ -1184,6 +1184,48 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "underscore-space",
+        "summary": "An `_` in an `sz` value that this project's Tailwind reads as a space.",
+        "surfaces": {
+            "engine": {},
+            "check": {
+                "group": "dead-class"
+            },
+            "runtime": {
+                "production": false,
+                "host": "node"
+            }
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "value": {
+                "type": "string",
+                "optional": true
+            },
+            "className": {
+                "type": "string"
+            },
+            "literal": {
+                "type": "string",
+                "optional": true
+            },
+            "spaced": {
+                "type": "string",
+                "optional": true
+            },
+            "escaped": {
+                "type": "string",
+                "optional": true
+            }
+        },
+        "text": "`{key}: {literal}` emits `{className}`, and this project's Tailwind reads its `_` as a space.",
+        "help": "write `{key}: {spaced}` for a space; for an underscore, write `{key}: {escaped}`.",
+        "note": "the class is still emitted."
+    },
+    {
         "id": "unsigned-value",
         "summary": "A negative value on a key Tailwind serves no negative utility for.",
         "surfaces": {

@@ -537,6 +537,7 @@ function fromNativeResult(
         mergeGroups: spans.mergeGroups,
         singleClassGroups: spans.singleClassGroups,
         mergeOverrides: spans.mergeOverrides,
+        underscoreValues: spans.underscoreValues,
         ...fields(spans.issues, file),
         issues: spans.issues,
         recoveryTokens: new Map(

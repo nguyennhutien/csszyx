@@ -123,6 +123,15 @@ export interface ProjectStyleModel {
      */
     inert(classes: readonly string[]): string[];
     /**
+     * Each compiled root's CSS for these classes, index for index: for a
+     * question answered per root, such as whether a root reads an `_` as a
+     * space (`underscoreSpaceFindings`). Empty when no root compiled.
+     *
+     * @param classes - Class names, as emitted.
+     * @returns One array per root.
+     */
+    cssPerRoot(classes: readonly string[]): Array<Array<string | null>>;
+    /**
      * Merge signature agreed by every compiled root.
      *
      * @param candidate - Tailwind candidate class.
@@ -868,6 +877,9 @@ export async function openProjectStyleModel(
                     classes,
                     compiled.map(entry => entry.cssFor(classes)),
                 );
+            },
+            cssPerRoot(classes) {
+                return compiled.map(entry => entry.cssFor(classes));
             },
             candidates() {
                 // Every root's sources, once each: two roots that scan one tree

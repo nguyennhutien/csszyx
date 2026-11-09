@@ -421,6 +421,7 @@ function htmlOptions(context: MigrationContext) {
         cdnUrl: context.options.cdnUrl,
         localPath: context.options.localPath,
         served: context.verdicts.answers,
+        underscores: context.verdicts.underscores,
         prefix: context.prefix,
     };
 }
@@ -433,6 +434,7 @@ function sourceOptions(context: MigrationContext) {
         customMapJson: context.customMapJson,
         keysOnly: context.options.keysOnly,
         served: context.verdicts.answers,
+        underscores: context.verdicts.underscores,
         prefix: context.prefix,
     };
 }
@@ -520,7 +522,9 @@ async function processMigrationBatch(
 
 /**
  * Whether a result holds a class a table decided otherwise than the project's
- * Tailwind has since answered, so the file has to be migrated again.
+ * Tailwind has since answered, or a value it read with each `_` as a space
+ * where the project's Tailwind keeps one, so the file has to be migrated
+ * again.
  *
  * @param result - One file's result.
  * @param context - Migration context, holding the answers.
@@ -530,11 +534,17 @@ function contradicted(
     result: MigrateRustResult | null | undefined,
     context: MigrationContext,
 ): boolean {
-    const { answers } = context.verdicts;
-    return (result?.stats.tableVerdicts ?? []).some(verdict => {
-        const answer = answers.get(verdict.class);
-        return answer !== undefined && answer !== verdict.served;
-    });
+    const { answers, underscores } = context.verdicts;
+    return (
+        (result?.stats.tableVerdicts ?? []).some(verdict => {
+            const answer = answers.get(verdict.class);
+            return answer !== undefined && answer !== verdict.served;
+        }) ||
+        (result?.stats.underscoreQuestions ?? []).some(question => {
+            const answer = underscores.get(question.value);
+            return answer !== undefined && answer !== question.reading;
+        })
+    );
 }
 
 /**
@@ -560,7 +570,11 @@ async function settleTableVerdicts<Result extends MigrateRustResult | null | und
 ): Promise<Array<Result | MigrateRustResult>> {
     const settled: Array<Result | MigrateRustResult> = [...results];
     const verdicts = results.flatMap(result => result?.stats.tableVerdicts ?? []);
-    if (!(await context.verdicts.settle(verdicts))) return settled;
+    const questions = results.flatMap(result => result?.stats.underscoreQuestions ?? []);
+    // Both asked, whichever answers first: one compile serves the two.
+    const tables = await context.verdicts.settle(verdicts);
+    const spaces = await context.verdicts.settleUnderscores(questions);
+    if (!tables && !spaces) return settled;
     const again = inputs.flatMap((input, index) =>
         contradicted(results[index], context) ? [{ input, index }] : [],
     );

@@ -374,7 +374,7 @@ describe('transform cache', () => {
         expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
         const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
-        expect(content).toContain('"version":22');
+        expect(content).toContain('"version":23');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
@@ -401,6 +401,44 @@ describe('transform cache', () => {
         expect(cached?.issues?.map(issue => renderEngineDiagnostic(issue, file))).toEqual(
             transformWasm(source, { filename: '/repo/src/A.tsx', rootDir: '/repo' }).diagnostics,
         );
+    });
+
+    it('replays the `_` facts a build reports as `underscore-space`, at their key', () => {
+        // A hit that dropped them would say nothing about a file the first
+        // build named, and the warning would vanish on the second build.
+        const source = `export const A = () => <div sz={{ p: 4, content: "'a_b'" }} />;`;
+        const engine = transformWasm(source, { filename: '/repo/src/App.tsx' });
+        expect(engine.underscoreValues).toHaveLength(1);
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const spannedInput = input({ source });
+        writeTransformCache(cacheRoot, spannedInput, { ...result(), ...engine });
+
+        const cached = readTransformCache(cacheRoot, spannedInput) as CacheableTransformResult & {
+            underscoreValues?: Array<{
+                key: string;
+                value: string;
+                className: string;
+                line: number;
+                column: number;
+            }>;
+        };
+        expect(
+            (cached.underscoreValues ?? []).map(({ key, value, className, line, column }) => ({
+                key,
+                value,
+                className,
+                line,
+                column,
+            })),
+        ).toEqual([
+            {
+                key: 'content',
+                value: "'a_b'",
+                className: "content-['a_b']",
+                line: 1,
+                column: source.indexOf('content') + 1,
+            },
+        ]);
     });
 
     it('rejects an entry written under an older cache schema', () => {

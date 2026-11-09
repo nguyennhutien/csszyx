@@ -121,6 +121,7 @@ fn transform_source_writes_exactly_what_the_typescript_transformer_writes() {
             keys_only: case.options.keys_only,
             custom_map: case.options.custom_map.then_some(&corpus.custom_map),
             served: None,
+            underscores: None,
             prefix: None,
         };
         let result = transform_source(&source.source, &source.file, &options);
@@ -240,6 +241,7 @@ fn record_the_corpus() {
             keys_only: case.options.keys_only,
             custom_map: case.options.custom_map.then_some(&custom_map),
             served: None,
+            underscores: None,
             prefix: None,
         };
         case.result =

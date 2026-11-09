@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SZ_DIAGNOSTIC_REGISTRY_FORMAT } from '../src/diagnostic-registry.generated.js';
 import { SZ_DIAGNOSTIC_REGISTRY } from '../src/diagnostic-spec.generated.js';
+import { UNDERSCORE_FACT } from '../src/engine-spans.js';
 import {
     SZ_DIAGNOSTIC_CODES,
     SZ_DIAGNOSTIC_DEFAULT_LEVELS,
@@ -35,7 +36,13 @@ function positionOf(source: string, index: number): { line: number; column: numb
 
 describe('SZ_DIAGNOSTIC_CODES', () => {
     it('has an engine-diagnosed source for every code the engine renders', () => {
-        expect(CODE_SOURCES.map(([code]) => code).sort()).toEqual([...SZ_DIAGNOSTIC_CODES].sort());
+        // A fact rides the wire as an issue and is split out before any lane
+        // renders it (`underscore-value-fact.test.ts`): the engine reports it
+        // and judges nothing, so no source here makes it an issue.
+        const facts = [UNDERSCORE_FACT];
+        expect([...CODE_SOURCES.map(([code]) => code), ...facts].sort()).toEqual(
+            [...SZ_DIAGNOSTIC_CODES].sort(),
+        );
     });
 
     it('leaves the oracle’s ids out of the engine codes', () => {

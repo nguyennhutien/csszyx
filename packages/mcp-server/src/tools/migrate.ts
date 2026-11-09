@@ -64,7 +64,21 @@ export async function handleMigrate(
     let result = migrateSource(input.code, options);
     const decided = result.stats.tableVerdicts;
     const { served, skipped } = await project.ask(decided);
-    if (served !== null) result = migrateSource(input.code, { ...options, served });
+    // An `_` the project's Tailwind keeps stays one: `url(/a_b.png)` is a
+    // path, not `url(/a b.png)`.
+    const asked = result.stats.underscoreQuestions;
+    const {
+        underscores,
+        unanswered,
+        skipped: underscoresSkipped,
+    } = await project.askUnderscores(asked);
+    if (served !== null || underscores !== null) {
+        result = migrateSource(input.code, {
+            ...options,
+            ...(served === null ? {} : { served }),
+            ...(underscores === null ? {} : { underscores }),
+        });
+    }
 
     return {
         content: [
@@ -87,7 +101,10 @@ export async function handleMigrate(
                             result.potentiallyUnusedImports.length > 0
                                 ? result.potentiallyUnusedImports
                                 : undefined,
-                        note: projectNote(unread, skipped, decided),
+                        note: projectNote(unread, skipped, decided, {
+                            values: unanswered,
+                            skipped: underscoresSkipped,
+                        }),
                     },
                     null,
                     2,

@@ -42,7 +42,10 @@ import { sha256Of } from './content-digest.js';
 // 22: the build lanes cache their transform unrendered: no message text, and
 // the path each issue's header names (`diagnosticFile`), so a report renders
 // only what it prints; a schema-21 entry holds the text of every message.
-const CACHE_SCHEMA_VERSION = 22;
+// 23: each `_` an `sz` value carries (`underscoreValues`), which the build
+// reports as `underscore-space`; a schema-22 entry has none to replay, and an
+// entry with none reads as a file with no `_`.
+const CACHE_SCHEMA_VERSION = 23;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -508,6 +511,7 @@ function deserializeResult(
  * @param result.singleClassGroups - Each one-class static object, as stored.
  * @param result.mergeOverrides - Each class name beside a static `sz`, as stored.
  * @param result.issues - Each diagnostic's code and offset, as stored.
+ * @param result.underscoreValues - Each `_` an `sz` value carries, as stored.
  * @param source - The source the entry was transformed from.
  * @returns The spans, located lazily.
  */
@@ -517,6 +521,7 @@ export function restoreCachedSpans(
         singleClassGroups?: unknown;
         mergeOverrides?: unknown;
         issues?: unknown;
+        underscoreValues?: unknown;
     },
     source: string,
 ): ReturnType<typeof restoreEngineSpans> {
@@ -526,6 +531,7 @@ export function restoreCachedSpans(
         stored.singleClassGroups = result.singleClassGroups;
     if (Array.isArray(result.mergeOverrides)) stored.mergeOverrides = result.mergeOverrides;
     if (Array.isArray(result.issues)) stored.issues = result.issues;
+    if (Array.isArray(result.underscoreValues)) stored.underscoreValues = result.underscoreValues;
     return restoreEngineSpans(source, stored);
 }
 

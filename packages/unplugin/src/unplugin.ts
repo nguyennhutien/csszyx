@@ -265,6 +265,12 @@ import {
     shouldHoldAdvisories,
     suppressedAdvisoryMessage,
 } from './transform-diagnostics.js';
+import {
+    reportUnderscoreSpaces,
+    type UnderscoreSite,
+    underscoreFactsOf,
+    underscoreSpaceFindings,
+} from './underscore-space.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
@@ -3441,6 +3447,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const szClassesByFile = new Map<string, ReadonlyMap<string, DeadClassSite>>();
 
     /**
+     * The `_` the author wrote in an `sz` value, per project-relative file, as
+     * of each file's latest transform: the `underscore-space` facts, which the
+     * build asks the project's Tailwind about with the dead classes.
+     */
+    const underscoreSitesByFile = new Map<string, UnderscoreSite[]>();
+
+    /**
      * Record what one transform of a file emitted, replacing its last answer.
      *
      * The engine places a class at its key only in a first pass, and only for
@@ -3454,6 +3467,42 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const relative = projectRelative(file.split('?')[0] as string);
         const first = objectRuleOutputs.get(result) ?? result;
         szClassesByFile.set(relative, szClassSites(relative, result.classes, first));
+        // Few values carry an `_`, so their positions are resolved here
+        // rather than when a site is named.
+        const facts = underscoreFactsOf({
+            underscoreValues: result.underscoreValues ?? first.underscoreValues,
+        });
+        if (facts.length === 0) underscoreSitesByFile.delete(relative);
+        else
+            underscoreSitesByFile.set(
+                relative,
+                facts.map(fact => ({ ...fact, file: relative })),
+            );
+    }
+
+    /**
+     * Print the sites whose `_` every root that serves the class reads as a
+     * space, at the level the project's policy gives `underscore-space`.
+     *
+     * @param model - The opened style model.
+     * @returns How many were held back.
+     */
+    function reportUnderscoreSites(model: ProjectStyleModel): number {
+        const sites = sortStrings(underscoreSitesByFile.keys()).flatMap(
+            file => underscoreSitesByFile.get(file) as UnderscoreSite[],
+        );
+        const findings =
+            sites.length === 0
+                ? []
+                : underscoreSpaceFindings(sites, classes => model.cssPerRoot(classes));
+        const { lines, held } = reportUnderscoreSpaces(findings, {
+            policy: diagnosticPolicy,
+            quiet,
+            holdInfo: shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV),
+            limiter: diagnosticLimiter,
+        });
+        for (const line of lines) console.warn(line);
+        return held;
     }
 
     /**
@@ -3492,7 +3541,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             limiter: diagnosticLimiter,
         });
         for (const line of lines) console.warn(line);
-        state.suppressedAdvisories += held;
+        state.suppressedAdvisories += held + reportUnderscoreSites(model);
         if (serving) capFlush.schedule();
     }
 

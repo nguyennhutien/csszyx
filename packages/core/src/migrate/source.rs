@@ -30,7 +30,10 @@ use super::normalize::{normalize_sz_expression, static_key};
 use super::sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
 use super::value::{is_js_whitespace, SzObject};
 use super::variant_parser::{class_name_to_sz_object_with, tokenize, Lookup};
-use super::verdict::{Judge, ServedAnswers, TableVerdict, TableVerdicts};
+use super::verdict::{
+    Judge, ServedAnswers, TableVerdict, TableVerdicts, UnderscoreAnswers, UnderscoreQuestion,
+    UnderscoreQuestions,
+};
 
 /// Options for the source transformation.
 #[derive(Clone, Copy, Debug, Default)]
@@ -45,6 +48,8 @@ pub struct TransformOptions<'a> {
     /// What the project's Tailwind answered for classes one of migrate's
     /// tables would otherwise decide.
     pub served: Option<&'a ServedAnswers>,
+    /// What the project's Tailwind answered about the `_` of arbitrary values.
+    pub underscores: Option<&'a UnderscoreAnswers>,
     /// The project's Tailwind prefix, read off the front of each class.
     pub prefix: Option<&'a str>,
 }
@@ -84,6 +89,10 @@ pub struct TransformStats {
     /// Tailwind had not been asked about them, with the table's verdict.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub table_verdicts: Vec<TableVerdict>,
+    /// Arbitrary values with a bare `_` no answer covered, written with each
+    /// such `_` as a space.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub underscore_questions: Vec<UnderscoreQuestion>,
 }
 
 /// One edit: the bytes `start..end` replaced by `text`.
@@ -126,13 +135,15 @@ pub fn transform_source(
     }
 
     let asked = TableVerdicts::default();
+    let asked_underscores = UnderscoreQuestions::default();
     let mut visitor = Migration {
         source,
         file_path,
         options,
         lookup: Lookup {
             custom_map: options.custom_map,
-            judge: Judge::new(options.served, Some(&asked)),
+            judge: Judge::new(options.served, Some(&asked))
+                .with_underscores(options.underscores, Some(&asked_underscores)),
             prefix: options.prefix,
         },
         replacements: Vec::new(),
@@ -181,6 +192,7 @@ pub fn transform_source(
     stats.sz_keys_normalized = Some(stats.sz_keys_normalized.unwrap_or(0));
     let warnings = visitor.warnings;
     stats.table_verdicts = asked.into_sorted();
+    stats.underscore_questions = asked_underscores.into_sorted();
     TransformResult {
         code: output,
         changed,

@@ -14,6 +14,7 @@ use super::source::Replacement;
 use super::stylesheet_order::{rank, static_class};
 use super::sz_codegen::quoted;
 use super::value::{js_number_to_string, SzValue};
+use super::verdict::Judge;
 use crate::transform::generated::tables::{
     closed_enum_value_move, global_keyword_for_group, key_suggestion,
     removed_boolean_sugar_replacement,
@@ -483,7 +484,7 @@ fn normalize_ambiguous_font(
     push_resolved_value(
         property,
         &value,
-        &class_rules::emit(rule, "font", &shape, false)?,
+        &class_rules::emit(rule, "font", &shape, false, Judge::default())?,
         replacements,
     );
     Some(Outcome::one(canonical, None))

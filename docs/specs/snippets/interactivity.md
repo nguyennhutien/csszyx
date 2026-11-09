@@ -51,7 +51,7 @@ Utilities for controlling the cursor style when hovering over an element.
 | Concept       | CSS Rule           | Tailwind v4 Class                    | `sz` Prop (Object Syntax)           | Note |
 | :------------ | :----------------- | :----------------------------------- | :---------------------------------- | :--- |
 | **Keywords**  | `cursor: (etc)`    | `cursor-pointer`, `cursor-wait`(etc) | `{ cursor: 'pointer' }`             |      |
-| **Arbitrary** | `cursor: (etc)`    | `cursor-[url(h.cur),_pointer]`       | `{ cursor: 'url(h.cur),_pointer' }` |      |
+| **Arbitrary** | `cursor: (etc)`    | `cursor-[url(h.cur),_pointer]`       | `{ cursor: 'url(h.cur), pointer' }` |      |
 | **Variable**  | `cursor: var(--c)` | `cursor-(--c)`                       | `{ cursor: '--c' }`                 |      |
 
 ## Field Sizing

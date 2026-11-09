@@ -95,7 +95,7 @@ Utilities for controlling the origin of transformations.
 | Concept       | CSS Rule                     | Tailwind v4 Class                                                                                                                                                 | `sz` Prop (Object Syntax) | Note                             |
 | :------------ | :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------ | :------------------------------- |
 | **Keywords**  | `transform-origin: center`   | `origin-center`, `origin-top`, `origin-top-right`, `origin-right`, `origin-bottom-right`, `origin-bottom`, `origin-bottom-left`, `origin-left`, `origin-top-left` | `{ origin: 'top' }`       | Shorthand for `transformOrigin`. |
-| **Arbitrary** | `transform-origin: (etc)`    | `origin-[33%_75%]`                                                                                                                                                | `{ origin: '33%_75%' }`   |                                  |
+| **Arbitrary** | `transform-origin: (etc)`    | `origin-[33%_75%]`                                                                                                                                                | `{ origin: '33% 75%' }`   |                                  |
 | **Variable**  | `transform-origin: var(--o)` | `origin-(--o)`                                                                                                                                                    | `{ origin: '--o' }`       |                                  |
 
 ## Transform Style
@@ -133,7 +133,7 @@ Utilities for controlling the origin of the perspective.
 | Concept       | CSS Rule                     | Tailwind v4 Class                                          | `sz` Prop (Object Syntax)          | Note |
 | :------------ | :--------------------------- | :--------------------------------------------------------- | :--------------------------------- | :--- |
 | **Keywords**  | `perspective-origin: center` | `perspective-origin-center`, `perspective-origin-top`(etc) | `{ perspectiveOrigin: 'top' }`     |      |
-| **Arbitrary** | `perspective-origin: (etc)`  | `perspective-origin-[25%_25%]`                             | `{ perspectiveOrigin: '25%_25%' }` |      |
+| **Arbitrary** | `perspective-origin: (etc)`  | `perspective-origin-[25%_25%]`                             | `{ perspectiveOrigin: '25% 25%' }` |      |
 
 ## Transform
 

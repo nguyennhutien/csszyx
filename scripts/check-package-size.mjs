@@ -769,7 +769,9 @@ export const SIZE_BUDGETS = [
         // group was measured: 0.2 to 0.8 ms faster per Node import, no
         // resident-memory change, none in a Vue build, and any added group
         // re-lays out the browser `transform-core` chunk (`./browser` +107).
-        maxGzipBytes: 30_500,
+        // 31,200 on 2026-11-08, measured 30,581: the `underscore-space` registry entry and the step that moves its fact out of
+        // `issues`, so no lane renders a verdict the engine did not make.
+        maxGzipBytes: 31_200,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -790,7 +792,9 @@ export const SIZE_BUDGETS = [
         // build loaded through this entry: 2 ms and 1.2 MB importing this
         // entry alone, about 0.3 MB and no time above the noise in the
         // whole plugin process.
-        maxGzipBytes: 31_000,
+        // 31,700 on 2026-11-08, measured 31,089: the `underscore-space` registry entry and the step that moves its fact out of
+        // `issues`, so no lane renders a verdict the engine did not make.
+        maxGzipBytes: 31_700,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -804,7 +808,9 @@ export const SIZE_BUDGETS = [
         subpath: './template',
         // Measured 32,324 on 2026-11-04: what a template adapter lowers with,
         // loaded only when a build meets a `.vue` or `.svelte` file.
-        maxGzipBytes: 32_650,
+        // 33,400 on 2026-11-08, measured 32,757: the `underscore-space` registry entry and the step that moves its fact out of
+        // `issues`, so no lane renders a verdict the engine did not make.
+        maxGzipBytes: 33_400,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev
@@ -848,24 +854,32 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './diagnostics',
-        // Measured 21,344.
-        maxGzipBytes: 21_650,
+        // Measured 21,344. 22,700 on 2026-11-08, measured 22,417: the
+        // comparison that asks the project's Tailwind whether an `_` reads as
+        // a space, and its report, which `csszyx check` and the Next commands
+        // import from here. 23,000 on 2026-11-09, measured 22,696: the same
+        // comparison reads facts through one helper and splits whitespace as
+        // the engine does.
+        maxGzipBytes: 23_000,
     },
     {
         name: '@csszyx/unplugin `./next-turbo-loader`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './next-turbo-loader',
-        // Measured 78,516.
-        maxGzipBytes: 80_100,
+        // Measured 78,516. 81,800 on 2026-11-09, measured 80,197: the
+        // `_` facts the transform cache replays, and finding a value in its
+        // class however its whitespace was written.
+        maxGzipBytes: 81_800,
     },
     {
         name: '@csszyx/unplugin `./next-prebuild`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './next-prebuild',
-        // Measured 68,217.
-        maxGzipBytes: 69_600,
+        // Measured 68,217. 71,050 on 2026-11-08, measured 69,676: the
+        // `underscore-space` sites a shard carries, and the compiler's split.
+        maxGzipBytes: 71_050,
     },
     {
         name: '@csszyx/unplugin `./next-watcher`, loaded by Node',
@@ -880,8 +894,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './jest',
-        // Measured 59,152.
-        maxGzipBytes: 60_350,
+        // Measured 59,152. 61,650 on 2026-11-08, measured 60,428: the
+        // compiler's `underscore-space` split, in the chunk this lane shares.
+        maxGzipBytes: 61_650,
     },
     {
         name: '@csszyx/unplugin `./postcss`, loaded by Node',
@@ -896,8 +911,10 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/cli',
         subpath: '.',
-        // Measured 9,363.
-        maxGzipBytes: 9700,
+        // Measured 9,363. 10,450 on 2026-11-09, measured 10,131: migrate asks
+        // the project's Tailwind which `_` of an arbitrary value it keeps,
+        // under each stylesheet's own prefix, and names what went unanswered.
+        maxGzipBytes: 10_450,
     },
     {
         name: '@csszyx/cli bin `csszyx`, loaded by Node',
@@ -923,8 +940,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './migrate',
-        // Measured 27,572.
-        maxGzipBytes: 27_900,
+        // Measured 27,572. 28,300 on 2026-11-08, measured 27,982: the
+        // `underscore-space` registry entry.
+        maxGzipBytes: 28_300,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',
@@ -941,8 +959,11 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/mcp-server',
         bin: 'csszyx-mcp',
-        // Measured 13,382.
-        maxGzipBytes: 13_700,
+        // Measured 13,382. 14,550 on 2026-11-09, measured 14,268: the tools
+        // ask the project's Tailwind about an `_` in a value
+        // (`csszyx_validate`, `csszyx_compile_preview`) and say when
+        // `csszyx_migrate` and `csszyx_reverse` could not.
+        maxGzipBytes: 14_550,
     },
     {
         name: '@csszyx/vue-adapter `.`, loaded by Node',

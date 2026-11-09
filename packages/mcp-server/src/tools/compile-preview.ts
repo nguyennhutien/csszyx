@@ -13,7 +13,10 @@
 
 import { projectAnswers } from '@csszyx/cli';
 import { transformSource } from '@csszyx/compiler/engine';
+import { underscoreSpaceMessage } from '@csszyx/unplugin/diagnostics';
 import { z } from 'zod';
+
+import { underscoreSpaceAnswers, underscoreUncheckedNote } from './underscore-space.js';
 
 export const compilePreviewSchema = z.object({
     source: z
@@ -189,17 +192,19 @@ export async function handleCompilePreview(
     content: Array<{ type: 'text'; text: string }>;
 }> {
     const cwd = context.cwd ?? process.cwd();
+    const filename = input.filename ?? 'preview.tsx';
+    // One project for both questions: its stylesheets compile at most once.
+    const answers = projectAnswers(cwd);
     const classPrefixFrom = input.classPrefix === undefined ? 'project' : 'input';
     const read =
         input.classPrefix === undefined
-            ? await projectAnswers(cwd).prefix()
+            ? await answers.prefix()
             : { prefix: input.classPrefix, unread: null };
     const classPrefix = read.prefix;
-    const { result, warnings } = compileWithDiagnostics(
-        input.source,
-        input.filename ?? 'preview.tsx',
-        classPrefix,
-    );
+    const { result, warnings } = compileWithDiagnostics(input.source, filename, classPrefix);
+    // The build names an `_` its Tailwind reads as a space; a preview asked
+    // before the code is written says so too, from the same stylesheets.
+    const underscore = await underscoreSpaceAnswers(result, answers, filename);
     return {
         content: [
             {
@@ -212,7 +217,11 @@ export async function handleCompilePreview(
                         // element actually carries, and reordering it would
                         // hide a cascade question the preview is asked about.
                         classes: [...result.classes],
-                        diagnostics: [...result.diagnostics, ...warnings],
+                        diagnostics: [
+                            ...result.diagnostics,
+                            ...warnings,
+                            ...underscore.found.map(underscoreSpaceMessage),
+                        ],
                         runtimeHelpers: RUNTIME_HELPERS.filter(
                             ([, flag]) => result[flag] === true,
                         ).map(([name]) => name),
@@ -224,6 +233,9 @@ export async function handleCompilePreview(
                         // holds two or more classes can lose one to it.
                         ...(mergesSomewhere(result) ? { mergeNote: MERGE_NOTE } : {}),
                         ...(classPrefix === null ? { note: noPrefixNote(cwd, read.unread) } : {}),
+                        ...(underscore.skipped === null
+                            ? {}
+                            : { underscoreNote: underscoreUncheckedNote(underscore.skipped) }),
                     },
                     null,
                     2,

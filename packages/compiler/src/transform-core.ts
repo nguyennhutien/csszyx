@@ -11,7 +11,12 @@ import {
     isDroppedSlashOpacity,
     warnStringColorOpacity,
 } from './color-validation.js';
-import type { SzDiagnosticIssue, SzMergeGroup, SzMergeOverride } from './engine-spans.js';
+import type {
+    SzDiagnosticIssue,
+    SzMergeGroup,
+    SzMergeOverride,
+    SzUnderscoreValue,
+} from './engine-spans.js';
 import { CsszyxError } from './errors.js';
 import {
     GROUPS_OF_GLOBAL_KEYWORD,
@@ -4735,6 +4740,15 @@ export interface SourceTransformResult {
      * @internal Read by the bundler plugin and `csszyx check`; not a stable shape.
      */
     mergeOverrides?: SzMergeOverride[];
+    /**
+     * Each `sz` string value with a bare `_` and the arbitrary class it lowers
+     * into: a fact for the check that asks the project's Tailwind whether it
+     * reads that `_` as a space (`underscore-space`). Absent from a result an
+     * older engine or cache entry produced.
+     *
+     * @internal Read by the bundler plugin, `csszyx check` and the MCP tools; not a stable shape.
+     */
+    underscoreValues?: SzUnderscoreValue[];
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
     /**

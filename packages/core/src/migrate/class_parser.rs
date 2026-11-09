@@ -7,8 +7,8 @@
 //! the caller keeps it in `className`.
 
 use super::class_rules::{
-    self, decode_arbitrary_spaces, is_fraction, is_valid_spacing_value, prefix_takes_fractions,
-    signed_string, wrapped, Shape, SHADOW_SIZE_PROPS,
+    self, is_fraction, is_valid_spacing_value, prefix_takes_fractions, signed_string, wrapped,
+    Shape, SHADOW_SIZE_PROPS,
 };
 use super::value::{js_number, js_number_to_string, Extra, ParsedClass, SzObject, SzValue};
 use super::verdict::{lowered_class, lowers_back_to, Judge};
@@ -23,6 +23,7 @@ pub fn parse_class(class: &str) -> Option<ParsedClass> {
 
 /// [`parse_class`], with the project's Tailwind answering where a table would.
 pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> {
+    let judge = judge.reading(class);
     let important = class.ends_with('!');
     let input = if important {
         &class[..class.len() - 1]
@@ -46,7 +47,7 @@ pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> 
     if let Some(boolean) = try_boolean_match(input) {
         return Some(apply_important(boolean, important));
     }
-    if let Some(gradient) = try_gradient(source, negative) {
+    if let Some(gradient) = try_gradient(source, negative, judge) {
         return Some(apply_important(gradient, important));
     }
     if let Some(utility) = parse_longest_prefix(source, negative, judge) {
@@ -256,7 +257,7 @@ fn try_boolean_match(class: &str) -> Option<ParsedClass> {
 
 /// `bg-linear-to-r`, `bg-radial-[at_50%_75%]/oklab`, `bg-conic-90`: the
 /// gradient kind, an optional direction, an optional interpolation space.
-fn try_gradient(class: &str, negative: bool) -> Option<ParsedClass> {
+fn try_gradient(class: &str, negative: bool, judge: Judge<'_>) -> Option<ParsedClass> {
     let (kind, suffix) = ["linear", "radial", "conic"].iter().find_map(|kind| {
         class
             .strip_prefix("bg-")
@@ -270,7 +271,7 @@ fn try_gradient(class: &str, negative: bool) -> Option<ParsedClass> {
 
     let mut gradient = SzObject::new();
     gradient.insert("gradient".to_string(), SzValue::from(kind));
-    if let Some(direction) = parse_gradient_direction(input, negative) {
+    if let Some(direction) = parse_gradient_direction(input, negative, judge) {
         gradient.insert("dir".to_string(), direction);
     }
     if let Some(interpolation) = interpolation.filter(|text| !text.is_empty()) {
@@ -281,10 +282,10 @@ fn try_gradient(class: &str, negative: bool) -> Option<ParsedClass> {
 
 /// The gradient's direction: `to-r`, an angle, an arbitrary value or a custom
 /// property. Absent when the suffix carries none.
-fn parse_gradient_direction(input: &str, negative: bool) -> Option<SzValue> {
+fn parse_gradient_direction(input: &str, negative: bool, judge: Judge<'_>) -> Option<SzValue> {
     let direction = input.strip_prefix('-')?;
     if let Some(inner) = wrapped(direction, '[', ']') {
-        return Some(SzValue::from(decode_arbitrary_spaces(inner)));
+        return Some(SzValue::from(judge.spaces(inner)));
     }
     if let Some(inner) = wrapped(direction, '(', ')') {
         return Some(SzValue::from(inner));
@@ -390,7 +391,7 @@ fn parse_valued_prefix(
     if tables::spacing_props(prefix) && !is_valid_spacing_value(raw_value) {
         return None;
     }
-    let reading = read_value(prefix, raw_value, negative);
+    let reading = read_value(prefix, raw_value, negative, judge);
     let Some(table) = reading.table else {
         return reading.parsed;
     };
@@ -427,10 +428,10 @@ struct Reading {
     table: Option<bool>,
 }
 
-fn read_value(prefix: &str, raw_value: &str, negative: bool) -> Reading {
+fn read_value(prefix: &str, raw_value: &str, negative: bool, judge: Judge<'_>) -> Reading {
     // A keyword Tailwind serves no negative of: `-z-auto`, `-scale-none`.
     let unsigned_keyword = negative && unsigned_keyword_value(raw_value);
-    let (parsed, not_colour) = match disambiguate_and_parse(prefix, raw_value, negative) {
+    let (parsed, not_colour) = match disambiguate_and_parse(prefix, raw_value, negative, judge) {
         Ok(parsed) => (Some(parsed), false),
         Err(Unread::NotColour) => (None, true),
         Err(Unread::NoRule) => (None, false),
@@ -526,9 +527,10 @@ fn disambiguate_and_parse(
     prefix: &str,
     raw_value: &str,
     negative: bool,
+    judge: Judge<'_>,
 ) -> Result<ParsedClass, Unread> {
     let (value, opacity) = extract_opacity(prefix, raw_value);
-    let result = disambiguate(prefix, value, negative).ok_or(Unread::NoRule)?;
+    let result = disambiguate(prefix, value, negative, judge).ok_or(Unread::NoRule)?;
     let Some(opacity) = opacity else {
         return Ok(result);
     };
@@ -649,7 +651,12 @@ fn is_plain_decimal(text: &str) -> bool {
 }
 
 /// Pick the prefix's key by the value's shape and spell the value.
-fn disambiguate(prefix: &str, value: &str, negative: bool) -> Option<ParsedClass> {
+fn disambiguate(
+    prefix: &str,
+    value: &str,
+    negative: bool,
+    judge: Judge<'_>,
+) -> Option<ParsedClass> {
     if class_rules::keeps_in_class_name(prefix, value) {
         return None;
     }
@@ -660,7 +667,7 @@ fn disambiguate(prefix: &str, value: &str, negative: bool) -> Option<ParsedClass
     let (_, rule) = class_rules::select(class_rules::rules_for(prefix), &shape)?;
     let parsed = ParsedClass::new(
         &class_rules::prop_name(rule, prefix),
-        class_rules::emit(rule, prefix, &shape, negative)?,
+        class_rules::emit(rule, prefix, &shape, negative, judge)?,
     );
     if names_untyped_variable_of_another_type(prefix, &shape, &parsed.prop) {
         return None;
@@ -856,7 +863,7 @@ mod tests {
             .map_or((false, input), |source| (true, source));
         if parse_container_marker(input).is_some()
             || try_boolean_match(input).is_some()
-            || try_gradient(source, negative).is_some()
+            || try_gradient(source, negative, Judge::default()).is_some()
         {
             return None;
         }
@@ -1184,7 +1191,7 @@ mod tests {
                         || parse_mask(&signed).is_some()
                         || is_mask_layer_class(&signed)
                         || try_boolean_match(&signed).is_some()
-                        || try_gradient(source, negative).is_some();
+                        || try_gradient(source, negative, Judge::default()).is_some();
                     let (Some(parsed), Some(longest), false) = (
                         parse_class(&signed),
                         longest_textual_prefix(source),
@@ -1379,6 +1386,67 @@ mod tests {
         );
         assert_eq!(prop_value("p-[calc(1px_+_2px)]"), r#"p="calc(1px + 2px)""#);
         assert_eq!(prop_value("grid-cols-[1fr_2fr]"), r#"gridCols="1fr 2fr""#);
+    }
+
+    /// One class read with the project's answers about `_`: `prop=value`,
+    /// and the values left to the default, as `class|value`.
+    fn spaced(class: &str, answers: &[(&str, &str)]) -> (String, Vec<String>) {
+        use crate::migrate::verdict::{UnderscoreAnswers, UnderscoreQuestions};
+        let answers: UnderscoreAnswers = answers
+            .iter()
+            .map(|(value, reading)| ((*value).to_string(), (*reading).to_string()))
+            .collect();
+        let asked = UnderscoreQuestions::default();
+        let judge = Judge::default().with_underscores(Some(&answers), Some(&asked));
+        let read = parse_class_judged(class, judge).map_or_else(
+            || "null".to_string(),
+            |parsed| {
+                let value = serde_json::to_string(&parsed.value).expect("a value serialises");
+                format!("{}={value}", parsed.prop)
+            },
+        );
+        let questions = asked
+            .into_sorted()
+            .into_iter()
+            .map(|question| format!("{}|{}", question.class, question.value))
+            .collect();
+        (read, questions)
+    }
+
+    #[test]
+    fn an_underscore_is_a_space_only_where_the_project_reads_one() {
+        // Unasked: each bare `_` reads as a space, and the value is asked about.
+        assert_eq!(
+            spaced("bg-[url(/a_b.png)]", &[]),
+            (
+                r#"bg="url(/a b.png)""#.to_string(),
+                vec!["bg-[url(/a_b.png)]|url(/a_b.png)".to_string()]
+            )
+        );
+        // Answered: the project's Tailwind keeps the `_` of a `url()`.
+        assert_eq!(
+            spaced("bg-[url(/a_b.png)]", &[("url(/a_b.png)", "url(/a_b.png)")]),
+            (r#"bg="url(/a_b.png)""#.to_string(), vec![])
+        );
+        // Answered per `_`: only the one read as a space becomes one.
+        assert_eq!(
+            spaced(
+                "grid-cols-[repeat(2,minmax(0,1fr))_var(--a_b)]",
+                &[(
+                    "repeat(2,minmax(0,1fr))_var(--a_b)",
+                    "repeat(2,minmax(0,1fr)) var(--a_b)"
+                )]
+            )
+            .0,
+            r#"gridCols="repeat(2,minmax(0,1fr)) var(--a_b)""#
+        );
+        // An escaped `_` is an underscore wherever it sits, and nothing to ask.
+        assert_eq!(
+            spaced("content-['a\\_b']", &[]),
+            (r#"content="\"a\\_b\"""#.to_string(), vec![])
+        );
+        // No `_`, no question.
+        assert_eq!(spaced("w-[333px]", &[]).1, Vec::<String>::new());
     }
 
     /// One class read with the given answers: `prop=value` or `null`, and

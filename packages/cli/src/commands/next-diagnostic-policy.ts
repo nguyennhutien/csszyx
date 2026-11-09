@@ -22,9 +22,11 @@ import {
     diagnosticPolicyInputs,
     loadCurrentDiagnosticPolicy,
     reportDeadSzClasses,
+    reportUnderscoreSpaces,
     resolveQuietMode,
     shouldHoldAdvisories,
     suppressedAdvisoryMessage,
+    type UnderscoreSpaceFinding,
     writeDiagnosticPolicyState,
 } from '@csszyx/unplugin/diagnostics';
 
@@ -69,8 +71,9 @@ export async function writeNextDiagnosticPolicy(
 
 /**
  * The lines a Next command prints for the `sz` classes the project's Tailwind
- * serves nothing for, at the level the policy gives `dead-class`, followed by
- * what the cap held back.
+ * serves nothing for, at the level the policy gives `dead-class`, and for the
+ * `_` it reads as a space, under `underscore-space`; followed by what the cap
+ * held back.
  *
  * The Turbopack loader cannot compile the project's CSS, so the commands that
  * settle the merge table are where the question is asked, as the bundler
@@ -78,7 +81,9 @@ export async function writeNextDiagnosticPolicy(
  * `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them, and a production prebuild counts an
  * `info` finding in one closing line, as a production build does.
  *
- * @param dead - The dead classes the registration found.
+ * @param found - What the registration found.
+ * @param found.dead - The dead classes.
+ * @param found.underscore - The `_` read as a space; none when absent.
  * @param policy - The project's policy.
  * @param limiter - The command's dedupe record, kept across a watch session.
  * @param development - Whether this is a dev session, which lists `info`.
@@ -86,20 +91,30 @@ export async function writeNextDiagnosticPolicy(
  * @returns The lines to print.
  */
 export function nextDeadClassLines(
-    dead: readonly DeadClassFinding[],
+    found: {
+        dead: readonly DeadClassFinding[];
+        underscore?: readonly UnderscoreSpaceFinding[];
+    },
     policy: DiagnosticPolicy,
     limiter: DiagnosticLimiter,
     development: boolean,
     env: Record<string, string | undefined> = process.env,
 ): string[] {
     const quiet = resolveQuietMode(env.CSSZYX_QUIET_SZ_WARNINGS === '1');
-    const { lines, held } = reportDeadSzClasses(dead, {
+    const input = {
         policy,
         quiet,
         // A prebuild that is not a dev session is a production build.
         holdInfo: shouldHoldAdvisories(quiet, development, 'production'),
         limiter,
-    });
-    const closing = suppressedAdvisoryMessage(held);
-    return [...lines, ...limiter.flush(), ...(closing === null ? [] : [closing])];
+    };
+    const dead = reportDeadSzClasses(found.dead, input);
+    const underscore = reportUnderscoreSpaces(found.underscore ?? [], input);
+    const closing = suppressedAdvisoryMessage(dead.held + underscore.held);
+    return [
+        ...dead.lines,
+        ...underscore.lines,
+        ...limiter.flush(),
+        ...(closing === null ? [] : [closing]),
+    ];
 }

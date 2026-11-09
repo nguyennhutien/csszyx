@@ -71,6 +71,39 @@ describe('the runtime registration the Next lane writes', () => {
         expect(szcn('pb-2', 'p-4')).toBe('p-4');
     }, 60_000);
 
+    it('returns each `_` the design system reads as a space, with its file', async () => {
+        const root = tailwindProject('csszyx-next-underscore-', {
+            'app.css': '@import "tailwindcss";',
+        });
+        const model = await openProjectStyleModel(root, [join(root, 'app.css')]);
+        const site = { line: 2, column: 9, sourcePath: join(root, 'app/page.tsx') };
+        const written = writeMergeRegistration({
+            root,
+            model,
+            classes: ["content-['a_b']", 'bg-[url(/a_b.png)]'],
+            underscoreSites: [
+                { ...site, key: 'content', value: "'a_b'", className: "content-['a_b']" },
+                { ...site, key: 'bgImg', value: 'url(/a_b.png)', className: 'bg-[url(/a_b.png)]' },
+            ],
+            authoredClasses: [],
+            mergeLiterals: [],
+        });
+
+        expect(written.underscore).toEqual([
+            {
+                key: 'content',
+                value: "'a_b'",
+                className: "content-['a_b']",
+                file: 'app/page.tsx',
+                line: 2,
+                column: 9,
+                literal: `"'a_b'"`,
+                spaced: `"'a b'"`,
+                escaped: `"'a\\\\_b'"`,
+            },
+        ]);
+    }, 60_000);
+
     it('returns the emitted classes the design system serves nothing for, with their file', async () => {
         // The Turbopack loader cannot compile the CSS, so the Next commands
         // that settle the table ask the dead-class question here. Only the

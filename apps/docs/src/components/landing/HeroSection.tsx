@@ -50,10 +50,10 @@ const compileData: CompileEntry[] = [
     // Arbitrary values and variants
     { sz: "{maxW: '1200px'}", tw: "max-w-[1200px]" },
     { sz: "{w: 'calc(100vh-2rem)'}", tw: "w-[calc(100vh-2rem)]" },
-    { sz: "{grid: {cols: '200px_minmax(900px,_1fr)_100px'}}", tw: "grid-cols-[200px_minmax(900px,_1fr)_100px]" },
+    { sz: "{grid: {cols: '200px minmax(900px, 1fr) 100px'}}", tw: "grid-cols-[200px_minmax(900px,_1fr)_100px]" },
     { sz: "{bg: {image: 'url(…)'}}", tw: "bg-[url(…)]" },
     { sz: "{text: '#50d71e'}", tw: "text-[#50d71e]" },
-    { sz: "{animate: 'spin_3s_linear_infinite'}", tw: "animate-[spin_3s_linear_infinite]" },
+    { sz: "{animate: 'spin 3s linear infinite'}", tw: "animate-[spin_3s_linear_infinite]" },
     { sz: "{dropShadow: '0 0 15px rgba(255,255,255,0.02)'}", tw: "drop-shadow-[0_0_15px_rgba(255,255,255,0.02)]" },
 
     // Specific edge cases

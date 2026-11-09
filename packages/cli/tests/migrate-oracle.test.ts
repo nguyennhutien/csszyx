@@ -255,3 +255,37 @@ describe('csszyx migrate — the project answers where a table would', () => {
         );
     });
 });
+
+describe('csszyx migrate — an `_` in an arbitrary value, as the project reads it', () => {
+    const CLASSES = "bg-[url(/a_b.png)] grid-cols-[1fr_2fr] content-['a\\_b']";
+
+    it('keeps the `_` the project keeps and writes a space for the one it reads as one', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";\n',
+            'src/A.tsx': `export const A = () => <div className="${CLASSES}" />;\n`,
+        });
+        const out = await migrated(cwd, 'src/A.tsx');
+        expect(out).toContain(`'url(/a_b.png)'`);
+        expect(out).toContain(`'1fr 2fr'`);
+        // An escaped underscore stays one, written as source writes it.
+        expect(out).toContain(String.raw`a\\_b`);
+        expect(out).not.toContain('className');
+    });
+
+    it('reads the HTML attribute the same way', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";\n',
+            'index.html': `<html><head></head><body><div class="${CLASSES}"></div></body></html>\n`,
+        });
+        const out = await migrated(cwd, 'index.html');
+        expect(out).toContain('url(/a_b.png)');
+        expect(out).toContain('1fr 2fr');
+    });
+
+    it('writes each `_` as a space when no stylesheet can be asked', async () => {
+        const cwd = tailwindProject({
+            'src/A.tsx': 'export const A = () => <div className="bg-[url(/a_b.png)]" />;\n',
+        });
+        expect(await migrated(cwd, 'src/A.tsx')).toContain(`'url(/a b.png)'`);
+    });
+});
